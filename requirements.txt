@@ -2,6 +2,6 @@ numpy
 opencv-python
 Pillow
 mediapipe
-onnxruntime-gpu
+onnxruntime
 requests
 PyYAML
