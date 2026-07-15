@@ -3,117 +3,301 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#151517">
+<meta name="theme-color" content="#0b0b0e">
 <title>DouchkoVE Captions</title>
 <style>
+/* ---------- Design-Tokens ---------- */
 :root {
-  --bg:#151517; --side:#1b1b1e; --surf:#1e1e21; --surf2:#2a2a2e; --surf3:#3a3a3f;
-  --line:#2e2e33; --fg:#f5f5f7;
-  --mut:#a8a8ad;             /* 5.4:1 auf surf, WCAG AA */
-  --mut2:#8a8a90;            /* 4.5:1 auf surf */
-  --acc:#0a84ff; --acc2:#409cff;
-  --green:#30d158; --red:#ff453a; --amber:#ffb340;
-  --focus:#5eb3ff;
-  --r-sm:8px; --r-md:12px; --r-lg:16px;
-  --t-fast:120ms; --t-med:200ms; --t-slow:300ms;
-  --shadow-lg:0 12px 40px -8px rgba(0,0,0,.6);
-  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:22px; --sp-6:28px; --sp-7:36px;
+  --bg:#0b0b0e; --bg2:#111117; --side:#141420;
+  --surf:#1a1a25; --surf2:#252534; --surf3:#33334a;
+  --line:#26263a; --line2:#33334a;
+  --fg:#f2f2f7;
+  --mut:#b0b0bd;
+  --mut2:#8686a0;
+  --acc:#7c5cff;              /* Violett - warmer als Systemblau */
+  --acc2:#9b7dff;
+  --acc-glow:rgba(124,92,255,0.4);
+  --acc-soft:rgba(124,92,255,0.10);
+  --pink:#ff6b9d;             /* Delight-Akzent */
+  --gold:#ffb340;             /* Achievement */
+  --green:#30d158;
+  --red:#ff5566;
+  --focus:#a68dff;
+  --r-sm:8px; --r-md:14px; --r-lg:20px; --r-xl:28px;
+  --t-fast:120ms; --t-med:220ms; --t-slow:380ms;
+  --shadow-lg: 0 20px 60px -12px rgba(0,0,0,.5), 0 4px 16px -4px rgba(0,0,0,.4);
+  --shadow-glow: 0 0 40px -8px var(--acc-glow);
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:22px; --sp-6:28px; --sp-7:40px;
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
 }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-text-size-adjust: 100%; }
 html, body { min-height: 100%; overscroll-behavior-y: none; }
 body {
-  background: var(--bg); color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  background: radial-gradient(1200px 800px at 15% -10%, rgba(124,92,255,.10), transparent 60%),
+              radial-gradient(900px 600px at 100% 100%, rgba(255,107,157,.06), transparent 55%),
+              var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
   font-size: 15px; line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-/* Focus (Keyboard sichtbar, Maus nicht) */
 :focus { outline: none; }
-:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--r-sm);
-}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 6px; }
 
-/* Skip-Link */
 .skip { position: absolute; top: -100px; left: 8px; z-index: 9999;
   background: var(--acc); color: white; padding: 10px 14px;
-  border-radius: var(--r-sm); font-weight: 600; text-decoration: none; }
+  border-radius: 10px; font-weight: 600; text-decoration: none; }
 .skip:focus { top: 8px; }
 
-/* App-Shell */
-.app { display: flex; min-height: 100vh; }
-.sidebar {
-  width: 240px; background: var(--side); border-right: 1px solid var(--line);
-  padding: var(--sp-6) 0; position: sticky; top: 0; height: 100vh;
-  overflow-y: auto; flex-shrink: 0;
+/* ---------- Login-Screen (Hero + Value-Prop) ---------- */
+.hero {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 40px 20px;
 }
-.brand { font-family: Georgia, serif; font-style: italic; font-size: 22px;
-  padding: 0 var(--sp-6) var(--sp-1); font-weight: 700; }
-.tag { font-size: 10px; letter-spacing: 3px; color: var(--mut2);
-  padding: 0 var(--sp-6) var(--sp-6); font-weight: 600; }
+.hero-inner {
+  max-width: 460px; width: 100%;
+  background: linear-gradient(180deg, var(--surf) 0%, var(--surf) 100%);
+  border-radius: var(--r-xl); padding: 40px 32px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--line);
+  position: relative; overflow: hidden;
+}
+.hero-inner::before {
+  content: ''; position: absolute; inset: -2px;
+  background: linear-gradient(120deg, transparent, var(--acc-glow), transparent);
+  z-index: -1; filter: blur(20px); opacity: .6;
+}
+.hero-brand { font-family: 'Georgia', serif; font-style: italic; font-size: 34px;
+  font-weight: 700; letter-spacing: -1px; margin-bottom: 4px; }
+.hero-tag { font-size: 10px; letter-spacing: 4px; color: var(--acc2);
+  font-weight: 700; margin-bottom: 28px; }
+.hero-title { font-size: 24px; font-weight: 700; letter-spacing: -.5px;
+  margin-bottom: 8px; line-height: 1.25; }
+.hero-title .glow { color: var(--acc2); }
+.hero-sub { color: var(--mut); font-size: 15px; margin-bottom: 28px; line-height: 1.55; }
+.hero-badges { display: flex; gap: 8px; margin-bottom: 26px; flex-wrap: wrap; }
+.badge {
+  padding: 5px 10px; background: var(--surf2); border-radius: 999px;
+  font-size: 11px; color: var(--mut); font-weight: 600;
+  letter-spacing: .5px; text-transform: uppercase;
+}
+.badge.on { background: var(--acc-soft); color: var(--acc2); }
+.hero input {
+  width: 100%; padding: 16px 18px; background: var(--surf2);
+  border: 2px solid transparent; border-radius: 14px;
+  color: var(--fg); font-size: 15px; margin: 10px 0 4px; outline: none;
+  transition: border-color var(--t-fast), background var(--t-fast);
+  font-family: inherit; letter-spacing: .5px;
+}
+.hero input:focus { border-color: var(--acc); background: var(--surf); }
+.err { color: var(--red); font-size: 13px; margin-top: 10px;
+  display: flex; align-items: center; gap: 8px; }
+.hero .trust { margin-top: 20px; color: var(--mut2); font-size: 12px;
+  text-align: center; line-height: 1.5; }
+.hero .trust b { color: var(--fg); }
 
-.nav { display: flex; flex-direction: column; }
-.nav a {
-  display: flex; align-items: center; gap: var(--sp-3);
-  padding: 11px var(--sp-6); color: var(--mut); text-decoration: none;
-  font-size: 14px; border-left: 3px solid transparent;
-  cursor: pointer; transition: background var(--t-fast), color var(--t-fast),
-    border-left-color var(--t-fast); min-height: 44px;
-}
-.nav a[aria-current="page"] {
-  color: var(--fg); border-left-color: var(--acc);
-  background: rgba(10,132,255,.08); font-weight: 600;
-}
-.nav a:hover:not([aria-current="page"]) {
-  color: var(--fg); background: rgba(255,255,255,.04);
-}
-.nav a .ic { width: 18px; height: 18px; flex-shrink: 0; opacity: .8; }
-
-.main { flex: 1; padding: var(--sp-6) 32px 80px; max-width: 940px; min-width: 0; }
-
-.topbar {
-  display: flex; align-items: center; gap: var(--sp-4);
-  margin-bottom: var(--sp-6); padding-bottom: var(--sp-4);
+/* ---------- App-Shell mit Wizard ---------- */
+.app { display: none; }
+.app.show { display: block; }
+.header {
+  padding: 20px 32px; display: flex; align-items: center; gap: 20px;
   border-bottom: 1px solid var(--line);
+  background: rgba(11,11,14,.85); backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 50;
 }
-.topbar .name { font-weight: 600; font-size: 15px; }
-.topbar .rest { color: var(--mut); font-size: 13px; }
-.topbar .grow { flex: 1; }
+.header .brand { font-family: Georgia, serif; font-style: italic;
+  font-size: 20px; font-weight: 700; letter-spacing: -.5px; }
+.header .grow { flex: 1; }
+.hi { display: flex; align-items: center; gap: 12px; }
+.hi .greeting { font-size: 14px; }
+.hi .greeting b { color: var(--fg); }
+.hi .greeting .mut { color: var(--mut); }
 
-.section { display: none; }
-.section.active { display: block; }
-.section h2 { font-size: 26px; font-weight: 700; margin-bottom: var(--sp-1);
-  letter-spacing: -0.5px; }
-.section .sub { color: var(--mut); font-size: 14px; margin-bottom: var(--sp-6); }
+/* Streak/Kontingent Ring */
+.ring-wrap { position: relative; width: 42px; height: 42px; }
+.ring-wrap svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.ring-wrap .ring-bg { stroke: var(--surf2); }
+.ring-wrap .ring-fg { stroke: var(--acc); stroke-linecap: round;
+  transition: stroke-dashoffset var(--t-slow) var(--ease-out-quart); }
+.ring-wrap .ring-num {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 700;
+}
+
+/* Stepper */
+.stepper {
+  display: flex; align-items: center; gap: 6px; padding: 20px 32px 4px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.stepper::-webkit-scrollbar { display: none; }
+.step {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: 999px; cursor: pointer; user-select: none;
+  transition: background var(--t-fast); flex-shrink: 0;
+  color: var(--mut);
+}
+.step:hover { background: var(--surf); color: var(--fg); }
+.step.done { color: var(--acc2); }
+.step.active { background: var(--acc); color: white; box-shadow: 0 6px 20px -6px var(--acc-glow); }
+.step-num {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--surf2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--fg);
+  transition: background var(--t-fast);
+}
+.step.active .step-num { background: rgba(255,255,255,.25); }
+.step.done .step-num { background: var(--acc-soft); color: var(--acc2); }
+.step-lbl { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.step-line { height: 2px; width: 20px; background: var(--line);
+  border-radius: 1px; flex-shrink: 0; }
+.step-line.done { background: var(--acc); }
+
+.main { padding: 32px; max-width: 1040px; margin: 0 auto; }
+.step-view { display: none; animation: fadein var(--t-slow) var(--ease-out-quart); }
+.step-view.active { display: block; }
+@keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.step-title { font-size: 30px; font-weight: 700; letter-spacing: -.6px;
+  margin-bottom: 6px; line-height: 1.2; }
+.step-sub { color: var(--mut); font-size: 15px; margin-bottom: 28px; max-width: 640px; }
 
 .card {
-  background: var(--surf); border-radius: var(--r-lg); padding: var(--sp-5);
-  margin-bottom: var(--sp-4);
+  background: var(--surf); border-radius: var(--r-lg);
+  padding: 26px; margin-bottom: 16px;
+  border: 1px solid transparent;
+  transition: border-color var(--t-fast), transform var(--t-fast);
 }
-.card h3 { font-size: 16px; font-weight: 600; margin-bottom: var(--sp-1); }
-.card p.desc { color: var(--mut); font-size: 13px; margin-bottom: var(--sp-4);
-  line-height: 1.5; }
+.card:hover { border-color: var(--line2); }
+.card h3 { font-size: 17px; font-weight: 700; margin-bottom: 4px; letter-spacing: -.2px; }
+.card p.desc { color: var(--mut); font-size: 13px; margin-bottom: 16px;
+  line-height: 1.55; }
 
-.setting { margin: var(--sp-4) 0 var(--sp-2); }
+/* Drop-Zone */
+#drop {
+  border: 2px dashed var(--line2); border-radius: 20px;
+  padding: 60px 24px; text-align: center; cursor: pointer;
+  transition: border-color var(--t-med), background var(--t-med), transform var(--t-fast);
+  position: relative;
+}
+#drop:hover, #drop.over {
+  border-color: var(--acc); background: var(--acc-soft);
+  transform: translateY(-2px);
+}
+#drop .ic-lg {
+  width: 56px; height: 56px; color: var(--acc2);
+  margin: 0 auto 16px; display: block;
+}
+#drop .big { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+#drop .small { font-size: 13px; color: var(--mut); }
+.file-card {
+  margin-top: 14px; padding: 18px 20px;
+  background: var(--surf2); border-radius: var(--r-md);
+  display: flex; align-items: center; gap: 14px;
+  animation: pop var(--t-med) var(--ease-spring);
+}
+@keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+.file-card .fi-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: var(--acc-soft); color: var(--acc2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.file-card .fi-name { font-weight: 600; word-break: break-all; }
+.file-card .fi-meta { font-size: 12px; color: var(--mut); margin-top: 2px; }
+
+/* Look-Cards (Grosse Optionen mit Preview) */
+.look-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px; }
+.look-card {
+  background: var(--surf); border-radius: var(--r-lg);
+  padding: 20px; cursor: pointer; user-select: none;
+  border: 2px solid transparent;
+  transition: transform var(--t-fast), border-color var(--t-fast),
+    box-shadow var(--t-fast);
+  position: relative; overflow: hidden;
+}
+.look-card:hover { transform: translateY(-4px); }
+.look-card.on {
+  border-color: var(--acc); box-shadow: var(--shadow-glow);
+  background: linear-gradient(180deg, var(--surf) 0%, var(--acc-soft) 100%);
+}
+.look-card .lp-preview {
+  height: 90px; border-radius: 12px;
+  background: linear-gradient(135deg, #2a2a3a, #1a1a25);
+  margin-bottom: 14px; position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.look-card .lp-preview span {
+  color: white; font-weight: 900; letter-spacing: -.5px;
+  font-size: 22px; padding: 4px 10px; border-radius: 4px;
+}
+.look-card[data-look=tiktok] .lp-preview span { background: white; color: black; }
+.look-card[data-look=creator] .lp-preview span { color: white; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
+.look-card[data-look=cinematic] .lp-preview span { font-family: Georgia, serif; font-style: italic; color: #f5e6c8; }
+.look-card[data-look=clean] .lp-preview span { color: white; border: 1px solid white; font-weight: 400; }
+.look-card h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.look-card p { font-size: 13px; color: var(--mut); }
+.look-card .checkmark {
+  position: absolute; top: 14px; right: 14px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--acc); color: white;
+  display: none; align-items: center; justify-content: center;
+  animation: pop var(--t-med) var(--ease-spring);
+}
+.look-card.on .checkmark { display: flex; }
+
+/* Accordion (Feintuning) */
+.acc { background: var(--surf); border-radius: var(--r-lg);
+  margin-bottom: 12px; overflow: hidden; border: 1px solid transparent;
+  transition: border-color var(--t-fast); }
+.acc.open { border-color: var(--acc); }
+.acc-head {
+  padding: 20px 24px; cursor: pointer; display: flex; align-items: center;
+  gap: 14px; user-select: none;
+  transition: background var(--t-fast);
+}
+.acc-head:hover { background: var(--surf2); }
+.acc-head .ic {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--acc-soft); color: var(--acc2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.acc-head .lbl { flex: 1; }
+.acc-head .lbl h4 { font-size: 15px; font-weight: 700; }
+.acc-head .lbl p { font-size: 12.5px; color: var(--mut); margin-top: 2px; }
+.acc-head .chev {
+  width: 20px; height: 20px; color: var(--mut);
+  transition: transform var(--t-med);
+}
+.acc.open .chev { transform: rotate(180deg); }
+.acc-body {
+  padding: 0 24px; max-height: 0; overflow: hidden;
+  transition: max-height var(--t-slow) var(--ease-out-quart),
+    padding var(--t-slow);
+}
+.acc.open .acc-body { padding: 4px 24px 24px; max-height: 2000px; }
+
+/* Setting-Blocks */
+.setting { margin: 16px 0 6px; }
 .setting-label { font-weight: 600; font-size: 14px; color: var(--fg); }
 .setting-desc { color: var(--mut); font-size: 12.5px; margin-top: 2px;
-  margin-bottom: var(--sp-2); line-height: 1.5; max-width: 620px; }
+  margin-bottom: 10px; line-height: 1.5; max-width: 620px; }
 .row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; }
 .row .grow { flex: 1; min-width: 0; }
 
 /* Slider */
-.slider { display: flex; align-items: center; gap: var(--sp-3); }
+.slider { display: flex; align-items: center; gap: 14px; }
 .slider input[type=range] {
   flex: 1; -webkit-appearance: none; appearance: none;
   height: 6px; background: var(--surf2); border-radius: 3px; outline: none;
@@ -121,96 +305,111 @@ body {
 }
 .slider input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 22px; height: 22px; background: var(--acc);
-  border-radius: 50%; cursor: pointer;
-  border: 2px solid var(--bg);
-  transition: transform var(--t-fast);
+  width: 22px; height: 22px;
+  background: linear-gradient(135deg, var(--acc), var(--acc2));
+  border-radius: 50%; cursor: pointer; border: 2px solid var(--bg);
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+  box-shadow: 0 2px 8px -2px var(--acc-glow);
 }
 .slider input[type=range]:hover::-webkit-slider-thumb,
 .slider input[type=range]:focus::-webkit-slider-thumb {
-  transform: scale(1.15);
+  transform: scale(1.2); box-shadow: 0 4px 16px -2px var(--acc-glow);
 }
 .slider input[type=range]::-moz-range-thumb {
   width: 20px; height: 20px; background: var(--acc);
   border-radius: 50%; cursor: pointer; border: 2px solid var(--bg);
 }
 .slider .val {
-  font-size: 13px; color: var(--mut); min-width: 68px; text-align: right;
-  font-variant-numeric: tabular-nums; font-weight: 500;
+  font-size: 13px; color: var(--acc2); min-width: 68px; text-align: right;
+  font-variant-numeric: tabular-nums; font-weight: 700;
 }
 
 /* Switch */
 .switch { position: relative; width: 50px; height: 30px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 100%; height: 100%; margin: 0;
   position: absolute; cursor: pointer; }
-.switch .track { position: absolute; inset: 0; background: var(--surf2);
+.switch .track { position: absolute; inset: 0; background: var(--surf3);
   border-radius: 30px; transition: background var(--t-med); }
 .switch .knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px;
   background: white; border-radius: 50%; transition: transform var(--t-med);
   box-shadow: 0 2px 5px rgba(0,0,0,.3); }
-.switch input:checked + .track { background: var(--green); }
+.switch input:checked + .track {
+  background: linear-gradient(90deg, var(--acc), var(--acc2));
+}
 .switch input:checked + .track .knob { transform: translateX(20px); }
 .switch input:focus-visible + .track {
-  outline: 2px solid var(--focus); outline-offset: 2px;
+  outline: 2px solid var(--focus); outline-offset: 3px;
 }
 
 /* Segmented */
-.seg { display: inline-flex; background: var(--surf2); border-radius: 10px;
+.seg { display: inline-flex; background: var(--surf2); border-radius: 12px;
   padding: 4px; gap: 2px; flex-wrap: wrap; }
 .seg button {
-  background: transparent; border: 0; padding: 9px 16px; color: var(--mut);
-  border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+  background: transparent; border: 0; padding: 10px 18px; color: var(--mut);
+  border-radius: 9px; cursor: pointer; font-size: 13px; font-weight: 600;
   transition: background var(--t-fast), color var(--t-fast);
-  min-height: 40px;
+  min-height: 40px; font-family: inherit;
 }
-.seg button:hover:not(.on) { color: var(--fg); background: rgba(255,255,255,.04); }
-.seg button.on { background: var(--surf3); color: var(--fg); font-weight: 600; }
+.seg button:hover:not(.on) { color: var(--fg); background: rgba(255,255,255,.03); }
+.seg button.on {
+  background: var(--surf3); color: var(--fg);
+  box-shadow: 0 2px 8px -2px rgba(0,0,0,.4);
+}
 
 /* Chips */
-.chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
-  padding: 10px 16px; background: var(--surf2); border-radius: 20px;
+  padding: 10px 16px; background: var(--surf2); border-radius: 999px;
   cursor: pointer; font-size: 13px; user-select: none;
-  transition: background var(--t-fast), color var(--t-fast);
-  min-height: 40px; display: flex; align-items: center;
+  transition: all var(--t-fast); min-height: 40px;
+  display: flex; align-items: center; gap: 6px; font-weight: 600;
   border: 2px solid transparent;
 }
 .chip:hover:not(.on) { background: var(--surf3); }
-.chip.on { background: var(--acc); color: white; font-weight: 600; }
-.chip.big { padding: 14px 18px; border-radius: var(--r-md); }
+.chip.on {
+  background: var(--acc); color: white;
+  box-shadow: 0 4px 14px -4px var(--acc-glow);
+}
 
 /* Font-Grid */
 .fontgrid { display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: var(--sp-3);
+  gap: 12px;
 }
 .fonttile {
-  padding: 22px 12px; background: var(--surf2); border-radius: var(--r-md);
+  padding: 24px 12px; background: var(--surf2); border-radius: var(--r-md);
   cursor: pointer; text-align: center;
-  border: 2px solid transparent; transition: border-color var(--t-fast),
-    background var(--t-fast); min-height: 96px;
+  border: 2px solid transparent; transition: all var(--t-fast);
+  min-height: 106px;
 }
-.fonttile:hover:not(.on) { background: var(--surf3); }
-.fonttile.on { border-color: var(--acc); background: rgba(10,132,255,.14); }
-.fonttile .name { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
-.fonttile .lbl { font-size: 11px; color: var(--mut); margin-top: 6px;
-  text-transform: uppercase; letter-spacing: 1px; font-weight: 500; }
+.fonttile:hover:not(.on) { background: var(--surf3); transform: translateY(-2px); }
+.fonttile.on { border-color: var(--acc); background: var(--acc-soft); }
+.fonttile .name { font-size: 30px; font-weight: 900; letter-spacing: -.5px;
+  color: var(--fg); }
+.fonttile .lbl { font-size: 11px; color: var(--mut); margin-top: 8px;
+  text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
 
 /* Buttons */
 .btn {
-  background: var(--acc); color: white; border: 0;
-  padding: 13px 24px; border-radius: var(--r-md);
-  font-size: 15px; font-weight: 600; cursor: pointer;
-  transition: background var(--t-fast), transform var(--t-fast);
-  min-height: 44px; display: inline-flex; align-items: center; gap: var(--sp-2);
-  justify-content: center; text-decoration: none;
-  font-family: inherit;
+  background: linear-gradient(135deg, var(--acc), var(--acc2));
+  color: white; border: 0;
+  padding: 14px 26px; border-radius: 14px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
+  min-height: 46px; display: inline-flex; align-items: center; gap: 10px;
+  justify-content: center; text-decoration: none; font-family: inherit;
+  box-shadow: 0 4px 16px -4px var(--acc-glow);
 }
-.btn:hover:not(:disabled) { background: var(--acc2); }
-.btn:active:not(:disabled) { transform: translateY(1px); }
-.btn:disabled { background: var(--surf2); color: var(--mut2); cursor: not-allowed; }
-.btn.secondary { background: var(--surf2); color: var(--fg); }
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px var(--acc-glow);
+}
+.btn:active:not(:disabled) { transform: translateY(0); }
+.btn:disabled { background: var(--surf2); color: var(--mut2); cursor: not-allowed;
+  box-shadow: none; }
+.btn.secondary { background: var(--surf2); color: var(--fg); box-shadow: none; }
 .btn.secondary:hover:not(:disabled) { background: var(--surf3); }
+.btn.big { padding: 18px 32px; font-size: 16px; border-radius: 16px; }
 .btn.wide { width: 100%; }
 .btn .spin {
   width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3);
@@ -219,166 +418,169 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Wizard-Nav (unten) */
+.wiz-nav {
+  display: flex; gap: 12px; margin-top: 28px; padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.wiz-nav .grow { flex: 1; }
+
 /* Overlay */
 .overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.72);
+  position: fixed; inset: 0; background: rgba(0,0,0,.75);
   display: flex; align-items: center; justify-content: center;
-  z-index: 100; padding: var(--sp-5);
-  backdrop-filter: blur(4px);
+  z-index: 100; padding: 20px;
+  backdrop-filter: blur(6px);
+  animation: fadein var(--t-med) var(--ease-out-quart);
 }
 .overlay.hidden { display: none; }
 .modal {
-  background: var(--bg); border-radius: var(--r-lg);
-  width: 100%; max-width: 960px; max-height: 92vh;
+  background: var(--bg2); border-radius: var(--r-xl);
+  width: 100%; max-width: 1040px; max-height: 92vh;
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg); border: 1px solid var(--line);
+  animation: pop var(--t-slow) var(--ease-spring);
 }
-.modal .head { padding: var(--sp-5) var(--sp-6) var(--sp-3);
-  border-bottom: 1px solid var(--line); }
+.modal .head { padding: 22px 28px 14px; border-bottom: 1px solid var(--line); }
 .modal .head h3 { font-size: 20px; font-weight: 700; }
-.modal .head p { color: var(--mut); font-size: 13px; margin-top: var(--sp-1); }
-.modal .body { padding: var(--sp-4) var(--sp-6); overflow-y: auto; flex: 1; }
-.modal .foot {
-  padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--line);
-  display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap;
-}
+.modal .head p { color: var(--mut); font-size: 13px; margin-top: 3px; }
+.modal .body { padding: 18px 28px; overflow-y: auto; flex: 1; }
+.modal .foot { padding: 16px 28px; border-top: 1px solid var(--line);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-/* Login */
-.login {
-  max-width: 480px; margin: 80px auto; padding: var(--sp-7);
+/* Progress-Screen */
+.prog-box {
   background: var(--surf); border-radius: var(--r-lg);
-  box-shadow: var(--shadow-lg);
+  padding: 32px; text-align: center;
 }
-.login h1 {
-  font-family: Georgia, serif; font-style: italic;
-  font-size: 32px; font-weight: 700;
+.prog-ring { width: 140px; height: 140px; margin: 0 auto 20px; position: relative; }
+.prog-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.prog-ring .pr-bg { stroke: var(--surf2); }
+.prog-ring .pr-fg { stroke: url(#pg); stroke-linecap: round;
+  transition: stroke-dashoffset var(--t-slow) var(--ease-out-quart); }
+.prog-ring .pr-num {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 32px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
-.login .tag { padding: 4px 0 var(--sp-4); }
-.login p { color: var(--mut); font-size: 14px; margin: var(--sp-3) 0; }
-.login input {
-  width: 100%; padding: 14px 16px; background: var(--surf2); border: 2px solid transparent;
-  border-radius: var(--r-md); color: var(--fg); font-size: 15px;
-  margin: var(--sp-3) 0; outline: none;
-  transition: border-color var(--t-fast); font-family: inherit;
-}
-.login input:focus { border-color: var(--acc); }
-.err { color: var(--red); font-size: 13px; margin-top: var(--sp-3);
-  display: flex; align-items: center; gap: var(--sp-2); }
+.prog-ring .pr-num .pct { color: var(--acc2); }
+.prog-phase { font-size: 15px; color: var(--mut); margin-top: 8px; }
 
-/* Drop */
-#drop {
-  border: 2px dashed var(--line); border-radius: var(--r-lg);
-  padding: 48px var(--sp-5); text-align: center; cursor: pointer;
-  transition: border-color var(--t-med), background var(--t-med);
+/* Success-Card */
+.success-hero {
+  background: linear-gradient(135deg, rgba(124,92,255,.20), rgba(255,107,157,.14));
+  border: 1px solid var(--line2);
+  border-radius: var(--r-xl); padding: 40px 32px; text-align: center;
+  margin-bottom: 16px; position: relative; overflow: hidden;
 }
-#drop:hover, #drop.over {
-  border-color: var(--acc); background: rgba(10,132,255,.06);
+.success-hero .ic-big {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--green); color: white;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px; animation: pop var(--t-slow) var(--ease-spring);
+  box-shadow: 0 8px 32px -8px rgba(48,209,88,.5);
 }
-#drop .ic { width: 40px; height: 40px; color: var(--mut); margin: 0 auto var(--sp-3); }
-#drop .big { font-size: 16px; font-weight: 600; margin-bottom: var(--sp-1); }
-#drop .small { font-size: 13px; color: var(--mut); }
-.file-info {
-  font-size: 14px; margin-top: var(--sp-3); padding: 14px 16px;
-  background: var(--surf2); border-radius: var(--r-md);
-  display: flex; align-items: center; gap: var(--sp-3);
-}
-.file-info .ic { width: 24px; height: 24px; color: var(--acc); flex-shrink: 0; }
-
-/* Progress */
-.bar { height: 8px; background: var(--surf2); border-radius: 4px;
-  overflow: hidden; margin: var(--sp-4) 0 var(--sp-2); }
-.bar i {
-  display: block; height: 100%; width: 0;
-  background: linear-gradient(90deg, var(--acc), var(--acc2));
-  border-radius: 4px; transition: width var(--t-slow);
-}
-.phase { font-size: 14px; color: var(--mut); font-weight: 500; }
+.success-hero h2 { font-size: 32px; font-weight: 800; letter-spacing: -.5px;
+  margin-bottom: 6px; }
+.success-hero p { color: var(--mut); font-size: 15px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px; margin: 24px 0; }
+.stat { background: var(--surf); border-radius: var(--r-md);
+  padding: 18px; text-align: center; }
+.stat .n { font-size: 22px; font-weight: 800; color: var(--acc2);
+  font-variant-numeric: tabular-nums; }
+.stat .l { font-size: 11px; color: var(--mut); text-transform: uppercase;
+  letter-spacing: 1px; font-weight: 600; margin-top: 4px; }
 
 /* Momente-Table */
 .mom-row {
   display: grid;
   grid-template-columns: 34px 68px 1fr 130px 100px 140px 96px 96px;
-  gap: var(--sp-2); padding: var(--sp-2);
-  background: var(--surf); border-radius: var(--r-sm);
-  margin-bottom: var(--sp-1); align-items: center;
+  gap: 8px; padding: 10px;
+  background: var(--surf); border-radius: 10px;
+  margin-bottom: 4px; align-items: center;
+  transition: background var(--t-fast);
 }
+.mom-row:hover { background: var(--surf2); }
 .mom-row.head { background: transparent; color: var(--mut);
-  font-size: 11.5px; letter-spacing: 0.5px; text-transform: uppercase;
-  padding-bottom: var(--sp-1); font-weight: 600; }
+  font-size: 11.5px; letter-spacing: .5px; text-transform: uppercase;
+  padding-bottom: 8px; font-weight: 700; }
 .mom-row input[type=text], .mom-row select {
   background: var(--surf2); border: 1px solid transparent; color: var(--fg);
-  padding: 8px 10px; border-radius: var(--r-sm);
+  padding: 9px 11px; border-radius: 8px;
   font-size: 13px; width: 100%; outline: none; font-family: inherit;
   transition: border-color var(--t-fast);
 }
 .mom-row input[type=text]:focus, .mom-row select:focus { border-color: var(--acc); }
 .mom-row .zeit { font-size: 12px; color: var(--mut);
-  font-variant-numeric: tabular-nums; }
+  font-variant-numeric: tabular-nums; font-weight: 600; }
 .mom-row input[type=checkbox] {
   width: 20px; height: 20px; accent-color: var(--acc); cursor: pointer;
 }
 
 /* Toast */
 .toasts {
-  position: fixed; top: var(--sp-4); right: var(--sp-4); z-index: 9999;
-  display: flex; flex-direction: column; gap: var(--sp-2);
-  max-width: calc(100vw - 32px);
+  position: fixed; top: 20px; right: 20px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px;
+  max-width: calc(100vw - 40px);
 }
 .toast {
   background: var(--surf); color: var(--fg);
-  padding: 14px 16px; border-radius: var(--r-md);
+  padding: 14px 18px; border-radius: var(--r-md);
   box-shadow: var(--shadow-lg); font-size: 14px;
-  display: flex; align-items: center; gap: var(--sp-3);
+  display: flex; align-items: center; gap: 12px;
   border-left: 3px solid var(--acc);
-  animation: slidein var(--t-med) ease-out;
-  min-width: 260px;
+  animation: slidein var(--t-med) var(--ease-spring);
+  min-width: 260px; font-weight: 500;
 }
 .toast.err { border-left-color: var(--red); }
 .toast.ok { border-left-color: var(--green); }
 .toast .close {
   background: transparent; border: 0; color: var(--mut);
-  cursor: pointer; padding: 4px; margin-left: auto;
-  border-radius: 4px;
+  cursor: pointer; padding: 4px; margin-left: auto; font-size: 18px;
+  line-height: 1; border-radius: 4px;
 }
 .toast .close:hover { color: var(--fg); }
 @keyframes slidein {
-  from { transform: translateX(20px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* Confetti */
+.confetti { position: fixed; inset: 0; pointer-events: none;
+  z-index: 9998; overflow: hidden; }
+.confetti span {
+  position: absolute; top: -20px; width: 10px; height: 14px;
+  animation: confall linear forwards;
+  border-radius: 2px;
+}
+@keyframes confall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
 }
 
 /* Responsive */
-@media (max-width: 1024px) {
-  .main { padding: var(--sp-5) var(--sp-5) 60px; }
-}
+@media (max-width: 1024px) { .main { padding: 24px; } }
 @media (max-width: 768px) {
-  .app { flex-direction: column; }
-  .sidebar {
-    width: 100%; height: auto; position: static;
-    padding: var(--sp-2) 0;
-    border-right: 0; border-bottom: 1px solid var(--line);
-  }
-  .brand, .tag { display: none; }
-  .nav {
-    display: flex; flex-direction: row; overflow-x: auto;
-    padding: 0 var(--sp-3) 2px; gap: 4px;
-    scroll-snap-type: x mandatory;
-  }
-  .nav a {
-    padding: 10px 14px; border-left: 0;
-    border-radius: 8px; white-space: nowrap;
-    scroll-snap-align: start;
-  }
-  .nav a[aria-current="page"] { background: var(--surf); }
-  .main { padding: var(--sp-4); }
-  .mom-row { grid-template-columns: 30px 56px 1fr; padding: var(--sp-2); }
+  .header { padding: 14px 16px; }
+  .main { padding: 20px 16px 60px; }
+  .stepper { padding: 14px 16px 4px; }
+  .step-title { font-size: 24px; }
+  .look-grid { grid-template-columns: 1fr; }
+  .mom-row { grid-template-columns: 30px 56px 1fr; padding: 10px; }
   .mom-row .hide-mob { display: none; }
   .fontgrid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
-  .modal .foot { padding: var(--sp-3) var(--sp-4); }
-  .btn { padding: 12px 18px; }
+  .modal .foot { padding: 14px 18px; }
+  .wiz-nav { position: sticky; bottom: 0; background: var(--bg);
+    padding: 16px 0; margin: 0 -16px; padding-left: 16px; padding-right: 16px;
+    border-top: 1px solid var(--line); z-index: 10; }
+  .step-lbl { display: none; }
+  .step { padding: 6px; }
+  .hero-inner { padding: 32px 24px; }
 }
 
 footer { text-align: center; color: var(--mut2); font-size: 12px;
-  padding: var(--sp-5); margin-top: var(--sp-6); }
+  padding: 22px; margin-top: 20px; }
 
 .hidden { display: none !important; }
 .sr-only {
@@ -390,399 +592,445 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 </head>
 <body>
 
-<a href="#main" class="skip">Zum Inhalt springen</a>
+<a href="#main" class="skip">Zum Inhalt</a>
 <div class="toasts" id="toasts" aria-live="polite" aria-atomic="true"></div>
+<div class="confetti" id="confetti" aria-hidden="true"></div>
 
-<div id="loginView" class="login" role="main">
-  <h1>DouchkoVE</h1>
-  <div class="tag">CAPTIONS</div>
-  <p>Zugangscode eingeben. Nichts zu installieren.</p>
-  <label for="code" class="sr-only">Zugangscode</label>
-  <input type="text" id="code" placeholder="z. B. ISMET-1728" autocomplete="off"
-         autocapitalize="characters" inputmode="text"
-         aria-describedby="loginErr">
-  <button class="btn wide" id="btnLogin">Weiter</button>
-  <div class="err hidden" id="loginErr" role="alert"></div>
+<!-- ---------- LOGIN (Hero) ---------- -->
+<div id="loginView" class="hero" role="main">
+  <div class="hero-inner">
+    <div class="hero-brand">DouchkoVE</div>
+    <div class="hero-tag">CAPTIONS · v76</div>
+    <h1 class="hero-title">Premium-Captions in <span class="glow">wenigen Minuten</span>.</h1>
+    <p class="hero-sub">Automatische Regie, 26 Animationen, Kino-Blur, Musik-Beat-Sync.
+      Kein Download.</p>
+    <div class="hero-badges">
+      <span class="badge on">GPT-4o Regie</span>
+      <span class="badge on">Blender 3D</span>
+      <span class="badge on">Depth-Track</span>
+      <span class="badge on">DE + EN</span>
+    </div>
+    <label for="code" class="sr-only">Zugangscode</label>
+    <input type="text" id="code" placeholder="Zugangscode (z. B. ISMET-1728)"
+           autocomplete="off" autocapitalize="characters" inputmode="text"
+           aria-describedby="loginErr">
+    <button class="btn wide" id="btnLogin" style="margin-top:12px;">Loslegen</button>
+    <div class="err hidden" id="loginErr" role="alert"></div>
+    <div class="trust">
+      <b>Kein Konto</b> · Kein Payment · Nur Zugangscode<br>
+      Video bleibt privat · nach Download geloescht
+    </div>
+  </div>
 </div>
 
-<div id="appView" class="app hidden">
-  <aside class="sidebar" aria-label="Bereich waehlen">
+<!-- ---------- APP (Wizard) ---------- -->
+<div id="appView" class="app">
+  <header class="header">
     <div class="brand">DouchkoVE</div>
-    <div class="tag">CAPTIONS</div>
-    <nav class="nav" role="tablist" aria-orientation="vertical">
-      <a role="tab" data-sec="video" aria-current="page" tabindex="0"><span>Video</span></a>
-      <a role="tab" data-sec="hook" tabindex="-1"><span>Hook</span></a>
-      <a role="tab" data-sec="text" tabindex="-1"><span>Text</span></a>
-      <a role="tab" data-sec="effekte" tabindex="-1"><span>Effekte</span></a>
-      <a role="tab" data-sec="spezial" tabindex="-1"><span>Spezial</span></a>
-      <a role="tab" data-sec="sound" tabindex="-1"><span>Sound</span></a>
-      <a role="tab" data-sec="kamera" tabindex="-1"><span>Kamera</span></a>
-      <a role="tab" data-sec="fonts" tabindex="-1"><span>Schrift</span></a>
-      <a role="tab" data-sec="farben" tabindex="-1"><span>Farben</span></a>
-      <a role="tab" data-sec="ausgabe" tabindex="-1"><span>Ausgabe</span></a>
-      <a role="tab" data-sec="momente" tabindex="-1"><span>Momente-Editor</span></a>
-      <a role="tab" data-sec="rendern" tabindex="-1"><span>Rendern</span></a>
-    </nav>
-  </aside>
+    <div class="grow"></div>
+    <div class="hi">
+      <div class="greeting">
+        <b id="topName">Hallo</b><br>
+        <span class="mut" id="topRest">–</span>
+      </div>
+      <div class="ring-wrap" id="ringWrap" title="Kontingent">
+        <svg viewBox="0 0 42 42">
+          <circle cx="21" cy="21" r="18" fill="none" stroke-width="4" class="ring-bg"/>
+          <circle cx="21" cy="21" r="18" fill="none" stroke-width="4" class="ring-fg"
+                  stroke-dasharray="113" stroke-dashoffset="113" id="ringFg"/>
+        </svg>
+        <div class="ring-num" id="ringNum">–</div>
+      </div>
+    </div>
+    <button class="btn secondary" id="btnLogout" style="padding:10px 16px;">Ausloggen</button>
+  </header>
+
+  <!-- Stepper -->
+  <div class="stepper" id="stepper" role="tablist" aria-label="Schritte">
+    <div class="step active" data-step="1" role="tab">
+      <div class="step-num">1</div><div class="step-lbl">Video</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" data-step="2" role="tab">
+      <div class="step-num">2</div><div class="step-lbl">Look</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" data-step="3" role="tab">
+      <div class="step-num">3</div><div class="step-lbl">Feintuning</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" data-step="4" role="tab">
+      <div class="step-num">4</div><div class="step-lbl">Rendern</div>
+    </div>
+  </div>
 
   <main class="main" id="main">
-    <div class="topbar">
-      <div>
-        <div class="name" id="topName">Angemeldet</div>
-        <div class="rest" id="topRest"></div>
-      </div>
-      <div class="grow"></div>
-      <button class="btn secondary" id="btnLogout" aria-label="Abmelden">Abmelden</button>
-    </div>
 
-    <section class="section active" data-sec="video" role="tabpanel" aria-label="Video">
-      <h2>Video</h2>
-      <p class="sub">Video hochladen und Voreinstellung waehlen.</p>
+    <!-- SCHRITT 1: VIDEO -->
+    <div class="step-view active" data-step="1" role="tabpanel" aria-label="Video">
+      <h1 class="step-title">Dein Video</h1>
+      <p class="step-sub">Zieh es rein oder klick zum Auswaehlen. Max. 3 Minuten,
+        300 MB. Wir stellen automatisch alles ein — Du kannst danach feintunen.</p>
       <div class="card">
-        <h3>Datei hochladen</h3>
-        <p class="desc">MP4, MOV, MKV oder WEBM. Max. 3 Minuten, 300 MB.</p>
         <div id="drop" role="button" tabindex="0" aria-label="Video-Datei auswaehlen">
-          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
           <div class="big">Video hierher ziehen</div>
-          <div class="small">oder klicken zum Auswaehlen</div>
+          <div class="small">oder klicken zum Auswaehlen · MP4, MOV, MKV, WEBM</div>
         </div>
         <input type="file" id="file" accept="video/*" class="hidden">
-        <div id="fileInfo" class="file-info hidden" role="status" aria-live="polite"></div>
+        <div id="fileInfo" class="file-card hidden" role="status" aria-live="polite"></div>
       </div>
-      <div class="card">
-        <h3>Voreinstellung (Look)</h3>
-        <p class="desc">Startpunkt. Feintuning in den anderen Bereichen.</p>
-        <div class="chips" id="looks" role="radiogroup" aria-label="Look-Voreinstellung"></div>
+      <div class="wiz-nav">
+        <div class="grow"></div>
+        <button class="btn" id="wiz1Next" disabled>Weiter zu Look
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
       </div>
-    </section>
+    </div>
 
-    <section class="section" data-sec="hook" role="tabpanel" aria-label="Hook">
-      <h2>Hook</h2>
-      <p class="sub">Die ersten Sekunden entscheiden. 65-71 % springen davor ab.</p>
-      <div class="card">
-        <div class="setting">
-          <div class="setting-label">Hook-Dauer</div>
-          <div class="setting-desc">Wie lange am Anfang die Caption-Dichte hochgefahren wird. 0 = kein Hook.</div>
-          <div class="seg" data-cfg="effects.hook_seconds" data-opts="Aus:0,8s:8,15s:15,30s:30,60s:60"></div>
+    <!-- SCHRITT 2: LOOK -->
+    <div class="step-view" data-step="2" role="tabpanel" aria-label="Look waehlen">
+      <h1 class="step-title">Waehl deinen Look</h1>
+      <p class="step-sub">Als Startpunkt. Feintuning kommt gleich.</p>
+      <div class="look-grid" id="looks"></div>
+      <div class="wiz-nav">
+        <button class="btn secondary" data-back="1">Zurueck</button>
+        <div class="grow"></div>
+        <button class="btn" id="wiz2Next">Weiter zum Feintuning
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- SCHRITT 3: FEINTUNING (Accordions) -->
+    <div class="step-view" data-step="3" role="tabpanel" aria-label="Feintuning">
+      <h1 class="step-title">Feintuning</h1>
+      <p class="step-sub">Regler oeffnen, was Du willst. Was Du nicht anfasst,
+        bleibt beim Look. Am Ende rendern.</p>
+
+      <!-- Hook & Text -->
+      <div class="acc" data-cat="text">
+        <div class="acc-head">
+          <div class="ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          </div>
+          <div class="lbl"><h4>Hook & Text</h4><p>Wie das Video oeffnet, wie Text getaktet ist.</p></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
-        <div class="setting">
-          <div class="setting-label">Hook-Staerke</div>
-          <div class="seg" data-cfg="effects.hook_strength" data-opts="Sanft:0.3,Normal:0.5,Stark:0.85"></div>
-        </div>
-        <div class="setting">
-          <div class="row">
-            <div class="grow">
+        <div class="acc-body">
+          <div class="setting"><div class="setting-label">Hook-Dauer</div>
+            <div class="setting-desc">0 = kein Hook. Erste Sekunden entscheiden.</div>
+            <div class="seg" data-cfg="effects.hook_seconds" data-opts="Aus:0,8s:8,15s:15,30s:30,60s:60"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Hook-Staerke</div>
+            <div class="seg" data-cfg="effects.hook_strength" data-opts="Sanft:0.3,Normal:0.5,Stark:0.85"></div>
+          </div>
+          <div class="setting">
+            <div class="row"><div class="grow">
               <div class="setting-label">Sofort-Hook</div>
-              <div class="setting-desc">Staerkstes Statement der ersten Sekunden startet auf Frame 1.</div>
+              <div class="setting-desc">Staerkste Aussage startet auf Frame 1.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="effects.instant_hook" aria-label="Sofort-Hook">
               <span class="track"><span class="knob"></span></span></label>
+            </div>
+          </div>
+          <div class="setting"><div class="setting-label">Woerter pro Gruppe</div>
+            <div class="seg" data-cfg="effects.words_per_group" data-opts="2:2,3:3,4:4"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Chunk-Standzeit</div>
+            <div class="setting-desc">Wortgruppen bleiben mind. so lange stehen.</div>
+            <div class="slider" data-cfg="effects.chunk_hold_min" data-min="0" data-max="1500" data-scale="1000" data-suffix=" ms"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Beat-Sync (Stimme)</div>
+            <div class="slider" data-cfg="effects.beat_sync" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Musik-Beat</div>
+            <div class="setting-desc">Kick/Sub-Bass triggert Beat-Sync mit.</div>
+            <div class="slider" data-cfg="effects.music_beat" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Sprache</div>
+            <div class="seg" data-cfg="language" data-opts="Deutsch:de,Englisch:en,Auto:auto"></div>
           </div>
         </div>
-        <div class="setting">
-          <div class="setting-label">Pattern-Interrupt (Sek. Grenze)</div>
-          <div class="setting-desc">In stillen Passagen Kamera-Impulse einbauen. 0 = aus.</div>
-          <div class="slider" data-cfg="effects.pattern_interrupt" data-min="0" data-max="20" data-suffix=" s"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Lueckenfueller</div>
-          <div class="setting-desc">Textlose Strecken bekommen einen dezenten Moment. 0 = aus.</div>
-          <div class="slider" data-cfg="effects.retention_gap" data-min="0" data-max="30" data-suffix=" s"></div>
-        </div>
       </div>
-    </section>
 
-    <section class="section" data-sec="text" role="tabpanel" aria-label="Text">
-      <h2>Text</h2>
-      <p class="sub">Wie die Untertitel getaktet und gruppiert werden.</p>
-      <div class="card">
-        <div class="setting">
-          <div class="setting-label">Woerter pro Gruppe</div>
-          <div class="seg" data-cfg="effects.words_per_group" data-opts="2:2,3:3,4:4"></div>
+      <!-- Effekte -->
+      <div class="acc" data-cat="effekte">
+        <div class="acc-head">
+          <div class="ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          </div>
+          <div class="lbl"><h4>Effekte</h4><p>Welche Caption-Effekte + Freistellung + Blur.</p></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
-        <div class="setting">
-          <div class="setting-label">Max. Woerter pro Gruppe</div>
-          <div class="slider" data-cfg="effects.words_per_group_max" data-min="2" data-max="8"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Chunk-Standzeit</div>
-          <div class="setting-desc">Wortgruppen bleiben mind. so lange stehen.</div>
-          <div class="slider" data-cfg="effects.chunk_hold_min" data-min="0" data-max="1500" data-scale="1000" data-suffix=" ms"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Abdunkeln hinter Text</div>
-          <div class="slider" data-cfg="effects.dim_behind" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Beat-Sync (Stimme)</div>
-          <div class="slider" data-cfg="effects.beat_sync" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Musik-Beat</div>
-          <div class="slider" data-cfg="effects.music_beat" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Schatten der Person</div>
-          <div class="slider" data-cfg="effects.person_shadow" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Abstand Zahl-Captions</div>
-          <div class="slider" data-cfg="effects.zahl_gap" data-min="0" data-max="60" data-suffix=" s"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Sprache</div>
-          <div class="seg" data-cfg="language" data-opts="Deutsch:de,Englisch:en,Auto:auto"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" data-sec="effekte" role="tabpanel" aria-label="Effekte">
-      <h2>Effekte</h2>
-      <p class="sub">Welche Caption-Effekte vorkommen duerfen + Dynamik + Freistellung.</p>
-      <div class="card">
-        <h3>Effekte auswaehlen</h3>
-        <p class="desc">KI-Regie rotiert automatisch durch die aktivierten.</p>
-        <div class="chips" id="fxChips"></div>
-      </div>
-      <div class="card">
-        <h3>Dynamik</h3>
-        <div class="setting">
-          <div class="setting-label">Bewegungsstil</div>
-          <div class="seg" data-cfg="effects.density" data-opts="Ruhig:sparsam,Ausgewogen:akzente,Energisch:wortweise"></div>
-        </div>
-        <div class="setting">
-          <div class="row">
-            <div class="grow">
+        <div class="acc-body">
+          <div class="setting">
+            <div class="setting-label">Effekte auswaehlen</div>
+            <div class="setting-desc">KI-Regie rotiert automatisch durch die aktiven.</div>
+            <div class="chips" id="fxChips"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Bewegungsstil</div>
+            <div class="seg" data-cfg="effects.density" data-opts="Ruhig:sparsam,Ausgewogen:akzente,Energisch:wortweise"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Herausschieben (Emerge)</div>
+            <div class="seg" data-cfg="effects.emerge" data-opts="Auto:auto,Immer:immer,Aus:aus"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Maskenqualitaet</div>
+            <div class="seg" data-cfg="matting_quality" data-opts="Standard:standard,Hoch:hoch,Maximum:maximum"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Hintergrund weichzeichnen (Bokeh)</div>
+            <div class="setting-desc">Person + Text scharf, Rest unscharf.</div>
+            <div class="slider" data-cfg="effects.bg_blur" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting">
+            <div class="row"><div class="grow">
               <div class="setting-label">Animationen aktiv</div>
-              <div class="setting-desc">26 Animationen. Woerter reagieren auf den Satz.</div>
+              <div class="setting-desc">26 Animationen reagieren auf den Satz.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="effects.anim" aria-label="Animationen aktiv">
               <span class="track"><span class="knob"></span></span></label>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <h3>Freistellung & Masken</h3>
-        <div class="setting">
-          <div class="setting-label">Herausschieben (Emerge)</div>
-          <div class="seg" data-cfg="effects.emerge" data-opts="Auto:auto,Immer:immer,Aus:aus"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Maskenqualitaet</div>
-          <div class="seg" data-cfg="matting_quality" data-opts="Standard:standard,Hoch:hoch,Maximum:maximum"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Hintergrund weichzeichnen (Bokeh)</div>
-          <div class="setting-desc">Person + Text scharf, Rest unscharf.</div>
-          <div class="slider" data-cfg="effects.bg_blur" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" data-sec="spezial" role="tabpanel" aria-label="Spezial-Effekte">
-      <h2>Spezial-Effekte</h2>
-      <p class="sub">Fuenf Effekte fuer besondere Momente. Bei 0 % passiert nichts.</p>
-      <div class="card">
-        <div class="setting">
-          <div class="setting-label">Freeze-Frame (Standbild auf Punchline)</div>
-          <div class="setting-desc">Nur einmal pro Clip. Sekunden Standbild.</div>
-          <div class="slider" data-cfg="effects.freeze_frame" data-min="0" data-max="150" data-scale="100" data-suffix=" s"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Duplicate-Trail (Speed-Echo)</div>
-          <div class="slider" data-cfg="effects.trail" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Zaehler-Ring</div>
-          <div class="setting-desc">Kreisrunder Fortschritt um Zahl-Momente.</div>
-          <div class="slider" data-cfg="effects.counter_ring" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Split-Screen</div>
-          <div class="setting-desc">Frame teilt sich bei Power-3-Momenten.</div>
-          <div class="slider" data-cfg="effects.split_screen" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Kontaktschatten (Environment)</div>
-          <div class="slider" data-cfg="effects.env_shadow" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" data-sec="sound" role="tabpanel" aria-label="Sound">
-      <h2>Sound</h2>
-      <p class="sub">Ohne Sound-Pack laeuft das Video stumm.</p>
-      <div class="card">
-        <div class="setting">
-          <div class="setting-label">SFX-Lautstaerke</div>
-          <div class="slider" data-cfg="effects.sfx_volume" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" data-sec="kamera" role="tabpanel" aria-label="Kamera">
-      <h2>Kamera</h2>
-      <p class="sub">Die kuenstliche Kamerabewegung.</p>
-      <div class="card">
-        <div class="setting">
-          <div class="setting-label">Kamera-Staerke</div>
-          <div class="setting-desc">Gesamt-Multiplikator. 0 = Kamera ganz aus.</div>
-          <div class="slider" data-cfg="camera.strength" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="setting-label">Crash-Zoom</div>
-          <div class="setting-desc">Nur einmal pro Clip.</div>
-          <div class="slider" data-cfg="camera.crash" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
-        </div>
-        <div class="setting">
-          <div class="row">
-            <div class="grow">
-              <div class="setting-label">Whip-Pan an Abschnittsgrenzen</div>
-              <div class="setting-desc">Schneller Motion-Blur-Schwenk.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="camera.whip" aria-label="Whip-Pan aktivieren">
-              <span class="track"><span class="knob"></span></span></label>
           </div>
         </div>
-        <div class="setting">
-          <div class="setting-label">Kamera-Impulse Frequenz</div>
-          <div class="setting-desc">Kleiner = haeufiger.</div>
-          <div class="slider" data-cfg="camera.side_every" data-min="1" data-max="10"></div>
+      </div>
+
+      <!-- Spezial -->
+      <div class="acc" data-cat="spezial">
+        <div class="acc-head">
+          <div class="ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <div class="lbl"><h4>Spezial-Effekte</h4><p>Freeze, Trail, Zaehler-Ring, Split, Schatten.</p></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="acc-body">
+          <div class="setting"><div class="setting-label">Freeze-Frame (Standbild auf Punchline)</div>
+            <div class="setting-desc">Nur einmal pro Clip. Sekunden Standbild.</div>
+            <div class="slider" data-cfg="effects.freeze_frame" data-min="0" data-max="150" data-scale="100" data-suffix=" s"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Duplicate-Trail (Speed-Echo)</div>
+            <div class="slider" data-cfg="effects.trail" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Zaehler-Ring</div>
+            <div class="setting-desc">Kreis-Fortschritt um Zahl-Momente.</div>
+            <div class="slider" data-cfg="effects.counter_ring" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Split-Screen</div>
+            <div class="setting-desc">Frame teilt sich bei Power-3.</div>
+            <div class="slider" data-cfg="effects.split_screen" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Kontaktschatten (Environment)</div>
+            <div class="slider" data-cfg="effects.env_shadow" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
         </div>
       </div>
-    </section>
 
-    <section class="section" data-sec="fonts" role="tabpanel" aria-label="Schrift">
-      <h2>Schrift</h2>
-      <p class="sub">Hauptschrift fuer alle Captions.</p>
-      <div class="card">
-        <div class="fontgrid" id="fontGrid" role="radiogroup" aria-label="Schriftart"></div>
-      </div>
-    </section>
-
-    <section class="section" data-sec="farben" role="tabpanel" aria-label="Farben">
-      <h2>Farben</h2>
-      <p class="sub">Farbwelt der Captions.</p>
-      <div class="card">
-        <div class="setting">
-          <div class="setting-label">Farb-Stil</div>
-          <div class="setting-desc">Auto = adaptiv aus der Szene.</div>
-          <div class="seg" data-cfg="colors.style" data-opts="Auto:auto,Schwarz:schwarz,Weiss:weiss"></div>
+      <!-- Kamera -->
+      <div class="acc" data-cat="kamera">
+        <div class="acc-head">
+          <div class="ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          </div>
+          <div class="lbl"><h4>Kamera</h4><p>Bewegung, Crash-Zoom, Whip-Pan.</p></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
-        <div class="setting">
-          <div class="row">
-            <div class="grow">
+        <div class="acc-body">
+          <div class="setting"><div class="setting-label">Kamera-Staerke</div>
+            <div class="slider" data-cfg="camera.strength" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Crash-Zoom</div>
+            <div class="slider" data-cfg="camera.crash" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting">
+            <div class="row"><div class="grow">
+              <div class="setting-label">Whip-Pan</div>
+              <div class="setting-desc">Motion-Blur-Schwenk an Abschnittsgrenzen.</div>
+            </div>
+            <label class="switch"><input type="checkbox" data-cfg="camera.whip" aria-label="Whip-Pan">
+              <span class="track"><span class="knob"></span></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schrift & Farbe -->
+      <div class="acc" data-cat="schrift">
+        <div class="acc-head">
+          <div class="ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v3h5v11h3V4z"/><path d="M3 20h11l-5.5-16z" transform="translate(0)"/></svg>
+          </div>
+          <div class="lbl"><h4>Schrift & Farben</h4><p>15 Schriften, adaptive Farben.</p></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="acc-body">
+          <div class="setting"><div class="setting-label">Schrift</div>
+            <div class="fontgrid" id="fontGrid" role="radiogroup" aria-label="Schriftart"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Farb-Stil</div>
+            <div class="seg" data-cfg="colors.style" data-opts="Auto:auto,Schwarz:schwarz,Weiss:weiss"></div>
+          </div>
+          <div class="setting">
+            <div class="row"><div class="grow">
               <div class="setting-label">Adaptive Farben</div>
-              <div class="setting-desc">Caption-Farben passen sich pro Moment der Szene an.</div>
+              <div class="setting-desc">Farben aus der Szene ableiten.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="colors.adaptive" aria-label="Adaptive Farben">
               <span class="track"><span class="knob"></span></span></label>
+            </div>
           </div>
         </div>
       </div>
-    </section>
 
-    <section class="section" data-sec="ausgabe" role="tabpanel" aria-label="Ausgabe">
-      <h2>Ausgabe</h2>
-      <p class="sub">Format des fertigen Videos.</p>
-      <div class="card">
-        <div class="setting">
-          <div class="setting-label">Aufloesung</div>
-          <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K:2160"></div>
+      <!-- Ausgabe -->
+      <div class="acc" data-cat="ausgabe">
+        <div class="acc-head">
+          <div class="ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div class="lbl"><h4>Ausgabe</h4><p>Aufloesung, Geschwindigkeit, SFX.</p></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
-        <div class="setting">
-          <div class="setting-label">Render-Geschwindigkeit</div>
-          <div class="seg" data-cfg="output.speed" data-opts="Schnell:schnell,Standard:standard,Beste:beste"></div>
-        </div>
-        <div class="setting">
-          <div class="row">
-            <div class="grow">
+        <div class="acc-body">
+          <div class="setting"><div class="setting-label">Aufloesung</div>
+            <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K:2160"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Render-Geschwindigkeit</div>
+            <div class="seg" data-cfg="output.speed" data-opts="Schnell:schnell,Standard:standard,Beste:beste"></div>
+          </div>
+          <div class="setting"><div class="setting-label">SFX-Lautstaerke</div>
+            <div class="setting-desc">Ohne Sound-Pack laeuft das Video stumm.</div>
+            <div class="slider" data-cfg="effects.sfx_volume" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting">
+            <div class="row"><div class="grow">
               <div class="setting-label">Master-Container (MOV)</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="output.master" aria-label="Master-Container">
+            <label class="switch"><input type="checkbox" data-cfg="output.master" aria-label="Master">
               <span class="track"><span class="knob"></span></span></label>
+            </div>
           </div>
         </div>
       </div>
-    </section>
 
-    <section class="section" data-sec="momente" role="tabpanel" aria-label="Momente-Editor">
-      <h2>Momente-Editor</h2>
-      <p class="sub">Jeden Moment einzeln bearbeiten. Undo/Redo mit Strg+Z / Strg+Y.</p>
-      <div class="card">
-        <p class="desc">Erst Video hochladen, dann Analysieren. Danach jeden Moment
-          bearbeiten (Text, Effekt, Groesse, Animation, Szene, Lage).</p>
-        <button class="btn" id="btnAnalyze">
-          <svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round" aria-hidden="true">
+      <div class="wiz-nav">
+        <button class="btn secondary" data-back="2">Zurueck</button>
+        <div class="grow"></div>
+        <button class="btn secondary" id="btnAnalyze">Momente-Editor
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          Analysieren
         </button>
-        <button class="btn secondary hidden" id="btnOpenMoments" style="margin-left:8px;">
-          Momente bearbeiten
+        <button class="btn" id="wiz3Next">Rendern
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
-        <div id="analyzeStatus" style="margin-top:14px; color:var(--mut); font-size:14px;"
-             role="status" aria-live="polite"></div>
       </div>
-    </section>
+      <div id="analyzeStatus" style="margin-top:10px; color:var(--mut); font-size:14px;"
+           role="status" aria-live="polite"></div>
+    </div>
 
-    <section class="section" data-sec="rendern" role="tabpanel" aria-label="Rendern">
-      <h2>Rendern</h2>
-      <p class="sub">Volles Video mit allen aktuellen Einstellungen bauen.</p>
+    <!-- SCHRITT 4: RENDERN -->
+    <div class="step-view" data-step="4" role="tabpanel" aria-label="Rendern">
+      <h1 class="step-title">Alles klar?</h1>
+      <p class="step-sub">Ein Klick — wir bauen dein Video mit allen Einstellungen.</p>
+
       <div class="card">
-        <button class="btn wide" id="btnRender">
-          <svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round" aria-hidden="true">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          Video erstellen
-        </button>
-        <div class="err hidden" id="renderErr" role="alert" style="margin-top:10px;"></div>
+        <h3>Zusammenfassung</h3>
+        <div id="summary" style="color:var(--mut); font-size:14px; line-height:1.7;
+             margin-top:10px;"></div>
       </div>
-      <div class="card hidden" id="progressCard">
-        <h3>Wird gebaut</h3>
-        <div class="bar"><i id="progressBar"></i></div>
-        <div class="phase" id="progressPhase" aria-live="polite">In der Warteschlange …</div>
+
+      <button class="btn big wide" id="btnRender" style="margin-top:14px;">
+        Video jetzt bauen
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+      </button>
+
+      <div class="wiz-nav">
+        <button class="btn secondary" data-back="3">Zurueck</button>
+        <div class="grow"></div>
       </div>
-      <div class="card hidden" id="doneCard">
-        <h3 style="color:var(--green); display:flex; align-items:center; gap:8px;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="20 6 9 17 4 12"/>
+
+      <!-- Fortschritt -->
+      <div class="card hidden" id="progressCard" style="margin-top:20px;">
+        <div class="prog-box">
+          <svg width="0" height="0" style="position:absolute;">
+            <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#ff6b9d"/>
+            </linearGradient></defs>
           </svg>
-          Fertig
-        </h3>
+          <div class="prog-ring">
+            <svg viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke-width="6" class="pr-bg"/>
+              <circle cx="50" cy="50" r="42" fill="none" stroke-width="6" class="pr-fg"
+                      stroke-dasharray="264" stroke-dashoffset="264" id="prFg"/>
+            </svg>
+            <div class="pr-num"><span class="pct" id="prPct">0</span>%</div>
+          </div>
+          <div class="prog-phase" id="progressPhase">In der Warteschlange …</div>
+        </div>
+      </div>
+
+      <!-- Erfolg -->
+      <div class="hidden" id="doneCard" style="margin-top:20px;">
+        <div class="success-hero">
+          <div class="ic-big">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <h2>Fertig!</h2>
+          <p id="doneSub">Dein Video ist bereit.</p>
+        </div>
+        <div class="stat-grid" id="statGrid"></div>
         <video id="resultVid" controls playsinline
-               style="width:100%; border-radius:12px; margin:12px 0; background:#000;"></video>
-        <a class="btn wide" id="dlLink" download>Video herunterladen</a>
+               style="width:100%; border-radius:16px; margin:16px 0;
+               background:#000; max-height: 480px;"></video>
+        <div style="display:flex; gap:10px; flex-wrap: wrap;">
+          <a class="btn" id="dlLink" download style="flex:1;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Herunterladen
+          </a>
+          <button class="btn secondary" id="btnAgain" style="flex:1;">Noch eins bauen</button>
+        </div>
       </div>
-      <div class="card hidden" id="errCard">
+
+      <!-- Fehler -->
+      <div class="card hidden" id="errCard" style="margin-top:20px;">
         <h3 style="color:var(--red); display:flex; align-items:center; gap:8px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          Fehler
+          Fehler beim Rendern
         </h3>
         <div id="errMsg" style="color:var(--mut); margin-top:8px;"></div>
-        <pre id="errDetail" style="background:var(--surf2); padding:12px;
-             border-radius:8px; margin-top:10px; font-size:12px; overflow-x:auto;
-             color:var(--mut); white-space:pre-wrap;"></pre>
+        <pre id="errDetail" style="background:var(--surf2); padding:14px; border-radius:10px;
+             margin-top:12px; font-size:12px; overflow-x:auto; color:var(--mut);
+             white-space:pre-wrap; max-height: 300px;"></pre>
+        <button class="btn secondary" onclick="$('#errCard').classList.add('hidden');
+                $('#btnRender').disabled=false;">Nochmal versuchen</button>
       </div>
-    </section>
+    </div>
 
-    <footer>DouchkoVE Captions · v76</footer>
+    <footer>DouchkoVE Captions · v76 · Made with intent</footer>
   </main>
 </div>
 
+<!-- Momente-Editor Modal -->
 <div class="overlay hidden" id="momEditor" role="dialog" aria-modal="true"
      aria-labelledby="momTitle">
   <div class="modal">
@@ -793,8 +1041,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
     <div class="body" id="momBody"></div>
     <div class="foot">
-      <button class="btn secondary" id="momUndo" disabled aria-label="Undo (Strg+Z)">Undo</button>
-      <button class="btn secondary" id="momRedo" disabled aria-label="Redo (Strg+Y)">Redo</button>
+      <button class="btn secondary" id="momUndo" disabled aria-label="Undo">Undo</button>
+      <button class="btn secondary" id="momRedo" disabled aria-label="Redo">Redo</button>
       <div style="flex:1;"></div>
       <button class="btn secondary" id="momCancel">Abbrechen</button>
       <button class="btn" id="momSave">Speichern & Rendern</button>
@@ -805,10 +1053,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 <script>
 'use strict';
 const State = {
-  code: null, codeName: '', codeRest: null,
+  code: null, codeName: '', codeRest: null, codeLimit: null,
   file: null, look: 'creator',
   cfg: null, cfgBase: null,
   jid: null, moments: null, history: null,
+  currentStep: 1, renderStart: 0,
 };
 
 class EditorHistory {
@@ -832,17 +1081,29 @@ class EditorHistory {
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
-// Toast statt alert
 function toast(msg, kind='info', dur=4000) {
   const el = document.createElement('div');
   el.className = 'toast' + (kind !== 'info' ? ' ' + kind : '');
   el.setAttribute('role', 'status');
-  el.innerHTML = `<span>${msg}</span>
-    <button class="close" aria-label="Schliessen">&times;</button>`;
+  el.innerHTML = `<span>${msg}</span><button class="close" aria-label="Schliessen">&times;</button>`;
   $('#toasts').appendChild(el);
   const close = () => el.remove();
   el.querySelector('.close').addEventListener('click', close);
   if (dur > 0) setTimeout(close, dur);
+}
+
+function confetti(n=30) {
+  const box = $('#confetti');
+  const colors = ['#7c5cff','#ff6b9d','#30d158','#ffb340','#9b7dff'];
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('span');
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.background = colors[i % colors.length];
+    el.style.animationDuration = (2 + Math.random() * 2) + 's';
+    el.style.animationDelay = (Math.random() * 0.4) + 's';
+    box.appendChild(el);
+    setTimeout(() => el.remove(), 4500);
+  }
 }
 
 function setDeep(obj, path, value) {
@@ -885,16 +1146,13 @@ function buildWidgets() {
     const suffix = el.dataset.suffix || '';
     const raw = getDeep(State.cfg, cfg, min);
     const val = Math.round(raw * scale);
-    el.innerHTML = `<input type="range" min="${min}" max="${max}" value="${val}"
-        aria-label="${cfg}" aria-valuemin="${min}" aria-valuemax="${max}"
-        aria-valuenow="${val}">
+    el.innerHTML = `<input type="range" min="${min}" max="${max}" value="${val}" aria-label="${cfg}">
       <span class="val">${val}${suffix}</span>`;
     const inp = el.querySelector('input');
     const out = el.querySelector('.val');
     inp.addEventListener('input', () => {
       const v = parseInt(inp.value);
       out.textContent = v + suffix;
-      inp.setAttribute('aria-valuenow', v);
       setDeep(State.cfg, cfg, scale === 1 ? v : v / scale);
     });
   });
@@ -905,18 +1163,13 @@ function buildWidgets() {
       return { lbl, val: (val === 'true' ? true : val === 'false' ? false : isNaN(+val) ? val : +val) };
     });
     const cur = getDeep(State.cfg, cfg, opts[0].val);
-    el.setAttribute('role', 'radiogroup');
     el.innerHTML = opts.map(o => {
       const on = JSON.stringify(o.val) === JSON.stringify(cur);
-      return `<button role="radio" aria-checked="${on}" data-val="${o.val}"${on ? ' class="on"' : ''}>${o.lbl}</button>`;
+      return `<button data-val="${o.val}"${on ? ' class="on"' : ''}>${o.lbl}</button>`;
     }).join('');
     el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-      el.querySelectorAll('button').forEach(x => {
-        x.classList.remove('on');
-        x.setAttribute('aria-checked', 'false');
-      });
+      el.querySelectorAll('button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
-      b.setAttribute('aria-checked', 'true');
       const raw = b.dataset.val;
       const v = raw === 'true' ? true : raw === 'false' ? false : (isNaN(+raw) ? raw : +raw);
       setDeep(State.cfg, cfg, v);
@@ -935,20 +1188,23 @@ async function buildLooks() {
   el.innerHTML = '';
   for (const [id, v] of Object.entries(looks)) {
     const c = document.createElement('div');
-    c.className = 'chip big' + (id === State.look ? ' on' : '');
-    c.innerHTML = `<div><b>${v.name}</b> — ${v.desc}</div>`;
+    c.className = 'look-card' + (id === State.look ? ' on' : '');
+    c.dataset.look = id;
     c.setAttribute('role', 'radio');
-    c.setAttribute('aria-checked', id === State.look ? 'true' : 'false');
     c.setAttribute('tabindex', '0');
+    c.innerHTML = `
+      <div class="checkmark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="lp-preview"><span>${v.name.toUpperCase()}</span></div>
+      <h4>${v.name}</h4><p>${v.desc}</p>`;
     const activate = async () => {
-      el.querySelectorAll('.chip').forEach(x => {
-        x.classList.remove('on'); x.setAttribute('aria-checked', 'false');
-      });
-      c.classList.add('on'); c.setAttribute('aria-checked', 'true');
+      el.querySelectorAll('.look-card').forEach(x => x.classList.remove('on'));
+      c.classList.add('on');
       State.look = id;
       await loadDefaults();
       rebuildAllWidgets();
-      toast(`Look "${v.name}" gewaehlt`, 'info', 2500);
+      toast('Look "' + v.name + '" gewaehlt', 'ok', 2000);
     };
     c.addEventListener('click', activate);
     c.addEventListener('keydown', e => {
@@ -968,7 +1224,6 @@ async function buildFxChips() {
     c.className = 'chip' + (rot.includes(id) ? ' on' : '');
     c.textContent = lbl;
     c.setAttribute('role', 'checkbox');
-    c.setAttribute('aria-checked', rot.includes(id) ? 'true' : 'false');
     c.setAttribute('tabindex', '0');
     const toggle = () => {
       c.classList.toggle('on');
@@ -976,7 +1231,6 @@ async function buildFxChips() {
       const idx = cur.indexOf(id);
       if (idx >= 0) cur.splice(idx, 1); else cur.push(id);
       setDeep(State.cfg, 'effects.keyword_rotation', cur);
-      c.setAttribute('aria-checked', c.classList.contains('on') ? 'true' : 'false');
     };
     c.addEventListener('click', toggle);
     c.addEventListener('keydown', e => {
@@ -996,14 +1250,10 @@ async function buildFontGrid() {
     t.className = 'fonttile' + (f.file === curFile ? ' on' : '');
     t.innerHTML = `<div class="name">Aa</div><div class="lbl">${f.label}</div>`;
     t.setAttribute('role', 'radio');
-    t.setAttribute('aria-checked', f.file === curFile ? 'true' : 'false');
-    t.setAttribute('aria-label', 'Schrift ' + f.label);
     t.setAttribute('tabindex', '0');
     const activate = () => {
-      el.querySelectorAll('.fonttile').forEach(x => {
-        x.classList.remove('on'); x.setAttribute('aria-checked', 'false');
-      });
-      t.classList.add('on'); t.setAttribute('aria-checked', 'true');
+      el.querySelectorAll('.fonttile').forEach(x => x.classList.remove('on'));
+      t.classList.add('on');
       setDeep(State.cfg, 'fonts.display', f.file);
       if (f.script) setDeep(State.cfg, 'fonts.script', f.script);
     };
@@ -1015,16 +1265,23 @@ async function buildFontGrid() {
   }
 }
 
-function rebuildAllWidgets() {
-  buildWidgets();
-  buildFxChips();
-  buildFontGrid();
-}
+function rebuildAllWidgets() { buildWidgets(); buildFxChips(); buildFontGrid(); }
 
 async function loadDefaults() {
   const r = await fetch('/api/default_config?look=' + State.look);
   State.cfg = await r.json();
   State.cfgBase = JSON.parse(JSON.stringify(State.cfg));
+}
+
+/* --------- Login --------- */
+function greetingForHour() {
+  const h = new Date().getHours();
+  if (h < 5) return 'Gute Nacht';
+  if (h < 11) return 'Guten Morgen';
+  if (h < 14) return 'Hi';
+  if (h < 18) return 'Guten Nachmittag';
+  if (h < 22) return 'Guten Abend';
+  return 'Gute Nacht';
 }
 
 $('#btnLogin').addEventListener('click', doLogin);
@@ -1033,8 +1290,7 @@ $('#code').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); 
 async function doLogin() {
   const code = $('#code').value.trim();
   if (!code) return;
-  const btn = $('#btnLogin');
-  btn.disabled = true;
+  const btn = $('#btnLogin'); btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Verbinde …';
   try {
     const fd = new FormData(); fd.append('code', code);
@@ -1047,55 +1303,80 @@ async function doLogin() {
     }
     State.code = code; State.codeName = d.name; State.codeRest = d.rest;
     $('#loginView').classList.add('hidden');
-    $('#appView').classList.remove('hidden');
-    $('#topName').textContent = 'Hallo' + (d.name ? ' ' + d.name : '');
-    $('#topRest').textContent = d.rest !== null ? `noch ${d.rest} Videos frei` : '';
+    $('#appView').classList.add('show');
+    const greet = greetingForHour();
+    $('#topName').textContent = `${greet}${d.name ? ', ' + d.name : ''}`;
+    if (d.rest !== null) {
+      $('#topRest').textContent = `${d.rest} Videos frei`;
+      State.codeLimit = d.rest + 0;  // hier approximiert; server liefert nur rest
+      updateRing(d.rest, d.rest + 5); // ohne Gesamt-Limit: minimal-Anzeige
+    } else {
+      $('#topRest').textContent = 'unbegrenzt';
+      updateRing(1, 1);
+    }
     await loadDefaults();
     rebuildAllWidgets();
     await buildLooks();
-    toast('Angemeldet', 'ok', 2200);
+    toast(`${greet}${d.name ? ', ' + d.name : ''}! Bereit fuer dein Video?`, 'ok', 3000);
   } catch (e) {
-    $('#loginErr').textContent = 'Verbindungsfehler. Nochmal versuchen.';
+    $('#loginErr').textContent = 'Verbindungsfehler.';
     $('#loginErr').classList.remove('hidden');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Weiter';
+    btn.textContent = 'Loslegen';
   }
 }
 
-$('#btnLogout').addEventListener('click', () => { location.reload(); });
+function updateRing(rest, total) {
+  const pct = total > 0 ? Math.max(0.02, rest / total) : 1;
+  const circ = 113;
+  $('#ringFg').setAttribute('stroke-dashoffset', String(circ * (1 - pct)));
+  $('#ringNum').textContent = String(rest);
+}
 
-// Tabs mit ARIA
-$$('.nav a').forEach(a => {
-  const activate = () => {
-    const sec = a.dataset.sec;
-    $$('.nav a').forEach(x => {
-      x.removeAttribute('aria-current');
-      x.setAttribute('tabindex', '-1');
-    });
-    a.setAttribute('aria-current', 'page');
-    a.setAttribute('tabindex', '0');
-    $$('.section').forEach(s => s.classList.remove('active'));
-    document.querySelector(`.section[data-sec="${sec}"]`).classList.add('active');
-    a.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  };
-  a.addEventListener('click', activate);
-  a.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      const list = [...$$('.nav a')];
-      const i = list.indexOf(a);
-      list[(i + 1) % list.length].focus();
-    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-      e.preventDefault();
-      const list = [...$$('.nav a')];
-      const i = list.indexOf(a);
-      list[(i - 1 + list.length) % list.length].focus();
-    }
+$('#btnLogout').addEventListener('click', () => location.reload());
+
+/* --------- Stepper --------- */
+function goStep(n) {
+  State.currentStep = n;
+  $$('.step').forEach(s => {
+    const num = parseInt(s.dataset.step);
+    s.classList.toggle('active', num === n);
+    s.classList.toggle('done', num < n);
   });
-});
+  $$('.step-line').forEach((l, i) => {
+    l.classList.toggle('done', i + 1 < n);
+  });
+  $$('.step-view').forEach(v => {
+    v.classList.toggle('active', parseInt(v.dataset.step) === n);
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (n === 4) buildSummary();
+}
 
+$$('.step').forEach(s => s.addEventListener('click', () => {
+  const target = parseInt(s.dataset.step);
+  // Nur zurueckspringen oder auf naechsten wenn Voraussetzung erfuellt
+  if (target < State.currentStep || target === State.currentStep + 1) {
+    if (target === 2 && !State.file) { toast('Erst Video hochladen.', 'err'); return; }
+    goStep(target);
+  }
+}));
+
+$$('[data-back]').forEach(b => b.addEventListener('click', () => {
+  goStep(parseInt(b.dataset.back));
+}));
+
+$('#wiz1Next').addEventListener('click', () => goStep(2));
+$('#wiz2Next').addEventListener('click', () => goStep(3));
+$('#wiz3Next').addEventListener('click', () => goStep(4));
+
+/* Accordions */
+$$('.acc-head').forEach(h => h.addEventListener('click', () => {
+  h.parentElement.classList.toggle('open');
+}));
+
+/* --------- Datei --------- */
 const drop = $('#drop');
 drop.addEventListener('click', () => $('#file').click());
 drop.addEventListener('keydown', e => {
@@ -1112,30 +1393,33 @@ $('#file').addEventListener('change', e => { if (e.target.files[0]) setFile(e.ta
 function setFile(f) {
   State.file = f;
   $('#fileInfo').innerHTML = `
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-    </svg>
-    <div><b>${f.name}</b> · ${(f.size / 1048576).toFixed(1)} MB</div>`;
+    <div class="fi-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+      </svg>
+    </div>
+    <div>
+      <div class="fi-name">${f.name}</div>
+      <div class="fi-meta">${(f.size / 1048576).toFixed(1)} MB · bereit</div>
+    </div>`;
   $('#fileInfo').classList.remove('hidden');
-  toast('Datei bereit: ' + f.name, 'ok', 2200);
+  $('#wiz1Next').disabled = false;
+  toast('Datei bereit', 'ok', 2000);
 }
 
+/* --------- Analyze / Render --------- */
 $('#btnAnalyze').addEventListener('click', () => startUpload('analyze'));
 $('#btnRender').addEventListener('click', () => startUpload('full'));
 
 async function startUpload(mode) {
-  if (!State.file) {
-    toast('Erst ein Video hochladen (Bereich "Video").', 'err');
-    return;
-  }
+  if (!State.file) { toast('Erst Video hochladen.', 'err'); return; }
   if (mode === 'full') {
-    $('#renderErr').classList.add('hidden');
     $('#progressCard').classList.remove('hidden');
     $('#doneCard').classList.add('hidden');
     $('#errCard').classList.add('hidden');
     $('#btnRender').disabled = true;
+    State.renderStart = Date.now();
   }
   const overrides = diffCfg(State.cfgBase, State.cfg);
   const fd = new FormData();
@@ -1148,9 +1432,7 @@ async function startUpload(mode) {
   try {
     r = await fetch('/api/upload', { method: 'POST', body: fd });
     d = await r.json();
-  } catch (e) {
-    showError('Upload fehlgeschlagen. Verbindung pruefen.'); return;
-  }
+  } catch (e) { showError('Upload fehlgeschlagen.'); return; }
   if (!r.ok) { showError(d.detail || d.msg || 'Upload fehlgeschlagen.'); return; }
   State.jid = d.job;
   if (mode === 'analyze') {
@@ -1163,8 +1445,6 @@ async function startUpload(mode) {
 }
 
 function showError(msg, detail) {
-  $('#renderErr').textContent = msg;
-  $('#renderErr').classList.remove('hidden');
   $('#progressCard').classList.add('hidden');
   $('#errCard').classList.remove('hidden');
   $('#errMsg').textContent = msg;
@@ -1177,10 +1457,9 @@ async function pollAnalyze() {
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     if (st.status === 'analysiert') {
-      $('#analyzeStatus').innerHTML = 'Analyse fertig — <b>Momente bearbeiten</b> klicken.';
-      $('#btnOpenMoments').classList.remove('hidden');
-      $('#btnAnalyze').disabled = false;
-      toast('Analyse fertig', 'ok', 2500);
+      $('#analyzeStatus').textContent = 'Analyse fertig — Editor oeffnet …';
+      toast('Analyse fertig!', 'ok');
+      openMomentsEditor();
       return;
     }
     if (st.status === 'fehler') {
@@ -1197,15 +1476,14 @@ async function pollAnalyze() {
 async function pollRender() {
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
-    $('#progressBar').style.width = Math.round((st.progress || 0) * 100) + '%';
+    const pct = Math.round((st.progress || 0) * 100);
+    const dashoff = 264 * (1 - (st.progress || 0));
+    $('#prFg').setAttribute('stroke-dashoffset', String(dashoff));
+    $('#prPct').textContent = String(pct);
     $('#progressPhase').textContent = st.phase || '';
     if (st.status === 'fertig') {
       $('#progressCard').classList.add('hidden');
-      $('#doneCard').classList.remove('hidden');
-      $('#resultVid').src = '/api/video/' + State.jid;
-      $('#dlLink').href = '/api/video/' + State.jid;
-      $('#btnRender').disabled = false;
-      toast('Video fertig', 'ok');
+      renderSuccess();
       return;
     }
     if (st.status === 'fehler') {
@@ -1216,8 +1494,61 @@ async function pollRender() {
   setTimeout(pollRender, 2000);
 }
 
-$('#btnOpenMoments').addEventListener('click', openMomentsEditor);
+function renderSuccess() {
+  $('#doneCard').classList.remove('hidden');
+  $('#resultVid').src = '/api/video/' + State.jid;
+  $('#dlLink').href = '/api/video/' + State.jid;
+  // Peak-End: Stats + Confetti
+  const dur = ((Date.now() - State.renderStart) / 1000);
+  const min = Math.floor(dur / 60), sec = Math.floor(dur % 60);
+  const overrides = diffCfg(State.cfgBase, State.cfg);
+  const changed = countChanged(overrides);
+  $('#statGrid').innerHTML = `
+    <div class="stat"><div class="n">${min}:${String(sec).padStart(2,'0')}</div><div class="l">Renderzeit</div></div>
+    <div class="stat"><div class="n">${getDeep(State.cfg, 'output.height', 1080)}p</div><div class="l">Aufloesung</div></div>
+    <div class="stat"><div class="n">${changed}</div><div class="l">Einstellungen</div></div>
+  `;
+  $('#doneSub').textContent = `${State.codeName || 'Du'} hast gebaut. Video ist bereit.`;
+  $('#btnRender').disabled = false;
+  if (State.codeRest !== null) { State.codeRest = Math.max(0, State.codeRest - 1);
+    $('#topRest').textContent = `${State.codeRest} Videos frei`; }
+  confetti(40);
+  toast('Video fertig — sauber!', 'ok', 4000);
+}
 
+function countChanged(obj) {
+  let n = 0;
+  for (const k of Object.keys(obj)) {
+    if (typeof obj[k] === 'object' && obj[k] !== null) n += countChanged(obj[k]);
+    else n++;
+  }
+  return n;
+}
+
+$('#btnAgain').addEventListener('click', () => {
+  $('#doneCard').classList.add('hidden');
+  State.file = null;
+  $('#fileInfo').classList.add('hidden');
+  $('#wiz1Next').disabled = true;
+  goStep(1);
+});
+
+/* --------- Zusammenfassung Step 4 --------- */
+function buildSummary() {
+  const overrides = diffCfg(State.cfgBase, State.cfg);
+  const changed = countChanged(overrides);
+  const lines = [];
+  lines.push(`<b>Datei:</b> ${State.file ? State.file.name : '–'}`);
+  lines.push(`<b>Look:</b> ${State.look}`);
+  lines.push(`<b>Aufloesung:</b> ${getDeep(State.cfg, 'output.height', 1080)}p`);
+  lines.push(`<b>Effekte:</b> ${(getDeep(State.cfg, 'effects.keyword_rotation', [])).join(', ')}`);
+  lines.push(`<b>Musik-Beat:</b> ${Math.round(getDeep(State.cfg, 'effects.music_beat', 0)*100)} %`);
+  lines.push(`<b>Bokeh:</b> ${Math.round(getDeep(State.cfg, 'effects.bg_blur', 0)*100)} %`);
+  lines.push(`<b>Feintuning:</b> ${changed} Einstellung${changed === 1 ? '' : 'en'} geaendert`);
+  $('#summary').innerHTML = lines.join(' · ');
+}
+
+/* --------- Momente-Editor --------- */
 async function openMomentsEditor() {
   try {
     const r = await fetch('/api/moments/' + State.jid);
@@ -1232,12 +1563,9 @@ async function openMomentsEditor() {
   const powerOpts = ['Dezent:1','Normal:2','Gross:3'].map(p => {
     const [l, v] = p.split(':'); return `<option value="${v}">${l}</option>`;
   }).join('');
-  const animOpts = Object.entries(animLabels)
-    .map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-  const szeneOpts = ['auto','wasser','boden','wand','person']
-    .map(v => `<option value="${v}">${v}</option>`).join('');
-  const lageOpts = ['auto','liegend','stehend','frei']
-    .map(v => `<option value="${v}">${v}</option>`).join('');
+  const animOpts = Object.entries(animLabels).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  const szeneOpts = ['auto','wasser','boden','wand','person'].map(v => `<option value="${v}">${v}</option>`).join('');
+  const lageOpts = ['auto','liegend','stehend','frei'].map(v => `<option value="${v}">${v}</option>`).join('');
   const body = $('#momBody');
   body.innerHTML = `<div class="mom-row head" aria-hidden="true">
     <div>An</div><div>Zeit</div><div>Text</div><div>Effekt</div><div>Groesse</div>
@@ -1248,16 +1576,14 @@ async function openMomentsEditor() {
     const row = document.createElement('div');
     row.className = 'mom-row';
     row.innerHTML = `
-      <input type="checkbox" data-i="${i}" data-k="aktiv"
-             aria-label="Moment ${i} aktiv" ${m.aktiv !== false ? 'checked' : ''}>
+      <input type="checkbox" data-i="${i}" data-k="aktiv" ${m.aktiv !== false ? 'checked' : ''}>
       <div class="zeit">${(m.zeit || 0).toFixed(1)}s</div>
-      <input type="text" data-i="${i}" data-k="text" aria-label="Text"
-             value="${(m.text || '').replace(/"/g, '&quot;')}">
-      <select data-i="${i}" data-k="fx" aria-label="Effekt">${fxOpts}</select>
-      <select data-i="${i}" data-k="power" aria-label="Groesse">${powerOpts}</select>
-      <select data-i="${i}" data-k="anim" class="hide-mob" aria-label="Animation">${animOpts}</select>
-      <select data-i="${i}" data-k="szene" class="hide-mob" aria-label="Szene">${szeneOpts}</select>
-      <select data-i="${i}" data-k="lage" class="hide-mob" aria-label="Lage">${lageOpts}</select>`;
+      <input type="text" data-i="${i}" data-k="text" value="${(m.text || '').replace(/"/g, '&quot;')}">
+      <select data-i="${i}" data-k="fx">${fxOpts}</select>
+      <select data-i="${i}" data-k="power">${powerOpts}</select>
+      <select data-i="${i}" data-k="anim" class="hide-mob">${animOpts}</select>
+      <select data-i="${i}" data-k="szene" class="hide-mob">${szeneOpts}</select>
+      <select data-i="${i}" data-k="lage" class="hide-mob">${lageOpts}</select>`;
     body.appendChild(row);
     row.querySelector('[data-k=fx]').value = m.fx || 'behind';
     row.querySelector('[data-k=power]').value = String(m.power || 2);
@@ -1277,17 +1603,15 @@ async function openMomentsEditor() {
       }
     });
   });
-  syncFromDom();
-  pushSnap();
+  syncFromDom(); pushSnap();
   $('#momEditor').classList.remove('hidden');
-  // Focus setzen
-  setTimeout(() => { const f = body.querySelector('input[type=text]'); if (f) f.focus(); }, 50);
+  $('#btnAnalyze').disabled = false;
+  $('#analyzeStatus').textContent = '';
 }
 
 function syncFromDom() {
   $('#momBody').querySelectorAll('input, select').forEach(el => {
-    const i = parseInt(el.dataset.i);
-    const k = el.dataset.k;
+    const i = parseInt(el.dataset.i); const k = el.dataset.k;
     if (!State.moments[i]) return;
     if (el.type === 'checkbox') State.moments[i][k] = el.checked;
     else if (k === 'power') State.moments[i][k] = parseInt(el.value);
@@ -1305,8 +1629,7 @@ function refreshHistBtns() {
 function applySnap(snap) {
   State.moments = JSON.parse(JSON.stringify(snap));
   $('#momBody').querySelectorAll('input, select').forEach(el => {
-    const i = parseInt(el.dataset.i);
-    const k = el.dataset.k;
+    const i = parseInt(el.dataset.i); const k = el.dataset.k;
     if (!State.moments[i]) return;
     if (el.type === 'checkbox') el.checked = !!State.moments[i][k];
     else if (k === 'power') el.value = String(State.moments[i][k] || 2);
@@ -1334,17 +1657,14 @@ window.addEventListener('keydown', e => {
     } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' ||
               (e.key.toLowerCase() === 'z' && e.shiftKey))) {
       e.preventDefault(); $('#momRedo').click();
-    } else if (e.key === 'Escape') {
-      $('#momCancel').click();
-    }
+    } else if (e.key === 'Escape') { $('#momCancel').click(); }
   }
 });
 $('#momCancel').addEventListener('click', () => $('#momEditor').classList.add('hidden'));
 $('#momSave').addEventListener('click', async () => {
   syncFromDom();
   const btn = $('#momSave');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Speichere …';
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Speichere …';
   try {
     const fd = new FormData();
     fd.append('moments', JSON.stringify(State.moments));
@@ -1353,20 +1673,14 @@ $('#momSave').addEventListener('click', async () => {
     const d = await r.json();
     if (!r.ok || !d.ok) { toast('Fehler: ' + (d.detail || d.msg || 'unbekannt'), 'err'); return; }
     $('#momEditor').classList.add('hidden');
-    $$('.nav a').forEach(x => { x.removeAttribute('aria-current'); x.setAttribute('tabindex', '-1'); });
-    const rn = document.querySelector('.nav a[data-sec="rendern"]');
-    rn.setAttribute('aria-current', 'page'); rn.setAttribute('tabindex', '0');
-    $$('.section').forEach(s => s.classList.remove('active'));
-    document.querySelector('.section[data-sec="rendern"]').classList.add('active');
+    goStep(4);
     $('#progressCard').classList.remove('hidden');
     $('#doneCard').classList.add('hidden');
     $('#errCard').classList.add('hidden');
+    State.renderStart = Date.now();
     toast('Momente gespeichert. Render startet.', 'ok');
     pollRender();
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Speichern & Rendern';
-  }
+  } finally { btn.disabled = false; btn.textContent = 'Speichern & Rendern'; }
 });
 </script>
 </body>
