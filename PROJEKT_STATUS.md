@@ -688,6 +688,47 @@ Transkription auf Sprach-Sample).
 [ ] 6. EU AI Act Art. 50: optionaler Offenlegungs-Hinweis/Metadaten (ab 2.8.2026)
 [ ] 7. Windows-Build/Packaging (Modell + Sound-Pack mit-bundeln)
 
+## v71 - Acht weitere Animationen (18 -> 26)
+
+Vorher 18 Animationen, jetzt 26. Jede loest ein anderes Ereignis auf,
+keine ist Kosmetik. Alle laufen ueber `anim_apply()` und wirken bei
+allen 5 Effekten (kein "still verpuffen"-Bug moeglich).
+
+Neu:
+- **kippen** - Wort kippt nach vorn wie ein Buch das aufklappt
+  (Tilt um X-Achse mit Feder-Ausklang). Fuer Kapitel/oeffnet.
+- **explosion** - 8 vertikale Streifen fliegen radial auseinander und
+  ziehen sich wieder zusammen (Impact + Retract, 0.55 s).
+- **magnet** - umgekehrte Explosion: Streifen kommen aus Streuung
+  zusammen mit wachsender Deckkraft. Fuer Sog/Anziehung.
+- **wackel** - Cartoon-Sinus-Loop auf y + kleine Skala. Amplitude
+  moduliert von der Stimme. Fuer Witz/Quatsch/kindisch.
+- **regen** - Streifen fallen von oben nacheinander (linke zuerst),
+  weichen mit ease_out ein. Fuer Regen/Tropfen/Rieselt.
+- **zoom_punch** - startet bei 1.25x, faellt quadratisch auf 1.0.
+  Ganz kurz, sitzt genau auf Onset. Fuer Punchline/Achtung/Wumms.
+- **rutsche** - Streifen kommen einzeln von rechts rein (gestaffelt).
+  Fuer rutscht/gleitet/slidet.
+- **stempel** - kommt aus 1.8x rein mit weichem Impact-Blur, stanzt
+  scharf, kleines Nachbeben. Fuer endgueltig/offiziell/beschlossen.
+
+HINTS-Konflikte bereinigt (Bug-Vorbeugung):
+- `schub` hatte `explo` -> ging auf `explosion` weg
+- `sturz` hatte `rutscht` -> ging auf `rutsche` weg
+- `knall` hatte `endgueltig` -> ging auf `stempel` weg
+
+REGIE_PROMPT + Editor-Combobox + ANIM_HINTS (Keyword-Matching) fuer
+alle 8 erweitert. Selbstschutz: der bestehende Test "Editor kennt alle
+Animationen" faengt automatisch, wenn die Liste auseinanderlaeuft.
+
+Selftest: +36 Tests netto (jede Animation wirkt bei jedem Effekt, GUI-
+Liste + KI-Prompt kennen sie, parse_regie akzeptiert sie, HINTS-Match
+korrekt, spezifische Verhaltens-Tests pro Anim).
+Regression: 325/326 gruen (vorher 290/291, +35 netto). Whisper-Fail
+unveraendert.
+
+GUI-Smoke `xvfb-run` -> GUI_OK.
+
 ## v70 - Musik-Beat-Erkennung
 
 Beat-Sync haengt jetzt nicht mehr nur an Sprech-Onsets, sondern reagiert

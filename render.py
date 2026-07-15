@@ -165,7 +165,12 @@ ANIM_LIST = ('glitch', 'puls', 'welle', 'zittern', 'neon', 'schub', 'bruch',
              'sturz', 'anstieg', 'wende', 'druck', 'schwund', 'knall',
              # --- Stand 2026: das, was High-End-Editing heute von Presets trennt.
              # Zurueckhaltende, physikalisch plausible Bewegung statt Zappeln.
-             'gewicht', 'schweben', 'fokus', 'enthuellen', 'spur')
+             'gewicht', 'schweben', 'fokus', 'enthuellen', 'spur',
+             # --- v71: acht weitere Klassiker, physikalisch plausibel, jede
+             # loest ein anderes Ereignis auf: Kippen, Impact, Sog, Cartoon-
+             # Puls, Fallen, Punch, Slide, Stempel.
+             'kippen', 'explosion', 'magnet', 'wackel', 'regen', 'zoom_punch',
+             'rutsche', 'stempel')
 
 # Bewegungsunschaerfe global (aus config.yaml gesetzt). Sie ist der groesste
 # einzelne Qualitaetsunterschied: ohne sie springt Text von Frame zu Frame und
@@ -594,6 +599,154 @@ def _anim_core(p, base, aud, dt):
             arr = out
         dx = travel
         op = min(dt / 0.06, 1.0)
+
+    # ---------------------------------------------------------------- v71
+    elif a == 'kippen':                       # Wort kippt nach vorn wie ein Buch das aufklappt
+        # Tilt um X-Achse: obere Kante entfernt sich, untere kommt entgegen.
+        # Federt aus, bleibt stehen. Kein Wackeln danach.
+        e = spring(min(dt / 0.50, 1.4), freq=2.1, damp=6.0)
+        tilt = -0.85 * (1.0 - min(e, 1.0))    # startet stark tilted, geht auf 0
+        arr, _px, _py = _persp3d(base, 0.0, tilt, 0.14)
+        op = min(dt / 0.06, 1.0)
+
+    elif a == 'explosion':                    # radialer Aufschlag: Streifen fliegen weg + zurueck
+        e = min(dt / 0.55, 1.0)
+        # 0..0.35 auseinander, 0.35..1 wieder zusammen (impact + retract)
+        if e < 0.35:
+            spread = (e / 0.35)
+        else:
+            spread = 1.0 - (e - 0.35) / 0.65
+        spread = max(spread, 0.0)
+        if spread > 0.02:
+            h, w = base.shape[:2]
+            n_col = 8                          # 8 vertikale Streifen
+            cw = max(w // n_col, 6)
+            pad = int(w * 0.25) + 6
+            out = np.zeros((h, w + 2 * pad, 4), base.dtype)
+            for i in range(n_col):
+                x0 = i * cw
+                x1 = min(x0 + cw, w)
+                if x1 <= x0:
+                    continue
+                seg = base[:, x0:x1]
+                # radial vom Zentrum weg
+                cx = (x0 + x1) / 2 - w / 2
+                dx_s = int(cx / (w / 2) * (w * 0.22) * spread)
+                dst_x = pad + x0 + dx_s
+                if 0 <= dst_x <= w + 2 * pad - (x1 - x0):
+                    np.maximum(out[:, dst_x:dst_x + (x1 - x0)], seg,
+                               out=out[:, dst_x:dst_x + (x1 - x0)])
+            arr = out
+        op = min(dt / 0.05, 1.0)
+
+    elif a == 'magnet':                       # umgekehrte Explosion: aus Streuung zusammenziehen
+        e = 1.0 - min(dt / 0.55, 1.0)         # startet gestreut, zieht zusammen
+        if e > 0.02:
+            h, w = base.shape[:2]
+            n_col = 8
+            cw = max(w // n_col, 6)
+            pad = int(w * 0.30) + 6
+            out = np.zeros((h, w + 2 * pad, 4), base.dtype)
+            for i in range(n_col):
+                x0 = i * cw
+                x1 = min(x0 + cw, w)
+                seg = base[:, x0:x1]
+                cx = (x0 + x1) / 2 - w / 2
+                dx_s = int(cx / (w / 2) * (w * 0.28) * e)
+                dst_x = pad + x0 + dx_s
+                dst_x = max(0, min(dst_x, w + 2 * pad - (x1 - x0)))
+                # Opacity waechst waehrend Zusammenzug (aus Nichts kommend)
+                alpha_mul = 1.0 - e * 0.7
+                gh = seg.copy()
+                gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * alpha_mul,
+                                     0, 255).astype(base.dtype)
+                np.maximum(out[:, dst_x:dst_x + (x1 - x0)], gh,
+                           out=out[:, dst_x:dst_x + (x1 - x0)])
+            arr = out
+        op = 1.0
+
+    elif a == 'wackel':                       # Cartoon-Wackel: vertikaler Sinus-Loop
+        # Loopfaehig, kein Ende. Amplitude wird von der Stimme moduliert.
+        amp = base.shape[0] * (0.020 + 0.015 * a_rms)
+        dy = amp * math.sin(dt * 12.0)        # ~2 Hz
+        sc = 1.0 + 0.015 * math.sin(dt * 12.0 + math.pi / 2)
+
+    elif a == 'regen':                        # Buchstaben-Streifen fallen von oben nacheinander
+        h, w = base.shape[:2]
+        n_col = max(int(w / 34), 4)
+        cw = max(w // n_col, 6)
+        pad_y = int(h * 0.55) + 8
+        out = np.zeros((h + pad_y, w, 4), base.dtype)
+        for i in range(n_col):
+            x0 = i * cw
+            x1 = min(x0 + cw, w)
+            # gestaffelt: linke Streifen zuerst fertig
+            offset = 0.05 * i
+            e = ease_out(min(max((dt - offset) / 0.55, 0.0), 1.0))
+            y_off = int((1.0 - e) * pad_y)
+            if e <= 0.001:
+                continue
+            seg = base[:, x0:x1]
+            alpha_mul = e
+            gh = seg.copy()
+            gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * alpha_mul,
+                                 0, 255).astype(base.dtype)
+            np.maximum(out[y_off:y_off + h, x0:x1], gh,
+                       out=out[y_off:y_off + h, x0:x1])
+        arr = out
+        dy = 0.0
+
+    elif a == 'zoom_punch':                   # kurzer harter Skalen-Push mit Nachschwingen
+        # Reisst rein bis 1.25, federt auf 1.0. Sehr kurz, sitzt genau auf Onset.
+        # Explizite Kurve statt spring: startet bei 1.25, sinkt smooth zu 1.0.
+        if dt < 0.55:
+            e = min(dt / 0.28, 1.0)
+            sc = 1.0 + 0.25 * (1.0 - e) ** 2   # quadratisch: bleibt oben, faellt spaet
+            op = min(dt / 0.04, 1.0)
+        else:
+            sc = 1.0
+
+    elif a == 'rutsche':                      # Streifen rutschen einzeln von rechts rein
+        h, w = base.shape[:2]
+        n_col = max(int(w / 34), 4)
+        cw = max(w // n_col, 6)
+        pad_x = int(w * 0.45) + 8
+        out = np.zeros((h, w + pad_x, 4), base.dtype)
+        for i in range(n_col):
+            x0 = i * cw
+            x1 = min(x0 + cw, w)
+            # gestaffelt: linke zuerst
+            offset = 0.06 * i
+            e = ease_out(min(max((dt - offset) / 0.45, 0.0), 1.0))
+            x_off = int((1.0 - e) * pad_x)
+            if e <= 0.001:
+                continue
+            seg = base[:, x0:x1]
+            gh = seg.copy()
+            gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * e,
+                                 0, 255).astype(base.dtype)
+            dst_x = x0 + x_off
+            np.maximum(out[:, dst_x:dst_x + (x1 - x0)], gh,
+                       out=out[:, dst_x:dst_x + (x1 - x0)])
+        arr = out
+        dx = 0.0
+
+    elif a == 'stempel':                       # knallt drauf wie ein Stempel: fetter Rand-Blur am Aufschlag
+        # 0..0.18: kommt aus 1.8x rein (Vergroesserung des ganzen Bildes) und
+        # verwischt weich (Motion-Streaks). Ab 0.18 steht es scharf.
+        if dt < 0.18:
+            e = min(dt / 0.18, 1.0)
+            sc = 1.8 - 0.8 * e                # von 1.8 auf 1.0
+            # Aufprall-Unschaerfe: Gaussian verschmilzt Kanten kurz.
+            blur_sig = (1.0 - e) * max(base.shape[0], base.shape[1]) * 0.020
+            if blur_sig > 0.6:
+                arr = cv2.GaussianBlur(base, (0, 0), blur_sig)
+            op = min(dt / 0.03, 1.0)
+        elif dt < 0.28:
+            # Kurzes Nachbeben - Aufschlag stanzt
+            k = 1.0 - (dt - 0.18) / 0.10
+            dy = -base.shape[0] * 0.008 * k
+            sc = 1.0 + 0.03 * k
     return arr, dx, dy, sc, op
 
 
@@ -1390,7 +1543,15 @@ erdrueckt) · "schwund" (verschwindet, verloren, vorbei) · \
 "schweben" (Ruhe, Eleganz, Luxus, Raum - dezente 3D-Drift) · \
 "fokus" (Klarheit, Erkenntnis, praezise - kommt scharf ins Bild) · \
 "enthuellen" (Geheimnis, Wahrheit, aufgedeckt - wird freigewischt) · \
-"spur" (Tempo, rasant, sofort - schiesst herein mit Nachzieher).
+"spur" (Tempo, rasant, sofort - schiesst herein mit Nachzieher) · \
+"kippen" (Buch kippt auf, Kapitel-Beginn, oeffnet sich) · \
+"explosion" (explodiert, sprengt, zerreisst - radialer Aufschlag) · \
+"magnet" (Sog, Anziehung, sammelt, buendelt - Streifen ziehen zusammen) · \
+"wackel" (Cartoon, Witz, lustig, kindisch - Sinus-Wobble) · \
+"regen" (regnet, faellt, tropft, rieselt - Streifen fallen von oben) · \
+"zoom_punch" (Punchline, achtung, wumms - kurzer harter Push) · \
+"rutsche" (rutscht, gleitet, slidet seitlich - Streifen von rechts) · \
+"stempel" (endgueltig, offiziell, beschlossen, geprueft - knallt drauf wie Stempel).
 WICHTIG: Die Animation richtet sich nach dem, was im SATZ passiert - auch wenn das \
 Keyword selbst nur der Handelnde oder das Opfer ist.
 Beispiel: "Deutschland bricht seine Versprechen" -> Keyword "Deutschland" bekommt \
@@ -1911,7 +2072,7 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
               ('welle', ('welle', 'wasser', 'meer', 'fluss', 'flow', 'ozean')),
               ('zittern', ('angst', 'panik', 'nervoes', 'beben', 'stress', 'chaos')),
               ('neon', ('neon', 'nacht', 'club', 'leucht', 'glow', 'licht', 'city')),
-              ('schub', ('boom', 'explo', 'schub', 'power', 'wachstum',
+              ('schub', ('boom', 'schub', 'power', 'wachstum',
                          'durchbruch', 'skalier')),
               ('bruch', ('bricht', 'brechen', 'gebrochen', 'zerbricht', 'zerbrochen',
                          'bruch', 'zerfaellt', 'zerfällt', 'kaputt', 'ruin',
@@ -1921,7 +2082,7 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
               ('sturz', ('stuerz', 'stürz', 'sturz', 'absturz', 'faellt', 'fällt',
                          'fallen', 'sinkt', 'sinken', 'einbruch', 'rezession',
                          'pleite', 'verlust', 'abwaerts', 'abwärts',
-                         'minus', 'talfahrt', 'rutscht', 'billiger', 'weniger')),
+                         'minus', 'talfahrt', 'billiger', 'weniger')),
               ('anstieg', ('steigt', 'steigen', 'anstieg', 'rekord', 'gewinn',
                            'zuwachs', 'kletter', 'teurer', 'hoeher', 'höher',
                            'verdoppelt', 'verdreifacht', 'aufwaerts', 'aufwärts',
@@ -1936,8 +2097,8 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                            'geloescht', 'gelöscht', 'vorbei', 'verpuff', 'nichts',
                            'aufgeloest', 'aufgelöst', 'schwindet', 'futsch',
                            'dahin')),
-              ('knall', ('punkt', 'fakt', 'fakten', 'schluss', 'endgueltig',
-                         'endgültig', 'basta', 'beweis', 'bewiesen', 'definitiv',
+              ('knall', ('punkt', 'fakt', 'fakten', 'schluss',
+                         'basta', 'beweis', 'bewiesen', 'definitiv',
                          'garantiert')),
               ('gewicht', ('stark', 'staerke', 'stärke', 'macht', 'gewicht',
                            'massiv', 'wucht', 'kraft', 'dominanz', 'schwergewicht')),
@@ -1949,7 +2110,28 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                               'wahrheit', 'aufgedeckt', 'zeigt', 'verraten',
                               'offenbart', 'luegt', 'lügt')),
               ('spur', ('schnell', 'tempo', 'rasant', 'sofort', 'blitz', 'rast',
-                        'jagt', 'speed', 'eilt', 'sekunden')))
+                        'jagt', 'speed', 'eilt', 'sekunden')),
+              # ---- v71
+              ('kippen', ('kippt', 'kippen', 'klappt', 'aufklappt', 'oeffnet',
+                          'öffnet', 'aufgeschlagen', 'kapitel')),
+              ('explosion', ('explodiert', 'explosion', 'sprengt', 'gesprengt',
+                             'zerstoert', 'zerreist', 'zerreißt', 'detoniert',
+                             'blast')),
+              ('magnet', ('zieht', 'anziehung', 'magnet', 'sog', 'sammelt',
+                          'buendel', 'bündel', 'fokussiert', 'zieht an',
+                          'ballt')),
+              ('wackel', ('lustig', 'quatsch', 'unsinn', 'witz', 'komisch',
+                          'cartoon', 'kindisch', 'quirlig', 'bounce')),
+              ('regen', ('regen', 'faellt', 'tropfen', 'rieselt', 'schuettet',
+                         'schüttet', 'niederschlag', 'sturm')),
+              ('zoom_punch', ('achtung', 'punchline', 'boom', 'wumms', 'plopp',
+                              'hier', 'schau', 'guck', 'siehst', 'sehen')),
+              ('rutsche', ('rutscht', 'schlittert', 'gleitet', 'slide', 'slidet',
+                           'schiebt', 'seitwaerts', 'seitwärts')),
+              ('stempel', ('endgueltig', 'endgültig', 'fest', 'siegel',
+                           'beschlossen', 'unterschrieben', 'genehmigt', 'stempel',
+                           'zertifiziert', 'offiziell', 'approved', 'verified',
+                           'geprueft', 'geprüft')))
 
 
 def _anim_hit(text, key):

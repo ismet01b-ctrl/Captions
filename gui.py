@@ -1077,7 +1077,7 @@ class App:
         Slider(c, self.bgblur_var, 0, 100, ' %').pack(fill='x')
 
         c = self.card('Lebendige Typo',
-                      '13 Animationen. Das Wort reagiert auf den Satz: „Deutschland '
+                      '26 Animationen. Das Wort reagiert auf den Satz: „Deutschland '
                       'bricht seine Versprechen" — das Wort zerbricht wirklich.')
         self.switch_row(c, 'Animationen aktiv',
                         'Die KI-Regie wählt die passende Animation aus dem Inhalt. '
@@ -1836,13 +1836,24 @@ class App:
                'schweben': 'Schweben (3D-Drift, edel)',
                'fokus': 'Fokus (kommt scharf ins Bild)',
                'enthuellen': 'Enthüllen (wird freigewischt)',
-               'spur': 'Spur (Tempo mit Nachzieher)'}
+               'spur': 'Spur (Tempo mit Nachzieher)',
+               # v71
+               'kippen': 'Kippen (klappt nach vorn)',
+               'explosion': 'Explosion (fliegt weg + zurück)',
+               'magnet': 'Magnet (Streifen ziehen zusammen)',
+               'wackel': 'Wackel (Cartoon-Bounce)',
+               'regen': 'Regen (Streifen fallen von oben)',
+               'zoom_punch': 'Zoom-Punch (harter Push)',
+               'rutsche': 'Rutsche (von rechts rein)',
+               'stempel': 'Stempel (knallt drauf)'}
     ANIM_DE_R = {v: k for k, v in ANIM_DE.items()}
     SZENE_LIST = ('auto', 'wasser', 'boden', 'wand', 'person')
     LAGE_LIST = ('auto', 'liegend', 'stehend', 'frei')
     ANIM_LIST = ('', 'glitch', 'puls', 'welle', 'zittern', 'neon', 'schub',
                  'bruch', 'sturz', 'anstieg', 'wende', 'druck', 'schwund', 'knall',
-                 'gewicht', 'schweben', 'fokus', 'enthuellen', 'spur')
+                 'gewicht', 'schweben', 'fokus', 'enthuellen', 'spur',
+                 'kippen', 'explosion', 'magnet', 'wackel', 'regen', 'zoom_punch',
+                 'rutsche', 'stempel')
 
     def open_moments(self):
         if getattr(self, 'busy', False):

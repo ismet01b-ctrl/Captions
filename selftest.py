@@ -934,6 +934,68 @@ def _scenario_logic(clip, transcript, tmp):
         _fm = R.parse_regie('{"keywords": [{"i": 1, "n": 1, "fx": "behind", '
                             '"power": 2, "anim": "%s"}]}' % _a, wg, 'de')
         check(f'KI darf {_a} waehlen', _fm and _fm[1].get('anim') == _a)
+
+    # ---- v71: Acht weitere Animationen ----
+    _v71 = ('kippen', 'explosion', 'magnet', 'wackel', 'regen', 'zoom_punch',
+            'rutsche', 'stempel')
+    check('v71-Animationen in ANIM_LIST', all(_a in R.ANIM_LIST for _a in _v71))
+    check('v71 stehen in GUI (Dropdown + Liste)',
+          all(_gsrc26.count(f"'{_a}'") >= 2 for _a in _v71))
+    check('v71 stehen im KI-Prompt',
+          all(f'"{_a}"' in R.REGIE_PROMPT for _a in _v71))
+    # HINTS: passendes Keyword loest die Animation aus
+    _hits = {'kippen': 'Kapitel', 'explosion': 'explodiert', 'magnet': 'zieht',
+             'wackel': 'lustig', 'regen': 'regen', 'zoom_punch': 'punchline',
+             'rutsche': 'rutscht', 'stempel': 'endgueltig'}
+    for _a, _kw in _hits.items():
+        _got = R.anim_for(_kw, f'das {_kw} passiert')
+        check(f'HINTS: "{_kw}" -> {_a}', _got == _a,
+              f'bekam {_got!r} statt {_a!r}')
+    # Editor-Combobox kann parse_regie die neuen zurueckliefern
+    for _a in _v71:
+        _fm71 = R.parse_regie('{"keywords": [{"i": 1, "n": 1, "fx": "behind", '
+                              '"power": 2, "anim": "%s"}]}' % _a, wg, 'de')
+        check(f'parse_regie akzeptiert {_a}',
+              _fm71 and _fm71[1].get('anim') == _a)
+    # Explosion: shape aendert sich (breiter geworden durch pad)
+    _e_arr, _dx, _dy, _sc, _op = R.anim_apply(
+        {'anim': 'explosion', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.15)
+    check('explosion breitet aus', _e_arr.shape[1] > _base.shape[1])
+    # Rutsche: shape breiter (pad rechts)
+    _r_arr, *_ = R.anim_apply(
+        {'anim': 'rutsche', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.1)
+    check('rutsche macht Padding', _r_arr.shape[1] > _base.shape[1])
+    # Regen: shape hoeher (pad unten)
+    _re_arr, *_ = R.anim_apply(
+        {'anim': 'regen', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.1)
+    check('regen macht vertikales Padding', _re_arr.shape[0] > _base.shape[0])
+    # Zoom-Punch: Skalierung > 1 im ersten Drittel
+    _, _, _, _sc_zp, _ = R.anim_apply(
+        {'anim': 'zoom_punch', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.05)
+    check('zoom_punch drueckt rein (sc > 1.0)', _sc_zp > 1.05)
+    # Wackel: Sinus loopt -> dy oszilliert (unterschiedliche Vorzeichen)
+    _dy_a = R.anim_apply({'anim': 'wackel', 'start': 0}, _base,
+                         (0.5, 0.5, 0.5), 0.15)[2]
+    _dy_b = R.anim_apply({'anim': 'wackel', 'start': 0}, _base,
+                         (0.5, 0.5, 0.5), 0.40)[2]
+    check('wackel oszilliert', _dy_a * _dy_b < 0 or abs(_dy_a) + abs(_dy_b) > 0.5,
+          f'dy_a={_dy_a:.3f}, dy_b={_dy_b:.3f}')
+    # Magnet: shape breiter am Anfang, gleich am Ende (Zusammenzug)
+    _m_start, *_ = R.anim_apply(
+        {'anim': 'magnet', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.05)
+    _m_end, *_ = R.anim_apply(
+        {'anim': 'magnet', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.60)
+    check('magnet: breiter am Anfang', _m_start.shape[1] > _base.shape[1])
+    # Stempel: scale > 1.0 im Aufschlag
+    _, _, _, _sc_st, _ = R.anim_apply(
+        {'anim': 'stempel', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.05)
+    check('stempel: kommt aus grosser Skala (sc > 1.3)', _sc_st > 1.3,
+          f'sc={_sc_st:.2f}')
+    # Kippen: shape aendert sich durch perspektive
+    _k_arr, *_ = R.anim_apply(
+        {'anim': 'kippen', 'start': 0}, _base, (0.5, 0.5, 0.5), 0.05)
+    check('kippen macht 3D-Kipp (shape geaendert)',
+          _k_arr.shape != _base.shape or not _np.array_equal(_k_arr, _base))
     # Feder schiesst ueber das Ziel hinaus und kommt zur Ruhe (kein Ease-Out)
     _sp = [R.spring(x / 30.0) for x in range(50)]
     check('Feder ueberschwingt und beruhigt sich',
@@ -1171,8 +1233,8 @@ def _scenario_logic(clip, transcript, tmp):
                               encoding='utf-8').read())
 
     # --- v51: sechs neue Animationen + deutsche Sprach-Fallen ---
-    check('18 Animationen an Bord', len(R.ANIM_LIST) == 18
-          and len(set(R.ANIM_LIST)) == 18, str(len(R.ANIM_LIST)))
+    check('26 Animationen an Bord', len(R.ANIM_LIST) == 26
+          and len(set(R.ANIM_LIST)) == 26, str(len(R.ANIM_LIST)))
     for _new in ('sturz', 'anstieg', 'wende', 'druck', 'schwund', 'knall'):
         check(f'Animation "{_new}" vorhanden', _new in R.ANIM_LIST)
     # Jede Animation muss das Bild wirklich veraendern (keine Attrappe)
@@ -1189,7 +1251,7 @@ def _scenario_logic(clip, transcript, tmp):
                 _wirkt = True
                 break
         _tot += _wirkt
-    check('Alle 18 Animationen wirken sichtbar', _tot == 18, f'{_tot}/18')
+    check('Alle 26 Animationen wirken sichtbar', _tot == 26, f'{_tot}/26')
     # Deutsche Sprach-Fallen: Wortanfang zaehlt, nicht blinder Teilstring
     _traps = [
         ('DEUTSCHLAND', 'Deutschland bricht seine Versprechen', 'bruch'),
