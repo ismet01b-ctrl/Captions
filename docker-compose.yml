@@ -1,0 +1,39 @@
+# DouchkoVE Web Stack: Caddy (HTTPS + Reverse-Proxy) + App (Render-Backend).
+# Caddy holt Let's Encrypt automatisch, kein certbot noetig.
+
+services:
+  app:
+    build: .
+    container_name: douchko-app
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY fehlt in .env}
+      DVE_ADMIN: ${DVE_ADMIN:?DVE_ADMIN fehlt in .env}
+      DVE_WORKERS: ${DVE_WORKERS:-1}
+      DVE_MAX_SECONDS: ${DVE_MAX_SECONDS:-180}
+      DVE_MAX_MB: ${DVE_MAX_MB:-300}
+    volumes:
+      - dve-data:/data
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    container_name: douchko-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN fehlt in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  dve-data:
+  caddy-data:
+  caddy-config:

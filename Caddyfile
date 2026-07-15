@@ -1,0 +1,15 @@
+# Caddy zieht Let's Encrypt-Zertifikat automatisch fuer {$DOMAIN}.
+# Uploads gehen ueber Caddy an den App-Container (Port 8000).
+
+{$DOMAIN} {
+    encode gzip
+    request_body {
+        max_size 500MB
+    }
+    reverse_proxy app:8000 {
+        transport http {
+            read_timeout 30m
+            write_timeout 30m
+        }
+    }
+}

@@ -1,4 +1,4 @@
-# Der ganze Server in einem Bild. Ein Befehl, keine Handarbeit.
+# DouchkoVE Web-Server in einem Container.
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -11,9 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY . /app/
 
-# Die KI-Modelle schon beim Bauen holen (110 MB). Sonst wartet der erste Tester
-# minutenlang auf einen Download, den er nicht versteht.
-RUN python -c "import render; render.ensure_models()"
+# ONNX-Modelle beim Bauen ziehen (RVM ~30 MB, Depth ~80 MB), damit der erste
+# Nutzer nicht wartet.
+RUN python -c "import render; render.ensure_models()" || echo "Modelle werden zur Laufzeit geladen"
 
 ENV DVE_DATA=/data DVE_WORKERS=1 DVE_MAX_SECONDS=180 DVE_MAX_MB=300
 VOLUME /data
