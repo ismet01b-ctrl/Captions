@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
-"""DouchkoVE Web - kein Download, kein Setup.
+"""DouchkoVE Web - vollstaendige Web-Version mit allen Reglern der Desktop-App.
 
-Der Nutzer oeffnet einen Link, laedt sein Video hoch, waehlt einen Look und
-bekommt das fertige Video zurueck. Auf seinem Rechner wird NICHTS installiert.
+Was fehlt bewusst (server-seitig sinnlos):
+- Blender-Wasser (500 MB Install, sehr langsam auf CPU - hart aus).
+- Freesound-Key-Verwaltung (Sound-Pack liegt auf dem Server).
+- Kundenprofile (Session-basiert - hier nicht relevant).
+- Windows-Setup-Sachen.
 
-Warum das so gebaut ist:
-- Der OpenAI-Key liegt AUF DEM SERVER (Umgebungsvariable). Kein Nutzer sieht ihn
-  je. In eine ausgelieferte .exe gepackt waere er in zwei Minuten ausgelesen - und
-  ein OpenAI-Key hat kein Limit pro Nutzer, das Konto waere offen wie ein Scheunentor.
-- Zugang nur mit CODE. Jeder Tester bekommt seinen eigenen. Verbrauch wird
-  mitgezaehlt, Limit pro Code, jederzeit sperrbar. Das ist zugleich die Grundlage
-  fuer die spaetere Paywall - dann wird aus dem Code ein Abo.
-- Rendern laeuft in einer WARTESCHLANGE, ein Job nach dem anderen. Sonst reissen
-  sich zwei Videos um denselben Prozessor und beide dauern doppelt so lang.
+Was NEU vs. v59:
+- Alle v69-v73-Effekte als Regler (Blur, Musik-Beat, Freeze, Trail, Ring,
+  Split, Env-Shadow).
+- Momente-Editor mit Undo/Redo (v68a).
+- Font-Auswahl, Fein-Regler, Momente-Rerender.
+- Preset (Look) als Startpunkt, individuelles Feintuning per JSON-Overrides.
 """
+import copy
+import glob
 import json
 import os
 import shutil
@@ -43,13 +45,59 @@ JOBS = {}
 QUEUE = Queue()
 LOCK = threading.Lock()
 
-# Die Looks, die der Nutzer waehlen kann. Bewusst wenige: im Browser will niemand
-# 40 Regler sehen - das ist der Unterschied zum Profi-Programm.
+# Presets als Startpunkt. Der Nutzer kann alles individuell nachjustieren.
 LOOKS = {
     'tiktok':    {'name': 'TikTok', 'desc': 'Wort für Wort, fett, laut.'},
     'creator':   {'name': 'Creator', 'desc': 'Talking-Head & Business.'},
     'cinematic': {'name': 'Cinematic', 'desc': 'Wenige, große Momente.'},
     'clean':     {'name': 'Clean', 'desc': 'Nur lesbare Untertitel.'},
+}
+
+# Font-Kacheln wie in der Desktop-App
+FONTS = [
+    {'id': 'kino',    'label': 'Kino',      'file': 'fonts/archivo.ttf',
+     'script': 'fonts/playfair_i.ttf'},
+    {'id': 'tiktok',  'label': 'TikTok',    'file': 'fonts/tiktok_bold.ttf'},
+    {'id': 'montse',  'label': 'Creator',   'file': 'fonts/montserrat_xb.ttf'},
+    {'id': 'inter',   'label': 'Cinematic', 'file': 'fonts/inter_black.ttf'},
+    {'id': 'anton',   'label': 'Impact',    'file': 'fonts/anton.ttf'},
+    {'id': 'archivo', 'label': 'Black',     'file': 'fonts/archivo.ttf'},
+    {'id': 'bebas',   'label': 'Condensed', 'file': 'fonts/bebas.ttf'},
+    {'id': 'poppins', 'label': 'Clean',     'file': 'fonts/poppins_b.ttf'},
+    {'id': 'staat',   'label': 'Poster',    'file': 'fonts/staatliches.ttf'},
+    {'id': 'alfa',    'label': 'Slab',      'file': 'fonts/alfaslab.ttf'},
+    {'id': 'yeseva',  'label': 'Fashion',   'file': 'fonts/yeseva.ttf'},
+    {'id': 'bangers', 'label': 'Comic',     'file': 'fonts/bangers.ttf'},
+    {'id': 'right',   'label': 'Retro',     'file': 'fonts/righteous.ttf'},
+    {'id': 'lobster', 'label': 'Script',    'file': 'fonts/lobster.ttf'},
+    {'id': 'marker',  'label': 'Brush',     'file': 'fonts/marker.ttf'},
+]
+
+FX_LABELS = [
+    ('behind',  'Hinter dir'),
+    ('cascade', 'Buchstaben-Aufbau'),
+    ('blurin',  'Aus der Unschärfe'),
+    ('outline', 'Nur Umriss'),
+    ('ground',  'In der Szene'),
+]
+
+ANIM_LABELS = {
+    '': 'keine', 'glitch': 'Glitch', 'puls': 'Puls', 'welle': 'Welle',
+    'zittern': 'Zittern', 'neon': 'Neon', 'schub': 'Schub',
+    'bruch': 'Bruch (zerbricht)', 'sturz': 'Sturz (fällt)',
+    'anstieg': 'Anstieg (steigt)', 'wende': 'Wende (kippt um)',
+    'druck': 'Druck (erdrückt)', 'schwund': 'Schwund (löst sich auf)',
+    'knall': 'Knall (Pointe)', 'gewicht': 'Gewicht (Strich fetter)',
+    'schweben': 'Schweben (3D-Drift)', 'fokus': 'Fokus (kommt scharf)',
+    'enthuellen': 'Enthüllen (freigewischt)', 'spur': 'Spur (Nachzieher)',
+    'kippen': 'Kippen (klappt nach vorn)',
+    'explosion': 'Explosion (fliegt weg + zurück)',
+    'magnet': 'Magnet (zieht zusammen)',
+    'wackel': 'Wackel (Cartoon-Bounce)',
+    'regen': 'Regen (fällt von oben)',
+    'zoom_punch': 'Zoom-Punch (harter Push)',
+    'rutsche': 'Rutsche (von rechts)',
+    'stempel': 'Stempel (knallt drauf)',
 }
 
 
@@ -70,9 +118,6 @@ def save_codes(c):
 
 
 def check_code(code):
-    """Prueft den Zugangscode. Gibt (ok, meldung) zurueck. Das Limit schuetzt dich
-    davor, dass ein einzelner Tester (oder ein weitergegebener Code) dein
-    OpenAI-Guthaben leerlaeuft."""
     codes = load_codes()
     c = codes.get((code or '').strip())
     if not c:
@@ -94,6 +139,53 @@ def count_use(code):
             save_codes(codes)
 
 
+# ---------------------------------------------------------------- Config-Merge
+def deep_merge(base, override):
+    """Rekursives Merge: override ueberschreibt base an Blaettern.
+    Nur Dicts werden merged, alles andere ersetzt."""
+    if not isinstance(override, dict):
+        return override
+    out = copy.deepcopy(base) if isinstance(base, dict) else {}
+    for k, v in override.items():
+        if k in out and isinstance(out[k], dict) and isinstance(v, dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def build_config(look, overrides=None):
+    """Config-Kaskade: config.yaml -> Preset -> User-Overrides.
+    Serverseitige Zwaenge werden am Ende hart ueberschrieben (Blender aus)."""
+    cfg = yaml.safe_load(open(os.path.join(ROOT, 'config.yaml'), encoding='utf-8'))
+    presets = {
+        'tiktok':    dict(density='wortweise', text_style='3d kinetisch',
+                          hook_seconds=8, hook_strength=0.85,
+                          bg_blur=0.6, music_beat=0.8, trail=0.4,
+                          freeze_frame=0.6, counter_ring=0.5),
+        'creator':   dict(density='akzente', text_style='3d',
+                          hook_seconds=15, hook_strength=0.5,
+                          bg_blur=0.5, music_beat=0.5, trail=0.0,
+                          freeze_frame=0.0, counter_ring=0.3),
+        'cinematic': dict(density='sparsam', text_style='klassisch',
+                          hook_seconds=30, hook_strength=0.3,
+                          bg_blur=0.4, music_beat=0.3, trail=0.0,
+                          freeze_frame=0.8, counter_ring=0.0),
+        'clean':     dict(density='sparsam', text_style='klassisch',
+                          hook_seconds=0, hook_strength=0.0,
+                          bg_blur=0.0, music_beat=0.0, trail=0.0,
+                          freeze_frame=0.0, counter_ring=0.0),
+    }
+    cfg['effects'].update(presets.get(look, presets['creator']))
+    if look == 'clean':
+        cfg['effects']['keyword_rotation'] = ['outline']
+    if overrides:
+        cfg = deep_merge(cfg, overrides)
+    # Serverseitige Zwaenge - unabhaengig vom User-Wunsch
+    cfg['effects']['blender_water'] = False
+    return cfg
+
+
 # ---------------------------------------------------------------- Render-Worker
 def job_dir(jid):
     return os.path.join(JOBS_DIR, jid)
@@ -103,61 +195,28 @@ def set_state(jid, **kw):
     j = JOBS.setdefault(jid, {})
     j.update(kw)
     try:
-        json.dump(j, open(os.path.join(job_dir(jid), 'state.json'), 'w',
-                          encoding='utf-8'), ensure_ascii=False)
+        json.dump({k: v for k, v in j.items() if k not in ('input', 'code')},
+                  open(os.path.join(job_dir(jid), 'state.json'), 'w',
+                       encoding='utf-8'), ensure_ascii=False)
     except Exception:
         pass
 
 
-def build_config(look):
-    """Baut die config.yaml fuer diesen Job aus dem gewaehlten Look."""
-    cfg = yaml.safe_load(open(os.path.join(ROOT, 'config.yaml'), encoding='utf-8'))
-    # Blender-Wasser ist serverseitig aus: 500 MB Installation und sehr langsam.
-    cfg['effects']['blender_water'] = False
-    presets = {
-        'tiktok':    dict(density='wortweise', text_style='3d kinetisch',
-                          hook_seconds=8, hook_strength=0.85),
-        'creator':   dict(density='akzente', text_style='3d',
-                          hook_seconds=15, hook_strength=0.5),
-        'cinematic': dict(density='sparsam', text_style='klassisch',
-                          hook_seconds=30, hook_strength=0.3),
-        'clean':     dict(density='sparsam', text_style='klassisch',
-                          hook_seconds=0, hook_strength=0.0),
-    }
-    cfg['effects'].update(presets.get(look, presets['creator']))
-    if look == 'clean':
-        cfg['effects']['keyword_rotation'] = ['outline']
-    return cfg
-
-
-def worker():
-    while True:
-        jid = QUEUE.get()
-        try:
-            run_job(jid)
-        except Exception as e:
-            set_state(jid, status='fehler',
-                      msg=f'Unerwarteter Fehler: {type(e).__name__}')
-        finally:
-            QUEUE.task_done()
-
-
-def run_job(jid):
+def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05):
+    """Ruft render.py als Subprocess und streamt Log + Fortschritt in state."""
     j = JOBS[jid]
     d = job_dir(jid)
     src = j['input']
-    out = os.path.join(d, 'fertig.mp4')
-    cfg = build_config(j['look'])
+    out = os.path.join(d, out_name)
+    cfg = build_config(j.get('look', 'creator'), j.get('cfg_overrides'))
     cfg_path = os.path.join(d, 'config.yaml')
-    yaml.safe_dump(cfg, open(cfg_path, 'w', encoding='utf-8'))
+    yaml.safe_dump(cfg, open(cfg_path, 'w', encoding='utf-8'), allow_unicode=True)
 
-    set_state(jid, status='laeuft', phase='Transkription …', progress=0.05)
     cmd = [sys.executable, os.path.join(ROOT, 'render.py'), src,
-           '--config', cfg_path, '--out', out]
-    # Testbetrieb ohne OpenAI-Key: fertiges Transkript verwenden.
-    if os.environ.get('DVE_TEST_TRANSCRIPT'):
-        cmd += ['--transcript', os.environ['DVE_TEST_TRANSCRIPT']]
-    env = dict(os.environ)          # OPENAI_API_KEY kommt vom Server, nicht vom Nutzer
+           '--config', cfg_path, '--out', out] + (extra_args or [])
+    env = dict(os.environ)
+    set_state(jid, status='laeuft', phase='Transkription …',
+              progress=progress_start)
     p = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, text=True, bufsize=1)
     log = []
@@ -179,26 +238,61 @@ def run_job(jid):
         elif ln.startswith('Fertig'):
             set_state(jid, phase='Fast fertig …', progress=0.97)
     p.wait()
-    open(os.path.join(d, 'log.txt'), 'w', encoding='utf-8').write('\n'.join(log))
+    open(os.path.join(d, 'log.txt'), 'a', encoding='utf-8').write('\n'.join(log) + '\n')
+    return p.returncode, log, out
 
+
+def worker():
+    while True:
+        jid = QUEUE.get()
+        try:
+            run_job(jid)
+        except Exception as e:
+            set_state(jid, status='fehler',
+                      msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
+        finally:
+            QUEUE.task_done()
+
+
+def run_job(jid):
+    """Voller Render: Analyse -> Momente -> Video-Bau."""
+    j = JOBS[jid]
+    d = job_dir(jid)
+    mode = j.get('mode', 'full')
+    if mode == 'analyze':
+        rc, log, out = _run_render(jid, extra_args=['--plan-only'],
+                                   out_name='plan.mp4', progress_start=0.10)
+        if rc == 0:
+            # Momente-Datei liegt neben dem Quellvideo
+            base = os.path.splitext(j['input'])[0]
+            mom_path = base + '_momente.json'
+            if os.path.exists(mom_path):
+                set_state(jid, status='analysiert', progress=1.0,
+                          phase='Momente bereit',
+                          moments_url=f'/api/moments/{jid}')
+                return
+        set_state(jid, status='fehler', progress=0,
+                  msg='Analyse fehlgeschlagen.',
+                  detail='\n'.join([x for x in log[-15:] if x.strip()]))
+        return
+
+    rc, log, out = _run_render(jid)
     if 'OPENAI_API_KEY ist nicht gesetzt' in '\n'.join(log):
         set_state(jid, status='fehler', progress=0,
-                  msg='Der Server ist noch nicht fertig eingerichtet '
+                  msg='Der Server ist nicht fertig eingerichtet '
                       '(kein OpenAI-Schlüssel). Sag Ismet Bescheid.')
         return
-    if p.returncode == 0 and os.path.exists(out):
+    if rc == 0 and os.path.exists(out):
         count_use(j['code'])
         set_state(jid, status='fertig', progress=1.0, phase='Fertig',
                   out='fertig.mp4')
     else:
-        letzte = [x for x in log[-12:] if x.strip()]
+        letzte = [x for x in log[-15:] if x.strip()]
         set_state(jid, status='fehler', progress=0,
                   msg='Der Render ist fehlgeschlagen.',
                   detail='\n'.join(letzte))
-    try:
-        os.remove(src)              # Quellvideo loeschen: kein Datenfriedhof
-    except Exception:
-        pass
+    # Quellvideo aufheben, damit "Momente-Editor" nach Analyse den Re-Render kann.
+    # Erst beim Job-Cleanup loeschen.
 
 
 for _ in range(int(os.environ.get('DVE_WORKERS', '1'))):
@@ -221,14 +315,45 @@ def pruefe(code: str = Form(...)):
     return {'ok': True, 'name': c.get('name', ''), 'rest': rest}
 
 
+@app.get('/api/looks')
+def looks():
+    return LOOKS
+
+
+@app.get('/api/fonts')
+def fonts():
+    return FONTS
+
+
+@app.get('/api/fx_labels')
+def fx_labels():
+    return FX_LABELS
+
+
+@app.get('/api/anim_labels')
+def anim_labels():
+    return ANIM_LABELS
+
+
+@app.get('/api/default_config')
+def default_config(look: str = 'creator'):
+    """Voreinstellungen fuer die UI. Der Client kann alles ueberschreiben."""
+    return build_config(look)
+
+
 @app.post('/api/upload')
 async def upload(datei: UploadFile = File(...), look: str = Form('creator'),
-                 code: str = Form(...)):
+                 code: str = Form(...), mode: str = Form('full'),
+                 cfg_overrides: str = Form('{}')):
     ok, msg = check_code(code)
     if not ok:
         raise HTTPException(403, msg)
     if look not in LOOKS:
         look = 'creator'
+    try:
+        overrides = json.loads(cfg_overrides) if cfg_overrides else {}
+    except Exception:
+        overrides = {}
     jid = uuid.uuid4().hex[:12]
     d = job_dir(jid)
     os.makedirs(d, exist_ok=True)
@@ -249,7 +374,6 @@ async def upload(datei: UploadFile = File(...), look: str = Form('creator'),
                 raise HTTPException(413, f'Video zu groß (max. {MAX_MB} MB).')
             f.write(chunk)
 
-    # Laenge pruefen: ein 30-Minuten-Video blockiert die Warteschlange stundenlang.
     try:
         dur = float(subprocess.run(
             ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
@@ -263,10 +387,12 @@ async def upload(datei: UploadFile = File(...), look: str = Form('creator'),
                                  f'Maximal {MAX_SECONDS} Sekunden.')
 
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
+                 'mode': mode, 'cfg_overrides': overrides,
                  'status': 'wartet', 'progress': 0.0,
                  'phase': 'In der Warteschlange …',
                  'dauer': round(dur, 1), 'name': datei.filename}
-    set_state(jid, **JOBS[jid])
+    set_state(jid, **{k: v for k, v in JOBS[jid].items()
+                      if k not in ('input', 'code')})
     QUEUE.put(jid)
     return {'job': jid, 'position': QUEUE.qsize()}
 
@@ -275,6 +401,10 @@ async def upload(datei: UploadFile = File(...), look: str = Form('creator'),
 def status(jid: str):
     j = JOBS.get(jid)
     if not j:
+        # State evtl. auf Platte
+        sp = os.path.join(job_dir(jid), 'state.json')
+        if os.path.exists(sp):
+            return json.load(open(sp, encoding='utf-8'))
         raise HTTPException(404, 'Job unbekannt.')
     out = {k: v for k, v in j.items() if k not in ('input', 'code')}
     if j.get('status') == 'wartet':
@@ -291,14 +421,50 @@ def video(jid: str):
                         filename='DouchkoVE_Captions.mp4')
 
 
-@app.get('/api/looks')
-def looks():
-    return LOOKS
+@app.get('/api/moments/{jid}')
+def get_moments(jid: str):
+    """Momente-Datei aus der Analyse laden."""
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Job unbekannt.')
+    base = os.path.splitext(j['input'])[0]
+    mom_path = base + '_momente.json'
+    if not os.path.exists(mom_path):
+        raise HTTPException(404, 'Momente noch nicht analysiert.')
+    return json.load(open(mom_path, encoding='utf-8'))
+
+
+@app.post('/api/moments/{jid}')
+async def save_and_render(jid: str, moments: str = Form(...),
+                          code: str = Form(...)):
+    """Momente speichern und Voll-Render starten."""
+    ok, msg = check_code(code)
+    if not ok:
+        raise HTTPException(403, msg)
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Job unbekannt.')
+    try:
+        mom = json.loads(moments)
+    except Exception:
+        raise HTTPException(400, 'Momente-JSON ungueltig.')
+    base = os.path.splitext(j['input'])[0]
+    mom_path = base + '_momente.json'
+    json.dump(mom, open(mom_path, 'w', encoding='utf-8'),
+              ensure_ascii=False, indent=1)
+    # Voll-Render mit den neuen Momenten
+    j['mode'] = 'full'
+    j['status'] = 'wartet'
+    j['progress'] = 0.0
+    j['phase'] = 'In der Warteschlange (Re-Render) …'
+    set_state(jid, **{k: v for k, v in j.items()
+                      if k not in ('input', 'code')})
+    QUEUE.put(jid)
+    return {'ok': True, 'job': jid, 'position': QUEUE.qsize()}
 
 
 @app.get('/admin/codes')
 def admin_codes(schluessel: str = ''):
-    """Uebersicht fuer dich: wer hat wie viel verbraucht."""
     if schluessel != os.environ.get('DVE_ADMIN', 'admin'):
         raise HTTPException(403, 'Kein Zugriff.')
     return load_codes()

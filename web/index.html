@@ -2,235 +2,986 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>DouchkoVE Captions</title>
 <style>
-  :root{
-    --bg:#151517; --surf:#1e1e21; --surf2:#2a2a2e; --line:#2e2e33;
-    --fg:#f5f5f7; --mut:#98989d; --mut2:#6b6b70; --acc:#0a84ff; --acc2:#409cff;
-    --green:#30d158; --red:#ff453a;
-  }
-  *{box-sizing:border-box; margin:0; padding:0}
-  body{background:var(--bg); color:var(--fg); min-height:100vh;
-       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
-       display:flex; justify-content:center; padding:40px 20px 80px}
-  .wrap{width:100%; max-width:680px}
-  header{margin-bottom:34px}
-  h1{font-family:Georgia,serif; font-style:italic; font-size:30px; letter-spacing:-.5px}
-  .tag{font-size:11px; letter-spacing:3px; color:var(--mut2); margin-top:2px}
-  .card{background:var(--surf); border-radius:16px; padding:26px; margin-bottom:16px}
-  .card h2{font-size:17px; font-weight:600; margin-bottom:4px}
-  .card p.sub{font-size:13px; color:var(--mut); line-height:1.5; margin-bottom:18px}
-  input[type=text]{width:100%; background:var(--surf2); border:0; border-radius:10px;
-    padding:14px; color:var(--fg); font-size:15px; outline:none}
-  input[type=text]:focus{box-shadow:0 0 0 2px var(--acc)}
-  button{background:var(--acc); color:#fff; border:0; border-radius:10px;
-    padding:14px 24px; font-size:15px; font-weight:600; cursor:pointer;
-    transition:background .15s}
-  button:hover:not(:disabled){background:var(--acc2)}
-  button:disabled{background:var(--surf2); color:var(--mut2); cursor:default}
-  button.wide{width:100%; margin-top:16px}
-  #drop{border:2px dashed var(--line); border-radius:14px; padding:46px 20px;
-    text-align:center; cursor:pointer; transition:.15s}
-  #drop:hover,#drop.over{border-color:var(--acc); background:rgba(10,132,255,.06)}
-  #drop .big{font-size:16px; font-weight:600; margin-bottom:6px}
-  #drop .small{font-size:13px; color:var(--mut)}
-  .looks{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-  .look{background:var(--surf2); border-radius:12px; padding:16px; cursor:pointer;
-    border:2px solid transparent; transition:.12s}
-  .look:hover{background:#33333a}
-  .look.on{border-color:var(--acc); background:rgba(10,132,255,.12)}
-  .look b{font-size:15px; display:block; margin-bottom:3px}
-  .look span{font-size:12px; color:var(--mut); line-height:1.4}
-  .bar{height:6px; background:var(--surf2); border-radius:3px; overflow:hidden;
-    margin:18px 0 10px}
-  .bar i{display:block; height:100%; width:0; background:var(--acc);
-    border-radius:3px; transition:width .4s}
-  .phase{font-size:14px; color:var(--mut)}
-  .hint{font-size:12px; color:var(--mut2); margin-top:12px; line-height:1.5}
-  .err{color:var(--red); font-size:14px; margin-top:12px; line-height:1.5}
-  .ok{color:var(--green); font-size:14px}
-  video{width:100%; border-radius:12px; margin-top:6px; background:#000}
-  .hidden{display:none}
-  a.dl{display:block; text-align:center; background:var(--acc); color:#fff;
-    padding:15px; border-radius:10px; font-weight:600; text-decoration:none;
-    margin-top:14px}
-  a.dl:hover{background:var(--acc2)}
-  .file{font-size:14px; color:var(--fg); margin-top:14px}
-  .file b{color:var(--acc)}
-  footer{text-align:center; color:var(--mut2); font-size:12px; margin-top:30px}
+:root {
+  --bg:#151517; --side:#1b1b1e; --surf:#1e1e21; --surf2:#2a2a2e; --surf3:#3a3a3f;
+  --line:#2e2e33; --fg:#f5f5f7; --mut:#98989d; --mut2:#6b6b70;
+  --acc:#0a84ff; --acc2:#409cff; --green:#30d158; --red:#ff453a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; overscroll-behavior: none; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-size: 15px; line-height: 1.5;
+}
+.app { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 220px; background: var(--side); border-right: 1px solid var(--line);
+  padding: 24px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  flex-shrink: 0;
+}
+.brand { font-family: Georgia, serif; font-style: italic; font-size: 22px;
+  padding: 0 24px 4px; }
+.tag { font-size: 10px; letter-spacing: 3px; color: var(--mut2); padding: 0 24px 22px; }
+.nav a { display: block; padding: 10px 24px; color: var(--mut); text-decoration: none;
+  font-size: 14px; border-left: 3px solid transparent; cursor: pointer; }
+.nav a.active { color: var(--fg); border-left-color: var(--acc); background: rgba(10,132,255,.06); }
+.nav a:hover:not(.active) { color: var(--fg); background: rgba(255,255,255,.03); }
+.main { flex: 1; padding: 24px 32px 64px; max-width: 900px; }
+.section { display: none; }
+.section.active { display: block; }
+.section h2 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+.section .sub { color: var(--mut); font-size: 13px; margin-bottom: 20px; }
+.card {
+  background: var(--surf); border-radius: 14px; padding: 22px; margin-bottom: 14px;
+}
+.card h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.card p.desc { color: var(--mut); font-size: 13px; margin-bottom: 14px; }
+.setting { margin: 14px 0 6px; }
+.setting-label { font-weight: 600; font-size: 14px; }
+.setting-desc { color: var(--mut); font-size: 12px; margin-top: 2px; margin-bottom: 8px;
+  line-height: 1.4; }
+.row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.row .label { font-size: 14px; font-weight: 500; }
+.row .grow { flex: 1; }
+
+.slider { display: flex; align-items: center; gap: 12px; }
+.slider input[type=range] { flex: 1; -webkit-appearance: none; appearance: none;
+  height: 4px; background: var(--surf2); border-radius: 2px; outline: none; }
+.slider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none;
+  appearance: none; width: 18px; height: 18px; background: var(--acc);
+  border-radius: 50%; cursor: pointer; }
+.slider input[type=range]::-moz-range-thumb { width: 18px; height: 18px;
+  background: var(--acc); border-radius: 50%; cursor: pointer; border: 0; }
+.slider .val { font-size: 13px; color: var(--mut); min-width: 60px; text-align: right;
+  font-variant-numeric: tabular-nums; }
+
+.switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track { position: absolute; inset: 0; background: var(--surf2);
+  border-radius: 26px; cursor: pointer; transition: .18s; }
+.switch .knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+  background: white; border-radius: 50%; transition: .18s; }
+.switch input:checked + .track { background: var(--green); }
+.switch input:checked + .track .knob { transform: translateX(20px); }
+
+.seg { display: inline-flex; background: var(--surf2); border-radius: 8px;
+  padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { background: transparent; border: 0; padding: 7px 14px; color: var(--mut);
+  border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.seg button.on { background: var(--surf3); color: var(--fg); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 8px 14px; background: var(--surf2); border-radius: 20px;
+  cursor: pointer; font-size: 13px; user-select: none; }
+.chip.on { background: var(--acc); color: white; }
+
+.fontgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px; }
+.fonttile { padding: 18px 12px; background: var(--surf2); border-radius: 10px;
+  cursor: pointer; text-align: center; border: 2px solid transparent; }
+.fonttile.on { border-color: var(--acc); background: rgba(10,132,255,.12); }
+.fonttile .name { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.fonttile .lbl { font-size: 11px; color: var(--mut); margin-top: 4px; }
+
+button.btn { background: var(--acc); color: white; border: 0; padding: 12px 22px;
+  border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: background .15s; }
+button.btn:hover:not(:disabled) { background: var(--acc2); }
+button.btn:disabled { background: var(--surf2); color: var(--mut2); cursor: default; }
+button.btn.secondary { background: var(--surf2); color: var(--fg); }
+button.btn.secondary:hover:not(:disabled) { background: var(--surf3); }
+
+.topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
+  padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.topbar .name { font-weight: 600; }
+.topbar .rest { color: var(--mut); font-size: 13px; }
+.topbar .grow { flex: 1; }
+
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  padding: 20px; }
+.overlay.hidden { display: none; }
+.modal { background: var(--bg); border-radius: 16px; width: 100%; max-width: 900px;
+  max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal .head { padding: 20px 22px 12px; border-bottom: 1px solid var(--line); }
+.modal .head h3 { font-size: 18px; font-weight: 600; }
+.modal .head p { color: var(--mut); font-size: 13px; margin-top: 3px; }
+.modal .body { padding: 16px 22px; overflow-y: auto; flex: 1; }
+.modal .foot { padding: 14px 22px; border-top: 1px solid var(--line);
+  display: flex; gap: 10px; align-items: center; }
+
+.login { max-width: 480px; margin: 80px auto; padding: 30px; background: var(--surf);
+  border-radius: 16px; }
+.login input { width: 100%; padding: 14px; background: var(--surf2); border: 0;
+  border-radius: 10px; color: var(--fg); font-size: 15px; margin: 12px 0; outline: none; }
+.login input:focus { box-shadow: 0 0 0 2px var(--acc); }
+.err { color: var(--red); font-size: 13px; margin-top: 10px; }
+
+#drop { border: 2px dashed var(--line); border-radius: 14px; padding: 42px 20px;
+  text-align: center; cursor: pointer; transition: .15s; }
+#drop:hover, #drop.over { border-color: var(--acc); background: rgba(10,132,255,.06); }
+#drop .big { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+#drop .small { font-size: 13px; color: var(--mut); }
+.file-info { font-size: 14px; margin-top: 12px; padding: 12px; background: var(--surf2);
+  border-radius: 10px; }
+.file-info b { color: var(--acc); }
+
+.bar { height: 6px; background: var(--surf2); border-radius: 3px; overflow: hidden;
+  margin: 18px 0 10px; }
+.bar i { display: block; height: 100%; width: 0; background: var(--acc);
+  border-radius: 3px; transition: width .4s; }
+.phase { font-size: 14px; color: var(--mut); }
+
+.mom-row { display: grid; grid-template-columns: 34px 60px 1fr 130px 90px 130px 90px 90px;
+  gap: 6px; padding: 8px 6px; background: var(--surf); border-radius: 8px;
+  margin-bottom: 4px; align-items: center; }
+.mom-row.head { background: transparent; color: var(--mut); font-size: 12px;
+  padding-bottom: 4px; }
+.mom-row input[type=text], .mom-row select {
+  background: var(--surf2); border: 0; color: var(--fg); padding: 6px 8px;
+  border-radius: 6px; font-size: 13px; width: 100%; outline: none; }
+.mom-row .zeit { font-size: 12px; color: var(--mut); }
+
+@media (max-width: 720px) {
+  .app { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: static; padding: 12px 0;
+    border-right: 0; border-bottom: 1px solid var(--line); }
+  .nav { display: flex; flex-wrap: wrap; padding: 0 12px; gap: 4px; }
+  .nav a { padding: 6px 12px; border-left: 0; border-radius: 8px; }
+  .brand { padding: 0 16px 4px; }
+  .tag { padding: 0 16px 12px; }
+  .main { padding: 16px; }
+  .mom-row { grid-template-columns: 34px 60px 1fr; }
+  .mom-row .hide-mob { display: none; }
+  .fontgrid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+}
+
+footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px; }
+.hidden { display: none !important; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>DouchkoVE</h1>
+
+<div id="loginView" class="login">
+  <h2 style="font-family:Georgia,serif; font-style:italic;">DouchkoVE</h2>
+  <div style="font-size:11px; letter-spacing:3px; color:var(--mut2); margin-top:2px;">CAPTIONS</div>
+  <p style="color:var(--mut); font-size:14px; margin:16px 0;">
+    Zugangscode eingeben. Nichts zu installieren.
+  </p>
+  <input type="text" id="code" placeholder="z. B. ISMET-1728" autocomplete="off">
+  <button class="btn" id="btnLogin" style="width:100%;">Weiter</button>
+  <div class="err hidden" id="loginErr"></div>
+</div>
+
+<div id="appView" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand">DouchkoVE</div>
     <div class="tag">CAPTIONS</div>
-  </header>
+    <nav class="nav">
+      <a data-sec="video" class="active">Video</a>
+      <a data-sec="hook">Hook</a>
+      <a data-sec="text">Text</a>
+      <a data-sec="effekte">Effekte</a>
+      <a data-sec="spezial">Spezial</a>
+      <a data-sec="sound">Sound</a>
+      <a data-sec="kamera">Kamera</a>
+      <a data-sec="fonts">Schrift</a>
+      <a data-sec="farben">Farben</a>
+      <a data-sec="ausgabe">Ausgabe</a>
+      <a data-sec="momente">Momente-Editor</a>
+      <a data-sec="rendern">Rendern</a>
+    </nav>
+  </aside>
 
-  <!-- 1. Zugang -->
-  <div class="card" id="c_code">
-    <h2>Zugangscode</h2>
-    <p class="sub">Du hast einen Code von Ismet bekommen. Nichts zu installieren —
-      alles läuft hier im Browser.</p>
-    <input type="text" id="code" placeholder="z. B. TESTER-4711" autocomplete="off">
-    <button class="wide" id="b_code">Weiter</button>
-    <div class="err hidden" id="e_code"></div>
-  </div>
-
-  <!-- 2. Video + Look -->
-  <div class="card hidden" id="c_up">
-    <h2>Dein Video</h2>
-    <p class="sub" id="willkommen"></p>
-    <div id="drop">
-      <div class="big">Video hierher ziehen</div>
-      <div class="small">oder klicken zum Auswählen · max. 3 Minuten</div>
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="name" id="topName">Angemeldet</div>
+        <div class="rest" id="topRest"></div>
+      </div>
+      <div class="grow"></div>
+      <button class="btn secondary" id="btnLogout">Abmelden</button>
     </div>
-    <input type="file" id="file" accept="video/*" class="hidden">
-    <div class="file hidden" id="dateiname"></div>
-  </div>
 
-  <div class="card hidden" id="c_look">
-    <h2>Look</h2>
-    <p class="sub">Bestimmt, wie dicht und wie laut die Captions laufen.</p>
-    <div class="looks" id="looks"></div>
-    <button class="wide" id="b_go">Video erstellen</button>
-    <div class="err hidden" id="e_up"></div>
-  </div>
+    <section class="section active" data-sec="video">
+      <h2>Video</h2>
+      <p class="sub">Video hochladen und Voreinstellung waehlen.</p>
+      <div class="card">
+        <h3>Datei hochladen</h3>
+        <p class="desc">MP4, MOV, MKV oder WEBM. Max. 3 Minuten, 300 MB.</p>
+        <div id="drop">
+          <div class="big">Video hierher ziehen</div>
+          <div class="small">oder klicken zum Auswaehlen</div>
+        </div>
+        <input type="file" id="file" accept="video/*" class="hidden">
+        <div id="fileInfo" class="file-info hidden"></div>
+      </div>
+      <div class="card">
+        <h3>Voreinstellung (Look)</h3>
+        <p class="desc">Startpunkt. Feintuning in den anderen Bereichen.</p>
+        <div class="chips" id="looks"></div>
+      </div>
+    </section>
 
-  <!-- 3. Fortschritt -->
-  <div class="card hidden" id="c_run">
-    <h2>Wird gebaut</h2>
-    <div class="bar"><i id="bal"></i></div>
-    <div class="phase" id="phase">In der Warteschlange …</div>
-    <div class="hint">Das dauert je nach Länge ein paar Minuten. Du kannst den Tab
-      offen lassen — der Fortschritt aktualisiert sich von selbst.</div>
-  </div>
+    <section class="section" data-sec="hook">
+      <h2>Hook</h2>
+      <p class="sub">Die ersten Sekunden entscheiden. 65-71 % springen davor ab.</p>
+      <div class="card">
+        <div class="setting">
+          <div class="setting-label">Hook-Dauer</div>
+          <div class="setting-desc">Wie lange am Anfang die Caption-Dichte hochgefahren wird. 0 = kein Hook.</div>
+          <div class="seg" data-cfg="effects.hook_seconds" data-opts="Aus:0,8s:8,15s:15,30s:30,60s:60"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Hook-Staerke</div>
+          <div class="seg" data-cfg="effects.hook_strength" data-opts="Sanft:0.3,Normal:0.5,Stark:0.85"></div>
+        </div>
+        <div class="setting">
+          <div class="row">
+            <div class="grow">
+              <div class="setting-label">Sofort-Hook</div>
+              <div class="setting-desc">Staerkstes Statement der ersten Sekunden startet auf Frame 1.</div>
+            </div>
+            <label class="switch"><input type="checkbox" data-cfg="effects.instant_hook">
+              <span class="track"><span class="knob"></span></span></label>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Pattern-Interrupt (Sek. Grenze)</div>
+          <div class="setting-desc">In stillen Passagen Kamera-Impulse einbauen. 0 = aus.</div>
+          <div class="slider" data-cfg="effects.pattern_interrupt" data-min="0" data-max="20" data-suffix=" s"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Lueckenfueller</div>
+          <div class="setting-desc">Textlose Strecken bekommen einen dezenten Moment. 0 = aus.</div>
+          <div class="slider" data-cfg="effects.retention_gap" data-min="0" data-max="30" data-suffix=" s"></div>
+        </div>
+      </div>
+    </section>
 
-  <!-- 4. Fertig -->
-  <div class="card hidden" id="c_done">
-    <h2 class="ok">Fertig</h2>
-    <p class="sub">Schau es dir an und lade es herunter.</p>
-    <video id="vid" controls></video>
-    <a class="dl" id="dl" download>Video herunterladen</a>
-    <button class="wide" id="b_neu" style="background:var(--surf2)">Noch ein Video</button>
-  </div>
+    <section class="section" data-sec="text">
+      <h2>Text</h2>
+      <p class="sub">Wie die Untertitel getaktet und gruppiert werden.</p>
+      <div class="card">
+        <div class="setting">
+          <div class="setting-label">Woerter pro Gruppe</div>
+          <div class="seg" data-cfg="effects.words_per_group" data-opts="2:2,3:3,4:4"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Max. Woerter pro Gruppe</div>
+          <div class="slider" data-cfg="effects.words_per_group_max" data-min="2" data-max="8"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Chunk-Standzeit</div>
+          <div class="setting-desc">Wortgruppen bleiben mind. so lange stehen.</div>
+          <div class="slider" data-cfg="effects.chunk_hold_min" data-min="0" data-max="1500" data-scale="1000" data-suffix=" ms"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Abdunkeln hinter Text</div>
+          <div class="slider" data-cfg="effects.dim_behind" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Beat-Sync (Stimme)</div>
+          <div class="slider" data-cfg="effects.beat_sync" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Musik-Beat</div>
+          <div class="slider" data-cfg="effects.music_beat" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Schatten der Person</div>
+          <div class="slider" data-cfg="effects.person_shadow" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Abstand Zahl-Captions</div>
+          <div class="slider" data-cfg="effects.zahl_gap" data-min="0" data-max="60" data-suffix=" s"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Sprache</div>
+          <div class="seg" data-cfg="language" data-opts="Deutsch:de,Englisch:en,Auto:auto"></div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card hidden" id="c_err">
-    <h2>Das hat nicht geklappt</h2>
-    <div class="err" id="e_run"></div>
-    <button class="wide" id="b_neu2" style="background:var(--surf2)">Nochmal versuchen</button>
-  </div>
+    <section class="section" data-sec="effekte">
+      <h2>Effekte</h2>
+      <p class="sub">Welche Caption-Effekte vorkommen duerfen + Dynamik + Freistellung.</p>
+      <div class="card">
+        <h3>Effekte auswaehlen</h3>
+        <p class="desc">KI-Regie rotiert automatisch durch die aktivierten.</p>
+        <div class="chips" id="fxChips"></div>
+      </div>
+      <div class="card">
+        <h3>Dynamik</h3>
+        <div class="setting">
+          <div class="setting-label">Bewegungsstil</div>
+          <div class="seg" data-cfg="effects.density" data-opts="Ruhig:sparsam,Ausgewogen:akzente,Energisch:wortweise"></div>
+        </div>
+        <div class="setting">
+          <div class="row">
+            <div class="grow">
+              <div class="setting-label">Animationen aktiv</div>
+              <div class="setting-desc">26 Animationen. Woerter reagieren auf den Satz.</div>
+            </div>
+            <label class="switch"><input type="checkbox" data-cfg="effects.anim">
+              <span class="track"><span class="knob"></span></span></label>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Freistellung & Masken</h3>
+        <div class="setting">
+          <div class="setting-label">Herausschieben (Emerge)</div>
+          <div class="seg" data-cfg="effects.emerge" data-opts="Auto:auto,Immer:immer,Aus:aus"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Maskenqualitaet</div>
+          <div class="seg" data-cfg="matting_quality" data-opts="Standard:standard,Hoch:hoch,Maximum:maximum"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Hintergrund weichzeichnen (Bokeh)</div>
+          <div class="setting-desc">Person + Text scharf, Rest unscharf.</div>
+          <div class="slider" data-cfg="effects.bg_blur" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+      </div>
+    </section>
 
-  <footer>DouchkoVE Captions · Testversion</footer>
+    <section class="section" data-sec="spezial">
+      <h2>Spezial-Effekte</h2>
+      <p class="sub">Fuenf Effekte fuer besondere Momente. Bei 0 % passiert nichts.</p>
+      <div class="card">
+        <div class="setting">
+          <div class="setting-label">Freeze-Frame (Standbild auf Punchline)</div>
+          <div class="setting-desc">Nur einmal pro Clip. Sekunden Standbild.</div>
+          <div class="slider" data-cfg="effects.freeze_frame" data-min="0" data-max="150" data-scale="100" data-suffix=" s"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Duplicate-Trail (Speed-Echo)</div>
+          <div class="slider" data-cfg="effects.trail" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Zaehler-Ring</div>
+          <div class="setting-desc">Kreisrunder Fortschritt um Zahl-Momente.</div>
+          <div class="slider" data-cfg="effects.counter_ring" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Split-Screen</div>
+          <div class="setting-desc">Frame teilt sich bei Power-3-Momenten.</div>
+          <div class="slider" data-cfg="effects.split_screen" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Kontaktschatten (Environment)</div>
+          <div class="slider" data-cfg="effects.env_shadow" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-sec="sound">
+      <h2>Sound</h2>
+      <p class="sub">Ohne Sound-Pack laeuft das Video stumm.</p>
+      <div class="card">
+        <div class="setting">
+          <div class="setting-label">SFX-Lautstaerke</div>
+          <div class="slider" data-cfg="effects.sfx_volume" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-sec="kamera">
+      <h2>Kamera</h2>
+      <p class="sub">Die kuenstliche Kamerabewegung.</p>
+      <div class="card">
+        <div class="setting">
+          <div class="setting-label">Kamera-Staerke</div>
+          <div class="setting-desc">Gesamt-Multiplikator. 0 = Kamera ganz aus.</div>
+          <div class="slider" data-cfg="camera.strength" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Crash-Zoom</div>
+          <div class="setting-desc">Nur einmal pro Clip.</div>
+          <div class="slider" data-cfg="camera.crash" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+        </div>
+        <div class="setting">
+          <div class="row">
+            <div class="grow">
+              <div class="setting-label">Whip-Pan an Abschnittsgrenzen</div>
+              <div class="setting-desc">Schneller Motion-Blur-Schwenk.</div>
+            </div>
+            <label class="switch"><input type="checkbox" data-cfg="camera.whip">
+              <span class="track"><span class="knob"></span></span></label>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Kamera-Impulse Frequenz</div>
+          <div class="setting-desc">Kleiner = haeufiger.</div>
+          <div class="slider" data-cfg="camera.side_every" data-min="1" data-max="10"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-sec="fonts">
+      <h2>Schrift</h2>
+      <p class="sub">Hauptschrift fuer alle Captions.</p>
+      <div class="card">
+        <div class="fontgrid" id="fontGrid"></div>
+      </div>
+    </section>
+
+    <section class="section" data-sec="farben">
+      <h2>Farben</h2>
+      <p class="sub">Farbwelt der Captions.</p>
+      <div class="card">
+        <div class="setting">
+          <div class="setting-label">Farb-Stil</div>
+          <div class="setting-desc">Auto = adaptiv aus der Szene.</div>
+          <div class="seg" data-cfg="colors.style" data-opts="Auto:auto,Schwarz:schwarz,Weiss:weiss"></div>
+        </div>
+        <div class="setting">
+          <div class="row">
+            <div class="grow">
+              <div class="setting-label">Adaptive Farben</div>
+              <div class="setting-desc">Caption-Farben passen sich pro Moment der Szene an.</div>
+            </div>
+            <label class="switch"><input type="checkbox" data-cfg="colors.adaptive">
+              <span class="track"><span class="knob"></span></span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-sec="ausgabe">
+      <h2>Ausgabe</h2>
+      <p class="sub">Format des fertigen Videos.</p>
+      <div class="card">
+        <div class="setting">
+          <div class="setting-label">Aufloesung</div>
+          <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K:2160"></div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Render-Geschwindigkeit</div>
+          <div class="seg" data-cfg="output.speed" data-opts="Schnell:schnell,Standard:standard,Beste:beste"></div>
+        </div>
+        <div class="setting">
+          <div class="row">
+            <div class="grow">
+              <div class="setting-label">Master-Container (MOV)</div>
+            </div>
+            <label class="switch"><input type="checkbox" data-cfg="output.master">
+              <span class="track"><span class="knob"></span></span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-sec="momente">
+      <h2>Momente-Editor</h2>
+      <p class="sub">Jeden Moment einzeln bearbeiten. Undo/Redo mit Strg+Z / Strg+Y.</p>
+      <div class="card">
+        <p class="desc">Erst Video hochladen, dann Analysieren. Danach jeden Moment
+          bearbeiten (Text, Effekt, Groesse, Animation, Szene, Lage).</p>
+        <button class="btn" id="btnAnalyze">Analysieren</button>
+        <button class="btn secondary hidden" id="btnOpenMoments" style="margin-left:8px;">Momente bearbeiten</button>
+        <div id="analyzeStatus" style="margin-top:14px; color:var(--mut); font-size:14px;"></div>
+      </div>
+    </section>
+
+    <section class="section" data-sec="rendern">
+      <h2>Rendern</h2>
+      <p class="sub">Volles Video mit allen aktuellen Einstellungen bauen.</p>
+      <div class="card">
+        <button class="btn" id="btnRender" style="width:100%;">Video erstellen</button>
+        <div class="err hidden" id="renderErr" style="margin-top:10px;"></div>
+      </div>
+      <div class="card hidden" id="progressCard">
+        <h3>Wird gebaut</h3>
+        <div class="bar"><i id="progressBar"></i></div>
+        <div class="phase" id="progressPhase">In der Warteschlange …</div>
+      </div>
+      <div class="card hidden" id="doneCard">
+        <h3 style="color:var(--green);">Fertig</h3>
+        <video id="resultVid" controls style="width:100%; border-radius:12px; margin:12px 0; background:#000;"></video>
+        <a class="btn" id="dlLink" download style="display:block; text-align:center; text-decoration:none;">Video herunterladen</a>
+      </div>
+      <div class="card hidden" id="errCard">
+        <h3 style="color:var(--red);">Fehler</h3>
+        <div id="errMsg" style="color:var(--mut); margin-top:8px;"></div>
+        <pre id="errDetail" style="background:var(--surf2); padding:12px; border-radius:8px; margin-top:10px; font-size:12px; overflow-x:auto; color:var(--mut); white-space:pre-wrap;"></pre>
+      </div>
+    </section>
+
+    <footer>DouchkoVE Captions · v73</footer>
+  </main>
+</div>
+
+<div class="overlay hidden" id="momEditor">
+  <div class="modal">
+    <div class="head">
+      <h3>Momente bearbeiten</h3>
+      <p>Text tippen, Effekt/Groesse/Animation waehlen, Haken raus = weg.
+        Strg+Z / Strg+Y</p>
+    </div>
+    <div class="body" id="momBody"></div>
+    <div class="foot">
+      <button class="btn secondary" id="momUndo" disabled>Undo</button>
+      <button class="btn secondary" id="momRedo" disabled>Redo</button>
+      <div style="flex:1;"></div>
+      <button class="btn secondary" id="momCancel">Abbrechen</button>
+      <button class="btn" id="momSave">Speichern & Rendern</button>
+    </div>
+  </div>
 </div>
 
 <script>
-const $ = s => document.querySelector(s);
-let CODE = '', LOOK = 'creator', DATEI = null, JOB = null, TIMER = null;
-
-function zeige(id, an=true){ $(id).classList.toggle('hidden', !an); }
-
-// --- Zugangscode
-$('#b_code').onclick = async () => {
-  const c = $('#code').value.trim();
-  if(!c) return;
-  $('#b_code').disabled = true;
-  const fd = new FormData(); fd.append('code', c);
-  const r = await fetch('/api/pruefe-code', {method:'POST', body:fd});
-  const d = await r.json();
-  $('#b_code').disabled = false;
-  if(!d.ok){ $('#e_code').textContent = d.msg; zeige('#e_code'); return; }
-  CODE = c;
-  zeige('#e_code', false);
-  zeige('#c_code', false);
-  zeige('#c_up');
-  $('#willkommen').textContent = (d.name ? 'Hallo ' + d.name + '. ' : '') +
-    (d.rest !== null ? 'Du hast noch ' + d.rest + ' Videos frei.' : '');
-  ladeLooks();
+'use strict';
+const State = {
+  code: null, codeName: '', codeRest: null,
+  file: null, look: 'creator',
+  cfg: null, cfgBase: null,
+  jid: null, moments: null, history: null,
 };
-$('#code').addEventListener('keydown', e => { if(e.key === 'Enter') $('#b_code').click(); });
 
-// --- Looks
-async function ladeLooks(){
+class EditorHistory {
+  constructor(cap = 200) { this.stack = []; this.idx = -1; this.cap = cap; this.quiet = false; }
+  push(snap) {
+    if (this.quiet) return false;
+    const j = JSON.stringify(snap);
+    if (this.idx >= 0 && JSON.stringify(this.stack[this.idx]) === j) return false;
+    this.stack.splice(this.idx + 1);
+    this.stack.push(snap);
+    if (this.stack.length > this.cap) this.stack.shift();
+    this.idx = this.stack.length - 1;
+    return true;
+  }
+  canUndo() { return this.idx > 0; }
+  canRedo() { return this.idx < this.stack.length - 1; }
+  undo() { if (!this.canUndo()) return null; this.idx--; return this.stack[this.idx]; }
+  redo() { if (!this.canRedo()) return null; this.idx++; return this.stack[this.idx]; }
+}
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function setDeep(obj, path, value) {
+  const parts = path.split('.');
+  let o = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!(parts[i] in o) || typeof o[parts[i]] !== 'object' || o[parts[i]] === null) o[parts[i]] = {};
+    o = o[parts[i]];
+  }
+  o[parts[parts.length - 1]] = value;
+}
+function getDeep(obj, path, def) {
+  const parts = path.split('.');
+  let o = obj;
+  for (const p of parts) {
+    if (o == null || typeof o !== 'object' || !(p in o)) return def;
+    o = o[p];
+  }
+  return o;
+}
+function diffCfg(base, cur) {
+  const out = {};
+  for (const k of Object.keys(cur)) {
+    if (typeof cur[k] === 'object' && !Array.isArray(cur[k]) && cur[k] !== null) {
+      const sub = diffCfg(base[k] || {}, cur[k]);
+      if (Object.keys(sub).length > 0) out[k] = sub;
+    } else if (JSON.stringify(base[k]) !== JSON.stringify(cur[k])) {
+      out[k] = cur[k];
+    }
+  }
+  return out;
+}
+
+function buildWidgets() {
+  $$('.slider[data-cfg]').forEach(el => {
+    const cfg = el.dataset.cfg;
+    const min = parseFloat(el.dataset.min || '0');
+    const max = parseFloat(el.dataset.max || '100');
+    const scale = parseFloat(el.dataset.scale || '1');
+    const suffix = el.dataset.suffix || '';
+    const raw = getDeep(State.cfg, cfg, min);
+    const val = Math.round(raw * scale);
+    el.innerHTML = `<input type="range" min="${min}" max="${max}" value="${val}">
+                    <span class="val">${val}${suffix}</span>`;
+    const inp = el.querySelector('input');
+    const out = el.querySelector('.val');
+    inp.addEventListener('input', () => {
+      const v = parseInt(inp.value);
+      out.textContent = v + suffix;
+      setDeep(State.cfg, cfg, scale === 1 ? v : v / scale);
+    });
+  });
+  $$('.seg[data-cfg]').forEach(el => {
+    const cfg = el.dataset.cfg;
+    const opts = el.dataset.opts.split(',').map(p => {
+      const [lbl, val] = p.split(':');
+      return { lbl, val: (val === 'true' ? true : val === 'false' ? false : isNaN(+val) ? val : +val) };
+    });
+    const cur = getDeep(State.cfg, cfg, opts[0].val);
+    el.innerHTML = opts.map(o =>
+      `<button data-val="${o.val}"${JSON.stringify(o.val) === JSON.stringify(cur) ? ' class="on"' : ''}>${o.lbl}</button>`
+    ).join('');
+    el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      el.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      const raw = b.dataset.val;
+      const v = raw === 'true' ? true : raw === 'false' ? false : (isNaN(+raw) ? raw : +raw);
+      setDeep(State.cfg, cfg, v);
+    }));
+  });
+  $$('input[type=checkbox][data-cfg]').forEach(inp => {
+    const cfg = inp.dataset.cfg;
+    inp.checked = !!getDeep(State.cfg, cfg, false);
+    inp.addEventListener('change', () => setDeep(State.cfg, cfg, inp.checked));
+  });
+}
+
+async function buildLooks() {
   const looks = await (await fetch('/api/looks')).json();
-  $('#looks').innerHTML = '';
-  for(const [k,v] of Object.entries(looks)){
-    const el = document.createElement('div');
-    el.className = 'look' + (k === LOOK ? ' on' : '');
-    el.innerHTML = '<b>'+v.name+'</b><span>'+v.desc+'</span>';
-    el.onclick = () => {
-      LOOK = k;
-      document.querySelectorAll('.look').forEach(x => x.classList.remove('on'));
-      el.classList.add('on');
-    };
-    $('#looks').appendChild(el);
+  const el = $('#looks');
+  el.innerHTML = '';
+  for (const [id, v] of Object.entries(looks)) {
+    const c = document.createElement('div');
+    c.className = 'chip' + (id === State.look ? ' on' : '');
+    c.innerHTML = `<b>${v.name}</b> — ${v.desc}`;
+    c.style.padding = '14px 16px'; c.style.borderRadius = '12px';
+    c.addEventListener('click', async () => {
+      el.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
+      c.classList.add('on');
+      State.look = id;
+      await loadDefaults();
+      rebuildAllWidgets();
+    });
+    el.appendChild(c);
   }
 }
 
-// --- Datei
-const drop = $('#drop');
-drop.onclick = () => $('#file').click();
-drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
-drop.ondragleave = () => drop.classList.remove('over');
-drop.ondrop = e => {
-  e.preventDefault(); drop.classList.remove('over');
-  if(e.dataTransfer.files[0]) nimm(e.dataTransfer.files[0]);
-};
-$('#file').onchange = e => { if(e.target.files[0]) nimm(e.target.files[0]); };
-
-function nimm(f){
-  DATEI = f;
-  $('#dateiname').innerHTML = '<b>' + f.name + '</b> · ' +
-    (f.size/1048576).toFixed(1) + ' MB';
-  zeige('#dateiname');
-  zeige('#c_look');
-  $('#c_look').scrollIntoView({behavior:'smooth'});
+async function buildFxChips() {
+  const labels = await (await fetch('/api/fx_labels')).json();
+  const el = $('#fxChips');
+  const rot = getDeep(State.cfg, 'effects.keyword_rotation', []);
+  el.innerHTML = '';
+  for (const [id, lbl] of labels) {
+    const c = document.createElement('div');
+    c.className = 'chip' + (rot.includes(id) ? ' on' : '');
+    c.textContent = lbl;
+    c.addEventListener('click', () => {
+      c.classList.toggle('on');
+      const cur = getDeep(State.cfg, 'effects.keyword_rotation', []);
+      const idx = cur.indexOf(id);
+      if (idx >= 0) cur.splice(idx, 1); else cur.push(id);
+      setDeep(State.cfg, 'effects.keyword_rotation', cur);
+    });
+    el.appendChild(c);
+  }
 }
 
-// --- Hochladen und rendern
-$('#b_go').onclick = async () => {
-  if(!DATEI) return;
-  $('#b_go').disabled = true;
-  zeige('#e_up', false);
+async function buildFontGrid() {
+  const fonts = await (await fetch('/api/fonts')).json();
+  const el = $('#fontGrid');
+  const curFile = getDeep(State.cfg, 'fonts.display', fonts[0].file);
+  el.innerHTML = '';
+  for (const f of fonts) {
+    const t = document.createElement('div');
+    t.className = 'fonttile' + (f.file === curFile ? ' on' : '');
+    t.innerHTML = `<div class="name">Aa</div><div class="lbl">${f.label}</div>`;
+    t.addEventListener('click', () => {
+      el.querySelectorAll('.fonttile').forEach(x => x.classList.remove('on'));
+      t.classList.add('on');
+      setDeep(State.cfg, 'fonts.display', f.file);
+      if (f.script) setDeep(State.cfg, 'fonts.script', f.script);
+    });
+    el.appendChild(t);
+  }
+}
+
+function rebuildAllWidgets() {
+  buildWidgets();
+  buildFxChips();
+  buildFontGrid();
+}
+
+async function loadDefaults() {
+  const r = await fetch('/api/default_config?look=' + State.look);
+  State.cfg = await r.json();
+  State.cfgBase = JSON.parse(JSON.stringify(State.cfg));
+}
+
+$('#btnLogin').addEventListener('click', doLogin);
+$('#code').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  const code = $('#code').value.trim();
+  if (!code) return;
+  const btn = $('#btnLogin'); btn.disabled = true;
+  const fd = new FormData(); fd.append('code', code);
+  const r = await fetch('/api/pruefe-code', { method: 'POST', body: fd });
+  const d = await r.json();
+  btn.disabled = false;
+  if (!d.ok) {
+    $('#loginErr').textContent = d.msg; $('#loginErr').classList.remove('hidden');
+    return;
+  }
+  State.code = code; State.codeName = d.name; State.codeRest = d.rest;
+  $('#loginView').classList.add('hidden');
+  $('#appView').classList.remove('hidden');
+  $('#topName').textContent = 'Hallo' + (d.name ? ' ' + d.name : '');
+  $('#topRest').textContent = d.rest !== null ? `noch ${d.rest} Videos frei` : '';
+  await loadDefaults();
+  rebuildAllWidgets();
+  await buildLooks();
+}
+
+$('#btnLogout').addEventListener('click', () => { location.reload(); });
+
+$$('.nav a').forEach(a => a.addEventListener('click', () => {
+  const sec = a.dataset.sec;
+  $$('.nav a').forEach(x => x.classList.remove('active'));
+  a.classList.add('active');
+  $$('.section').forEach(s => s.classList.remove('active'));
+  document.querySelector(`.section[data-sec="${sec}"]`).classList.add('active');
+}));
+
+const drop = $('#drop');
+drop.addEventListener('click', () => $('#file').click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+$('#file').addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+
+function setFile(f) {
+  State.file = f;
+  $('#fileInfo').innerHTML = `<b>${f.name}</b> · ${(f.size / 1048576).toFixed(1)} MB`;
+  $('#fileInfo').classList.remove('hidden');
+}
+
+$('#btnAnalyze').addEventListener('click', () => startUpload('analyze'));
+$('#btnRender').addEventListener('click', () => startUpload('full'));
+
+async function startUpload(mode) {
+  if (!State.file) {
+    alert('Erst ein Video hochladen (Bereich "Video").');
+    return;
+  }
+  if (mode === 'full') {
+    $('#renderErr').classList.add('hidden');
+    $('#progressCard').classList.remove('hidden');
+    $('#doneCard').classList.add('hidden');
+    $('#errCard').classList.add('hidden');
+    $('#btnRender').disabled = true;
+  }
+  const overrides = diffCfg(State.cfgBase, State.cfg);
   const fd = new FormData();
-  fd.append('datei', DATEI); fd.append('look', LOOK); fd.append('code', CODE);
+  fd.append('datei', State.file);
+  fd.append('look', State.look);
+  fd.append('code', State.code);
+  fd.append('mode', mode);
+  fd.append('cfg_overrides', JSON.stringify(overrides));
   let r, d;
   try {
-    r = await fetch('/api/upload', {method:'POST', body:fd});
+    r = await fetch('/api/upload', { method: 'POST', body: fd });
     d = await r.json();
-  } catch(e) {
-    $('#e_up').textContent = 'Upload fehlgeschlagen. Verbindung prüfen.';
-    zeige('#e_up'); $('#b_go').disabled = false; return;
+  } catch (e) {
+    showError('Upload fehlgeschlagen. Verbindung pruefen.'); return;
   }
-  if(!r.ok){
-    $('#e_up').textContent = d.detail || 'Upload fehlgeschlagen.';
-    zeige('#e_up'); $('#b_go').disabled = false; return;
-  }
-  JOB = d.job;
-  zeige('#c_up', false); zeige('#c_look', false); zeige('#c_run');
-  TIMER = setInterval(pruefe, 1500);
-};
-
-async function pruefe(){
-  const d = await (await fetch('/api/status/' + JOB)).json();
-  $('#bal').style.width = Math.round((d.progress||0)*100) + '%';
-  $('#phase').textContent = d.phase || '';
-  if(d.status === 'fertig'){
-    clearInterval(TIMER);
-    zeige('#c_run', false); zeige('#c_done');
-    $('#vid').src = '/api/video/' + JOB;
-    $('#dl').href = '/api/video/' + JOB;
-  } else if(d.status === 'fehler'){
-    clearInterval(TIMER);
-    zeige('#c_run', false); zeige('#c_err');
-    $('#e_run').textContent = d.msg || 'Unbekannter Fehler.';
+  if (!r.ok) { showError(d.detail || d.msg || 'Upload fehlgeschlagen.'); return; }
+  State.jid = d.job;
+  if (mode === 'analyze') {
+    $('#analyzeStatus').textContent = 'Analyse laeuft … (30-90 s)';
+    $('#btnAnalyze').disabled = true;
+    pollAnalyze();
+  } else {
+    pollRender();
   }
 }
 
-const neu = () => location.reload();
-$('#b_neu').onclick = neu;
-$('#b_neu2').onclick = neu;
+function showError(msg, detail) {
+  $('#renderErr').textContent = msg;
+  $('#renderErr').classList.remove('hidden');
+  $('#progressCard').classList.add('hidden');
+  $('#errCard').classList.remove('hidden');
+  $('#errMsg').textContent = msg;
+  $('#errDetail').textContent = detail || '';
+  $('#btnRender').disabled = false;
+}
+
+async function pollAnalyze() {
+  const st = await (await fetch('/api/status/' + State.jid)).json();
+  if (st.status === 'analysiert') {
+    $('#analyzeStatus').innerHTML = 'Analyse fertig - <b>Momente bearbeiten</b> klicken.';
+    $('#btnOpenMoments').classList.remove('hidden');
+    $('#btnAnalyze').disabled = false;
+    return;
+  }
+  if (st.status === 'fehler') {
+    $('#analyzeStatus').textContent = 'Analyse fehlgeschlagen: ' + (st.msg || '?');
+    $('#btnAnalyze').disabled = false;
+    return;
+  }
+  $('#analyzeStatus').textContent = st.phase || 'Laeuft …';
+  setTimeout(pollAnalyze, 2000);
+}
+
+async function pollRender() {
+  const st = await (await fetch('/api/status/' + State.jid)).json();
+  $('#progressBar').style.width = Math.round((st.progress || 0) * 100) + '%';
+  $('#progressPhase').textContent = st.phase || '';
+  if (st.status === 'fertig') {
+    $('#progressCard').classList.add('hidden');
+    $('#doneCard').classList.remove('hidden');
+    $('#resultVid').src = '/api/video/' + State.jid;
+    $('#dlLink').href = '/api/video/' + State.jid;
+    $('#btnRender').disabled = false;
+    return;
+  }
+  if (st.status === 'fehler') {
+    showError(st.msg || 'Render fehlgeschlagen', st.detail || '');
+    return;
+  }
+  setTimeout(pollRender, 2000);
+}
+
+$('#btnOpenMoments').addEventListener('click', openMomentsEditor);
+
+async function openMomentsEditor() {
+  const r = await fetch('/api/moments/' + State.jid);
+  State.moments = await r.json();
+  State.history = new EditorHistory();
+  const [fxLabels, animLabels] = await Promise.all([
+    fetch('/api/fx_labels').then(r => r.json()),
+    fetch('/api/anim_labels').then(r => r.json()),
+  ]);
+  const fxOpts = fxLabels.map(([id, l]) => `<option value="${id}">${l}</option>`).join('');
+  const powerOpts = ['Dezent:1','Normal:2','Gross:3'].map(p => {
+    const [l, v] = p.split(':'); return `<option value="${v}">${l}</option>`;
+  }).join('');
+  const animOpts = Object.entries(animLabels)
+    .map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  const szeneOpts = ['auto','wasser','boden','wand','person']
+    .map(v => `<option value="${v}">${v}</option>`).join('');
+  const lageOpts = ['auto','liegend','stehend','frei']
+    .map(v => `<option value="${v}">${v}</option>`).join('');
+  const body = $('#momBody');
+  body.innerHTML = `<div class="mom-row head">
+    <div>An</div><div>Zeit</div><div>Text</div><div>Effekt</div><div>Groesse</div>
+    <div class="hide-mob">Animation</div><div class="hide-mob">Szene</div><div class="hide-mob">Lage</div>
+  </div>`;
+  State.moments.forEach((m, i) => {
+    if (!m || typeof m !== 'object' || !('i' in m)) return;
+    const row = document.createElement('div');
+    row.className = 'mom-row';
+    row.innerHTML = `
+      <input type="checkbox" data-i="${i}" data-k="aktiv" ${m.aktiv !== false ? 'checked' : ''}>
+      <div class="zeit">${(m.zeit || 0).toFixed(1)}s</div>
+      <input type="text" data-i="${i}" data-k="text" value="${(m.text || '').replace(/"/g, '&quot;')}">
+      <select data-i="${i}" data-k="fx">${fxOpts}</select>
+      <select data-i="${i}" data-k="power">${powerOpts}</select>
+      <select data-i="${i}" data-k="anim" class="hide-mob">${animOpts}</select>
+      <select data-i="${i}" data-k="szene" class="hide-mob">${szeneOpts}</select>
+      <select data-i="${i}" data-k="lage" class="hide-mob">${lageOpts}</select>`;
+    body.appendChild(row);
+    row.querySelector('[data-k=fx]').value = m.fx || 'behind';
+    row.querySelector('[data-k=power]').value = String(m.power || 2);
+    row.querySelector('[data-k=anim]').value = m.anim || '';
+    row.querySelector('[data-k=szene]').value = m.szene || 'auto';
+    row.querySelector('[data-k=lage]').value = m.lage || 'auto';
+  });
+  let debTimer;
+  body.querySelectorAll('input, select').forEach(el => {
+    const isText = el.tagName === 'INPUT' && el.type === 'text';
+    el.addEventListener(isText ? 'input' : 'change', () => {
+      if (isText) {
+        clearTimeout(debTimer);
+        debTimer = setTimeout(() => { syncFromDom(); pushSnap(); }, 400);
+      } else {
+        syncFromDom(); pushSnap();
+      }
+    });
+  });
+  syncFromDom();
+  pushSnap();
+  $('#momEditor').classList.remove('hidden');
+}
+
+function syncFromDom() {
+  $('#momBody').querySelectorAll('input, select').forEach(el => {
+    const i = parseInt(el.dataset.i);
+    const k = el.dataset.k;
+    if (!State.moments[i]) return;
+    if (el.type === 'checkbox') State.moments[i][k] = el.checked;
+    else if (k === 'power') State.moments[i][k] = parseInt(el.value);
+    else State.moments[i][k] = el.value;
+  });
+}
+function pushSnap() {
+  State.history.push(JSON.parse(JSON.stringify(State.moments)));
+  refreshHistBtns();
+}
+function refreshHistBtns() {
+  $('#momUndo').disabled = !State.history.canUndo();
+  $('#momRedo').disabled = !State.history.canRedo();
+}
+function applySnap(snap) {
+  State.moments = JSON.parse(JSON.stringify(snap));
+  $('#momBody').querySelectorAll('input, select').forEach(el => {
+    const i = parseInt(el.dataset.i);
+    const k = el.dataset.k;
+    if (!State.moments[i]) return;
+    if (el.type === 'checkbox') el.checked = !!State.moments[i][k];
+    else if (k === 'power') el.value = String(State.moments[i][k] || 2);
+    else el.value = State.moments[i][k] || (k === 'szene' || k === 'lage' ? 'auto' : '');
+  });
+}
+$('#momUndo').addEventListener('click', () => {
+  State.history.quiet = true;
+  const s = State.history.undo();
+  if (s) applySnap(s);
+  State.history.quiet = false;
+  refreshHistBtns();
+});
+$('#momRedo').addEventListener('click', () => {
+  State.history.quiet = true;
+  const s = State.history.redo();
+  if (s) applySnap(s);
+  State.history.quiet = false;
+  refreshHistBtns();
+});
+window.addEventListener('keydown', e => {
+  if (!$('#momEditor').classList.contains('hidden')) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      e.preventDefault(); $('#momUndo').click();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' ||
+              (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+      e.preventDefault(); $('#momRedo').click();
+    }
+  }
+});
+$('#momCancel').addEventListener('click', () => $('#momEditor').classList.add('hidden'));
+$('#momSave').addEventListener('click', async () => {
+  syncFromDom();
+  const fd = new FormData();
+  fd.append('moments', JSON.stringify(State.moments));
+  fd.append('code', State.code);
+  const r = await fetch('/api/moments/' + State.jid, { method: 'POST', body: fd });
+  const d = await r.json();
+  if (!r.ok || !d.ok) { alert('Fehler: ' + (d.detail || d.msg || 'unbekannt')); return; }
+  $('#momEditor').classList.add('hidden');
+  $$('.nav a').forEach(x => x.classList.remove('active'));
+  document.querySelector('.nav a[data-sec="rendern"]').classList.add('active');
+  $$('.section').forEach(s => s.classList.remove('active'));
+  document.querySelector('.section[data-sec="rendern"]').classList.add('active');
+  $('#progressCard').classList.remove('hidden');
+  $('#doneCard').classList.add('hidden');
+  $('#errCard').classList.add('hidden');
+  pollRender();
+});
 </script>
 </body>
 </html>
