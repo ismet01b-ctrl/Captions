@@ -688,6 +688,39 @@ Transkription auf Sprach-Sample).
 [ ] 6. EU AI Act Art. 50: optionaler Offenlegungs-Hinweis/Metadaten (ab 2.8.2026)
 [ ] 7. Windows-Build/Packaging (Modell + Sound-Pack mit-bundeln)
 
+## v68 - Undo/Redo im Momente-Editor
+
+Editor konnte bisher keinen Fehlklick zurueckdrehen - versehentlich Effekt
+verstellt, Haken raus, Text ueberschrieben = Fenster schliessen + neu
+analysieren, damit die alte Fassung zurueckkam. Ab jetzt Strg+Z / Strg+Y
+(auch Strg+Shift+Z fuer Mac-Gewohnheit) plus zwei Buttons "Undo"/"Redo"
+im Knopfbalken.
+
+Umsetzung:
+- Neue Klasse `EditorHistory` in `gui.py` (Modulebene, testbar) - haelt
+  Snapshot-Stack, kennt `push/undo/redo/current/can_*` und `quiet`-Flag.
+  Deckel `cap=200` gegen unbegrenztes Wachstum.
+- Snapshot = eine Zeile pro Moment mit den 7 Widget-Werten
+  (aktiv/fx/power/anim/text/szene/lage). Traces auf allen tk-Variablen.
+- Text-Entry pusht DEBOUNCED (400 ms Ruhe) - sonst haetten wir einen
+  Snapshot pro Tastendruck und Strg+Z ginge Buchstabe fuer Buchstabe
+  zurueck. Combobox/Checkbox pushen sofort.
+- `apply_snap()` setzt `quiet=True`, damit das Zurueckschreiben der Werte
+  nicht neue Snapshots ausloest (Endlos-Selbstschutz).
+- Doppelte Snapshots werden verworfen (Combobox feuert 2x pro Aenderung).
+- Bindings `<Control-z/Z/y/Y/Shift-Z>` am Toplevel; werden beim Schliessen
+  wieder entfernt, sonst wuerden sie im Hauptfenster mitlaufen.
+- `save()` cancelt einen anstehenden Debounce-Push (State-Konsistenz).
+
+Selftest: 12 neue Tests (initial leer, push/undo/redo, Grenzen, kein
+Doppel-Push, Cap greift, quiet blockiert, neuer Push kappt Redo-Zweig,
+Source-Checks fuer Bindings + debounced/sofort-Traces).
+Regression: 263/264 gruen (vorher 251/252, +12 neu). Der einzelne FAIL
+"Whisper-Modell liegt im App-Ordner" ist Umgebungsprüfung, existiert
+seit v66 und ist auf Ismets PC gruen (Modell da).
+
+GUI-Smoke: `xvfb-run` -> GUI_OK. Fensteraufbau ohne Regression.
+
 ## v67 - Zurueck auf Qualitaets-Kurs: lokal fuer Ismet, API-Transkription
 
 Richtungswechsel: Kein Verkauf, kein Abo, kein Server. Tool laeuft lokal auf

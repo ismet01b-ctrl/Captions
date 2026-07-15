@@ -41,6 +41,54 @@ F_NAV_A  = ('Segoe UI Semibold', 10)
 
 CARD, TILE, GOLD, GOLD_HI = SURF, SURF2, ACCENT, '#e7d3a8'
 
+
+class EditorHistory:
+    """Undo/Redo-Stack fuer den Momente-Editor.
+
+    Snapshots sind Listen von Tuples - eine je Zeile. Was drin steht ist
+    egal, die Klasse behandelt sie opak. Push nur, wenn sich was geaendert
+    hat (kein Doppel-Push). Deckel `cap` verhindert unbeschraenktes Wachstum
+    bei tausenden Aenderungen.
+    """
+    def __init__(self, cap=200):
+        self.stack = []
+        self.idx = -1
+        self.cap = cap
+        self.quiet = False   # True waehrend apply(): keine neuen Snapshots
+
+    def push(self, snap):
+        if self.quiet:
+            return False
+        if self.idx >= 0 and self.stack[self.idx] == snap:
+            return False
+        del self.stack[self.idx + 1:]
+        self.stack.append(snap)
+        if len(self.stack) > self.cap:
+            self.stack.pop(0)
+        self.idx = len(self.stack) - 1
+        return True
+
+    def can_undo(self):
+        return self.idx > 0
+
+    def can_redo(self):
+        return self.idx < len(self.stack) - 1
+
+    def undo(self):
+        if not self.can_undo():
+            return None
+        self.idx -= 1
+        return self.stack[self.idx]
+
+    def redo(self):
+        if not self.can_redo():
+            return None
+        self.idx += 1
+        return self.stack[self.idx]
+
+    def current(self):
+        return self.stack[self.idx] if self.idx >= 0 else None
+
 FONT_CHOICES = [
     {'id': 'kino',    'label': 'Kino',      'file': 'fonts/archivo.ttf',     'italic': 'fonts/serif_i.ttf',
      'script': 'fonts/playfair_i.ttf'},
@@ -1829,6 +1877,52 @@ class App:
         skipped = 0
         import copy as _copy
         orig_moments = _copy.deepcopy(moments)
+        # Undo/Redo-Historie: pro Snapshot die 7 Var-Werte je Zeile.
+        # Text-Entries schnappen erst nach 400 ms Ruhe, sonst haetten wir pro Tastendruck
+        # einen State und Strg+Z wuerde Buchstabe fuer Buchstabe zurueckgehen.
+        hist = EditorHistory()
+        pending = {'after': None}
+
+        def snapshot():
+            return [(av.get(), fv.get(), pv.get(), nv.get(), tv.get(), sv.get(), lv.get())
+                    for (_m, av, fv, pv, nv, tv, sv, lv) in rows]
+
+        def apply_snap(snap):
+            hist.quiet = True
+            try:
+                for row, values in zip(rows, snap):
+                    _m, av, fv, pv, nv, tv, sv, lv = row
+                    a_v, f_v, p_v, n_v, t_v, s_v, l_v = values
+                    av.set(a_v); fv.set(f_v); pv.set(p_v); nv.set(n_v)
+                    tv.set(t_v); sv.set(s_v); lv.set(l_v)
+            finally:
+                hist.quiet = False
+
+        def push_now():
+            hist.push(snapshot())
+
+        def push_debounced():
+            if hist.quiet:
+                return
+            try:
+                if pending['after']:
+                    win.after_cancel(pending['after'])
+            except Exception:
+                pass
+            pending['after'] = win.after(400, push_now)
+
+        def undo(_e=None):
+            snap = hist.undo()
+            if snap is not None:
+                apply_snap(snap)
+            return 'break'
+
+        def redo(_e=None):
+            snap = hist.redo()
+            if snap is not None:
+                apply_snap(snap)
+            return 'break'
+
         for m in moments:
             if not isinstance(m, dict) or 'i' not in m:
                 skipped += 1
@@ -1870,6 +1964,10 @@ class App:
                 ttk.Combobox(fr, textvariable=lv, values=self.LAGE_LIST, width=8,
                              state='readonly').pack(side='left', padx=2)
                 rows.append((m, av, fv, pv, nv, tv, sv, lv))
+                # Traces registrieren: Text-Entry debounced, Rest sofort.
+                tv.trace_add('write', lambda *_a: push_debounced())
+                for var in (av, fv, pv, nv, sv, lv):
+                    var.trace_add('write', lambda *_a: push_now())
             except Exception as e:
                 skipped += 1
                 try:
@@ -1888,6 +1986,11 @@ class App:
                      font=F_M, bg=BG, fg=FG, justify='left').pack(anchor='w', pady=12)
 
         def save():
+            try:
+                if pending['after']:
+                    win.after_cancel(pending['after'])
+            except Exception:
+                pass
             for m, av, fv, pv, nv, tv, sv, lv in rows:
                 m['aktiv'] = bool(av.get())
                 m['fx'] = self.FX_DE_R.get(fv.get(), 'behind')
@@ -1906,10 +2009,32 @@ class App:
                           f'Momente gespeichert ({len(changed)} geändert).')
             if changed:
                 self.partial_rerender(changed)
+        # Startzustand als erster Snapshot. Danach werden Traces bei User-Aenderungen aktiv.
+        if rows:
+            push_now()
+        # Tastatur + Buttons. Bindung am Toplevel greift ueberall im Fenster.
+        win.bind_all('<Control-z>', undo)
+        win.bind_all('<Control-Z>', undo)
+        win.bind_all('<Control-y>', redo)
+        win.bind_all('<Control-Y>', redo)
+        win.bind_all('<Control-Shift-Z>', redo)  # Mac/Editor-Gewohnheit
+        # Bindings raeumen wir beim Schliessen auf, sonst greifen sie auch im Hauptfenster.
+        win.protocol('WM_DELETE_WINDOW', lambda: (
+            [win.unbind_all(k) for k in ('<Control-z>', '<Control-Z>', '<Control-y>',
+                                         '<Control-Y>', '<Control-Shift-Z>')],
+            win.destroy()))
         Pill(bar, 'Speichern', save, primary=True, width=170,
              bg=BG).pack(side='right', padx=16, pady=12)
-        tk.Label(bar, text='Geänderte Momente werden einzeln neu gerendert.',
+        Pill(bar, 'Redo', redo, primary=False, width=70,
+             bg=BG).pack(side='right', padx=(2, 8), pady=12)
+        Pill(bar, 'Undo', undo, primary=False, width=70,
+             bg=BG).pack(side='right', padx=2, pady=12)
+        tk.Label(bar, text='Undo Strg+Z · Redo Strg+Y · Geänderte Momente werden einzeln neu gerendert.',
                  font=F_S, bg=BG, fg=MUT2).pack(side='left', padx=16)
+        # Fuer Selftest zugreifbar machen (kein User-Effekt).
+        win._dve_editor = dict(rows=rows, hist=hist, snapshot=snapshot,
+                               apply_snap=apply_snap, undo=undo, redo=redo,
+                               push_now=push_now)
 
     def set_busy(self, busy):
         """Waehrend Render/Analyse: alles sperren, was den Lauf durcheinanderbringen

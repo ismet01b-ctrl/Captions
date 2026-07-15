@@ -1266,6 +1266,55 @@ def _scenario_logic(clip, transcript, tmp):
     check('Editor spricht Deutsch',
           all(x in _gsrc for x in ('FX_DE', 'POWER_DE', 'ANIM_DE'))
           and 'Hinter dir' in _gsrc)
+    # v68: Undo/Redo im Momente-Editor
+    import importlib
+    _gui = importlib.import_module('gui')
+    _h = _gui.EditorHistory(cap=5)
+    check('EditorHistory: initial leer',
+          not _h.can_undo() and not _h.can_redo())
+    _h.push([('a',)])
+    _h.push([('b',)])
+    _h.push([('c',)])
+    check('EditorHistory: 3 States, kann undo',
+          _h.can_undo() and not _h.can_redo() and _h.current() == [('c',)])
+    check('EditorHistory: undo -> b',
+          _h.undo() == [('b',)] and _h.can_redo())
+    check('EditorHistory: undo -> a',
+          _h.undo() == [('a',)] and not _h.can_undo() and _h.can_redo())
+    check('EditorHistory: undo am Anfang gibt None',
+          _h.undo() is None and _h.current() == [('a',)])
+    check('EditorHistory: redo -> b, redo -> c',
+          _h.redo() == [('b',)] and _h.redo() == [('c',)] and not _h.can_redo())
+    _h.undo(); _h.undo()                              # jetzt bei a, mit Redo b/c
+    _h.push([('d',)])                                 # Push kappt den Redo-Zweig
+    check('EditorHistory: neuer Push kappt Redo-Zweig',
+          not _h.can_redo() and _h.current() == [('d',)])
+    # Kein Doppel-Push bei gleichem Snapshot
+    _h2 = _gui.EditorHistory()
+    _h2.push([('x',)])
+    _ok = _h2.push([('x',)])
+    check('EditorHistory: identischer Snapshot nicht doppelt', not _ok and len(_h2.stack) == 1)
+    # Cap greift
+    _h3 = _gui.EditorHistory(cap=3)
+    for _i in range(5):
+        _h3.push([(_i,)])
+    check('EditorHistory: cap deckelt',
+          len(_h3.stack) == 3 and _h3.stack[0] == [(2,)] and _h3.current() == [(4,)])
+    # Quiet-Modus blockiert Push (Selbstschutz waehrend apply_snap)
+    _h4 = _gui.EditorHistory()
+    _h4.push([('a',)])
+    _h4.quiet = True
+    _ok2 = _h4.push([('b',)])
+    _h4.quiet = False
+    check('EditorHistory: quiet blockiert Push',
+          not _ok2 and len(_h4.stack) == 1)
+    check('Editor: Undo/Redo verdrahtet',
+          'EditorHistory()' in _gsrc and '<Control-z>' in _gsrc
+          and '<Control-y>' in _gsrc and "Pill(bar, 'Undo'" in _gsrc
+          and "Pill(bar, 'Redo'" in _gsrc)
+    check('Editor: Text-Entry debounced, Widgets sofort',
+          "trace_add('write', lambda *_a: push_debounced())" in _gsrc
+          and "trace_add('write', lambda *_a: push_now())" in _gsrc)
     check('TikTok-Fonts an Bord',
           all(os.path.exists(os.path.join(HERE, 'fonts', f))
               for f in ('tiktok_bold.ttf', 'montserrat_xb.ttf', 'inter_black.ttf')))
