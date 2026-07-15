@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+fonts/
+models/
+sfx/pack/
+data/
+*_transcript.json
+*_transcript2.json
+*_regie3.json
+*_momente.json
+*_captions.mp4
+*_vorschau.mp4
+.env
+.freesound_key
