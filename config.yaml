@@ -78,6 +78,7 @@ effects:
   pattern_interrupt: 9
   emerge: auto
   bg_blur: 0.5   # v69: Hintergrund weichzeichnen waehrend Momente (0 = aus, 1 = maximum)
+  music_beat: 0.6  # v70: Musik-Beat mit ins Beat-Sync (0 = nur Stimme, 1 = voll)
 camera:
   strength: 0.7
   crash: 0.55      # Crash-Zoom auf den staerksten Moment (0 = aus)

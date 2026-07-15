@@ -1825,6 +1825,66 @@ def _scenario_premium(tmp):
     check('Blur im Kundenprofil gesichert',
           "'bgblur_var'" in _gsrc_bl)
 
+    # ---- v70: Musik-Beat-Erkennung ----
+    print('\n--- Musik-Beat ---')
+    check('music_beats existiert', hasattr(R, 'music_beats'))
+    check('Config: music_beat',
+          'music_beat' in open(os.path.join(HERE, 'config.yaml'),
+                               encoding='utf-8').read())
+    import wave, struct
+    _wav_path = os.path.join(tempfile.gettempdir(), 'dve_st_beat.wav')
+
+    def _write_wav(samples, sr=44100):
+        s16 = np.clip(samples * 32767, -32768, 32767).astype(np.int16)
+        with wave.open(_wav_path, 'wb') as _wf:
+            _wf.setnchannels(1); _wf.setsampwidth(2); _wf.setframerate(sr)
+            _wf.writeframes(s16.tobytes())
+
+    # 120 BPM Kick: alle 0.5 s ein Sub-Bass-Puls
+    sr = 44100
+    dur = 8.0
+    n_samp = int(sr * dur)
+    x = np.zeros(n_samp, np.float32)
+    kick_every = int(sr * 0.5)                          # 120 BPM -> 0.5 s Abstand
+    for pos in range(0, n_samp - 2000, kick_every):
+        env = np.exp(-np.arange(2000) / 400.0).astype(np.float32)
+        tone = np.sin(2 * np.pi * 60 * np.arange(2000) / sr).astype(np.float32)
+        x[pos:pos + 2000] += env * tone * 0.8
+    _write_wav(x)
+    env, bpm, conf = R.music_beats(_wav_path, int(dur * 30), 30.0)
+    check('Musik-Beat: 120 BPM erkannt (Toleranz +/- 5)',
+          abs(bpm - 120) <= 5, f'{bpm} BPM')
+    check('Musik-Beat: Confidence hoch bei klarem Beat',
+          conf > 0.30, f'conf={conf:.2f}')
+    check('Musik-Beat: Envelope hat Peaks',
+          float(env.max()) > 0.5)
+
+    # Reines Rauschen (kein Beat): conf muss klein sein
+    x2 = (np.random.default_rng(0).standard_normal(n_samp) * 0.05).astype(np.float32)
+    _write_wav(x2)
+    env2, bpm2, conf2 = R.music_beats(_wav_path, int(dur * 30), 30.0)
+    check('Musik-Beat: Rauschen -> niedrige Confidence',
+          conf2 < 0.30, f'conf={conf2:.2f}')
+
+    # Stille -> alles 0
+    _write_wav(np.zeros(n_samp, np.float32))
+    env3, bpm3, conf3 = R.music_beats(_wav_path, int(dur * 30), 30.0)
+    check('Musik-Beat: Stille -> conf 0, bpm 0',
+          conf3 == 0.0 and bpm3 == 0)
+
+    os.remove(_wav_path)
+
+    _rsrc_mb = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('Musik-Beat: Pipeline mischt in aud_onset',
+          'music_beats(voice_wav' in _rsrc_mb
+          and 'np.maximum(aud_onset, beat_env' in _rsrc_mb)
+    check('Musik-Beat: Confidence-Gate greift',
+          'conf > 0.10' in _rsrc_mb)
+    check('Musik-Beat: Regler in der GUI',
+          'mbeat_var' in _gsrc_bl and 'Musik-Beat' in _gsrc_bl)
+    check('Musik-Beat: im Kundenprofil gesichert',
+          "'mbeat_var'" in _gsrc_bl)
+
 
 if __name__ == '__main__':
     main()

@@ -1684,6 +1684,85 @@ def build_groups(words, max_words=3, min_hold=0.0, hard_max=5):
         groups = merged
     return groups
 
+def music_beats(voice_wav, n_frames, fps):
+    """Musik-Beat-Erkennung (Kick + Snare). Rueckgabe: (beat_env, bpm, conf).
+
+    beat_env: 0..1 pro Videoframe, spike auf jedem Beat, weicher Ausklang.
+    bpm:      geschaetztes Tempo (int) oder 0.
+    conf:     0..1 wie sicher ein Beat vorliegt. Bei purem Talking-Head ohne
+              Musik ist conf klein -> die Kopplung wirkt nicht (Selbstschutz).
+
+    Algorithmus ohne librosa: (1) Sub-Bass-Onset (Amplitude-Delta auf
+    Tiefpass < 200 Hz) fuer Kick, (2) Auto-Korrelation der Onset-Reihe im
+    Tempo-Bereich 60-180 BPM fuer den Grundschlag, (3) Confidence aus dem
+    Auto-Korrelations-Peak vs. Rauschboden.
+    """
+    try:
+        import wave
+        wf = wave.open(voice_wav, 'rb')
+        sr = wf.getframerate()
+        raw = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
+        wf.close()
+        x = raw.astype(np.float32) / 32768.0
+        # Tiefpass ~200 Hz: einfache gleitende Mittelung, greift Kick + Sub.
+        k = max(int(sr / 200), 8)
+        low = np.convolve(x, np.ones(k, np.float32) / k, mode='same')
+        hop = max(int(sr / fps), 1)
+        n = min(n_frames, len(low) // hop)
+        rms_lo = np.zeros(n_frames, np.float32)
+        for i in range(n):
+            seg = low[i * hop:(i + 1) * hop]
+            rms_lo[i] = np.sqrt(np.mean(seg * seg) + 1e-9)
+        # Stille: das eps in sqrt() haelt rms_lo.max() bei ~3e-5 (nicht 0),
+        # deshalb auf dem echten Signal pruefen.
+        if float(np.abs(x).max()) < 1e-4:
+            z = np.zeros(n_frames, np.float32)
+            return z, 0, 0.0
+        # Onset = positive Amplitude-Steigerung im Sub-Bass
+        d = np.diff(rms_lo, prepend=rms_lo[:1])
+        onset = np.clip(d, 0, None)
+        hi = max(np.percentile(onset[onset > 0], 95) if (onset > 0).any() else 1e-6, 1e-6)
+        onset = np.clip(onset / hi, 0, 1)
+        # Schwellwert: nur echte Peaks in die Auto-Korrelation. Bei Rauschen bleibt
+        # das Signal fast leer -> flache AC -> niedrige Confidence.
+        onset_sharp = np.where(onset > 0.4, onset, 0.0).astype(np.float32)
+        # Auto-Korrelation im Bereich 60-180 BPM
+        min_bpm, max_bpm = 60, 180
+        lag_min = max(int(60.0 / max_bpm * fps), 4)          # 20 Frames bei 30 fps, 180 BPM
+        lag_max = min(int(60.0 / min_bpm * fps), n_frames // 3)  # 30 Frames bei 30 fps, 60 BPM
+        if lag_max <= lag_min + 1:
+            return onset, 0, 0.0
+        # Zentrierte AC auf dem geschaerften Signal - Harmonische bleiben, aber
+        # der Peak sticht deutlicher hervor.
+        y = onset_sharp - onset_sharp.mean()
+        norm = float(np.dot(y, y)) + 1e-9
+        ac = np.zeros(lag_max - lag_min + 1, np.float32)
+        for j, lag in enumerate(range(lag_min, lag_max + 1)):
+            ac[j] = float(np.dot(y[:-lag], y[lag:])) / norm
+        peak_idx = int(np.argmax(ac))
+        peak_val = float(ac[peak_idx])
+        best_lag = peak_idx + lag_min
+        bpm = int(round(60.0 * fps / best_lag)) if best_lag > 0 else 0
+        # Confidence: Peak muss aus dem Median-Rauschen herausragen. Kombiniert
+        # mit z-score gegen zufaellige Muster (Gauss-Rauschen).
+        med_ac = float(np.median(ac))
+        std_ac = float(ac.std()) + 1e-9
+        pom = (peak_val - med_ac) / max(peak_val, 0.05)      # 0..1, robust vs Harmonics
+        z_score = (peak_val - float(ac.mean())) / std_ac      # gegen Rauschen
+        conf = max(0.0, min(1.0, pom * min(1.0, (z_score - 1.5) / 3.0)))
+        # Beat-Envelope aus den Onset-Peaks: max +0.5/Frame hoch, 0.72 Abklingfaktor.
+        env = np.zeros(n_frames, np.float32)
+        acc = 0.0
+        for i in range(n_frames):
+            v = onset[i] if i < len(onset) else 0.0
+            acc = max(min(v, acc + 0.5), acc * 0.72)
+            env[i] = acc
+        return env, bpm, conf
+    except Exception:
+        z = np.zeros(n_frames, np.float32)
+        return z, 0, 0.0
+
+
 def audio_envelopes(voice_wav, n_frames, fps):
     """Lautstaerke-, Bass- und Onset-Huellkurve pro Videoframe, normalisiert 0..1.
     Damit koennen Texte auf Musik und Stimme reagieren."""
@@ -3367,6 +3446,22 @@ def main():
     n_est = (max(int(args.duration * fps), 1) if args.duration else n_frames) + 8
     if voice_wav and os.path.exists(voice_wav) and cfg['effects'].get('anim', True):
         aud_rms, aud_bass, aud_onset = audio_envelopes(voice_wav, n_est, fps)
+        # Musik-Beat: eigener Onset aus Sub-Bass + Auto-Korrelation. Wird mit
+        # dem Sprech-Onset kombiniert (max), damit Text sowohl auf Stimme als
+        # auch auf Musik reagiert. Gewicht = effects.music_beat * conf; ohne
+        # Musik im Clip ist conf klein -> reine Talking-Heads werden nicht
+        # angefasst.
+        _mb_w = float(cfg['effects'].get('music_beat', 0.6) or 0.0)
+        if _mb_w > 0.01:
+            beat_env, bpm, conf = music_beats(voice_wav, n_est, fps)
+            if conf > 0.10:
+                gain = _mb_w * conf
+                aud_onset = np.maximum(aud_onset, beat_env * gain).astype(np.float32)
+                print(f"Musik-Beat: ~{bpm} BPM (Confidence {conf:.2f}, "
+                      f"Gewicht {gain:.2f})")
+            else:
+                print("Musik-Beat: kein klares Tempo (Confidence zu niedrig) - "
+                      "nur Sprech-Onset")
     else:
         aud_rms = aud_bass = aud_onset = np.zeros(n_est, np.float32)
     fx_map = None

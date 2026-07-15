@@ -688,6 +688,42 @@ Transkription auf Sprach-Sample).
 [ ] 6. EU AI Act Art. 50: optionaler Offenlegungs-Hinweis/Metadaten (ab 2.8.2026)
 [ ] 7. Windows-Build/Packaging (Modell + Sound-Pack mit-bundeln)
 
+## v70 - Musik-Beat-Erkennung
+
+Beat-Sync haengt jetzt nicht mehr nur an Sprech-Onsets, sondern reagiert
+auch auf den Musik-Beat (Kick/Sub-Bass). Text pulsiert mit Musik UND
+Stimme - wie ein handgeschnittener Musik-Cut.
+
+Umsetzung:
+- Neue Funktion `music_beats(voice_wav, n_frames, fps)` in `render.py`.
+  Ohne librosa - eigene Kette: Tiefpass < 200 Hz -> Amplitude-Delta ->
+  Peak-Threshold (nur echte Peaks in die Auto-Korrelation, damit
+  Rauschen nicht zaehlt) -> Auto-Korrelation im Bereich 60-180 BPM ->
+  Peak-Suche. Rueckgabe: (beat_env, bpm, conf).
+- Confidence-Berechnung kombiniert: (a) Peak-over-Median (robust gegen
+  Harmonische), (b) z-Score des Peaks (gegen zufaellige Rauschmuster).
+  So triggert reines Talking-Head nicht faelschlich.
+- Pipeline mischt Beat-Envelope in `aud_onset` per `max(...)`, gewichtet
+  mit `music_beat * conf`. Confidence-Gate bei 0.10: kein klarer Beat
+  -> kein Effekt.
+- Config: `effects.music_beat` (0-1, Default 0.6). GUI-Regler direkt
+  unter Beat-Sync in der Karte "Sonstiges/Feintuning".
+- Kundenprofil sichert `mbeat_var`.
+
+Selftest: +13 neue Tests (Funktion existiert, Config, 120 BPM erkannt
+(+/- 5 BPM), Confidence hoch bei klarem Beat > 0.30, Envelope-Peaks,
+Rauschen -> Confidence < 0.30, Stille -> alles 0, Pipeline-Kopplung,
+Confidence-Gate, GUI-Regler, Profil-Sicherung).
+Regression: 290/291 gruen (vorher 279/280, +11 netto - der Whisper-
+Modell-Check unveraendert).
+
+GUI-Smoke `xvfb-run` -> GUI_OK.
+
+Ehrliche Grenze: Erkennt Kick/Sub-Bass zuverlaessig, subtile Snare-only-
+oder Off-Beat-Muster koennen niedrigere Confidence liefern. In-The-Wild-
+Test auf Musik-Videos macht Ismet auf Windows. Der Confidence-Gate
+verhindert False-Positives - im Zweifel wirkt der Musik-Beat nicht.
+
 ## v69 - Hintergrund-Blur (Depth-basiert)
 
 Bokeh-artiger Kino-Blur waehrend jedes Caption-Moments: Person + Text
