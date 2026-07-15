@@ -1,0 +1,96 @@
+transcription:
+  engine: api        # api = OpenAI Whisper (beste Qualitaet) | local = faster-whisper (offline)
+  model: base
+  device: auto
+  compute: int8
+language: de
+output:
+  height: 1080
+  crf: 18
+  preset: medium
+  master: false
+  speed: standard
+matting_downsample: auto
+fonts:
+  display: fonts/archivo.ttf
+  italic: fonts/serif_i.ttf
+  support: fonts/sans_l.ttf
+  script: fonts/playfair_i.ttf
+colors:
+  style: auto
+  text:
+  - 248
+  - 246
+  - 242
+  accent:
+  - 255
+  - 122
+  - 26
+  adaptive: true
+keywords:
+  ai: true
+  auto: true
+  emphasize_last: true
+  min_gap_seconds: 6
+  include: []
+  exclude: []
+  ai_vision: true
+effects:
+  words_per_group: 3
+  words_per_group_max: 5
+  chunk_hold_min: 0.65
+  zahl_gap: 15
+  beat_sync: 0.7
+  person_shadow: 0.5
+  keyword_rotation:
+  - behind
+  - cascade
+  - blurin
+  - outline
+  - ground
+  breathing: true
+  dim_behind: 0.38
+  dim_blurin: 0.3
+  tracking: true
+  sfx: true
+  sfx_volume: 0.5
+  broll_captions: false
+  scene_lock: true
+  text_style: 3d
+  finish: true
+  density: akzente
+  anim: true
+  motion_blur: true
+  intro_hook: true
+  intro_seconds: 15
+  safe_zone: true
+  reflection: true
+  occlusion: true
+  track3d: true
+  blender_water: true
+  blender_samples: 128
+  blender_anim_frames: 12
+  blender_width: 1600
+  hook_seconds: 15
+  hook_strength: 0.5
+  instant_hook: true
+  retention_gap: 12
+  pattern_interrupt: 9
+  emerge: auto
+camera:
+  strength: 0.7
+  crash: 0.55      # Crash-Zoom auf den staerksten Moment (0 = aus)
+  whip: false      # Whip-Pan an Abschnittsgrenzen
+  side_every: 3
+  keyword_rotation:
+  - caption
+  - punch
+  - pan
+  - push
+  - pullback
+  side_rotation:
+  - capzoom
+  - drift
+render:
+  blender_path: ''
+matting_quality: hoch

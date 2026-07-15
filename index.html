@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DouchkoVE Captions</title>
+<style>
+  :root{
+    --bg:#151517; --surf:#1e1e21; --surf2:#2a2a2e; --line:#2e2e33;
+    --fg:#f5f5f7; --mut:#98989d; --mut2:#6b6b70; --acc:#0a84ff; --acc2:#409cff;
+    --green:#30d158; --red:#ff453a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--fg); min-height:100vh;
+       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       display:flex; justify-content:center; padding:40px 20px 80px}
+  .wrap{width:100%; max-width:680px}
+  header{margin-bottom:34px}
+  h1{font-family:Georgia,serif; font-style:italic; font-size:30px; letter-spacing:-.5px}
+  .tag{font-size:11px; letter-spacing:3px; color:var(--mut2); margin-top:2px}
+  .card{background:var(--surf); border-radius:16px; padding:26px; margin-bottom:16px}
+  .card h2{font-size:17px; font-weight:600; margin-bottom:4px}
+  .card p.sub{font-size:13px; color:var(--mut); line-height:1.5; margin-bottom:18px}
+  input[type=text]{width:100%; background:var(--surf2); border:0; border-radius:10px;
+    padding:14px; color:var(--fg); font-size:15px; outline:none}
+  input[type=text]:focus{box-shadow:0 0 0 2px var(--acc)}
+  button{background:var(--acc); color:#fff; border:0; border-radius:10px;
+    padding:14px 24px; font-size:15px; font-weight:600; cursor:pointer;
+    transition:background .15s}
+  button:hover:not(:disabled){background:var(--acc2)}
+  button:disabled{background:var(--surf2); color:var(--mut2); cursor:default}
+  button.wide{width:100%; margin-top:16px}
+  #drop{border:2px dashed var(--line); border-radius:14px; padding:46px 20px;
+    text-align:center; cursor:pointer; transition:.15s}
+  #drop:hover,#drop.over{border-color:var(--acc); background:rgba(10,132,255,.06)}
+  #drop .big{font-size:16px; font-weight:600; margin-bottom:6px}
+  #drop .small{font-size:13px; color:var(--mut)}
+  .looks{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .look{background:var(--surf2); border-radius:12px; padding:16px; cursor:pointer;
+    border:2px solid transparent; transition:.12s}
+  .look:hover{background:#33333a}
+  .look.on{border-color:var(--acc); background:rgba(10,132,255,.12)}
+  .look b{font-size:15px; display:block; margin-bottom:3px}
+  .look span{font-size:12px; color:var(--mut); line-height:1.4}
+  .bar{height:6px; background:var(--surf2); border-radius:3px; overflow:hidden;
+    margin:18px 0 10px}
+  .bar i{display:block; height:100%; width:0; background:var(--acc);
+    border-radius:3px; transition:width .4s}
+  .phase{font-size:14px; color:var(--mut)}
+  .hint{font-size:12px; color:var(--mut2); margin-top:12px; line-height:1.5}
+  .err{color:var(--red); font-size:14px; margin-top:12px; line-height:1.5}
+  .ok{color:var(--green); font-size:14px}
+  video{width:100%; border-radius:12px; margin-top:6px; background:#000}
+  .hidden{display:none}
+  a.dl{display:block; text-align:center; background:var(--acc); color:#fff;
+    padding:15px; border-radius:10px; font-weight:600; text-decoration:none;
+    margin-top:14px}
+  a.dl:hover{background:var(--acc2)}
+  .file{font-size:14px; color:var(--fg); margin-top:14px}
+  .file b{color:var(--acc)}
+  footer{text-align:center; color:var(--mut2); font-size:12px; margin-top:30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>DouchkoVE</h1>
+    <div class="tag">CAPTIONS</div>
+  </header>
+
+  <!-- 1. Zugang -->
+  <div class="card" id="c_code">
+    <h2>Zugangscode</h2>
+    <p class="sub">Du hast einen Code von Ismet bekommen. Nichts zu installieren —
+      alles läuft hier im Browser.</p>
+    <input type="text" id="code" placeholder="z. B. TESTER-4711" autocomplete="off">
+    <button class="wide" id="b_code">Weiter</button>
+    <div class="err hidden" id="e_code"></div>
+  </div>
+
+  <!-- 2. Video + Look -->
+  <div class="card hidden" id="c_up">
+    <h2>Dein Video</h2>
+    <p class="sub" id="willkommen"></p>
+    <div id="drop">
+      <div class="big">Video hierher ziehen</div>
+      <div class="small">oder klicken zum Auswählen · max. 3 Minuten</div>
+    </div>
+    <input type="file" id="file" accept="video/*" class="hidden">
+    <div class="file hidden" id="dateiname"></div>
+  </div>
+
+  <div class="card hidden" id="c_look">
+    <h2>Look</h2>
+    <p class="sub">Bestimmt, wie dicht und wie laut die Captions laufen.</p>
+    <div class="looks" id="looks"></div>
+    <button class="wide" id="b_go">Video erstellen</button>
+    <div class="err hidden" id="e_up"></div>
+  </div>
+
+  <!-- 3. Fortschritt -->
+  <div class="card hidden" id="c_run">
+    <h2>Wird gebaut</h2>
+    <div class="bar"><i id="bal"></i></div>
+    <div class="phase" id="phase">In der Warteschlange …</div>
+    <div class="hint">Das dauert je nach Länge ein paar Minuten. Du kannst den Tab
+      offen lassen — der Fortschritt aktualisiert sich von selbst.</div>
+  </div>
+
+  <!-- 4. Fertig -->
+  <div class="card hidden" id="c_done">
+    <h2 class="ok">Fertig</h2>
+    <p class="sub">Schau es dir an und lade es herunter.</p>
+    <video id="vid" controls></video>
+    <a class="dl" id="dl" download>Video herunterladen</a>
+    <button class="wide" id="b_neu" style="background:var(--surf2)">Noch ein Video</button>
+  </div>
+
+  <div class="card hidden" id="c_err">
+    <h2>Das hat nicht geklappt</h2>
+    <div class="err" id="e_run"></div>
+    <button class="wide" id="b_neu2" style="background:var(--surf2)">Nochmal versuchen</button>
+  </div>
+
+  <footer>DouchkoVE Captions · Testversion</footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let CODE = '', LOOK = 'creator', DATEI = null, JOB = null, TIMER = null;
+
+function zeige(id, an=true){ $(id).classList.toggle('hidden', !an); }
+
+// --- Zugangscode
+$('#b_code').onclick = async () => {
+  const c = $('#code').value.trim();
+  if(!c) return;
+  $('#b_code').disabled = true;
+  const fd = new FormData(); fd.append('code', c);
+  const r = await fetch('/api/pruefe-code', {method:'POST', body:fd});
+  const d = await r.json();
+  $('#b_code').disabled = false;
+  if(!d.ok){ $('#e_code').textContent = d.msg; zeige('#e_code'); return; }
+  CODE = c;
+  zeige('#e_code', false);
+  zeige('#c_code', false);
+  zeige('#c_up');
+  $('#willkommen').textContent = (d.name ? 'Hallo ' + d.name + '. ' : '') +
+    (d.rest !== null ? 'Du hast noch ' + d.rest + ' Videos frei.' : '');
+  ladeLooks();
+};
+$('#code').addEventListener('keydown', e => { if(e.key === 'Enter') $('#b_code').click(); });
+
+// --- Looks
+async function ladeLooks(){
+  const looks = await (await fetch('/api/looks')).json();
+  $('#looks').innerHTML = '';
+  for(const [k,v] of Object.entries(looks)){
+    const el = document.createElement('div');
+    el.className = 'look' + (k === LOOK ? ' on' : '');
+    el.innerHTML = '<b>'+v.name+'</b><span>'+v.desc+'</span>';
+    el.onclick = () => {
+      LOOK = k;
+      document.querySelectorAll('.look').forEach(x => x.classList.remove('on'));
+      el.classList.add('on');
+    };
+    $('#looks').appendChild(el);
+  }
+}
+
+// --- Datei
+const drop = $('#drop');
+drop.onclick = () => $('#file').click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => {
+  e.preventDefault(); drop.classList.remove('over');
+  if(e.dataTransfer.files[0]) nimm(e.dataTransfer.files[0]);
+};
+$('#file').onchange = e => { if(e.target.files[0]) nimm(e.target.files[0]); };
+
+function nimm(f){
+  DATEI = f;
+  $('#dateiname').innerHTML = '<b>' + f.name + '</b> · ' +
+    (f.size/1048576).toFixed(1) + ' MB';
+  zeige('#dateiname');
+  zeige('#c_look');
+  $('#c_look').scrollIntoView({behavior:'smooth'});
+}
+
+// --- Hochladen und rendern
+$('#b_go').onclick = async () => {
+  if(!DATEI) return;
+  $('#b_go').disabled = true;
+  zeige('#e_up', false);
+  const fd = new FormData();
+  fd.append('datei', DATEI); fd.append('look', LOOK); fd.append('code', CODE);
+  let r, d;
+  try {
+    r = await fetch('/api/upload', {method:'POST', body:fd});
+    d = await r.json();
+  } catch(e) {
+    $('#e_up').textContent = 'Upload fehlgeschlagen. Verbindung prüfen.';
+    zeige('#e_up'); $('#b_go').disabled = false; return;
+  }
+  if(!r.ok){
+    $('#e_up').textContent = d.detail || 'Upload fehlgeschlagen.';
+    zeige('#e_up'); $('#b_go').disabled = false; return;
+  }
+  JOB = d.job;
+  zeige('#c_up', false); zeige('#c_look', false); zeige('#c_run');
+  TIMER = setInterval(pruefe, 1500);
+};
+
+async function pruefe(){
+  const d = await (await fetch('/api/status/' + JOB)).json();
+  $('#bal').style.width = Math.round((d.progress||0)*100) + '%';
+  $('#phase').textContent = d.phase || '';
+  if(d.status === 'fertig'){
+    clearInterval(TIMER);
+    zeige('#c_run', false); zeige('#c_done');
+    $('#vid').src = '/api/video/' + JOB;
+    $('#dl').href = '/api/video/' + JOB;
+  } else if(d.status === 'fehler'){
+    clearInterval(TIMER);
+    zeige('#c_run', false); zeige('#c_err');
+    $('#e_run').textContent = d.msg || 'Unbekannter Fehler.';
+  }
+}
+
+const neu = () => location.reload();
+$('#b_neu').onclick = neu;
+$('#b_neu2').onclick = neu;
+</script>
+</body>
+</html>
