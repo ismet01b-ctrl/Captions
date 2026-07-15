@@ -688,6 +688,60 @@ Transkription auf Sprach-Sample).
 [ ] 6. EU AI Act Art. 50: optionaler Offenlegungs-Hinweis/Metadaten (ab 2.8.2026)
 [ ] 7. Windows-Build/Packaging (Modell + Sound-Pack mit-bundeln)
 
+## v73 - Fuenf neue Effekt-Klassen
+
+Fuenf komplett neue Effekte, alle als Post-Overlay oder Pipeline-
+Modifikator - keine tiefe Umstellung der 5 tpl-Pfade noetig.
+
+1. **Freeze-Frame** (`effects.freeze_frame`, Sekunden): auf dem staerksten
+   power=3-Moment (laengstes Wort bei Gleichstand) friert das Video fuer
+   0.4-1.5 s ein, waehrend die Caption weiterlaeuft. Regie-Trick fuer
+   Punchlines. Nur EINMAL pro Clip - sonst wird's kitschig. B-Roll
+   ausgeschlossen. Pipeline-Modifikator im For-Loop, `frozen_frame`-Cache
+   haelt das erste Frame ab Fensterstart.
+
+2. **Duplicate-Trail** (`effects.trail`, 0-1): der Text hinterlaesst
+   versetzte Kopien nach links mit fallender Deckkraft (Speed-Gefuehl wie
+   in Musikvideos). Post-Effekt via Diff comp vs. frame - extrahiert die
+   Text-Region und dupliziert sie. Ohne Text im Frame passiert nichts
+   (kein Blindwurf).
+
+3. **Zaehler-Ring** (`effects.counter_ring`, 0-1): kreisrunder Fortschritts-
+   bogen um Zahl-Momente (die mit `count`-Metadaten). Laeuft synchron zum
+   Zaehler von 0 auf 360°. Wirkt wie ein Sport-Timer/Score-Ring. Bei
+   Momenten ohne Zahl: no-op.
+
+4. **Split-Screen** (`effects.split_screen`, 0-1): das Frame wird
+   horizontal in zwei Haelften geteilt, die an einer Luecke (bis 5% der
+   Bildhoehe) auseinander driften. Text sitzt in der Luecke. Greift nur
+   bei power=3-Momenten ohne B-Roll. Rein/raus mit der ueblichen Moment-
+   Fade-Kurve.
+
+5. **Environment-Text-Schatten** (`effects.env_shadow`, 0-1): ground-
+   Momente (In der Szene) bekommen einen weichen Kontakt-Schatten unter
+   dem Text. Diff-Extraktion der Text-Region, nach unten/rechts verschoben,
+   Gauss-Blur, dunkelt AUSSERHALB der Text-Pixel ab (der Text selbst bleibt
+   hell). Ergaenzt Blender-Wasser (das die Schatten schon fuer Wasser
+   liefert) fuer Non-Blender-Faelle.
+
+Alle Regler in einer neuen Karte "Spezial-Effekte (v73)" im Effekte-Tab.
+Alle Defaults bei 0.0 - der Nutzer entscheidet, was er will. Kein Regler
+wirft blind: jeder prueft Vorbedingungen (Text im Frame, power=3, ground-
+Moment, count-Metadaten) und ist sonst no-op.
+
+Selftest: +32 Tests (Existenz aller Funktionen, Config-Keys, Verhaltens-
+Tests pro Effekt inkl. no-op-Bedingungen, GUI-Regler-Verdrahtung, Profil-
+Sicherung). Regression: **357/357 gruen** (vorher 325/325, +32 neu).
+
+GUI-Smoke `xvfb-run` -> GUI_OK.
+
+Ehrliche Grenze: Duplicate-Trail arbeitet ueber Diff comp/frame - wenn das
+Video-Background sehr aehnlich zur Text-Farbe ist, faellt der Trail weniger
+auf. Freeze-Frame haelt strikt das erste Frame ab Fensterstart - bei
+Bewegungen davor sieht man einen harten Snap; das ist gewollt (Standbild).
+Split-Screen ist eine bewusste Kino-Anleihe, wird bei power=3-Momenten
+schnell zu haeufig - default 0 % ist bewusst.
+
 ## v72 - Lokale Transkription komplett raus
 
 Der `local`-Pfad (faster-whisper) war seit v67 nur noch Option, in

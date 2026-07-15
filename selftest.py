@@ -1919,6 +1919,98 @@ def _scenario_premium(tmp):
     check('Musik-Beat: im Kundenprofil gesichert',
           "'mbeat_var'" in _gsrc_bl)
 
+    # ---- v73: 5 neue Effekt-Klassen ----
+    print('\n--- v73: 5 neue Effekt-Klassen ---')
+    for _fn in ('apply_duplicate_trail', 'apply_counter_ring',
+                'apply_split_screen', 'apply_env_shadow'):
+        check(f'{_fn} existiert', hasattr(R, _fn))
+    # Config-Keys da
+    _cfg_src = open(os.path.join(HERE, 'config.yaml'), encoding='utf-8').read()
+    for _k in ('freeze_frame', 'trail', 'counter_ring', 'split_screen', 'env_shadow'):
+        check(f'Config: {_k}', _k in _cfg_src)
+    # Freeze-Frame ist Pipeline-Modifikator - Source-Check + Kommentar-Test
+    _r_v73 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('Freeze-Frame: Pipeline-Modifikator verdrahtet',
+          'freeze_windows' in _r_v73 and 'frozen_frame' in _r_v73
+          and "cfg['effects'].get('freeze_frame'" in _r_v73)
+    check('Freeze-Frame: nur staerkster power=3 (B-Roll ausgeschlossen)',
+          "not p.get('broll')" in _r_v73)
+
+    # Trail: erzeugt sichtbare versetzte Kopie
+    _fr_t = np.zeros((100, 200, 3), np.uint8)
+    _cmp_t = _fr_t.copy()
+    _cmp_t[40:60, 80:120] = 255                          # "Text" hell mittig
+    _tr = R.apply_duplicate_trail(_cmp_t.copy(), _fr_t, 1.0, offset_px=10, layers=2)
+    check('Trail: strength=1 malt Kopien links vom Text',
+          float(_tr[40:60, 40:80].mean()) > float(_cmp_t[40:60, 40:80].mean()) + 3,
+          f'{_tr[40:60, 40:80].mean():.1f} > {_cmp_t[40:60, 40:80].mean():.1f}+3')
+    _tr0 = R.apply_duplicate_trail(_cmp_t.copy(), _fr_t, 0.0)
+    check('Trail: strength=0 ist no-op',
+          np.array_equal(_tr0, _cmp_t))
+    _tr_empty = R.apply_duplicate_trail(_fr_t.copy(), _fr_t, 1.0)
+    check('Trail: ohne Text kein Trail',
+          np.array_equal(_tr_empty, _fr_t))
+
+    # Counter-Ring: malt Ring nur bei count-Momenten
+    _fr_r = np.full((200, 300, 3), 50, np.uint8)
+    _p_count = {'tpl': 'behind', 'start': 0.0, 'end': 2.0, 't0': 0.0,
+                'kw_i': 1, 'cx': 150, 'cy': 100, 'power': 2,
+                'count': {'dur': 1.0, 'fmt': lambda x: str(int(x))}}
+    _rr = R.apply_counter_ring(_fr_r.copy(), [_p_count], 0.5, 300, 200, 1.0)
+    check('Ring: malt sichtbaren Kreis um cx/cy',
+          not np.array_equal(_rr, _fr_r))
+    _p_nocount = {'tpl': 'behind', 'start': 0.0, 'end': 2.0, 'kw_i': 1,
+                  'cx': 150, 'cy': 100, 'power': 2}
+    _rr2 = R.apply_counter_ring(_fr_r.copy(), [_p_nocount], 0.5, 300, 200, 1.0)
+    check('Ring: kein Count -> kein Ring',
+          np.array_equal(_rr2, _fr_r))
+
+    # Split-Screen: pruefe dass Frame vertikal ausgeschoben wird (Luecke sichtbar)
+    _fr_s = np.full((200, 200, 3), 200, np.uint8)
+    _p_pow3 = {'tpl': 'behind', 'start': 0.0, 'end': 2.0, 't0': 0.0,
+               'kw_i': 1, 'cx': 100, 'cy': 100, 'power': 3, 'broll': False}
+    _ss = R.apply_split_screen(_fr_s.copy(), _fr_s, [_p_pow3], 0.8, 200, 200, 1.0)
+    _mid = _ss[99:101, :, 0].mean()                       # Mitte muss dunkel sein (Luecke)
+    check('Split: Luecke in der Mitte (dunkler)', _mid < 100, f'mid={_mid:.1f}')
+    _p_pow2 = dict(_p_pow3); _p_pow2['power'] = 2
+    _ss_no = R.apply_split_screen(_fr_s.copy(), _fr_s, [_p_pow2], 0.8, 200, 200, 1.0)
+    check('Split: power<3 -> kein Split',
+          np.array_equal(_ss_no, _fr_s))
+
+    # Env-Shadow: dunkelt neben dem Text ab (nicht auf dem Text)
+    _fr_e = np.full((200, 300, 3), 200, np.uint8)
+    _cmp_e = _fr_e.copy()
+    _cmp_e[80:120, 100:200] = 255                         # "Text" hell
+    _p_grd = {'tpl': 'ground', 'start': 0.0, 'end': 2.0, 't0': 0.0,
+              'kw_i': 1, 'cx': 150, 'cy': 100, 'power': 2, 'broll': False}
+    _es = R.apply_env_shadow(_cmp_e.copy(), _fr_e, [_p_grd], 0.8, 300, 200, 1.0)
+    # Unter dem Text (y=125..135) muss abgedunkelt sein vs. Original-Fond
+    _shadow_zone = float(_es[125:135, 110:190, 0].mean())
+    _orig_zone = float(_fr_e[125:135, 110:190, 0].mean())
+    check('Env-Shadow: dunkelt unter dem Text ab',
+          _shadow_zone < _orig_zone - 5,
+          f'{_shadow_zone:.1f} < {_orig_zone:.1f}-5')
+    # Auf dem Text (y=90..110) darf sich fast nichts aendern (Schatten
+    # wird durch text-Maske ausgeblendet)
+    _on_text = float(_es[90:110, 130:170, 0].mean())
+    _on_text_orig = float(_cmp_e[90:110, 130:170, 0].mean())
+    check('Env-Shadow: Text selbst bleibt hell',
+          abs(_on_text - _on_text_orig) < 3,
+          f'{_on_text:.1f} vs {_on_text_orig:.1f}')
+    # Kein ground-Moment -> no-op
+    _p_beh = dict(_p_grd); _p_beh['tpl'] = 'behind'
+    _es_no = R.apply_env_shadow(_cmp_e.copy(), _fr_e, [_p_beh], 0.8, 300, 200, 1.0)
+    check('Env-Shadow: nur bei ground', np.array_equal(_es_no, _cmp_e))
+
+    # GUI-Regler + Profil
+    _g_v73 = open(os.path.join(HERE, 'gui.py'), encoding='utf-8').read()
+    for _v in ('freeze_var', 'trail_var', 'cring_var', 'split_var', 'envsh_var'):
+        check(f'GUI: {_v} definiert', _v in _g_v73)
+    for _v in ('freeze_var', 'trail_var', 'cring_var', 'split_var', 'envsh_var'):
+        check(f'Profil: {_v} gesichert', f"'{_v}'" in _g_v73)
+    check('GUI: Special-Effects-Karte',
+          'Spezial-Effekte (v73)' in _g_v73)
+
 
 if __name__ == '__main__':
     main()

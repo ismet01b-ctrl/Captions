@@ -523,6 +523,12 @@ class App:
         self.pshadow_var = tk.IntVar(value=int(float(cfg['effects'].get('person_shadow', 0.5)) * 100))
         self.bgblur_var = tk.IntVar(value=int(float(cfg['effects'].get('bg_blur', 0.5)) * 100))
         self.mbeat_var = tk.IntVar(value=int(float(cfg['effects'].get('music_beat', 0.6)) * 100))
+        # v73: 5 neue Effekt-Klassen
+        self.freeze_var = tk.IntVar(value=int(float(cfg['effects'].get('freeze_frame', 0.0)) * 100))
+        self.trail_var = tk.IntVar(value=int(float(cfg['effects'].get('trail', 0.0)) * 100))
+        self.cring_var = tk.IntVar(value=int(float(cfg['effects'].get('counter_ring', 0.0)) * 100))
+        self.split_var = tk.IntVar(value=int(float(cfg['effects'].get('split_screen', 0.0)) * 100))
+        self.envsh_var = tk.IntVar(value=int(float(cfg['effects'].get('env_shadow', 0.0)) * 100))
         self.sfxvol_var = tk.IntVar(value=int(cfg['effects'].get('sfx_volume', 0.35) * 100))
         self.cam_str = tk.IntVar(value=int(cfg['camera'].get('strength', 0.7) * 100))
         self.crash_var = tk.IntVar(value=int(float(cfg['camera'].get('crash', 0.55)) * 100))
@@ -1075,6 +1081,36 @@ class App:
                      'Kino/Interviews. 0 = aus. Auf B-Roll (Drohne, FPV) ausgeschaltet, '
                      'dort ist die Umgebung das Motiv.')
         Slider(c, self.bgblur_var, 0, 100, ' %').pack(fill='x')
+
+        c = self.card('Spezial-Effekte (v73)',
+                      'Fuenf neue Effekte fuer besondere Momente. Bei 0 % passiert '
+                      'nichts — dezent hochdrehen und in der Vorschau prüfen.')
+        self.setting(c, 'Freeze-Frame (Standbild auf Punchline)',
+                     'Der stärkste Moment (Power 3) friert das Video ein — 0.4-1.2 s '
+                     'Standbild, waehrend die Caption weiterlaeuft. Zwingt die '
+                     'Aufmerksamkeit auf das eine Wort. Maximal einmal pro Clip.')
+        # Slider ist in 0.01 s Schritten (0..150 = 0..1.5 s Standbild)
+        Slider(c, self.freeze_var, 0, 150, ' ×10ms').pack(fill='x')
+        self.setting(c, 'Duplicate-Trail (Speed-Echo)',
+                     'Text hinterlaesst versetzte Kopien — Speed-Gefuehl wie in '
+                     'Musikvideos. 0.3-0.6 dezent, 1.0 knallig. Wirkt nur wenn '
+                     'Text im Frame ist.')
+        Slider(c, self.trail_var, 0, 100, ' %').pack(fill='x')
+        self.setting(c, 'Zaehler-Ring (Fortschritts-Bogen um Zahlen)',
+                     'Bei Zahl-Momenten (57 %, 12 Millionen …) läuft ein Kreis-'
+                     'Bogen um die Zahl hoch, synchron zum Zaehler. Wirkt wie '
+                     'ein Sport-Timer.')
+        Slider(c, self.cring_var, 0, 100, ' %').pack(fill='x')
+        self.setting(c, 'Split-Screen (horizontale Teilung)',
+                     'Der Frame teilt sich horizontal, dazwischen sitzt der Text. '
+                     'Greift bei Power-3-Momenten (Höhepunkt) ohne B-Roll. Nur ein '
+                     'paar pro Video, sonst wird es albern.')
+        Slider(c, self.split_var, 0, 100, ' %').pack(fill='x')
+        self.setting(c, 'Kontakt-Schatten unter In-Szene-Text',
+                     'Ground-Text (behind Kamera-Track) wirft einen weichen Schatten '
+                     'auf den Untergrund - der Text sitzt im Raum statt aufgeklebt. '
+                     'Ergaenzt Blender-Wasser (der es fuer Wasser schon macht).')
+        Slider(c, self.envsh_var, 0, 100, ' %').pack(fill='x')
 
         c = self.card('Lebendige Typo',
                       '26 Animationen. Das Wort reagiert auf den Satz: „Deutschland '
@@ -1702,7 +1738,10 @@ class App:
                     # v69 Hintergrund-Blur
                     'bgblur_var',
                     # v70 Musik-Beat
-                    'mbeat_var')
+                    'mbeat_var',
+                    # v73 fuenf neue Effekte
+                    'freeze_var', 'trail_var', 'cring_var', 'split_var',
+                    'envsh_var')
 
     def profile_snapshot(self):
         snap = {'font': self.font_id.get(),
@@ -1776,6 +1815,12 @@ class App:
         self.cfg['effects']['person_shadow'] = round(self.pshadow_var.get() / 100.0, 2)
         self.cfg['effects']['bg_blur'] = round(self.bgblur_var.get() / 100.0, 2)
         self.cfg['effects']['music_beat'] = round(self.mbeat_var.get() / 100.0, 2)
+        # v73
+        self.cfg['effects']['freeze_frame'] = round(self.freeze_var.get() / 100.0, 2)
+        self.cfg['effects']['trail'] = round(self.trail_var.get() / 100.0, 2)
+        self.cfg['effects']['counter_ring'] = round(self.cring_var.get() / 100.0, 2)
+        self.cfg['effects']['split_screen'] = round(self.split_var.get() / 100.0, 2)
+        self.cfg['effects']['env_shadow'] = round(self.envsh_var.get() / 100.0, 2)
         self.cfg['effects']['dim_blurin'] = round(self.dim_var.get() / 100.0 * 0.8, 2)
         self.cfg['effects']['tracking'] = True
         self.cfg['effects']['scene_lock'] = True

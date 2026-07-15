@@ -74,6 +74,12 @@ effects:
   emerge: auto
   bg_blur: 0.5   # v69: Hintergrund weichzeichnen waehrend Momente (0 = aus, 1 = maximum)
   music_beat: 0.6  # v70: Musik-Beat mit ins Beat-Sync (0 = nur Stimme, 1 = voll)
+  # ---- v73: 5 neue Effekt-Klassen ----
+  freeze_frame: 0.0   # Sekunden Standbild auf staerkstem Moment (0 = aus, 0.4-1.2 gut)
+  trail: 0.0          # Duplicate-Trail Staerke (0 = aus, 0.3-0.6 dezent, 1 = knallig)
+  counter_ring: 0.0   # Kreis-Fortschritt um Zahl-Momente (0 = aus)
+  split_screen: 0.0   # Split-Screen Staerke (0 = aus, greift bei p.split=True in Regie)
+  env_shadow: 0.0     # Kontaktschatten unter ground-Text (0 = aus, 0.5 dezent)
 camera:
   strength: 0.7
   crash: 0.55      # Crash-Zoom auf den staerksten Moment (0 = aus)

@@ -2917,6 +2917,161 @@ def kill_spill(person, alpha, frame):
     return person * (1 - 0.35 * kante) + grau * (0.35 * kante)
 
 
+def apply_duplicate_trail(comp, frame, strength, offset_px=14, layers=3):
+    """Post-Effekt: der Text hinterlaesst versetzte Kopien fuer Speed-Gefuehl.
+
+    Extrahiert die Text-Region ueber ein Diff comp vs. frame (die Stellen, wo
+    der Compositor etwas gezeichnet hat), kopiert sie versetzt mit fallender
+    Deckkraft nach links. Wirkt nur, wenn UEBERHAUPT Text gemalt wurde -
+    keine Trails auf leerem Frame.
+    """
+    if strength <= 0.02:
+        return comp
+    diff = np.abs(comp.astype(np.int16) - frame.astype(np.int16)).max(axis=-1)
+    text_mask = (diff > 18).astype(np.float32)
+    if float(text_mask.sum()) < 500:                # zu wenig Text -> nichts zu duplizieren
+        return comp
+    text_mask = cv2.GaussianBlur(text_mask, (0, 0), 1.6)
+    out = comp.astype(np.float32).copy()
+    for k in range(1, layers + 1):
+        off = int(offset_px * k)
+        if off <= 0:
+            continue
+        shifted = np.zeros_like(out)
+        shifted[:, :-off] = comp[:, off:]           # nach links versetzt
+        mshift = np.zeros_like(text_mask)
+        mshift[:, :-off] = text_mask[:, off:]
+        alpha = strength * (1.0 - k / (layers + 1)) * 0.55
+        m = (mshift * alpha)[..., None]
+        out = out * (1 - m) + shifted * m
+    return np.clip(out, 0, 255).astype(comp.dtype)
+
+
+def apply_counter_ring(comp, active, t, W, H, strength):
+    """Kreisrunder Fortschrittsbogen um Zahl-Momente. Waechst mit dem Zaehler.
+
+    Zeichnet nur bei Momenten mit `count`-Metadaten - laeuft synchron zur
+    Zahl, die von 0 auf den Zielwert hochzaehlt. Ring liegt hinter dem
+    Text, wirkt wie ein Timer-/Score-Ring in Sport-Grafiken.
+    """
+    if strength <= 0.02 or not active:
+        return comp
+    out = comp.copy()
+    for p in active:
+        c = p.get('count')
+        if not c:
+            continue
+        t0p = p.get('t0', p.get('start', 0.0))
+        dt = t - t0p
+        if dt < 0:
+            continue
+        prog = min(max(dt / max(float(c.get('dur', 1.0)), 0.1), 0.0), 1.0)
+        cx = int(p.get('cx', W / 2))
+        cy = int(p.get('cy', H * 0.5))
+        radius = int(min(W, H) * 0.10)
+        thick = max(int(radius * 0.10), 3)
+        # Hintergrund-Ring (dezent)
+        cv2.circle(out, (cx, cy), radius, (60, 60, 60), thick, cv2.LINE_AA)
+        # Fortschritts-Bogen (hell, Akzentfarbe)
+        col = (255, 240, 200)
+        end_angle = -90 + int(prog * 360)
+        # ellipse mit angle steps - cv2.ellipse zeichnet Bogen
+        cv2.ellipse(out, (cx, cy), (radius, radius), 0, -90, end_angle,
+                    col, thick, cv2.LINE_AA)
+    if strength >= 0.99:
+        return out
+    return (comp.astype(np.float32) * (1 - strength)
+            + out.astype(np.float32) * strength).astype(comp.dtype)
+
+
+def apply_split_screen(comp, frame, active, t, W, H, strength):
+    """Split-Screen: der Frame wird horizontal geteilt, die Haelften driften
+    an einer Luecke auseinander. Wirkt bei power=3-Momenten ohne B-Roll
+    (die grossen Punkt-Aussagen). Fade rein/raus mit Moment-Kurve.
+    """
+    if strength <= 0.02:
+        return comp
+    hit = 0.0
+    for p in active:
+        if p.get('power', 2) < 3 or p.get('broll'):
+            continue
+        t0p = p.get('t0', p.get('start', 0.0))
+        dur = max(p['end'] - t0p, 0.6)
+        dt = t - t0p
+        if dt < 0:
+            continue
+        if dt < 0.20:
+            s = dt / 0.20
+        elif dt > dur:
+            s = max(0.0, 1 - (dt - dur) / 0.35)
+        else:
+            s = 1.0
+        hit = max(hit, s)
+    if hit < 0.02:
+        return comp
+    gap = int(H * 0.05 * hit * strength)             # bis 5 % Bildhoehe
+    if gap < 2:
+        return comp
+    top = comp[:H // 2]
+    bot = comp[H // 2:]
+    out = np.zeros_like(comp)
+    # Fond fuer Luecke: aus Original-Frame leicht abgedunkelt
+    fond = (frame.astype(np.float32) * 0.20).astype(comp.dtype)
+    out[:] = fond
+    # Ober- und Unterhaelfte an die Luecke wegschieben
+    top_y = 0
+    bot_y = H // 2 + gap
+    out[top_y:top_y + top.shape[0] - gap] = top[:top.shape[0] - gap]
+    end = bot_y + bot.shape[0] - gap
+    if end > H:
+        end = H
+    out[bot_y:end] = bot[:end - bot_y]
+    return out
+
+
+def apply_env_shadow(comp, frame, active, t, W, H, strength):
+    """Environment-Text: ground-Momente bekommen einen weichen Kontakt-
+    Schatten auf dem Untergrund, damit sie wie ein Objekt im Raum wirken
+    (nicht wie Aufkleber). Analog Trail extrahieren wir die Text-Region
+    aus dem Diff comp vs. frame, verschieben nach unten/rechts, verwischen
+    weich und dunkeln nur AUSSERHALB des Textes ab.
+    """
+    if strength <= 0.02 or not active:
+        return comp
+    env_hit = 0.0
+    for p in active:
+        if p.get('tpl') != 'ground':
+            continue
+        t0p = p.get('t0', p.get('start', 0.0))
+        dur = max(p['end'] - t0p, 0.6)
+        dt = t - t0p
+        if dt < 0:
+            continue
+        if dt < 0.30:
+            s = dt / 0.30
+        elif dt > dur:
+            s = max(0.0, 1 - (dt - dur) / 0.40)
+        else:
+            s = 1.0
+        env_hit = max(env_hit, s)
+    if env_hit < 0.02:
+        return comp
+    diff = np.abs(comp.astype(np.int16) - frame.astype(np.int16)).max(axis=-1)
+    text_mask = (diff > 15).astype(np.float32)
+    if float(text_mask.sum()) < 500:
+        return comp
+    off_y = max(int(H * 0.014), 4)                 # Schatten nach unten
+    off_x = max(int(W * 0.006), 2)                 # leicht nach rechts (Licht von links)
+    shifted = np.zeros_like(text_mask)
+    shifted[off_y:, off_x:] = text_mask[:-off_y, :-off_x]
+    shadow = cv2.GaussianBlur(shifted, (0, 0), max(H * 0.010, 3.0))
+    # Nur AUSSERHALB der Text-Pixel abdunkeln (sonst kaeme der Schatten
+    # ueber den Text und dunkelt ihn selbst ab).
+    shadow *= 1.0 - np.clip(text_mask, 0, 1)
+    darken = strength * env_hit * 0.55 * shadow[..., None]
+    return np.clip(comp.astype(np.float32) * (1 - darken), 0, 255).astype(comp.dtype)
+
+
 def apply_bg_blur(frame, alpha, depth_n, strength, W, H):
     """Hintergrund-Blur (Bokeh-artig) waehrend eines Moments.
 
@@ -3473,6 +3628,19 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 ker = np.zeros((k, k), np.float32)
                 ker[k // 2, :] = 1.0 / k          # rein horizontaler Kernel
                 comp = cv2.filter2D(comp, -1, ker)
+    # ---------- v73: 4 neue Post-Effekte (Split-Screen macht Etappe 2) ----------
+    _env = float(cfg['effects'].get('env_shadow', 0.0) or 0.0)
+    if _env > 0.02:
+        comp = apply_env_shadow(comp, frame, active, t, W, H, _env)
+    _ring = float(cfg['effects'].get('counter_ring', 0.0) or 0.0)
+    if _ring > 0.02:
+        comp = apply_counter_ring(comp, active, t, W, H, _ring)
+    _trail = float(cfg['effects'].get('trail', 0.0) or 0.0)
+    if _trail > 0.02:
+        comp = apply_duplicate_trail(comp, frame, _trail)
+    _split = float(cfg['effects'].get('split_screen', 0.0) or 0.0)
+    if _split > 0.02:
+        comp = apply_split_screen(comp, frame, active, t, W, H, _split)
     return comp
 
 # ---------------------------------------------------------------- main
@@ -3956,12 +4124,39 @@ def main():
     if win:
         print(f'Fenster-Render: {win[0]:.2f}s - {win[1]:.2f}s '
               f'(Vorlauf {win[0] - seek:.2f}s fuer Tracking/Matting)')
+    # ---- v73: Freeze-Frame vorberechnen. Auf dem staerksten power=3-Moment
+    # wird das Video-Frame fuer `freeze_frame` Sekunden gehalten (Regie-Trick,
+    # der die Aufmerksamkeit auf die Punchline zwingt). Caption laeuft weiter.
+    freeze_dur = float(cfg['effects'].get('freeze_frame', 0.0) or 0.0)
+    freeze_windows = []
+    if freeze_dur > 0.02:
+        p3 = [p for p in plans if p.get('power', 2) == 3
+              and 'kw_i' in p and not p.get('broll')]
+        if p3:
+            p3.sort(key=lambda p: (-float(p.get('power', 2)),
+                                   -(p.get('end', 0) - p.get('start', 0))))
+            fp = p3[0]
+            fz_start = float(fp.get('t0', fp['start']))
+            freeze_windows.append((fz_start, fz_start + freeze_dur))
+            print(f'Freeze-Frame: {fz_start:.2f}s fuer {freeze_dur:.2f}s '
+                  f'(Moment "{fp.get("text", "?")}")')
+    frozen_frame = None
     for frame in iter_frames(args.input, W, H, fps_str,
                              start=seek if win else None):
         if max_frames and fi >= max_frames: break
         t = (fi + off_frames) / fps
         if win and t > win[1] + 1.0 / fps: break
         frame = frame.astype(np.float32)
+        # Freeze anwenden: wenn t in einem Fenster, dann Frame durch
+        # den ersten Frame ab Fensterstart ersetzen.
+        for fz_s, fz_e in freeze_windows:
+            if fz_s <= t < fz_e:
+                if frozen_frame is None:
+                    frozen_frame = frame.copy()
+                frame = frozen_frame.copy()
+                break
+            elif t >= fz_e:
+                frozen_frame = None
 
         # --- Freistellen nur in den benoetigten Fenstern
         fa = fi + off_frames
