@@ -2,232 +2,465 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#151517">
 <title>DouchkoVE Captions</title>
 <style>
 :root {
   --bg:#151517; --side:#1b1b1e; --surf:#1e1e21; --surf2:#2a2a2e; --surf3:#3a3a3f;
-  --line:#2e2e33; --fg:#f5f5f7; --mut:#98989d; --mut2:#6b6b70;
-  --acc:#0a84ff; --acc2:#409cff; --green:#30d158; --red:#ff453a;
+  --line:#2e2e33; --fg:#f5f5f7;
+  --mut:#a8a8ad;             /* 5.4:1 auf surf, WCAG AA */
+  --mut2:#8a8a90;            /* 4.5:1 auf surf */
+  --acc:#0a84ff; --acc2:#409cff;
+  --green:#30d158; --red:#ff453a; --amber:#ffb340;
+  --focus:#5eb3ff;
+  --r-sm:8px; --r-md:12px; --r-lg:16px;
+  --t-fast:120ms; --t-med:200ms; --t-slow:300ms;
+  --shadow-lg:0 12px 40px -8px rgba(0,0,0,.6);
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:22px; --sp-6:28px; --sp-7:36px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { min-height: 100%; overscroll-behavior: none; }
+html { -webkit-text-size-adjust: 100%; }
+html, body { min-height: 100%; overscroll-behavior-y: none; }
 body {
   background: var(--bg); color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-  font-size: 15px; line-height: 1.5;
+  font-size: 15px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Focus (Keyboard sichtbar, Maus nicht) */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Skip-Link */
+.skip { position: absolute; top: -100px; left: 8px; z-index: 9999;
+  background: var(--acc); color: white; padding: 10px 14px;
+  border-radius: var(--r-sm); font-weight: 600; text-decoration: none; }
+.skip:focus { top: 8px; }
+
+/* App-Shell */
 .app { display: flex; min-height: 100vh; }
 .sidebar {
-  width: 220px; background: var(--side); border-right: 1px solid var(--line);
-  padding: 24px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto;
-  flex-shrink: 0;
+  width: 240px; background: var(--side); border-right: 1px solid var(--line);
+  padding: var(--sp-6) 0; position: sticky; top: 0; height: 100vh;
+  overflow-y: auto; flex-shrink: 0;
 }
 .brand { font-family: Georgia, serif; font-style: italic; font-size: 22px;
-  padding: 0 24px 4px; }
-.tag { font-size: 10px; letter-spacing: 3px; color: var(--mut2); padding: 0 24px 22px; }
-.nav a { display: block; padding: 10px 24px; color: var(--mut); text-decoration: none;
-  font-size: 14px; border-left: 3px solid transparent; cursor: pointer; }
-.nav a.active { color: var(--fg); border-left-color: var(--acc); background: rgba(10,132,255,.06); }
-.nav a:hover:not(.active) { color: var(--fg); background: rgba(255,255,255,.03); }
-.main { flex: 1; padding: 24px 32px 64px; max-width: 900px; }
-.section { display: none; }
-.section.active { display: block; }
-.section h2 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
-.section .sub { color: var(--mut); font-size: 13px; margin-bottom: 20px; }
-.card {
-  background: var(--surf); border-radius: 14px; padding: 22px; margin-bottom: 14px;
+  padding: 0 var(--sp-6) var(--sp-1); font-weight: 700; }
+.tag { font-size: 10px; letter-spacing: 3px; color: var(--mut2);
+  padding: 0 var(--sp-6) var(--sp-6); font-weight: 600; }
+
+.nav { display: flex; flex-direction: column; }
+.nav a {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 11px var(--sp-6); color: var(--mut); text-decoration: none;
+  font-size: 14px; border-left: 3px solid transparent;
+  cursor: pointer; transition: background var(--t-fast), color var(--t-fast),
+    border-left-color var(--t-fast); min-height: 44px;
 }
-.card h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-.card p.desc { color: var(--mut); font-size: 13px; margin-bottom: 14px; }
-.setting { margin: 14px 0 6px; }
-.setting-label { font-weight: 600; font-size: 14px; }
-.setting-desc { color: var(--mut); font-size: 12px; margin-top: 2px; margin-bottom: 8px;
-  line-height: 1.4; }
-.row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
-.row .label { font-size: 14px; font-weight: 500; }
-.row .grow { flex: 1; }
+.nav a[aria-current="page"] {
+  color: var(--fg); border-left-color: var(--acc);
+  background: rgba(10,132,255,.08); font-weight: 600;
+}
+.nav a:hover:not([aria-current="page"]) {
+  color: var(--fg); background: rgba(255,255,255,.04);
+}
+.nav a .ic { width: 18px; height: 18px; flex-shrink: 0; opacity: .8; }
 
-.slider { display: flex; align-items: center; gap: 12px; }
-.slider input[type=range] { flex: 1; -webkit-appearance: none; appearance: none;
-  height: 4px; background: var(--surf2); border-radius: 2px; outline: none; }
-.slider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none;
-  appearance: none; width: 18px; height: 18px; background: var(--acc);
-  border-radius: 50%; cursor: pointer; }
-.slider input[type=range]::-moz-range-thumb { width: 18px; height: 18px;
-  background: var(--acc); border-radius: 50%; cursor: pointer; border: 0; }
-.slider .val { font-size: 13px; color: var(--mut); min-width: 60px; text-align: right;
-  font-variant-numeric: tabular-nums; }
+.main { flex: 1; padding: var(--sp-6) 32px 80px; max-width: 940px; min-width: 0; }
 
-.switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.switch .track { position: absolute; inset: 0; background: var(--surf2);
-  border-radius: 26px; cursor: pointer; transition: .18s; }
-.switch .knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
-  background: white; border-radius: 50%; transition: .18s; }
-.switch input:checked + .track { background: var(--green); }
-.switch input:checked + .track .knob { transform: translateX(20px); }
-
-.seg { display: inline-flex; background: var(--surf2); border-radius: 8px;
-  padding: 3px; gap: 2px; flex-wrap: wrap; }
-.seg button { background: transparent; border: 0; padding: 7px 14px; color: var(--mut);
-  border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
-.seg button.on { background: var(--surf3); color: var(--fg); }
-
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { padding: 8px 14px; background: var(--surf2); border-radius: 20px;
-  cursor: pointer; font-size: 13px; user-select: none; }
-.chip.on { background: var(--acc); color: white; }
-
-.fontgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px; }
-.fonttile { padding: 18px 12px; background: var(--surf2); border-radius: 10px;
-  cursor: pointer; text-align: center; border: 2px solid transparent; }
-.fonttile.on { border-color: var(--acc); background: rgba(10,132,255,.12); }
-.fonttile .name { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-.fonttile .lbl { font-size: 11px; color: var(--mut); margin-top: 4px; }
-
-button.btn { background: var(--acc); color: white; border: 0; padding: 12px 22px;
-  border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer;
-  transition: background .15s; }
-button.btn:hover:not(:disabled) { background: var(--acc2); }
-button.btn:disabled { background: var(--surf2); color: var(--mut2); cursor: default; }
-button.btn.secondary { background: var(--surf2); color: var(--fg); }
-button.btn.secondary:hover:not(:disabled) { background: var(--surf3); }
-
-.topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
-  padding-bottom: 16px; border-bottom: 1px solid var(--line); }
-.topbar .name { font-weight: 600; }
+.topbar {
+  display: flex; align-items: center; gap: var(--sp-4);
+  margin-bottom: var(--sp-6); padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+.topbar .name { font-weight: 600; font-size: 15px; }
 .topbar .rest { color: var(--mut); font-size: 13px; }
 .topbar .grow { flex: 1; }
 
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65);
-  display: flex; align-items: center; justify-content: center; z-index: 100;
-  padding: 20px; }
-.overlay.hidden { display: none; }
-.modal { background: var(--bg); border-radius: 16px; width: 100%; max-width: 900px;
-  max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
-.modal .head { padding: 20px 22px 12px; border-bottom: 1px solid var(--line); }
-.modal .head h3 { font-size: 18px; font-weight: 600; }
-.modal .head p { color: var(--mut); font-size: 13px; margin-top: 3px; }
-.modal .body { padding: 16px 22px; overflow-y: auto; flex: 1; }
-.modal .foot { padding: 14px 22px; border-top: 1px solid var(--line);
-  display: flex; gap: 10px; align-items: center; }
+.section { display: none; }
+.section.active { display: block; }
+.section h2 { font-size: 26px; font-weight: 700; margin-bottom: var(--sp-1);
+  letter-spacing: -0.5px; }
+.section .sub { color: var(--mut); font-size: 14px; margin-bottom: var(--sp-6); }
 
-.login { max-width: 480px; margin: 80px auto; padding: 30px; background: var(--surf);
-  border-radius: 16px; }
-.login input { width: 100%; padding: 14px; background: var(--surf2); border: 0;
-  border-radius: 10px; color: var(--fg); font-size: 15px; margin: 12px 0; outline: none; }
-.login input:focus { box-shadow: 0 0 0 2px var(--acc); }
-.err { color: var(--red); font-size: 13px; margin-top: 10px; }
+.card {
+  background: var(--surf); border-radius: var(--r-lg); padding: var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+.card h3 { font-size: 16px; font-weight: 600; margin-bottom: var(--sp-1); }
+.card p.desc { color: var(--mut); font-size: 13px; margin-bottom: var(--sp-4);
+  line-height: 1.5; }
 
-#drop { border: 2px dashed var(--line); border-radius: 14px; padding: 42px 20px;
-  text-align: center; cursor: pointer; transition: .15s; }
-#drop:hover, #drop.over { border-color: var(--acc); background: rgba(10,132,255,.06); }
-#drop .big { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
-#drop .small { font-size: 13px; color: var(--mut); }
-.file-info { font-size: 14px; margin-top: 12px; padding: 12px; background: var(--surf2);
-  border-radius: 10px; }
-.file-info b { color: var(--acc); }
+.setting { margin: var(--sp-4) 0 var(--sp-2); }
+.setting-label { font-weight: 600; font-size: 14px; color: var(--fg); }
+.setting-desc { color: var(--mut); font-size: 12.5px; margin-top: 2px;
+  margin-bottom: var(--sp-2); line-height: 1.5; max-width: 620px; }
+.row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; }
+.row .grow { flex: 1; min-width: 0; }
 
-.bar { height: 6px; background: var(--surf2); border-radius: 3px; overflow: hidden;
-  margin: 18px 0 10px; }
-.bar i { display: block; height: 100%; width: 0; background: var(--acc);
-  border-radius: 3px; transition: width .4s; }
-.phase { font-size: 14px; color: var(--mut); }
-
-.mom-row { display: grid; grid-template-columns: 34px 60px 1fr 130px 90px 130px 90px 90px;
-  gap: 6px; padding: 8px 6px; background: var(--surf); border-radius: 8px;
-  margin-bottom: 4px; align-items: center; }
-.mom-row.head { background: transparent; color: var(--mut); font-size: 12px;
-  padding-bottom: 4px; }
-.mom-row input[type=text], .mom-row select {
-  background: var(--surf2); border: 0; color: var(--fg); padding: 6px 8px;
-  border-radius: 6px; font-size: 13px; width: 100%; outline: none; }
-.mom-row .zeit { font-size: 12px; color: var(--mut); }
-
-@media (max-width: 720px) {
-  .app { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; position: static; padding: 12px 0;
-    border-right: 0; border-bottom: 1px solid var(--line); }
-  .nav { display: flex; flex-wrap: wrap; padding: 0 12px; gap: 4px; }
-  .nav a { padding: 6px 12px; border-left: 0; border-radius: 8px; }
-  .brand { padding: 0 16px 4px; }
-  .tag { padding: 0 16px 12px; }
-  .main { padding: 16px; }
-  .mom-row { grid-template-columns: 34px 60px 1fr; }
-  .mom-row .hide-mob { display: none; }
-  .fontgrid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+/* Slider */
+.slider { display: flex; align-items: center; gap: var(--sp-3); }
+.slider input[type=range] {
+  flex: 1; -webkit-appearance: none; appearance: none;
+  height: 6px; background: var(--surf2); border-radius: 3px; outline: none;
+  cursor: pointer;
+}
+.slider input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; background: var(--acc);
+  border-radius: 50%; cursor: pointer;
+  border: 2px solid var(--bg);
+  transition: transform var(--t-fast);
+}
+.slider input[type=range]:hover::-webkit-slider-thumb,
+.slider input[type=range]:focus::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+.slider input[type=range]::-moz-range-thumb {
+  width: 20px; height: 20px; background: var(--acc);
+  border-radius: 50%; cursor: pointer; border: 2px solid var(--bg);
+}
+.slider .val {
+  font-size: 13px; color: var(--mut); min-width: 68px; text-align: right;
+  font-variant-numeric: tabular-nums; font-weight: 500;
 }
 
-footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px; }
+/* Switch */
+.switch { position: relative; width: 50px; height: 30px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 100%; height: 100%; margin: 0;
+  position: absolute; cursor: pointer; }
+.switch .track { position: absolute; inset: 0; background: var(--surf2);
+  border-radius: 30px; transition: background var(--t-med); }
+.switch .knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px;
+  background: white; border-radius: 50%; transition: transform var(--t-med);
+  box-shadow: 0 2px 5px rgba(0,0,0,.3); }
+.switch input:checked + .track { background: var(--green); }
+.switch input:checked + .track .knob { transform: translateX(20px); }
+.switch input:focus-visible + .track {
+  outline: 2px solid var(--focus); outline-offset: 2px;
+}
+
+/* Segmented */
+.seg { display: inline-flex; background: var(--surf2); border-radius: 10px;
+  padding: 4px; gap: 2px; flex-wrap: wrap; }
+.seg button {
+  background: transparent; border: 0; padding: 9px 16px; color: var(--mut);
+  border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: background var(--t-fast), color var(--t-fast);
+  min-height: 40px;
+}
+.seg button:hover:not(.on) { color: var(--fg); background: rgba(255,255,255,.04); }
+.seg button.on { background: var(--surf3); color: var(--fg); font-weight: 600; }
+
+/* Chips */
+.chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.chip {
+  padding: 10px 16px; background: var(--surf2); border-radius: 20px;
+  cursor: pointer; font-size: 13px; user-select: none;
+  transition: background var(--t-fast), color var(--t-fast);
+  min-height: 40px; display: flex; align-items: center;
+  border: 2px solid transparent;
+}
+.chip:hover:not(.on) { background: var(--surf3); }
+.chip.on { background: var(--acc); color: white; font-weight: 600; }
+.chip.big { padding: 14px 18px; border-radius: var(--r-md); }
+
+/* Font-Grid */
+.fontgrid { display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-3);
+}
+.fonttile {
+  padding: 22px 12px; background: var(--surf2); border-radius: var(--r-md);
+  cursor: pointer; text-align: center;
+  border: 2px solid transparent; transition: border-color var(--t-fast),
+    background var(--t-fast); min-height: 96px;
+}
+.fonttile:hover:not(.on) { background: var(--surf3); }
+.fonttile.on { border-color: var(--acc); background: rgba(10,132,255,.14); }
+.fonttile .name { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+.fonttile .lbl { font-size: 11px; color: var(--mut); margin-top: 6px;
+  text-transform: uppercase; letter-spacing: 1px; font-weight: 500; }
+
+/* Buttons */
+.btn {
+  background: var(--acc); color: white; border: 0;
+  padding: 13px 24px; border-radius: var(--r-md);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: background var(--t-fast), transform var(--t-fast);
+  min-height: 44px; display: inline-flex; align-items: center; gap: var(--sp-2);
+  justify-content: center; text-decoration: none;
+  font-family: inherit;
+}
+.btn:hover:not(:disabled) { background: var(--acc2); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { background: var(--surf2); color: var(--mut2); cursor: not-allowed; }
+.btn.secondary { background: var(--surf2); color: var(--fg); }
+.btn.secondary:hover:not(:disabled) { background: var(--surf3); }
+.btn.wide { width: 100%; }
+.btn .spin {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3);
+  border-top-color: white; border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Overlay */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.72);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: var(--sp-5);
+  backdrop-filter: blur(4px);
+}
+.overlay.hidden { display: none; }
+.modal {
+  background: var(--bg); border-radius: var(--r-lg);
+  width: 100%; max-width: 960px; max-height: 92vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+.modal .head { padding: var(--sp-5) var(--sp-6) var(--sp-3);
+  border-bottom: 1px solid var(--line); }
+.modal .head h3 { font-size: 20px; font-weight: 700; }
+.modal .head p { color: var(--mut); font-size: 13px; margin-top: var(--sp-1); }
+.modal .body { padding: var(--sp-4) var(--sp-6); overflow-y: auto; flex: 1; }
+.modal .foot {
+  padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--line);
+  display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap;
+}
+
+/* Login */
+.login {
+  max-width: 480px; margin: 80px auto; padding: var(--sp-7);
+  background: var(--surf); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+}
+.login h1 {
+  font-family: Georgia, serif; font-style: italic;
+  font-size: 32px; font-weight: 700;
+}
+.login .tag { padding: 4px 0 var(--sp-4); }
+.login p { color: var(--mut); font-size: 14px; margin: var(--sp-3) 0; }
+.login input {
+  width: 100%; padding: 14px 16px; background: var(--surf2); border: 2px solid transparent;
+  border-radius: var(--r-md); color: var(--fg); font-size: 15px;
+  margin: var(--sp-3) 0; outline: none;
+  transition: border-color var(--t-fast); font-family: inherit;
+}
+.login input:focus { border-color: var(--acc); }
+.err { color: var(--red); font-size: 13px; margin-top: var(--sp-3);
+  display: flex; align-items: center; gap: var(--sp-2); }
+
+/* Drop */
+#drop {
+  border: 2px dashed var(--line); border-radius: var(--r-lg);
+  padding: 48px var(--sp-5); text-align: center; cursor: pointer;
+  transition: border-color var(--t-med), background var(--t-med);
+}
+#drop:hover, #drop.over {
+  border-color: var(--acc); background: rgba(10,132,255,.06);
+}
+#drop .ic { width: 40px; height: 40px; color: var(--mut); margin: 0 auto var(--sp-3); }
+#drop .big { font-size: 16px; font-weight: 600; margin-bottom: var(--sp-1); }
+#drop .small { font-size: 13px; color: var(--mut); }
+.file-info {
+  font-size: 14px; margin-top: var(--sp-3); padding: 14px 16px;
+  background: var(--surf2); border-radius: var(--r-md);
+  display: flex; align-items: center; gap: var(--sp-3);
+}
+.file-info .ic { width: 24px; height: 24px; color: var(--acc); flex-shrink: 0; }
+
+/* Progress */
+.bar { height: 8px; background: var(--surf2); border-radius: 4px;
+  overflow: hidden; margin: var(--sp-4) 0 var(--sp-2); }
+.bar i {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--acc), var(--acc2));
+  border-radius: 4px; transition: width var(--t-slow);
+}
+.phase { font-size: 14px; color: var(--mut); font-weight: 500; }
+
+/* Momente-Table */
+.mom-row {
+  display: grid;
+  grid-template-columns: 34px 68px 1fr 130px 100px 140px 96px 96px;
+  gap: var(--sp-2); padding: var(--sp-2);
+  background: var(--surf); border-radius: var(--r-sm);
+  margin-bottom: var(--sp-1); align-items: center;
+}
+.mom-row.head { background: transparent; color: var(--mut);
+  font-size: 11.5px; letter-spacing: 0.5px; text-transform: uppercase;
+  padding-bottom: var(--sp-1); font-weight: 600; }
+.mom-row input[type=text], .mom-row select {
+  background: var(--surf2); border: 1px solid transparent; color: var(--fg);
+  padding: 8px 10px; border-radius: var(--r-sm);
+  font-size: 13px; width: 100%; outline: none; font-family: inherit;
+  transition: border-color var(--t-fast);
+}
+.mom-row input[type=text]:focus, .mom-row select:focus { border-color: var(--acc); }
+.mom-row .zeit { font-size: 12px; color: var(--mut);
+  font-variant-numeric: tabular-nums; }
+.mom-row input[type=checkbox] {
+  width: 20px; height: 20px; accent-color: var(--acc); cursor: pointer;
+}
+
+/* Toast */
+.toasts {
+  position: fixed; top: var(--sp-4); right: var(--sp-4); z-index: 9999;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  max-width: calc(100vw - 32px);
+}
+.toast {
+  background: var(--surf); color: var(--fg);
+  padding: 14px 16px; border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg); font-size: 14px;
+  display: flex; align-items: center; gap: var(--sp-3);
+  border-left: 3px solid var(--acc);
+  animation: slidein var(--t-med) ease-out;
+  min-width: 260px;
+}
+.toast.err { border-left-color: var(--red); }
+.toast.ok { border-left-color: var(--green); }
+.toast .close {
+  background: transparent; border: 0; color: var(--mut);
+  cursor: pointer; padding: 4px; margin-left: auto;
+  border-radius: 4px;
+}
+.toast .close:hover { color: var(--fg); }
+@keyframes slidein {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .main { padding: var(--sp-5) var(--sp-5) 60px; }
+}
+@media (max-width: 768px) {
+  .app { flex-direction: column; }
+  .sidebar {
+    width: 100%; height: auto; position: static;
+    padding: var(--sp-2) 0;
+    border-right: 0; border-bottom: 1px solid var(--line);
+  }
+  .brand, .tag { display: none; }
+  .nav {
+    display: flex; flex-direction: row; overflow-x: auto;
+    padding: 0 var(--sp-3) 2px; gap: 4px;
+    scroll-snap-type: x mandatory;
+  }
+  .nav a {
+    padding: 10px 14px; border-left: 0;
+    border-radius: 8px; white-space: nowrap;
+    scroll-snap-align: start;
+  }
+  .nav a[aria-current="page"] { background: var(--surf); }
+  .main { padding: var(--sp-4); }
+  .mom-row { grid-template-columns: 30px 56px 1fr; padding: var(--sp-2); }
+  .mom-row .hide-mob { display: none; }
+  .fontgrid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .modal .foot { padding: var(--sp-3) var(--sp-4); }
+  .btn { padding: 12px 18px; }
+}
+
+footer { text-align: center; color: var(--mut2); font-size: 12px;
+  padding: var(--sp-5); margin-top: var(--sp-6); }
+
 .hidden { display: none !important; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
 </style>
 </head>
 <body>
 
-<div id="loginView" class="login">
-  <h2 style="font-family:Georgia,serif; font-style:italic;">DouchkoVE</h2>
-  <div style="font-size:11px; letter-spacing:3px; color:var(--mut2); margin-top:2px;">CAPTIONS</div>
-  <p style="color:var(--mut); font-size:14px; margin:16px 0;">
-    Zugangscode eingeben. Nichts zu installieren.
-  </p>
-  <input type="text" id="code" placeholder="z. B. ISMET-1728" autocomplete="off">
-  <button class="btn" id="btnLogin" style="width:100%;">Weiter</button>
-  <div class="err hidden" id="loginErr"></div>
+<a href="#main" class="skip">Zum Inhalt springen</a>
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+<div id="loginView" class="login" role="main">
+  <h1>DouchkoVE</h1>
+  <div class="tag">CAPTIONS</div>
+  <p>Zugangscode eingeben. Nichts zu installieren.</p>
+  <label for="code" class="sr-only">Zugangscode</label>
+  <input type="text" id="code" placeholder="z. B. ISMET-1728" autocomplete="off"
+         autocapitalize="characters" inputmode="text"
+         aria-describedby="loginErr">
+  <button class="btn wide" id="btnLogin">Weiter</button>
+  <div class="err hidden" id="loginErr" role="alert"></div>
 </div>
 
 <div id="appView" class="app hidden">
-  <aside class="sidebar">
+  <aside class="sidebar" aria-label="Bereich waehlen">
     <div class="brand">DouchkoVE</div>
     <div class="tag">CAPTIONS</div>
-    <nav class="nav">
-      <a data-sec="video" class="active">Video</a>
-      <a data-sec="hook">Hook</a>
-      <a data-sec="text">Text</a>
-      <a data-sec="effekte">Effekte</a>
-      <a data-sec="spezial">Spezial</a>
-      <a data-sec="sound">Sound</a>
-      <a data-sec="kamera">Kamera</a>
-      <a data-sec="fonts">Schrift</a>
-      <a data-sec="farben">Farben</a>
-      <a data-sec="ausgabe">Ausgabe</a>
-      <a data-sec="momente">Momente-Editor</a>
-      <a data-sec="rendern">Rendern</a>
+    <nav class="nav" role="tablist" aria-orientation="vertical">
+      <a role="tab" data-sec="video" aria-current="page" tabindex="0"><span>Video</span></a>
+      <a role="tab" data-sec="hook" tabindex="-1"><span>Hook</span></a>
+      <a role="tab" data-sec="text" tabindex="-1"><span>Text</span></a>
+      <a role="tab" data-sec="effekte" tabindex="-1"><span>Effekte</span></a>
+      <a role="tab" data-sec="spezial" tabindex="-1"><span>Spezial</span></a>
+      <a role="tab" data-sec="sound" tabindex="-1"><span>Sound</span></a>
+      <a role="tab" data-sec="kamera" tabindex="-1"><span>Kamera</span></a>
+      <a role="tab" data-sec="fonts" tabindex="-1"><span>Schrift</span></a>
+      <a role="tab" data-sec="farben" tabindex="-1"><span>Farben</span></a>
+      <a role="tab" data-sec="ausgabe" tabindex="-1"><span>Ausgabe</span></a>
+      <a role="tab" data-sec="momente" tabindex="-1"><span>Momente-Editor</span></a>
+      <a role="tab" data-sec="rendern" tabindex="-1"><span>Rendern</span></a>
     </nav>
   </aside>
 
-  <main class="main">
+  <main class="main" id="main">
     <div class="topbar">
       <div>
         <div class="name" id="topName">Angemeldet</div>
         <div class="rest" id="topRest"></div>
       </div>
       <div class="grow"></div>
-      <button class="btn secondary" id="btnLogout">Abmelden</button>
+      <button class="btn secondary" id="btnLogout" aria-label="Abmelden">Abmelden</button>
     </div>
 
-    <section class="section active" data-sec="video">
+    <section class="section active" data-sec="video" role="tabpanel" aria-label="Video">
       <h2>Video</h2>
       <p class="sub">Video hochladen und Voreinstellung waehlen.</p>
       <div class="card">
         <h3>Datei hochladen</h3>
         <p class="desc">MP4, MOV, MKV oder WEBM. Max. 3 Minuten, 300 MB.</p>
-        <div id="drop">
+        <div id="drop" role="button" tabindex="0" aria-label="Video-Datei auswaehlen">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
           <div class="big">Video hierher ziehen</div>
           <div class="small">oder klicken zum Auswaehlen</div>
         </div>
         <input type="file" id="file" accept="video/*" class="hidden">
-        <div id="fileInfo" class="file-info hidden"></div>
+        <div id="fileInfo" class="file-info hidden" role="status" aria-live="polite"></div>
       </div>
       <div class="card">
         <h3>Voreinstellung (Look)</h3>
         <p class="desc">Startpunkt. Feintuning in den anderen Bereichen.</p>
-        <div class="chips" id="looks"></div>
+        <div class="chips" id="looks" role="radiogroup" aria-label="Look-Voreinstellung"></div>
       </div>
     </section>
 
-    <section class="section" data-sec="hook">
+    <section class="section" data-sec="hook" role="tabpanel" aria-label="Hook">
       <h2>Hook</h2>
       <p class="sub">Die ersten Sekunden entscheiden. 65-71 % springen davor ab.</p>
       <div class="card">
@@ -246,7 +479,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
               <div class="setting-label">Sofort-Hook</div>
               <div class="setting-desc">Staerkstes Statement der ersten Sekunden startet auf Frame 1.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="effects.instant_hook">
+            <label class="switch"><input type="checkbox" data-cfg="effects.instant_hook" aria-label="Sofort-Hook">
               <span class="track"><span class="knob"></span></span></label>
           </div>
         </div>
@@ -263,7 +496,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
       </div>
     </section>
 
-    <section class="section" data-sec="text">
+    <section class="section" data-sec="text" role="tabpanel" aria-label="Text">
       <h2>Text</h2>
       <p class="sub">Wie die Untertitel getaktet und gruppiert werden.</p>
       <div class="card">
@@ -307,7 +540,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
       </div>
     </section>
 
-    <section class="section" data-sec="effekte">
+    <section class="section" data-sec="effekte" role="tabpanel" aria-label="Effekte">
       <h2>Effekte</h2>
       <p class="sub">Welche Caption-Effekte vorkommen duerfen + Dynamik + Freistellung.</p>
       <div class="card">
@@ -327,7 +560,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
               <div class="setting-label">Animationen aktiv</div>
               <div class="setting-desc">26 Animationen. Woerter reagieren auf den Satz.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="effects.anim">
+            <label class="switch"><input type="checkbox" data-cfg="effects.anim" aria-label="Animationen aktiv">
               <span class="track"><span class="knob"></span></span></label>
           </div>
         </div>
@@ -350,7 +583,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
       </div>
     </section>
 
-    <section class="section" data-sec="spezial">
+    <section class="section" data-sec="spezial" role="tabpanel" aria-label="Spezial-Effekte">
       <h2>Spezial-Effekte</h2>
       <p class="sub">Fuenf Effekte fuer besondere Momente. Bei 0 % passiert nichts.</p>
       <div class="card">
@@ -380,7 +613,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
       </div>
     </section>
 
-    <section class="section" data-sec="sound">
+    <section class="section" data-sec="sound" role="tabpanel" aria-label="Sound">
       <h2>Sound</h2>
       <p class="sub">Ohne Sound-Pack laeuft das Video stumm.</p>
       <div class="card">
@@ -391,7 +624,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
       </div>
     </section>
 
-    <section class="section" data-sec="kamera">
+    <section class="section" data-sec="kamera" role="tabpanel" aria-label="Kamera">
       <h2>Kamera</h2>
       <p class="sub">Die kuenstliche Kamerabewegung.</p>
       <div class="card">
@@ -411,7 +644,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
               <div class="setting-label">Whip-Pan an Abschnittsgrenzen</div>
               <div class="setting-desc">Schneller Motion-Blur-Schwenk.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="camera.whip">
+            <label class="switch"><input type="checkbox" data-cfg="camera.whip" aria-label="Whip-Pan aktivieren">
               <span class="track"><span class="knob"></span></span></label>
           </div>
         </div>
@@ -423,15 +656,15 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
       </div>
     </section>
 
-    <section class="section" data-sec="fonts">
+    <section class="section" data-sec="fonts" role="tabpanel" aria-label="Schrift">
       <h2>Schrift</h2>
       <p class="sub">Hauptschrift fuer alle Captions.</p>
       <div class="card">
-        <div class="fontgrid" id="fontGrid"></div>
+        <div class="fontgrid" id="fontGrid" role="radiogroup" aria-label="Schriftart"></div>
       </div>
     </section>
 
-    <section class="section" data-sec="farben">
+    <section class="section" data-sec="farben" role="tabpanel" aria-label="Farben">
       <h2>Farben</h2>
       <p class="sub">Farbwelt der Captions.</p>
       <div class="card">
@@ -446,14 +679,14 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
               <div class="setting-label">Adaptive Farben</div>
               <div class="setting-desc">Caption-Farben passen sich pro Moment der Szene an.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="colors.adaptive">
+            <label class="switch"><input type="checkbox" data-cfg="colors.adaptive" aria-label="Adaptive Farben">
               <span class="track"><span class="knob"></span></span></label>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section" data-sec="ausgabe">
+    <section class="section" data-sec="ausgabe" role="tabpanel" aria-label="Ausgabe">
       <h2>Ausgabe</h2>
       <p class="sub">Format des fertigen Videos.</p>
       <div class="card">
@@ -470,64 +703,98 @@ footer { text-align: center; color: var(--mut2); font-size: 12px; padding: 20px;
             <div class="grow">
               <div class="setting-label">Master-Container (MOV)</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="output.master">
+            <label class="switch"><input type="checkbox" data-cfg="output.master" aria-label="Master-Container">
               <span class="track"><span class="knob"></span></span></label>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section" data-sec="momente">
+    <section class="section" data-sec="momente" role="tabpanel" aria-label="Momente-Editor">
       <h2>Momente-Editor</h2>
       <p class="sub">Jeden Moment einzeln bearbeiten. Undo/Redo mit Strg+Z / Strg+Y.</p>
       <div class="card">
         <p class="desc">Erst Video hochladen, dann Analysieren. Danach jeden Moment
           bearbeiten (Text, Effekt, Groesse, Animation, Szene, Lage).</p>
-        <button class="btn" id="btnAnalyze">Analysieren</button>
-        <button class="btn secondary hidden" id="btnOpenMoments" style="margin-left:8px;">Momente bearbeiten</button>
-        <div id="analyzeStatus" style="margin-top:14px; color:var(--mut); font-size:14px;"></div>
+        <button class="btn" id="btnAnalyze">
+          <svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Analysieren
+        </button>
+        <button class="btn secondary hidden" id="btnOpenMoments" style="margin-left:8px;">
+          Momente bearbeiten
+        </button>
+        <div id="analyzeStatus" style="margin-top:14px; color:var(--mut); font-size:14px;"
+             role="status" aria-live="polite"></div>
       </div>
     </section>
 
-    <section class="section" data-sec="rendern">
+    <section class="section" data-sec="rendern" role="tabpanel" aria-label="Rendern">
       <h2>Rendern</h2>
       <p class="sub">Volles Video mit allen aktuellen Einstellungen bauen.</p>
       <div class="card">
-        <button class="btn" id="btnRender" style="width:100%;">Video erstellen</button>
-        <div class="err hidden" id="renderErr" style="margin-top:10px;"></div>
+        <button class="btn wide" id="btnRender">
+          <svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Video erstellen
+        </button>
+        <div class="err hidden" id="renderErr" role="alert" style="margin-top:10px;"></div>
       </div>
       <div class="card hidden" id="progressCard">
         <h3>Wird gebaut</h3>
         <div class="bar"><i id="progressBar"></i></div>
-        <div class="phase" id="progressPhase">In der Warteschlange …</div>
+        <div class="phase" id="progressPhase" aria-live="polite">In der Warteschlange …</div>
       </div>
       <div class="card hidden" id="doneCard">
-        <h3 style="color:var(--green);">Fertig</h3>
-        <video id="resultVid" controls style="width:100%; border-radius:12px; margin:12px 0; background:#000;"></video>
-        <a class="btn" id="dlLink" download style="display:block; text-align:center; text-decoration:none;">Video herunterladen</a>
+        <h3 style="color:var(--green); display:flex; align-items:center; gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Fertig
+        </h3>
+        <video id="resultVid" controls playsinline
+               style="width:100%; border-radius:12px; margin:12px 0; background:#000;"></video>
+        <a class="btn wide" id="dlLink" download>Video herunterladen</a>
       </div>
       <div class="card hidden" id="errCard">
-        <h3 style="color:var(--red);">Fehler</h3>
+        <h3 style="color:var(--red); display:flex; align-items:center; gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          Fehler
+        </h3>
         <div id="errMsg" style="color:var(--mut); margin-top:8px;"></div>
-        <pre id="errDetail" style="background:var(--surf2); padding:12px; border-radius:8px; margin-top:10px; font-size:12px; overflow-x:auto; color:var(--mut); white-space:pre-wrap;"></pre>
+        <pre id="errDetail" style="background:var(--surf2); padding:12px;
+             border-radius:8px; margin-top:10px; font-size:12px; overflow-x:auto;
+             color:var(--mut); white-space:pre-wrap;"></pre>
       </div>
     </section>
 
-    <footer>DouchkoVE Captions · v73</footer>
+    <footer>DouchkoVE Captions · v76</footer>
   </main>
 </div>
 
-<div class="overlay hidden" id="momEditor">
+<div class="overlay hidden" id="momEditor" role="dialog" aria-modal="true"
+     aria-labelledby="momTitle">
   <div class="modal">
     <div class="head">
-      <h3>Momente bearbeiten</h3>
+      <h3 id="momTitle">Momente bearbeiten</h3>
       <p>Text tippen, Effekt/Groesse/Animation waehlen, Haken raus = weg.
         Strg+Z / Strg+Y</p>
     </div>
     <div class="body" id="momBody"></div>
     <div class="foot">
-      <button class="btn secondary" id="momUndo" disabled>Undo</button>
-      <button class="btn secondary" id="momRedo" disabled>Redo</button>
+      <button class="btn secondary" id="momUndo" disabled aria-label="Undo (Strg+Z)">Undo</button>
+      <button class="btn secondary" id="momRedo" disabled aria-label="Redo (Strg+Y)">Redo</button>
       <div style="flex:1;"></div>
       <button class="btn secondary" id="momCancel">Abbrechen</button>
       <button class="btn" id="momSave">Speichern & Rendern</button>
@@ -564,6 +831,19 @@ class EditorHistory {
 
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
+
+// Toast statt alert
+function toast(msg, kind='info', dur=4000) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind !== 'info' ? ' ' + kind : '');
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<span>${msg}</span>
+    <button class="close" aria-label="Schliessen">&times;</button>`;
+  $('#toasts').appendChild(el);
+  const close = () => el.remove();
+  el.querySelector('.close').addEventListener('click', close);
+  if (dur > 0) setTimeout(close, dur);
+}
 
 function setDeep(obj, path, value) {
   const parts = path.split('.');
@@ -605,13 +885,16 @@ function buildWidgets() {
     const suffix = el.dataset.suffix || '';
     const raw = getDeep(State.cfg, cfg, min);
     const val = Math.round(raw * scale);
-    el.innerHTML = `<input type="range" min="${min}" max="${max}" value="${val}">
-                    <span class="val">${val}${suffix}</span>`;
+    el.innerHTML = `<input type="range" min="${min}" max="${max}" value="${val}"
+        aria-label="${cfg}" aria-valuemin="${min}" aria-valuemax="${max}"
+        aria-valuenow="${val}">
+      <span class="val">${val}${suffix}</span>`;
     const inp = el.querySelector('input');
     const out = el.querySelector('.val');
     inp.addEventListener('input', () => {
       const v = parseInt(inp.value);
       out.textContent = v + suffix;
+      inp.setAttribute('aria-valuenow', v);
       setDeep(State.cfg, cfg, scale === 1 ? v : v / scale);
     });
   });
@@ -622,12 +905,18 @@ function buildWidgets() {
       return { lbl, val: (val === 'true' ? true : val === 'false' ? false : isNaN(+val) ? val : +val) };
     });
     const cur = getDeep(State.cfg, cfg, opts[0].val);
-    el.innerHTML = opts.map(o =>
-      `<button data-val="${o.val}"${JSON.stringify(o.val) === JSON.stringify(cur) ? ' class="on"' : ''}>${o.lbl}</button>`
-    ).join('');
+    el.setAttribute('role', 'radiogroup');
+    el.innerHTML = opts.map(o => {
+      const on = JSON.stringify(o.val) === JSON.stringify(cur);
+      return `<button role="radio" aria-checked="${on}" data-val="${o.val}"${on ? ' class="on"' : ''}>${o.lbl}</button>`;
+    }).join('');
     el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-      el.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+      el.querySelectorAll('button').forEach(x => {
+        x.classList.remove('on');
+        x.setAttribute('aria-checked', 'false');
+      });
       b.classList.add('on');
+      b.setAttribute('aria-checked', 'true');
       const raw = b.dataset.val;
       const v = raw === 'true' ? true : raw === 'false' ? false : (isNaN(+raw) ? raw : +raw);
       setDeep(State.cfg, cfg, v);
@@ -646,15 +935,24 @@ async function buildLooks() {
   el.innerHTML = '';
   for (const [id, v] of Object.entries(looks)) {
     const c = document.createElement('div');
-    c.className = 'chip' + (id === State.look ? ' on' : '');
-    c.innerHTML = `<b>${v.name}</b> — ${v.desc}`;
-    c.style.padding = '14px 16px'; c.style.borderRadius = '12px';
-    c.addEventListener('click', async () => {
-      el.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
-      c.classList.add('on');
+    c.className = 'chip big' + (id === State.look ? ' on' : '');
+    c.innerHTML = `<div><b>${v.name}</b> — ${v.desc}</div>`;
+    c.setAttribute('role', 'radio');
+    c.setAttribute('aria-checked', id === State.look ? 'true' : 'false');
+    c.setAttribute('tabindex', '0');
+    const activate = async () => {
+      el.querySelectorAll('.chip').forEach(x => {
+        x.classList.remove('on'); x.setAttribute('aria-checked', 'false');
+      });
+      c.classList.add('on'); c.setAttribute('aria-checked', 'true');
       State.look = id;
       await loadDefaults();
       rebuildAllWidgets();
+      toast(`Look "${v.name}" gewaehlt`, 'info', 2500);
+    };
+    c.addEventListener('click', activate);
+    c.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
     });
     el.appendChild(c);
   }
@@ -669,12 +967,20 @@ async function buildFxChips() {
     const c = document.createElement('div');
     c.className = 'chip' + (rot.includes(id) ? ' on' : '');
     c.textContent = lbl;
-    c.addEventListener('click', () => {
+    c.setAttribute('role', 'checkbox');
+    c.setAttribute('aria-checked', rot.includes(id) ? 'true' : 'false');
+    c.setAttribute('tabindex', '0');
+    const toggle = () => {
       c.classList.toggle('on');
       const cur = getDeep(State.cfg, 'effects.keyword_rotation', []);
       const idx = cur.indexOf(id);
       if (idx >= 0) cur.splice(idx, 1); else cur.push(id);
       setDeep(State.cfg, 'effects.keyword_rotation', cur);
+      c.setAttribute('aria-checked', c.classList.contains('on') ? 'true' : 'false');
+    };
+    c.addEventListener('click', toggle);
+    c.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
     });
     el.appendChild(c);
   }
@@ -689,11 +995,21 @@ async function buildFontGrid() {
     const t = document.createElement('div');
     t.className = 'fonttile' + (f.file === curFile ? ' on' : '');
     t.innerHTML = `<div class="name">Aa</div><div class="lbl">${f.label}</div>`;
-    t.addEventListener('click', () => {
-      el.querySelectorAll('.fonttile').forEach(x => x.classList.remove('on'));
-      t.classList.add('on');
+    t.setAttribute('role', 'radio');
+    t.setAttribute('aria-checked', f.file === curFile ? 'true' : 'false');
+    t.setAttribute('aria-label', 'Schrift ' + f.label);
+    t.setAttribute('tabindex', '0');
+    const activate = () => {
+      el.querySelectorAll('.fonttile').forEach(x => {
+        x.classList.remove('on'); x.setAttribute('aria-checked', 'false');
+      });
+      t.classList.add('on'); t.setAttribute('aria-checked', 'true');
       setDeep(State.cfg, 'fonts.display', f.file);
       if (f.script) setDeep(State.cfg, 'fonts.script', f.script);
+    };
+    t.addEventListener('click', activate);
+    t.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
     });
     el.appendChild(t);
   }
@@ -717,37 +1033,74 @@ $('#code').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); 
 async function doLogin() {
   const code = $('#code').value.trim();
   if (!code) return;
-  const btn = $('#btnLogin'); btn.disabled = true;
-  const fd = new FormData(); fd.append('code', code);
-  const r = await fetch('/api/pruefe-code', { method: 'POST', body: fd });
-  const d = await r.json();
-  btn.disabled = false;
-  if (!d.ok) {
-    $('#loginErr').textContent = d.msg; $('#loginErr').classList.remove('hidden');
-    return;
+  const btn = $('#btnLogin');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Verbinde …';
+  try {
+    const fd = new FormData(); fd.append('code', code);
+    const r = await fetch('/api/pruefe-code', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!d.ok) {
+      $('#loginErr').textContent = d.msg;
+      $('#loginErr').classList.remove('hidden');
+      return;
+    }
+    State.code = code; State.codeName = d.name; State.codeRest = d.rest;
+    $('#loginView').classList.add('hidden');
+    $('#appView').classList.remove('hidden');
+    $('#topName').textContent = 'Hallo' + (d.name ? ' ' + d.name : '');
+    $('#topRest').textContent = d.rest !== null ? `noch ${d.rest} Videos frei` : '';
+    await loadDefaults();
+    rebuildAllWidgets();
+    await buildLooks();
+    toast('Angemeldet', 'ok', 2200);
+  } catch (e) {
+    $('#loginErr').textContent = 'Verbindungsfehler. Nochmal versuchen.';
+    $('#loginErr').classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Weiter';
   }
-  State.code = code; State.codeName = d.name; State.codeRest = d.rest;
-  $('#loginView').classList.add('hidden');
-  $('#appView').classList.remove('hidden');
-  $('#topName').textContent = 'Hallo' + (d.name ? ' ' + d.name : '');
-  $('#topRest').textContent = d.rest !== null ? `noch ${d.rest} Videos frei` : '';
-  await loadDefaults();
-  rebuildAllWidgets();
-  await buildLooks();
 }
 
 $('#btnLogout').addEventListener('click', () => { location.reload(); });
 
-$$('.nav a').forEach(a => a.addEventListener('click', () => {
-  const sec = a.dataset.sec;
-  $$('.nav a').forEach(x => x.classList.remove('active'));
-  a.classList.add('active');
-  $$('.section').forEach(s => s.classList.remove('active'));
-  document.querySelector(`.section[data-sec="${sec}"]`).classList.add('active');
-}));
+// Tabs mit ARIA
+$$('.nav a').forEach(a => {
+  const activate = () => {
+    const sec = a.dataset.sec;
+    $$('.nav a').forEach(x => {
+      x.removeAttribute('aria-current');
+      x.setAttribute('tabindex', '-1');
+    });
+    a.setAttribute('aria-current', 'page');
+    a.setAttribute('tabindex', '0');
+    $$('.section').forEach(s => s.classList.remove('active'));
+    document.querySelector(`.section[data-sec="${sec}"]`).classList.add('active');
+    a.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+  a.addEventListener('click', activate);
+  a.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const list = [...$$('.nav a')];
+      const i = list.indexOf(a);
+      list[(i + 1) % list.length].focus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const list = [...$$('.nav a')];
+      const i = list.indexOf(a);
+      list[(i - 1 + list.length) % list.length].focus();
+    }
+  });
+});
 
 const drop = $('#drop');
 drop.addEventListener('click', () => $('#file').click());
+drop.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#file').click(); }
+});
 drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
 drop.addEventListener('dragleave', () => drop.classList.remove('over'));
 drop.addEventListener('drop', e => {
@@ -758,8 +1111,15 @@ $('#file').addEventListener('change', e => { if (e.target.files[0]) setFile(e.ta
 
 function setFile(f) {
   State.file = f;
-  $('#fileInfo').innerHTML = `<b>${f.name}</b> · ${(f.size / 1048576).toFixed(1)} MB`;
+  $('#fileInfo').innerHTML = `
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+    <div><b>${f.name}</b> · ${(f.size / 1048576).toFixed(1)} MB</div>`;
   $('#fileInfo').classList.remove('hidden');
+  toast('Datei bereit: ' + f.name, 'ok', 2200);
 }
 
 $('#btnAnalyze').addEventListener('click', () => startUpload('analyze'));
@@ -767,7 +1127,7 @@ $('#btnRender').addEventListener('click', () => startUpload('full'));
 
 async function startUpload(mode) {
   if (!State.file) {
-    alert('Erst ein Video hochladen (Bereich "Video").');
+    toast('Erst ein Video hochladen (Bereich "Video").', 'err');
     return;
   }
   if (mode === 'full') {
@@ -810,49 +1170,59 @@ function showError(msg, detail) {
   $('#errMsg').textContent = msg;
   $('#errDetail').textContent = detail || '';
   $('#btnRender').disabled = false;
+  toast(msg, 'err');
 }
 
 async function pollAnalyze() {
-  const st = await (await fetch('/api/status/' + State.jid)).json();
-  if (st.status === 'analysiert') {
-    $('#analyzeStatus').innerHTML = 'Analyse fertig - <b>Momente bearbeiten</b> klicken.';
-    $('#btnOpenMoments').classList.remove('hidden');
-    $('#btnAnalyze').disabled = false;
-    return;
-  }
-  if (st.status === 'fehler') {
-    $('#analyzeStatus').textContent = 'Analyse fehlgeschlagen: ' + (st.msg || '?');
-    $('#btnAnalyze').disabled = false;
-    return;
-  }
-  $('#analyzeStatus').textContent = st.phase || 'Laeuft …';
+  try {
+    const st = await (await fetch('/api/status/' + State.jid)).json();
+    if (st.status === 'analysiert') {
+      $('#analyzeStatus').innerHTML = 'Analyse fertig — <b>Momente bearbeiten</b> klicken.';
+      $('#btnOpenMoments').classList.remove('hidden');
+      $('#btnAnalyze').disabled = false;
+      toast('Analyse fertig', 'ok', 2500);
+      return;
+    }
+    if (st.status === 'fehler') {
+      $('#analyzeStatus').textContent = 'Analyse fehlgeschlagen: ' + (st.msg || '?');
+      $('#btnAnalyze').disabled = false;
+      toast('Analyse fehlgeschlagen', 'err');
+      return;
+    }
+    $('#analyzeStatus').textContent = st.phase || 'Laeuft …';
+  } catch (e) {}
   setTimeout(pollAnalyze, 2000);
 }
 
 async function pollRender() {
-  const st = await (await fetch('/api/status/' + State.jid)).json();
-  $('#progressBar').style.width = Math.round((st.progress || 0) * 100) + '%';
-  $('#progressPhase').textContent = st.phase || '';
-  if (st.status === 'fertig') {
-    $('#progressCard').classList.add('hidden');
-    $('#doneCard').classList.remove('hidden');
-    $('#resultVid').src = '/api/video/' + State.jid;
-    $('#dlLink').href = '/api/video/' + State.jid;
-    $('#btnRender').disabled = false;
-    return;
-  }
-  if (st.status === 'fehler') {
-    showError(st.msg || 'Render fehlgeschlagen', st.detail || '');
-    return;
-  }
+  try {
+    const st = await (await fetch('/api/status/' + State.jid)).json();
+    $('#progressBar').style.width = Math.round((st.progress || 0) * 100) + '%';
+    $('#progressPhase').textContent = st.phase || '';
+    if (st.status === 'fertig') {
+      $('#progressCard').classList.add('hidden');
+      $('#doneCard').classList.remove('hidden');
+      $('#resultVid').src = '/api/video/' + State.jid;
+      $('#dlLink').href = '/api/video/' + State.jid;
+      $('#btnRender').disabled = false;
+      toast('Video fertig', 'ok');
+      return;
+    }
+    if (st.status === 'fehler') {
+      showError(st.msg || 'Render fehlgeschlagen', st.detail || '');
+      return;
+    }
+  } catch (e) {}
   setTimeout(pollRender, 2000);
 }
 
 $('#btnOpenMoments').addEventListener('click', openMomentsEditor);
 
 async function openMomentsEditor() {
-  const r = await fetch('/api/moments/' + State.jid);
-  State.moments = await r.json();
+  try {
+    const r = await fetch('/api/moments/' + State.jid);
+    State.moments = await r.json();
+  } catch (e) { toast('Momente konnten nicht geladen werden.', 'err'); return; }
   State.history = new EditorHistory();
   const [fxLabels, animLabels] = await Promise.all([
     fetch('/api/fx_labels').then(r => r.json()),
@@ -869,7 +1239,7 @@ async function openMomentsEditor() {
   const lageOpts = ['auto','liegend','stehend','frei']
     .map(v => `<option value="${v}">${v}</option>`).join('');
   const body = $('#momBody');
-  body.innerHTML = `<div class="mom-row head">
+  body.innerHTML = `<div class="mom-row head" aria-hidden="true">
     <div>An</div><div>Zeit</div><div>Text</div><div>Effekt</div><div>Groesse</div>
     <div class="hide-mob">Animation</div><div class="hide-mob">Szene</div><div class="hide-mob">Lage</div>
   </div>`;
@@ -878,14 +1248,16 @@ async function openMomentsEditor() {
     const row = document.createElement('div');
     row.className = 'mom-row';
     row.innerHTML = `
-      <input type="checkbox" data-i="${i}" data-k="aktiv" ${m.aktiv !== false ? 'checked' : ''}>
+      <input type="checkbox" data-i="${i}" data-k="aktiv"
+             aria-label="Moment ${i} aktiv" ${m.aktiv !== false ? 'checked' : ''}>
       <div class="zeit">${(m.zeit || 0).toFixed(1)}s</div>
-      <input type="text" data-i="${i}" data-k="text" value="${(m.text || '').replace(/"/g, '&quot;')}">
-      <select data-i="${i}" data-k="fx">${fxOpts}</select>
-      <select data-i="${i}" data-k="power">${powerOpts}</select>
-      <select data-i="${i}" data-k="anim" class="hide-mob">${animOpts}</select>
-      <select data-i="${i}" data-k="szene" class="hide-mob">${szeneOpts}</select>
-      <select data-i="${i}" data-k="lage" class="hide-mob">${lageOpts}</select>`;
+      <input type="text" data-i="${i}" data-k="text" aria-label="Text"
+             value="${(m.text || '').replace(/"/g, '&quot;')}">
+      <select data-i="${i}" data-k="fx" aria-label="Effekt">${fxOpts}</select>
+      <select data-i="${i}" data-k="power" aria-label="Groesse">${powerOpts}</select>
+      <select data-i="${i}" data-k="anim" class="hide-mob" aria-label="Animation">${animOpts}</select>
+      <select data-i="${i}" data-k="szene" class="hide-mob" aria-label="Szene">${szeneOpts}</select>
+      <select data-i="${i}" data-k="lage" class="hide-mob" aria-label="Lage">${lageOpts}</select>`;
     body.appendChild(row);
     row.querySelector('[data-k=fx]').value = m.fx || 'behind';
     row.querySelector('[data-k=power]').value = String(m.power || 2);
@@ -908,6 +1280,8 @@ async function openMomentsEditor() {
   syncFromDom();
   pushSnap();
   $('#momEditor').classList.remove('hidden');
+  // Focus setzen
+  setTimeout(() => { const f = body.querySelector('input[type=text]'); if (f) f.focus(); }, 50);
 }
 
 function syncFromDom() {
@@ -960,27 +1334,39 @@ window.addEventListener('keydown', e => {
     } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' ||
               (e.key.toLowerCase() === 'z' && e.shiftKey))) {
       e.preventDefault(); $('#momRedo').click();
+    } else if (e.key === 'Escape') {
+      $('#momCancel').click();
     }
   }
 });
 $('#momCancel').addEventListener('click', () => $('#momEditor').classList.add('hidden'));
 $('#momSave').addEventListener('click', async () => {
   syncFromDom();
-  const fd = new FormData();
-  fd.append('moments', JSON.stringify(State.moments));
-  fd.append('code', State.code);
-  const r = await fetch('/api/moments/' + State.jid, { method: 'POST', body: fd });
-  const d = await r.json();
-  if (!r.ok || !d.ok) { alert('Fehler: ' + (d.detail || d.msg || 'unbekannt')); return; }
-  $('#momEditor').classList.add('hidden');
-  $$('.nav a').forEach(x => x.classList.remove('active'));
-  document.querySelector('.nav a[data-sec="rendern"]').classList.add('active');
-  $$('.section').forEach(s => s.classList.remove('active'));
-  document.querySelector('.section[data-sec="rendern"]').classList.add('active');
-  $('#progressCard').classList.remove('hidden');
-  $('#doneCard').classList.add('hidden');
-  $('#errCard').classList.add('hidden');
-  pollRender();
+  const btn = $('#momSave');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Speichere …';
+  try {
+    const fd = new FormData();
+    fd.append('moments', JSON.stringify(State.moments));
+    fd.append('code', State.code);
+    const r = await fetch('/api/moments/' + State.jid, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok || !d.ok) { toast('Fehler: ' + (d.detail || d.msg || 'unbekannt'), 'err'); return; }
+    $('#momEditor').classList.add('hidden');
+    $$('.nav a').forEach(x => { x.removeAttribute('aria-current'); x.setAttribute('tabindex', '-1'); });
+    const rn = document.querySelector('.nav a[data-sec="rendern"]');
+    rn.setAttribute('aria-current', 'page'); rn.setAttribute('tabindex', '0');
+    $$('.section').forEach(s => s.classList.remove('active'));
+    document.querySelector('.section[data-sec="rendern"]').classList.add('active');
+    $('#progressCard').classList.remove('hidden');
+    $('#doneCard').classList.add('hidden');
+    $('#errCard').classList.add('hidden');
+    toast('Momente gespeichert. Render startet.', 'ok');
+    pollRender();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Speichern & Rendern';
+  }
 });
 </script>
 </body>
