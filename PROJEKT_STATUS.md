@@ -688,6 +688,30 @@ Transkription auf Sprach-Sample).
 [ ] 6. EU AI Act Art. 50: optionaler Offenlegungs-Hinweis/Metadaten (ab 2.8.2026)
 [ ] 7. Windows-Build/Packaging (Modell + Sound-Pack mit-bundeln)
 
+## v68a - Undo/Redo: Buttons ausgrauen (Klarheit)
+
+Nachtrag zu v68. Die Undo/Redo-Buttons waren immer klickbar - auch wenn
+nichts zurueckzuholen oder vorzuholen war. Klick ins Leere passierte
+schweigend nichts. Fuer einen bedienerfreundlichen Editor gilt: sichtbar
+= klickbar. Buttons werden jetzt ausgegraut, wenn der Stack am Ende ist.
+
+Umsetzung:
+- Neue Funktion `refresh_buttons()` liest `hist.can_undo/can_redo` und
+  ruft `Pill.set_enabled()`.
+- Wird nach jedem Push (Trace + debounced) und nach jedem Undo/Redo
+  aufgerufen.
+- Initialer Aufruf beim Editor-Aufbau: Startzustand hat 1 Snapshot,
+  also beide grau - Nutzer sieht sofort "nix zu tun".
+- Neuer Wrapper `_push_and_refresh()` fuer sofort-Traces (Comboboxen,
+  Checkbox); debounced ruft nach dem 400ms-`after` denselben Wrapper.
+
+Selftest: +6 neue Tests (Buttons-Ausgrauung Source-Check + 5 Verhaltens-
+Tests ueber `can_undo/can_redo` in EditorHistory).
+Regression: 269/270 gruen (vorher 263/264, +6 neu). Der eine bekannte
+Fail (Whisper-Modell) unveraendert.
+
+GUI-Smoke `xvfb-run` -> GUI_OK.
+
 ## v68 - Undo/Redo im Momente-Editor
 
 Editor konnte bisher keinen Fehlklick zurueckdrehen - versehentlich Effekt

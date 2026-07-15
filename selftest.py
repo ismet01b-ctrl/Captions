@@ -1314,7 +1314,27 @@ def _scenario_logic(clip, transcript, tmp):
           and "Pill(bar, 'Redo'" in _gsrc)
     check('Editor: Text-Entry debounced, Widgets sofort',
           "trace_add('write', lambda *_a: push_debounced())" in _gsrc
-          and "trace_add('write', lambda *_a: push_now())" in _gsrc)
+          and "trace_add('write', lambda *_a: _push_and_refresh())" in _gsrc)
+    check('Editor: Undo/Redo-Buttons werden ausgegraut',
+          'def refresh_buttons' in _gsrc and 'set_enabled(hist.can_undo())' in _gsrc
+          and 'set_enabled(hist.can_redo())' in _gsrc
+          and "pending['btns']" in _gsrc)
+    # Verhalten der Ausgrauung ueber die Klasse allein (kein GUI noetig)
+    _h5 = _gui.EditorHistory()
+    check('Ausgrauung: initial beides aus',
+          not _h5.can_undo() and not _h5.can_redo())
+    _h5.push([('a',)])
+    check('Ausgrauung: 1 State -> beides aus',
+          not _h5.can_undo() and not _h5.can_redo())
+    _h5.push([('b',)])
+    check('Ausgrauung: 2 States -> Undo an, Redo aus',
+          _h5.can_undo() and not _h5.can_redo())
+    _h5.undo()
+    check('Ausgrauung: nach Undo -> Redo an',
+          not _h5.can_undo() and _h5.can_redo())
+    _h5.redo()
+    check('Ausgrauung: nach Redo -> Undo an, Redo aus',
+          _h5.can_undo() and not _h5.can_redo())
     check('TikTok-Fonts an Bord',
           all(os.path.exists(os.path.join(HERE, 'fonts', f))
               for f in ('tiktok_bold.ttf', 'montserrat_xb.ttf', 'inter_black.ttf')))

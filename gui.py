@@ -1909,19 +1909,34 @@ class App:
                     win.after_cancel(pending['after'])
             except Exception:
                 pass
-            pending['after'] = win.after(400, push_now)
+            pending['after'] = win.after(400, _push_and_refresh)
+
+        def refresh_buttons():
+            """Undo/Redo ausgrauen wenn Stack am Ende. Sichtbar = klickbar."""
+            btns = pending.get('btns') or {}
+            u, r = btns.get('undo'), btns.get('redo')
+            if u:
+                u.set_enabled(hist.can_undo())
+            if r:
+                r.set_enabled(hist.can_redo())
 
         def undo(_e=None):
             snap = hist.undo()
             if snap is not None:
                 apply_snap(snap)
+            refresh_buttons()
             return 'break'
 
         def redo(_e=None):
             snap = hist.redo()
             if snap is not None:
                 apply_snap(snap)
+            refresh_buttons()
             return 'break'
+
+        def _push_and_refresh():
+            push_now()
+            refresh_buttons()
 
         for m in moments:
             if not isinstance(m, dict) or 'i' not in m:
@@ -1967,7 +1982,7 @@ class App:
                 # Traces registrieren: Text-Entry debounced, Rest sofort.
                 tv.trace_add('write', lambda *_a: push_debounced())
                 for var in (av, fv, pv, nv, sv, lv):
-                    var.trace_add('write', lambda *_a: push_now())
+                    var.trace_add('write', lambda *_a: _push_and_refresh())
             except Exception as e:
                 skipped += 1
                 try:
@@ -2025,16 +2040,19 @@ class App:
             win.destroy()))
         Pill(bar, 'Speichern', save, primary=True, width=170,
              bg=BG).pack(side='right', padx=16, pady=12)
-        Pill(bar, 'Redo', redo, primary=False, width=70,
-             bg=BG).pack(side='right', padx=(2, 8), pady=12)
-        Pill(bar, 'Undo', undo, primary=False, width=70,
-             bg=BG).pack(side='right', padx=2, pady=12)
+        _redo_btn = Pill(bar, 'Redo', redo, primary=False, width=70, bg=BG)
+        _redo_btn.pack(side='right', padx=(2, 8), pady=12)
+        _undo_btn = Pill(bar, 'Undo', undo, primary=False, width=70, bg=BG)
+        _undo_btn.pack(side='right', padx=2, pady=12)
+        pending['btns'] = {'undo': _undo_btn, 'redo': _redo_btn}
+        refresh_buttons()   # Startzustand: nichts zurueckzuholen -> beide grau.
         tk.Label(bar, text='Undo Strg+Z · Redo Strg+Y · Geänderte Momente werden einzeln neu gerendert.',
                  font=F_S, bg=BG, fg=MUT2).pack(side='left', padx=16)
         # Fuer Selftest zugreifbar machen (kein User-Effekt).
         win._dve_editor = dict(rows=rows, hist=hist, snapshot=snapshot,
                                apply_snap=apply_snap, undo=undo, redo=redo,
-                               push_now=push_now)
+                               push_now=push_now, undo_btn=_undo_btn, redo_btn=_redo_btn,
+                               refresh_buttons=refresh_buttons)
 
     def set_busy(self, busy):
         """Waehrend Render/Analyse: alles sperren, was den Lauf durcheinanderbringen
