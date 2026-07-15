@@ -1,9 +1,16 @@
-# DouchkoVE Web-Server in einem Container.
-FROM python:3.12-slim
+# DouchkoVE Web-Server. Volles python:3.12-Image + alle Deps die
+# opencv/mediapipe/PIL/onnxruntime/ffmpeg im Container ueblicherweise wollen.
+# Kostet ~400 MB mehr als slim, spart aber Nachbau-Runden.
+FROM python:3.12
 
+# Alle System-Libs auf einmal.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg libgl1 libglib2.0-0 \
-    libgles2 libegl1 libgomp1 \
+      ffmpeg \
+      libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+      libgles2 libegl1 libgomp1 \
+      libgtk-3-0 libxkbcommon0 libdbus-1-3 \
+      fonts-dejavu fonts-noto \
+      curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -13,8 +20,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY . /app/
 
-# ONNX-Modelle beim Bauen ziehen (RVM ~30 MB, Depth ~80 MB), damit der erste
-# Nutzer nicht wartet.
+# ONNX-Modelle beim Bauen ziehen (RVM ~30 MB, Depth ~80 MB), damit der
+# erste Nutzer nicht wartet.
 RUN python -c "import render; render.ensure_models()" || echo "Modelle werden zur Laufzeit geladen"
 
 ENV DVE_DATA=/data DVE_WORKERS=1 DVE_MAX_SECONDS=180 DVE_MAX_MB=300
