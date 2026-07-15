@@ -688,6 +688,42 @@ Transkription auf Sprach-Sample).
 [ ] 6. EU AI Act Art. 50: optionaler Offenlegungs-Hinweis/Metadaten (ab 2.8.2026)
 [ ] 7. Windows-Build/Packaging (Modell + Sound-Pack mit-bundeln)
 
+## v69 - Hintergrund-Blur (Depth-basiert)
+
+Bokeh-artiger Kino-Blur waehrend jedes Caption-Moments: Person + Text
+bleiben scharf, der Hintergrund wird weichgezeichnet. Lenkt den Blick
+wie in einem Interview mit offener Blende. Auf B-Roll bewusst AUS -
+dort ist die Umgebung das Motiv.
+
+Umsetzung:
+- Neue Funktion `apply_bg_blur(frame, alpha, depth_n, strength, W, H)`
+  in `render.py`. Blur auf 1/4-Aufloesung (Gaussian, sigma ~4 % der
+  Bildbreite), dann hochskaliert. Alpha ist Vordergrund-Maske
+  (weichgezeichnet fuer Bokeh-Rand). Wenn Depth vorhanden, verlaengert
+  das den Blur weiter in die Ferne (Nah bleibt scharf, weit weg mehr).
+- Blur-Staerke folgt der Moment-Fade-Kurve: ramp 0.20 s rein, halten,
+  0.35 s raus - der Blur atmet mit dem Text. Power-3-Momente kriegen
+  einen kleinen Zuschlag.
+- Ohne Alpha UND ohne Depth: kein Blindwurf (Selbstschutz).
+- Config: `effects.bg_blur` (0-1, Default 0.5). GUI-Regler in Karte
+  "Freistellung & Masken" (unter Maskenqualitaet).
+- Kundenprofil sichert `bgblur_var`, damit es beim Profilwechsel
+  mitwandert.
+
+Selftest: 10 neue Tests (Funktion existiert, Config, strength=0 no-op,
+Maske-fehlt no-op, Blur wirkt im Hintergrund, Vordergrund bleibt scharf,
+Depth-only Fern > Nah, B-Roll-Ausschluss, GUI-Regler, Profil-Sicherung).
+Regression: 279/280 gruen (vorher 269/270, +10 neu). Der pre-existierende
+Whisper-Modell-Check bleibt umgebungsbedingt rot.
+
+GUI-Smoke `xvfb-run` -> GUI_OK.
+
+Ehrliche Grenze: Rechenzeit steigt pro Moment-Frame um ~1-2 ms (bei 1080p);
+das ist unkritisch. Sichtbare Bokeh-Qualitaet vs. Blur-Sigma bewertet
+Ismet am echten Windows-Material - Gaussian bei 4 % kann bei sehr
+homogenen Hintergruenden zu weich wirken (dann Regler zurueck) oder
+bei viel Struktur zu wenig (Regler hoch).
+
 ## v68a - Undo/Redo: Buttons ausgrauen (Klarheit)
 
 Nachtrag zu v68. Die Undo/Redo-Buttons waren immer klickbar - auch wenn

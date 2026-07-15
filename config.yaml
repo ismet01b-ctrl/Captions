@@ -77,6 +77,7 @@ effects:
   retention_gap: 12
   pattern_interrupt: 9
   emerge: auto
+  bg_blur: 0.5   # v69: Hintergrund weichzeichnen waehrend Momente (0 = aus, 1 = maximum)
 camera:
   strength: 0.7
   crash: 0.55      # Crash-Zoom auf den staerksten Moment (0 = aus)

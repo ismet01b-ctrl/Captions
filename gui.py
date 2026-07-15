@@ -521,6 +521,7 @@ class App:
         self.zahl_var = tk.IntVar(value=int(float(cfg['effects'].get('zahl_gap', 15))))
         self.beat_var = tk.IntVar(value=int(float(cfg['effects'].get('beat_sync', 0.7)) * 100))
         self.pshadow_var = tk.IntVar(value=int(float(cfg['effects'].get('person_shadow', 0.5)) * 100))
+        self.bgblur_var = tk.IntVar(value=int(float(cfg['effects'].get('bg_blur', 0.5)) * 100))
         self.sfxvol_var = tk.IntVar(value=int(cfg['effects'].get('sfx_volume', 0.35) * 100))
         self.cam_str = tk.IntVar(value=int(cfg['camera'].get('strength', 0.7) * 100))
         self.crash_var = tk.IntVar(value=int(float(cfg['camera'].get('crash', 0.55)) * 100))
@@ -1062,6 +1063,12 @@ class App:
                      'Brillenbügel — kostet aber spürbar Rechenzeit.')
         Segmented(r, [('Standard', 'standard'), ('Hoch', 'hoch'),
                       ('Maximum', 'maximum')], self.mask_var).pack()
+        self.setting(c, 'Hintergrund weichzeichnen',
+                     'Waehrend eines Caption-Moments wird der Hintergrund unscharf, '
+                     'die Person und der Text bleiben scharf. Lenkt den Blick wie in '
+                     'Kino/Interviews. 0 = aus. Auf B-Roll (Drohne, FPV) ausgeschaltet, '
+                     'dort ist die Umgebung das Motiv.')
+        Slider(c, self.bgblur_var, 0, 100, ' %').pack(fill='x')
 
         c = self.card('Lebendige Typo',
                       '13 Animationen. Das Wort reagiert auf den Satz: „Deutschland '
@@ -1685,7 +1692,9 @@ class App:
                     'emerge_var', 'mask_var',
                     # v61 Premium-Typo
                     'hold_var', 'beat_var', 'pshadow_var', 'zahl_var',
-                    'crash_var', 'whip_var')
+                    'crash_var', 'whip_var',
+                    # v69 Hintergrund-Blur
+                    'bgblur_var')
 
     def profile_snapshot(self):
         snap = {'font': self.font_id.get(),
@@ -1757,6 +1766,7 @@ class App:
         self.cfg['effects']['zahl_gap'] = int(self.zahl_var.get())
         self.cfg['effects']['beat_sync'] = round(self.beat_var.get() / 100.0, 2)
         self.cfg['effects']['person_shadow'] = round(self.pshadow_var.get() / 100.0, 2)
+        self.cfg['effects']['bg_blur'] = round(self.bgblur_var.get() / 100.0, 2)
         self.cfg['effects']['dim_blurin'] = round(self.dim_var.get() / 100.0 * 0.8, 2)
         self.cfg['effects']['tracking'] = True
         self.cfg['effects']['scene_lock'] = True

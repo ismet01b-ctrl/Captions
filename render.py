@@ -2704,6 +2704,47 @@ def kill_spill(person, alpha, frame):
     return person * (1 - 0.35 * kante) + grau * (0.35 * kante)
 
 
+def apply_bg_blur(frame, alpha, depth_n, strength, W, H):
+    """Hintergrund-Blur (Bokeh-artig) waehrend eines Moments.
+
+    Der Vordergrund (Person, Text) bleibt scharf, dahinter wird das Bild
+    weichgezeichnet - lenkt den Blick auf den Text, wie in Kino/Interviews.
+
+    strength: 0 = aus, 1 = maximum (Sigma ~4 % der Bildbreite).
+    Maskenlogik:
+      - alpha da:    Person = scharf, Rest = blur
+      - alpha + depth: zusaetzliche Verlaufskante (weit weg = mehr blur)
+      - nur depth:   ohne Person alpha; Fern-Ebenen blur
+      - nix:         kein Effekt (kein Blindwurf)
+    """
+    if strength <= 0.02 or (alpha is None and depth_n is None):
+        return frame
+    # Blur einmalig auf verkleinertem Bild (schnell, Bokeh-freundlich).
+    scale = 4
+    small = cv2.resize(frame, (W // scale, H // scale))
+    sigma = max(1.5, strength * (W / scale) * 0.04)
+    blurred_small = cv2.GaussianBlur(small, (0, 0), sigma)
+    blurred = cv2.resize(blurred_small, (W, H))
+    # Vordergrund-Maske (was scharf bleibt): 1.0 = scharf, 0.0 = voll blur.
+    if alpha is not None:
+        fg = alpha[..., 0] if alpha.ndim == 3 else alpha
+        fg = np.clip(fg.astype(np.float32), 0, 1)
+        # Etwas ausdehnen, damit die Text-Zone um die Person auch scharf bleibt
+        # und der Uebergang natuerlich weich verlaeuft (Bokeh-Rand).
+        fg = cv2.GaussianBlur(fg, (0, 0), max(H * 0.008, 2.0))
+    else:
+        fg = np.zeros((H, W), dtype=np.float32)
+    if depth_n is not None and depth_n.shape[:2] == (H, W):
+        # Tiefe weit weg (hohe Werte) -> mehr blur.
+        far = np.clip(depth_n.astype(np.float32), 0, 1)
+        # Fern-Ebene bekommt zusaetzlich blur, Nah-Bereich schuetzt sich.
+        fg = np.clip(fg + (1 - far) * 0.5, 0, 1)
+    blur_mask = (1 - fg) * strength
+    m = blur_mask[..., None]
+    return (frame.astype(np.float32) * (1 - m)
+            + blurred.astype(np.float32) * m).astype(frame.dtype)
+
+
 def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_state=None,
                     scene_off=(0.0, 0.0), aud=(0.0, 0.0, 0.0), depth_n=None,
                     scene_vel=0.0, H_cum=None, track_gen=0):
@@ -2743,6 +2784,34 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             obj['o_arr'], obj['f_arr'] = res
         else:
             obj['arr'] = res
+    active = [p for p in plans if p['start'] <= t < p['end'] + 0.25]
+
+    # Hintergrund-Blur (v69): waehrend eines aktiven Moments den Hintergrund
+    # weichzeichnen. Staerke folgt der max. Moment-Fade-Kurve, damit der
+    # Blur mit dem Text ein/ausblendet. Auf B-Roll aus - dort ist der
+    # Hintergrund das Motiv, nicht die Person.
+    bg_blur = float(cfg['effects'].get('bg_blur', 0.0) or 0.0)
+    if bg_blur > 0.02 and active and (alpha is not None or depth_n is not None):
+        bstr = 0.0
+        for p in active:
+            if p.get('broll'):
+                continue
+            dur = max(p['end'] - p.get('t0', p['start']), 0.9)
+            dtp = t - p.get('t0', p['start'])
+            if dtp < 0:
+                s = 0.0
+            elif dtp < 0.20:
+                s = dtp / 0.20                      # rein
+            elif dtp > dur:
+                s = max(0.0, 1 - (dtp - dur) / 0.35)  # raus
+            else:
+                s = 1.0
+            # Power-3-Momente kriegen mehr Blur (bewusster Fokus).
+            s *= 0.75 + 0.25 * (float(p.get('power', 2)) - 1) / 2.0
+            bstr = max(bstr, s)
+        if bstr > 0.02:
+            frame = apply_bg_blur(frame, alpha, depth_n, bg_blur * bstr, W, H)
+
     comp = frame.copy()
     person = frame if alpha is not None else None
     lock = cfg['effects'].get('scene_lock', True)
@@ -2758,8 +2827,6 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         dy = scene_off[1] - p['s0'][1]
         lim = W * (0.30 if p.get('broll') else 0.12)
         return max(-lim, min(dx, lim)), max(-lim * 0.6, min(dy, lim * 0.6))
-
-    active = [p for p in plans if p['start'] <= t < p['end'] + 0.25]
     behind_str = 0.0          # staerkster aktiver Hintergrund-Text (fuer Kontaktschatten)
 
     for p in active:

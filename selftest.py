@@ -1777,6 +1777,54 @@ def _scenario_premium(tmp):
                     - c_on[70:190, 130:190].mean())) < 0.5)
     R.PERSON_SHADOW = 0.5
 
+    # ---- v69: Hintergrund-Blur ----
+    print('\n--- Hintergrund-Blur ---')
+    check('apply_bg_blur existiert', hasattr(R, 'apply_bg_blur'))
+    check('Config: bg_blur',
+          'bg_blur' in open(os.path.join(HERE, 'config.yaml'),
+                            encoding='utf-8').read())
+    # Test-Frame mit hoher Kante (sichtbare Detail-Reduktion nur bei Blur).
+    Wb, Hb = 320, 180
+    fr = np.zeros((Hb, Wb, 3), dtype=np.float32)
+    fr[:, ::10] = 255                                # senkrechte Streifen: hohe Frequenz
+    alpha_full = np.zeros((Hb, Wb, 1), dtype=np.float32)
+    alpha_full[40:140, 120:200] = 1.0                # Person mittig
+    # 1) strength=0 -> Frame unveraendert
+    out0 = R.apply_bg_blur(fr.copy(), alpha_full, None, 0.0, Wb, Hb)
+    check('Blur strength=0: kein Effekt',
+          float(np.abs(out0 - fr).mean()) < 1e-3)
+    # 2) alpha=None + depth=None -> kein Effekt (kein Blindwurf)
+    out_no = R.apply_bg_blur(fr.copy(), None, None, 0.8, Wb, Hb)
+    check('Blur ohne Maske: kein Effekt',
+          float(np.abs(out_no - fr).mean()) < 1e-3)
+    # 3) Vollstaerke: Hintergrund glaettet, Vordergrund bleibt
+    out1 = R.apply_bg_blur(fr.copy(), alpha_full, None, 1.0, Wb, Hb)
+    # Streifen-Detail im Hintergrund muss deutlich runter, im Vordergrund erhalten.
+    _bg_var_before = float(fr[10:30, 10:100].std())
+    _bg_var_after = float(out1[10:30, 10:100].std())
+    _fg_var_before = float(fr[70:120, 130:190].std())
+    _fg_var_after = float(out1[70:120, 130:190].std())
+    check('Blur wirkt im Hintergrund', _bg_var_after < _bg_var_before * 0.55,
+          f'{_bg_var_after:.1f} < {_bg_var_before:.1f}*0.55')
+    check('Vordergrund bleibt scharf', _fg_var_after > _fg_var_before * 0.75,
+          f'{_fg_var_after:.1f} > {_fg_var_before:.1f}*0.75')
+    # 4) Depth allein reicht auch
+    depth_far = np.linspace(0.1, 0.9, Wb, dtype=np.float32)[None, :].repeat(Hb, 0)
+    out_d = R.apply_bg_blur(fr.copy(), None, depth_far, 1.0, Wb, Hb)
+    _near = float(out_d[10:30, 10:60].std())         # links: nah, wenig blur
+    _far = float(out_d[10:30, 260:310].std())        # rechts: weit, viel blur
+    check('Depth-only: Fern wird staerker verwischt als Nah',
+          _far < _near * 0.85, f'{_far:.1f} < {_near:.1f}*0.85')
+    # 5) composite_frame ruft Blur nur bei aktivem Moment auf B-Roll nicht
+    _gsrc_bl = open(os.path.join(HERE, 'gui.py'), encoding='utf-8').read()
+    _rsrc_bl = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('Blur nur ausserhalb B-Roll',
+          "if p.get('broll'):" in _rsrc_bl and 'apply_bg_blur(' in _rsrc_bl)
+    check('Blur-Regler in der GUI',
+          'bgblur_var' in _gsrc_bl and 'Hintergrund weichzeichnen' in _gsrc_bl)
+    check('Blur im Kundenprofil gesichert',
+          "'bgblur_var'" in _gsrc_bl)
+
 
 if __name__ == '__main__':
     main()
