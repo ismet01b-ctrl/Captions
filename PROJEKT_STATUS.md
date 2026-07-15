@@ -688,6 +688,31 @@ Transkription auf Sprach-Sample).
 [ ] 6. EU AI Act Art. 50: optionaler Offenlegungs-Hinweis/Metadaten (ab 2.8.2026)
 [ ] 7. Windows-Build/Packaging (Modell + Sound-Pack mit-bundeln)
 
+## v72 - Lokale Transkription komplett raus
+
+Der `local`-Pfad (faster-whisper) war seit v67 nur noch Option, in
+v72 vollstaendig entfernt. Begruendung: Qualitaet > alles - die API
+liefert Namen/Fachbegriffe zuverlaessiger, und der Umschalt-Ballast
+(Modell-Download, DirectML/CTranslate2-Sonderfall, CPU-Fallback)
+lohnt sich fuer ein persoenliches Tool nicht.
+
+Entfernt:
+- `transcribe_local()` und `from faster_whisper import` aus render.py
+- `_transcribe_api()` als eigene Funktion (Inhalt jetzt direkt in
+  `transcribe()`)
+- Config-Block `transcription:` (engine/model/device/compute)
+- `models/whisper/` wird nicht mehr angelegt oder referenziert
+- `faster-whisper` aus requirements.txt
+
+`transcribe(audio, lang, cfg=None)` behaelt die Signatur - `cfg` wird
+ignoriert (Rueckwaerts-Kompatibilitaet fuer bestehende Aufrufer).
+
+Selftest v66-Block ersetzt durch v72-Block: prueft dass local wirklich
+weg ist (nicht nur ungenutzt). Der Whisper-Modell-Fail, der seit v66
+umgebungsbedingt rot war, ist ersatzlos raus.
+
+Regression: **325/325 gruen** (kein einziger Fail mehr). GUI-Smoke OK.
+
 ## v71 - Acht weitere Animationen (18 -> 26)
 
 Vorher 18 Animationen, jetzt 26. Jede loest ein anderes Ereignis auf,

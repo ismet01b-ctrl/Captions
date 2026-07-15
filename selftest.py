@@ -1654,53 +1654,25 @@ def _scenario_kamera(tmp):
 
 
 def _scenario_transkription(tmp):
-    """v66: Lokale Transkription (faster-whisper) - kein API-Key, offline."""
-    print('\n--- Transkription lokal ---')
+    """v72: nur noch API-Transkription (OpenAI Whisper). Lokal komplett entfernt."""
+    print('\n--- Transkription API ---')
     sys.path.insert(0, HERE)
     import render as R
-    import yaml, json, subprocess, shutil
+
+    check('transcribe() existiert', hasattr(R, 'transcribe'))
+    check('faster-whisper aus requirements entfernt',
+          'faster-whisper' not in open(os.path.join(HERE, 'requirements.txt'),
+                                       encoding='utf-8').read())
+    _rsrc = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('transcribe_local aus render.py entfernt',
+          'def transcribe_local' not in _rsrc
+          and 'from faster_whisper' not in _rsrc)
+    check('models/whisper wird nicht mehr referenziert',
+          "'whisper')" not in _rsrc)
+    import yaml
     cfg = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
-
-    check('Transkription default ist api (beste Qualitaet)',
-          cfg.get('transcription', {}).get('engine') == 'api')
-    check('transcribe_local existiert', hasattr(R, 'transcribe_local'))
-    check('API-Pfad bleibt als Option erhalten', hasattr(R, '_transcribe_api'))
-
-    # Echte lokale Transkription auf einem kurzen Sprach-Sample (espeak)
-    speech = os.path.join(tmp, 'sp.wav')
-    if shutil.which('espeak-ng'):
-        subprocess.run(['espeak-ng', '-v', 'de', '-w', speech,
-                        'Das ist der wichtigste Moment im Video heute.'],
-                       check=False)
-    have_speech = os.path.exists(speech) and os.path.getsize(speech) > 1000
-    if have_speech:
-        try:
-            words = R.transcribe_local(speech, 'de', cfg)
-            check('Lokale Transkription liefert Woerter', len(words) >= 1,
-                  f'{len(words)} Woerter (Roboter-TTS; echte Genauigkeit am Windows-Material)')
-            ok_fmt = all(set(w) >= {'word', 'start', 'end'} for w in words)
-            check('Wort-Format wie API (word/start/end)', ok_fmt)
-            # JSON-serialisierbar (kein np.float64)
-            try:
-                json.dumps(words); ser = True
-            except TypeError:
-                ser = False
-            check('Transkript ist JSON-serialisierbar', ser)
-            mono = all(words[i]['start'] <= words[i + 1]['start']
-                       for i in range(len(words) - 1))
-            check('Wort-Zeiten laufen vorwaerts', mono)
-        except Exception as e:
-            check('Lokale Transkription liefert Woerter', False, str(e)[:80])
-    else:
-        check('Lokale Transkription (uebersprungen: kein espeak)', True)
-
-    # Modell wird lokal unter models/whisper gehalten (offline nach 1. Lauf)
-    check('Whisper-Modell liegt im App-Ordner',
-          os.path.isdir(os.path.join(HERE, 'models', 'whisper')))
-    # requirements enthaelt faster-whisper
-    check('faster-whisper in requirements',
-          'faster-whisper' in open(os.path.join(HERE, 'requirements.txt'),
-                                    encoding='utf-8').read())
+    check('config.yaml: transcription-Block entfernt',
+          'transcription' not in cfg)
 
 
 def _scenario_premium(tmp):

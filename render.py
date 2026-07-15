@@ -752,58 +752,10 @@ def _anim_core(p, base, aud, dt):
 
 # ---------------------------------------------------------------- transcription
 def transcribe(audio_path, language, cfg=None):
-    """Transkription. Standard ist LOKAL (faster-whisper) - kein API-Key, keine
-    laufenden Kosten, laeuft offline. Die alte OpenAI-API bleibt als Option
-    erhalten (cfg['transcription']['engine'] == 'api')."""
-    engine = 'api'
-    if cfg is not None:
-        engine = cfg.get('transcription', {}).get('engine', 'api')
-    if engine == 'local':
-        return transcribe_local(audio_path, language, cfg)
-    return _transcribe_api(audio_path, language)
-
-
-def transcribe_local(audio_path, language, cfg=None):
-    """Lokale Transkription mit faster-whisper. Das Modell wird beim ersten Lauf
-    in models/whisper/ geladen und ist danach offline verfuegbar. Rueckgabe im
-    exakt gleichen Format wie der API-Pfad (Woerter + Satzzeichen aus Segmenten)."""
-    from faster_whisper import WhisperModel
-    tc = (cfg or {}).get('transcription', {})
-    size = tc.get('model', 'base')             # tiny/base/small/medium/large-v3
-    device = tc.get('device', 'auto')
-    compute = tc.get('compute', 'int8')
-    root = os.path.join(HERE, 'models', 'whisper')
-    os.makedirs(root, exist_ok=True)
-    if device == 'auto':
-        # CTranslate2 kennt kein DirectML - auf Windows-GPU-Boxen bleibt es CPU.
-        try:
-            import torch
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        except Exception:
-            device = 'cpu'
-    if device == 'cpu' and compute in ('float16', 'fp16'):
-        compute = 'int8'                       # float16 gibt es auf CPU nicht
-    print(f"Transkribiere lokal (faster-whisper '{size}', {device})...")
-    model = WhisperModel(size, device=device, compute_type=compute,
-                         download_root=root)
-    segs, info = model.transcribe(
-        audio_path, word_timestamps=True,
-        language=None if language == 'auto' else language)
-    words, segments = [], []
-    for s in segs:
-        segments.append({'text': s.text,
-                         'start': round(float(s.start), 3),
-                         'end': round(float(s.end), 3)})
-        for w in (s.words or []):
-            words.append({'word': w.word.strip(),
-                          'start': round(float(w.start), 3),
-                          'end': round(float(w.end), 3)})
-    if not words:
-        sys.exit("FEHLER: Keine Woerter in der Transkription. Hat das Video eine Tonspur?")
-    return attach_punctuation(words, segments)
-
-
-def _transcribe_api(audio_path, language):
+    """Transkription ueber OpenAI Whisper API (whisper-1). Beste Qualitaet
+    bei Namen/Fachbegriffen, laeuft ueber Ismets lokalen OPENAI_API_KEY.
+    Der Signatur-Parameter `cfg` bleibt fuer Kompatibilitaet - wird nicht
+    mehr ausgewertet."""
     import requests
     key = os.environ.get('OPENAI_API_KEY')
     if not key:

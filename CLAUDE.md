@@ -45,9 +45,9 @@ Beide laufen über Ismets lokalen `OPENAI_API_KEY`. Die Heuristik-Fallbacks
 existieren nur als Notnagel bei fehlendem Key — nie als Standardweg bewerben.
 
 ## Transkription
-Default `config.yaml → transcription.engine: api` (OpenAI Whisper `whisper-1`,
-beste Qualität). `local` (faster-whisper, offline) existiert als Option, ist
-aber NICHT der Qualitäts-Default.
+Nur OpenAI Whisper API (`whisper-1`) - beste Qualitaet fuer Namen/Fachbegriffe.
+Lokale faster-whisper-Option wurde in v72 komplett entfernt (Qualitaet > alles,
+kein Umschalt-Ballast).
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
 Gesamt 265/265 grün (Stand v67). Läuft nur unter Linux/CPU mit synthetischen

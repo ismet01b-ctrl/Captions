@@ -5,4 +5,3 @@ mediapipe
 onnxruntime-gpu
 requests
 PyYAML
-faster-whisper>=1.0
