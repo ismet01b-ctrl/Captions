@@ -963,6 +963,46 @@ def _cleanup_worker():
         _t.sleep(3600)
 
 
+def _restore_jobs():
+    """v80u: Job-Persistenz. Nach Container-Neustart JOBS aus den
+    state.json-Dateien wieder aufbauen. Unterbrochene Renders (wartet/laeuft)
+    kommen zurueck in die Queue - fuer den User sieht es aus, als waere
+    nichts passiert. Fertige Jobs bleiben abrufbar (Video/Momente/Editor)."""
+    restored = requeued = 0
+    if not os.path.isdir(JOBS_DIR):
+        return
+    for jid in os.listdir(JOBS_DIR):
+        d = os.path.join(JOBS_DIR, jid)
+        sp = os.path.join(d, 'state.json')
+        if not os.path.isfile(sp):
+            continue
+        try:
+            st = json.load(open(sp, encoding='utf-8'))
+        except Exception:
+            continue
+        src = None
+        for f in os.listdir(d):
+            if f.startswith('quelle.'):
+                src = os.path.join(d, f)
+                break
+        if not src:
+            continue
+        st['input'] = src
+        st.setdefault('code', '')
+        st.setdefault('id', jid)
+        JOBS[jid] = st
+        restored += 1
+        if st.get('status') in ('wartet', 'laeuft'):
+            st['status'] = 'wartet'
+            st['progress'] = 0.0
+            st['phase'] = 'Queued (restored after restart) …'
+            QUEUE.put(jid)
+            requeued += 1
+    if restored:
+        print(f"Job-Restore: {restored} Jobs geladen, {requeued} neu eingereiht")
+
+
+_restore_jobs()
 threading.Thread(target=_cleanup_worker, daemon=True).start()
 
 for _ in range(int(os.environ.get('DVE_WORKERS', '1'))):
