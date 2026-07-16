@@ -4616,17 +4616,25 @@ def main():
             try:
                 enc.stdin.write(np.clip(comp, 0, 255).astype(np.uint8).tobytes())
             except BrokenPipeError:
-                # v80n: ffmpeg ist gestorben - meist OOM oder Codec-Problem
+                # v80n: ffmpeg ist gestorben - Ursache so genau wie moeglich melden
                 err = ''
                 try:
                     if enc.stderr:
                         err = enc.stderr.read().decode('utf-8', 'ignore')[-800:]
                 except Exception:
                     pass
-                sys.exit(f"FEHLER: Videoschreiber (ffmpeg) unerwartet beendet. "
-                         f"Meist zu wenig Arbeitsspeicher fuer die Aufloesung. "
-                         f"Kuerzeres Video oder niedrigere Aufloesung probieren. "
-                         f"ffmpeg-Ausgabe:\n{err.strip() or '(leer)'}")
+                rc = enc.poll()
+                if not err.strip() and rc in (-9, 137):
+                    grund = ('Der Videoschreiber wurde vom System beendet '
+                             '(Out-of-Memory-Killer). Der Server hatte zu wenig '
+                             'freien Arbeitsspeicher fuer diese Aufloesung.')
+                elif not err.strip():
+                    grund = (f'Der Videoschreiber wurde beendet (Exit-Code {rc}) '
+                             f'ohne Fehlermeldung - typisch fuer volle Festplatte '
+                             f'oder System-Kill.')
+                else:
+                    grund = f'ffmpeg-Fehler: {err.strip()}'
+                sys.exit(f"FEHLER: Video-Encoding abgebrochen. {grund}")
         fi += 1
         if fi % 100 == 0:
             el = _time.time() - t_start

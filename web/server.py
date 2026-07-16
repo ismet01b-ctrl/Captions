@@ -898,8 +898,13 @@ def run_job(jid):
         return
     for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
         if line.startswith('FEHLER:'):
+            # v80o: Kontext mitliefern - die Zeilen um den Fehler herum
+            # helfen bei der Diagnose direkt in der Web-UI.
+            idx = len(log) - 1 - list(reversed(log)).index(line)
+            ctx = [x for x in log[max(0, idx - 5):idx + 6] if x.strip()]
             set_state(jid, status='fehler', progress=0,
-                      msg=line.replace('FEHLER:', '').strip())
+                      msg=line.replace('FEHLER:', '').strip(),
+                      detail='\n'.join(ctx))
             return
     if rc == 0 and os.path.exists(out):
         count_use(j['code'])
