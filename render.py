@@ -1489,6 +1489,8 @@ STOPWORDS = {
     'als', 'aus', 'ohne', 'gegen', 'fuer', 'für', 'ja', 'nein', 'okay', 'so',
     'da', 'dass', 'ob', 'weil', 'obwohl', 'sondern', 'sowie', 'sowohl',
     'jeder', 'jede', 'jedes', 'alle', 'alles', 'aller', 'meiner', 'meinem',
+    # v80s: Artikel fehlten komplett - "DAS" konnte als Keyword landen
+    'der', 'die', 'das', 'dem', 'den', 'des', 'ein',
     # Englisch (fuer language != de; kollidiert nicht mit deutschen Woertern)
     'the', 'and', 'that', 'this', 'with', 'have', 'from', 'they', 'will',
     'would', 'there', 'their', 'what', 'when', 'your', 'just', 'like',

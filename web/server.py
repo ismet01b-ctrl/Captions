@@ -289,6 +289,16 @@ def _stripe():
         return None
 
 
+def _render_charged(user_id, jid):
+    """v80s: Wurde dieser Job schon abgerechnet? Re-Render = inklusive."""
+    con = _db()
+    row = con.execute(
+        "SELECT id FROM ledger WHERE user_id = ? AND grund LIKE ?",
+        (user_id, f'Render {jid} %')).fetchone()
+    con.close()
+    return row is not None
+
+
 def _pack_processed(user_id, session_id):
     """Idempotenz-Check: wurde diese Stripe-Session bereits gutgeschrieben?"""
     con = _db()
@@ -884,7 +894,7 @@ def run_job(jid):
                           moments_url=f'/api/moments/{jid}')
                 return
         set_state(jid, status='fehler', progress=0,
-                  msg='Analyse fehlgeschlagen.',
+                  msg='Analysis failed.',
                   detail='\n'.join([x for x in log[-15:] if x.strip()]))
         return
 
@@ -893,7 +903,7 @@ def run_job(jid):
     # v80g: Menschliche Fehlermeldungen aus dem Render-Log herausklauben
     if 'OPENAI_API_KEY ist nicht gesetzt' in log_txt:
         set_state(jid, status='fehler', progress=0,
-                  msg='Der Server ist nicht fertig eingerichtet '
+                  msg='Server is not fully configured '
                       '(AI key missing). Please contact support.')
         return
     for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
@@ -909,8 +919,10 @@ def run_job(jid):
     if rc == 0 and os.path.exists(out):
         count_use(j['code'])
         # v80i: Video-Sekunden vom User-Guthaben abziehen (falls User-Account)
+        # v80s: nur EINMAL pro Job - Re-Render nach Momente-Edit ist inklusive
+        # (Konkurrenz-Standard, sonst zahlt man jede Korrektur doppelt).
         uid = j.get('user_id')
-        if uid:
+        if uid and not _render_charged(uid, jid):
             verbrauch = max(1, int(round(j.get('dauer', 0))))
             _adjust_balance(uid, -verbrauch,
                             f'Render {jid} ({verbrauch}s)')
@@ -1244,7 +1256,7 @@ def status(jid: str):
 def video(jid: str):
     p = os.path.join(job_dir(jid), 'fertig.mp4')
     if not os.path.exists(p):
-        raise HTTPException(404, 'Noch nicht fertig.')
+        raise HTTPException(404, 'Not ready yet.')
     return FileResponse(p, media_type='video/mp4',
                         filename='DouchkoVE_Captions.mp4')
 
@@ -1306,11 +1318,11 @@ async def save_template(request: Request, name: str = Form(...),
         raise HTTPException(403, msg)
     name = name.strip()[:60]
     if not name:
-        raise HTTPException(400, 'Name fehlt.')
+        raise HTTPException(400, 'Name is missing.')
     try:
         payload = json.loads(settings)
     except Exception:
-        raise HTTPException(400, 'Settings-JSON ungueltig.')
+        raise HTTPException(400, 'Settings JSON invalid.')
     owner = _tpl_owner(code, request)
     all_ = _load_templates()
     entries = all_.setdefault(owner, [])
@@ -1344,11 +1356,11 @@ def get_thumb(jid: str, name: str):
     if not j:
         raise HTTPException(404, 'Unknown job.')
     if not name.endswith('.jpg') or '/' in name or '\\' in name or '..' in name:
-        raise HTTPException(400, 'Ungueltiger Thumb-Name.')
+        raise HTTPException(400, 'Invalid thumbnail name.')
     thumb_dir = os.path.splitext(j['input'])[0] + '_thumbs'
     thumb_path = os.path.join(thumb_dir, name)
     if not os.path.exists(thumb_path):
-        raise HTTPException(404, 'Thumb nicht vorhanden.')
+        raise HTTPException(404, 'Thumbnail not found.')
     return FileResponse(thumb_path, media_type='image/jpeg')
 
 
@@ -1384,5 +1396,5 @@ async def save_and_render(request: Request, jid: str,
 @app.get('/admin/codes')
 def admin_codes(schluessel: str = ''):
     if schluessel != os.environ.get('DVE_ADMIN', 'admin'):
-        raise HTTPException(403, 'Kein Zugriff.')
+        raise HTTPException(403, 'Access denied.')
     return load_codes()

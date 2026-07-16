@@ -1525,7 +1525,7 @@ async function loadTemplates() {
     const d = await r.json();
     const sel = $('#tplLoad');
     if (!sel) return;
-    sel.innerHTML = '<option value="">— Gespeichertes Setup laden —</option>';
+    sel.innerHTML = '<option value="">— Load saved setup —</option>';
     (d.templates || []).forEach(t => {
       const o = document.createElement('option');
       o.value = t.name; o.textContent = t.name;
@@ -1534,7 +1534,7 @@ async function loadTemplates() {
   } catch (e) {}
 }
 async function saveTemplate() {
-  const name = prompt('Wie soll dieses Setup heissen?', 'Mein TikTok-Setup');
+  const name = prompt('Name for this setup?', 'My TikTok setup');
   if (!name || !name.trim()) return;
   const snapshot = { look: State.look, cfg: State.cfg };
   const fd = new FormData();
@@ -1546,7 +1546,7 @@ async function saveTemplate() {
     toast(`Setup "${name.trim()}" gespeichert.`, 'ok');
     loadTemplates();
   } else {
-    toast('Speichern fehlgeschlagen.', 'err');
+    toast('Saving failed.', 'err');
   }
 }
 function applyTemplate(name) {
@@ -1710,7 +1710,7 @@ async function buildLooks() {
       await loadDefaults();
       rebuildAllWidgets();
       c.style.opacity = '1';
-      toast('Look "' + v.name + '" gesetzt — alle Regler aktualisiert', 'ok', 2500);
+      toast('Look "' + v.name + '" applied — all settings updated', 'ok', 2500);
     };
     c.addEventListener('click', activate);
     c.addEventListener('keydown', e => {
@@ -2108,7 +2108,7 @@ $$('.step').forEach(s => s.addEventListener('click', () => {
   const target = parseInt(s.dataset.step);
   // Nur zurueckspringen oder auf naechsten wenn Voraussetzung erfuellt
   if (target < State.currentStep || target === State.currentStep + 1) {
-    if (target === 2 && !State.file) { toast('Erst Video hochladen.', 'err'); return; }
+    if (target === 2 && !State.file) { toast('Please upload a video first.', 'err'); return; }
     goStep(target);
   }
 }));
@@ -2295,14 +2295,14 @@ async function pollAnalyze() {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     if (st.status === 'analysiert') {
       $('#analyzeStatus').textContent = 'Analyse fertig — Editor oeffnet …';
-      toast('Analyse fertig!', 'ok');
+      toast('Analysis done!', 'ok');
       openMomentsEditor();
       return;
     }
     if (st.status === 'fehler') {
-      $('#analyzeStatus').textContent = 'Analyse fehlgeschlagen: ' + (st.msg || '?');
+      $('#analyzeStatus').textContent = 'Analysis failed: ' + (st.msg || '?');
       $('#btnAnalyze').disabled = false;
-      toast('Analyse fehlgeschlagen', 'err');
+      toast('Analysis failed', 'err');
       return;
     }
     $('#analyzeStatus').textContent = st.phase || 'Laeuft …';
@@ -2367,7 +2367,7 @@ function renderSuccess() {
   if (State.codeRest !== null) { State.codeRest = Math.max(0, State.codeRest - 1);
     $('#topRest').textContent = `${State.codeRest} videos left`; }
   confetti(40);
-  toast('Video fertig — sauber!', 'ok', 4000);
+  toast('Video done — nice!', 'ok', 4000);
 }
 
 function countChanged(obj) {
@@ -2478,8 +2478,8 @@ function buildSummary() {
   }));
   tiles.push(_tile({
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
-    head: 'Feintuning', val: `${changed} ${changed === 1 ? 'Änderung' : 'Änderungen'}`,
-    sub: changed === 0 ? 'nur Preset-Werte' : 'gegenüber Preset-Voreinstellung',
+    head: 'Fine-tune', val: `${changed} ${changed === 1 ? 'change' : 'changes'}`,
+    sub: changed === 0 ? 'preset values only' : 'vs. preset defaults',
   }));
   $('#summary').innerHTML = tiles.join('');
 }
@@ -2489,7 +2489,7 @@ async function openMomentsEditor() {
   try {
     const r = await fetch('/api/moments/' + State.jid);
     State.moments = await r.json();
-  } catch (e) { toast('Momente konnten nicht geladen werden.', 'err'); return; }
+  } catch (e) { toast('Could not load moments.', 'err'); return; }
   State.history = new EditorHistory();
   const [fxLabels, animLabels] = await Promise.all([
     fetch('/api/fx_labels').then(r => r.json()),
@@ -2684,14 +2684,14 @@ $('#momSave').addEventListener('click', async () => {
     fd.append('code', State.code);
     const r = await fetch('/api/moments/' + State.jid, { method: 'POST', body: fd });
     const d = await r.json();
-    if (!r.ok || !d.ok) { toast('Fehler: ' + (d.detail || d.msg || 'unbekannt'), 'err'); return; }
+    if (!r.ok || !d.ok) { toast('Error: ' + (d.detail || d.msg || 'unknown'), 'err'); return; }
     $('#momEditor').classList.add('hidden');
     goStep(4);
     $('#progressCard').classList.remove('hidden');
     $('#doneCard').classList.add('hidden');
     $('#errCard').classList.add('hidden');
     State.renderStart = Date.now();
-    toast('Momente gespeichert. Render startet.', 'ok');
+    toast('Moments saved. Render starting.', 'ok');
     pollRender();
   } finally { btn.disabled = false; btn.textContent = 'Speichern & Rendern'; }
 });
