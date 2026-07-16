@@ -960,10 +960,29 @@ def _page(name):
     return open(p, encoding='utf-8').read()
 
 
+# v80m: Rate-Limit gegen Spam-Registrierungen (in-memory, pro IP)
+_REG_ATTEMPTS = {}       # ip -> [timestamps]
+
+
+def _rate_limit_ok(ip, window_sec=3600, max_attempts=5):
+    """Max 5 Registrierungen pro Stunde pro IP. Reicht fuer echte Nutzer,
+    stoppt automatisierten Spam."""
+    now = time.time()
+    xs = [t for t in _REG_ATTEMPTS.get(ip, []) if now - t < window_sec]
+    xs.append(now)
+    _REG_ATTEMPTS[ip] = xs[-max_attempts:]
+    return len(xs) <= max_attempts
+
+
 @app.post('/api/register')
-def api_register(response: Response, email: str = Form(...),
-                 password: str = Form(...), name: str = Form('')):
+def api_register(request: Request, response: Response,
+                 email: str = Form(...), password: str = Form(...),
+                 name: str = Form('')):
     """v80h: Neuer Account, 2 Min Willkommens-Guthaben."""
+    # Rate-Limit gegen Spam
+    ip = request.client.host if request.client else 'unknown'
+    if not _rate_limit_ok(ip):
+        raise HTTPException(429, 'Too many sign-up attempts. Please try again in an hour.')
     email = (email or '').strip().lower()
     if not _valid_email(email):
         raise HTTPException(400, 'Please enter a valid email address.')
@@ -1011,6 +1030,52 @@ def api_me(request: Request):
         return {'ok': False}
     return {'ok': True, 'email': u['email'], 'name': u['name'],
             'balance_sec': u['balance_sec']}
+
+
+@app.post('/api/change_password')
+def api_change_password(request: Request, old: str = Form(...),
+                        new: str = Form(...)):
+    """v80m: Passwort im eingeloggten Zustand aendern."""
+    u = _require_user(request)
+    if not _verify_pw(old, u['pw_hash']):
+        raise HTTPException(401, 'Current password is wrong.')
+    if not _valid_pw(new):
+        raise HTTPException(400, 'New password needs at least 8 characters.')
+    con = _db()
+    con.execute("UPDATE users SET pw_hash = ? WHERE id = ?",
+                (_hash_pw(new), u['id']))
+    con.commit()
+    con.close()
+    return {'ok': True}
+
+
+@app.post('/api/delete_account')
+def api_delete_account(request: Request, response: Response,
+                       password: str = Form(...)):
+    """v80m: DSGVO - Nutzer kann sein Konto komplett loeschen.
+    Passwort-Bestaetigung noetig. Alle Sessions, Ledger-Eintraege,
+    Templates werden ebenfalls entfernt."""
+    u = _require_user(request)
+    if not _verify_pw(password, u['pw_hash']):
+        raise HTTPException(401, 'Password is wrong.')
+    uid = u['id']
+    con = _db()
+    con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM ledger WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM users WHERE id = ?", (uid,))
+    con.commit()
+    con.close()
+    # Templates fuer diesen User loeschen
+    try:
+        all_tpl = _load_templates()
+        key = 'u:' + u['email']
+        if key in all_tpl:
+            all_tpl.pop(key)
+            _save_templates(all_tpl)
+    except Exception:
+        pass
+    response.delete_cookie('dve_session', path='/')
+    return {'ok': True}
 
 
 @app.get('/', response_class=HTMLResponse)
