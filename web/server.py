@@ -149,7 +149,7 @@ def _create_user(email, pw, name=''):
             con.execute(
                 "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
                 "VALUES (?, ?, ?, ?)",
-                (uid, TRIAL_SECONDS, 'Willkommens-Guthaben', int(time.time())))
+                (uid, TRIAL_SECONDS, 'Welcome credit', int(time.time())))
         con.commit()
         return uid, None
     except sqlite3.IntegrityError:
@@ -432,11 +432,11 @@ LOCK = threading.Lock()
 
 # Presets als Startpunkt. Der Nutzer kann alles individuell nachjustieren.
 LOOKS = {
-    'tiktok':    {'name': 'TikTok', 'desc': 'Wort für Wort, fett, laut.'},
-    'creator':   {'name': 'Creator', 'desc': 'Talking-Head & Business.'},
-    'elegant':   {'name': 'Elegant', 'desc': 'Dichte Captions, aber edel — kein Zappeln.'},
-    'cinematic': {'name': 'Cinematic', 'desc': 'Wenige, große Momente.'},
-    'clean':     {'name': 'Clean', 'desc': 'Nur lesbare Untertitel.'},
+    'tiktok':    {'name': 'TikTok', 'desc': 'Word by word, bold, loud.'},
+    'creator':   {'name': 'Creator', 'desc': 'Talking-head & business.'},
+    'elegant':   {'name': 'Elegant', 'desc': 'Dense captions, but classy — no jitter.'},
+    'cinematic': {'name': 'Cinematic', 'desc': 'Few, big moments.'},
+    'clean':     {'name': 'Clean', 'desc': 'Readable subtitles only.'},
 }
 
 # Font-Kacheln wie in der Desktop-App
@@ -460,30 +460,30 @@ FONTS = [
 ]
 
 FX_LABELS = [
-    ('behind',  'Hinter dir'),
-    ('cascade', 'Buchstaben-Aufbau'),
-    ('blurin',  'Aus der Unschärfe'),
-    ('outline', 'Nur Umriss'),
-    ('ground',  'In der Szene'),
+    ('behind',  'Behind you'),
+    ('cascade', 'Letter build-up'),
+    ('blurin',  'From the blur'),
+    ('outline', 'Outline only'),
+    ('ground',  'In the scene'),
 ]
 
 ANIM_LABELS = {
-    '': 'keine', 'glitch': 'Glitch', 'puls': 'Puls', 'welle': 'Welle',
-    'zittern': 'Zittern', 'neon': 'Neon', 'schub': 'Schub',
-    'bruch': 'Bruch (zerbricht)', 'sturz': 'Sturz (fällt)',
-    'anstieg': 'Anstieg (steigt)', 'wende': 'Wende (kippt um)',
-    'druck': 'Druck (erdrückt)', 'schwund': 'Schwund (löst sich auf)',
-    'knall': 'Knall (Pointe)', 'gewicht': 'Gewicht (Strich fetter)',
-    'schweben': 'Schweben (3D-Drift)', 'fokus': 'Fokus (kommt scharf)',
-    'enthuellen': 'Enthüllen (freigewischt)', 'spur': 'Spur (Nachzieher)',
-    'kippen': 'Kippen (klappt nach vorn)',
-    'explosion': 'Explosion (fliegt weg + zurück)',
-    'magnet': 'Magnet (zieht zusammen)',
-    'wackel': 'Wackel (Cartoon-Bounce)',
-    'regen': 'Regen (fällt von oben)',
-    'zoom_punch': 'Zoom-Punch (harter Push)',
-    'rutsche': 'Rutsche (von rechts)',
-    'stempel': 'Stempel (knallt drauf)',
+    '': 'none', 'glitch': 'Glitch', 'puls': 'Pulse', 'welle': 'Wave',
+    'zittern': 'Shake', 'neon': 'Neon', 'schub': 'Boost',
+    'bruch': 'Shatter (breaks apart)', 'sturz': 'Drop (falls)',
+    'anstieg': 'Rise (lifts up)', 'wende': 'Flip (turns over)',
+    'druck': 'Pressure (crushed)', 'schwund': 'Fade (dissolves)',
+    'knall': 'Bang (punchline)', 'gewicht': 'Weight (stroke thickens)',
+    'schweben': 'Float (3D drift)', 'fokus': 'Focus (sharpens in)',
+    'enthuellen': 'Reveal (wiped free)', 'spur': 'Trail (speed echo)',
+    'kippen': 'Tilt (folds forward)',
+    'explosion': 'Explosion (flies out + back)',
+    'magnet': 'Magnet (pulls together)',
+    'wackel': 'Wobble (cartoon bounce)',
+    'regen': 'Rain (falls from above)',
+    'zoom_punch': 'Zoom punch (hard push)',
+    'rutsche': 'Slide (from the right)',
+    'stempel': 'Stamp (slams down)',
 }
 
 
