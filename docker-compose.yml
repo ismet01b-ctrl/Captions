@@ -17,6 +17,12 @@ services:
       DVE_PUBLIC_URL: ${DVE_PUBLIC_URL:-https://douchko.eu}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # v80w: Mail (Passwort-Reset, spaeter Verifikation)
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
     volumes:
       - dve-data:/data
     expose:

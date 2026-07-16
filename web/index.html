@@ -892,6 +892,10 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <input type="password" id="authPassword" placeholder="Password (min. 8 characters)"
              required autocomplete="new-password" minlength="8" style="text-transform:none;">
       <button class="btn wide" id="btnAuth" type="submit" style="margin-top:6px;">Create account</button>
+      <button type="button" id="btnForgot" style="background:none; border:0; color:var(--mut);
+              font-size:13px; cursor:pointer; text-decoration:underline; display:none;">
+        Forgot password?
+      </button>
     </form>
     <div class="err hidden" id="loginErr" role="alert"></div>
     <div class="trust" style="margin-top:14px;">
@@ -1808,6 +1812,7 @@ function setAuthMode(mode) {
   $('#authName').style.display = mode === 'register' ? 'block' : 'none';
   $('#authPassword').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
   $('#btnAuth').textContent = mode === 'register' ? 'Create account' : 'Sign in';
+  $('#btnForgot').style.display = mode === 'login' ? 'block' : 'none';
   $('#authSub').textContent = mode === 'register'
     ? 'Sign up — 2 free minutes of video to try it out.'
     : 'Welcome back.';
@@ -1894,8 +1899,42 @@ async function resumeActiveJob() {
   }
 }
 
+/* v80w: Passwort vergessen + Reset-Link-Handling */
+$('#btnForgot').addEventListener('click', async () => {
+  const email = $('#authEmail').value.trim() ||
+                prompt('Your account email:') || '';
+  if (!email) return;
+  const fd = new FormData(); fd.append('email', email.trim());
+  try {
+    const r = await fetch('/api/forgot_password', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { toast(d.detail || 'Too many attempts.', 'err'); return; }
+    toast(d.msg || 'If this email is registered, a reset link is on its way.', 'ok', 6000);
+  } catch (e) { toast('Connection error.', 'err'); }
+});
+
+async function handleResetLink() {
+  const tok = new URLSearchParams(location.search).get('reset');
+  if (!tok) return false;
+  history.replaceState({}, '', location.pathname);
+  const pw = prompt('Choose a new password (min. 8 characters):');
+  if (!pw) return true;
+  if (pw.length < 8) { toast('Password needs at least 8 characters.', 'err'); return true; }
+  const fd = new FormData();
+  fd.append('token', tok); fd.append('password', pw);
+  try {
+    const r = await fetch('/api/reset_password', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { toast(d.detail || 'Reset failed.', 'err'); return true; }
+    toast('Password changed — you are signed in.', 'ok', 5000);
+    enterApp(d);
+  } catch (e) { toast('Connection error.', 'err'); }
+  return true;
+}
+
 /* Auto-Login beim Seiten-Laden (Session-Cookie) */
 (async () => {
+  if (await handleResetLink()) return;
   try {
     const r = await fetch('/api/me');
     const d = await r.json();

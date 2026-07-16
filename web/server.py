@@ -76,6 +76,13 @@ def _init_users_db():
       expires_at    INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS ix_sess_user ON sessions(user_id);
+    CREATE TABLE IF NOT EXISTS resets (
+      token         TEXT PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id),
+      created_at    INTEGER NOT NULL,
+      expires_at    INTEGER NOT NULL,
+      used          INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS ledger (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id       INTEGER NOT NULL REFERENCES users(id),
@@ -219,6 +226,55 @@ def _adjust_balance(uid, delta_sec, grund):
         (uid, delta_sec, grund[:120], int(time.time())))
     con.commit()
     con.close()
+
+
+# ---------------------------------------------------------------- Mail (v80w)
+def _send_mail(to, subject, body):
+    """SMTP-Versand (Gmail App-Passwort o.ae.). Wirft bei Fehler."""
+    import smtplib
+    from email.mime.text import MIMEText
+    host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+    port = int(os.environ.get('SMTP_PORT', '587'))
+    user = os.environ.get('SMTP_USER', '').strip()
+    pw = os.environ.get('SMTP_PASS', '').replace(' ', '').strip()
+    sender = os.environ.get('MAIL_FROM', user)
+    if not user or not pw:
+        raise RuntimeError('SMTP not configured')
+    msg = MIMEText(body, 'plain', 'utf-8')
+    msg['Subject'] = subject
+    msg['From'] = f'DouchkoVE <{sender}>'
+    msg['To'] = to
+    with smtplib.SMTP(host, port, timeout=20) as s:
+        s.starttls()
+        s.login(user, pw)
+        s.sendmail(sender, [to], msg.as_string())
+
+
+def _create_reset(uid):
+    tok = secrets.token_urlsafe(32)
+    now = int(time.time())
+    con = _db()
+    con.execute("INSERT INTO resets (token, user_id, created_at, expires_at) "
+                "VALUES (?, ?, ?, ?)", (tok, uid, now, now + 1800))  # 30 Min
+    con.execute("DELETE FROM resets WHERE expires_at < ?", (now,))
+    con.commit()
+    con.close()
+    return tok
+
+
+def _consume_reset(token):
+    """Token pruefen + als benutzt markieren. Gibt user_id oder None."""
+    if not token:
+        return None
+    con = _db()
+    row = con.execute(
+        "SELECT user_id FROM resets WHERE token = ? AND used = 0 "
+        "AND expires_at > ?", (token, int(time.time()))).fetchone()
+    if row:
+        con.execute("UPDATE resets SET used = 1 WHERE token = ?", (token,))
+        con.commit()
+    con.close()
+    return row['user_id'] if row else None
 
 
 def _current_user(request):
@@ -1085,6 +1141,57 @@ def api_me(request: Request):
     u = _current_user(request)
     if not u:
         return {'ok': False}
+    return {'ok': True, 'email': u['email'], 'name': u['name'],
+            'balance_sec': u['balance_sec']}
+
+
+@app.post('/api/forgot_password')
+def api_forgot_password(request: Request, email: str = Form(...)):
+    """v80w: Reset-Link per Mail. Antwort immer identisch - kein
+    E-Mail-Enumeration. Rate-Limit teilt sich den Topf mit Registrierung."""
+    ip = request.client.host if request.client else 'unknown'
+    if not _rate_limit_ok(ip):
+        raise HTTPException(429, 'Too many attempts. Please try again in an hour.')
+    u = _find_user_by_email((email or '').strip().lower())
+    if u:
+        tok = _create_reset(u['id'])
+        base = os.environ.get('DVE_PUBLIC_URL', '').rstrip('/') or \
+            str(request.base_url).rstrip('/')
+        link = f'{base}/app?reset={tok}'
+        try:
+            _send_mail(u['email'], 'Reset your DouchkoVE password',
+                       f'Hi{" " + u["name"] if u["name"] else ""},\n\n'
+                       f'someone (hopefully you) requested a password reset '
+                       f'for your DouchkoVE account.\n\n'
+                       f'Reset link (valid 30 minutes):\n{link}\n\n'
+                       f'If this wasn\'t you, just ignore this email - '
+                       f'your password stays unchanged.\n\n— DouchkoVE')
+        except Exception as e:
+            print(f'Mail-Versand fehlgeschlagen: {type(e).__name__}: {e}')
+    return {'ok': True,
+            'msg': 'If this email is registered, a reset link is on its way.'}
+
+
+@app.post('/api/reset_password')
+def api_reset_password(response: Response, token: str = Form(...),
+                       password: str = Form(...)):
+    """v80w: Token einloesen, neues Passwort setzen, direkt einloggen."""
+    if not _valid_pw(password):
+        raise HTTPException(400, 'Password needs at least 8 characters.')
+    uid = _consume_reset(token)
+    if not uid:
+        raise HTTPException(400, 'This reset link is invalid or has expired. '
+                                 'Please request a new one.')
+    con = _db()
+    con.execute("UPDATE users SET pw_hash = ? WHERE id = ?",
+                (_hash_pw(password), uid))
+    con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))  # alle raus
+    con.commit()
+    con.close()
+    tok, _ = _create_session(uid)
+    response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
+                        secure=True, max_age=SESSION_DAYS * 86400, path='/')
+    u = _find_user_by_id(uid)
     return {'ok': True, 'email': u['email'], 'name': u['name'],
             'balance_sec': u['balance_sec']}
 
