@@ -1115,6 +1115,11 @@ def privacy():
     return _page('privacy.html')
 
 
+@app.get('/terms', response_class=HTMLResponse)
+def terms():
+    return _page('terms.html')
+
+
 # Legacy DE-routes -> redirect
 @app.get('/impressum')
 def impressum_legacy():
