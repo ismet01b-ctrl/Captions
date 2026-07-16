@@ -2351,9 +2351,16 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         ret_gap = float(cfg['effects'].get('retention_gap', 0))
         if (ret_gap > 0 and not is_kw_group and not in_intro
                 and start - last_kw_end > ret_gap and g):
-            g_kw = sorted(g, key=score, reverse=True)[:1]
+            # v80: Stopwords (denn/aber/also/ist/...) sind ausdruecklich KEINE
+            # gueltigen Watchtime-Momente - sonst kommt "DENN" gross ins Bild.
+            g_kw_cand = [j for j in g
+                         if clean(words[j].get('word', '')).lower() not in STOPWORDS]
+            if not g_kw_cand:
+                g_kw_cand = g       # nur wenn ALLES Fuellwoerter sind, doch nehmen
+            g_kw = sorted(g_kw_cand, key=score, reverse=True)[:1]
             i_f = g_kw[0]
-            if len(words[i_f].get('word', '').strip()) >= 3:   # kein "und"/"der"
+            _tf = clean(words[i_f].get('word', '')).lower()
+            if (len(_tf) >= 3 and _tf not in STOPWORDS):       # kein "der"/"und"/"denn"
                 is_kw_group = True
                 kw = set(kw) | {i_f}
                 fx_map.setdefault(i_f, {}).setdefault('fx', rot_fill.next())

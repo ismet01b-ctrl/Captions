@@ -597,28 +597,61 @@ body {
 /* Momente-Table */
 .mom-row {
   display: grid;
-  grid-template-columns: 34px 68px 1fr 130px 100px 140px 96px 96px;
+  grid-template-columns: 34px 74px 96px 1fr 130px 100px 140px 96px 96px;
   gap: 8px; padding: 10px;
   background: var(--surf); border-radius: 10px;
-  margin-bottom: 4px; align-items: center;
-  transition: background var(--t-fast);
+  margin-bottom: 6px; align-items: center;
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+  border: 1px solid transparent;
 }
-.mom-row:hover { background: var(--surf2); }
+.mom-row:hover {
+  background: var(--surf);
+  border-color: var(--acc-soft);
+  box-shadow: 0 4px 16px -8px var(--acc-glow);
+}
 .mom-row.head { background: transparent; color: var(--mut);
   font-size: 11.5px; letter-spacing: .5px; text-transform: uppercase;
-  padding-bottom: 8px; font-weight: 700; }
+  padding: 4px 10px 8px; font-weight: 700; border: 0;
+}
+.mom-row.head:hover { background: transparent; box-shadow: none; }
 .mom-row input[type=text], .mom-row select {
   background: var(--surf2); border: 1px solid transparent; color: var(--fg);
   padding: 9px 11px; border-radius: 8px;
   font-size: 13px; width: 100%; outline: none; font-family: inherit;
   transition: border-color var(--t-fast);
 }
+.mom-row:hover input[type=text],
+.mom-row:hover select { background: var(--surf2); }
 .mom-row input[type=text]:focus, .mom-row select:focus { border-color: var(--acc); }
 .mom-row .zeit { font-size: 12px; color: var(--mut);
-  font-variant-numeric: tabular-nums; font-weight: 600; }
+  font-variant-numeric: tabular-nums; font-weight: 600; text-align: center; }
 .mom-row input[type=checkbox] {
   width: 20px; height: 20px; accent-color: var(--acc); cursor: pointer;
 }
+
+/* Vorschau-Kachel: kleines Video-Frame-Placeholder mit Text-Wortartrepraesentation */
+.mom-preview {
+  width: 96px; height: 54px; border-radius: 6px;
+  background: linear-gradient(135deg, #2a2438, #14101c);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+  border: 1px solid var(--line);
+}
+.mom-preview .txt {
+  color: white; font-weight: 900; font-size: 13px;
+  letter-spacing: -0.3px; text-shadow: 0 2px 6px rgba(0,0,0,.7);
+  padding: 0 6px; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mom-preview.fx-behind .txt { color: #fff5c8; }
+.mom-preview.fx-cascade .txt { font-family: Georgia, serif; font-style: italic; color: #fff; }
+.mom-preview.fx-outline .txt { color: transparent;
+  -webkit-text-stroke: 1.5px #fff; }
+.mom-preview.fx-blurin .txt { filter: blur(0.6px); color: #fff; }
+.mom-preview.fx-ground .txt { transform: perspective(60px) rotateX(30deg);
+  color: #f5e6c8; }
+.mom-preview.pow-1 .txt { font-size: 11px; }
+.mom-preview.pow-3 .txt { font-size: 15px; }
 
 /* Toast */
 .toasts {
@@ -676,7 +709,9 @@ body {
   .stepper { padding: 14px 16px 4px; }
   .step-title { font-size: 24px; }
   .look-grid { grid-template-columns: 1fr; }
-  .mom-row { grid-template-columns: 30px 56px 1fr; padding: 10px; }
+  .mom-row { grid-template-columns: 30px 56px 60px 1fr; padding: 10px; gap: 6px; }
+  .mom-preview { width: 60px; height: 34px; }
+  .mom-preview .txt { font-size: 10px; }
   .mom-row .hide-mob { display: none; }
   .fontgrid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
   .modal .foot { padding: 14px 18px; }
@@ -1877,7 +1912,7 @@ async function openMomentsEditor() {
   const lageOpts = ['auto','liegend','stehend','frei'].map(v => `<option value="${v}">${v}</option>`).join('');
   const body = $('#momBody');
   body.innerHTML = `<div class="mom-row head" aria-hidden="true">
-    <div>An</div><div>Zeit</div><div>Text</div><div>Effekt</div><div>Groesse</div>
+    <div>An</div><div>Zeit</div><div>Vorschau</div><div>Text</div><div>Effekt</div><div>Groesse</div>
     <div class="hide-mob">Animation</div><div class="hide-mob">Szene</div><div class="hide-mob">Lage</div>
   </div>`;
   State.moments.forEach((m, i) => {
@@ -1887,6 +1922,7 @@ async function openMomentsEditor() {
     row.innerHTML = `
       <input type="checkbox" data-i="${i}" data-k="aktiv" ${m.aktiv !== false ? 'checked' : ''}>
       <div class="zeit">${(m.zeit || 0).toFixed(1)}s</div>
+      <div class="mom-preview" data-i="${i}"><div class="txt"></div></div>
       <input type="text" data-i="${i}" data-k="text" value="${(m.text || '').replace(/"/g, '&quot;')}">
       <select data-i="${i}" data-k="fx">${fxOpts}</select>
       <select data-i="${i}" data-k="power">${powerOpts}</select>
@@ -1899,11 +1935,24 @@ async function openMomentsEditor() {
     row.querySelector('[data-k=anim]').value = m.anim || '';
     row.querySelector('[data-k=szene]').value = m.szene || 'auto';
     row.querySelector('[data-k=lage]').value = m.lage || 'auto';
+    updatePreview(row, m);
   });
   let debTimer;
   body.querySelectorAll('input, select').forEach(el => {
     const isText = el.tagName === 'INPUT' && el.type === 'text';
     el.addEventListener(isText ? 'input' : 'change', () => {
+      // Vorschau sofort updaten (Debounce nur fuer History)
+      const rowEl = el.closest('.mom-row');
+      const iIdx = parseInt(el.dataset.i);
+      if (rowEl && State.moments[iIdx]) {
+        const liveM = Object.assign({}, State.moments[iIdx]);
+        rowEl.querySelectorAll('input, select').forEach(x => {
+          if (x.type === 'checkbox') liveM[x.dataset.k] = x.checked;
+          else if (x.dataset.k === 'power') liveM[x.dataset.k] = parseInt(x.value);
+          else liveM[x.dataset.k] = x.value;
+        });
+        updatePreview(rowEl, liveM);
+      }
       if (isText) {
         clearTimeout(debTimer);
         debTimer = setTimeout(() => { syncFromDom(); pushSnap(); }, 400);
@@ -1916,6 +1965,18 @@ async function openMomentsEditor() {
   $('#momEditor').classList.remove('hidden');
   $('#btnAnalyze').disabled = false;
   $('#analyzeStatus').textContent = '';
+}
+
+function updatePreview(rowEl, m) {
+  const pv = rowEl.querySelector('.mom-preview');
+  if (!pv) return;
+  const fx = m.fx || 'behind';
+  const power = m.power || 2;
+  pv.className = 'mom-preview fx-' + fx + ' pow-' + power;
+  const txt = (m.text || '').split(' ').slice(0, 3).join(' ').toUpperCase();
+  pv.querySelector('.txt').textContent = txt.slice(0, 14) || '·';
+  // Aktiv-Zustand: ausgegraut wenn aus
+  pv.style.opacity = m.aktiv === false ? '0.35' : '1';
 }
 
 function syncFromDom() {

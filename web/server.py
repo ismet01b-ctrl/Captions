@@ -392,39 +392,57 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
         progress = None
         eta = None
         if 'Transkribiere' in ln:
-            phase = 'Transkribieren via OpenAI Whisper …'
+            phase = 'Deine Stimme wird verschriftet …'
             progress = 0.05
         elif 'Woerter' in ln and 'Transkript' in ln:
-            phase = 'Transkript gespeichert - Timing feinjustieren …'
+            phase = 'Jeder Wort-Zeitpunkt wird feinjustiert …'
             progress = 0.10
         elif 'Gesichts-Tracking' in ln:
-            phase = 'Gesichter erkennen + Szenen segmentieren …'
+            phase = 'Dein Gesicht wird verfolgt, Szenen werden getrennt …'
             progress = 0.20
         elif 'Musik-Beat' in ln:
-            phase = 'Musik-Beat analysieren …'
+            phase = 'Der Musik-Beat wird analysiert …'
             progress = 0.28
         elif 'KI-Regie' in ln and 'analysiert' in ln:
-            phase = 'GPT-4o waehlt die grossen Momente …'
+            phase = 'Die KI liest dein Transkript und plant die Regie …'
             progress = 0.35
+        elif 'Vision-Regie' in ln:
+            phase = 'Die KI schaut sich einzelne Frames an …'
+            progress = 0.38
         elif ln.startswith('Keywords'):
-            phase = 'Momente gewaehlt - Vision-Regie prueft die Szene …'
+            phase = 'Die grossen Momente stehen fest …'
             progress = 0.40
         elif 'Adaptive Farben' in ln:
-            phase = 'Farben aus der Szene ableiten …'
+            phase = 'Die Caption-Farben werden aus der Szene abgeleitet …'
             progress = 0.43
         elif 'Kompositionen' in ln:
-            phase = 'Momente aufbauen …'
+            phase = 'Wortgruppen werden zu Magazin-Layouts komponiert …'
             progress = 0.45
-        elif 'Matting-Fenster' in ln or 'Tiefen-Okklusion' in ln:
-            phase = 'Person freistellen + Tiefe berechnen …'
-            progress = 0.48
+        elif 'Matting-Fenster' in ln:
+            phase = 'Deine Person wird sauber vom Hintergrund freigestellt …'
+            progress = 0.47
+        elif 'Tiefen-Okklusion' in ln:
+            phase = 'Objekte vor dir werden erkannt (die verdecken den Text) …'
+            progress = 0.49
+        elif 'Kamera-Track' in ln:
+            phase = 'Kamera-Bewegung wird nachverfolgt …'
+            progress = 0.50
         elif 'Frame' in ln and '/' in ln:
             try:
                 cur_s, tot_s = ln.split('Frame')[1].split('|')[0].strip().split('/')
                 cur, tot = int(cur_s), int(tot_s)
-                frac = 0.50 + 0.45 * (cur / max(tot, 1))
+                frac = 0.52 + 0.43 * (cur / max(tot, 1))
                 progress = round(min(frac, 0.95), 3)
-                phase = f'Video bauen · Frame {cur}/{tot}'
+                # Live-Story: was jetzt gerade auf dem Frame passiert
+                sec_at = cur / 25.0
+                if frac < 0.62:
+                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Text hinter dir wird gerendert'
+                elif frac < 0.75:
+                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Animationen laufen'
+                elif frac < 0.85:
+                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Kamera-Fahrten werden ueberlagert'
+                else:
+                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Feinschliff und Farb-Korrektur'
                 if frame_start_t is None:
                     frame_start_t = time.time()
                     frame_start_i = cur
@@ -436,7 +454,7 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
             except Exception:
                 pass
         elif ln.startswith('Fertig') or 'Encode fertig' in ln:
-            phase = 'Video encodieren + speichern …'
+            phase = 'Fertiges Video wird encodiert und gespeichert …'
             progress = 0.97
 
         if phase is not None or progress is not None or tail:
