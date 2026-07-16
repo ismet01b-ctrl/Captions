@@ -2184,6 +2184,20 @@ $('#btnEditMoments').addEventListener('click', openMomentsEditor);
 
 async function startUpload(mode) {
   if (!State.file) { toast('Please upload a video first.', 'err'); return; }
+  // v80r: iOS gibt File-Handles frei wenn der Tab im Hintergrund war.
+  // Vor dem Upload kurz anlesen - wenn das scheitert, ist die Auswahl
+  // abgelaufen und der User muss die Datei neu waehlen.
+  try {
+    await State.file.slice(0, 1024).arrayBuffer();
+  } catch (e) {
+    State.file = null;
+    $('#fileInfo').classList.add('hidden');
+    $('#wiz1Next').disabled = true;
+    showError('Your file selection expired (the phone released it while the tab was in the background).',
+              'Please go back to step 1 and select your video again. This is an iOS/Safari behavior, not a bug in your video.');
+    goStep(1);
+    return;
+  }
   // v80m: Pre-check Balance before starting upload (saves bandwidth for user)
   if (mode === 'full' && State.file.duration) {
     // wenn wir die Video-Dauer schon kennen, direkt hier pruefen
@@ -2208,18 +2222,38 @@ async function startUpload(mode) {
   fd.append('code', State.code);
   fd.append('mode', mode);
   fd.append('cfg_overrides', JSON.stringify(overrides));
-  let r, d;
+  // v80r: XHR statt fetch - liefert echten Upload-Fortschritt.
+  let res;
   try {
-    r = await fetch('/api/upload', { method: 'POST', body: fd });
-    d = await r.json();
+    res = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+      xhr.timeout = 15 * 60 * 1000;
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const pct = Math.round(e.loaded / e.total * 100);
+        const el = $('#progressPhase');
+        if (el && mode === 'full') el.textContent = `Uploading … ${pct}%`;
+        if (mode === 'analyze') $('#analyzeStatus').textContent = `Uploading … ${pct}%`;
+      };
+      xhr.onload = () => {
+        let body = {};
+        try { body = JSON.parse(xhr.responseText || '{}'); } catch (e2) {}
+        resolve({ status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300, body });
+      };
+      xhr.onerror = () => reject(new Error('network'));
+      xhr.ontimeout = () => reject(new Error('timeout'));
+      xhr.onabort = () => reject(new Error('aborted'));
+      xhr.send(fd);
+    });
   } catch (e) {
-    // v80m: Uploaden failed ohne Server-Response - meist Netzwerk oder Caddy hat abgelehnt.
-    const hint = e && e.message ? ` (${e.message})` : '';
-    showError('Upload could not be started' + hint,
-              'Possible causes: no internet, file too large for the connection, ' +
-              'or server is offline. Reload the page and try again with a smaller file.');
+    const why = e.message === 'timeout'
+      ? 'The upload took too long (over 15 minutes). Your connection may be too slow for this file size.'
+      : 'The connection dropped during upload. Check your internet and try again.';
+    showError('Upload failed', why);
     return;
   }
+  const r = res, d = res.body;
   if (!r.ok) {
     if (r.status === 402) {
       showError(d.detail || 'Insufficient credit.');
