@@ -960,16 +960,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <div class="setting"><div class="setting-label">Kreis-Fortschritt um Zahlen (Zähler-Ring)</div>
             <div class="setting-desc">Bei Zahlen (57 %, 12 Millionen, x3 …) läuft ein Kreis-Bogen
               synchron zum Hochzählen der Zahl. Sport-Timer/Score-Look.</div>
-            <label class="switch"><input type="checkbox" data-cfg-switch="effects.counter_ring" data-on="0.55" data-off="0"
-                   aria-label="Zaehler-Ring">
-              <span class="track"><span class="knob"></span></span></label>
+            <div class="seg" data-cfg="effects.counter_ring" data-opts="Aus:0,An:0.55"></div>
           </div>
           <div class="setting"><div class="setting-label">Frame teilt sich bei Höhepunkten (Split-Screen)</div>
             <div class="setting-desc">Das Video teilt sich horizontal in zwei Hälften mit einer
               Lücke — Text sitzt dazwischen. Nur bei den stärksten Momenten.</div>
-            <label class="switch"><input type="checkbox" data-cfg-switch="effects.split_screen" data-on="0.55" data-off="0"
-                   aria-label="Split-Screen">
-              <span class="track"><span class="knob"></span></span></label>
+            <div class="seg" data-cfg="effects.split_screen" data-opts="Aus:0,An:0.55"></div>
           </div>
           <div class="setting"><div class="setting-label">Text wirft Schatten auf den Boden</div>
             <div class="setting-desc">Für In-Szene-Text (steht IM Video): weicher Kontakt-Schatten
