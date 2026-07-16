@@ -330,6 +330,16 @@ body {
 .row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; }
 .row .grow { flex: 1; min-width: 0; }
 
+/* Switch-Setting: Label+Beschreibung links, Switch oben rechts (immer selbe Position) */
+.switch-row {
+  display: flex; align-items: flex-start; gap: 20px;
+  padding: 12px 0 4px;
+}
+.switch-row > .grow { flex: 1; min-width: 0; padding-right: 8px; }
+.switch-row > .switch { margin-top: 4px; flex-shrink: 0; }
+.switch-row .setting-label { margin-bottom: 4px; }
+.switch-row .setting-desc { margin-bottom: 0; }
+
 /* Slider */
 .slider { display: flex; align-items: center; gap: 14px; }
 .slider input[type=range] {
@@ -613,17 +623,23 @@ body {
   max-width: calc(100vw - 40px);
 }
 .toast {
-  background: var(--bg2); color: var(--fg);
-  padding: 12px 16px; border-radius: 10px;
-  box-shadow: 0 8px 32px -8px rgba(0,0,0,.6), 0 0 0 1px var(--line);
+  background: var(--surf); color: var(--fg);
+  padding: 12px 14px; border-radius: 12px;
+  box-shadow: 0 12px 32px -12px rgba(0,0,0,.7), 0 0 0 1px var(--line2);
   font-size: 14px;
   display: flex; align-items: center; gap: 12px;
-  border-left: 3px solid var(--acc);
   animation: slidein var(--t-med) var(--ease-spring);
   min-width: 240px; font-weight: 500;
 }
-.toast.err { border-left-color: var(--red); }
-.toast.ok { border-left-color: var(--green); }
+.toast::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--acc); flex-shrink: 0;
+  box-shadow: 0 0 12px var(--acc-glow);
+}
+.toast.err::before { background: var(--red);
+  box-shadow: 0 0 12px rgba(255,85,102,.5); }
+.toast.ok::before { background: var(--acc);
+  box-shadow: 0 0 12px var(--acc-glow); }
 .toast .close {
   background: transparent; border: 0; color: var(--mut);
   cursor: pointer; padding: 4px; margin-left: auto; font-size: 18px;
@@ -944,20 +960,16 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <div class="setting"><div class="setting-label">Kreis-Fortschritt um Zahlen (Zähler-Ring)</div>
             <div class="setting-desc">Bei Zahlen (57 %, 12 Millionen, x3 …) läuft ein Kreis-Bogen
               synchron zum Hochzählen der Zahl. Sport-Timer/Score-Look.</div>
-            <div class="row"><div class="grow"></div>
-              <label class="switch"><input type="checkbox" data-cfg-switch="effects.counter_ring" data-on="0.55" data-off="0"
-                     aria-label="Zaehler-Ring">
-                <span class="track"><span class="knob"></span></span></label>
-            </div>
+            <label class="switch"><input type="checkbox" data-cfg-switch="effects.counter_ring" data-on="0.55" data-off="0"
+                   aria-label="Zaehler-Ring">
+              <span class="track"><span class="knob"></span></span></label>
           </div>
           <div class="setting"><div class="setting-label">Frame teilt sich bei Höhepunkten (Split-Screen)</div>
             <div class="setting-desc">Das Video teilt sich horizontal in zwei Hälften mit einer
               Lücke — Text sitzt dazwischen. Nur bei den stärksten Momenten.</div>
-            <div class="row"><div class="grow"></div>
-              <label class="switch"><input type="checkbox" data-cfg-switch="effects.split_screen" data-on="0.55" data-off="0"
-                     aria-label="Split-Screen">
-                <span class="track"><span class="knob"></span></span></label>
-            </div>
+            <label class="switch"><input type="checkbox" data-cfg-switch="effects.split_screen" data-on="0.55" data-off="0"
+                   aria-label="Split-Screen">
+              <span class="track"><span class="knob"></span></span></label>
           </div>
           <div class="setting"><div class="setting-label">Text wirft Schatten auf den Boden</div>
             <div class="setting-desc">Für In-Szene-Text (steht IM Video): weicher Kontakt-Schatten
