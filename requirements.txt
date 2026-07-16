@@ -1,7 +1,11 @@
-numpy
+numpy<2
 opencv-python
 Pillow
-mediapipe
+# v80m: mediapipe auf 0.10.14 gepinnt - neuere Versionen haben in Docker/Python3.12
+# den 'dispatcher_wrapper NoneType' Bug bei bestimmten Aufrufen (Face-Detection).
+mediapipe==0.10.14
+# Muss mit mediapipe kompatibel sein
+protobuf<5
 onnxruntime
 requests
 PyYAML
