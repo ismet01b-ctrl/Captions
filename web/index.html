@@ -630,6 +630,19 @@ body {
 }
 
 /* Vorschau-Kachel: kleines Video-Frame-Placeholder mit Text-Wortartrepraesentation */
+.ob-row {
+  display: flex; align-items: center; gap: 10px; font-size: 14px;
+  color: var(--mut);
+}
+.ob-row.done { color: var(--fg); }
+.ob-row .dot {
+  width: 20px; height: 20px; border-radius: 50%; flex: none;
+  border: 2px solid var(--line); display: flex; align-items: center;
+  justify-content: center; font-size: 12px;
+}
+.ob-row.done .dot { background: #6dd48a; border-color: #6dd48a; color: #0b0812; }
+.ob-row a { color: var(--acc2); cursor: pointer; text-decoration: underline; }
+
 .lang-select {
   width: 100%; max-width: 280px; padding: 10px 12px;
   background: var(--surf2); color: var(--fg);
@@ -928,7 +941,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="hi">
       <div class="greeting">
         <b id="topName">Hallo</b><br>
-        <span class="mut" id="topRest">–</span>
+        <span class="mut" id="topRest">–</span><br>
+        <span id="topFree" style="font-size:11px; color:#6dd48a; display:none;"></span>
       </div>
       <div class="ring-wrap" id="ringWrap" title="Kontingent">
         <svg viewBox="0 0 42 42">
@@ -1064,6 +1078,18 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
     <!-- STEP 1: VIDEO -->
     <div class="step-view active" data-step="1" role="tabpanel" aria-label="Video">
+      <div class="card hidden" id="onboardCard" style="margin-bottom:18px; position:relative;">
+        <button id="onboardClose" aria-label="Dismiss" style="position:absolute; top:12px;
+                right:14px; background:none; border:0; color:var(--mut); cursor:pointer;
+                font-size:18px;">×</button>
+        <h3 style="display:flex; align-items:center; gap:10px;">
+          Get set up <span id="onboardPct" style="font-size:12px; font-weight:700;
+          color:var(--acc2); background:rgba(124,92,255,0.12); padding:3px 10px;
+          border-radius:999px;"></span>
+        </h3>
+        <div id="onboardSteps" style="display:flex; flex-direction:column; gap:8px;
+             margin-top:12px;"></div>
+      </div>
       <h1 class="step-title">Your video</h1>
       <p class="step-sub">Drop it in or click to select. Max 3 minutes, 300 MB.
         We auto-configure everything — you can fine-tune afterwards.</p>
@@ -1935,6 +1961,7 @@ function enterApp(user) {
   State.email = user.email;
   State.verified = user.verified !== false;
   State.balanceSec = user.balance_sec || 0;
+  updateEngagementUI(user);
   $('#loginView').classList.add('hidden');
   $('#appView').classList.add('show');
   $('#topName').textContent = State.codeName || 'Account';
@@ -2039,10 +2066,57 @@ function fmtMin(sec) {
   return `${m}:${String(s).padStart(2, '0')} min`;
 }
 
+/* v80z: Onboarding-Checkliste (Zeigarnik) + Rueckkehr-Trigger */
+function updateEngagementUI(d) {
+  // Rueckkehr-Trigger: Gratis-Reset-Countdown fuer Nicht-Kaeufer
+  const tf = $('#topFree');
+  if (tf) {
+    if (d.purchased === false && typeof d.free_reset_days === 'number') {
+      tf.textContent = `+3 free min in ${d.free_reset_days}d`;
+      tf.style.display = 'inline';
+    } else tf.style.display = 'none';
+  }
+  // Checkliste: verify -> first render -> watermark weg
+  const card = $('#onboardCard');
+  if (!card) return;
+  if (localStorage.getItem('dve_ob_dismissed') === '1') { card.classList.add('hidden'); return; }
+  const steps = [
+    { done: d.verified !== false, label: 'Verify your email',
+      action: d.verified === false ? '<a id="obVerify">resend link</a>' : '' },
+    { done: (d.renders || 0) > 0, label: 'Render your first video', action: '' },
+    { done: d.purchased === true, label: 'Remove the watermark',
+      action: d.purchased !== true ? '<a id="obBuy">get credits</a>' : '' },
+  ];
+  const doneN = steps.filter(x => x.done).length;
+  if (doneN === steps.length) { card.classList.add('hidden'); return; }
+  $('#onboardPct').textContent = `${doneN}/${steps.length}`;
+  $('#onboardSteps').innerHTML = steps.map(x =>
+    `<div class="ob-row${x.done ? ' done' : ''}">
+       <span class="dot">${x.done ? '✓' : ''}</span>
+       <span>${x.label}</span>${x.action ? ' · ' + x.action : ''}
+     </div>`).join('');
+  card.classList.remove('hidden');
+  const v = $('#obVerify');
+  if (v) v.addEventListener('click', async () => {
+    try {
+      const r = await fetch('/api/resend_verification', { method: 'POST' });
+      const dd = await r.json();
+      toast(r.ok ? (dd.msg || 'Sent.') : (dd.detail || 'Failed.'), r.ok ? 'ok' : 'err');
+    } catch (e) { toast('Connection error.', 'err'); }
+  });
+  const b = $('#obBuy');
+  if (b) b.addEventListener('click', showPricing);
+}
+if ($('#onboardClose')) $('#onboardClose').addEventListener('click', () => {
+  localStorage.setItem('dve_ob_dismissed', '1');
+  $('#onboardCard').classList.add('hidden');
+});
+
 function refreshBalanceInHeader() {
   fetch('/api/me').then(r => r.json()).then(d => {
     if (!d.ok) return;
     State.balanceSec = d.balance_sec;
+    updateEngagementUI(d);
     const m = Math.floor(d.balance_sec / 60);
     $('#topRest').textContent = `${m} min credit`;
     updateRing(m || 1, Math.max(m, 5));
@@ -2554,11 +2628,24 @@ function renderSuccess() {
   const overrides = diffCfg(State.cfgBase, State.cfg);
   const changed = countChanged(overrides);
   $('#statGrid').innerHTML = `
-    <div class="stat"><div class="n">${min}:${String(sec).padStart(2,'0')}</div><div class="l">Renderzeit</div></div>
-    <div class="stat"><div class="n">${getDeep(State.cfg, 'output.height', 1080)}p</div><div class="l">Aufloesung</div></div>
-    <div class="stat"><div class="n">${changed}</div><div class="l">Einstellungen</div></div>
+    <div class="stat"><div class="n">${min}:${String(sec).padStart(2,'0')}</div><div class="l">Render time</div></div>
+    <div class="stat"><div class="n">${getDeep(State.cfg, 'output.height', 1080)}p</div><div class="l">Resolution</div></div>
+    <div class="stat"><div class="n">${changed}</div><div class="l">Custom settings</div></div>
   `;
-  $('#doneSub').textContent = `${State.codeName || 'Du'} hast gebaut. Video ist bereit.`;
+  $('#doneSub').textContent = 'Your video is ready.';
+  // v80z Peak-End: Hook-Score als vierte Kachel + Lob-Zeile
+  fetch('/api/moments/' + State.jid).then(r => r.ok ? r.json() : null).then(moms => {
+    if (!moms || !moms.length) return;
+    State.moments = moms;
+    const sc = computeHookScore(moms);
+    const col = sc >= 75 ? '#6dd48a' : sc >= 50 ? '#f5c451' : '#e0785a';
+    $('#statGrid').innerHTML += `
+      <div class="stat"><div class="n" style="color:${col}">${sc}</div>
+      <div class="l">Hook score</div></div>`;
+    if (sc >= 75) $('#doneSub').textContent = 'Strong opener — this one should hold viewers.';
+    else if (sc >= 50) $('#doneSub').textContent = 'Solid video. Tip: edit moments to push your hook score up.';
+    else $('#doneSub').textContent = 'Rendered. Your hook is weak — try "Edit moments" to strengthen the first seconds.';
+  }).catch(() => {});
   $('#btnRender').disabled = false;
   if (State.codeRest !== null) { State.codeRest = Math.max(0, State.codeRest - 1);
     $('#topRest').textContent = `${State.codeRest} videos left`; }

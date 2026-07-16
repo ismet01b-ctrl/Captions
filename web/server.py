@@ -549,6 +549,16 @@ async def api_stripe_webhook(request: Request):
     return {'ok': True, 'gutgeschrieben_sek': sec}
 
 
+@app.get('/api/stats')
+def api_stats():
+    """v80z: Echte Aggregat-Zahlen fuer Social Proof. Keine Fake-Counter."""
+    con = _db()
+    r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(-delta_sec), 0) s "
+                    "FROM ledger WHERE grund LIKE 'Render %'").fetchone()
+    con.close()
+    return {'renders': r['c'], 'minutes': int(r['s'] // 60)}
+
+
 @app.get('/api/history')
 def api_history(request: Request):
     """Kauf- und Verbrauchs-Historie fuer den eingeloggten User."""
@@ -1259,8 +1269,19 @@ def api_me(request: Request):
         return {'ok': False}
     if _grant_monthly_free(u):
         u = _find_user_by_id(u['id'])          # frisches Guthaben anzeigen
+    # v80z: Investment sichtbar machen (Renders) + Rueckkehr-Trigger
+    # (Tage bis zum naechsten Gratis-Reset) + Wasserzeichen-Status
+    con = _db()
+    rc = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id = ? AND "
+                     "grund LIKE 'Render %'", (u['id'],)).fetchone()['c']
+    con.close()
+    lt = time.localtime()
+    days_in_month = [31, 29 if lt.tm_year % 4 == 0 else 28, 31, 30, 31, 30,
+                     31, 31, 30, 31, 30, 31][lt.tm_mon - 1]
     return {'ok': True, 'email': u['email'], 'name': u['name'],
-            'balance_sec': u['balance_sec'], 'verified': bool(u['verified'])}
+            'balance_sec': u['balance_sec'], 'verified': bool(u['verified']),
+            'renders': rc, 'purchased': _has_purchased(u['id']),
+            'free_reset_days': days_in_month - lt.tm_mday + 1}
 
 
 @app.post('/api/forgot_password')

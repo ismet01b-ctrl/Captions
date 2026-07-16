@@ -238,7 +238,19 @@ footer .links a:hover { color: var(--fg); }
     </svg>
   </a>
   <div class="small">Free: 3 minutes every month · No card required · Videos auto-deleted after 7 days</div>
+  <div class="small" id="liveStats" style="display:none; margin-top:8px; color:var(--gold);
+       font-weight:700;"></div>
 </section>
+
+<script>
+fetch('/api/stats').then(r => r.json()).then(d => {
+  if (d && d.renders > 100) {
+    const el = document.getElementById('liveStats');
+    el.textContent = d.renders.toLocaleString() + ' videos rendered so far';
+    el.style.display = 'block';
+  }
+}).catch(() => {});
+</script>
 
 <div class="preview-strip wrap">
   <span class="chip a">AI direction</span>
