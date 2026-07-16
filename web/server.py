@@ -378,15 +378,18 @@ async def api_stripe_webhook(request: Request):
             event = json.loads(payload)
     except Exception as e:
         raise HTTPException(400, f'Webhook invalid: {type(e).__name__}')
-    if event.get('type') != 'checkout.session.completed':
-        return {'ok': True, 'ignored': event.get('type')}
+    # v80k-fix: Stripe liefert ein StripeObject bei verifizierter Signatur -
+    # das hat kein .get(). Beide Zugriffsarten via [] funktionieren.
+    ev_type = event['type'] if 'type' in event else None
+    if ev_type != 'checkout.session.completed':
+        return {'ok': True, 'ignored': ev_type}
     sess = event['data']['object']
-    meta = sess.get('metadata') or {}
+    meta = dict(sess['metadata']) if 'metadata' in sess and sess['metadata'] else {}
     try:
         uid = int(meta.get('user_id'))
         sec = int(meta.get('sekunden'))
         pack = meta.get('pack', '?')
-        sess_id = sess.get('id', '')
+        sess_id = sess['id'] if 'id' in sess else ''
     except Exception:
         raise HTTPException(400, 'Metadata incomplete.')
     if _pack_processed(uid, sess_id):
