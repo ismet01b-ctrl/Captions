@@ -465,26 +465,37 @@ body {
 
 /* Overlay */
 .overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.75);
+  position: fixed; inset: 0;
+  background: radial-gradient(1200px 800px at 30% 20%, rgba(124,92,255,.10), transparent 60%),
+              rgba(11,11,14,.82);
   display: flex; align-items: center; justify-content: center;
   z-index: 100; padding: 20px;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
   animation: fadein var(--t-med) var(--ease-out-quart);
 }
 .overlay.hidden { display: none; }
 .modal {
-  background: var(--bg2); border-radius: var(--r-xl);
-  width: 100%; max-width: 1040px; max-height: 92vh;
+  background: var(--surf); border-radius: var(--r-xl);
+  width: 100%; max-width: 1080px; max-height: 92vh;
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: var(--shadow-lg); border: 1px solid var(--line);
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,.6), 0 0 0 1px var(--line2),
+              0 0 60px -20px var(--acc-glow);
   animation: pop var(--t-slow) var(--ease-spring);
+  position: relative;
 }
-.modal .head { padding: 22px 28px 14px; border-bottom: 1px solid var(--line); }
-.modal .head h3 { font-size: 20px; font-weight: 700; }
-.modal .head p { color: var(--mut); font-size: 13px; margin-top: 3px; }
-.modal .body { padding: 18px 28px; overflow-y: auto; flex: 1; }
-.modal .foot { padding: 16px 28px; border-top: 1px solid var(--line);
-  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.modal::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--acc), transparent);
+  opacity: .6;
+}
+.modal .head { padding: 24px 30px 16px; border-bottom: 1px solid var(--line); }
+.modal .head h3 { font-size: 22px; font-weight: 800; letter-spacing: -.3px; }
+.modal .head p { color: var(--mut); font-size: 13px; margin-top: 4px; line-height: 1.5; }
+.modal .body { padding: 20px 30px; overflow-y: auto; flex: 1;
+  background: var(--surf); }
+.modal .foot { padding: 18px 30px; border-top: 1px solid var(--line);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  background: var(--bg2); }
 
 /* Progress-Screen */
 .prog-box {
@@ -529,6 +540,45 @@ body {
   font-variant-numeric: tabular-nums; }
 .stat .l { font-size: 11px; color: var(--mut); text-transform: uppercase;
   letter-spacing: 1px; font-weight: 600; margin-top: 4px; }
+
+/* Summary-Karten (Schritt 4) */
+.sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px; margin-top: 4px; }
+.sum-tile {
+  background: var(--surf2); border-radius: var(--r-md);
+  padding: 16px 18px; position: relative;
+  border: 1px solid transparent; transition: border-color var(--t-fast);
+}
+.sum-tile:hover { border-color: var(--line2); }
+.sum-tile .head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  color: var(--mut); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 1px; font-weight: 700;
+}
+.sum-tile .head .ic {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--acc-soft); color: var(--acc2);
+  display: flex; align-items: center; justify-content: center;
+}
+.sum-tile .val {
+  color: var(--fg); font-size: 17px; font-weight: 700;
+  letter-spacing: -.2px; word-break: break-word;
+}
+.sum-tile .sub {
+  color: var(--mut); font-size: 12px; margin-top: 4px; line-height: 1.4;
+}
+.sum-tile.wide { grid-column: 1 / -1; }
+.sum-bar { height: 5px; background: var(--surf3); border-radius: 3px;
+  margin-top: 8px; overflow: hidden; }
+.sum-bar i { display: block; height: 100%;
+  background: linear-gradient(90deg, var(--acc), var(--acc2));
+  border-radius: 3px; transition: width var(--t-med); }
+.sum-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.sum-chip {
+  padding: 3px 10px; background: var(--acc-soft); color: var(--acc2);
+  border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  letter-spacing: .2px;
+}
 
 /* Momente-Table */
 .mom-row {
@@ -1039,8 +1089,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
       <div class="card">
         <h3>Zusammenfassung</h3>
-        <div id="summary" style="color:var(--mut); font-size:14px; line-height:1.7;
-             margin-top:10px;"></div>
+        <p class="desc">So sieht dein Video-Rezept aus. Alles klar? Dann bauen.</p>
+        <div id="summary" class="sum-grid"></div>
       </div>
 
       <button class="btn big wide" id="btnRender" style="margin-top:14px;">
@@ -1154,7 +1204,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       </div>
     </div>
 
-    <footer>DouchkoVE Captions · v76 · Made with intent</footer>
+    <footer>DouchkoVE Captions v0.1 · Early Access</footer>
   </main>
 </div>
 
@@ -1291,10 +1341,24 @@ function buildWidgets() {
       return { lbl, val: (val === 'true' ? true : val === 'false' ? false : isNaN(+val) ? val : +val) };
     });
     const cur = getDeep(State.cfg, cfg, opts[0].val);
-    el.innerHTML = opts.map(o => {
-      const on = JSON.stringify(o.val) === JSON.stringify(cur);
-      return `<button data-val="${o.val}"${on ? ' class="on"' : ''}>${o.lbl}</button>`;
-    }).join('');
+    // Fuzzy-Match: bei Zahlen den naechsten Wert markieren (Preset kann von den
+    // Segmented-Werten abweichen, aber der User erwartet trotzdem eine Auswahl).
+    let onIdx = -1;
+    if (typeof cur === 'number' && opts.every(o => typeof o.val === 'number')) {
+      let best = Infinity;
+      opts.forEach((o, i) => {
+        const d = Math.abs(o.val - cur);
+        if (d < best) { best = d; onIdx = i; }
+      });
+    } else {
+      opts.forEach((o, i) => {
+        if (JSON.stringify(o.val) === JSON.stringify(cur)) onIdx = i;
+      });
+      if (onIdx < 0) onIdx = 0;
+    }
+    el.innerHTML = opts.map((o, i) =>
+      `<button data-val="${o.val}"${i === onIdx ? ' class="on"' : ''}>${o.lbl}</button>`
+    ).join('');
     el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       el.querySelectorAll('button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
@@ -1692,18 +1756,99 @@ $('#btnAgain').addEventListener('click', () => {
 });
 
 /* --------- Zusammenfassung Step 4 --------- */
+function _tile({icon, head, val, sub, bar, chips, wide}) {
+  const barHtml = bar != null ? `<div class="sum-bar"><i style="width:${Math.round(bar*100)}%"></i></div>` : '';
+  const chipsHtml = chips ? `<div class="sum-chips">${chips.map(c => `<span class="sum-chip">${c}</span>`).join('')}</div>` : '';
+  const subHtml = sub ? `<div class="sub">${sub}</div>` : '';
+  return `<div class="sum-tile${wide ? ' wide' : ''}">
+    <div class="head"><span class="ic">${icon}</span>${head}</div>
+    <div class="val">${val}</div>${subHtml}${barHtml}${chipsHtml}
+  </div>`;
+}
+const FX_NAMES = {
+  behind: 'Hinter dir', cascade: 'Aufbau', blurin: 'Unschärfe',
+  outline: 'Umriss', ground: 'In der Szene',
+};
+const LOOK_LABELS = {
+  tiktok: 'TikTok · Wortweise, laut',
+  creator: 'Creator · Talking-Head',
+  cinematic: 'Cinematic · Wenige, groß',
+  clean: 'Clean · Nur Untertitel',
+};
 function buildSummary() {
   const overrides = diffCfg(State.cfgBase, State.cfg);
   const changed = countChanged(overrides);
-  const lines = [];
-  lines.push(`<b>Datei:</b> ${State.file ? State.file.name : '–'}`);
-  lines.push(`<b>Look:</b> ${State.look}`);
-  lines.push(`<b>Aufloesung:</b> ${getDeep(State.cfg, 'output.height', 1080)}p`);
-  lines.push(`<b>Effekte:</b> ${(getDeep(State.cfg, 'effects.keyword_rotation', [])).join(', ')}`);
-  lines.push(`<b>Musik-Beat:</b> ${Math.round(getDeep(State.cfg, 'effects.music_beat', 0)*100)} %`);
-  lines.push(`<b>Bokeh:</b> ${Math.round(getDeep(State.cfg, 'effects.bg_blur', 0)*100)} %`);
-  lines.push(`<b>Feintuning:</b> ${changed} Einstellung${changed === 1 ? '' : 'en'} geaendert`);
-  $('#summary').innerHTML = lines.join(' · ');
+  const beat = getDeep(State.cfg, 'effects.music_beat', 0);
+  const blur = getDeep(State.cfg, 'effects.bg_blur', 0);
+  const camS = getDeep(State.cfg, 'camera.strength', 0);
+  const fxRot = getDeep(State.cfg, 'effects.keyword_rotation', []);
+  const anim = getDeep(State.cfg, 'effects.anim', true);
+  const freeze = getDeep(State.cfg, 'effects.freeze_frame', 0);
+  const density = getDeep(State.cfg, 'effects.density', 'akzente');
+  const densName = {sparsam: 'Ruhig', akzente: 'Ausgewogen', wortweise: 'Energisch'}[density] || density;
+  const fontFile = getDeep(State.cfg, 'fonts.display', '');
+  const fontName = ((fontFile.split('/').pop()||'').replace(/\.ttf$/i,'')) || '–';
+  const height = getDeep(State.cfg, 'output.height', 1080);
+  const speed = getDeep(State.cfg, 'output.speed', 'standard');
+  const speedName = {schnell: 'Schnell', standard: 'Standard', beste: 'Beste'}[speed] || speed;
+  const tiles = [];
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`,
+    head: 'Datei', val: State.file ? State.file.name : '–',
+    sub: State.file ? `${(State.file.size/1048576).toFixed(1)} MB` : '',
+    wide: true,
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`,
+    head: 'Look', val: (LOOK_LABELS[State.look]||State.look).split(' · ')[0],
+    sub: (LOOK_LABELS[State.look]||'').split(' · ')[1] || '',
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+    head: 'Auflösung & Encoding', val: `${height}p`,
+    sub: `${speedName}${getDeep(State.cfg,'output.master',false)?' · Master (MOV)':''}`,
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7v10l8 4 8-4V7L12 3 4 7z"/></svg>`,
+    head: 'Schrift', val: fontName,
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M3 12h18"/></svg>`,
+    head: 'Dynamik', val: densName,
+    sub: anim ? '26 Animationen aktiv' : 'Animationen aus',
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
+    head: 'Musik-Beat', val: Math.round(beat*100)+' %',
+    bar: beat,
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8" opacity=".4"/></svg>`,
+    head: 'Bokeh (Hintergrund)', val: Math.round(blur*100)+' %',
+    bar: blur,
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`,
+    head: 'Kamera', val: Math.round(camS*100)+' %',
+    bar: camS,
+    sub: getDeep(State.cfg,'camera.whip',false) ? 'inkl. Whip-Pan' : '',
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`,
+    head: 'Freeze-Frame', val: freeze > 0.02 ? `${freeze.toFixed(1)} s` : 'Aus',
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M2 12h20"/><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg>`,
+    head: 'Effekte in Rotation', val: fxRot.length ? `${fxRot.length} aktiv` : 'keine',
+    chips: fxRot.map(k => FX_NAMES[k] || k),
+    wide: true,
+  }));
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
+    head: 'Feintuning', val: `${changed} ${changed === 1 ? 'Änderung' : 'Änderungen'}`,
+    sub: changed === 0 ? 'nur Preset-Werte' : 'gegenüber Preset-Voreinstellung',
+  }));
+  $('#summary').innerHTML = tiles.join('');
 }
 
 /* --------- Momente-Editor --------- */
