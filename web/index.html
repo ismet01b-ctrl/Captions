@@ -659,10 +659,33 @@ body {
 .p-card .preis .cur { font-size: 22px; opacity: 0.7; vertical-align: top;
   margin-right: 2px; }
 .p-card .minuten { color: var(--mut); font-size: 15px; font-weight: 600; }
-.p-card .beschr { color: var(--mut); font-size: 13px; }
-.p-card .hinweis { font-size: 12px; color: var(--acc2); font-weight: 600;
+.p-card .ppm {
+  color: var(--fg); font-size: 14px; font-weight: 700;
+  padding: 6px 10px; background: rgba(255,255,255,0.05);
+  border-radius: 8px; margin-bottom: 4px;
+  border: 1px solid var(--line);
+}
+.p-card .beschr { color: var(--mut); font-size: 13.5px; line-height: 1.4; }
+.p-card .p-features {
+  list-style: none; padding: 0; margin: 8px 0; display: flex;
+  flex-direction: column; gap: 6px;
+}
+.p-card .p-features li {
+  font-size: 13px; color: var(--fg); padding-left: 22px; position: relative;
+  line-height: 1.4;
+}
+.p-card .p-features li::before {
+  content: ''; position: absolute; left: 0; top: 4px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--acc);
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>") no-repeat center / 10px;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>") no-repeat center / 10px;
+}
+.p-card.best .p-features li::before { background: #f5c451; }
+.p-card .hinweis { font-size: 12px; color: var(--acc2); font-weight: 700;
   padding: 6px 10px; background: rgba(124,92,255,0.1); border-radius: 6px;
   display: inline-block; }
+.p-card.best .hinweis { color: #f5c451; background: rgba(245,196,81,0.1); }
 .p-card .kaufen {
   margin-top: auto; padding: 12px; width: 100%;
   background: var(--acc); color: white; border: none;
@@ -1810,8 +1833,35 @@ function enterApp(user) {
   const min = Math.floor(State.balanceSec / 60);
   $('#topRest').textContent = `${min} min credit`;
   updateRing(min || 1, Math.max(min, 5));
-  loadDefaults().then(rebuildAllWidgets).then(buildLooks);
+  loadDefaults().then(rebuildAllWidgets).then(buildLooks).then(resumeActiveJob);
   toast(`${greet}${State.codeName ? ', ' + State.codeName : ''}! Ready for your video?`, 'ok', 3000);
+}
+
+async function resumeActiveJob() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem('dve_active_job') || 'null'); }
+  catch (e) { return; }
+  if (!saved || !saved.jid) return;
+  // Aelter als 4 Std -> verwerfen (sollte laengst durch sein)
+  if (Date.now() - (saved.ts || 0) > 4 * 3600 * 1000) {
+    localStorage.removeItem('dve_active_job'); return;
+  }
+  try {
+    const st = await (await fetch('/api/status/' + saved.jid)).json();
+    if (!st || st.status === 'fertig' || st.status === 'fehler' || !st.status) {
+      localStorage.removeItem('dve_active_job'); return;
+    }
+    // Es laeuft noch. Sprung in Step 4 und Polling wieder aufnehmen.
+    State.jid = saved.jid;
+    goStep(4);
+    $('#progressCard').classList.remove('hidden');
+    $('#btnRender').disabled = true;
+    toast('Your last render is still running — reconnected.', 'ok', 4000);
+    if (saved.mode === 'analyze') pollAnalyze();
+    else pollRender();
+  } catch (e) {
+    localStorage.removeItem('dve_active_job');
+  }
 }
 
 /* Auto-Login beim Seiten-Laden (Session-Cookie) */
@@ -1865,15 +1915,17 @@ async function showPricing() {
                 (isPop ? '<div class="tag">Recommended</div>' : '');
     const btnLabel = d.stripe_ready ? `Pay €${euro}` : 'Coming soon';
     const btnDis = d.stripe_ready ? '' : 'disabled';
+    const features = (p.features_en || []).map(f => `<li>${f}</li>`).join('');
     const card = document.createElement('div');
     card.className = 'p-card ' + cls;
     card.innerHTML = `
       ${tag}
       <h4>${p.name}</h4>
       <div class="preis"><span class="cur">€</span>${euro}</div>
-      <div class="minuten">${p.minuten} minutes of video</div>
-      <div class="beschr">${p.beschreibung_en || p.beschreibung}</div>
-      <div class="hinweis">${p.hinweis_en || p.hinweis} · €${pMin} per minute</div>
+      <div class="ppm">€${pMin} / minute · ${p.minuten} min total</div>
+      <div class="beschr">${p.beschreibung_en || ''}</div>
+      <ul class="p-features">${features}</ul>
+      <div class="hinweis">${p.hinweis_en || ''}</div>
       <button class="kaufen" data-pack="${id}" ${btnDis}>${btnLabel}</button>
     `;
     grid.appendChild(card);
@@ -2075,8 +2127,14 @@ async function startUpload(mode) {
     showError(d.detail || d.msg || 'Upload failed.'); return;
   }
   State.jid = d.job;
+  // v80k: jid persistieren, damit ein Refresh mitten im Render den Job wieder findet
+  try {
+    localStorage.setItem('dve_active_job', JSON.stringify({
+      jid: d.job, mode, ts: Date.now()
+    }));
+  } catch (e) {}
   if (mode === 'analyze') {
-    $('#analyzeStatus').textContent = 'Analyse laeuft … (30-90 s)';
+    $('#analyzeStatus').textContent = 'Analysis running … (30-90 s)';
     $('#btnAnalyze').disabled = true;
     pollAnalyze();
   } else {
@@ -2090,6 +2148,7 @@ function showError(msg, detail) {
   $('#errMsg').textContent = msg;
   $('#errDetail').textContent = detail || '';
   $('#btnRender').disabled = false;
+  try { localStorage.removeItem('dve_active_job'); } catch (e) {}
   toast(msg, 'err');
 }
 
@@ -2140,10 +2199,11 @@ async function pollRender() {
       $('#progressCard').classList.add('hidden');
       renderSuccess();
       refreshBalanceInHeader();
+      try { localStorage.removeItem('dve_active_job'); } catch (e) {}
       return;
     }
     if (st.status === 'fehler') {
-      showError(st.msg || 'Render fehlgeschlagen', st.detail || '');
+      showError(st.msg || 'Render failed', st.detail || '');
       return;
     }
   } catch (e) {}

@@ -246,32 +246,32 @@ PACKS = {
         'preis_cent': 900,
         'minuten': 20,
         'sekunden': 20 * 60,
-        'beschreibung': 'Perfekt zum Ausprobieren',
-        'beschreibung_en': 'Perfect to try it out',
-        'hinweis': '1 Video pro Woche',
-        'hinweis_en': '1 video per week',
+        'beschreibung_en': 'Test the waters. Enough for 6-8 short reels or 3-4 mid-length videos.',
+        'hinweis_en': 'Credits valid for 6 months',
+        'features_en': ['20 minutes of finished video', 'All effects & animations',
+                        'Full moments editor access', 'Credits valid 6 months'],
     },
     'creator': {
         'name': 'Creator',
         'preis_cent': 1900,
         'minuten': 60,
         'sekunden': 60 * 60,
-        'beschreibung': 'Fuer regelmaessige Creator',
-        'beschreibung_en': 'For regular creators',
-        'hinweis': '3-4 Videos pro Woche',
-        'hinweis_en': '3-4 videos per week',
+        'beschreibung_en': 'Weekly posting schedule. Cheapest per-minute price under €0.35.',
+        'hinweis_en': 'Save 30% vs Starter · Most popular',
         'empfohlen': True,
+        'features_en': ['60 minutes of finished video', '30% cheaper per minute',
+                        'Priority queue in busy hours', 'Credits valid 6 months'],
     },
     'pro': {
         'name': 'Pro',
         'preis_cent': 3900,
         'minuten': 150,
         'sekunden': 150 * 60,
-        'beschreibung': 'Fuer Heavy-User und Agenturen',
-        'beschreibung_en': 'For heavy users and agencies',
-        'hinweis': 'Bester Preis pro Minute',
-        'hinweis_en': 'Best price per minute',
+        'beschreibung_en': 'Daily creator or small agency. Lowest cost per minute we offer.',
+        'hinweis_en': 'Save 42% vs Starter · Best value',
         'bester_wert': True,
+        'features_en': ['150 minutes of finished video', '42% cheaper per minute',
+                        'Priority queue', 'Credits valid 6 months'],
     },
 }
 
@@ -350,7 +350,14 @@ async def api_checkout(request: Request, pack: str = Form(...)):
         )
         return {'ok': True, 'url': session.url}
     except Exception as e:
-        raise HTTPException(500, f'Stripe-Fehler: {type(e).__name__}')
+        cls = type(e).__name__
+        if cls == 'AuthenticationError':
+            msg = 'Payment provider rejected our credentials. Server-side config issue — support has been notified.'
+        elif cls == 'APIConnectionError':
+            msg = 'Could not reach the payment provider. Please try again in a minute.'
+        else:
+            msg = f'Payment error ({cls}). Please try again in a minute.'
+        raise HTTPException(500, msg)
 
 
 @app.post('/api/stripe/webhook')
