@@ -1834,7 +1834,6 @@ function enterApp(user) {
   $('#topRest').textContent = `${min} min credit`;
   updateRing(min || 1, Math.max(min, 5));
   loadDefaults().then(rebuildAllWidgets).then(buildLooks).then(resumeActiveJob);
-  toast(`${greet}${State.codeName ? ', ' + State.codeName : ''}! Ready for your video?`, 'ok', 3000);
 }
 
 async function resumeActiveJob() {
