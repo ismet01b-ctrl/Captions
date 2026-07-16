@@ -153,7 +153,7 @@ def _create_user(email, pw, name=''):
         con.commit()
         return uid, None
     except sqlite3.IntegrityError:
-        return None, 'Diese E-Mail ist bereits registriert.'
+        return None, 'This email is already registered.'
     finally:
         con.close()
 
@@ -230,7 +230,7 @@ def _require_user(request):
     """FastAPI-Dependency-Style: wirft 401 wenn kein User."""
     u = _current_user(request)
     if not u:
-        raise HTTPException(401, 'Nicht eingeloggt.')
+        raise HTTPException(401, 'Not signed in.')
     return u
 
 
@@ -247,7 +247,9 @@ PACKS = {
         'minuten': 20,
         'sekunden': 20 * 60,
         'beschreibung': 'Perfekt zum Ausprobieren',
+        'beschreibung_en': 'Perfect to try it out',
         'hinweis': '1 Video pro Woche',
+        'hinweis_en': '1 video per week',
     },
     'creator': {
         'name': 'Creator',
@@ -255,7 +257,9 @@ PACKS = {
         'minuten': 60,
         'sekunden': 60 * 60,
         'beschreibung': 'Fuer regelmaessige Creator',
+        'beschreibung_en': 'For regular creators',
         'hinweis': '3-4 Videos pro Woche',
+        'hinweis_en': '3-4 videos per week',
         'empfohlen': True,
     },
     'pro': {
@@ -264,7 +268,9 @@ PACKS = {
         'minuten': 150,
         'sekunden': 150 * 60,
         'beschreibung': 'Fuer Heavy-User und Agenturen',
+        'beschreibung_en': 'For heavy users and agencies',
         'hinweis': 'Bester Preis pro Minute',
+        'hinweis_en': 'Best price per minute',
         'bester_wert': True,
     },
 }
@@ -309,11 +315,11 @@ async def api_checkout(request: Request, pack: str = Form(...)):
     Weiterleitung dorthin macht der Client (window.location)."""
     u = _require_user(request)
     if pack not in PACKS:
-        raise HTTPException(400, 'Unbekanntes Pack.')
+        raise HTTPException(400, 'Unknown pack.')
     st = _stripe()
     if not st:
-        raise HTTPException(503, 'Zahlung ist gerade nicht konfiguriert. '
-                                 'Bitte spaeter noch einmal versuchen.')
+        raise HTTPException(503, 'Payment is not configured yet. '
+                                 'Please try again later.')
     p = PACKS[pack]
     base = os.environ.get('DVE_PUBLIC_URL', '').rstrip('/') or str(request.base_url).rstrip('/')
     try:
@@ -327,7 +333,7 @@ async def api_checkout(request: Request, pack: str = Form(...)):
                     'unit_amount': p['preis_cent'],
                     'product_data': {
                         'name': f"DouchkoVE {p['name']} Pack",
-                        'description': f"{p['minuten']} Minuten Video-Guthaben",
+                        'description': f"{p['minuten']} minutes of video credit",
                     },
                 },
             }],
@@ -746,7 +752,7 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
     cmd = [sys.executable, os.path.join(ROOT, 'render.py'), src,
            '--config', cfg_path, '--out', out] + (extra_args or [])
     env = dict(os.environ)
-    set_state(jid, status='laeuft', phase='Transkribieren via OpenAI Whisper …',
+    set_state(jid, status='laeuft', phase='Transcribing …',
               progress=progress_start, log_tail=[], eta_sec=None)
     p = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -865,7 +871,7 @@ def run_job(jid):
             mom_path = base + '_momente.json'
             if os.path.exists(mom_path):
                 set_state(jid, status='analysiert', progress=1.0,
-                          phase='Momente bereit',
+                          phase='Moments ready',
                           moments_url=f'/api/moments/{jid}')
                 return
         set_state(jid, status='fehler', progress=0,
@@ -879,7 +885,7 @@ def run_job(jid):
     if 'OPENAI_API_KEY ist nicht gesetzt' in log_txt:
         set_state(jid, status='fehler', progress=0,
                   msg='Der Server ist nicht fertig eingerichtet '
-                      '(KI-Schluessel fehlt). Sag Support Bescheid.')
+                      '(AI key missing). Please contact support.')
         return
     for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
         if line.startswith('FEHLER:'):
@@ -894,12 +900,12 @@ def run_job(jid):
             verbrauch = max(1, int(round(j.get('dauer', 0))))
             _adjust_balance(uid, -verbrauch,
                             f'Render {jid} ({verbrauch}s)')
-        set_state(jid, status='fertig', progress=1.0, phase='Fertig',
+        set_state(jid, status='fertig', progress=1.0, phase='Done',
                   out='fertig.mp4')
     else:
         letzte = [x for x in log[-15:] if x.strip()]
         set_state(jid, status='fehler', progress=0,
-                  msg='Der Render ist fehlgeschlagen.',
+                  msg='Render failed.',
                   detail='\n'.join(letzte))
     # Quellvideo aufheben, damit "Momente-Editor" nach Analyse den Re-Render kann.
     # Erst beim Job-Cleanup loeschen.
@@ -951,9 +957,9 @@ def api_register(response: Response, email: str = Form(...),
     """v80h: Neuer Account, 2 Min Willkommens-Guthaben."""
     email = (email or '').strip().lower()
     if not _valid_email(email):
-        raise HTTPException(400, 'Bitte eine gueltige E-Mail eingeben.')
+        raise HTTPException(400, 'Please enter a valid email address.')
     if not _valid_pw(password):
-        raise HTTPException(400, 'Passwort braucht mindestens 8 Zeichen.')
+        raise HTTPException(400, 'Password needs at least 8 characters.')
     uid, err = _create_user(email, password, name)
     if err:
         raise HTTPException(409, err)
@@ -973,7 +979,7 @@ def api_login(response: Response, email: str = Form(...),
     email = (email or '').strip().lower()
     row = _find_user_by_email(email)
     if not row or not _verify_pw(password, row['pw_hash']):
-        raise HTTPException(401, 'E-Mail oder Passwort stimmt nicht.')
+        raise HTTPException(401, 'Email or password is wrong.')
     tok, exp = _create_session(row['id'])
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
@@ -1008,14 +1014,27 @@ def index():
     return _page('index.html')
 
 
-@app.get('/impressum', response_class=HTMLResponse)
-def impressum():
-    return _page('impressum.html')
+@app.get('/imprint', response_class=HTMLResponse)
+def imprint():
+    return _page('imprint.html')
 
 
-@app.get('/datenschutz', response_class=HTMLResponse)
-def datenschutz():
-    return _page('datenschutz.html')
+@app.get('/privacy', response_class=HTMLResponse)
+def privacy():
+    return _page('privacy.html')
+
+
+# Legacy DE-routes -> redirect
+@app.get('/impressum')
+def impressum_legacy():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse('/imprint')
+
+
+@app.get('/datenschutz')
+def datenschutz_legacy():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse('/privacy')
 
 
 @app.post('/api/pruefe-code')
@@ -1072,7 +1091,7 @@ async def upload(request: Request, datei: UploadFile = File(...),
     os.makedirs(d, exist_ok=True)
     ext = os.path.splitext(datei.filename or '')[1].lower() or '.mp4'
     if ext not in ('.mp4', '.mov', '.m4v', '.webm', '.mkv'):
-        raise HTTPException(400, 'Nur Videodateien (mp4, mov, webm, mkv).')
+        raise HTTPException(400, 'Only video files (mp4, mov, webm, mkv).')
     src = os.path.join(d, 'quelle' + ext)
     groesse = 0
     with open(src, 'wb') as f:
@@ -1084,7 +1103,7 @@ async def upload(request: Request, datei: UploadFile = File(...),
             if groesse > MAX_MB * 1024 * 1024:
                 f.close()
                 shutil.rmtree(d, ignore_errors=True)
-                raise HTTPException(413, f'Video zu groß (max. {MAX_MB} MB).')
+                raise HTTPException(413, f'Video too large (max {MAX_MB} MB).')
             f.write(chunk)
 
     try:
@@ -1096,8 +1115,8 @@ async def upload(request: Request, datei: UploadFile = File(...),
         dur = 0
     if dur > MAX_SECONDS:
         shutil.rmtree(d, ignore_errors=True)
-        raise HTTPException(413, f'Video zu lang ({dur:.0f}s). '
-                                 f'Maximal {MAX_SECONDS} Sekunden.')
+        raise HTTPException(413, f'Video too long ({dur:.0f}s). '
+                                 f'Maximum {MAX_SECONDS} seconds.')
 
     # v80i: Pre-Check auf Guthaben. Ohne Balance kein Render.
     u = _current_user(request)
@@ -1110,16 +1129,16 @@ async def upload(request: Request, datei: UploadFile = File(...),
             fehlt = need - u['balance_sec']
             raise HTTPException(
                 402,
-                f"Guthaben reicht nicht (Video braucht {need // 60}:"
-                f"{need % 60:02d} Min, du hast {u['balance_sec'] // 60}:"
-                f"{u['balance_sec'] % 60:02d} Min). "
-                f"Fehlen {fehlt // 60 + 1} Min - bitte Guthaben aufladen.")
+                f"Not enough credit (video needs {need // 60}:"
+                f"{need % 60:02d} min, you have {u['balance_sec'] // 60}:"
+                f"{u['balance_sec'] % 60:02d} min). "
+                f"Missing {fehlt // 60 + 1} min - please top up.")
 
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
                  'user_id': uid,
                  'mode': mode, 'cfg_overrides': overrides,
                  'status': 'wartet', 'progress': 0.0,
-                 'phase': 'In der Warteschlange …',
+                 'phase': 'Queued …',
                  'dauer': round(dur, 1), 'name': datei.filename}
     set_state(jid, **{k: v for k, v in JOBS[jid].items()
                       if k not in ('input', 'code')})
@@ -1135,10 +1154,10 @@ def status(jid: str):
         sp = os.path.join(job_dir(jid), 'state.json')
         if os.path.exists(sp):
             return json.load(open(sp, encoding='utf-8'))
-        raise HTTPException(404, 'Job unbekannt.')
+        raise HTTPException(404, 'Unknown job.')
     out = {k: v for k, v in j.items() if k not in ('input', 'code')}
     if j.get('status') == 'wartet':
-        out['phase'] = f'In der Warteschlange (Platz {QUEUE.qsize()}) …'
+        out['phase'] = f'Queued (position {QUEUE.qsize()}) …'
     return out
 
 
@@ -1156,11 +1175,11 @@ def get_moments(jid: str):
     """Momente-Datei aus der Analyse laden."""
     j = JOBS.get(jid)
     if not j:
-        raise HTTPException(404, 'Job unbekannt.')
+        raise HTTPException(404, 'Unknown job.')
     base = os.path.splitext(j['input'])[0]
     mom_path = base + '_momente.json'
     if not os.path.exists(mom_path):
-        raise HTTPException(404, 'Momente noch nicht analysiert.')
+        raise HTTPException(404, 'Moments not analyzed yet.')
     return json.load(open(mom_path, encoding='utf-8'))
 
 
@@ -1227,7 +1246,7 @@ async def save_template(request: Request, name: str = Form(...),
 def delete_template(request: Request, name: str, code: str = ''):
     ok, _ = check_auth(code, request)
     if not ok:
-        raise HTTPException(403, 'Nicht eingeloggt.')
+        raise HTTPException(403, 'Not signed in.')
     owner = _tpl_owner(code, request)
     all_ = _load_templates()
     entries = [e for e in all_.get(owner, []) if e.get('name') != name]
@@ -1244,7 +1263,7 @@ def get_thumb(jid: str, name: str):
     from fastapi.responses import FileResponse
     j = JOBS.get(jid)
     if not j:
-        raise HTTPException(404, 'Job unbekannt.')
+        raise HTTPException(404, 'Unknown job.')
     if not name.endswith('.jpg') or '/' in name or '\\' in name or '..' in name:
         raise HTTPException(400, 'Ungueltiger Thumb-Name.')
     thumb_dir = os.path.splitext(j['input'])[0] + '_thumbs'
@@ -1263,11 +1282,11 @@ async def save_and_render(request: Request, jid: str,
         raise HTTPException(403, msg)
     j = JOBS.get(jid)
     if not j:
-        raise HTTPException(404, 'Job unbekannt.')
+        raise HTTPException(404, 'Unknown job.')
     try:
         mom = json.loads(moments)
     except Exception:
-        raise HTTPException(400, 'Momente-JSON ungueltig.')
+        raise HTTPException(400, 'Moments JSON invalid.')
     base = os.path.splitext(j['input'])[0]
     mom_path = base + '_momente.json'
     json.dump(mom, open(mom_path, 'w', encoding='utf-8'),
@@ -1276,7 +1295,7 @@ async def save_and_render(request: Request, jid: str,
     j['mode'] = 'full'
     j['status'] = 'wartet'
     j['progress'] = 0.0
-    j['phase'] = 'In der Warteschlange (Re-Render) …'
+    j['phase'] = 'Queued (re-render) …'
     set_state(jid, **{k: v for k, v in j.items()
                       if k not in ('input', 'code')})
     QUEUE.put(jid)

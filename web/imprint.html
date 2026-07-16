@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imprint · DouchkoVE</title>
+<style>
+:root { --bg: #0b0812; --surf: #14101c; --fg: #f4f1ff; --mut: #a8a1c2; --acc: #7c5cff; --line: #2a2438; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--fg); line-height: 1.6; padding: 40px 24px; min-height: 100vh; }
+.wrap { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 32px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 8px; }
+h2 { font-size: 20px; font-weight: 800; margin: 32px 0 12px; }
+p, li { color: var(--mut); font-size: 15px; margin-bottom: 8px; }
+strong { color: var(--fg); font-weight: 600; }
+a { color: var(--acc); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.back { display: inline-block; margin-bottom: 32px; color: var(--mut); }
+.stub { background: var(--surf); border: 1px dashed var(--line);
+  padding: 16px 20px; border-radius: 12px; margin-top: 16px; }
+.stub p { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← Back</a>
+  <h1>Imprint</h1>
+  <p style="margin-top: 8px;">Legal information as required by German law (§ 5 TMG).</p>
+
+  <h2>Provider</h2>
+  <p><strong>{{NAME}}</strong><br>
+     {{STREET_NUMBER}}<br>
+     {{POSTAL_CITY}}<br>
+     Germany</p>
+
+  <h2>Contact</h2>
+  <p>Email: <a href="mailto:{{EMAIL}}">{{EMAIL}}</a></p>
+
+  <h2>Responsible for content per § 55 RStV</h2>
+  <p>{{NAME}}, address as above.</p>
+
+  <h2>Liability for content</h2>
+  <p>As a service provider, we are responsible for our own content on these pages
+    according to § 7 (1) TMG under general law. According to §§ 8 to 10 TMG, we
+    are not obligated to monitor transmitted or stored external information.</p>
+
+  <h2>Liability for links</h2>
+  <p>Our offer contains links to external websites of third parties whose content
+    we cannot influence. The respective provider or operator of the linked pages
+    is always responsible for their content.</p>
+
+  <h2>Copyright</h2>
+  <p>Content and works created by the site operator on these pages are subject to
+    German copyright law. Reproduction, editing, distribution, and any kind of
+    exploitation outside the limits of copyright require written consent.</p>
+
+  <div class="stub">
+    <p>⚠ Placeholder active</p>
+    <p style="font-weight: normal; color: var(--mut); margin-top: 8px;">
+      Ismet: replace {{NAME}}, {{STREET_NUMBER}}, {{POSTAL_CITY}}, {{EMAIL}} with real values before
+      launching. Without a real imprint you risk cease-and-desist letters in Germany.</p>
+  </div>
+</div>
+</body>
+</html>

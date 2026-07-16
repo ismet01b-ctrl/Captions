@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · DouchkoVE</title>
+<style>
+:root { --bg: #0b0812; --surf: #14101c; --fg: #f4f1ff; --mut: #a8a1c2; --acc: #7c5cff; --line: #2a2438; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--fg); line-height: 1.6; padding: 40px 24px; min-height: 100vh; }
+.wrap { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 32px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 8px; }
+h2 { font-size: 20px; font-weight: 800; margin: 32px 0 12px; }
+p, li { color: var(--mut); font-size: 15px; margin-bottom: 8px; }
+li { margin-left: 20px; }
+strong { color: var(--fg); font-weight: 600; }
+a { color: var(--acc); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.back { display: inline-block; margin-bottom: 32px; color: var(--mut); }
+.hi { background: rgba(124, 92, 255, 0.1); border-left: 3px solid var(--acc);
+  padding: 12px 16px; border-radius: 6px; margin: 16px 0; }
+.hi p { color: var(--fg); }
+.stub { background: var(--surf); border: 1px dashed var(--line);
+  padding: 16px 20px; border-radius: 12px; margin-top: 24px; }
+.stub p { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← Back</a>
+  <h1>Privacy Policy</h1>
+  <p style="margin-top: 8px;">Short, honest, concrete.</p>
+
+  <div class="hi">
+    <p><strong>Summary:</strong> You upload a video, we add captions, you download it.
+      Everything is auto-deleted after 7 days. No tracking, no data sharing
+      except one processing step with our AI provider.</p>
+  </div>
+
+  <h2>Controller</h2>
+  <p>{{NAME}}, {{STREET_NUMBER}}, {{POSTAL_CITY}}, {{EMAIL}}</p>
+
+  <h2>What data we process</h2>
+  <ul>
+    <li><strong>Your video:</strong> uploaded by you for processing</li>
+    <li><strong>Your account email &amp; password (hashed):</strong> for login and billing</li>
+    <li><strong>Server logs:</strong> IP address and timestamps for operations
+      (kept no longer than 14 days)</li>
+    <li><strong>Payment data:</strong> handled by Stripe (Stripe Payments Europe,
+      Ltd., Ireland). We only see your email and the amount paid.</li>
+  </ul>
+
+  <h2>What we do NOT do</h2>
+  <ul>
+    <li>No Google Analytics, no Meta Pixel, no advertising tracker</li>
+    <li>No cookies other than the technically required session cookie</li>
+    <li>No sharing of your videos with advertising partners</li>
+  </ul>
+
+  <h2>Sharing with our AI provider (data processor)</h2>
+  <p>For transcription and AI direction we share the following with our AI provider
+    (OpenAI, L.L.C., San Francisco, USA):</p>
+  <ul>
+    <li>The audio track of your video (for transcription)</li>
+    <li>Individual video frames of the most important moments (for vision analysis)</li>
+    <li>The recognized text (for the direction decision)</li>
+  </ul>
+  <p>The provider is contractually bound <strong>not to use API data for model training</strong>
+    and to delete it after 30 days. Details:
+    <a href="https://openai.com/policies/eu-privacy-policy" target="_blank">privacy policy</a>.</p>
+
+  <h2>Retention</h2>
+  <ul>
+    <li>Videos, transcripts, intermediate files: <strong>7 days after upload</strong>, then automatic deletion</li>
+    <li>Server logs: 14 days</li>
+    <li>Account and purchase history: until you delete your account</li>
+  </ul>
+
+  <h2>Your rights</h2>
+  <p>You have the right to access, correct, delete, and object.
+    Contact: <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>.
+    Right to complain to the responsible supervisory authority.</p>
+
+  <h2>Hosting</h2>
+  <p>Server is located at netcup GmbH, Karlsruhe, Germany. No transfer to third countries
+    outside of the AI-provider processing step described above.</p>
+
+  <div class="stub">
+    <p>⚠ Placeholder active</p>
+    <p style="font-weight: normal; color: var(--mut); margin-top: 8px;">
+      Ismet: replace {{NAME}}, {{STREET_NUMBER}}, {{POSTAL_CITY}}, {{EMAIL}} with real values. Text
+      structure is GDPR-compliant. For commercial use, a DPA with OpenAI Business
+      is recommended.</p>
+  </div>
+</div>
+</body>
+</html>
