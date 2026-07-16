@@ -83,6 +83,13 @@ def _init_users_db():
       expires_at    INTEGER NOT NULL,
       used          INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS verify_tokens (
+      token         TEXT PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id),
+      created_at    INTEGER NOT NULL,
+      expires_at    INTEGER NOT NULL,
+      used          INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS ledger (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id       INTEGER NOT NULL REFERENCES users(id),
@@ -92,6 +99,13 @@ def _init_users_db():
     );
     """)
     con.commit()
+    # v80x: verified-Spalte nachziehen. Bestands-Accounts werden als
+    # verifiziert uebernommen (Grandfathering), Neue starten bei 0.
+    cols = [r[1] for r in con.execute("PRAGMA table_info(users)").fetchall()]
+    if 'verified' not in cols:
+        con.execute("ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
+        con.execute("UPDATE users SET verified = 1")
+        con.commit()
     con.close()
 
 
@@ -262,6 +276,46 @@ def _create_reset(uid):
     return tok
 
 
+def _send_verify_mail(uid, email, name=''):
+    """Verify-Token erzeugen + Mail raus. 48h gueltig. Fehler nicht fatal."""
+    tok = secrets.token_urlsafe(32)
+    now = int(time.time())
+    con = _db()
+    con.execute("INSERT INTO verify_tokens (token, user_id, created_at, "
+                "expires_at) VALUES (?, ?, ?, ?)", (tok, uid, now, now + 172800))
+    con.execute("DELETE FROM verify_tokens WHERE expires_at < ?", (now,))
+    con.commit()
+    con.close()
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    try:
+        _send_mail(email, 'Verify your DouchkoVE email',
+                   f'Hi{" " + name if name else ""},\n\n'
+                   f'welcome to DouchkoVE! Please confirm your email address '
+                   f'(needed before purchasing credits):\n\n'
+                   f'{base}/app?verify={tok}\n\n'
+                   f'Link is valid for 48 hours.\n\n— DouchkoVE')
+        return True
+    except Exception as e:
+        print(f'Verify-Mail fehlgeschlagen: {type(e).__name__}: {e}')
+        return False
+
+
+def _consume_verify(token):
+    if not token:
+        return None
+    con = _db()
+    row = con.execute(
+        "SELECT user_id FROM verify_tokens WHERE token = ? AND used = 0 "
+        "AND expires_at > ?", (token, int(time.time()))).fetchone()
+    if row:
+        con.execute("UPDATE verify_tokens SET used = 1 WHERE token = ?", (token,))
+        con.execute("UPDATE users SET verified = 1 WHERE id = ?",
+                    (row['user_id'],))
+        con.commit()
+    con.close()
+    return row['user_id'] if row else None
+
+
 def _consume_reset(token):
     """Token pruefen + als benutzt markieren. Gibt user_id oder None."""
     if not token:
@@ -380,6 +434,10 @@ async def api_checkout(request: Request, pack: str = Form(...)):
     """Erstellt eine Stripe-Checkout-Session und liefert die URL zurueck.
     Weiterleitung dorthin macht der Client (window.location)."""
     u = _require_user(request)
+    if not u['verified']:
+        raise HTTPException(403, 'Please verify your email before purchasing - '
+                                 'check your inbox, or resend the link in '
+                                 'Account settings.')
     if pack not in PACKS:
         raise HTTPException(400, 'Unknown pack.')
     st = _stripe()
@@ -993,12 +1051,38 @@ def run_job(jid):
     # Erst beim Job-Cleanup loeschen.
 
 
+def _backup_users_db():
+    """v80x: Taeglicher Snapshot der users.db nach DATA/backups.
+    14 Stueck rotierend. SQLite-Online-Backup-API - konsistent auch
+    waehrend laufender Writes."""
+    bdir = os.path.join(DATA, 'backups')
+    os.makedirs(bdir, exist_ok=True)
+    stamp = time.strftime('%Y%m%d')
+    dest = os.path.join(bdir, f'users_{stamp}.db')
+    if os.path.exists(dest):
+        return                                   # heute schon gesichert
+    try:
+        src = sqlite3.connect(USERS_DB)
+        dst = sqlite3.connect(dest)
+        src.backup(dst)
+        dst.close(); src.close()
+        # Rotation: nur die 14 neuesten behalten
+        snaps = sorted(f for f in os.listdir(bdir) if f.startswith('users_'))
+        for old in snaps[:-14]:
+            os.remove(os.path.join(bdir, old))
+        print(f"DB-Backup: {dest}")
+    except Exception as e:
+        print(f"DB-Backup fehlgeschlagen: {type(e).__name__}: {e}")
+
+
 def _cleanup_worker():
     """v80g: Alte Job-Verzeichnisse loeschen. Standard 7 Tage, ueber
-    DVE_RETENTION_DAYS ueberschreibbar. Laeuft stuendlich."""
+    DVE_RETENTION_DAYS ueberschreibbar. Laeuft stuendlich.
+    v80x: macht nebenbei den taeglichen users.db-Snapshot."""
     import time as _t
     retention = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
     while True:
+        _backup_users_db()
         try:
             cutoff = _t.time() - retention * 86400
             if os.path.isdir(JOBS_DIR):
@@ -1104,12 +1188,13 @@ def api_register(request: Request, response: Response,
     uid, err = _create_user(email, password, name)
     if err:
         raise HTTPException(409, err)
+    _send_verify_mail(uid, email, name.strip())        # v80x
     tok, exp = _create_session(uid)
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
     u = _find_user_by_id(uid)
     return {'ok': True, 'email': u['email'], 'name': u['name'],
-            'balance_sec': u['balance_sec']}
+            'balance_sec': u['balance_sec'], 'verified': bool(u['verified'])}
 
 
 @app.post('/api/login')
@@ -1125,7 +1210,7 @@ def api_login(response: Response, email: str = Form(...),
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
     return {'ok': True, 'email': row['email'], 'name': row['name'],
-            'balance_sec': row['balance_sec']}
+            'balance_sec': row['balance_sec'], 'verified': bool(row['verified'])}
 
 
 @app.post('/api/logout')
@@ -1142,7 +1227,7 @@ def api_me(request: Request):
     if not u:
         return {'ok': False}
     return {'ok': True, 'email': u['email'], 'name': u['name'],
-            'balance_sec': u['balance_sec']}
+            'balance_sec': u['balance_sec'], 'verified': bool(u['verified'])}
 
 
 @app.post('/api/forgot_password')
@@ -1194,6 +1279,27 @@ def api_reset_password(response: Response, token: str = Form(...),
     u = _find_user_by_id(uid)
     return {'ok': True, 'email': u['email'], 'name': u['name'],
             'balance_sec': u['balance_sec']}
+
+
+@app.post('/api/verify_email')
+def api_verify_email(token: str = Form(...)):
+    """v80x: Verify-Token einloesen."""
+    uid = _consume_verify(token)
+    if not uid:
+        raise HTTPException(400, 'This verification link is invalid or has '
+                                 'expired. Request a new one in Account settings.')
+    return {'ok': True}
+
+
+@app.post('/api/resend_verification')
+def api_resend_verification(request: Request):
+    u = _require_user(request)
+    if u['verified']:
+        return {'ok': True, 'msg': 'Already verified.'}
+    ok = _send_verify_mail(u['id'], u['email'], u['name'] or '')
+    if not ok:
+        raise HTTPException(500, 'Could not send the email. Try again later.')
+    return {'ok': True, 'msg': 'Verification email sent.'}
 
 
 @app.post('/api/change_password')

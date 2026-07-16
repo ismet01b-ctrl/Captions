@@ -939,6 +939,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <p id="accEmail" style="color:var(--mut);">—</p>
       </div>
       <div class="body">
+        <div id="verifyBox" style="display:none; margin-bottom:20px; padding:12px 16px;
+             background:rgba(245,196,81,0.1); border-left:3px solid #f5c451; border-radius:6px;">
+          <p style="color:var(--fg); font-size:14px; margin-bottom:8px;">
+            Your email is not verified yet — purchasing is locked.</p>
+          <button class="btn secondary" id="btnResendVerify" type="button"
+                  style="padding:8px 14px;">Resend verification email</button>
+        </div>
         <h4 style="margin-bottom:12px;">Change password</h4>
         <form id="pwForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px;">
           <input type="password" id="pwOld" placeholder="Current password" required autocomplete="current-password">
@@ -1862,6 +1869,7 @@ function enterApp(user) {
   State.code = 'user';
   State.codeName = user.name || user.email.split('@')[0];
   State.email = user.email;
+  State.verified = user.verified !== false;
   State.balanceSec = user.balance_sec || 0;
   $('#loginView').classList.add('hidden');
   $('#appView').classList.add('show');
@@ -1932,8 +1940,22 @@ async function handleResetLink() {
   return true;
 }
 
+async function handleVerifyLink() {
+  const tok = new URLSearchParams(location.search).get('verify');
+  if (!tok) return;
+  history.replaceState({}, '', location.pathname);
+  const fd = new FormData(); fd.append('token', tok);
+  try {
+    const r = await fetch('/api/verify_email', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (r.ok) toast('Email verified — you can now purchase credits.', 'ok', 6000);
+    else toast(d.detail || 'Verification failed.', 'err', 6000);
+  } catch (e) { toast('Connection error.', 'err'); }
+}
+
 /* Auto-Login beim Seiten-Laden (Session-Cookie) */
 (async () => {
+  await handleVerifyLink();
   if (await handleResetLink()) return;
   try {
     const r = await fetch('/api/me');
@@ -2077,7 +2099,15 @@ if ($('#btnBuy')) $('#btnBuy').addEventListener('click', showPricing);
 if ($('#btnHistory')) $('#btnHistory').addEventListener('click', showHistory);
 if ($('#pricingClose')) $('#pricingClose').addEventListener('click', () => $('#pricingModal').classList.add('hidden'));
 if ($('#historyClose')) $('#historyClose').addEventListener('click', () => $('#historyModal').classList.add('hidden'));
+if ($('#btnResendVerify')) $('#btnResendVerify').addEventListener('click', async () => {
+  try {
+    const r = await fetch('/api/resend_verification', { method: 'POST' });
+    const d = await r.json();
+    toast(r.ok ? (d.msg || 'Sent.') : (d.detail || 'Failed.'), r.ok ? 'ok' : 'err');
+  } catch (e) { toast('Connection error.', 'err'); }
+});
 if ($('#btnAccount')) $('#btnAccount').addEventListener('click', () => {
+  $('#verifyBox').style.display = State.verified === false ? 'block' : 'none';
   $('#accEmail').textContent = State.email || '';
   $('#pwOld').value = ''; $('#pwNew').value = ''; $('#delPw').value = '';
   $('#accountModal').classList.remove('hidden');
