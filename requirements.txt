@@ -5,3 +5,4 @@ mediapipe
 onnxruntime
 requests
 PyYAML
+bcrypt

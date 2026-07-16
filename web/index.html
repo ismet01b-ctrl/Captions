@@ -790,17 +790,34 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
   <div class="hero-inner">
     <div class="hero-brand">DouchkoVE</div>
     <div class="hero-tag">CAPTIONS</div>
-    <h1 class="hero-title">Premium-Captions.<br>In <span class="glow">wenigen Minuten.</span></h1>
-    <p class="hero-sub">Video hochladen — fertig zurueckbekommen.<br>
-      Kein Download, kein Konto.</p>
-    <label for="code" class="sr-only">Zugangscode</label>
-    <input type="text" id="code" placeholder="Zugangscode"
-           autocomplete="off" autocapitalize="characters" inputmode="text"
-           aria-describedby="loginErr">
-    <button class="btn wide" id="btnLogin" style="margin-top:12px;">Loslegen</button>
+    <h1 class="hero-title" id="authTitle">Premium-Captions.<br>In <span class="glow">wenigen Minuten.</span></h1>
+    <p class="hero-sub" id="authSub">Konto anlegen — 2 Minuten Video zum Ausprobieren geschenkt.</p>
+
+    <div id="authTabs" style="display:flex; gap:6px; margin: 0 auto 14px; max-width:340px;
+                              background:rgba(0,0,0,0.3); border-radius:10px; padding:4px;">
+      <button type="button" class="auth-tab on" data-mode="register" style="flex:1; padding:10px; border:0;
+              background:var(--acc); color:#fff; border-radius:8px; font-weight:700; cursor:pointer;">
+        Neu hier
+      </button>
+      <button type="button" class="auth-tab" data-mode="login" style="flex:1; padding:10px; border:0;
+              background:transparent; color:var(--mut); border-radius:8px; font-weight:600; cursor:pointer;">
+        Einloggen
+      </button>
+    </div>
+
+    <form id="authForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;
+          max-width:340px; margin:0 auto;">
+      <input type="text" id="authName" placeholder="Vorname (optional)"
+             autocomplete="given-name" style="text-transform:none;">
+      <input type="email" id="authEmail" placeholder="E-Mail" required
+             autocomplete="email" style="text-transform:none;">
+      <input type="password" id="authPassword" placeholder="Passwort (min. 8 Zeichen)"
+             required autocomplete="new-password" minlength="8" style="text-transform:none;">
+      <button class="btn wide" id="btnAuth" type="submit" style="margin-top:6px;">Konto anlegen</button>
+    </form>
     <div class="err hidden" id="loginErr" role="alert"></div>
-    <div class="trust">
-      Video bleibt privat · nach Download geloescht
+    <div class="trust" style="margin-top:14px;">
+      Video bleibt privat · Speicher automatisch nach 7 Tagen geloescht
     </div>
   </div>
 </div>
@@ -1628,48 +1645,90 @@ function greetingForHour() {
   return 'Gute Nacht';
 }
 
-$('#btnLogin').addEventListener('click', doLogin);
-$('#code').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+/* v80h: Email + Passwort. Register/Login als Tabs im gleichen Formular. */
+let authMode = 'register';
 
-async function doLogin() {
-  const code = $('#code').value.trim();
-  if (!code) return;
-  const btn = $('#btnLogin'); btn.disabled = true;
+function setAuthMode(mode) {
+  authMode = mode;
+  $$('.auth-tab').forEach(b => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle('on', on);
+    b.style.background = on ? 'var(--acc)' : 'transparent';
+    b.style.color = on ? '#fff' : 'var(--mut)';
+    b.style.fontWeight = on ? '700' : '600';
+  });
+  $('#authName').style.display = mode === 'register' ? 'block' : 'none';
+  $('#authPassword').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
+  $('#btnAuth').textContent = mode === 'register' ? 'Konto anlegen' : 'Einloggen';
+  $('#authSub').textContent = mode === 'register'
+    ? 'Konto anlegen — 2 Minuten Video zum Ausprobieren geschenkt.'
+    : 'Willkommen zurueck.';
+  $('#loginErr').classList.add('hidden');
+}
+$$('.auth-tab').forEach(b => b.addEventListener('click', () => setAuthMode(b.dataset.mode)));
+
+$('#authForm').addEventListener('submit', doAuth);
+
+async function doAuth() {
+  const email = $('#authEmail').value.trim();
+  const pw = $('#authPassword').value;
+  const name = $('#authName').value.trim();
+  const err = $('#loginErr');
+  err.classList.add('hidden');
+  if (!email || !pw) return;
+  if (authMode === 'register' && pw.length < 8) {
+    err.textContent = 'Passwort braucht mindestens 8 Zeichen.';
+    err.classList.remove('hidden');
+    return;
+  }
+  const btn = $('#btnAuth'); btn.disabled = true;
+  const orig = btn.textContent;
   btn.innerHTML = '<span class="spin"></span> Verbinde …';
   try {
-    const fd = new FormData(); fd.append('code', code);
-    const r = await fetch('/api/pruefe-code', { method: 'POST', body: fd });
+    const fd = new FormData();
+    fd.append('email', email); fd.append('password', pw);
+    if (authMode === 'register') fd.append('name', name);
+    const r = await fetch('/api/' + authMode, { method: 'POST', body: fd });
     const d = await r.json();
-    if (!d.ok) {
-      $('#loginErr').textContent = d.msg;
-      $('#loginErr').classList.remove('hidden');
+    if (!r.ok || d.ok === false) {
+      err.textContent = d.detail || d.msg || 'Anmeldung fehlgeschlagen.';
+      err.classList.remove('hidden');
       return;
     }
-    State.code = code; State.codeName = d.name; State.codeRest = d.rest;
-    $('#loginView').classList.add('hidden');
-    $('#appView').classList.add('show');
-    const greet = greetingForHour();
-    $('#topName').textContent = `${greet}${d.name ? ', ' + d.name : ''}`;
-    if (d.rest !== null) {
-      $('#topRest').textContent = `${d.rest} Videos frei`;
-      State.codeLimit = d.rest + 0;  // hier approximiert; server liefert nur rest
-      updateRing(d.rest, d.rest + 5); // ohne Gesamt-Limit: minimal-Anzeige
-    } else {
-      $('#topRest').textContent = 'unbegrenzt';
-      updateRing(1, 1);
-    }
-    await loadDefaults();
-    rebuildAllWidgets();
-    await buildLooks();
-    toast(`${greet}${d.name ? ', ' + d.name : ''}! Bereit fuer dein Video?`, 'ok', 3000);
+    enterApp(d);
   } catch (e) {
-    $('#loginErr').textContent = 'Verbindungsfehler.';
-    $('#loginErr').classList.remove('hidden');
+    err.textContent = 'Verbindungsfehler.';
+    err.classList.remove('hidden');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Loslegen';
+    btn.textContent = orig;
   }
 }
+
+function enterApp(user) {
+  State.code = 'user';                   // legacy fallback für bestehende Aufrufe
+  State.codeName = user.name || user.email.split('@')[0];
+  State.email = user.email;
+  State.balanceSec = user.balance_sec || 0;
+  $('#loginView').classList.add('hidden');
+  $('#appView').classList.add('show');
+  const greet = greetingForHour();
+  $('#topName').textContent = `${greet}${State.codeName ? ', ' + State.codeName : ''}`;
+  const min = Math.floor(State.balanceSec / 60);
+  $('#topRest').textContent = `${min} Min Guthaben`;
+  updateRing(min || 1, Math.max(min, 5));
+  loadDefaults().then(rebuildAllWidgets).then(buildLooks);
+  toast(`${greet}${State.codeName ? ', ' + State.codeName : ''}! Bereit fuer dein Video?`, 'ok', 3000);
+}
+
+/* Auto-Login beim Seiten-Laden (Session-Cookie) */
+(async () => {
+  try {
+    const r = await fetch('/api/me');
+    const d = await r.json();
+    if (d.ok) enterApp(d);
+  } catch (e) {}
+})();
 
 function updateRing(rest, total) {
   const pct = total > 0 ? Math.max(0.02, rest / total) : 1;
@@ -1678,7 +1737,10 @@ function updateRing(rest, total) {
   $('#ringNum').textContent = String(rest);
 }
 
-$('#btnLogout').addEventListener('click', () => location.reload());
+$('#btnLogout').addEventListener('click', async () => {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  location.reload();
+});
 
 /* --------- Stepper --------- */
 function goStep(n) {

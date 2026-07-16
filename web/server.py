@@ -18,7 +18,10 @@ import copy
 import glob
 import json
 import os
+import re
+import secrets
 import shutil
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -27,7 +30,7 @@ import uuid
 from queue import Queue
 
 import yaml
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Cookie, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -36,10 +39,199 @@ ROOT = os.path.dirname(HERE)
 DATA = os.environ.get('DVE_DATA', os.path.join(HERE, 'data'))
 JOBS_DIR = os.path.join(DATA, 'jobs')
 CODES_FILE = os.path.join(DATA, 'codes.json')
+USERS_DB = os.path.join(DATA, 'users.db')
 MAX_MB = int(os.environ.get('DVE_MAX_MB', '300'))
 MAX_SECONDS = int(os.environ.get('DVE_MAX_SECONDS', '180'))
+SESSION_DAYS = 30
+TRIAL_SECONDS = int(os.environ.get('DVE_TRIAL_SECONDS', '120'))  # 2 Min gratis
 
 os.makedirs(JOBS_DIR, exist_ok=True)
+os.makedirs(DATA, exist_ok=True)
+
+
+# ================================================================
+# v80h: User-Accounts (Email + Passwort, bcrypt-Hashing, SQLite)
+# ================================================================
+def _db():
+    con = sqlite3.connect(USERS_DB)
+    con.row_factory = sqlite3.Row
+    return con
+
+
+def _init_users_db():
+    con = _db()
+    con.executescript("""
+    CREATE TABLE IF NOT EXISTS users (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      email         TEXT UNIQUE NOT NULL,
+      pw_hash       TEXT NOT NULL,
+      name          TEXT DEFAULT '',
+      balance_sec   INTEGER NOT NULL DEFAULT 0,
+      created_at    INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      token         TEXT PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id),
+      created_at    INTEGER NOT NULL,
+      expires_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ix_sess_user ON sessions(user_id);
+    CREATE TABLE IF NOT EXISTS ledger (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id       INTEGER NOT NULL REFERENCES users(id),
+      delta_sec     INTEGER NOT NULL,
+      grund         TEXT NOT NULL,
+      created_at    INTEGER NOT NULL
+    );
+    """)
+    con.commit()
+    con.close()
+
+
+_init_users_db()
+
+
+def _hash_pw(pw):
+    """bcrypt-Hash. Wenn bcrypt fehlt, faellt auf pbkdf2_sha256 zurueck."""
+    try:
+        import bcrypt
+        return bcrypt.hashpw(pw.encode('utf-8'), bcrypt.gensalt()).decode('ascii')
+    except ImportError:
+        import hashlib
+        salt = secrets.token_hex(16)
+        h = hashlib.pbkdf2_hmac('sha256', pw.encode('utf-8'), salt.encode(), 260000)
+        return f'pbkdf2$260000${salt}${h.hex()}'
+
+
+def _verify_pw(pw, stored):
+    """Vergleicht Passwort mit gespeichertem Hash - bcrypt oder pbkdf2."""
+    if not stored:
+        return False
+    try:
+        if stored.startswith('$2'):     # bcrypt
+            import bcrypt
+            return bcrypt.checkpw(pw.encode('utf-8'), stored.encode('ascii'))
+    except Exception:
+        return False
+    if stored.startswith('pbkdf2$'):
+        import hashlib
+        try:
+            _, it, salt, hexh = stored.split('$')
+            h = hashlib.pbkdf2_hmac('sha256', pw.encode('utf-8'),
+                                    salt.encode(), int(it))
+            return secrets.compare_digest(h.hex(), hexh)
+        except Exception:
+            return False
+    return False
+
+
+EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+
+
+def _valid_email(s):
+    return bool(s) and len(s) <= 254 and EMAIL_RE.match(s)
+
+
+def _valid_pw(s):
+    return bool(s) and 8 <= len(s) <= 200
+
+
+def _create_user(email, pw, name=''):
+    con = _db()
+    try:
+        cur = con.execute(
+            "INSERT INTO users (email, pw_hash, name, balance_sec, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (email.strip().lower(), _hash_pw(pw), name.strip()[:60],
+             TRIAL_SECONDS, int(time.time())))
+        uid = cur.lastrowid
+        if TRIAL_SECONDS > 0:
+            con.execute(
+                "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (uid, TRIAL_SECONDS, 'Willkommens-Guthaben', int(time.time())))
+        con.commit()
+        return uid, None
+    except sqlite3.IntegrityError:
+        return None, 'Diese E-Mail ist bereits registriert.'
+    finally:
+        con.close()
+
+
+def _find_user_by_email(email):
+    con = _db()
+    row = con.execute("SELECT * FROM users WHERE email = ?",
+                      (email.strip().lower(),)).fetchone()
+    con.close()
+    return row
+
+
+def _find_user_by_id(uid):
+    con = _db()
+    row = con.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    con.close()
+    return row
+
+
+def _create_session(uid):
+    tok = secrets.token_urlsafe(32)
+    now = int(time.time())
+    exp = now + SESSION_DAYS * 86400
+    con = _db()
+    con.execute(
+        "INSERT INTO sessions (token, user_id, created_at, expires_at) "
+        "VALUES (?, ?, ?, ?)", (tok, uid, now, exp))
+    # alte abgelaufene Sessions gleich mit weg
+    con.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+    con.commit()
+    con.close()
+    return tok, exp
+
+
+def _session_user(token):
+    if not token:
+        return None
+    con = _db()
+    row = con.execute(
+        "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
+        "WHERE s.token = ? AND s.expires_at > ?",
+        (token, int(time.time()))).fetchone()
+    con.close()
+    return row
+
+
+def _kill_session(token):
+    if not token:
+        return
+    con = _db()
+    con.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    con.commit()
+    con.close()
+
+
+def _adjust_balance(uid, delta_sec, grund):
+    con = _db()
+    con.execute("UPDATE users SET balance_sec = MAX(0, balance_sec + ?) "
+                "WHERE id = ?", (delta_sec, uid))
+    con.execute(
+        "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (uid, delta_sec, grund[:120], int(time.time())))
+    con.commit()
+    con.close()
+
+
+def _current_user(request):
+    """Session-Cookie -> User-Row oder None."""
+    return _session_user(request.cookies.get('dve_session'))
+
+
+def _require_user(request):
+    """FastAPI-Dependency-Style: wirft 401 wenn kein User."""
+    u = _current_user(request)
+    if not u:
+        raise HTTPException(401, 'Nicht eingeloggt.')
+    return u
 
 app = FastAPI(title='DouchkoVE')
 
@@ -135,6 +327,17 @@ def check_code(code):
         return False, (f"Kontingent aufgebraucht ({c['genutzt']}/{c['limit']} Videos). "
                        'Melde dich bei Ismet.')
     return True, ''
+
+
+def check_auth(code, request):
+    """v80h: Neuer Auth-Wrapper - akzeptiert entweder ein gueltiges Session-
+    Cookie (User-Account) ODER einen Legacy-Code (Freundes-Kreis).
+    Rueckgabe wie check_code: (ok: bool, msg: str)."""
+    if request is not None:
+        u = _current_user(request)
+        if u:
+            return True, ''
+    return check_code(code)
 
 
 def count_use(code):
@@ -574,6 +777,59 @@ def _page(name):
     return open(p, encoding='utf-8').read()
 
 
+@app.post('/api/register')
+def api_register(response: Response, email: str = Form(...),
+                 password: str = Form(...), name: str = Form('')):
+    """v80h: Neuer Account, 2 Min Willkommens-Guthaben."""
+    email = (email or '').strip().lower()
+    if not _valid_email(email):
+        raise HTTPException(400, 'Bitte eine gueltige E-Mail eingeben.')
+    if not _valid_pw(password):
+        raise HTTPException(400, 'Passwort braucht mindestens 8 Zeichen.')
+    uid, err = _create_user(email, password, name)
+    if err:
+        raise HTTPException(409, err)
+    tok, exp = _create_session(uid)
+    response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
+                        secure=True, max_age=SESSION_DAYS * 86400, path='/')
+    u = _find_user_by_id(uid)
+    return {'ok': True, 'email': u['email'], 'name': u['name'],
+            'balance_sec': u['balance_sec']}
+
+
+@app.post('/api/login')
+def api_login(response: Response, email: str = Form(...),
+              password: str = Form(...)):
+    """v80h: Login. Gleiche Fehlermeldung fuer 'nicht vorhanden' und 'Passwort
+    falsch', damit man E-Mails nicht enumerieren kann."""
+    email = (email or '').strip().lower()
+    row = _find_user_by_email(email)
+    if not row or not _verify_pw(password, row['pw_hash']):
+        raise HTTPException(401, 'E-Mail oder Passwort stimmt nicht.')
+    tok, exp = _create_session(row['id'])
+    response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
+                        secure=True, max_age=SESSION_DAYS * 86400, path='/')
+    return {'ok': True, 'email': row['email'], 'name': row['name'],
+            'balance_sec': row['balance_sec']}
+
+
+@app.post('/api/logout')
+def api_logout(request: Request, response: Response):
+    _kill_session(request.cookies.get('dve_session'))
+    response.delete_cookie('dve_session', path='/')
+    return {'ok': True}
+
+
+@app.get('/api/me')
+def api_me(request: Request):
+    """Aktuellen Nutzer laden (fuer Auto-Login beim Seiten-Reload)."""
+    u = _current_user(request)
+    if not u:
+        return {'ok': False}
+    return {'ok': True, 'email': u['email'], 'name': u['name'],
+            'balance_sec': u['balance_sec']}
+
+
 @app.get('/', response_class=HTMLResponse)
 def landing():
     return _page('landing.html')
@@ -631,10 +887,10 @@ def default_config(look: str = 'creator'):
 
 
 @app.post('/api/upload')
-async def upload(datei: UploadFile = File(...), look: str = Form('creator'),
-                 code: str = Form(...), mode: str = Form('full'),
-                 cfg_overrides: str = Form('{}')):
-    ok, msg = check_code(code)
+async def upload(request: Request, datei: UploadFile = File(...),
+                 look: str = Form('creator'), code: str = Form(''),
+                 mode: str = Form('full'), cfg_overrides: str = Form('{}')):
+    ok, msg = check_auth(code, request)
     if not ok:
         raise HTTPException(403, msg)
     if look not in LOOKS:
@@ -741,21 +997,28 @@ def _save_templates(data):
               ensure_ascii=False, indent=1)
 
 
+def _tpl_owner(code, request):
+    """v80h: Templates werden pro User (Email) gespeichert wenn eingeloggt,
+    sonst pro Code als Fallback."""
+    u = _current_user(request) if request else None
+    if u:
+        return 'u:' + u['email']
+    return code
+
+
 @app.get('/api/templates')
-def list_templates(code: str = ''):
-    """Alle Templates fuer diesen Code auflisten (v80f)."""
-    ok, _ = check_code(code)
+def list_templates(request: Request, code: str = ''):
+    ok, _ = check_auth(code, request)
     if not ok:
         return {'templates': []}
     all_ = _load_templates()
-    return {'templates': all_.get(code, [])}
+    return {'templates': all_.get(_tpl_owner(code, request), [])}
 
 
 @app.post('/api/templates')
-async def save_template(name: str = Form(...), settings: str = Form(...),
-                        code: str = Form(...)):
-    """Setting-Snapshot als Named Template speichern (v80f)."""
-    ok, msg = check_code(code)
+async def save_template(request: Request, name: str = Form(...),
+                        settings: str = Form(...), code: str = Form('')):
+    ok, msg = check_auth(code, request)
     if not ok:
         raise HTTPException(403, msg)
     name = name.strip()[:60]
@@ -765,23 +1028,25 @@ async def save_template(name: str = Form(...), settings: str = Form(...),
         payload = json.loads(settings)
     except Exception:
         raise HTTPException(400, 'Settings-JSON ungueltig.')
+    owner = _tpl_owner(code, request)
     all_ = _load_templates()
-    entries = all_.setdefault(code, [])
-    entries = [e for e in entries if e.get('name') != name]     # ueberschreiben
+    entries = all_.setdefault(owner, [])
+    entries = [e for e in entries if e.get('name') != name]
     entries.append({'name': name, 'settings': payload})
-    all_[code] = entries[-20:]                                  # Deckel: 20/Code
+    all_[owner] = entries[-20:]
     _save_templates(all_)
-    return {'ok': True, 'count': len(all_[code])}
+    return {'ok': True, 'count': len(all_[owner])}
 
 
 @app.delete('/api/templates/{name}')
-def delete_template(name: str, code: str = ''):
-    ok, _ = check_code(code)
+def delete_template(request: Request, name: str, code: str = ''):
+    ok, _ = check_auth(code, request)
     if not ok:
-        raise HTTPException(403, 'Code ungueltig.')
+        raise HTTPException(403, 'Nicht eingeloggt.')
+    owner = _tpl_owner(code, request)
     all_ = _load_templates()
-    entries = [e for e in all_.get(code, []) if e.get('name') != name]
-    all_[code] = entries
+    entries = [e for e in all_.get(owner, []) if e.get('name') != name]
+    all_[owner] = entries
     _save_templates(all_)
     return {'ok': True}
 
@@ -805,10 +1070,10 @@ def get_thumb(jid: str, name: str):
 
 
 @app.post('/api/moments/{jid}')
-async def save_and_render(jid: str, moments: str = Form(...),
-                          code: str = Form(...)):
+async def save_and_render(request: Request, jid: str,
+                          moments: str = Form(...), code: str = Form('')):
     """Momente speichern und Voll-Render starten."""
-    ok, msg = check_code(code)
+    ok, msg = check_auth(code, request)
     if not ok:
         raise HTTPException(403, msg)
     j = JOBS.get(jid)
