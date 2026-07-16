@@ -1619,11 +1619,16 @@ def parse_regie(text, words, language='de'):
     except Exception:
         return None
 
-def _regie_chunks(words, max_words=400):
+def _regie_chunks(words, max_words=400, overlap=30):
     """Teilt lange Transkripte in Regie-Haeppchen an Satzgrenzen.
-    Globale Wort-Indizes bleiben erhalten; kurze Videos = genau ein Chunk."""
+    Globale Wort-Indizes bleiben erhalten; kurze Videos = genau ein Chunk.
+
+    Overlap (v80d): jeder Nicht-Anfangs-Chunk beginnt 30 Woerter frueher als
+    das eigentliche Fenster. So sieht die KI Kontext links vom Satz - Momente
+    an Chunk-Grenzen werden nicht mehr verschluckt. Bei doppelter Erwaehnung
+    gewinnt in der merge-Schleife der letzte Chunk."""
     if len(words) <= max_words:
-        return [(0, len(words))]
+        return [(0, len(words), 0)]
     chunks, start = [], 0
     while start < len(words):
         end = min(start + max_words, len(words))
@@ -1632,9 +1637,110 @@ def _regie_chunks(words, max_words=400):
                 if words[j]['word'].rstrip().endswith(('.', '!', '?')):
                     end = j + 1
                     break
-        chunks.append((start, end))
+        ctx_start = max(0, start - overlap) if chunks else start
+        chunks.append((ctx_start, end, start))     # (Kontext-Start, Ende, Auswahl-Start)
         start = end
     return chunks
+
+
+def _regie_validate(fx_map, words, model, key):
+    """Zwei-Pass-Validator: gpt-4o kriegt seine eigenen Vorschlaege zurueck und
+    prueft, ob wirklich Substanz-Woerter markiert wurden. Streicht Hilfsverben,
+    Fuellwoerter und generische Phrasen die durch die erste Runde geschluepft
+    sind. Kostet einen zweiten Call, faengt aber die "IST/DENN"-Klasse
+    strukturell ab. Bei Netzfehler bleibt fx_map unveraendert."""
+    import requests
+    if not fx_map:
+        return fx_map
+    entries = []
+    for i in sorted(fx_map):
+        v = fx_map[i]
+        n = int(v.get('n', 1))
+        txt = ' '.join(clean(words[j]['word'])
+                       for j in range(i, min(i + n, len(words))))
+        ctx_a = max(0, i - 4); ctx_b = min(len(words), i + n + 4)
+        ctx = ' '.join(clean(words[j]['word']) for j in range(ctx_a, ctx_b))
+        entries.append({'i': i, 'text': txt, 'im_satz': ctx})
+    prompt = (
+        "Du bist Qualitaets-Pruefer fuer Video-Captions. Du bekommst eine Liste "
+        "vorgeschlagener Highlights. Pruefe JEDES einzeln:\n"
+        "STREICHE es (in 'entfernen': [i, ...]) wenn es ist:\n"
+        "  - ein Hilfsverb (ist, hat, wird, kann, ...),\n"
+        "  - eine Konjunktion (denn, weil, aber, dann, ...),\n"
+        "  - ein Pronomen (ich, du, das, was, ...),\n"
+        "  - eine Praeposition (in, an, auf, mit, ...),\n"
+        "  - ein generisches Fuellwort (sache, thema, dinge, hier),\n"
+        "  - eine Phrase die auf Fuellwort endet (z.B. 'Deutschland nimmt').\n"
+        "BEHALTE alles was Substanz traegt (Zahlen, Namen, Fakten, Objekte, "
+        "emotionale Spitzen).\n"
+        "Antworte NUR mit JSON: {\"entfernen\": [<Index>, ...]}"
+    )
+    try:
+        r = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}'},
+            json={'model': model, 'temperature': 0.0, 'max_tokens': 800,
+                  'response_format': {'type': 'json_object'},
+                  'messages': [{'role': 'system', 'content': prompt},
+                               {'role': 'user', 'content': json.dumps(
+                                   entries, ensure_ascii=False)}]},
+            timeout=90)
+        r.raise_for_status()
+        data = json.loads(r.json()['choices'][0]['message']['content'])
+        drop = {int(i) for i in data.get('entfernen', []) if i in fx_map}
+        if drop:
+            for i in drop:
+                fx_map.pop(i, None)
+            print(f"  Validator: {len(drop)} Fehl-Highlights gestrichen")
+        else:
+            print(f"  Validator: alle {len(entries)} Highlights bestaetigt")
+    except Exception as e:
+        print(f"  Validator uebersprungen ({type(e).__name__})")
+    return fx_map
+
+
+def _audio_boost(fx_map, words, voice_wav_path):
+    """Audio-Emotion (v80d): wo der Sprecher laut/betont wird, bekommt der
+    nahe Moment einen Power-Bump. Nutzt nur die vorhandene wav - keine extra
+    Modelle. Konservativ: bumpt nur um 1 Stufe, nie ueber 3."""
+    if not fx_map or not voice_wav_path or not os.path.exists(voice_wav_path):
+        return fx_map
+    try:
+        import wave
+        with wave.open(voice_wav_path, 'rb') as wf:
+            sr = wf.getframerate()
+            nch = wf.getnchannels()
+            sw = wf.getsampwidth()
+            raw = wf.readframes(wf.getnframes())
+        if sw == 2:
+            samp = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        else:
+            return fx_map
+        if nch > 1:
+            samp = samp.reshape(-1, nch).mean(axis=1)
+        # RMS pro 100ms-Fenster
+        win = max(1, sr // 10)
+        n_win = len(samp) // win
+        if n_win < 2:
+            return fx_map
+        rms = np.array([np.sqrt(np.mean(samp[i * win:(i + 1) * win] ** 2))
+                        for i in range(n_win)], dtype=np.float32)
+        thr = float(np.quantile(rms, 0.85))    # top 15% = "laut"
+        bumped = 0
+        for i in list(fx_map):
+            t = words[i].get('start', 0)
+            k = int(t * 10)                    # 100ms-Bins
+            band = rms[max(0, k - 2):min(n_win, k + 6)]  # -200ms .. +500ms
+            if band.size and float(band.max()) >= thr:
+                cur = int(fx_map[i].get('power', 2))
+                if cur < 3:
+                    fx_map[i]['power'] = cur + 1
+                    bumped += 1
+        if bumped:
+            print(f"  Audio-Emotion: {bumped} Momente lauter -> Power hoch")
+    except Exception as e:
+        print(f"  Audio-Emotion uebersprungen ({type(e).__name__})")
+    return fx_map
 
 def _cap_power3(fx_map, keep=2):
     """Video-weite Regel auch bei Chunk-Analyse: maximal zwei power-3-Momente
@@ -1647,9 +1753,13 @@ def _cap_power3(fx_map, keep=2):
                 fx_map[i]['power'] = 2
     return fx_map
 
-def ai_direct(words, language, model='gpt-4o'):
+def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     """LLM waehlt Keywords, Phrasen, Effekte und Wucht. Gibt {index: info} zurueck oder None.
-    Lange Videos werden in Etappen analysiert, damit die JSON-Antwort nie abgeschnitten wird."""
+    Lange Videos werden in Etappen analysiert, damit die JSON-Antwort nie abgeschnitten wird.
+
+    v80d: WORTLISTE ohne STOPWORDS an gpt-4o - die KI KANN Hilfsverben gar
+    nicht mehr waehlen. Chunks mit 30-Wort-Overlap. Zwei-Pass-Validator und
+    Audio-Emotion optional (validate=True, voice_wav gesetzt)."""
     import requests
     key = os.environ.get('OPENAI_API_KEY')
     if not key:
@@ -1659,16 +1769,26 @@ def ai_direct(words, language, model='gpt-4o'):
         f"SPRACHE: Das Transkript ist nicht deutsch ({language}). " \
         f"Wende die Regeln sinngemaess auf diese Sprache an.\n\n"
     merged = {}
-    for ci, (a, b) in enumerate(chunks):
+    for ci, (a, b, sel) in enumerate(chunks):
         part = words[a:b]
         prose = ' '.join(w['word'].strip() for w in part)
         part_hint = '' if len(chunks) == 1 else \
             f"HINWEIS: Dies ist Teil {ci + 1} von {len(chunks)} eines laengeren Videos. " \
-            f"Die Wort-Indizes sind global und gelten wie angegeben." \
+            f"Die Wort-Indizes sind global und gelten wie angegeben. " \
+            f"Waehle nur Momente ab Index {sel} (davor ist nur Kontext)." \
             + (" Der Hook liegt in diesem Teil." if ci == 0 else "") \
             + (" Der Abschluss liegt in diesem Teil." if ci == len(chunks) - 1 else "") + "\n\n"
-        listing = lang_hint + part_hint + 'TRANSKRIPT:\n' + prose + '\n\nWORTLISTE:\n' + \
-                  ' '.join(f"[{i}]{clean(w['word'])}" for i, w in enumerate(part, start=a))
+        # Wortliste-Filter: Fuellwoerter werden nicht mehr angeboten, damit die
+        # KI sie nicht waehlen kann. Original-Indizes bleiben erhalten.
+        wl_toks = []
+        for i, w in enumerate(part, start=a):
+            raw = clean(w['word'])
+            if raw.lower() in STOPWORDS or not raw.strip():
+                continue
+            wl_toks.append(f"[{i}]{raw}")
+        listing = lang_hint + part_hint + 'TRANSKRIPT:\n' + prose + \
+                  '\n\nWORTLISTE (nur waehlbare Substanz-Woerter, ' \
+                  'Fuellwoerter wurden entfernt):\n' + ' '.join(wl_toks)
         try:
             r = requests.post(
                 'https://api.openai.com/v1/chat/completions',
@@ -1681,6 +1801,10 @@ def ai_direct(words, language, model='gpt-4o'):
             r.raise_for_status()
             res = parse_regie(r.json()['choices'][0]['message']['content'], words, language)
             if res:
+                # Overlap-Bereich: Momente aus dem Kontext-Vorlauf verwerfen,
+                # der vorherige Chunk hat sie bereits (oder bewusst uebergangen).
+                if ci > 0:
+                    res = {i: v for i, v in res.items() if i >= sel}
                 merged.update(res)
             if len(chunks) > 1:
                 print(f"  KI-Regie Etappe {ci + 1}/{len(chunks)}: "
@@ -1689,6 +1813,12 @@ def ai_direct(words, language, model='gpt-4o'):
             print(f"KI-Regie Etappe {ci + 1}/{len(chunks)} nicht verfuegbar "
                   f"({type(e).__name__})" if len(chunks) > 1 else
                   f"KI-Regie nicht verfuegbar ({type(e).__name__}), nutze Automatik.")
+    if not merged:
+        return None
+    if validate:
+        merged = _regie_validate(merged, words, model, key)
+    if voice_wav:
+        merged = _audio_boost(merged, words, voice_wav)
     return _cap_power3(merged) if merged else None
 
 # ---- Zahlen: nicht jede Zahl ist eine Aussage.
@@ -3857,7 +3987,9 @@ def main():
         if fx_map is None:
             print("KI-Regie analysiert das Transkript...")
             fx_map = ai_direct(words, cfg.get('language', 'de'),
-                               cfg['keywords'].get('ai_model', 'gpt-4o'))
+                               cfg['keywords'].get('ai_model', 'gpt-4o'),
+                               voice_wav=voice_wav,
+                               validate=cfg['keywords'].get('ai_validate', True))
             if fx_map and cfg['keywords'].get('ai_vision', True):
                 fx_map = ai_scene_direct(words, fx_map, args.input,
                                          cfg['keywords'].get('ai_model', 'gpt-4o'))
