@@ -411,32 +411,36 @@ body {
   gap: 12px;
 }
 .fonttile {
-  padding: 24px 12px; background: var(--surf2); border-radius: var(--r-md);
+  padding: 22px 10px 18px; background: var(--surf2); border-radius: var(--r-md);
   cursor: pointer; text-align: center;
   border: 2px solid transparent; transition: all var(--t-fast);
-  min-height: 106px;
+  min-height: 100px;
 }
 .fonttile:hover:not(.on) { background: var(--surf3); transform: translateY(-2px); }
 .fonttile.on { border-color: var(--acc); background: var(--acc-soft); }
-.fonttile .name { font-size: 30px; font-weight: 900; letter-spacing: -.5px;
-  color: var(--fg); }
-.fonttile .lbl { font-size: 11px; color: var(--mut); margin-top: 8px;
-  text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.fonttile .name {
+  font-size: 20px; font-weight: 900; letter-spacing: -.5px;
+  color: var(--fg); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; line-height: 1.15;
+}
+.fonttile .lbl { font-size: 10.5px; color: var(--mut); margin-top: 10px;
+  text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
 
 /* Buttons */
 .btn {
-  background: linear-gradient(135deg, var(--acc), var(--acc2));
+  background: var(--acc);
   color: white; border: 0;
   padding: 14px 26px; border-radius: 14px;
   font-size: 15px; font-weight: 700; cursor: pointer;
   transition: transform var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
   min-height: 46px; display: inline-flex; align-items: center; gap: 10px;
   justify-content: center; text-decoration: none; font-family: inherit;
-  box-shadow: 0 4px 16px -4px var(--acc-glow);
+  box-shadow: 0 4px 16px -6px var(--acc-glow);
 }
 .btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px -4px var(--acc-glow);
+  background: var(--acc2);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px -6px var(--acc-glow);
 }
 .btn:active:not(:disabled) { transform: translateY(0); }
 .btn:disabled { background: var(--surf2); color: var(--mut2); cursor: not-allowed;
@@ -559,13 +563,14 @@ body {
   max-width: calc(100vw - 40px);
 }
 .toast {
-  background: var(--surf); color: var(--fg);
-  padding: 14px 18px; border-radius: var(--r-md);
-  box-shadow: var(--shadow-lg); font-size: 14px;
+  background: var(--bg2); color: var(--fg);
+  padding: 12px 16px; border-radius: 10px;
+  box-shadow: 0 8px 32px -8px rgba(0,0,0,.6), 0 0 0 1px var(--line);
+  font-size: 14px;
   display: flex; align-items: center; gap: 12px;
   border-left: 3px solid var(--acc);
   animation: slidein var(--t-med) var(--ease-spring);
-  min-width: 260px; font-weight: 500;
+  min-width: 240px; font-weight: 500;
 }
 .toast.err { border-left-color: var(--red); }
 .toast.ok { border-left-color: var(--green); }
@@ -879,27 +884,35 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="setting-desc">Beim stärksten Moment friert das Video für eine kurze Zeit ein —
               Caption läuft weiter. Regie-Trick, der die Aufmerksamkeit auf die Punchline zwingt.
               Nur EINMAL pro Video (sonst kitschig).</div>
-            <div class="slider" data-cfg="effects.freeze_frame" data-min="0" data-max="150" data-scale="100" data-suffix=" Sek"></div>
+            <div class="seg" data-cfg="effects.freeze_frame" data-opts="Aus:0,Kurz (0.4 s):0.4,Klassisch (0.6 s):0.6,Lang (1.0 s):1.0"></div>
           </div>
           <div class="setting"><div class="setting-label">Text hinterlässt Speed-Echos (Trail)</div>
             <div class="setting-desc">Der Text lässt versetzte, verblasste Kopien hinter sich —
               Speed-Gefühl wie in Musikvideos.</div>
-            <div class="slider" data-cfg="effects.trail" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+            <div class="seg" data-cfg="effects.trail" data-opts="Aus:0,Dezent:0.35,Stark:0.7"></div>
           </div>
           <div class="setting"><div class="setting-label">Kreis-Fortschritt um Zahlen (Zähler-Ring)</div>
             <div class="setting-desc">Bei Zahlen (57 %, 12 Millionen, x3 …) läuft ein Kreis-Bogen
               synchron zum Hochzählen der Zahl. Sport-Timer/Score-Look.</div>
-            <div class="slider" data-cfg="effects.counter_ring" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+            <div class="row"><div class="grow"></div>
+              <label class="switch"><input type="checkbox" data-cfg-switch="effects.counter_ring" data-on="0.55" data-off="0"
+                     aria-label="Zaehler-Ring">
+                <span class="track"><span class="knob"></span></span></label>
+            </div>
           </div>
           <div class="setting"><div class="setting-label">Frame teilt sich bei Höhepunkten (Split-Screen)</div>
             <div class="setting-desc">Das Video teilt sich horizontal in zwei Hälften mit einer
               Lücke — Text sitzt dazwischen. Nur bei den stärksten Momenten.</div>
-            <div class="slider" data-cfg="effects.split_screen" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+            <div class="row"><div class="grow"></div>
+              <label class="switch"><input type="checkbox" data-cfg-switch="effects.split_screen" data-on="0.55" data-off="0"
+                     aria-label="Split-Screen">
+                <span class="track"><span class="knob"></span></span></label>
+            </div>
           </div>
           <div class="setting"><div class="setting-label">Text wirft Schatten auf den Boden</div>
             <div class="setting-desc">Für In-Szene-Text (steht IM Video): weicher Kontakt-Schatten
               darunter. Der Text sitzt sichtbar im Raum statt aufgeklebt zu wirken.</div>
-            <div class="slider" data-cfg="effects.env_shadow" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
+            <div class="seg" data-cfg="effects.env_shadow" data-opts="Aus:0,Sanft:0.35,Kräftig:0.65"></div>
           </div>
         </div>
       </div>
@@ -1048,7 +1061,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div class="prog-box">
           <svg width="0" height="0" style="position:absolute;">
             <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#ff6b9d"/>
+              <stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#9b7dff"/>
             </linearGradient></defs>
           </svg>
           <div class="prog-ring">
@@ -1059,7 +1072,27 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             </svg>
             <div class="pr-num"><span class="pct" id="prPct">0</span>%</div>
           </div>
-          <div class="prog-phase" id="progressPhase">In der Warteschlange …</div>
+          <div class="prog-phase" id="progressPhase">Bereit …</div>
+          <div style="display:flex; justify-content:center; gap:24px; margin-top:12px;
+               font-size:12px; color:var(--mut2); flex-wrap:wrap;">
+            <span>Vergangen: <b id="progressElapsed" style="color:var(--fg);">0:00</b></span>
+            <span>Noch: <b id="progressEta" style="color:var(--acc2);">–</b></span>
+          </div>
+        </div>
+        <div style="margin-top:16px; background:var(--bg2); border-radius:12px;
+             padding:14px 16px; font-size:12px; font-family: ui-monospace, 'SF Mono',
+             Menlo, Consolas, monospace; color:var(--mut); line-height:1.55;
+             max-height: 180px; overflow-y: auto; border: 1px solid var(--line);">
+          <div style="color:var(--mut2); font-size:11px; text-transform:uppercase;
+               letter-spacing:1px; margin-bottom:6px; font-family: inherit;
+               font-weight:700;">Live-Log</div>
+          <div id="progressLog"></div>
+        </div>
+        <div style="margin-top:12px; padding:12px 14px; background:var(--acc-soft);
+             border-radius:10px; font-size:12.5px; color:var(--mut); line-height:1.5;">
+          <b style="color:var(--acc2);">Warum dauert das?</b>
+          Der Server rendert auf CPU (ohne GPU). Ein 60-Sekunden-Video braucht
+          etwa 3-6 Minuten. Deine Konfiguration und Videolänge beeinflussen das direkt.
         </div>
       </div>
 
@@ -1275,6 +1308,15 @@ function buildWidgets() {
     inp.checked = !!getDeep(State.cfg, cfg, false);
     inp.addEventListener('change', () => setDeep(State.cfg, cfg, inp.checked));
   });
+  // Switch mit numerischen an/aus-Werten (Freeze/Trail-Style: Regler durch Toggle ersetzt)
+  $$('input[type=checkbox][data-cfg-switch]').forEach(inp => {
+    const cfg = inp.dataset.cfgSwitch;
+    const onVal = parseFloat(inp.dataset.on || '1');
+    const offVal = parseFloat(inp.dataset.off || '0');
+    const cur = parseFloat(getDeep(State.cfg, cfg, offVal));
+    inp.checked = cur > 0.02;
+    inp.addEventListener('change', () => setDeep(State.cfg, cfg, inp.checked ? onVal : offVal));
+  });
 }
 
 async function buildLooks() {
@@ -1297,9 +1339,11 @@ async function buildLooks() {
       el.querySelectorAll('.look-card').forEach(x => x.classList.remove('on'));
       c.classList.add('on');
       State.look = id;
+      c.style.opacity = '0.6';
       await loadDefaults();
       rebuildAllWidgets();
-      toast('Look "' + v.name + '" gewaehlt', 'ok', 2000);
+      c.style.opacity = '1';
+      toast('Look "' + v.name + '" gesetzt — alle Regler aktualisiert', 'ok', 2500);
     };
     c.addEventListener('click', activate);
     c.addEventListener('keydown', e => {
@@ -1344,8 +1388,8 @@ async function buildFontGrid() {
     const t = document.createElement('div');
     t.className = 'fonttile' + (f.file === curFile ? ' on' : '');
     t.dataset.id = f.id;                       // fuer @font-face-Mapping
-    // Preview zeigt zwei kleine + zwei grosse Buchstaben in der ECHTEN Schrift
-    t.innerHTML = `<div class="name">Aa</div>
+    // Preview zeigt "DouchkoVE" in der ECHTEN Schrift
+    t.innerHTML = `<div class="name">DouchkoVE</div>
                    <div class="lbl">${f.label}</div>`;
     t.setAttribute('role', 'radio');
     t.setAttribute('tabindex', '0');
@@ -1572,6 +1616,12 @@ async function pollAnalyze() {
   setTimeout(pollAnalyze, 2000);
 }
 
+function fmtDur(s) {
+  s = Math.max(0, Math.round(s));
+  const m = Math.floor(s / 60), sec = s % 60;
+  return m + ':' + String(sec).padStart(2, '0');
+}
+
 async function pollRender() {
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
@@ -1579,7 +1629,16 @@ async function pollRender() {
     const dashoff = 264 * (1 - (st.progress || 0));
     $('#prFg').setAttribute('stroke-dashoffset', String(dashoff));
     $('#prPct').textContent = String(pct);
-    $('#progressPhase').textContent = st.phase || '';
+    $('#progressPhase').textContent = st.phase || 'Bereit …';
+    if (State.renderStart) {
+      $('#progressElapsed').textContent = fmtDur((Date.now() - State.renderStart) / 1000);
+    }
+    $('#progressEta').textContent = st.eta_sec != null ? fmtDur(st.eta_sec) : '–';
+    if (st.log_tail && st.log_tail.length) {
+      const lg = $('#progressLog');
+      lg.innerHTML = st.log_tail.map(l => `<div>${l.replace(/</g,'&lt;')}</div>`).join('');
+      lg.scrollTop = lg.scrollHeight;
+    }
     if (st.status === 'fertig') {
       $('#progressCard').classList.add('hidden');
       renderSuccess();

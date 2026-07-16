@@ -337,28 +337,76 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
     cmd = [sys.executable, os.path.join(ROOT, 'render.py'), src,
            '--config', cfg_path, '--out', out] + (extra_args or [])
     env = dict(os.environ)
-    set_state(jid, status='laeuft', phase='Transkription …',
-              progress=progress_start)
+    set_state(jid, status='laeuft', phase='Transkribieren via OpenAI Whisper …',
+              progress=progress_start, log_tail=[], eta_sec=None)
     p = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, text=True, bufsize=1)
     log = []
+    t0_render = time.time()
+    frame_start_t = None
     for line in p.stdout:
         log.append(line.rstrip())
         ln = line.strip()
-        if 'Gesichts-Tracking' in ln:
-            set_state(jid, phase='Szenen-Analyse …', progress=0.20)
-        elif ln.startswith('Keywords') or 'KI-Regie' in ln:
-            set_state(jid, phase='Die KI wählt die Momente …', progress=0.35)
+        # letzte 8 nicht-leeren Zeilen als log_tail
+        tail = [x for x in log[-40:] if x.strip()][-8:]
+
+        phase = None
+        progress = None
+        eta = None
+        if 'Transkribiere' in ln:
+            phase = 'Transkribieren via OpenAI Whisper …'
+            progress = 0.05
+        elif 'Woerter' in ln and 'Transkript' in ln:
+            phase = 'Transkript gespeichert - Timing feinjustieren …'
+            progress = 0.10
+        elif 'Gesichts-Tracking' in ln:
+            phase = 'Gesichter erkennen + Szenen segmentieren …'
+            progress = 0.20
+        elif 'Musik-Beat' in ln:
+            phase = 'Musik-Beat analysieren …'
+            progress = 0.28
+        elif 'KI-Regie' in ln and 'analysiert' in ln:
+            phase = 'GPT-4o waehlt die grossen Momente …'
+            progress = 0.35
+        elif ln.startswith('Keywords'):
+            phase = 'Momente gewaehlt - Vision-Regie prueft die Szene …'
+            progress = 0.40
+        elif 'Adaptive Farben' in ln:
+            phase = 'Farben aus der Szene ableiten …'
+            progress = 0.43
+        elif 'Kompositionen' in ln:
+            phase = 'Momente aufbauen …'
+            progress = 0.45
+        elif 'Matting-Fenster' in ln or 'Tiefen-Okklusion' in ln:
+            phase = 'Person freistellen + Tiefe berechnen …'
+            progress = 0.48
         elif 'Frame' in ln and '/' in ln:
             try:
-                cur, tot = ln.split('Frame')[1].split('|')[0].strip().split('/')
-                frac = 0.45 + 0.5 * (int(cur) / max(int(tot), 1))
-                set_state(jid, phase='Video wird gebaut …',
-                          progress=round(min(frac, 0.95), 3))
+                cur_s, tot_s = ln.split('Frame')[1].split('|')[0].strip().split('/')
+                cur, tot = int(cur_s), int(tot_s)
+                frac = 0.50 + 0.45 * (cur / max(tot, 1))
+                progress = round(min(frac, 0.95), 3)
+                phase = f'Video bauen · Frame {cur}/{tot}'
+                if frame_start_t is None:
+                    frame_start_t = time.time()
+                    frame_start_i = cur
+                elif cur > 0:
+                    dt = time.time() - frame_start_t
+                    dc = cur - frame_start_i
+                    if dc > 0:
+                        eta = int((tot - cur) * (dt / dc))
             except Exception:
                 pass
-        elif ln.startswith('Fertig'):
-            set_state(jid, phase='Fast fertig …', progress=0.97)
+        elif ln.startswith('Fertig') or 'Encode fertig' in ln:
+            phase = 'Video encodieren + speichern …'
+            progress = 0.97
+
+        if phase is not None or progress is not None or tail:
+            kw = {'log_tail': tail}
+            if phase is not None: kw['phase'] = phase
+            if progress is not None: kw['progress'] = progress
+            if eta is not None: kw['eta_sec'] = eta
+            set_state(jid, **kw)
     p.wait()
     open(os.path.join(d, 'log.txt'), 'a', encoding='utf-8').write('\n'.join(log) + '\n')
     return p.returncode, log, out
