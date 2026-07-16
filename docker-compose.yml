@@ -12,6 +12,11 @@ services:
       DVE_WORKERS: ${DVE_WORKERS:-1}
       DVE_MAX_SECONDS: ${DVE_MAX_SECONDS:-180}
       DVE_MAX_MB: ${DVE_MAX_MB:-300}
+      # v80h/i: Accounts, Trial-Guthaben und Stripe-Payments
+      DVE_TRIAL_SECONDS: ${DVE_TRIAL_SECONDS:-120}
+      DVE_PUBLIC_URL: ${DVE_PUBLIC_URL:-https://douchko.eu}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     volumes:
       - dve-data:/data
     expose:
