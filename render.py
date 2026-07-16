@@ -908,15 +908,21 @@ Regeln: Wasser/Boden gross im Bild + grosser Moment -> "liegend". Klare Flaeche 
 Mittelgrund -> "stehend". Sprecher-Nahaufnahme -> "frei". Im Zweifel "frei".
 Antworte NUR mit JSON: {"momente": [{"i": <Index>, "szene": "...", "lage": "...", "fx": "<optional>"}]}"""
 
-def ai_scene_direct(words, fx_map, video_path, model='gpt-4o'):
+def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2):
     """Regie v4 (Vision): schaut sich pro gewaehltem Moment einen Frame an und
     entscheidet Material ('szene') und Lage ('liegend'/'stehend'/'frei').
-    Ergaenzt fx_map in-place. Faellt bei jedem Fehler lautlos auf Text-Regie zurueck."""
+    Ergaenzt fx_map in-place. Faellt bei jedem Fehler lautlos auf Text-Regie zurueck.
+
+    v80e: min_power (Default 2) filtert billige power=1-Momente raus. Die kriegen
+    keine Vision-Analyse - fuer die reicht Text-Regie. Spart 60% Vision-Kosten."""
     import requests
     key = os.environ.get('OPENAI_API_KEY')
     if not key or not fx_map:
         return fx_map
-    idx = sorted(fx_map)[:24]                 # Kosten-Deckel: max 24 Frames pro Video
+    idx = [i for i in sorted(fx_map)
+           if int(fx_map[i].get('power', 2)) >= min_power][:24]
+    if not idx:
+        return fx_map                          # nur schwache Momente = kein Vision-Call
     content = []
     sent = []
     for i in idx:
@@ -3916,6 +3922,16 @@ def main():
             subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', args.input,
                             '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'aac',
                             '-b:a', f'{br_kbps}k', wav], check=True)
+            # v80e: Sicherheitsnetz. Falls Duration-Schaetzung daneben lag und
+            # die Datei > 25 MB ist, kompressiere nochmal mit halber Bitrate.
+            _sz_mb = os.path.getsize(wav) / 1e6 if os.path.exists(wav) else 0
+            if _sz_mb > 24.5:
+                br_kbps = max(16, br_kbps // 2)
+                print(f"Audio {_sz_mb:.1f} MB > Whisper-Limit, "
+                      f"neu enkodiert mit {br_kbps} kbps")
+                subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', args.input,
+                                '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'aac',
+                                '-b:a', f'{br_kbps}k', wav], check=True)
             words = transcribe(wav, cfg.get('language', 'de'), cfg)
         tpath = os.path.splitext(args.input)[0] + '_transcript2.json'
         json.dump(words, open(tpath, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
@@ -3992,7 +4008,8 @@ def main():
                                validate=cfg['keywords'].get('ai_validate', True))
             if fx_map and cfg['keywords'].get('ai_vision', True):
                 fx_map = ai_scene_direct(words, fx_map, args.input,
-                                         cfg['keywords'].get('ai_model', 'gpt-4o'))
+                                         cfg['keywords'].get('ai_model', 'gpt-4o'),
+                                         min_power=int(cfg['keywords'].get('vision_min_power', 2)))
             if fx_map:
                 json.dump({'keywords': [{'i': i, 'fx': v['fx'], 'power': v['power'],
                                          'n': v.get('n', 1),
@@ -4017,6 +4034,14 @@ def main():
     # IMMER schreiben (nicht nur bei --plan-only), damit die Web-UI nach
     # dem Voll-Render einen Momente-Editor fuer Re-Rendering oeffnen kann.
     mom_path = os.path.splitext(args.input)[0] + '_momente.json'
+    # v80e: Thumb-Ordner - pro Moment ein 320x180 JPEG. Die Web-UI zeigt sie
+    # als Preview-Hintergrund, damit man beim Editieren sieht was zum Zeitpunkt
+    # wirklich im Bild ist.
+    thumb_dir = os.path.splitext(args.input)[0] + '_thumbs'
+    try:
+        os.makedirs(thumb_dir, exist_ok=True)
+    except Exception:
+        thumb_dir = None
     prev = {}
     if os.path.exists(mom_path):
         try:
@@ -4038,12 +4063,28 @@ def main():
                 clean(words[j]['word'])
                 for j in range(max(i - 4, 0),
                                min(i + 8, len(words))))) or ''
+        thumb_rel = ''
+        if thumb_dir:
+            thumb_rel = f'{i:06d}.jpg'
+            thumb_path = os.path.join(thumb_dir, thumb_rel)
+            if not os.path.exists(thumb_path):
+                _t = max(0.0, float(words[i].get('start', 0)) + 0.15)
+                try:
+                    subprocess.run(['ffmpeg', '-y', '-v', 'error', '-ss', f'{_t:.2f}',
+                                    '-i', args.input, '-frames:v', '1',
+                                    '-vf', 'scale=320:-2', '-q:v', '5', thumb_path],
+                                   check=False, timeout=15)
+                except Exception:
+                    pass
+                if not os.path.exists(thumb_path):
+                    thumb_rel = ''
         _mom_export.append({'i': i, 'text': txt, 'zeit': round(words[i]['start'], 2),
                             'fx': info.get('fx', 'behind'),
                             'power': int(info.get('power', 2)), 'n': n,
                             'anim': _anim, 'aktiv': True,
                             'szene': info.get('szene') or '',
-                            'lage': info.get('lage') or ''})
+                            'lage': info.get('lage') or '',
+                            'thumb': thumb_rel})
         if i in prev:                       # fruehere Korrekturen behalten
             for k in ('aktiv', 'fx', 'power', 'anim', 'text', 'szene', 'lage'):
                 if k in prev[i]:

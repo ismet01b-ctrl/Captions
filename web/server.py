@@ -660,6 +660,24 @@ def get_moments(jid: str):
     return json.load(open(mom_path, encoding='utf-8'))
 
 
+@app.get('/api/thumb/{jid}/{name}')
+def get_thumb(jid: str, name: str):
+    """Video-Frame-Preview fuer einen Moment (v80e). Wird im Momente-Editor
+    hinter der Text-Preview eingeblendet, damit man sieht was zu dem
+    Zeitpunkt wirklich im Bild ist."""
+    from fastapi.responses import FileResponse
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Job unbekannt.')
+    if not name.endswith('.jpg') or '/' in name or '\\' in name or '..' in name:
+        raise HTTPException(400, 'Ungueltiger Thumb-Name.')
+    thumb_dir = os.path.splitext(j['input'])[0] + '_thumbs'
+    thumb_path = os.path.join(thumb_dir, name)
+    if not os.path.exists(thumb_path):
+        raise HTTPException(404, 'Thumb nicht vorhanden.')
+    return FileResponse(thumb_path, media_type='image/jpeg')
+
+
 @app.post('/api/moments/{jid}')
 async def save_and_render(jid: str, moments: str = Form(...),
                           code: str = Form(...)):

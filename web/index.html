@@ -636,7 +636,14 @@ body {
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; position: relative;
   border: 1px solid var(--line);
+  background-size: cover; background-position: center;
 }
+.mom-preview::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(0,0,0,0.35), rgba(0,0,0,0.55));
+  pointer-events: none;
+}
+.mom-preview .txt { position: relative; z-index: 1; }
 .mom-preview .txt {
   color: white; font-weight: 900; font-size: 13px;
   letter-spacing: -0.3px; text-shadow: 0 2px 6px rgba(0,0,0,.7);
@@ -1975,6 +1982,19 @@ function updatePreview(rowEl, m) {
   pv.className = 'mom-preview fx-' + fx + ' pow-' + power;
   const txt = (m.text || '').split(' ').slice(0, 3).join(' ').toUpperCase();
   pv.querySelector('.txt').textContent = txt.slice(0, 14) || '·';
+  // v80e: Video-Frame als Hintergrund. Erst wenn wirklich vorhanden - sonst
+  // bleibt der Farbverlauf. onerror leert den Style, damit kaputte Referenzen
+  // nicht dauerhaft ein Broken-Image-Rauschen zeigen.
+  if (m.thumb && State.jid) {
+    const url = '/api/thumb/' + State.jid + '/' + m.thumb;
+    if (pv.dataset.thumb !== url) {
+      const probe = new Image();
+      probe.onload = () => { pv.style.backgroundImage = 'url(' + url + ')'; };
+      probe.onerror = () => { pv.style.backgroundImage = ''; };
+      probe.src = url;
+      pv.dataset.thumb = url;
+    }
+  }
   // Aktiv-Zustand: ausgegraut wenn aus
   pv.style.opacity = m.aktiv === false ? '0.35' : '1';
 }
