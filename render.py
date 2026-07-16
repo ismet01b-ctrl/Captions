@@ -4357,42 +4357,46 @@ def main():
             print(f"SFX uebersprungen ({type(e).__name__})")
             sfx_path = None
 
-    # --- Encoder-Pipe: Video aus stdin, Audio aus Original
+    # --- Encoder (v80p): ZWEI Stufen statt einer Pipe-Mux-Kombi.
+    # Stufe 1: NUR Video aus der Pipe in eine Temp-Datei. Kein zweiter Input,
+    #   kein -shortest. Hintergrund: ffmpeg hat einen Interleave-Mechanismus
+    #   (max_interleave_delta, 10s), der bei langsamer Pipe-Zufuhr (CPU-Render
+    #   ist langsamer als Echtzeit) die komplett eingelesene Audio-Spur
+    #   vorzeitig ausschreibt - danach beendet -shortest den Prozess REGULAER
+    #   mitten im Render. Symptom: BrokenPipeError ohne ffmpeg-Fehlertext.
+    # Stufe 2 (nach dem Render): Audio/SFX per Stream-Copy dazu muxen -
+    #   alle Inputs sind dann Dateien, dauert nur Sekunden, kein Pipe-Risiko.
     if cfg['output'].get('master', False):
         if not out_path.lower().endswith('.mov'):
             out_path = os.path.splitext(out_path)[0] + '.mov'
-        codec = ['-c:v', 'prores_ks', '-profile:v', '3', '-pix_fmt', 'yuv422p10le',
-                 '-c:a', 'pcm_s16le']
+        vcodec = ['-c:v', 'prores_ks', '-profile:v', '3', '-pix_fmt', 'yuv422p10le']
+        acodec = ['-c:a', 'pcm_s16le']
+        video_tmp = os.path.splitext(out_path)[0] + '.videoonly.mov'
         print("Ausgabe: ProRes-Master (.mov) fuer Premiere")
     else:
-        codec = ['-c:v', 'libx264', '-preset', x264_preset,
-                 '-crf', str(cfg['output'].get('crf', 18)), '-pix_fmt', 'yuv420p', '-c:a', 'aac']
+        vcodec = ['-c:v', 'libx264', '-preset', x264_preset,
+                  '-crf', str(cfg['output'].get('crf', 18)), '-pix_fmt', 'yuv420p']
+        acodec = ['-c:a', 'aac']
+        video_tmp = os.path.splitext(out_path)[0] + '.videoonly.mp4'
     vol = float(cfg['effects'].get('sfx_volume', 0.35))
-    base_cmd = ['ffmpeg', '-y', '-v', 'error',
-                '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', fps_str,
-                '-i', 'pipe:0', '-i', args.input]  # rate unten als exakter Bruch
     has_audio = subprocess.run(
         ['ffprobe', '-v', 'error', '-select_streams', 'a', '-show_entries',
          'stream=codec_type', '-of', 'csv=p=0', args.input],
         capture_output=True, text=True).stdout.strip() != ''
-    if sfx_path and has_audio:
-        cmd = base_cmd + ['-i', sfx_path, '-filter_complex',
-                          f'[2:a]volume={vol}[sfx];[1:a][sfx]amix=inputs=2:duration=first:normalize=0[aout]',
-                          '-map', '0:v', '-map', '[aout]'] + codec + ['-shortest', out_path]
-    elif sfx_path:
-        cmd = base_cmd + ['-i', sfx_path, '-filter_complex', f'[2:a]volume={vol}[aout]',
-                          '-map', '0:v', '-map', '[aout]'] + codec + ['-shortest', out_path]
-    else:
-        cmd = base_cmd + ['-map', '0:v', '-map', '1:a?'] + codec + ['-shortest', out_path]
     if args.window:
-        # Fenster-Render: reines Video-Segment - die Tonspur des fertigen Videos
-        # bleibt beim Einsetzen unveraendert (keine Audio-Nahtstellen)
+        # Fenster-Render: reines Video-Segment direkt ans Ziel - die Tonspur
+        # des fertigen Videos bleibt beim Einsetzen unveraendert
+        video_tmp = None
         cmd = ['ffmpeg', '-y', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'bgr24',
                '-s', f'{W}x{H}', '-r', fps_str, '-i', 'pipe:0',
                '-c:v', 'libx264', '-preset', x264_preset,
                '-crf', str(cfg['output'].get('crf', 18)), '-pix_fmt', 'yuv420p',
                out_path]
-    # v80n: stderr capturen, damit wir bei BrokenPipeError die echte ffmpeg-Ursache sehen
+    else:
+        cmd = ['ffmpeg', '-y', '-v', 'error',
+               '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}',
+               '-r', fps_str, '-i', 'pipe:0'] + vcodec + [video_tmp]
+    # stderr capturen, damit wir bei BrokenPipeError die echte Ursache sehen
     enc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
     # Matting nur dort rechnen, wo es gebraucht wird (behind/blurin-Momente)
@@ -4643,9 +4647,42 @@ def main():
             print(f"  Frame {fi}/{max_frames or n_frames} | {rate:.1f} f/s | "
                   f"noch ~{rest // 60}:{rest % 60:02d}", flush=True)
     enc.stdin.close()
+    enc_err = b''
+    try:
+        enc_err = enc.stderr.read() if enc.stderr else b''
+    except Exception:
+        pass
     enc.wait()
     if fi == 0:
         sys.exit("FEHLER: Es konnten keine Frames gelesen werden. Ist die Videodatei intakt?")
+    if enc.returncode != 0:
+        sys.exit(f"FEHLER: Video-Encoding fehlgeschlagen (ffmpeg Exit "
+                 f"{enc.returncode}). "
+                 f"{enc_err.decode('utf-8', 'ignore')[-600:].strip() or '(keine Ausgabe)'}")
+
+    # --- Stufe 2 (v80p): Audio + SFX dazu muxen. Video wird nur kopiert.
+    if video_tmp:
+        mux = ['ffmpeg', '-y', '-v', 'error', '-i', video_tmp, '-i', args.input]
+        if sfx_path and has_audio:
+            mux += ['-i', sfx_path, '-filter_complex',
+                    f'[2:a]volume={vol}[sfx];'
+                    f'[1:a][sfx]amix=inputs=2:duration=first:normalize=0[aout]',
+                    '-map', '0:v', '-map', '[aout]']
+        elif sfx_path:
+            mux += ['-i', sfx_path, '-filter_complex', f'[2:a]volume={vol}[aout]',
+                    '-map', '0:v', '-map', '[aout]']
+        else:
+            mux += ['-map', '0:v', '-map', '1:a?']
+        mux += ['-c:v', 'copy'] + acodec + ['-shortest', out_path]
+        print("Tonspur wird angelegt...")
+        r_mux = subprocess.run(mux, capture_output=True, text=True)
+        if r_mux.returncode != 0 or not os.path.exists(out_path):
+            sys.exit(f"FEHLER: Ton-Muxing fehlgeschlagen: "
+                     f"{(r_mux.stderr or '')[-600:].strip() or '(keine Ausgabe)'}")
+        try:
+            os.remove(video_tmp)
+        except OSError:
+            pass
     print(f"Fertig: {out_path}")
 
     # --- Fenster-Segment frame-exakt ins fertige Video einsetzen
