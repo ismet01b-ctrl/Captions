@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DouchkoVE — Premium-Captions fuer Talking-Head-Videos</title>
+<meta name="description" content="Editorial-Untertitel mit KI-Regie, Vision-Analyse und 26 Text-Animationen. Fuer Creators, die aussehen wollen wie ein Team.">
+<style>
+:root {
+  --bg: #0b0812; --surf: #14101c; --surf2: #1a1428; --line: #2a2438;
+  --fg: #f4f1ff; --mut: #a8a1c2; --acc: #7c5cff; --acc2: #9b7dff;
+  --gold: #f5c451; --pink: #ff6b9d;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--fg);
+  line-height: 1.5; overflow-x: hidden; min-height: 100vh;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+/* Nav */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(11, 8, 18, 0.85); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 24px;
+}
+nav .inner { max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; }
+.logo { font-weight: 900; font-size: 20px; letter-spacing: -0.5px; }
+.logo .dot { color: var(--acc); }
+nav a { color: var(--mut); text-decoration: none; margin-left: 24px;
+  font-size: 14px; font-weight: 500; transition: color .15s; }
+nav a:hover { color: var(--fg); }
+nav .cta {
+  background: var(--acc); color: white; padding: 8px 16px;
+  border-radius: 8px; font-weight: 700; font-size: 14px;
+  margin-left: 20px; transition: transform .12s, box-shadow .15s;
+}
+nav .cta:hover { color: white; transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4); }
+
+/* Hero */
+.hero {
+  padding: 100px 24px 80px; text-align: center; position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: ''; position: absolute; top: -40%; left: 50%;
+  width: 900px; height: 900px; transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(124, 92, 255, 0.15), transparent 60%);
+  pointer-events: none;
+}
+.hero .badge {
+  display: inline-block; padding: 6px 14px; border-radius: 999px;
+  background: rgba(124, 92, 255, 0.15); color: var(--acc2);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; margin-bottom: 24px;
+  border: 1px solid rgba(124, 92, 255, 0.3);
+}
+.hero h1 {
+  font-size: clamp(36px, 6vw, 68px); font-weight: 900;
+  letter-spacing: -1.5px; line-height: 1.05;
+  max-width: 900px; margin: 0 auto 24px;
+  background: linear-gradient(135deg, #fff 30%, #b8a8ff 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero h1 .accent { color: var(--gold); -webkit-text-fill-color: var(--gold); }
+.hero p.sub {
+  font-size: clamp(16px, 2vw, 20px); color: var(--mut);
+  max-width: 640px; margin: 0 auto 40px; line-height: 1.5;
+}
+.hero-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: var(--acc); color: white; padding: 16px 32px;
+  border-radius: 12px; font-weight: 800; font-size: 18px;
+  text-decoration: none; border: none; cursor: pointer;
+  transition: transform .12s, box-shadow .2s;
+  box-shadow: 0 8px 24px rgba(124, 92, 255, 0.35);
+}
+.hero-cta:hover { transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(124, 92, 255, 0.5); }
+.hero .small {
+  margin-top: 16px; color: var(--mut); font-size: 13px;
+}
+
+/* Feature Preview strip */
+.preview-strip {
+  padding: 20px 24px 60px;
+  display: flex; justify-content: center; gap: 12px;
+  flex-wrap: wrap; opacity: 0.9;
+}
+.chip {
+  padding: 8px 16px; border-radius: 999px;
+  background: var(--surf); border: 1px solid var(--line);
+  font-size: 13px; font-weight: 600; color: var(--mut);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.chip.g { border-color: rgba(245, 196, 81, 0.3); color: var(--gold); }
+.chip.p { border-color: rgba(255, 107, 157, 0.3); color: var(--pink); }
+.chip.a { border-color: rgba(124, 92, 255, 0.3); color: var(--acc2); }
+
+/* Features */
+section { padding: 80px 24px; }
+section h2 {
+  font-size: clamp(28px, 4vw, 42px); font-weight: 900;
+  letter-spacing: -1px; margin-bottom: 12px; text-align: center;
+}
+section p.section-sub {
+  color: var(--mut); text-align: center; max-width: 640px;
+  margin: 0 auto 60px; font-size: 17px;
+}
+.features {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+.feat {
+  background: var(--surf); border: 1px solid var(--line);
+  border-radius: 16px; padding: 32px 28px;
+  transition: transform .15s, border-color .15s;
+}
+.feat:hover { transform: translateY(-4px); border-color: rgba(124, 92, 255, 0.4); }
+.feat .icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--acc), var(--acc2));
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 20px;
+}
+.feat.gold .icon { background: linear-gradient(135deg, var(--gold), #d69a20); }
+.feat.pink .icon { background: linear-gradient(135deg, var(--pink), #d94578); }
+.feat h3 { font-size: 20px; font-weight: 800; margin-bottom: 10px;
+  letter-spacing: -0.3px; }
+.feat p { color: var(--mut); font-size: 15px; }
+
+/* How it works */
+.how {
+  background: linear-gradient(180deg, transparent, var(--surf2));
+}
+.steps {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px; position: relative;
+}
+.step {
+  background: var(--surf); border: 1px solid var(--line);
+  border-radius: 16px; padding: 32px 24px; text-align: center;
+  position: relative;
+}
+.step .num {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--acc); color: white; font-weight: 900; font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px;
+  box-shadow: 0 4px 12px rgba(124, 92, 255, 0.3);
+}
+.step h4 { font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+.step p { color: var(--mut); font-size: 14px; }
+
+/* Value Prop */
+.value {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.1), rgba(245, 196, 81, 0.05));
+  border: 1px solid var(--line); border-radius: 24px;
+  padding: 60px 40px; text-align: center;
+}
+.value h2 {
+  font-size: clamp(24px, 3.5vw, 36px); margin-bottom: 20px;
+}
+.value .quote {
+  font-size: 18px; color: var(--mut); font-style: italic;
+  max-width: 640px; margin: 0 auto 30px;
+}
+.value .stats {
+  display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
+  margin-top: 40px;
+}
+.stat .n {
+  font-size: 42px; font-weight: 900; color: var(--gold);
+  letter-spacing: -1px; line-height: 1;
+}
+.stat .l { color: var(--mut); font-size: 13px; margin-top: 6px;
+  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
+/* Bottom CTA */
+.bottom-cta {
+  text-align: center; padding: 100px 24px;
+}
+.bottom-cta h2 {
+  font-size: clamp(30px, 5vw, 52px); font-weight: 900;
+  letter-spacing: -1.5px; margin-bottom: 20px;
+}
+.bottom-cta p { color: var(--mut); font-size: 18px; margin-bottom: 32px; }
+
+/* Footer */
+footer {
+  background: var(--surf); border-top: 1px solid var(--line);
+  padding: 40px 24px 30px;
+}
+footer .inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 20px;
+}
+footer .copy { color: var(--mut); font-size: 13px; }
+footer .links a {
+  color: var(--mut); text-decoration: none; margin-left: 20px;
+  font-size: 13px; transition: color .15s;
+}
+footer .links a:hover { color: var(--fg); }
+
+@media (max-width: 640px) {
+  .hero { padding: 60px 20px 40px; }
+  nav a:not(.cta) { display: none; }
+  section { padding: 60px 20px; }
+  .value { padding: 40px 24px; }
+  footer .inner { flex-direction: column; text-align: center; }
+  footer .links a { margin: 0 10px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <div class="logo">Douchko<span class="dot">·</span>VE</div>
+    <div>
+      <a href="#features">Features</a>
+      <a href="#how">So laeuft's</a>
+      <a href="/app" class="cta">Loslegen</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <span class="badge">Private Beta · v0.1</span>
+  <h1>Untertitel wie ein<br><span class="accent">Editorial-Team</span></h1>
+  <p class="sub">Lade dein Talking-Head-Video hoch. Unsere KI-Regie waehlt die wichtigen Woerter,
+    setzt Animationen aus 26 Klassen, versteht die Szene und komponiert Untertitel,
+    fuer die andere ein 50-Stunden-Cutter-Team brauchen.</p>
+  <a href="/app" class="hero-cta">
+    Jetzt Video hochladen
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12h14M12 5l7 7-7 7"/>
+    </svg>
+  </a>
+  <div class="small">Bis zu 5 Minuten Video · Keine Anmeldung mit E-Mail · Videos nach 7 Tagen automatisch geloescht</div>
+</section>
+
+<div class="preview-strip wrap">
+  <span class="chip a">KI-Regie mit GPT-4o</span>
+  <span class="chip g">Vision-Analyse pro Moment</span>
+  <span class="chip p">26 Text-Animationen</span>
+  <span class="chip">Musik-Beat-Sync</span>
+  <span class="chip">Adaptive Farben</span>
+  <span class="chip">Freistell-Matting</span>
+  <span class="chip">Portrait/Landscape/Square</span>
+</div>
+
+<section id="features" class="wrap">
+  <h2>Warum das anders ist</h2>
+  <p class="section-sub">Andere Tools setzen alle 3 Sekunden ein Wort gross. Wir arbeiten wie ein Editor:
+    wir wissen wann Stille wirkt und wann ein Wort explodiert.</p>
+
+  <div class="features">
+    <div class="feat">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+        </svg>
+      </div>
+      <h3>KI-Regie versteht dich</h3>
+      <p>GPT-4o liest dein Transkript wie ein Editor: was ist Hook, was ist Kern,
+        was ist Fuellwort. Kein Wort mehr, das dumm gross wird.</p>
+    </div>
+
+    <div class="feat gold">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <h3>Vision-Analyse pro Moment</h3>
+      <p>Die KI schaut sich jedes Highlight-Frame an und entscheidet: Steht das
+        Wort besser am Wasser, am Boden, hinter der Person? Sieht aus wie Zauberei.</p>
+    </div>
+
+    <div class="feat pink">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </div>
+      <h3>26 Text-Animationen</h3>
+      <p>"fliegt" bekommt Speed-Spur. "explodiert" bekommt radialen Aufschlag.
+        "kaputt" zerbricht. Die KI waehlt automatisch was zum Wort passt.</p>
+    </div>
+
+    <div class="feat">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+      </div>
+      <h3>Musik & Sprech-Beat</h3>
+      <p>Text pumpt auf dem Beat, wenn Musik laeuft. Auf Sprech-Onset, wenn nicht.
+        Nichts wirkt zufaellig, alles rastet ein.</p>
+    </div>
+
+    <div class="feat gold">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+        </svg>
+      </div>
+      <h3>Momente-Editor</h3>
+      <p>Sieh jeden geplanten Moment mit Video-Frame-Preview. Aendere Effekt,
+        Animation, Szene. Timeline-View zeigt Struktur auf einen Blick.</p>
+    </div>
+
+    <div class="feat pink">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+      </div>
+      <h3>Zwei-Pass-Validator</h3>
+      <p>Die KI prueft ihre eigenen Vorschlaege. Hilfsverben, Fuellwoerter, "IST"
+        und "DENN" kommen nicht ins Bild. Nur echte Kernaussagen.</p>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="how">
+  <div class="wrap">
+    <h2>In drei Schritten fertig</h2>
+    <p class="section-sub">Vom Upload zum fertigen Video in unter 30 Minuten, je nach Videolaenge.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h4>Video hochladen</h4>
+        <p>Portrait, Landscape oder Square. Bis zu 5 Minuten. Format egal.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h4>Look waehlen</h4>
+        <p>Vier Presets von TikTok-wild bis Cinematic-elegant. Oder alles feintunen.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h4>Bauen lassen</h4>
+        <p>Momente-Editor pruefen, dann rendern. Fertig-Video als MP4 herunterladen.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="value">
+    <h2>Fuer Creator, die es ernst meinen</h2>
+    <p class="quote">"Ich wollte kein Tool, das Untertitel klebt. Ich wollte einen Editor,
+      der versteht was ich sage — und daraus etwas macht, das aussieht wie ein Redaktionsstueck."</p>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="n">26</div>
+        <div class="l">Animationen</div>
+      </div>
+      <div class="stat">
+        <div class="n">5</div>
+        <div class="l">Effekt-Klassen</div>
+      </div>
+      <div class="stat">
+        <div class="n">2×</div>
+        <div class="l">KI-Pass fuer Qualitaet</div>
+      </div>
+      <div class="stat">
+        <div class="n">100%</div>
+        <div class="l">Lokal auf DE-Server</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="bottom-cta wrap">
+  <h2>Probier's aus</h2>
+  <p>Zugangs-Code noetig. Wenn du keinen hast, sag Ismet Bescheid.</p>
+  <a href="/app" class="hero-cta">
+    Zur App
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 12h14M12 5l7 7-7 7"/>
+    </svg>
+  </a>
+</div>
+
+<footer>
+  <div class="inner">
+    <div class="copy">© 2026 DouchkoVE · v0.1 Early Access</div>
+    <div class="links">
+      <a href="/impressum">Impressum</a>
+      <a href="/datenschutz">Datenschutz</a>
+      <a href="mailto:ismet.01.b@gmail.com">Kontakt</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

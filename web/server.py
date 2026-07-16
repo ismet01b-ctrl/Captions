@@ -509,11 +509,18 @@ def run_job(jid):
         return
 
     rc, log, out = _run_render(jid)
-    if 'OPENAI_API_KEY ist nicht gesetzt' in '\n'.join(log):
+    log_txt = '\n'.join(log)
+    # v80g: Menschliche Fehlermeldungen aus dem Render-Log herausklauben
+    if 'OPENAI_API_KEY ist nicht gesetzt' in log_txt:
         set_state(jid, status='fehler', progress=0,
                   msg='Der Server ist nicht fertig eingerichtet '
                       '(kein OpenAI-Schlüssel). Sag Ismet Bescheid.')
         return
+    for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
+        if line.startswith('FEHLER:'):
+            set_state(jid, status='fehler', progress=0,
+                      msg=line.replace('FEHLER:', '').strip())
+            return
     if rc == 0 and os.path.exists(out):
         count_use(j['code'])
         set_state(jid, status='fertig', progress=1.0, phase='Fertig',
@@ -527,14 +534,64 @@ def run_job(jid):
     # Erst beim Job-Cleanup loeschen.
 
 
+def _cleanup_worker():
+    """v80g: Alte Job-Verzeichnisse loeschen. Standard 7 Tage, ueber
+    DVE_RETENTION_DAYS ueberschreibbar. Laeuft stuendlich."""
+    import time as _t
+    retention = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
+    while True:
+        try:
+            cutoff = _t.time() - retention * 86400
+            if os.path.isdir(JOBS_DIR):
+                for jid in os.listdir(JOBS_DIR):
+                    d = os.path.join(JOBS_DIR, jid)
+                    if not os.path.isdir(d):
+                        continue
+                    try:
+                        mtime = os.path.getmtime(d)
+                    except Exception:
+                        continue
+                    if mtime < cutoff:
+                        shutil.rmtree(d, ignore_errors=True)
+                        JOBS.pop(jid, None)
+                        print(f"Cleanup: Job {jid} nach {retention:.0f}d entfernt")
+        except Exception as e:
+            print(f"Cleanup-Fehler: {type(e).__name__}: {e}")
+        _t.sleep(3600)
+
+
+threading.Thread(target=_cleanup_worker, daemon=True).start()
+
 for _ in range(int(os.environ.get('DVE_WORKERS', '1'))):
     threading.Thread(target=worker, daemon=True).start()
 
 
 # ---------------------------------------------------------------- Endpunkte
+def _page(name):
+    p = os.path.join(HERE, name)
+    if not os.path.exists(p):
+        raise HTTPException(404)
+    return open(p, encoding='utf-8').read()
+
+
 @app.get('/', response_class=HTMLResponse)
+def landing():
+    return _page('landing.html')
+
+
+@app.get('/app', response_class=HTMLResponse)
 def index():
-    return open(os.path.join(HERE, 'index.html'), encoding='utf-8').read()
+    return _page('index.html')
+
+
+@app.get('/impressum', response_class=HTMLResponse)
+def impressum():
+    return _page('impressum.html')
+
+
+@app.get('/datenschutz', response_class=HTMLResponse)
+def datenschutz():
+    return _page('datenschutz.html')
 
 
 @app.post('/api/pruefe-code')

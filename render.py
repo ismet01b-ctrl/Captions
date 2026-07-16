@@ -761,14 +761,35 @@ def transcribe(audio_path, language, cfg=None):
     if not key:
         sys.exit("FEHLER: Umgebungsvariable OPENAI_API_KEY ist nicht gesetzt.")
     print("Transkribiere ueber OpenAI Whisper API...")
-    with open(audio_path, 'rb') as f:
-        r = requests.post(
-            'https://api.openai.com/v1/audio/transcriptions',
-            headers={'Authorization': f'Bearer {key}'},
-            data={'model': 'whisper-1', 'response_format': 'verbose_json',
-                  'timestamp_granularities[]': ['word', 'segment'],
-                  **({} if language == 'auto' else {'language': language})},
-            files={'file': (os.path.basename(audio_path), f, 'audio/mp4')}, timeout=600)
+    try:
+        with open(audio_path, 'rb') as f:
+            r = requests.post(
+                'https://api.openai.com/v1/audio/transcriptions',
+                headers={'Authorization': f'Bearer {key}'},
+                data={'model': 'whisper-1', 'response_format': 'verbose_json',
+                      'timestamp_granularities[]': ['word', 'segment'],
+                      **({} if language == 'auto' else {'language': language})},
+                files={'file': (os.path.basename(audio_path), f, 'audio/mp4')},
+                timeout=600)
+    except requests.exceptions.Timeout:
+        sys.exit("FEHLER: OpenAI antwortet zu langsam (Timeout). "
+                 "Bitte in 2-3 Minuten erneut versuchen.")
+    except requests.exceptions.ConnectionError:
+        sys.exit("FEHLER: Keine Verbindung zu OpenAI. "
+                 "Internet pruefen oder in ein paar Minuten erneut versuchen.")
+    # v80g: Menschliche Fehler-Meldung statt 400/401/429/500-Rohcodes
+    if r.status_code == 401:
+        sys.exit("FEHLER: OpenAI-Key ungueltig oder abgelaufen. "
+                 "Server-Administrator kontaktieren.")
+    if r.status_code == 429:
+        sys.exit("FEHLER: OpenAI ist gerade ueberlastet oder das Kontingent ist "
+                 "erschoepft. Bitte in 5 Minuten erneut versuchen.")
+    if r.status_code == 413:
+        sys.exit("FEHLER: Audio zu gross fuer Whisper (25 MB Limit). "
+                 "Kuerzeres Video versuchen.")
+    if 500 <= r.status_code < 600:
+        sys.exit(f"FEHLER: OpenAI-Server-Problem (HTTP {r.status_code}). "
+                 f"Bitte in ein paar Minuten erneut versuchen.")
     r.raise_for_status()
     data = r.json()
     words = [{'word': w['word'].strip(), 'start': round(w['start'], 3), 'end': round(w['end'], 3)}
