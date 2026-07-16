@@ -278,6 +278,10 @@ body {
 }
 .look-card[data-look=tiktok] .lp-preview span { background: white; color: black; }
 .look-card[data-look=creator] .lp-preview span { color: white; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
+.look-card[data-look=elegant] .lp-preview span { color: white; font-family: 'f-inter', sans-serif;
+  letter-spacing: -1px; text-shadow: 0 3px 12px rgba(0,0,0,.6); }
+.look-card[data-look=elegant] .lp-preview {
+  background: linear-gradient(135deg, #2a2438, #14101c); }
 .look-card[data-look=cinematic] .lp-preview span { font-family: Georgia, serif; font-style: italic; color: #f5e6c8; }
 .look-card[data-look=clean] .lp-preview span { color: white; border: 1px solid white; font-weight: 400; }
 .look-card h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
@@ -705,24 +709,17 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 <div id="loginView" class="hero" role="main">
   <div class="hero-inner">
     <div class="hero-brand">DouchkoVE</div>
-    <div class="hero-tag">CAPTIONS · v76</div>
-    <h1 class="hero-title">Premium-Captions in <span class="glow">wenigen Minuten</span>.</h1>
-    <p class="hero-sub">Automatische Regie, 26 Animationen, Kino-Blur, Musik-Beat-Sync.
-      Kein Download.</p>
-    <div class="hero-badges">
-      <span class="badge on">GPT-4o Regie</span>
-      <span class="badge on">Blender 3D</span>
-      <span class="badge on">Depth-Track</span>
-      <span class="badge on">DE + EN</span>
-    </div>
+    <div class="hero-tag">CAPTIONS</div>
+    <h1 class="hero-title">Premium-Captions.<br>In <span class="glow">wenigen Minuten.</span></h1>
+    <p class="hero-sub">Video hochladen — fertig zurueckbekommen.<br>
+      Kein Download, kein Konto.</p>
     <label for="code" class="sr-only">Zugangscode</label>
-    <input type="text" id="code" placeholder="Zugangscode (z. B. ISMET-1728)"
+    <input type="text" id="code" placeholder="Zugangscode"
            autocomplete="off" autocapitalize="characters" inputmode="text"
            aria-describedby="loginErr">
     <button class="btn wide" id="btnLogin" style="margin-top:12px;">Loslegen</button>
     <div class="err hidden" id="loginErr" role="alert"></div>
     <div class="trust">
-      <b>Kein Konto</b> · Kein Payment · Nur Zugangscode<br>
       Video bleibt privat · nach Download geloescht
     </div>
   </div>
@@ -1780,6 +1777,7 @@ const FX_NAMES = {
 const LOOK_LABELS = {
   tiktok: 'TikTok · Wortweise, laut',
   creator: 'Creator · Talking-Head',
+  elegant: 'Elegant · Dicht + edel',
   cinematic: 'Cinematic · Wenige, groß',
   clean: 'Clean · Nur Untertitel',
 };

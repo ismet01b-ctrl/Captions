@@ -55,6 +55,7 @@ LOCK = threading.Lock()
 LOOKS = {
     'tiktok':    {'name': 'TikTok', 'desc': 'Wort für Wort, fett, laut.'},
     'creator':   {'name': 'Creator', 'desc': 'Talking-Head & Business.'},
+    'elegant':   {'name': 'Elegant', 'desc': 'Dichte Captions, aber edel — kein Zappeln.'},
     'cinematic': {'name': 'Cinematic', 'desc': 'Wenige, große Momente.'},
     'clean':     {'name': 'Clean', 'desc': 'Nur lesbare Untertitel.'},
 }
@@ -231,6 +232,43 @@ def build_config(look, overrides=None):
             'fonts': {
                 'display': 'fonts/montserrat_xb.ttf',
                 'italic': 'fonts/montserrat_xb.ttf',
+                'script': 'fonts/playfair_i.ttf',
+            },
+            'matting_quality': 'hoch',
+        },
+        'elegant': {
+            'effects': {
+                # NEU: Der "Elegant"-Preset - dichte Captions, aber gepflegt.
+                # Fuer Kunden die viele Text-Momente wollen (Business/Talking-Head
+                # mit hoher Info-Dichte) OHNE dass es kindisch/zappelig wird.
+                # Keine glitzernden Extras, ruhige Kamera, klassische Serifen-
+                # Anmutung, sanfte Animationen, viel Bokeh + Kontaktschatten.
+                'density': 'akzente', 'text_style': '3d',
+                'hook_seconds': 15, 'hook_strength': 0.5, 'instant_hook': True,
+                'pattern_interrupt': 12, 'retention_gap': 10,
+                'words_per_group': 3, 'words_per_group_max': 5,
+                'chunk_hold_min': 0.85,               # gemaechlicher Puls
+                'dim_behind': 0.34, 'dim_blurin': 0.28,
+                'beat_sync': 0.55, 'music_beat': 0.30, 'person_shadow': 0.60,
+                'zahl_gap': 15,
+                'bg_blur': 0.65, 'freeze_frame': 0.60, 'trail': 0.0,
+                'counter_ring': 0.0, 'split_screen': 0.0, 'env_shadow': 0.55,
+                'emerge': 'auto', 'anim': True,
+                # Nur die ruhigen, edlen Effekte in Rotation
+                'keyword_rotation': ['behind', 'blurin', 'outline', 'cascade'],
+                'sfx_volume': 0.30, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.55, 'crash': 0.35, 'whip': False, 'side_every': 4,
+                'keyword_rotation': ['caption', 'push', 'pan'],
+                'side_rotation': ['drift'],
+            },
+            'colors': {'style': 'auto', 'adaptive': True},
+            'fonts': {
+                'display': 'fonts/inter_black.ttf',
+                'italic': 'fonts/playfair_i.ttf',
                 'script': 'fonts/playfair_i.ttf',
             },
             'matting_quality': 'hoch',
