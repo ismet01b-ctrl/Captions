@@ -630,6 +630,61 @@ body {
 }
 
 /* Vorschau-Kachel: kleines Video-Frame-Placeholder mit Text-Wortartrepraesentation */
+/* v80i: Pricing-Cards */
+.pricing-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.p-card {
+  background: var(--surf); border: 1px solid var(--line);
+  border-radius: 16px; padding: 28px 24px; position: relative;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: transform .15s, border-color .15s;
+}
+.p-card:hover { transform: translateY(-3px); border-color: var(--acc); }
+.p-card.pop { border-color: var(--acc); box-shadow: 0 0 0 2px rgba(124,92,255,0.25); }
+.p-card.best { border-color: #f5c451; box-shadow: 0 0 0 2px rgba(245,196,81,0.25); }
+.p-card .tag {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  background: var(--acc); color: white; padding: 4px 12px;
+  border-radius: 999px; font-size: 11px; font-weight: 800;
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+.p-card.best .tag { background: #f5c451; color: #1a1428; }
+.p-card h4 { font-size: 22px; font-weight: 900; letter-spacing: -0.3px; }
+.p-card .preis {
+  font-size: 40px; font-weight: 900; letter-spacing: -1.5px;
+  line-height: 1; margin: 4px 0;
+}
+.p-card .preis .cur { font-size: 22px; opacity: 0.7; vertical-align: top;
+  margin-right: 2px; }
+.p-card .minuten { color: var(--mut); font-size: 15px; font-weight: 600; }
+.p-card .beschr { color: var(--mut); font-size: 13px; }
+.p-card .hinweis { font-size: 12px; color: var(--acc2); font-weight: 600;
+  padding: 6px 10px; background: rgba(124,92,255,0.1); border-radius: 6px;
+  display: inline-block; }
+.p-card .kaufen {
+  margin-top: auto; padding: 12px; width: 100%;
+  background: var(--acc); color: white; border: none;
+  border-radius: 10px; font-weight: 800; font-size: 15px;
+  cursor: pointer; transition: transform .1s;
+}
+.p-card.best .kaufen { background: linear-gradient(135deg, #f5c451, #d69a20);
+  color: #1a1428; }
+.p-card .kaufen:hover { transform: scale(1.02); }
+.p-card .kaufen:disabled { opacity: 0.5; cursor: wait; }
+
+/* v80i: History */
+.hist-item {
+  display: grid; grid-template-columns: 1fr auto;
+  padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px;
+}
+.hist-item:last-child { border-bottom: none; }
+.hist-item .grund { color: var(--fg); }
+.hist-item .zeit { color: var(--mut); font-size: 12px; margin-top: 2px; }
+.hist-item .delta.plus { color: #6dd48a; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hist-item .delta.minus { color: #e0a06a; font-weight: 700; font-variant-numeric: tabular-nums; }
+
 /* v80f: Timeline-Storyboard oberhalb der Momente-Liste */
 .mom-timeline {
   padding: 12px 20px 4px; overflow-x: auto; white-space: nowrap;
@@ -841,8 +896,49 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div class="ring-num" id="ringNum">–</div>
       </div>
     </div>
+    <button class="btn secondary" id="btnBuy" style="padding:10px 16px;
+            background:linear-gradient(135deg, #f5c451, #d69a20); color:#1a1428;
+            border:none; font-weight:800;">+ Guthaben</button>
+    <button class="btn secondary" id="btnHistory" style="padding:10px 16px;">Historie</button>
     <button class="btn secondary" id="btnLogout" style="padding:10px 16px;">Ausloggen</button>
   </header>
+
+  <!-- Pricing Modal (v80i) -->
+  <div class="overlay hidden" id="pricingModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:960px;">
+      <div class="head">
+        <h3>Guthaben aufladen</h3>
+        <p>Deine Kosten pro Video sinken mit groesseren Packs.
+          Guthaben verfaellt nach 6 Monaten nicht.</p>
+      </div>
+      <div class="body">
+        <div id="pricingGrid" class="pricing-grid"></div>
+        <p style="margin-top:20px; color:var(--mut); font-size:13px; text-align:center;">
+          Sichere Zahlung ueber Stripe · Karte oder SEPA-Lastschrift ·
+          Rechnung kommt per E-Mail
+        </p>
+      </div>
+      <div class="foot">
+        <div style="flex:1;"></div>
+        <button class="btn secondary" id="pricingClose">Schliessen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Modal (v80i) -->
+  <div class="overlay hidden" id="historyModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:720px;">
+      <div class="head">
+        <h3>Deine Historie</h3>
+        <p>Alle Kaeufe und Renders auf einen Blick.</p>
+      </div>
+      <div class="body" id="historyBody"></div>
+      <div class="foot">
+        <div style="flex:1;"></div>
+        <button class="btn secondary" id="historyClose">Schliessen</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Stepper -->
   <div class="stepper" id="stepper" role="tablist" aria-label="Schritte">
@@ -1728,7 +1824,132 @@ function enterApp(user) {
     const d = await r.json();
     if (d.ok) enterApp(d);
   } catch (e) {}
+  handlePostCheckout();
 })();
+
+/* v80i: Pricing + Checkout + History */
+function fmtMin(sec) {
+  if (sec == null || isNaN(sec)) return '0 Min';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m < 1) return `${s} Sek`;
+  if (s === 0) return `${m} Min`;
+  return `${m}:${String(s).padStart(2, '0')} Min`;
+}
+
+function refreshBalanceInHeader() {
+  fetch('/api/me').then(r => r.json()).then(d => {
+    if (!d.ok) return;
+    State.balanceSec = d.balance_sec;
+    const m = Math.floor(d.balance_sec / 60);
+    $('#topRest').textContent = `${m} Min Guthaben`;
+    updateRing(m || 1, Math.max(m, 5));
+    if (m < 3) {
+      $('#topRest').style.color = '#e0a06a';
+      $('#topRest').textContent = `${m} Min - bald leer`;
+    }
+  });
+}
+
+async function showPricing() {
+  const r = await fetch('/api/pricing');
+  const d = await r.json();
+  const grid = $('#pricingGrid');
+  grid.innerHTML = '';
+  const order = ['starter', 'creator', 'pro'];
+  order.forEach(id => {
+    const p = d.packs[id]; if (!p) return;
+    const euro = (p.preis_cent / 100).toFixed(0);
+    const pMin = (p.preis_cent / 100 / p.minuten).toFixed(2);
+    const isPop = p.empfohlen;
+    const isBest = p.bester_wert;
+    const cls = isBest ? 'best' : (isPop ? 'pop' : '');
+    const tag = isBest ? '<div class="tag">Bester Wert</div>' :
+                (isPop ? '<div class="tag">Empfohlen</div>' : '');
+    const btnLabel = d.stripe_ready ? `${euro} € bezahlen` : 'Bald verfuegbar';
+    const btnDis = d.stripe_ready ? '' : 'disabled';
+    const card = document.createElement('div');
+    card.className = 'p-card ' + cls;
+    card.innerHTML = `
+      ${tag}
+      <h4>${p.name}</h4>
+      <div class="preis"><span class="cur">€</span>${euro}</div>
+      <div class="minuten">${p.minuten} Minuten Video</div>
+      <div class="beschr">${p.beschreibung}</div>
+      <div class="hinweis">${p.hinweis} · ${pMin} € pro Minute</div>
+      <button class="kaufen" data-pack="${id}" ${btnDis}>${btnLabel}</button>
+    `;
+    grid.appendChild(card);
+  });
+  grid.querySelectorAll('.kaufen').forEach(b => b.addEventListener('click', () => startCheckout(b)));
+  $('#pricingModal').classList.remove('hidden');
+}
+
+async function startCheckout(btn) {
+  const pack = btn.dataset.pack;
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Verbinde …';
+  try {
+    const fd = new FormData(); fd.append('pack', pack);
+    const r = await fetch('/api/checkout', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) {
+      toast(d.detail || 'Zahlung konnte nicht gestartet werden.', 'err');
+      return;
+    }
+    window.location.href = d.url;
+  } catch (e) {
+    toast('Verbindungsfehler.', 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+
+function handlePostCheckout() {
+  const p = new URLSearchParams(location.search);
+  if (p.get('bezahlt') === '1') {
+    toast('Zahlung erfolgreich - Guthaben ist gutgeschrieben.', 'ok', 6000);
+    setTimeout(refreshBalanceInHeader, 1500);   // Webhook braucht kurz
+    history.replaceState({}, '', location.pathname);
+  } else if (p.get('bezahlt') === '0') {
+    toast('Zahlung abgebrochen. Kein Geld gebucht.', 'info');
+    history.replaceState({}, '', location.pathname);
+  }
+}
+
+async function showHistory() {
+  const r = await fetch('/api/history');
+  const d = await r.json();
+  const body = $('#historyBody');
+  if (!r.ok) { body.innerHTML = '<p style="color:var(--mut)">Nicht eingeloggt.</p>'; }
+  else if (!d.items || !d.items.length) {
+    body.innerHTML = `<p style="color:var(--mut); text-align:center; padding:40px;">
+      Noch keine Aktivitaet. Erstes Video rendern oder Guthaben aufladen.</p>`;
+  } else {
+    body.innerHTML = `<p style="margin-bottom:16px; color:var(--mut);">
+      Aktuelles Guthaben: <b style="color:var(--fg)">${fmtMin(d.balance_sec)}</b></p>`;
+    d.items.forEach(it => {
+      const dt = new Date(it.zeit * 1000);
+      const plus = it.delta_sec >= 0;
+      const val = plus ? `+${fmtMin(it.delta_sec)}` : `-${fmtMin(-it.delta_sec)}`;
+      const el = document.createElement('div');
+      el.className = 'hist-item';
+      el.innerHTML = `
+        <div>
+          <div class="grund">${it.grund}</div>
+          <div class="zeit">${dt.toLocaleString('de-DE')}</div>
+        </div>
+        <div class="delta ${plus ? 'plus' : 'minus'}">${val}</div>`;
+      body.appendChild(el);
+    });
+  }
+  $('#historyModal').classList.remove('hidden');
+}
+
+if ($('#btnBuy')) $('#btnBuy').addEventListener('click', showPricing);
+if ($('#btnHistory')) $('#btnHistory').addEventListener('click', showHistory);
+if ($('#pricingClose')) $('#pricingClose').addEventListener('click', () => $('#pricingModal').classList.add('hidden'));
+if ($('#historyClose')) $('#historyClose').addEventListener('click', () => $('#historyModal').classList.add('hidden'));
 
 function updateRing(rest, total) {
   const pct = total > 0 ? Math.max(0.02, rest / total) : 1;
@@ -1839,7 +2060,14 @@ async function startUpload(mode) {
     r = await fetch('/api/upload', { method: 'POST', body: fd });
     d = await r.json();
   } catch (e) { showError('Upload fehlgeschlagen.'); return; }
-  if (!r.ok) { showError(d.detail || d.msg || 'Upload fehlgeschlagen.'); return; }
+  if (!r.ok) {
+    if (r.status === 402) {                    // Guthaben leer -> direkt Pricing zeigen
+      showError(d.detail || 'Guthaben zu niedrig.');
+      setTimeout(showPricing, 300);
+      return;
+    }
+    showError(d.detail || d.msg || 'Upload fehlgeschlagen.'); return;
+  }
   State.jid = d.job;
   if (mode === 'analyze') {
     $('#analyzeStatus').textContent = 'Analyse laeuft … (30-90 s)';
@@ -1905,6 +2133,7 @@ async function pollRender() {
     if (st.status === 'fertig') {
       $('#progressCard').classList.add('hidden');
       renderSuccess();
+      refreshBalanceInHeader();
       return;
     }
     if (st.status === 'fehler') {

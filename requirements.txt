@@ -6,3 +6,4 @@ onnxruntime
 requests
 PyYAML
 bcrypt
+stripe

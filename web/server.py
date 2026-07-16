@@ -233,7 +233,169 @@ def _require_user(request):
         raise HTTPException(401, 'Nicht eingeloggt.')
     return u
 
+
+# ================================================================
+# v80i: Credit-Packs + Stripe-Checkout + Konsum + Historie
+# ================================================================
+# Pricing: Preis (Cent) und Guthaben (Sekunden). Marge kalkuliert auf
+# ~15-16 Cent Kosten pro Minute reales KI-Setup (Text-Regie 2-Pass +
+# selektive Vision-Regie + Whisper).
+PACKS = {
+    'starter': {
+        'name': 'Starter',
+        'preis_cent': 900,
+        'minuten': 20,
+        'sekunden': 20 * 60,
+        'beschreibung': 'Perfekt zum Ausprobieren',
+        'hinweis': '1 Video pro Woche',
+    },
+    'creator': {
+        'name': 'Creator',
+        'preis_cent': 1900,
+        'minuten': 60,
+        'sekunden': 60 * 60,
+        'beschreibung': 'Fuer regelmaessige Creator',
+        'hinweis': '3-4 Videos pro Woche',
+        'empfohlen': True,
+    },
+    'pro': {
+        'name': 'Pro',
+        'preis_cent': 3900,
+        'minuten': 150,
+        'sekunden': 150 * 60,
+        'beschreibung': 'Fuer Heavy-User und Agenturen',
+        'hinweis': 'Bester Preis pro Minute',
+        'bester_wert': True,
+    },
+}
+
+
+def _stripe():
+    """Stripe-Client mit Key aus der Umgebung. None wenn nicht konfiguriert."""
+    key = os.environ.get('STRIPE_SECRET_KEY', '').strip()
+    if not key:
+        return None
+    try:
+        import stripe as _s
+        _s.api_key = key
+        return _s
+    except ImportError:
+        return None
+
+
+def _pack_processed(user_id, session_id):
+    """Idempotenz-Check: wurde diese Stripe-Session bereits gutgeschrieben?"""
+    con = _db()
+    row = con.execute(
+        "SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
+        (user_id, f'Kauf {session_id}')).fetchone()
+    con.close()
+    return row is not None
+
+
 app = FastAPI(title='DouchkoVE')
+
+
+@app.get('/api/pricing')
+def api_pricing():
+    return {'packs': PACKS,
+            'trial_sec': TRIAL_SECONDS,
+            'stripe_ready': _stripe() is not None}
+
+
+@app.post('/api/checkout')
+async def api_checkout(request: Request, pack: str = Form(...)):
+    """Erstellt eine Stripe-Checkout-Session und liefert die URL zurueck.
+    Weiterleitung dorthin macht der Client (window.location)."""
+    u = _require_user(request)
+    if pack not in PACKS:
+        raise HTTPException(400, 'Unbekanntes Pack.')
+    st = _stripe()
+    if not st:
+        raise HTTPException(503, 'Zahlung ist gerade nicht konfiguriert. '
+                                 'Bitte spaeter noch einmal versuchen.')
+    p = PACKS[pack]
+    base = os.environ.get('DVE_PUBLIC_URL', '').rstrip('/') or str(request.base_url).rstrip('/')
+    try:
+        session = st.checkout.Session.create(
+            mode='payment',
+            payment_method_types=['card', 'sepa_debit'],
+            line_items=[{
+                'quantity': 1,
+                'price_data': {
+                    'currency': 'eur',
+                    'unit_amount': p['preis_cent'],
+                    'product_data': {
+                        'name': f"DouchkoVE {p['name']} Pack",
+                        'description': f"{p['minuten']} Minuten Video-Guthaben",
+                    },
+                },
+            }],
+            metadata={
+                'user_id': str(u['id']),
+                'user_email': u['email'],
+                'pack': pack,
+                'sekunden': str(p['sekunden']),
+            },
+            customer_email=u['email'],
+            success_url=f'{base}/app?bezahlt=1&pack={pack}',
+            cancel_url=f'{base}/app?bezahlt=0',
+            allow_promotion_codes=True,
+        )
+        return {'ok': True, 'url': session.url}
+    except Exception as e:
+        raise HTTPException(500, f'Stripe-Fehler: {type(e).__name__}')
+
+
+@app.post('/api/stripe/webhook')
+async def api_stripe_webhook(request: Request):
+    """Stripe ruft hier an sobald eine Zahlung wirklich durch ist. Wir
+    verifizieren die Signatur und schreiben das Guthaben gut. Idempotent -
+    Stripe kann Webhooks mehrfach senden."""
+    st = _stripe()
+    if not st:
+        raise HTTPException(503, 'Stripe nicht konfiguriert.')
+    secret = os.environ.get('STRIPE_WEBHOOK_SECRET', '').strip()
+    payload = await request.body()
+    sig = request.headers.get('stripe-signature', '')
+    try:
+        if secret:
+            event = st.Webhook.construct_event(payload, sig, secret)
+        else:
+            event = json.loads(payload)
+    except Exception as e:
+        raise HTTPException(400, f'Webhook ungueltig: {type(e).__name__}')
+    if event.get('type') != 'checkout.session.completed':
+        return {'ok': True, 'ignored': event.get('type')}
+    sess = event['data']['object']
+    meta = sess.get('metadata') or {}
+    try:
+        uid = int(meta.get('user_id'))
+        sec = int(meta.get('sekunden'))
+        pack = meta.get('pack', '?')
+        sess_id = sess.get('id', '')
+    except Exception:
+        raise HTTPException(400, 'Metadaten unvollstaendig.')
+    if _pack_processed(uid, sess_id):
+        return {'ok': True, 'idempotent': True}
+    _adjust_balance(uid, sec, f'Kauf {sess_id}')
+    print(f"Kauf verbucht: user={uid} pack={pack} +{sec // 60} Min")
+    return {'ok': True, 'gutgeschrieben_sek': sec}
+
+
+@app.get('/api/history')
+def api_history(request: Request):
+    """Kauf- und Verbrauchs-Historie fuer den eingeloggten User."""
+    u = _require_user(request)
+    con = _db()
+    rows = con.execute(
+        "SELECT delta_sec, grund, created_at FROM ledger "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+        (u['id'],)).fetchall()
+    con.close()
+    items = [{'delta_sec': r['delta_sec'], 'grund': r['grund'],
+              'zeit': int(r['created_at'])} for r in rows]
+    return {'balance_sec': u['balance_sec'], 'items': items}
 
 # Fonts fuer die Font-Kacheln (Preview mit tatsaechlicher Schrift)
 _fonts_dir = os.path.join(ROOT, 'fonts')
@@ -717,7 +879,7 @@ def run_job(jid):
     if 'OPENAI_API_KEY ist nicht gesetzt' in log_txt:
         set_state(jid, status='fehler', progress=0,
                   msg='Der Server ist nicht fertig eingerichtet '
-                      '(kein OpenAI-Schlüssel). Sag Ismet Bescheid.')
+                      '(KI-Schluessel fehlt). Sag Support Bescheid.')
         return
     for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
         if line.startswith('FEHLER:'):
@@ -726,6 +888,12 @@ def run_job(jid):
             return
     if rc == 0 and os.path.exists(out):
         count_use(j['code'])
+        # v80i: Video-Sekunden vom User-Guthaben abziehen (falls User-Account)
+        uid = j.get('user_id')
+        if uid:
+            verbrauch = max(1, int(round(j.get('dauer', 0))))
+            _adjust_balance(uid, -verbrauch,
+                            f'Render {jid} ({verbrauch}s)')
         set_state(jid, status='fertig', progress=1.0, phase='Fertig',
                   out='fertig.mp4')
     else:
@@ -931,7 +1099,24 @@ async def upload(request: Request, datei: UploadFile = File(...),
         raise HTTPException(413, f'Video zu lang ({dur:.0f}s). '
                                  f'Maximal {MAX_SECONDS} Sekunden.')
 
+    # v80i: Pre-Check auf Guthaben. Ohne Balance kein Render.
+    u = _current_user(request)
+    uid = None
+    if u:
+        uid = u['id']
+        need = max(1, int(round(dur)))
+        if u['balance_sec'] < need:
+            shutil.rmtree(d, ignore_errors=True)
+            fehlt = need - u['balance_sec']
+            raise HTTPException(
+                402,
+                f"Guthaben reicht nicht (Video braucht {need // 60}:"
+                f"{need % 60:02d} Min, du hast {u['balance_sec'] // 60}:"
+                f"{u['balance_sec'] % 60:02d} Min). "
+                f"Fehlen {fehlt // 60 + 1} Min - bitte Guthaben aufladen.")
+
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
+                 'user_id': uid,
                  'mode': mode, 'cfg_overrides': overrides,
                  'status': 'wartet', 'progress': 0.0,
                  'phase': 'In der Warteschlange …',
