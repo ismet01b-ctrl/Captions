@@ -630,6 +630,44 @@ body {
 }
 
 /* Vorschau-Kachel: kleines Video-Frame-Placeholder mit Text-Wortartrepraesentation */
+/* v80f: Timeline-Storyboard oberhalb der Momente-Liste */
+.mom-timeline {
+  padding: 12px 20px 4px; overflow-x: auto; white-space: nowrap;
+  border-bottom: 1px solid var(--line); background: rgba(0,0,0,.15);
+}
+.mom-timeline::-webkit-scrollbar { height: 6px; }
+.mom-timeline::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.15); border-radius: 3px;
+}
+.tl-track {
+  position: relative; height: 62px; min-width: 100%;
+  display: flex; align-items: center;
+}
+.tl-block {
+  position: relative; height: 42px; margin-right: 3px;
+  border-radius: 4px; padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 11px; letter-spacing: -0.2px;
+  color: #fff; text-transform: uppercase;
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis;
+  max-width: 140px; min-width: 24px;
+  border: 1px solid rgba(255,255,255,.1);
+  transition: transform .12s ease;
+}
+.tl-block:hover { transform: translateY(-2px); }
+.tl-block.fx-behind { background: linear-gradient(135deg, #b78a2d, #7a5a1a); }
+.tl-block.fx-outline { background: linear-gradient(135deg, #7a4c9e, #4a2c6a); }
+.tl-block.fx-cascade { background: linear-gradient(135deg, #4d8fb5, #2a5a7a); }
+.tl-block.fx-blurin { background: linear-gradient(135deg, #6c6c8a, #3a3a4e); }
+.tl-block.fx-ground { background: linear-gradient(135deg, #a06d3a, #6a4620); }
+.tl-block.p-1 { opacity: 0.65; height: 32px; }
+.tl-block.p-3 { height: 52px; box-shadow: 0 0 0 2px var(--acc); }
+.tl-block.off { opacity: 0.25; text-decoration: line-through; }
+.tl-zeit {
+  font-size: 9px; opacity: 0.75; margin-left: 4px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 .mom-preview {
   width: 96px; height: 54px; border-radius: 6px;
   background: linear-gradient(135deg, #2a2438, #14101c);
@@ -1138,6 +1176,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <h3>Zusammenfassung</h3>
         <p class="desc">So sieht dein Video-Rezept aus. Alles klar? Dann bauen.</p>
         <div id="summary" class="sum-grid"></div>
+        <div class="tpl-row" style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+          <select id="tplLoad" class="segseg-item" style="flex:1; min-width:180px; padding:8px 12px;">
+            <option value="">— Gespeichertes Setup laden —</option>
+          </select>
+          <button class="btn secondary" id="btnTplSave" style="padding:8px 14px;">Setup speichern</button>
+        </div>
       </div>
 
       <button class="btn big wide" id="btnRender" style="margin-top:14px;">
@@ -1264,6 +1308,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <p>Text tippen, Effekt/Groesse/Animation waehlen, Haken raus = weg.
         Strg+Z / Strg+Y</p>
     </div>
+    <div id="momTimeline" class="mom-timeline" aria-hidden="true"></div>
     <div class="body" id="momBody"></div>
     <div class="foot">
       <button class="btn secondary" id="momUndo" disabled aria-label="Undo">Undo</button>
@@ -1305,6 +1350,51 @@ class EditorHistory {
 
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
+
+/* v80f: Templates - persistierte Setup-Snapshots pro Code */
+async function loadTemplates() {
+  if (!State.code) return;
+  try {
+    const r = await fetch('/api/templates?code=' + encodeURIComponent(State.code));
+    const d = await r.json();
+    const sel = $('#tplLoad');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Gespeichertes Setup laden —</option>';
+    (d.templates || []).forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.name; o.textContent = t.name;
+      sel.appendChild(o);
+    });
+  } catch (e) {}
+}
+async function saveTemplate() {
+  const name = prompt('Wie soll dieses Setup heissen?', 'Mein TikTok-Setup');
+  if (!name || !name.trim()) return;
+  const snapshot = { look: State.look, cfg: State.cfg };
+  const fd = new FormData();
+  fd.append('name', name.trim());
+  fd.append('settings', JSON.stringify(snapshot));
+  fd.append('code', State.code || '');
+  const r = await fetch('/api/templates', { method: 'POST', body: fd });
+  if (r.ok) {
+    toast(`Setup "${name.trim()}" gespeichert.`, 'ok');
+    loadTemplates();
+  } else {
+    toast('Speichern fehlgeschlagen.', 'err');
+  }
+}
+function applyTemplate(name) {
+  fetch('/api/templates?code=' + encodeURIComponent(State.code || ''))
+    .then(r => r.json())
+    .then(d => {
+      const t = (d.templates || []).find(x => x.name === name);
+      if (!t) return;
+      if (t.settings.look) State.look = t.settings.look;
+      if (t.settings.cfg) State.cfg = JSON.parse(JSON.stringify(t.settings.cfg));
+      toast(`Setup "${name}" geladen.`, 'ok');
+      if (typeof buildSummary === 'function') buildSummary();
+    });
+}
 
 function toast(msg, kind='info', dur=4000) {
   const el = document.createElement('div');
@@ -1605,7 +1695,7 @@ function goStep(n) {
     v.classList.toggle('active', parseInt(v.dataset.step) === n);
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  if (n === 4) buildSummary();
+  if (n === 4) { buildSummary(); loadTemplates(); }
 }
 
 $$('.step').forEach(s => s.addEventListener('click', () => {
@@ -1962,16 +2052,48 @@ async function openMomentsEditor() {
       }
       if (isText) {
         clearTimeout(debTimer);
-        debTimer = setTimeout(() => { syncFromDom(); pushSnap(); }, 400);
+        debTimer = setTimeout(() => { syncFromDom(); pushSnap(); renderTimeline(); }, 400);
       } else {
-        syncFromDom(); pushSnap();
+        syncFromDom(); pushSnap(); renderTimeline();
       }
     });
   });
   syncFromDom(); pushSnap();
+  renderTimeline();
   $('#momEditor').classList.remove('hidden');
   $('#btnAnalyze').disabled = false;
   $('#analyzeStatus').textContent = '';
+}
+
+function renderTimeline() {
+  const tl = $('#momTimeline');
+  if (!tl) return;
+  const moms = State.moments || [];
+  if (!moms.length) { tl.innerHTML = ''; return; }
+  const track = document.createElement('div');
+  track.className = 'tl-track';
+  moms.forEach((m, idx) => {
+    if (!m || !('i' in m)) return;
+    const b = document.createElement('div');
+    const fx = m.fx || 'behind';
+    const pw = m.power || 2;
+    b.className = 'tl-block fx-' + fx + ' p-' + pw + (m.aktiv === false ? ' off' : '');
+    const txt = (m.text || '').split(' ').slice(0, 2).join(' ');
+    b.textContent = txt || '·';
+    b.title = `${(m.zeit || 0).toFixed(1)}s · ${fx} · P${pw}`;
+    b.addEventListener('click', () => {
+      const rows = $('#momBody').querySelectorAll('.mom-row');
+      const row = rows[idx + 1];               // +1 fuer Header-Zeile
+      if (row) {
+        row.scrollIntoView({behavior: 'smooth', block: 'center'});
+        row.style.outline = '2px solid var(--acc)';
+        setTimeout(() => { row.style.outline = ''; }, 1200);
+      }
+    });
+    track.appendChild(b);
+  });
+  tl.innerHTML = '';
+  tl.appendChild(track);
 }
 
 function updatePreview(rowEl, m) {
@@ -2051,6 +2173,10 @@ window.addEventListener('keydown', e => {
   }
 });
 $('#momCancel').addEventListener('click', () => $('#momEditor').classList.add('hidden'));
+if ($('#btnTplSave')) $('#btnTplSave').addEventListener('click', saveTemplate);
+if ($('#tplLoad')) $('#tplLoad').addEventListener('change', (e) => {
+  if (e.target.value) { applyTemplate(e.target.value); e.target.value = ''; }
+});
 $('#momSave').addEventListener('click', async () => {
   syncFromDom();
   const btn = $('#momSave');

@@ -1561,7 +1561,12 @@ Beispiel: "Deutschland bricht seine Versprechen" -> Keyword "Deutschland" bekomm
 "anim": "bruch" (das Wort zerbricht sichtbar).
 Beispiel: "die Mieten steigen ins Unermessliche" -> Keyword "Mieten" bekommt "anim": "anstieg".
 Beispiel: "unser Umsatz explodiert" -> "anim": "schub". Sonst weglassen.
-Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Effekt>", "power": <1-3>, "anim": "<optional>"}]}"""
+- Optional "emoji": EIN einzelnes Unicode-Emoji das die Aussage untermalt. \
+Nur wenn es wirklich passt - kein Deko-Zwang. Beispiele: \
+Geld/Umsatz "💰" · Wachstum "🚀" · Absturz "📉" · Rekord "🏆" · Schock "⚠️" · \
+Zeit "⏰" · Herz/Emotion "❤️" · Fakt/Beweis "✅" · Verbot "🚫" · Idee "💡" · \
+Sieg "🔥" · Krise "🆘". Kein Emoji bei neutralem Text.
+Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Effekt>", "power": <1-3>, "anim": "<optional>", "emoji": "<optional>"}]}"""
 
 def parse_regie(text, words, language='de'):
     import json as _json
@@ -1620,6 +1625,12 @@ def parse_regie(text, words, language='de'):
                     anim = str(item.get('anim', '')).strip().lower()
                     if anim in ANIM_LIST:
                         entry['anim'] = anim
+                    emo = str(item.get('emoji', '')).strip()
+                    # nur echte Emoji-Bereiche zulassen, kein Text/HTML
+                    if emo and 1 <= len(emo) <= 4 and any(
+                            0x1F000 <= ord(c) <= 0x1FFFF or 0x2600 <= ord(c) <= 0x27BF
+                            for c in emo):
+                        entry['emoji'] = emo
                     out[i] = entry
         return out or None
     except Exception:
@@ -2660,6 +2671,9 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if p['entr'] == 'emerge' and not _em_moeglich:
                 p['entr'] = rot_entr_no_em.next()
             kw_count += 1
+            # v80f: Emoji durchreichen (kommt aus KI-Regie oder Editor-Overrides)
+            if isinstance(info, dict) and info.get('emoji'):
+                p['emoji'] = info['emoji']
             if cfg['effects'].get('anim', True):
                 _auto_anim = (info.get('anim') if isinstance(info, dict) else None)
                 if not _auto_anim:
@@ -3902,6 +3916,24 @@ def main():
         cfg['output']['speed'] = 'schnell'
         print("VORSCHAU-MODUS: 540p, schneller Encode")
     W = int(round(src_w * H / src_h / 2) * 2)
+
+    # v80f: Aspect-Ratio Auto-Detect. Der Renderer ist auf 9:16 optimiert
+    # (Safe-Zone, v_zone, Textgroessen). Bei Landscape-Eingaben (>1.3) kippen
+    # sicherheitshalber alle Portrait-Assumptions. Wir warnen laut und
+    # deaktivieren safe_zone/portrait-Layout automatisch.
+    _ar = src_w / max(src_h, 1)
+    _mode = str(cfg.get('output', {}).get('orientation', 'auto')).lower()
+    if _mode == 'auto':
+        if _ar > 1.3:
+            _mode = 'landscape'
+        elif _ar > 0.85:
+            _mode = 'square'
+        else:
+            _mode = 'portrait'
+    if _mode != 'portrait':
+        cfg['effects']['safe_zone'] = False
+        print(f"Eingabe erkannt als {_mode.upper()} ({src_w}x{src_h}, "
+              f"AR {_ar:.2f}). Portrait-Optimierungen deaktiviert.")
     print(f"Eingabe: {src_w}x{src_h} @ {fps:.3g}fps, {n_frames} Frames -> Ausgabe {W}x{H}")
 
     # --- Transkription
@@ -4028,6 +4060,36 @@ def main():
         print(f"KI-Regie: {len(kw)} Keywords gewaehlt")
     else:
         kw = detect_keywords(words, cfg, args.keywords)
+
+    # v80f: Chapter-Detection aus Sprech-Pausen. Lange Videos brauchen
+    # Struktur - eine >1.2s-Pause markiert idR einen Themen- oder Kapitel-
+    # Wechsel. Wenn dort noch kein Highlight sitzt, setzen wir einen dezenten
+    # blurin-Moment auf das erste Substanz-Wort nach der Pause. Nur bei
+    # Videos >= 60s, sonst waere jedes Atmen ein Kapitel.
+    if cfg.get('effects', {}).get('chapters', True) and words and \
+            words[-1].get('end', 0) - words[0].get('start', 0) >= 60:
+        n_chap = 0
+        for i in range(1, len(words)):
+            gap = words[i].get('start', 0) - words[i - 1].get('end', 0)
+            if gap < 1.2:
+                continue
+            # Erstes Substanz-Wort nach der Pause finden
+            for j in range(i, min(i + 6, len(words))):
+                t = clean(words[j]['word']).lower()
+                if not t or t in STOPWORDS:
+                    continue
+                # Nur wenn dort und drumherum noch kein Highlight sitzt
+                if any(abs(j - k) <= 3 for k in kw):
+                    break
+                kw.add(j)
+                fx_map = fx_map or {}
+                if j not in fx_map:
+                    fx_map[j] = {'fx': 'blurin', 'power': 1, 'n': 1}
+                n_chap += 1
+                break
+        if n_chap:
+            print(f"Kapitel-Struktur: {n_chap} Themenwechsel markiert")
+
     print("Keywords:", [clean(words[i]['word']) for i in sorted(kw)])
 
     # --- Moment-Editor: Analyse exportieren / Overrides anwenden
@@ -4084,9 +4146,10 @@ def main():
                             'anim': _anim, 'aktiv': True,
                             'szene': info.get('szene') or '',
                             'lage': info.get('lage') or '',
+                            'emoji': info.get('emoji') or '',
                             'thumb': thumb_rel})
         if i in prev:                       # fruehere Korrekturen behalten
-            for k in ('aktiv', 'fx', 'power', 'anim', 'text', 'szene', 'lage'):
+            for k in ('aktiv', 'fx', 'power', 'anim', 'text', 'szene', 'lage', 'emoji'):
                 if k in prev[i]:
                     _mom_export[-1][k] = prev[i][k]
     json.dump(_mom_export, open(mom_path, 'w', encoding='utf-8'),
@@ -4117,6 +4180,8 @@ def main():
                         fx_map[i]['anim'] = m['anim']
                     if m.get('text'):
                         fx_map[i]['txt'] = m['text']
+                    if m.get('emoji'):
+                        fx_map[i]['emoji'] = m['emoji']
             print(f"Moment-Editor: {len(kw)} aktive Momente uebernommen")
         except Exception as e:
             print(f"Momente-Datei ignoriert ({type(e).__name__})")

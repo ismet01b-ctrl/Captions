@@ -343,6 +343,12 @@ def build_config(look, overrides=None):
         cfg = deep_merge(cfg, overrides)
     # Serverseitige Zwaenge - unabhaengig vom User-Wunsch
     cfg['effects']['blender_water'] = False
+    # v80f: Neue Features als sichtbare Defaults verankern
+    cfg['effects'].setdefault('chapters', True)
+    cfg['effects'].setdefault('emoji', True)
+    cfg.setdefault('output', {}).setdefault('orientation', 'auto')
+    cfg.setdefault('keywords', {}).setdefault('vision_min_power', 2)
+    cfg['keywords'].setdefault('ai_validate', True)
     return cfg
 
 
@@ -658,6 +664,69 @@ def get_moments(jid: str):
     if not os.path.exists(mom_path):
         raise HTTPException(404, 'Momente noch nicht analysiert.')
     return json.load(open(mom_path, encoding='utf-8'))
+
+
+TEMPLATES_PATH = os.path.join(DATA, 'templates.json')
+
+
+def _load_templates():
+    if not os.path.exists(TEMPLATES_PATH):
+        return {}
+    try:
+        return json.load(open(TEMPLATES_PATH, encoding='utf-8'))
+    except Exception:
+        return {}
+
+
+def _save_templates(data):
+    os.makedirs(DATA, exist_ok=True)
+    json.dump(data, open(TEMPLATES_PATH, 'w', encoding='utf-8'),
+              ensure_ascii=False, indent=1)
+
+
+@app.get('/api/templates')
+def list_templates(code: str = ''):
+    """Alle Templates fuer diesen Code auflisten (v80f)."""
+    ok, _ = check_code(code)
+    if not ok:
+        return {'templates': []}
+    all_ = _load_templates()
+    return {'templates': all_.get(code, [])}
+
+
+@app.post('/api/templates')
+async def save_template(name: str = Form(...), settings: str = Form(...),
+                        code: str = Form(...)):
+    """Setting-Snapshot als Named Template speichern (v80f)."""
+    ok, msg = check_code(code)
+    if not ok:
+        raise HTTPException(403, msg)
+    name = name.strip()[:60]
+    if not name:
+        raise HTTPException(400, 'Name fehlt.')
+    try:
+        payload = json.loads(settings)
+    except Exception:
+        raise HTTPException(400, 'Settings-JSON ungueltig.')
+    all_ = _load_templates()
+    entries = all_.setdefault(code, [])
+    entries = [e for e in entries if e.get('name') != name]     # ueberschreiben
+    entries.append({'name': name, 'settings': payload})
+    all_[code] = entries[-20:]                                  # Deckel: 20/Code
+    _save_templates(all_)
+    return {'ok': True, 'count': len(all_[code])}
+
+
+@app.delete('/api/templates/{name}')
+def delete_template(name: str, code: str = ''):
+    ok, _ = check_code(code)
+    if not ok:
+        raise HTTPException(403, 'Code ungueltig.')
+    all_ = _load_templates()
+    entries = [e for e in all_.get(code, []) if e.get('name') != name]
+    all_[code] = entries
+    _save_templates(all_)
+    return {'ok': True}
 
 
 @app.get('/api/thumb/{jid}/{name}')
