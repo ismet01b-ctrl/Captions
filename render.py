@@ -3800,32 +3800,34 @@ def main():
     print("Keywords:", [clean(words[i]['word']) for i in sorted(kw)])
 
     # --- Moment-Editor: Analyse exportieren / Overrides anwenden
+    # IMMER schreiben (nicht nur bei --plan-only), damit die Web-UI nach
+    # dem Voll-Render einen Momente-Editor fuer Re-Rendering oeffnen kann.
     mom_path = os.path.splitext(args.input)[0] + '_momente.json'
-    if args.plan_only:
-        prev = {}
-        if os.path.exists(mom_path):
-            try:
-                prev = {m['i']: m for m in json.load(open(mom_path, encoding='utf-8'))}
-            except Exception:
-                prev = {}
-        moments = []
-        for i in sorted(kw):
-            info = (fx_map or {}).get(i, {}) if isinstance((fx_map or {}).get(i), dict) else {}
-            n = int(info.get('n', 1))
-            txt = ' '.join(clean(words[j]['word'])
-                           for j in range(i, min(i + n, len(words))))
-            moments.append({'i': i, 'text': txt, 'zeit': round(words[i]['start'], 2),
+    prev = {}
+    if os.path.exists(mom_path):
+        try:
+            prev = {m['i']: m for m in json.load(open(mom_path, encoding='utf-8'))}
+        except Exception:
+            prev = {}
+    _mom_export = []
+    for i in sorted(kw):
+        info = (fx_map or {}).get(i, {}) if isinstance((fx_map or {}).get(i), dict) else {}
+        n = int(info.get('n', 1))
+        txt = ' '.join(clean(words[j]['word'])
+                       for j in range(i, min(i + n, len(words))))
+        _mom_export.append({'i': i, 'text': txt, 'zeit': round(words[i]['start'], 2),
                             'fx': info.get('fx', 'behind'),
                             'power': int(info.get('power', 2)), 'n': n,
                             'anim': info.get('anim') or '', 'aktiv': True,
                             'szene': info.get('szene') or '',
                             'lage': info.get('lage') or ''})
-            if i in prev:                       # fruehere Korrekturen behalten
-                for k in ('aktiv', 'fx', 'power', 'anim', 'text', 'szene', 'lage'):
-                    if k in prev[i]:
-                        moments[-1][k] = prev[i][k]
-        json.dump(moments, open(mom_path, 'w', encoding='utf-8'),
-                  ensure_ascii=False, indent=1)
+        if i in prev:                       # fruehere Korrekturen behalten
+            for k in ('aktiv', 'fx', 'power', 'anim', 'text', 'szene', 'lage'):
+                if k in prev[i]:
+                    _mom_export[-1][k] = prev[i][k]
+    json.dump(_mom_export, open(mom_path, 'w', encoding='utf-8'),
+              ensure_ascii=False, indent=1)
+    if args.plan_only:
         print(f"Momente exportiert: {mom_path}")
         sys.exit(0)
     if os.path.exists(mom_path):

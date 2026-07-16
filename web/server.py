@@ -29,6 +29,7 @@ from queue import Queue
 import yaml
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -41,6 +42,11 @@ MAX_SECONDS = int(os.environ.get('DVE_MAX_SECONDS', '180'))
 os.makedirs(JOBS_DIR, exist_ok=True)
 
 app = FastAPI(title='DouchkoVE')
+
+# Fonts fuer die Font-Kacheln (Preview mit tatsaechlicher Schrift)
+_fonts_dir = os.path.join(ROOT, 'fonts')
+if os.path.isdir(_fonts_dir):
+    app.mount('/fonts', StaticFiles(directory=_fonts_dir), name='fonts')
 JOBS = {}
 QUEUE = Queue()
 LOCK = threading.Lock()
@@ -156,29 +162,145 @@ def deep_merge(base, override):
 
 def build_config(look, overrides=None):
     """Config-Kaskade: config.yaml -> Preset -> User-Overrides.
-    Serverseitige Zwaenge werden am Ende hart ueberschrieben (Blender aus)."""
+    Serverseitige Zwaenge werden am Ende hart ueberschrieben (Blender aus).
+
+    Presets sind Stand 2026 - jeder ist eine vollstaendige High-End-Konfig
+    quer durch alle Effekte, Kamera, Farben und Schrift. Nutzer kann alles
+    einzeln nachtunen; die Defaults sind aber schon deploybar."""
     cfg = yaml.safe_load(open(os.path.join(ROOT, 'config.yaml'), encoding='utf-8'))
-    presets = {
-        'tiktok':    dict(density='wortweise', text_style='3d kinetisch',
-                          hook_seconds=8, hook_strength=0.85,
-                          bg_blur=0.6, music_beat=0.8, trail=0.4,
-                          freeze_frame=0.6, counter_ring=0.5),
-        'creator':   dict(density='akzente', text_style='3d',
-                          hook_seconds=15, hook_strength=0.5,
-                          bg_blur=0.5, music_beat=0.5, trail=0.0,
-                          freeze_frame=0.0, counter_ring=0.3),
-        'cinematic': dict(density='sparsam', text_style='klassisch',
-                          hook_seconds=30, hook_strength=0.3,
-                          bg_blur=0.4, music_beat=0.3, trail=0.0,
-                          freeze_frame=0.8, counter_ring=0.0),
-        'clean':     dict(density='sparsam', text_style='klassisch',
-                          hook_seconds=0, hook_strength=0.0,
-                          bg_blur=0.0, music_beat=0.0, trail=0.0,
-                          freeze_frame=0.0, counter_ring=0.0),
+
+    # --- 2026er High-End-Presets (voll ausgereizt, produktionsreif)
+    PRESETS = {
+        'tiktok': {
+            'effects': {
+                # Wortweise, dicht, energisch - Reels/Shorts-Kern-Modus 2026
+                'density': 'wortweise', 'text_style': '3d kinetisch',
+                'hook_seconds': 8, 'hook_strength': 0.85, 'instant_hook': True,
+                'pattern_interrupt': 6, 'retention_gap': 8,
+                'words_per_group': 2, 'words_per_group_max': 4,
+                'chunk_hold_min': 0.55,
+                'dim_behind': 0.42, 'dim_blurin': 0.34,
+                'beat_sync': 0.90, 'music_beat': 0.85, 'person_shadow': 0.60,
+                'zahl_gap': 10,
+                'bg_blur': 0.60, 'freeze_frame': 0.50, 'trail': 0.45,
+                'counter_ring': 0.55, 'split_screen': 0.30, 'env_shadow': 0.15,
+                'emerge': 'immer', 'anim': True,
+                'keyword_rotation': ['behind', 'outline', 'ground'],
+                'sfx_volume': 0.55, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.90, 'crash': 1.00, 'whip': True, 'side_every': 2,
+                'keyword_rotation': ['punch', 'push', 'caption'],
+                'side_rotation': ['capzoom', 'drift'],
+            },
+            'colors': {'style': 'auto', 'adaptive': True},
+            'fonts': {
+                'display': 'fonts/tiktok_bold.ttf',
+                'italic': 'fonts/tiktok_bold.ttf',
+                'script': 'fonts/tiktok_bold.ttf',
+            },
+            'matting_quality': 'hoch',
+        },
+        'creator': {
+            'effects': {
+                # Talking-Head + Business - klar, ruhig-dynamisch, professionell
+                'density': 'akzente', 'text_style': '3d',
+                'hook_seconds': 15, 'hook_strength': 0.55, 'instant_hook': True,
+                'pattern_interrupt': 9, 'retention_gap': 12,
+                'words_per_group': 3, 'words_per_group_max': 5,
+                'chunk_hold_min': 0.75,
+                'dim_behind': 0.38, 'dim_blurin': 0.30,
+                'beat_sync': 0.75, 'music_beat': 0.45, 'person_shadow': 0.55,
+                'zahl_gap': 15,
+                'bg_blur': 0.55, 'freeze_frame': 0.30, 'trail': 0.0,
+                'counter_ring': 0.40, 'split_screen': 0.0, 'env_shadow': 0.45,
+                'emerge': 'auto', 'anim': True,
+                'keyword_rotation': ['behind', 'cascade', 'blurin', 'outline'],
+                'sfx_volume': 0.40, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.70, 'crash': 0.55, 'whip': False, 'side_every': 3,
+                'keyword_rotation': ['caption', 'punch', 'pan', 'push'],
+                'side_rotation': ['capzoom', 'drift'],
+            },
+            'colors': {'style': 'auto', 'adaptive': True},
+            'fonts': {
+                'display': 'fonts/montserrat_xb.ttf',
+                'italic': 'fonts/montserrat_xb.ttf',
+                'script': 'fonts/playfair_i.ttf',
+            },
+            'matting_quality': 'hoch',
+        },
+        'cinematic': {
+            'effects': {
+                # Wenige, grosse Momente. Kino-Bokeh, Freeze-Signature.
+                'density': 'sparsam', 'text_style': 'klassisch',
+                'hook_seconds': 30, 'hook_strength': 0.35, 'instant_hook': False,
+                'pattern_interrupt': 14, 'retention_gap': 18,
+                'words_per_group': 3, 'words_per_group_max': 5,
+                'chunk_hold_min': 0.95,
+                'dim_behind': 0.34, 'dim_blurin': 0.28,
+                'beat_sync': 0.55, 'music_beat': 0.30, 'person_shadow': 0.65,
+                'zahl_gap': 20,
+                'bg_blur': 0.70, 'freeze_frame': 1.00, 'trail': 0.0,
+                'counter_ring': 0.0, 'split_screen': 0.20, 'env_shadow': 0.65,
+                'emerge': 'auto', 'anim': True,
+                'keyword_rotation': ['blurin', 'ground', 'outline'],
+                'sfx_volume': 0.28, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.55, 'crash': 0.40, 'whip': False, 'side_every': 4,
+                'keyword_rotation': ['pan', 'pullback', 'caption'],
+                'side_rotation': ['drift'],
+            },
+            'colors': {'style': 'auto', 'adaptive': True},
+            'fonts': {
+                'display': 'fonts/inter_black.ttf',
+                'italic': 'fonts/serif_i.ttf',
+                'script': 'fonts/playfair_i.ttf',
+            },
+            'matting_quality': 'maximum',
+        },
+        'clean': {
+            'effects': {
+                # Nur lesbare Untertitel, keinerlei Deko. Minimalismus 2026.
+                'density': 'sparsam', 'text_style': 'klassisch',
+                'hook_seconds': 0, 'hook_strength': 0.0, 'instant_hook': False,
+                'pattern_interrupt': 0, 'retention_gap': 0,
+                'words_per_group': 3, 'words_per_group_max': 4,
+                'chunk_hold_min': 0.80,
+                'dim_behind': 0.0, 'dim_blurin': 0.0,
+                'beat_sync': 0.0, 'music_beat': 0.0, 'person_shadow': 0.0,
+                'zahl_gap': 0,
+                'bg_blur': 0.0, 'freeze_frame': 0.0, 'trail': 0.0,
+                'counter_ring': 0.0, 'split_screen': 0.0, 'env_shadow': 0.0,
+                'emerge': 'aus', 'anim': False,
+                'keyword_rotation': ['outline'],
+                'sfx_volume': 0.0, 'sfx': False,
+                'reflection': False, 'occlusion': False, 'track3d': False,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.0, 'crash': 0.0, 'whip': False, 'side_every': 10,
+                'keyword_rotation': [], 'side_rotation': [],
+            },
+            'colors': {'style': 'schwarz', 'adaptive': False},
+            'fonts': {
+                'display': 'fonts/poppins_b.ttf',
+                'italic': 'fonts/poppins_b.ttf',
+                'script': 'fonts/poppins_b.ttf',
+            },
+            'matting_quality': 'standard',
+        },
     }
-    cfg['effects'].update(presets.get(look, presets['creator']))
-    if look == 'clean':
-        cfg['effects']['keyword_rotation'] = ['outline']
+    preset = PRESETS.get(look, PRESETS['creator'])
+    cfg = deep_merge(cfg, preset)
     if overrides:
         cfg = deep_merge(cfg, overrides)
     # Serverseitige Zwaenge - unabhaengig vom User-Wunsch

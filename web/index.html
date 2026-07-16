@@ -6,6 +6,40 @@
 <meta name="theme-color" content="#0b0b0e">
 <title>DouchkoVE Captions</title>
 <style>
+/* ---------- Font-Faces (Preview in echter Schriftart) ---------- */
+@font-face { font-family: 'f-kino';    src: url('/fonts/archivo.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-tiktok';  src: url('/fonts/tiktok_bold.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-montse';  src: url('/fonts/montserrat_xb.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-inter';   src: url('/fonts/inter_black.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-anton';   src: url('/fonts/anton.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-archivo'; src: url('/fonts/archivo.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-bebas';   src: url('/fonts/bebas.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-poppins'; src: url('/fonts/poppins_b.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-staat';   src: url('/fonts/staatliches.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-alfa';    src: url('/fonts/alfaslab.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-yeseva';  src: url('/fonts/yeseva.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-bangers'; src: url('/fonts/bangers.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-right';   src: url('/fonts/righteous.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-lobster'; src: url('/fonts/lobster.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'f-marker';  src: url('/fonts/marker.ttf') format('truetype'); font-display: swap; }
+
+/* Font-Tile mapping: pro id die richtige Schrift */
+.fonttile[data-id=kino] .name    { font-family: 'f-kino', sans-serif; }
+.fonttile[data-id=tiktok] .name  { font-family: 'f-tiktok', sans-serif; }
+.fonttile[data-id=montse] .name  { font-family: 'f-montse', sans-serif; }
+.fonttile[data-id=inter] .name   { font-family: 'f-inter', sans-serif; }
+.fonttile[data-id=anton] .name   { font-family: 'f-anton', sans-serif; }
+.fonttile[data-id=archivo] .name { font-family: 'f-archivo', sans-serif; }
+.fonttile[data-id=bebas] .name   { font-family: 'f-bebas', sans-serif; }
+.fonttile[data-id=poppins] .name { font-family: 'f-poppins', sans-serif; }
+.fonttile[data-id=staat] .name   { font-family: 'f-staat', sans-serif; }
+.fonttile[data-id=alfa] .name    { font-family: 'f-alfa', serif; }
+.fonttile[data-id=yeseva] .name  { font-family: 'f-yeseva', serif; }
+.fonttile[data-id=bangers] .name { font-family: 'f-bangers', sans-serif; }
+.fonttile[data-id=right] .name   { font-family: 'f-right', sans-serif; }
+.fonttile[data-id=lobster] .name { font-family: 'f-lobster', cursive; }
+.fonttile[data-id=marker] .name  { font-family: 'f-marker', sans-serif; }
+
 /* ---------- Design-Tokens ---------- */
 :root {
   --bg:#0b0b0e; --bg2:#111117; --side:#141420;
@@ -724,37 +758,51 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="acc-body">
-          <div class="setting"><div class="setting-label">Hook-Dauer</div>
-            <div class="setting-desc">0 = kein Hook. Erste Sekunden entscheiden.</div>
-            <div class="seg" data-cfg="effects.hook_seconds" data-opts="Aus:0,8s:8,15s:15,30s:30,60s:60"></div>
+          <div class="setting"><div class="setting-label">Wie lange dauert der Hook?</div>
+            <div class="setting-desc">Die ersten Sekunden mit dichteren Captions. 65-71 %
+              der Zuschauer springen davor ab — hier entscheidet sich alles.
+              „Aus" = kein Hook.</div>
+            <div class="seg" data-cfg="effects.hook_seconds" data-opts="Aus:0,8 Sek:8,15 Sek:15,30 Sek:30,60 Sek:60"></div>
           </div>
-          <div class="setting"><div class="setting-label">Hook-Staerke</div>
+          <div class="setting"><div class="setting-label">Wie stark ist der Hook?</div>
+            <div class="setting-desc">Wie dicht die grossen Momente im Hook-Fenster stehen.
+              Stark = viele grosse Wörter, Sanft = ein paar Akzente.</div>
             <div class="seg" data-cfg="effects.hook_strength" data-opts="Sanft:0.3,Normal:0.5,Stark:0.85"></div>
           </div>
           <div class="setting">
             <div class="row"><div class="grow">
-              <div class="setting-label">Sofort-Hook</div>
-              <div class="setting-desc">Staerkste Aussage startet auf Frame 1.</div>
+              <div class="setting-label">Sofort loslegen</div>
+              <div class="setting-desc">Das stärkste Wort der ersten Sekunden ist ab Frame 1 zu
+                sehen. Kein Aufwaerm-Frame — Zuschauer bleibt sofort haengen.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-cfg="effects.instant_hook" aria-label="Sofort-Hook">
+            <label class="switch"><input type="checkbox" data-cfg="effects.instant_hook" aria-label="Sofort loslegen">
               <span class="track"><span class="knob"></span></span></label>
             </div>
           </div>
-          <div class="setting"><div class="setting-label">Woerter pro Gruppe</div>
-            <div class="seg" data-cfg="effects.words_per_group" data-opts="2:2,3:3,4:4"></div>
+          <div class="setting"><div class="setting-label">Wie viele Wörter pro Karte?</div>
+            <div class="setting-desc">Kleiner = wortweise (energisch, Reels-Look).
+              Größer = ganze Phrasen (ruhiger, professionell).</div>
+            <div class="seg" data-cfg="effects.words_per_group" data-opts="2 Wörter:2,3 Wörter:3,4 Wörter:4"></div>
           </div>
-          <div class="setting"><div class="setting-label">Chunk-Standzeit</div>
-            <div class="setting-desc">Wortgruppen bleiben mind. so lange stehen.</div>
+          <div class="setting"><div class="setting-label">Wie lange bleibt jede Karte stehen?</div>
+            <div class="setting-desc">Mindest-Standzeit einer Wortgruppe. Zu kurz wirkt hektisch,
+              zu lang „schleppt". 600-900 ms = Premium-Standard 2026.</div>
             <div class="slider" data-cfg="effects.chunk_hold_min" data-min="0" data-max="1500" data-scale="1000" data-suffix=" ms"></div>
           </div>
-          <div class="setting"><div class="setting-label">Beat-Sync (Stimme)</div>
+          <div class="setting"><div class="setting-label">Text pulsiert mit deiner Stimme</div>
+            <div class="setting-desc">Text hebt/senkt sich exakt auf den Sprech-Betonungen.
+              „Auf den Punkt geschnitten" ohne selbst zu schneiden.</div>
             <div class="slider" data-cfg="effects.beat_sync" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
-          <div class="setting"><div class="setting-label">Musik-Beat</div>
-            <div class="setting-desc">Kick/Sub-Bass triggert Beat-Sync mit.</div>
+          <div class="setting"><div class="setting-label">Text pulsiert mit dem Musik-Beat</div>
+            <div class="setting-desc">Zusätzlich zum Sprech-Beat auch der Kick/Sub-Bass.
+              Für Videos mit Musik im Hintergrund. Bei purem Talking-Head passiert nichts —
+              der Server erkennt automatisch.</div>
             <div class="slider" data-cfg="effects.music_beat" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
-          <div class="setting"><div class="setting-label">Sprache</div>
+          <div class="setting"><div class="setting-label">Sprache im Video</div>
+            <div class="setting-desc">Auto erkennt selbst — Deutsch/Englisch explizit
+              spart eine Whisper-Analyse.</div>
             <div class="seg" data-cfg="language" data-opts="Deutsch:de,Englisch:en,Auto:auto"></div>
           </div>
         </div>
@@ -771,27 +819,44 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </div>
         <div class="acc-body">
           <div class="setting">
-            <div class="setting-label">Effekte auswaehlen</div>
-            <div class="setting-desc">KI-Regie rotiert automatisch durch die aktiven.</div>
+            <div class="setting-label">Welche Wort-Effekte darf die KI verwenden?</div>
+            <div class="setting-desc">Die KI-Regie waehlt pro Moment einen der aktivierten
+              Effekte aus.<br>
+              <b>Hinter dir</b> = großes Wort steckt hinter der Person, schaut über die Schulter.
+              <b>Buchstaben-Aufbau</b> = Wort tippt sich Buchstabe für Buchstabe auf.
+              <b>Aus der Unschärfe</b> = Kinotitel-Look, kommt weich rein und dunkelt das Video ab.
+              <b>Nur Umriss</b> = feine Kontur-Linie, edel/dezent, gut für Zahlen.
+              <b>In der Szene</b> = Text steht IM Video (auf Boden, Wasser, Wand) und bewegt sich mit der Kamera mit.</div>
             <div class="chips" id="fxChips"></div>
           </div>
-          <div class="setting"><div class="setting-label">Bewegungsstil</div>
+          <div class="setting"><div class="setting-label">Wie viele grosse Momente pro Minute?</div>
+            <div class="setting-desc">Ruhig = ~2-3 Momente/Min (Business-Talk).
+              Ausgewogen = ~5-7/Min (Standard).
+              Energisch = wortweise (Reels/Shorts).</div>
             <div class="seg" data-cfg="effects.density" data-opts="Ruhig:sparsam,Ausgewogen:akzente,Energisch:wortweise"></div>
           </div>
-          <div class="setting"><div class="setting-label">Herausschieben (Emerge)</div>
+          <div class="setting"><div class="setting-label">Wort schiebt sich aus der Person heraus</div>
+            <div class="setting-desc">Signature-Look 2026: Das Wort steckt hinter der Person und wird
+              beim Sprechen hervorgeschoben — erst der Teil, den sie verdeckt.
+              „Immer" = jedes große Wort so, „Auto" = im Wechsel mit anderen Einflügen.</div>
             <div class="seg" data-cfg="effects.emerge" data-opts="Auto:auto,Immer:immer,Aus:aus"></div>
           </div>
-          <div class="setting"><div class="setting-label">Maskenqualitaet</div>
+          <div class="setting"><div class="setting-label">Wie genau wird die Person freigestellt?</div>
+            <div class="setting-desc">Damit Text hinter ihr laufen kann.
+              Standard = schnell, Kante kann an Haaren matschen.
+              Hoch = empfohlen. Maximum = jede Haarsträhne, kostet Rechenzeit.</div>
             <div class="seg" data-cfg="matting_quality" data-opts="Standard:standard,Hoch:hoch,Maximum:maximum"></div>
           </div>
-          <div class="setting"><div class="setting-label">Hintergrund weichzeichnen (Bokeh)</div>
-            <div class="setting-desc">Person + Text scharf, Rest unscharf.</div>
+          <div class="setting"><div class="setting-label">Hintergrund weichzeichnen (Kino-Bokeh)</div>
+            <div class="setting-desc">Während großer Momente wird der Hintergrund unscharf,
+              Person + Text bleiben scharf. Lenkt den Blick wie im Interview mit offener Blende.</div>
             <div class="slider" data-cfg="effects.bg_blur" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
           <div class="setting">
             <div class="row"><div class="grow">
-              <div class="setting-label">Animationen aktiv</div>
-              <div class="setting-desc">26 Animationen reagieren auf den Satz.</div>
+              <div class="setting-label">Wörter reagieren auf den Inhalt</div>
+              <div class="setting-desc">26 Animationen. Bei „Deutschland bricht seine Versprechen" zerbricht
+                das Wort wirklich. Bei „Umsatz steigt" hebt es sich. Bei „Zerfall" löst es sich auf.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="effects.anim" aria-label="Animationen aktiv">
               <span class="track"><span class="knob"></span></span></label>
@@ -810,22 +875,30 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="acc-body">
-          <div class="setting"><div class="setting-label">Freeze-Frame (Standbild auf Punchline)</div>
-            <div class="setting-desc">Nur einmal pro Clip. Sekunden Standbild.</div>
-            <div class="slider" data-cfg="effects.freeze_frame" data-min="0" data-max="150" data-scale="100" data-suffix=" s"></div>
+          <div class="setting"><div class="setting-label">Video pausiert auf dem stärksten Wort (Freeze-Frame)</div>
+            <div class="setting-desc">Beim stärksten Moment friert das Video für eine kurze Zeit ein —
+              Caption läuft weiter. Regie-Trick, der die Aufmerksamkeit auf die Punchline zwingt.
+              Nur EINMAL pro Video (sonst kitschig).</div>
+            <div class="slider" data-cfg="effects.freeze_frame" data-min="0" data-max="150" data-scale="100" data-suffix=" Sek"></div>
           </div>
-          <div class="setting"><div class="setting-label">Duplicate-Trail (Speed-Echo)</div>
+          <div class="setting"><div class="setting-label">Text hinterlässt Speed-Echos (Trail)</div>
+            <div class="setting-desc">Der Text lässt versetzte, verblasste Kopien hinter sich —
+              Speed-Gefühl wie in Musikvideos.</div>
             <div class="slider" data-cfg="effects.trail" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
-          <div class="setting"><div class="setting-label">Zaehler-Ring</div>
-            <div class="setting-desc">Kreis-Fortschritt um Zahl-Momente.</div>
+          <div class="setting"><div class="setting-label">Kreis-Fortschritt um Zahlen (Zähler-Ring)</div>
+            <div class="setting-desc">Bei Zahlen (57 %, 12 Millionen, x3 …) läuft ein Kreis-Bogen
+              synchron zum Hochzählen der Zahl. Sport-Timer/Score-Look.</div>
             <div class="slider" data-cfg="effects.counter_ring" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
-          <div class="setting"><div class="setting-label">Split-Screen</div>
-            <div class="setting-desc">Frame teilt sich bei Power-3.</div>
+          <div class="setting"><div class="setting-label">Frame teilt sich bei Höhepunkten (Split-Screen)</div>
+            <div class="setting-desc">Das Video teilt sich horizontal in zwei Hälften mit einer
+              Lücke — Text sitzt dazwischen. Nur bei den stärksten Momenten.</div>
             <div class="slider" data-cfg="effects.split_screen" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
-          <div class="setting"><div class="setting-label">Kontaktschatten (Environment)</div>
+          <div class="setting"><div class="setting-label">Text wirft Schatten auf den Boden</div>
+            <div class="setting-desc">Für In-Szene-Text (steht IM Video): weicher Kontakt-Schatten
+              darunter. Der Text sitzt sichtbar im Raum statt aufgeklebt zu wirken.</div>
             <div class="slider" data-cfg="effects.env_shadow" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
         </div>
@@ -841,16 +914,21 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="acc-body">
-          <div class="setting"><div class="setting-label">Kamera-Staerke</div>
+          <div class="setting"><div class="setting-label">Wie viel künstliche Kamerabewegung?</div>
+            <div class="setting-desc">Zooms, Schwenks, Push-Ins. 0 = ganz aus (statisches Video),
+              100 = maximale Dynamik.</div>
             <div class="slider" data-cfg="camera.strength" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
-          <div class="setting"><div class="setting-label">Crash-Zoom</div>
+          <div class="setting"><div class="setting-label">Crash-Zoom auf den stärksten Moment</div>
+            <div class="setting-desc">Ein schneller, harter Zoom auf das eine wichtigste Wort im Video —
+              mit knackigem Stopp. Signature-Move für Aufmerksamkeit. Nur einmal pro Clip.</div>
             <div class="slider" data-cfg="camera.crash" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
           <div class="setting">
             <div class="row"><div class="grow">
-              <div class="setting-label">Whip-Pan</div>
-              <div class="setting-desc">Motion-Blur-Schwenk an Abschnittsgrenzen.</div>
+              <div class="setting-label">Whip-Pan zwischen Abschnitten</div>
+              <div class="setting-desc">Schneller, verwischter Kameraschwenk als Übergang zwischen
+                Themen-Abschnitten. Sehr energisch — Reels/Shorts, nicht Cinematic.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="camera.whip" aria-label="Whip-Pan">
               <span class="track"><span class="knob"></span></span></label>
@@ -869,16 +947,21 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="acc-body">
-          <div class="setting"><div class="setting-label">Schrift</div>
+          <div class="setting"><div class="setting-label">Welche Schrift?</div>
+            <div class="setting-desc">Die Kachel zeigt die Schrift so, wie sie im Video aussieht.</div>
             <div class="fontgrid" id="fontGrid" role="radiogroup" aria-label="Schriftart"></div>
           </div>
-          <div class="setting"><div class="setting-label">Farb-Stil</div>
+          <div class="setting"><div class="setting-label">Farb-Welt der Captions</div>
+            <div class="setting-desc">Auto = pro Moment aus der Szene abgeleitet (Premium-Standard).
+              Schwarz = edler Dunkel-Look auf hellem Material.
+              Weiss = High-End auf dunklem Material.</div>
             <div class="seg" data-cfg="colors.style" data-opts="Auto:auto,Schwarz:schwarz,Weiss:weiss"></div>
           </div>
           <div class="setting">
             <div class="row"><div class="grow">
-              <div class="setting-label">Adaptive Farben</div>
-              <div class="setting-desc">Farben aus der Szene ableiten.</div>
+              <div class="setting-label">Farben passen sich der Szene an</div>
+              <div class="setting-desc">Text/Akzent-Farben werden pro Moment aus dem Video-Frame
+                gesampled. Fühlt sich an, als gehören die Captions zum Video.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="colors.adaptive" aria-label="Adaptive Farben">
               <span class="track"><span class="knob"></span></span></label>
@@ -897,19 +980,27 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="acc-body">
-          <div class="setting"><div class="setting-label">Aufloesung</div>
+          <div class="setting"><div class="setting-label">Auflösung des fertigen Videos</div>
+            <div class="setting-desc">4K ist Overkill für Reels/TikTok, aber Zukunftssicher.
+              1080p = Standard. 720p = mobil-optimiert.</div>
             <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K:2160"></div>
           </div>
-          <div class="setting"><div class="setting-label">Render-Geschwindigkeit</div>
+          <div class="setting"><div class="setting-label">Wie hochwertig wird encodiert?</div>
+            <div class="setting-desc">Schnell = kleiner File, kürzere Renderzeit.
+              Beste = Studio-Qualität, größer.</div>
             <div class="seg" data-cfg="output.speed" data-opts="Schnell:schnell,Standard:standard,Beste:beste"></div>
           </div>
-          <div class="setting"><div class="setting-label">SFX-Lautstaerke</div>
-            <div class="setting-desc">Ohne Sound-Pack laeuft das Video stumm.</div>
+          <div class="setting"><div class="setting-label">Wie laut sind die Sound-Effekte?</div>
+            <div class="setting-desc">Impact-Sounds bei Wörtern, Whoosh bei Übergängen,
+              Zähler-Ticks bei Zahlen. Ohne serverseitiges Sound-Pack läuft das Video stumm —
+              dann bleibt der Regler wirkungslos.</div>
             <div class="slider" data-cfg="effects.sfx_volume" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
           <div class="setting">
             <div class="row"><div class="grow">
-              <div class="setting-label">Master-Container (MOV)</div>
+              <div class="setting-label">Master-Datei für Weiterverarbeitung</div>
+              <div class="setting-desc">Statt MP4 als MOV/ProRes-Container ausgeben — für Cuts in
+                Premiere/DaVinci ohne Qualitätsverlust.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="output.master" aria-label="Master">
               <span class="track"><span class="knob"></span></span></label>
@@ -921,19 +1012,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <div class="wiz-nav">
         <button class="btn secondary" data-back="2">Zurueck</button>
         <div class="grow"></div>
-        <button class="btn secondary" id="btnAnalyze">Momente-Editor
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-        </button>
         <button class="btn" id="wiz3Next">Rendern
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
-      <div id="analyzeStatus" style="margin-top:10px; color:var(--mut); font-size:14px;"
-           role="status" aria-live="polite"></div>
     </div>
 
     <!-- SCHRITT 4: RENDERN -->
@@ -997,15 +1080,27 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
                style="width:100%; border-radius:16px; margin:16px 0;
                background:#000; max-height: 480px;"></video>
         <div style="display:flex; gap:10px; flex-wrap: wrap;">
-          <a class="btn" id="dlLink" download style="flex:1;">
+          <a class="btn" id="dlLink" download style="flex:1; min-width:180px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             Herunterladen
           </a>
-          <button class="btn secondary" id="btnAgain" style="flex:1;">Noch eins bauen</button>
+          <button class="btn secondary" id="btnEditMoments" style="flex:1; min-width:180px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+            Momente bearbeiten
+          </button>
+          <button class="btn secondary" id="btnAgain" style="flex:1; min-width:180px;">Neues Video</button>
         </div>
+        <p style="color:var(--mut); font-size:13px; margin-top:12px; line-height:1.5;">
+          Nicht ganz zufrieden? „Momente bearbeiten" öffnet den Editor mit den
+          großen Text-Momenten — Text ändern, Effekt tauschen, Animation wählen —
+          dann läuft ein Re-Render mit deinen Änderungen.
+        </p>
       </div>
 
       <!-- Fehler -->
@@ -1248,9 +1343,13 @@ async function buildFontGrid() {
   for (const f of fonts) {
     const t = document.createElement('div');
     t.className = 'fonttile' + (f.file === curFile ? ' on' : '');
-    t.innerHTML = `<div class="name">Aa</div><div class="lbl">${f.label}</div>`;
+    t.dataset.id = f.id;                       // fuer @font-face-Mapping
+    // Preview zeigt zwei kleine + zwei grosse Buchstaben in der ECHTEN Schrift
+    t.innerHTML = `<div class="name">Aa</div>
+                   <div class="lbl">${f.label}</div>`;
     t.setAttribute('role', 'radio');
     t.setAttribute('tabindex', '0');
+    t.setAttribute('aria-label', f.label);
     const activate = () => {
       el.querySelectorAll('.fonttile').forEach(x => x.classList.remove('on'));
       t.classList.add('on');
@@ -1409,8 +1508,8 @@ function setFile(f) {
 }
 
 /* --------- Analyze / Render --------- */
-$('#btnAnalyze').addEventListener('click', () => startUpload('analyze'));
 $('#btnRender').addEventListener('click', () => startUpload('full'));
+$('#btnEditMoments').addEventListener('click', openMomentsEditor);
 
 async function startUpload(mode) {
   if (!State.file) { toast('Erst Video hochladen.', 'err'); return; }
