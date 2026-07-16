@@ -1495,8 +1495,25 @@ Regeln:
 - Mehrwort-Highlights sind erwuenscht, wo sie Sinn ergeben: "n" = Anzahl aufeinanderfolgender \
 Woerter ab Index i (1-4). Beispiele: Zahl + Einheit ("100 Milliarden Euro"), Eigennamen \
 ("Schufa Holding AG"), feste Begriffe ("Dynamic Pricing").
-- NIE waehlen: Fuellwoerter, Hilfsverben, Pronomen, generische Woerter (Sache, Dinge, Thema, \
-Video, Leute), Woerter die nur grammatisch grossgeschrieben sind.
+- NIE waehlen (harte Sperrliste, absolut ausnahmslos):
+  * Hilfsverben: ist, sind, war, waren, bin, bist, hat, habe, haben, hatte, hatten, \
+wird, werden, wurde, wurden, kann, koennen, könne, muss, muessen, müssen, soll, sollen, \
+will, wollen, mag, moegen, mögen, darf, duerfen, dürfen
+  * Konjunktionen/Fuellwoerter: denn, weil, aber, doch, jedoch, also, dann, sondern, \
+oder, ob, dass, wenn, obwohl, waehrend, während, damit, als, wie, so, nur, noch, schon, \
+eben, halt, mal, ja, nein, quasi, sozusagen
+  * Pronomen: ich, du, er, sie, es, wir, ihr, mein, dein, sein, ihr, unser, euer, \
+mich, dich, ihn, uns, euch, was, wer, welche
+  * Praepositionen: in, an, auf, bei, mit, nach, von, vor, zu, aus, ueber, über, unter, \
+gegen, ohne, durch, fuer, für, um, seit, bis
+  * Generische Fuellsubstantive: sache, sachen, dinge, ding, thema, video, leute, \
+mensch, menschen, art, weise, moment, stelle
+  * Grammatik-Grossbuchstaben ohne Bedeutung (Satzanfang mit Fuellwort).
+FALSCH-Beispiele die du NIE waehlen darfst:
+  "Und das IST der Punkt" -> "IST" ist Hilfsverb, verboten. Waehle "Punkt".
+  "DENN was der Staat tut" -> "DENN" ist Konjunktion, verboten. Waehle "Staat".
+  "DAS was du siehst" -> "DAS" ist Pronomen, verboten. Waehle das Objekt.
+  "HIER kommt der Beweis" -> "HIER" ist Fuellwort, verboten. Waehle "Beweis".
 - Phrasen muessen in sich geschlossen sein: Substantivgruppe, Eigenname oder Zahl mit \
 Einheit. NIE mit Verb, Adverb oder Kleinwort enden ("Deutschland nimmt" ist FALSCH, \
 "Deutschland" ist richtig; "100 Milliarden Euro" ist richtig).
@@ -2047,13 +2064,26 @@ def letter_slices(arr, letters):
     return out
 
 ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash',
-                          'digital', 'bug', 'virus')),
-              ('puls', ('herz', 'beat', 'puls', 'bass', 'energie', 'musik')),
-              ('welle', ('welle', 'wasser', 'meer', 'fluss', 'flow', 'ozean')),
-              ('zittern', ('angst', 'panik', 'nervoes', 'beben', 'stress', 'chaos')),
-              ('neon', ('neon', 'nacht', 'club', 'leucht', 'glow', 'licht', 'city')),
+                          'digital', 'bug', 'virus', 'stoerung', 'störung',
+                          'ausfall', 'panne', 'gehackt', 'geknackt', 'malware',
+                          'cyber', 'system', 'daten', 'leck')),
+              ('puls', ('herz', 'beat', 'puls', 'bass', 'energie', 'musik',
+                        'rhythmus', 'trommel', 'takt', 'lebendig',
+                        'schlaegt', 'schlägt', 'klopft', 'pumpt')),
+              ('welle', ('welle', 'wasser', 'meer', 'fluss', 'flow', 'ozean',
+                         'stroemung', 'strömung', 'see', 'ufer', 'kueste',
+                         'küste', 'nass', 'flut', 'ebbe', 'sturm', 'brandung')),
+              ('zittern', ('angst', 'panik', 'nervoes', 'beben', 'stress', 'chaos',
+                           'furcht', 'schreck', 'terror', 'zittert', 'schaudert',
+                           'unruhe', 'aufregung', 'hektik', 'druck', 'krise')),
+              ('neon', ('neon', 'nacht', 'club', 'leucht', 'glow', 'licht', 'city',
+                        'stadt', 'metropole', 'downtown', 'bar', 'party',
+                        'strahl', 'grell', 'blitz')),
               ('schub', ('boom', 'schub', 'power', 'wachstum',
-                         'durchbruch', 'skalier')),
+                         'durchbruch', 'skalier', 'raketen', 'explodiert',
+                         'wachsen', 'wächst', 'waechst', 'expandiert',
+                         'stark', 'kraftvoll', 'antrieb', 'motor',
+                         'beschleunigt', 'zoomt', 'shootet')),
               ('bruch', ('bricht', 'brechen', 'gebrochen', 'zerbricht', 'zerbrochen',
                          'bruch', 'zerfaellt', 'zerfällt', 'kaputt', 'ruin',
                          'kollaps', 'zusammenbruch', 'scheitert', 'gescheitert',
@@ -2081,7 +2111,10 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                          'basta', 'beweis', 'bewiesen', 'definitiv',
                          'garantiert')),
               ('gewicht', ('stark', 'staerke', 'stärke', 'macht', 'gewicht',
-                           'massiv', 'wucht', 'kraft', 'dominanz', 'schwergewicht')),
+                           'massiv', 'wucht', 'kraft', 'dominanz', 'schwergewicht',
+                           'gross', 'groß', 'grosser', 'größer', 'gigant',
+                           'riesig', 'riese', 'kolossal', 'enorm', 'gewaltig',
+                           'brutal', 'hart', 'monster', 'immens', 'giga')),
               ('schweben', ('ruhe', 'ruhig', 'leicht', 'schwebt', 'frei', 'raum',
                             'traum', 'stille', 'gelassen', 'luxus', 'eleganz')),
               ('fokus', ('fokus', 'klar', 'klarheit', 'scharf', 'erkennt',
@@ -2090,7 +2123,10 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                               'wahrheit', 'aufgedeckt', 'zeigt', 'verraten',
                               'offenbart', 'luegt', 'lügt')),
               ('spur', ('schnell', 'tempo', 'rasant', 'sofort', 'blitz', 'rast',
-                        'jagt', 'speed', 'eilt', 'sekunden')),
+                        'jagt', 'speed', 'eilt', 'sekunden', 'fliegt', 'fliegen',
+                        'sausen', 'saust', 'huscht', 'schiesst', 'schießt',
+                        'flitz', 'zischt', 'segelt', 'schwebt vorbei',
+                        'dash', 'sprint', 'rennen', 'rennt', 'laeuft', 'läuft')),
               # ---- v71
               ('kippen', ('kippt', 'kippen', 'klappt', 'aufklappt', 'oeffnet',
                           'öffnet', 'aufgeschlagen', 'kapitel')),
@@ -2099,7 +2135,9 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                              'blast')),
               ('magnet', ('zieht', 'anziehung', 'magnet', 'sog', 'sammelt',
                           'buendel', 'bündel', 'fokussiert', 'zieht an',
-                          'ballt')),
+                          'ballt', 'rein', 'reinkommt', 'reinfliegt',
+                          'einsaugt', 'ansaugt', 'zentriert', 'buendeln',
+                          'bündeln')),
               ('wackel', ('lustig', 'quatsch', 'unsinn', 'witz', 'komisch',
                           'cartoon', 'kindisch', 'quirlig', 'bounce')),
               ('regen', ('regen', 'faellt', 'tropfen', 'rieselt', 'schuettet',
