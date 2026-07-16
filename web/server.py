@@ -371,25 +371,24 @@ async def api_stripe_webhook(request: Request):
     secret = os.environ.get('STRIPE_WEBHOOK_SECRET', '').strip()
     payload = await request.body()
     sig = request.headers.get('stripe-signature', '')
+    # v80l: Signatur separat verifizieren, dann mit Roh-JSON weiterarbeiten -
+    # spart Aerger mit StripeObject vs dict.
     try:
         if secret:
-            event = st.Webhook.construct_event(payload, sig, secret)
-        else:
-            event = json.loads(payload)
+            st.Webhook.construct_event(payload, sig, secret)  # nur Signatur-Check
+        event = json.loads(payload)
     except Exception as e:
         raise HTTPException(400, f'Webhook invalid: {type(e).__name__}')
-    # v80k-fix: Stripe liefert ein StripeObject bei verifizierter Signatur -
-    # das hat kein .get(). Beide Zugriffsarten via [] funktionieren.
-    ev_type = event['type'] if 'type' in event else None
+    ev_type = event.get('type')
     if ev_type != 'checkout.session.completed':
         return {'ok': True, 'ignored': ev_type}
-    sess = event['data']['object']
-    meta = dict(sess['metadata']) if 'metadata' in sess and sess['metadata'] else {}
+    sess = event.get('data', {}).get('object', {})
+    meta = sess.get('metadata') or {}
     try:
         uid = int(meta.get('user_id'))
         sec = int(meta.get('sekunden'))
         pack = meta.get('pack', '?')
-        sess_id = sess['id'] if 'id' in sess else ''
+        sess_id = sess.get('id', '')
     except Exception:
         raise HTTPException(400, 'Metadata incomplete.')
     if _pack_processed(uid, sess_id):
