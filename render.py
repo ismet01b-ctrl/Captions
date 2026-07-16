@@ -4392,7 +4392,8 @@ def main():
                '-c:v', 'libx264', '-preset', x264_preset,
                '-crf', str(cfg['output'].get('crf', 18)), '-pix_fmt', 'yuv420p',
                out_path]
-    enc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    # v80n: stderr capturen, damit wir bei BrokenPipeError die echte ffmpeg-Ursache sehen
+    enc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
     # Matting nur dort rechnen, wo es gebraucht wird (behind/blurin-Momente)
     total_est = (max(int(args.duration * fps), 1) if args.duration else n_frames) + 8
@@ -4612,7 +4613,20 @@ def main():
             if first_abs is None:
                 first_abs = fi + off_frames
             last_abs = fi + off_frames
-            enc.stdin.write(np.clip(comp, 0, 255).astype(np.uint8).tobytes())
+            try:
+                enc.stdin.write(np.clip(comp, 0, 255).astype(np.uint8).tobytes())
+            except BrokenPipeError:
+                # v80n: ffmpeg ist gestorben - meist OOM oder Codec-Problem
+                err = ''
+                try:
+                    if enc.stderr:
+                        err = enc.stderr.read().decode('utf-8', 'ignore')[-800:]
+                except Exception:
+                    pass
+                sys.exit(f"FEHLER: Videoschreiber (ffmpeg) unerwartet beendet. "
+                         f"Meist zu wenig Arbeitsspeicher fuer die Aufloesung. "
+                         f"Kuerzeres Video oder niedrigere Aufloesung probieren. "
+                         f"ffmpeg-Ausgabe:\n{err.strip() or '(leer)'}")
         fi += 1
         if fi % 100 == 0:
             el = _time.time() - t_start
