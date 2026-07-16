@@ -399,6 +399,33 @@ def _stripe():
         return None
 
 
+def _has_purchased(user_id):
+    """v80y: Hat der User jemals gekauft? Entscheidet ueber Wasserzeichen."""
+    con = _db()
+    row = con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund "
+                      "LIKE 'Kauf %'", (user_id,)).fetchone()
+    con.close()
+    return row is not None
+
+
+def _grant_monthly_free(u):
+    """v80y: 3 Min/Monat gratis fuer verifizierte Accounts (Konkurrenz-
+    Standard: dauerhafter Free-Tier statt einmaligem Trial). Idempotent
+    ueber Ledger-Eintrag pro Monat."""
+    if not u or not u['verified']:
+        return False
+    stamp = time.strftime('%Y-%m')
+    grund = f'Monthly free credit {stamp}'
+    con = _db()
+    row = con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
+                      (u['id'], grund)).fetchone()
+    con.close()
+    if row:
+        return False
+    _adjust_balance(u['id'], 180, grund)
+    return True
+
+
 def _render_charged(user_id, jid):
     """v80s: Wurde dieser Job schon abgerechnet? Re-Render = inklusive."""
     con = _db()
@@ -1012,7 +1039,11 @@ def run_job(jid):
                   detail='\n'.join([x for x in log[-15:] if x.strip()]))
         return
 
-    rc, log, out = _run_render(jid)
+    _extra = []
+    _uid = j.get('user_id')
+    if _uid and not _has_purchased(_uid):
+        _extra = ['--watermark']
+    rc, log, out = _run_render(jid, extra_args=_extra)
     log_txt = '\n'.join(log)
     # v80g: Menschliche Fehlermeldungen aus dem Render-Log herausklauben
     if 'OPENAI_API_KEY ist nicht gesetzt' in log_txt:
@@ -1226,6 +1257,8 @@ def api_me(request: Request):
     u = _current_user(request)
     if not u:
         return {'ok': False}
+    if _grant_monthly_free(u):
+        u = _find_user_by_id(u['id'])          # frisches Guthaben anzeigen
     return {'ok': True, 'email': u['email'], 'name': u['name'],
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified'])}
 
@@ -1602,6 +1635,65 @@ def delete_template(request: Request, name: str, code: str = ''):
     all_[owner] = entries
     _save_templates(all_)
     return {'ok': True}
+
+
+@app.get('/api/transcript/{jid}')
+def get_transcript(jid: str):
+    """v80y: Transkript zum Korrigieren laden."""
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    tp = os.path.splitext(j['input'])[0] + '_transcript2.json'
+    if not os.path.exists(tp):
+        raise HTTPException(404, 'Transcript not ready yet.')
+    return {'words': json.load(open(tp, encoding='utf-8'))}
+
+
+@app.post('/api/transcript/{jid}')
+async def save_transcript(request: Request, jid: str,
+                          edits: str = Form(...), code: str = Form('')):
+    """v80y: Wort-Korrekturen speichern (nur Text, Timings bleiben),
+    Regie-/Momente-Cache invalidieren, Analyse neu starten."""
+    ok, msg = check_auth(code, request)
+    if not ok:
+        raise HTTPException(403, msg)
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    try:
+        changes = json.loads(edits)
+        assert isinstance(changes, list)
+    except Exception:
+        raise HTTPException(400, 'Edits JSON invalid.')
+    base = os.path.splitext(j['input'])[0]
+    tp = base + '_transcript2.json'
+    if not os.path.exists(tp):
+        raise HTTPException(404, 'Transcript not ready yet.')
+    words = json.load(open(tp, encoding='utf-8'))
+    n = 0
+    for ch in changes:
+        try:
+            i = int(ch['i']); w = str(ch['word'])[:60]
+        except Exception:
+            continue
+        if 0 <= i < len(words) and w.strip():
+            words[i]['word'] = w
+            n += 1
+    json.dump(words, open(tp, 'w', encoding='utf-8'),
+              ensure_ascii=False, indent=1)
+    # Caches weg - Regie + Momente basieren auf altem Text
+    for suffix in ('_regie3.json', '_momente.json'):
+        try:
+            os.remove(base + suffix)
+        except OSError:
+            pass
+    j['mode'] = 'analyze'
+    j['status'] = 'wartet'
+    j['progress'] = 0.0
+    j['phase'] = 'Queued (re-analyzing with corrected transcript) …'
+    set_state(jid, **{k: v for k, v in j.items() if k not in ('input', 'code')})
+    QUEUE.put(jid)
+    return {'ok': True, 'changed': n}
 
 
 @app.get('/api/thumb/{jid}/{name}')

@@ -3915,6 +3915,8 @@ def main():
                     help='Nur transkribieren und speichern, dann beenden')
     ap.add_argument('--plan-only', action='store_true',
                     help='Nur analysieren: Momente als JSON schreiben, nicht rendern')
+    ap.add_argument('--watermark', action='store_true',
+                    help='Dezentes DouchkoVE-Wasserzeichen einblenden (Free-Tier)')
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config, encoding='utf-8'))
@@ -4359,6 +4361,25 @@ def main():
             print(f"SFX uebersprungen ({type(e).__name__})")
             sfx_path = None
 
+    # --- Wasserzeichen-Sprite (v80y, Free-Tier): einmal gebaut, pro Frame
+    # alpha-geblendet. Dezent: 38% Deckkraft, unten rechts.
+    wm = None
+    if args.watermark:
+        _wm_f = ImageFont.truetype(os.path.join(HERE, 'fonts', 'poppins_b.ttf'),
+                                   max(int(H * 0.030), 22))
+        _wm_img = Image.new('RGBA', (10, 10))
+        _d = ImageDraw.Draw(_wm_img)
+        _bb = _d.textbbox((0, 0), 'DouchkoVE', font=_wm_f)
+        _wm_img = Image.new('RGBA', (_bb[2] + 12, _bb[3] + 12), (0, 0, 0, 0))
+        ImageDraw.Draw(_wm_img).text((6, 6), 'DouchkoVE', font=_wm_f,
+                                     fill=(255, 255, 255, 97),
+                                     stroke_width=2, stroke_fill=(0, 0, 0, 60))
+        _wm_arr = np.array(_wm_img)
+        _wx = W - _wm_arr.shape[1] - int(W * 0.03)
+        _wy = H - _wm_arr.shape[0] - int(H * 0.025)
+        wm = (_wm_arr, _wx, _wy)
+        print("Wasserzeichen: aktiv (Free-Tier)")
+
     # --- Encoder (v80p): ZWEI Stufen statt einer Pipe-Mux-Kombi.
     # Stufe 1: NUR Video aus der Pipe in eine Temp-Datei. Kein zweiter Input,
     #   kein -shortest. Hintergrund: ffmpeg hat einen Interleave-Mechanismus
@@ -4619,6 +4640,12 @@ def main():
             if first_abs is None:
                 first_abs = fi + off_frames
             last_abs = fi + off_frames
+            if wm is not None:
+                _a, _x, _y = wm
+                _h, _w = _a.shape[:2]
+                _roi = comp[_y:_y + _h, _x:_x + _w]
+                _al = (_a[:, :, 3:4].astype(np.float32) / 255.0)
+                _roi[:] = _roi * (1 - _al) + _a[:, :, 2::-1].astype(np.float32) * _al
             try:
                 enc.stdin.write(np.clip(comp, 0, 255).astype(np.uint8).tobytes())
             except BrokenPipeError:
