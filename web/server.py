@@ -367,7 +367,7 @@ async def api_stripe_webhook(request: Request):
     Stripe kann Webhooks mehrfach senden."""
     st = _stripe()
     if not st:
-        raise HTTPException(503, 'Stripe nicht konfiguriert.')
+        raise HTTPException(503, 'Stripe not configured.')
     secret = os.environ.get('STRIPE_WEBHOOK_SECRET', '').strip()
     payload = await request.body()
     sig = request.headers.get('stripe-signature', '')
@@ -377,7 +377,7 @@ async def api_stripe_webhook(request: Request):
         else:
             event = json.loads(payload)
     except Exception as e:
-        raise HTTPException(400, f'Webhook ungueltig: {type(e).__name__}')
+        raise HTTPException(400, f'Webhook invalid: {type(e).__name__}')
     if event.get('type') != 'checkout.session.completed':
         return {'ok': True, 'ignored': event.get('type')}
     sess = event['data']['object']
@@ -388,7 +388,7 @@ async def api_stripe_webhook(request: Request):
         pack = meta.get('pack', '?')
         sess_id = sess.get('id', '')
     except Exception:
-        raise HTTPException(400, 'Metadaten unvollstaendig.')
+        raise HTTPException(400, 'Metadata incomplete.')
     if _pack_processed(uid, sess_id):
         return {'ok': True, 'idempotent': True}
     _adjust_balance(uid, sec, f'Kauf {sess_id}')
