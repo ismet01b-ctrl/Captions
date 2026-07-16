@@ -4662,17 +4662,20 @@ def main():
 
     # --- Stufe 2 (v80p): Audio + SFX dazu muxen. Video wird nur kopiert.
     if video_tmp:
+        # WICHTIG: nur die ERSTE Tonspur (1:a:0). iPhone-Videos tragen oft
+        # zusaetzliche Metadaten-Streams, die als 'Audio mit Codec none'
+        # auftauchen - '1:a' wuerde die mit mappen und ffmpeg abbrechen lassen.
         mux = ['ffmpeg', '-y', '-v', 'error', '-i', video_tmp, '-i', args.input]
         if sfx_path and has_audio:
             mux += ['-i', sfx_path, '-filter_complex',
-                    f'[2:a]volume={vol}[sfx];'
-                    f'[1:a][sfx]amix=inputs=2:duration=first:normalize=0[aout]',
+                    f'[2:a:0]volume={vol}[sfx];'
+                    f'[1:a:0][sfx]amix=inputs=2:duration=first:normalize=0[aout]',
                     '-map', '0:v', '-map', '[aout]']
         elif sfx_path:
-            mux += ['-i', sfx_path, '-filter_complex', f'[2:a]volume={vol}[aout]',
+            mux += ['-i', sfx_path, '-filter_complex', f'[2:a:0]volume={vol}[aout]',
                     '-map', '0:v', '-map', '[aout]']
         else:
-            mux += ['-map', '0:v', '-map', '1:a?']
+            mux += ['-map', '0:v', '-map', '1:a:0?']
         mux += ['-c:v', 'copy'] + acodec + ['-shortest', out_path]
         print("Tonspur wird angelegt...")
         r_mux = subprocess.run(mux, capture_output=True, text=True)

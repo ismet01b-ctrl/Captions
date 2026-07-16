@@ -2251,7 +2251,9 @@ function showError(msg, detail) {
   $('#errDetail').textContent = detail || '';
   $('#btnRender').disabled = false;
   try { localStorage.removeItem('dve_active_job'); } catch (e) {}
-  toast(msg, 'err');
+  // v80q: kein Fehler-Toast mehr - die rote Karte ist die einzige Anzeige.
+  // Karte in den Blick scrollen, damit man den Fehler nicht suchen muss.
+  try { $('#errCard').scrollIntoView({behavior: 'smooth', block: 'center'}); } catch (e) {}
 }
 
 async function pollAnalyze() {
