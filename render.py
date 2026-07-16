@@ -2487,11 +2487,20 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['entr'] = rot_entr_no_em.next()
             kw_count += 1
             if cfg['effects'].get('anim', True):
-                p['anim'] = ((info.get('anim') if isinstance(info, dict) else None)
-                             or anim_for(txt, ' '.join(
-                                 clean(words[j]['word'])
-                                 for j in range(max(i - 4, 0),
-                                                min(i + 8, len(words))))))
+                _auto_anim = (info.get('anim') if isinstance(info, dict) else None)
+                if not _auto_anim:
+                    _auto_anim = anim_for(txt, ' '.join(
+                        clean(words[j]['word'])
+                        for j in range(max(i - 4, 0),
+                                       min(i + 8, len(words)))))
+                p['anim'] = _auto_anim
+                # Auto-Wahl zurueck in fx_map schreiben, damit der Momente-Editor
+                # sie anzeigt (sonst steht dort "keine", obwohl das Video animiert).
+                if _auto_anim and isinstance(fx_map, dict):
+                    if i not in fx_map or not isinstance(fx_map[i], dict):
+                        fx_map[i] = fx_map.get(i) if isinstance(fx_map.get(i), dict) else {}
+                    if isinstance(fx_map.get(i), dict):
+                        fx_map[i].setdefault('anim', _auto_anim)
                 if p.get('anim'):
                     print(f"  Lebendige Typo: {p['anim']} auf '{txt}'")
             if _cnt:
@@ -3850,10 +3859,19 @@ def main():
         n = int(info.get('n', 1))
         txt = ' '.join(clean(words[j]['word'])
                        for j in range(i, min(i + n, len(words))))
+        # Wenn KI keine Animation vorgibt, spiegele die Auto-Wahl aus
+        # build_plans (anim_for) hier vor - sonst zeigt der Momente-Editor
+        # "keine", obwohl das Video mit Animation gerendert wird.
+        _anim = info.get('anim') or ''
+        if not _anim and cfg.get('effects', {}).get('anim', True):
+            _anim = anim_for(txt, ' '.join(
+                clean(words[j]['word'])
+                for j in range(max(i - 4, 0),
+                               min(i + 8, len(words))))) or ''
         _mom_export.append({'i': i, 'text': txt, 'zeit': round(words[i]['start'], 2),
                             'fx': info.get('fx', 'behind'),
                             'power': int(info.get('power', 2)), 'n': n,
-                            'anim': info.get('anim') or '', 'aktiv': True,
+                            'anim': _anim, 'aktiv': True,
                             'szene': info.get('szene') or '',
                             'lage': info.get('lage') or ''})
         if i in prev:                       # fruehere Korrekturen behalten
