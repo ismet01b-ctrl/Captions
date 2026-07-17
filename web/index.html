@@ -1058,6 +1058,44 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       </button>
     </form>
     <div class="err hidden" id="loginErr" role="alert"></div>
+
+    <!-- v89: Anonyme 10s-Demo - der Beweis mit dem eigenen Video -->
+    <div id="demoZone" style="max-width:340px; margin:26px auto 0; text-align:center;">
+      <div style="display:flex; align-items:center; gap:10px; color:var(--mut2);
+           font-size:12px; margin-bottom:12px;">
+        <span style="flex:1; height:1px; background:var(--surf2);"></span>
+        or see it first
+        <span style="flex:1; height:1px; background:var(--surf2);"></span>
+      </div>
+      <button type="button" class="btn secondary wide" id="btnDemo"
+              style="border-style:dashed;">
+        Try it on your own video · no account
+      </button>
+      <input type="file" id="demoFile" accept="video/*" class="hidden">
+      <p style="color:var(--mut2); font-size:12px; margin-top:8px;">
+        We render your first 10 seconds with a watermark. Free, no signup.
+      </p>
+      <div id="demoProgress" class="hidden" style="margin-top:14px; text-align:left;
+           background:rgba(0,0,0,0.3); border-radius:12px; padding:14px 16px;">
+        <div id="demoPhase" style="font-size:13px; color:var(--fg);">Uploading …</div>
+        <div style="height:5px; background:var(--surf2); border-radius:99px; margin-top:10px; overflow:hidden;">
+          <div id="demoBar" style="height:100%; width:3%; background:var(--acc);
+               border-radius:99px; transition:width .6s;"></div>
+        </div>
+        <p style="color:var(--mut2); font-size:11.5px; margin-top:8px;">
+          Takes a few minutes in beta. Leave the tab open.</p>
+      </div>
+      <div id="demoDone" class="hidden" style="margin-top:14px;">
+        <video id="demoVid" controls playsinline
+               style="width:100%; border-radius:12px; background:#000;"></video>
+        <p style="color:var(--mut); font-size:13px; margin-top:10px;">
+          That's 10 seconds with a watermark.
+          <b style="color:var(--fg);">Create your free account</b> for the full
+          video and 2 free credits.</p>
+      </div>
+      <div id="demoErr" class="err hidden" role="alert" style="margin-top:12px;"></div>
+    </div>
+
     <div class="trust" style="margin-top:14px;">
       Videos stay private · Auto-deleted after 7 days
     </div>
@@ -1496,6 +1534,9 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <p id="doneSub">Your video is ready.</p>
         </div>
         <div class="stat-grid" id="statGrid"></div>
+        <!-- v89: Director's cut - warum die KI diese Momente gewaehlt hat -->
+        <div id="dirReport" class="hidden" style="margin:16px 0 4px; background:var(--surf);
+             border:1px solid var(--line); border-radius:14px; padding:16px 18px;"></div>
         <video id="resultVid" controls playsinline
                style="width:100%; border-radius:16px; margin:16px 0;
                background:#000; max-height: 480px;"></video>
@@ -2074,6 +2115,53 @@ async function resumeActiveJob() {
   } catch (e) {
     localStorage.removeItem('dve_active_job');
   }
+}
+
+/* v89: Anonyme 10s-Demo auf der Login-Seite */
+if ($('#btnDemo')) $('#btnDemo').addEventListener('click', () => $('#demoFile').click());
+if ($('#demoFile')) $('#demoFile').addEventListener('change', async () => {
+  const f = $('#demoFile').files[0];
+  if (!f) return;
+  $('#demoErr').classList.add('hidden');
+  $('#demoDone').classList.add('hidden');
+  $('#demoProgress').classList.remove('hidden');
+  $('#demoPhase').textContent = 'Uploading …';
+  $('#btnDemo').disabled = true;
+  const fd = new FormData();
+  fd.append('datei', f);
+  fd.append('look', 'creator');
+  fd.append('mode', 'demo');
+  try {
+    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { demoFail(d.detail || 'Upload failed.'); return; }
+    pollDemo(d.job);
+  } catch (e) {
+    demoFail('Connection dropped during upload. Please try again.');
+  }
+});
+function demoFail(msg) {
+  $('#demoProgress').classList.add('hidden');
+  $('#btnDemo').disabled = false;
+  const e = $('#demoErr');
+  e.textContent = msg || 'Something went wrong.';
+  e.classList.remove('hidden');
+}
+async function pollDemo(jid) {
+  try {
+    const st = await (await fetch('/api/status/' + jid)).json();
+    if (st.status === 'fertig') {
+      $('#demoProgress').classList.add('hidden');
+      $('#demoDone').classList.remove('hidden');
+      $('#demoVid').src = '/api/video/' + jid;
+      $('#btnDemo').disabled = false;
+      return;
+    }
+    if (st.status === 'fehler') { demoFail(st.msg || 'Render failed.'); return; }
+    if (st.phase) $('#demoPhase').textContent = st.phase;
+    $('#demoBar').style.width = Math.max(3, Math.round((st.progress || 0) * 100)) + '%';
+  } catch (e) {}
+  setTimeout(() => pollDemo(jid), 2500);
 }
 
 /* v80w: Passwort vergessen + Reset-Link-Handling */
@@ -2901,10 +2989,43 @@ async function pollRender() {
   setTimeout(pollRender, 2000);
 }
 
+/* v89: Director's cut - macht die unsichtbare KI-Regie sichtbar. */
+async function loadDirectorReport() {
+  const box = $('#dirReport');
+  if (!box) return;
+  box.classList.add('hidden');
+  try {
+    const [moms, labels] = await Promise.all([
+      (await fetch('/api/moments/' + State.jid)).json(),
+      (await fetch('/api/fx_labels')).json()]);
+    const L = Object.fromEntries(labels);
+    const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const act = (Array.isArray(moms) ? moms : []).filter(m => m.aktiv !== false);
+    if (!act.length) return;
+    const rows = act.slice(0, 6).map(m => `
+      <div style="display:flex; align-items:baseline; gap:10px; padding:7px 0;
+           border-top:1px solid var(--line); font-size:13px;">
+        <span style="color:var(--mut2); font-variant-numeric:tabular-nums;
+              min-width:38px;">${fmtDur(m.zeit)}</span>
+        <b style="color:var(--fg);">${esc(m.text).toUpperCase()}</b>
+        <span style="color:var(--mut); margin-left:auto; text-align:right;">
+          ${esc(L[m.fx] || m.fx)}${m.anim ? ' · ' + esc(m.anim) : ''}${m.power >= 3 ? ' · <b style="color:var(--acc2)">peak</b>' : ''}
+        </span>
+      </div>`).join('');
+    box.innerHTML = `
+      <h4 style="font-size:14px; font-weight:800; margin-bottom:2px;">Director's cut</h4>
+      <p style="font-size:12.5px; color:var(--mut); margin-bottom:8px;">
+        The moments our AI direction picked, and what it did with them.
+        Want different ones? Use "Edit moments".</p>${rows}`;
+    box.classList.remove('hidden');
+  } catch (e) {}
+}
+
 function renderSuccess() {
   $('#doneCard').classList.remove('hidden');
   $('#resultVid').src = '/api/video/' + State.jid;
   $('#dlLink').href = '/api/video/' + State.jid + '?download=1';
+  loadDirectorReport();
   // Peak-End: Stats + Confetti
   const dur = ((Date.now() - State.renderStart) / 1000);
   const min = Math.floor(dur / 60), sec = Math.floor(dur % 60);

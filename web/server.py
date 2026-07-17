@@ -1315,7 +1315,10 @@ def run_job(jid):
 
     _extra = []
     _uid = j.get('user_id')
-    if _uid and not _has_purchased(_uid):
+    if mode == 'demo':
+        # v89: anonyme Kostprobe - immer Wasserzeichen, nur die ersten 10s.
+        _extra = ['--watermark', '--duration', '10']
+    elif _uid and not _has_purchased(_uid):
         _extra = ['--watermark']
     rc, log, out = _run_render(jid, extra_args=_extra)
     log_txt = '\n'.join(log)
@@ -1788,13 +1791,36 @@ def default_config(look: str = 'creator'):
     return build_config(look)
 
 
+# v89: Anonyme Demo. Der staerkste Wechselgrund ist das eigene Video -
+# also darf jeder OHNE Account 10 Sekunden mit Wasserzeichen rendern.
+# Missbrauchsschutz: 2 Demos pro IP pro Tag (in-memory; Neustart resettet,
+# fuer die Beta voellig ausreichend).
+_DEMO_IPS = {}
+
+
+def _demo_ok(ip, limit=2, window=86400):
+    now = time.time()
+    hits = [t for t in _DEMO_IPS.get(ip, []) if now - t < window]
+    if len(hits) >= limit:
+        return False
+    hits.append(now)
+    _DEMO_IPS[ip] = hits
+    return True
+
+
 @app.post('/api/upload')
 async def upload(request: Request, datei: UploadFile = File(...),
                  look: str = Form('creator'), code: str = Form(''),
                  mode: str = Form('full'), cfg_overrides: str = Form('{}')):
-    ok, msg = check_auth(code, request)
-    if not ok:
-        raise HTTPException(403, msg)
+    if mode == 'demo':
+        ip = request.client.host if request.client else 'unknown'
+        if not _demo_ok(ip):
+            raise HTTPException(429, 'Demo limit reached for today. '
+                                     'Create a free account to keep going.')
+    else:
+        ok, msg = check_auth(code, request)
+        if not ok:
+            raise HTTPException(403, msg)
     if look not in LOOKS:
         look = 'creator'
     try:
@@ -1834,7 +1860,8 @@ async def upload(request: Request, datei: UploadFile = File(...),
                                  f'Maximum {MAX_SECONDS} seconds.')
 
     # v80i: Pre-Check auf Guthaben. Ohne Balance kein Render.
-    u = _current_user(request)
+    # v89: Demo kostet nichts und braucht keinen Account.
+    u = _current_user(request) if mode != 'demo' else None
     uid = None
     if u:
         uid = u['id']

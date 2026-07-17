@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v89: Wechselgruende sichtbar machen - anonyme Demo + Director's Cut.**
+  Strategie-Erkenntnis: Der Produkt-Unterschied (Text IN der Szene statt
+  Karaoke AUF dem Video) war vor dem Kauf unsichtbar; und "Credits statt
+  Abo" stand nirgends. Umgesetzt:
+  1) **10s-Demo ohne Account** (staerkster Hebel): Auf der Login-Seite kann
+     jeder ein Video hochladen und bekommt die ersten 10 Sekunden mit
+     Wasserzeichen gerendert - ohne Registrierung. Upload-Modus 'demo':
+     kein Auth, kein Charge, erzwungen ['--watermark','--duration','10'],
+     2 Demos pro IP pro Tag (in-memory, fuer Beta ausreichend). Nach dem
+     Ergebnis: CTA "Create your free account for the full video".
+  2) **Director's Cut auf der Fertig-Karte**: kleine Karte zeigt die von der
+     KI-Regie gewaehlten Momente (Zeit, Wort, Effekt, Anim, peak) - macht
+     die unsichtbare Regie sichtbar, genau das, wofuer man zahlt. Daten aus
+     /api/moments (existierte schon).
+  3) **Landing**: "Or try it on your own video first - free, no account" +
+     "No subscription, ever"; Minuten -> Credits in der Hero-Zeile.
+  Getestet: E2E im Sandbox-Server (Demo-Upload ohne Login 200, dritter
+  Versuch am selben Tag 429), Demo-Worker-Branch per Stub verifiziert
+  (Wasserzeichen + 10s erzwungen, kein Charge, status fertig), JS-Syntax +
+  keine ID-Duplikate. Offen fuer spaeter: Landing-Side-by-side (braucht
+  einen echten Beispiel-Clip von Ismet), Live-Frame-Preview pro Look,
+  Stil-Klon (Referenzvideo -> eigener Look-Preset).
 - **v88b: Logo, Fortschritts-Texte, Retro-Blur, Transkript-Cache.**
   1) **Logo** (DV-Monogramm) integriert: aus dem Screenshot freigestellt
      (Letterbox weg, Ink->Alpha) in Weiss-auf-transparent (`web/logo_white.png`)
