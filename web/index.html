@@ -649,6 +649,17 @@ body {
   border: 1px solid var(--line); border-radius: 10px;
   font-size: 14px; font-weight: 600;
 }
+/* v81b: Modal-Inputs dunkel (waren Browser-Default weiss) */
+#forgotModal input, #resetModal input, #accountModal input {
+  width: 100%; padding: 12px 14px;
+  background: var(--surf2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 10px;
+  font-size: 15px; text-transform: none;
+}
+#forgotModal input:focus, #resetModal input:focus, #accountModal input:focus {
+  outline: none; border-color: var(--acc);
+}
+
 /* v80y: Transcript-Editor */
 .tw {
   display: inline-block; padding: 2px 6px; margin: 1px;
