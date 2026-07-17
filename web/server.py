@@ -654,6 +654,9 @@ LOCK = threading.Lock()
 LOOKS = {
     'tiktok':    {'name': 'TikTok', 'desc': 'Word by word, bold, loud.'},
     'creator':   {'name': 'Creator', 'desc': 'Talking-head & business.'},
+    'editorial': {'name': 'Editorial', 'desc': 'Magazine serif, calm, high-end.'},
+    'poster':    {'name': 'Poster', 'desc': 'Big condensed caps, hard statements.'},
+    'retro':     {'name': 'Retro', 'desc': 'Warm rounded, playful, music & lifestyle.'},
     'elegant':   {'name': 'Elegant', 'desc': 'Dense captions, but classy, no jitter.'},
     'cinematic': {'name': 'Cinematic', 'desc': 'Few, big moments.'},
     'clean':     {'name': 'Clean', 'desc': 'Readable subtitles only.'},
@@ -945,6 +948,108 @@ def build_config(look, overrides=None):
                 'script': 'fonts/poppins_b.ttf',
             },
             'matting_quality': 'standard',
+        },
+        'editorial': {
+            'effects': {
+                # NEU v87: Magazin / "New Editorial". Hochkontrast-Serifen, viel
+                # Ruhe, EIN Akzent, klassische Bewegung - der 2026er A24/Vox-Ton.
+                # Fuer alle, die hochwertig-redaktionell statt laut wollen.
+                'density': 'akzente', 'text_style': 'klassisch',
+                'hook_seconds': 20, 'hook_strength': 0.40, 'instant_hook': True,
+                'pattern_interrupt': 13, 'retention_gap': 14,
+                'words_per_group': 3, 'words_per_group_max': 5,
+                'chunk_hold_min': 0.90,
+                'dim_behind': 0.30, 'dim_blurin': 0.24,
+                'beat_sync': 0.45, 'music_beat': 0.25, 'person_shadow': 0.55,
+                'zahl_gap': 18,
+                'bg_blur': 0.60, 'freeze_frame': 0.50, 'trail': 0.0,
+                'counter_ring': 0.0, 'split_screen': 0.0, 'env_shadow': 0.50,
+                'emerge': 'auto', 'anim': True,
+                'keyword_rotation': ['blurin', 'outline', 'behind'],
+                'sfx_volume': 0.25, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.50, 'crash': 0.30, 'whip': False, 'side_every': 4,
+                'keyword_rotation': ['caption', 'pan', 'push'],
+                'side_rotation': ['drift'],
+            },
+            'colors': {'style': 'auto', 'adaptive': True},
+            'fonts': {
+                'display': 'fonts/yeseva.ttf',
+                'italic': 'fonts/playfair_i.ttf',
+                'script': 'fonts/playfair_i.ttf',
+            },
+            'matting_quality': 'hoch',
+        },
+        'poster': {
+            'effects': {
+                # NEU v87: Plakat / Impact. Grosse kondensierte Versalien, harte
+                # Statements, hoher Kontrast - laut, aber KEIN Wort-Maschinengewehr
+                # (die Chunks bleiben lesbar stehen). Ground/Outline dominieren.
+                'density': 'akzente', 'text_style': '3d',
+                'hook_seconds': 10, 'hook_strength': 0.75, 'instant_hook': True,
+                'pattern_interrupt': 7, 'retention_gap': 9,
+                'words_per_group': 2, 'words_per_group_max': 4,
+                'chunk_hold_min': 0.60,
+                'dim_behind': 0.44, 'dim_blurin': 0.36,
+                'beat_sync': 0.80, 'music_beat': 0.60, 'person_shadow': 0.62,
+                'zahl_gap': 12,
+                'bg_blur': 0.55, 'freeze_frame': 0.50, 'trail': 0.30,
+                'counter_ring': 0.50, 'split_screen': 0.25, 'env_shadow': 0.20,
+                'emerge': 'immer', 'anim': True,
+                'keyword_rotation': ['ground', 'outline', 'cascade'],
+                'sfx_volume': 0.50, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.85, 'crash': 0.90, 'whip': True, 'side_every': 2,
+                'keyword_rotation': ['punch', 'push', 'caption'],
+                'side_rotation': ['capzoom', 'drift'],
+            },
+            'colors': {'style': 'auto', 'adaptive': True},
+            'fonts': {
+                'display': 'fonts/staatliches.ttf',
+                'italic': 'fonts/staatliches.ttf',
+                'script': 'fonts/staatliches.ttf',
+            },
+            'matting_quality': 'hoch',
+        },
+        'retro': {
+            'effects': {
+                # NEU v87: Warmer Retro/Vaporwave-Ton. Runde Schrift, verspielt
+                # aber gepflegt, Trails + Reflexionen, mittlere Dichte. Fuer
+                # Musik/Lifestyle/Nightlife-Content.
+                'density': 'akzente', 'text_style': '3d',
+                'hook_seconds': 12, 'hook_strength': 0.60, 'instant_hook': True,
+                'pattern_interrupt': 10, 'retention_gap': 11,
+                'words_per_group': 2, 'words_per_group_max': 4,
+                'chunk_hold_min': 0.70,
+                'dim_behind': 0.40, 'dim_blurin': 0.32,
+                'beat_sync': 0.70, 'music_beat': 0.55, 'person_shadow': 0.50,
+                'zahl_gap': 14,
+                'bg_blur': 0.50, 'freeze_frame': 0.40, 'trail': 0.50,
+                'counter_ring': 0.45, 'split_screen': 0.30, 'env_shadow': 0.30,
+                'emerge': 'auto', 'anim': True,
+                'keyword_rotation': ['cascade', 'behind', 'ground'],
+                'sfx_volume': 0.45, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+            },
+            'camera': {
+                'strength': 0.75, 'crash': 0.50, 'whip': True, 'side_every': 3,
+                'keyword_rotation': ['push', 'caption', 'pan'],
+                'side_rotation': ['capzoom'],
+            },
+            'colors': {'style': 'auto', 'adaptive': True},
+            'fonts': {
+                'display': 'fonts/righteous.ttf',
+                'italic': 'fonts/righteous.ttf',
+                'script': 'fonts/lobster.ttf',
+            },
+            'matting_quality': 'hoch',
         },
     }
     preset = PRESETS.get(look, PRESETS['creator'])

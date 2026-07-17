@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v87: Drei neue Web-Looks (Editorial / Poster / Retro).** Die Preset-
+  Auswahl auf douchko.eu geht von 5 auf 8. Jeder Look ist eine vollstaendige
+  High-End-Konfig (Effekte/Kamera/Farben/Schrift), bewusst mit eigener
+  Schrift und eigenem fx/Kamera/Dichte-Profil, damit sie sich klar
+  unterscheiden:
+  - **Editorial** (Schrift Yeseva One, Serif): Magazin/"New Editorial" -
+    Hochkontrast-Serifen, viel Ruhe, EIN Akzent, klassische Bewegung, ruhige
+    Kamera. Der 2026er A24/Vox-Ton fuer hochwertig-redaktionell statt laut.
+  - **Poster** (Schrift Staatliches, kondensierte Versalien): Plakat/Impact -
+    grosse harte Statements, hoher Kontrast, ground/outline dominieren,
+    punchy Kamera (crash/whip). Laut, aber kein Wort-Maschinengewehr.
+  - **Retro** (Schrift Righteous, rund + Lobster-Script): warmer
+    Retro/Vaporwave-Ton, Trails + Reflexionen, mittlere Dichte - fuer
+    Musik/Lifestyle/Nightlife.
+  Datengetrieben: PRESETS + LOOKS in web/server.py, Tiles bauen sich per
+  /api/looks selbst, Font-Vorschau-CSS pro Look ergaenzt (@font-face war
+  schon da). Nur Web betroffen - render.py/gui.py unveraendert, der
+  Desktop-Preset-Satz (und dessen Selftest-Constraint) bleibt wie er ist.
+  Getestet: build_config aller drei Looks valide (Fonts existieren), je ein
+  echter 2s-Render lief sauber durch (exit 0, MP4 da - der eine Traceback ist
+  der bekannte harmlose mediapipe-__del__-Shutdown), /api/looks liefert 8,
+  default_config je Look die richtige Schrift, Preview-CSS ausgeliefert.
+  render.py/gui.py unberuehrt -> Selftest bleibt 371/371 (v86).
 - **v86: Farbwelt pro Shot + Baseline-Grid (Ruhe-Feinschliff aus dem Audit).**
   Zwei Quellen unnoetiger Unruhe beseitigt, die einzeln kaum auffallen, in
   Summe aber "billig" wirken lassen:
