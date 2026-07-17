@@ -889,17 +889,33 @@ def refine_word_times(words, voice_wav):
     avg = float(np.mean(np.abs(shifts))) * 1000 if shifts else 0.0
     return words, avg
 
-def scene_palette_sampler(video_path):
+def scene_palette_sampler(video_path, cut_times=None):
     """Liefert palette_at(t, region): tastet den Frame zum Zeitpunkt t per ffmpeg ab
     (robust bei HEVC/VFR, wo cv2-Seeks scheitern) und leitet Caption-Farben ab,
     die sich der Umgebung anpassen (Referenz-Look): Text = dominanter Szenenton,
     stark entsaettigt und fast auf Weiss gehoben (nie #FFFFFF), Akzent = leuchtende
     Version desselben Tons. region='unten' sampelt den Untergrund (Wasser/Boden),
-    auf dem ground-Texte liegen, statt Himmel und Felsen mitzumitteln."""
+    auf dem ground-Texte liegen, statt Himmel und Felsen mitzumitteln.
+
+    v86: Farbwelt pro SHOT, nicht pro Sekunde. Vorher war der Cache auf int(t)
+    gekeyt - zwei Captions 0.4s auseinander ueber eine Sekundengrenze bekamen aus
+    DERSELBEN Einstellung leicht verschiedene Toene (sichtbarer Tint-Sprung, ohne
+    dass sich das Bild aenderte). Jetzt teilen sich alle Captions eines Shots
+    exakt eine Farbe (Cache-Key = Shot-Index). Sehr lange Shots duerfen alle 6s
+    langsam nachziehen, damit Licht-Drift im Dauer-Take nicht einfriert."""
     cache = {}
+    bounds = sorted(float(c) for c in (cut_times or []))
+
+    def _shot_bucket(t):
+        # Index des Shots, in dem t liegt (Anzahl Schnitte davor) + grober
+        # 6s-Unterbucket fuer sehr lange Einstellungen.
+        import bisect
+        idx = bisect.bisect_right(bounds, t)
+        shot_start = bounds[idx - 1] if idx > 0 else 0.0
+        return (idx, int((t - shot_start) / 6.0))
 
     def palette_at(t, region='mitte'):
-        key = (int(t), region)
+        key = (_shot_bucket(t), region)
         if key in cache:
             return cache[key]
         try:
@@ -2549,21 +2565,49 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         return side, cx
 
     portrait = W / H < 0.8    # 9:16 und aehnliche Hochformate
+    # v86: Baseline-Zonen fuer Querformat. Vorher sassen cascade (0.39),
+    # outline (0.398) und stack (0.435) auf drei knapp verschiedenen Hoehen -
+    # aufeinanderfolgende Momente unterschiedlichen Typs huepften minimal. Jetzt
+    # teilen sie sich EINEN Unteres-Drittel-Anker. 'behind' bleibt oben (naeher
+    # am Kopf), 'ground' bleibt die Bodenebene fuer B-Roll.
+    Z_MAIN = H * 0.40         # gemeinsamer Anker: cascade / outline / stack
+    Z_BEHIND = H * 0.34       # Text hinter der Person, sitzt hoeher
     safe_z = portrait and cfg['effects'].get('safe_zone', True)
     if safe_z:
         print("Safe-Zone 9:16 aktiv: Buttons rechts und Beschreibung unten bleiben frei")
 
+    # v86: Baseline-Grid. Aufeinanderfolgende Captions sollen auf EINER Linie
+    # sitzen statt bei jedem Moment ein paar Prozent zu huepfen. Zwei Massnahmen:
+    # (a) Hysterese bei der Band-Wahl (oben ueber dem Kopf / unteres Drittel) -
+    #     die Grenze muss um H*0.34 herum deutlich ueberschritten werden, bevor
+    #     umgeschaltet wird, sonst wackelt der Text bei Mini-Kopfbewegungen.
+    # (b) Die Ziel-Hoehe wird auf ein Raster (H*0.025) gerundet, damit Gesichts-
+    #     Jitter den Text nicht kontinuierlich verschiebt.
+    VZ_GRID = H * 0.025
+    vz_state = {'band': None}
+
     def v_zone(start, end):
-        """Vertikale Text-Zone im Hochformat: ueber dem Kopf wenn Platz, sonst unteres Drittel."""
+        """Vertikale Text-Zone im Hochformat: ueber dem Kopf wenn Platz, sonst
+        unteres Drittel - mit Hysterese und auf ein Baseline-Raster gerastet."""
         if face_pos is None:
             return H * 0.70
         _, fy, fw = face_pos(start, end)
         head_top = fy - fw * 1.15
         floor_top = H * (0.12 if safe_z else 0.10)
         cap_bot = H * (0.64 if safe_z else 0.74)
-        if head_top > H * 0.34:
-            return max(head_top * 0.52, floor_top)
-        return min(cap_bot, fy + fw * 2.4)
+        # Band mit Hysterese: rein in 'oben' erst ab 0.39, rein in 'unten' erst
+        # ab 0.29; dazwischen bleibt das zuletzt gewaehlte Band stehen.
+        prev = vz_state['band']
+        if head_top > H * 0.39:
+            band = 'oben'
+        elif head_top < H * 0.29:
+            band = 'unten'
+        else:
+            band = prev or ('oben' if head_top > H * 0.34 else 'unten')
+        vz_state['band'] = band
+        y = (max(head_top * 0.52, floor_top) if band == 'oben'
+             else min(cap_bot, fy + fw * 2.4))
+        return round(y / VZ_GRID) * VZ_GRID          # aufs Raster einrasten
 
     def clamp_cx(cx, sprite_w):
         m = W * 0.045 + 30            # Rand + Reserve fuer Kamera und Tracking
@@ -2864,7 +2908,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         core_tok['builder'] = (lambda s, _sz=core_tok.get('sz'):
                                                S.text(s, _sz, S.white)[0])
                 p['tpl'] = 'behind'            # Komposition lebt hinter der Person
-                p['by'] = H * 0.34 if not portrait else v_zone(start, end)
+                p['by'] = Z_BEHIND if not portrait else v_zone(start, end)
                 sy = p['by'] + (H * 0.24 if not portrait else H * 0.15)
             elif fx == 'behind':
                 # HERAUSSCHIEBEN braucht Ueberlappung: liegt das Wort ueber dem
@@ -2912,7 +2956,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['side'], p['cx'] = pick_side(start, end, side_toggle)
                 p['cx'] = clamp_cx(p['cx'], p['arr'].shape[1])
                 side_toggle += 1
-                p['cy'] = v_zone(start, end) if portrait else H * 0.39
+                p['cy'] = v_zone(start, end) if portrait else Z_MAIN
                 sy = p['cy'] + (H * 0.128 if portrait else H * 0.139)
             elif fx == 'blurin':
                 sz = S.fit(txt, int(H * 0.199) if not portrait else int(H * 0.10), int(W * (0.62 if safe_z else 0.86) if portrait else W * 0.78), tracking=6)
@@ -2934,7 +2978,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['side'], p['cx'] = pick_side(start, end, side_toggle)
                 p['cx'] = clamp_cx(p['cx'], p['o_arr'].shape[1])
                 side_toggle += 1
-                p['cy'] = v_zone(start, end) if portrait else H * 0.398
+                p['cy'] = v_zone(start, end) if portrait else Z_MAIN
                 sy = p['cy'] + (H * 0.09 if portrait else H * 0.13)
             elif fx == 'ground':
                 # Untergrund-Palette: der Text liegt auf Wasser/Boden -> genau dort sampeln
@@ -3025,7 +3069,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     a2, tw = S.text(tt, int(H * 0.048), S.white, tracking=14, font=S.f_sans)
                 items.append({'i': i2, 'arr': rot_img(a2, rng(i2, 4) * 2.0 - 1.0), 'w': tw})
             sx = int(clamp_cx(sx, max(it['arr'].shape[1] for it in items)))
-            zc = v_zone(start, end) if portrait else H * 0.435
+            zc = v_zone(start, end) if portrait else Z_MAIN
             step = H * 0.062 if portrait else H * 0.096
             y0 = zc - (len(items) - 1) * step / 2
             for r, it in enumerate(items):
@@ -4440,6 +4484,7 @@ def main():
     # Farbwelt: 'auto' = adaptiv aus der Szene. 'schwarz'/'weiss' = feste
     # High-End-Palette; die Szenen-Toene werden dann bewusst NICHT aufgegriffen,
     # sonst waere die Farbwahl wirkungslos.
+    cut_times = [c / float(fps_i) for c in cut_frames] if fps_i else []
     c_style = str(cfg.get('colors', {}).get('style', 'auto')).lower()
     if c_style == 'schwarz':
         S.set_base_colors((20, 20, 22), (58, 58, 64))
@@ -4448,9 +4493,8 @@ def main():
         S.set_base_colors((250, 249, 246), (208, 204, 196))
         print("Farbwelt: Elegantes Weiss (Softweiss + warmer Grau-Akzent)")
     elif cfg.get('colors', {}).get('adaptive', True):
-        palette_at = scene_palette_sampler(args.input)
-        print("Adaptive Farben: Captions greifen die Szenen-Toene auf")
-    cut_times = [c / float(fps_i) for c in cut_frames] if fps_i else []
+        palette_at = scene_palette_sampler(args.input, cut_times)
+        print("Adaptive Farben: Captions greifen die Szenen-Toene auf (pro Shot)")
     plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
                         palette_at, cut_times=cut_times)
 

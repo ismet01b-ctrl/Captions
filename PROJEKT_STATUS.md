@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v86: Farbwelt pro Shot + Baseline-Grid (Ruhe-Feinschliff aus dem Audit).**
+  Zwei Quellen unnoetiger Unruhe beseitigt, die einzeln kaum auffallen, in
+  Summe aber "billig" wirken lassen:
+  1) **Farbwelt pro Shot statt pro Sekunde.** Die adaptiven Caption-Farben
+     wurden auf `int(t)` gecacht - zwei Captions 0.4s auseinander ueber eine
+     Sekundengrenze bekamen aus DERSELBEN Einstellung leicht verschiedene
+     Toene (sichtbarer Tint-Sprung, obwohl sich das Bild nicht aenderte).
+     `scene_palette_sampler` kennt jetzt die Schnitte (cut_times) und keyt den
+     Cache auf den Shot-Index: alle Captions eines Shots teilen exakt eine
+     Farbe, die Farbe wechselt nur dort, wo das Bild sowieso schneidet. Sehr
+     lange Dauer-Takes duerfen alle 6s langsam nachziehen (Licht-Drift).
+  2) **Baseline-Grid.** Querformat setzte cascade (0.39), outline (0.398) und
+     stack (0.435) auf drei knapp verschiedene Hoehen - aufeinanderfolgende
+     Momente unterschiedlichen Typs huepften minimal. Jetzt teilen sie EINEN
+     Unteres-Drittel-Anker (Z_MAIN = H*0.40); 'behind' bleibt oben (Z_BEHIND
+     = H*0.34), 'ground' die Bodenebene. Hochformat: v_zone rastet die Hoehe
+     aufs Raster (H*0.025) und waehlt das Band (oben/unten) mit Hysterese
+     (Grenze um H*0.34 muss deutlich ueberschritten werden) - Gesichts-Jitter
+     verschiebt den Text nicht mehr kontinuierlich.
+  Selftest: +4 Tests (cascade/outline auf einer Linie, Anker im unteren
+  Drittel, Hochformat aufs Raster, Palette identisch ueber Sekundengrenze).
+  Regression: 371/371 logic + 10/10 render + GUI_OK. Sandbox/CPU/synthetisch -
+  echte Wirkung auf Windows mit echtem Material.
 - **v85: Schnitt-Disziplin + echtes Kerning (Render-Craft aus dem Audit).**
   Zwei Typografie-/Timing-Punkte aus dem v82-Audit, die ein Video von
   "Auto-Pipeline" zu "handgeschnitten" heben:

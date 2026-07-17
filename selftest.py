@@ -278,6 +278,41 @@ def _scenario_logic(clip, transcript, tmp):
     check('Schnitt-Disziplin: Ende wird vorgezogen',
           max(p['end'] for p in _pl_snap) < max(p['end'] for p in _pl_base) - 0.05)
 
+    # v86: Baseline-Grid (Querformat). cascade/outline teilen sich EINEN Anker,
+    # damit aufeinanderfolgende Momente nicht in der Hoehe huepfen.
+    def _anchor(fx):
+        _plz = R.build_plans([{'word': 'Wahnsinn', 'start': 1.0, 'end': 1.6}],
+                             {0}, cfg, S, 1920, 1080, lambda s, e: True,
+                             {0: {'fx': fx, 'power': 2, 'n': 1}})
+        _k = [p for p in _plz if 'kw_i' in p]
+        return _k[0].get('cy') if _k else None
+    check('Baseline-Grid: cascade & outline auf einer Linie',
+          abs(_anchor('cascade') - _anchor('outline')) < 1e-6,
+          f"{_anchor('cascade')} vs {_anchor('outline')}")
+    check('Baseline-Grid: Anker im unteren Drittel',
+          abs(_anchor('cascade') - 1080 * 0.40) < 1e-6)
+
+    # v86: Hochformat rastet die Text-Hoehe auf ein Baseline-Raster (H*0.025),
+    # damit Gesichts-Jitter den Text nicht kontinuierlich verschiebt.
+    _plp = R.build_plans([{'word': 'Test', 'start': 1.0, 'end': 1.6}], {0}, cfg,
+                         S, 1080, 1920, lambda s, e: True,
+                         {0: {'fx': 'cascade', 'power': 2, 'n': 1}},
+                         face_pos=lambda s, e: (540, 300, 200))
+    _kp = [p for p in _plp if 'kw_i' in p]
+    _cyp = _kp[0]['cy'] if _kp else 0
+    _grid = 1920 * 0.025
+    check('Baseline-Grid: Hochformat auf Raster', _kp
+          and abs(_cyp / _grid - round(_cyp / _grid)) < 1e-6, f'cy={_cyp:.1f}')
+
+    # v86: Farbwelt pro Shot - zwei Captions ueber eine Sekundengrenze in
+    # DERSELBEN Einstellung teilen exakt eine Farbe (kein Tint-Sprung).
+    _tealv = os.path.join(tmp, 'st_teal86.mp4')
+    run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i',
+         'color=c=teal:s=320x240:d=3', '-pix_fmt', 'yuv420p', _tealv])
+    _samp = R.scene_palette_sampler(_tealv, cut_times=[5.0])
+    check('Farbwelt pro Shot: kein Tint-Sprung ueber Sekundengrenze',
+          _samp(0.3) is _samp(1.2))
+
     # Hook-Intro: vorne dicht, hinten Akzente
     wlong = [{'word': f'Wort{i}', 'start': i * .5, 'end': i * .5 + .3} for i in range(60)]
     cfg_i = dict(cfg)
