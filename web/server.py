@@ -258,10 +258,23 @@ def _send_mail(to, subject, body):
     msg['Subject'] = subject
     msg['From'] = f'DouchkoVE <{sender}>'
     msg['To'] = to
-    with smtplib.SMTP(host, port, timeout=20) as s:
+    # v81c: IPv4 erzwingen. Docker-Container ohne IPv6-Route scheitern an
+    # Gmails AAAA-Records mit 'Errno 101 Network is unreachable'.
+    import socket
+    addr = socket.getaddrinfo(host, port, socket.AF_INET,
+                              socket.SOCK_STREAM)[0][4][0]
+    s = smtplib.SMTP(timeout=20)
+    s._host = host                    # SNI/Zertifikat-Check gegen Hostname
+    try:
+        s.connect(addr, port)
         s.starttls()
         s.login(user, pw)
         s.sendmail(sender, [to], msg.as_string())
+    finally:
+        try:
+            s.quit()
+        except Exception:
+            pass
 
 
 def _create_reset(uid):
