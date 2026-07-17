@@ -3443,6 +3443,14 @@ def apply_duplicate_trail(comp, frame, strength, offset_px=14, layers=3):
     text_mask = (diff > 18).astype(np.float32)
     if float(text_mask.sum()) < 500:                # zu wenig Text -> nichts zu duplizieren
         return comp
+    # v88b: Ganzbild-Schmier-Schutz. Der Diff comp-vs-frame findet nicht nur
+    # Text: Hintergrund-Blur, Farb-Grading, Kamera-Warp und Szenen-Blending
+    # veraendern das Bild UEBERALL. Auf Nacht-B-Roll (Shibuya) deckte die
+    # "Text"-Maske so fast das ganze Bild ab -> der Trail duplizierte den
+    # kompletten Frame und alles wurde matschig. Deckt die Maske mehr als 6 %
+    # der Flaeche ab, ist es kein isolierter Text mehr -> kein Trail.
+    if float(text_mask.mean()) > 0.06:
+        return comp
     text_mask = cv2.GaussianBlur(text_mask, (0, 0), 1.6)
     out = comp.astype(np.float32).copy()
     for k in range(1, layers + 1):
@@ -4670,18 +4678,39 @@ def main():
     if args.watermark:
         _wm_f = ImageFont.truetype(os.path.join(HERE, 'fonts', 'poppins_b.ttf'),
                                    max(int(H * 0.030), 22))
-        _wm_img = Image.new('RGBA', (10, 10))
-        _d = ImageDraw.Draw(_wm_img)
+        _d = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
         _bb = _d.textbbox((0, 0), 'DouchkoVE', font=_wm_f)
-        _wm_img = Image.new('RGBA', (_bb[2] + 12, _bb[3] + 12), (0, 0, 0, 0))
-        ImageDraw.Draw(_wm_img).text((6, 6), 'DouchkoVE', font=_wm_f,
-                                     fill=(255, 255, 255, 97),
+        _tw, _th = _bb[2], _bb[3]
+        # v88b: Logo-Monogramm links neben den Schriftzug. Weiss, gleiche
+        # dezente Deckkraft wie der Text (~38%).
+        _logo_arr = None
+        _lp = os.path.join(HERE, 'web', 'logo_white.png')
+        if os.path.exists(_lp):
+            try:
+                _lh = int(_th * 1.15)
+                _lg = Image.open(_lp).convert('RGBA')
+                _lg = _lg.resize((max(int(_lg.width * _lh / _lg.height), 1), _lh),
+                                 Image.LANCZOS)
+                _la = np.array(_lg).astype(np.float32)
+                _la[..., 3] *= 97 / 255.0            # gleiche Transluzenz wie Text
+                _logo_arr = _la.astype(np.uint8)
+            except Exception:
+                _logo_arr = None
+        _lw = (_logo_arr.shape[1] + int(H * 0.010)) if _logo_arr is not None else 0
+        _wm_img = Image.new('RGBA', (_lw + _tw + 12, max(_th, _logo_arr.shape[0]
+                            if _logo_arr is not None else _th) + 14), (0, 0, 0, 0))
+        _cy = _wm_img.height // 2
+        if _logo_arr is not None:
+            _li = Image.fromarray(_logo_arr)
+            _wm_img.alpha_composite(_li, (6, _cy - _li.height // 2))
+        ImageDraw.Draw(_wm_img).text((_lw + 6, _cy - _th // 2 - _bb[1]), 'DouchkoVE',
+                                     font=_wm_f, fill=(255, 255, 255, 97),
                                      stroke_width=2, stroke_fill=(0, 0, 0, 60))
         _wm_arr = np.array(_wm_img)
         _wx = W - _wm_arr.shape[1] - int(W * 0.03)
         _wy = H - _wm_arr.shape[0] - int(H * 0.025)
         wm = (_wm_arr, _wx, _wy)
-        print("Wasserzeichen: aktiv (Free-Tier)")
+        print("Wasserzeichen: aktiv (Free-Tier, mit Logo)")
 
     # --- Encoder (v80p): ZWEI Stufen statt einer Pipe-Mux-Kombi.
     # Stufe 1: NUR Video aus der Pipe in eine Temp-Datei. Kein zweiter Input,

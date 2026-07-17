@@ -66,6 +66,40 @@ def cost_seconds(dur_sec):
 os.makedirs(JOBS_DIR, exist_ok=True)
 os.makedirs(DATA, exist_ok=True)
 
+# v88b: Transkript-Cache pro Nutzer + Videoinhalt. Dasselbe Video soll nie
+# zweimal transkribiert werden - auch nicht, wenn es (nach Einstellungs-
+# aenderungen) neu hochgeladen wird. Schluessel = (User, Inhalts-Hash, Sprache).
+_TCACHE = os.path.join(DATA, 'tcache')
+os.makedirs(_TCACHE, exist_ok=True)
+
+
+def _video_hash(path):
+    """Schneller, stabiler Inhalts-Hash: Groesse + erste/letzte 256 KB. Reicht,
+    um dieselbe Datei wiederzuerkennen, ohne GB durchzulesen."""
+    import hashlib
+    try:
+        sz = os.path.getsize(path)
+        h = hashlib.sha1(str(sz).encode())
+        with open(path, 'rb') as f:
+            h.update(f.read(262144))
+            if sz > 262144:
+                f.seek(max(0, sz - 262144))
+                h.update(f.read(262144))
+        return h.hexdigest()
+    except Exception:
+        return None
+
+
+def _tcache_path(uid, vhash, lang):
+    if not uid or not vhash:
+        return None
+    lang = (lang or 'auto').strip().lower() or 'auto'
+    return os.path.join(_TCACHE, f'{uid}_{vhash}_{lang}.json')
+
+
+def _job_transcript_path(src):
+    return os.path.splitext(src)[0] + '_transcript2.json'
+
 
 # ================================================================
 # v80h: User-Accounts (Email + Passwort, bcrypt-Hashing, SQLite)
@@ -1044,7 +1078,7 @@ def build_config(look, overrides=None):
                 'dim_behind': 0.40, 'dim_blurin': 0.32,
                 'beat_sync': 0.70, 'music_beat': 0.55, 'person_shadow': 0.50,
                 'zahl_gap': 14,
-                'bg_blur': 0.50, 'freeze_frame': 0.40, 'trail': 0.50,
+                'bg_blur': 0.50, 'freeze_frame': 0.40, 'trail': 0.35,
                 'counter_ring': 0.45, 'split_screen': 0.30, 'env_shadow': 0.30,
                 'emerge': 'auto', 'anim': True,
                 'keyword_rotation': ['cascade', 'behind', 'ground'],
@@ -1110,7 +1144,22 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
     cmd = [sys.executable, os.path.join(ROOT, 'render.py'), src,
            '--config', cfg_path, '--out', out] + (extra_args or [])
     env = dict(os.environ)
-    set_state(jid, status='laeuft', phase='Transcribing …',
+
+    # v88b: Transkript aus dem Cache holen, falls dasselbe Video (gleicher
+    # Nutzer, gleiche Sprache) schon einmal transkribiert wurde. render.py
+    # nutzt eine daneben liegende quelle_transcript2.json automatisch und
+    # ueberspringt damit den Whisper-Aufruf komplett.
+    _tp = _job_transcript_path(src)
+    _cache = _tcache_path(j.get('user_id'), j.get('vhash'),
+                          cfg.get('language', 'auto'))
+    if _cache and os.path.exists(_cache) and not os.path.exists(_tp):
+        try:
+            shutil.copyfile(_cache, _tp)
+            print(f'Transkript-Cache-Treffer fuer Job {jid}')
+        except Exception:
+            pass
+
+    set_state(jid, status='laeuft', phase='Warming up the engines …',
               progress=progress_start, log_tail=[], eta_sec=None)
     p = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -1127,40 +1176,40 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
         progress = None
         eta = None
         if 'Transkribiere' in ln:
-            phase = 'Deine Stimme wird verschriftet …'
+            phase = 'Listening to every word you said …'
             progress = 0.05
         elif 'Woerter' in ln and 'Transkript' in ln:
-            phase = 'Jeder Wort-Zeitpunkt wird feinjustiert …'
+            phase = 'Pinning each word to the exact millisecond …'
             progress = 0.10
         elif 'Gesichts-Tracking' in ln:
-            phase = 'Dein Gesicht wird verfolgt, Szenen werden getrennt …'
+            phase = 'Finding you in the frame and splitting the scenes …'
             progress = 0.20
         elif 'Musik-Beat' in ln:
-            phase = 'Der Musik-Beat wird analysiert …'
+            phase = 'Feeling out the rhythm of your music …'
             progress = 0.28
         elif 'KI-Regie' in ln and 'analysiert' in ln:
-            phase = 'Die KI liest dein Transkript und plant die Regie …'
+            phase = 'Our AI director is reading your script …'
             progress = 0.35
         elif 'Vision-Regie' in ln:
-            phase = 'Die KI schaut sich einzelne Frames an …'
+            phase = 'Taking a closer look at your footage, frame by frame …'
             progress = 0.38
         elif ln.startswith('Keywords'):
-            phase = 'Die grossen Momente stehen fest …'
+            phase = 'The big moments are locked in …'
             progress = 0.40
         elif 'Adaptive Farben' in ln:
-            phase = 'Die Caption-Farben werden aus der Szene abgeleitet …'
+            phase = 'Picking caption colors straight from your scene …'
             progress = 0.43
         elif 'Kompositionen' in ln:
-            phase = 'Wortgruppen werden zu Magazin-Layouts komponiert …'
+            phase = 'Laying your words out like a magazine spread …'
             progress = 0.45
         elif 'Matting-Fenster' in ln:
-            phase = 'Deine Person wird sauber vom Hintergrund freigestellt …'
+            phase = 'Cutting you cleanly out from the background …'
             progress = 0.47
         elif 'Tiefen-Okklusion' in ln:
-            phase = 'Objekte vor dir werden erkannt (die verdecken den Text) …'
+            phase = 'Working out what sits in front of you …'
             progress = 0.49
         elif 'Kamera-Track' in ln:
-            phase = 'Kamera-Bewegung wird nachverfolgt …'
+            phase = 'Locking the text onto the moving scene …'
             progress = 0.50
         elif 'Frame' in ln and '/' in ln:
             try:
@@ -1171,13 +1220,13 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
                 # Live-Story: was jetzt gerade auf dem Frame passiert
                 sec_at = cur / 25.0
                 if frac < 0.62:
-                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Text hinter dir wird gerendert'
+                    phase = f'Painting your video · second {sec_at:.0f} · sliding text behind you'
                 elif frac < 0.75:
-                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Animationen laufen'
+                    phase = f'Painting your video · second {sec_at:.0f} · bringing the animations to life'
                 elif frac < 0.85:
-                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Kamera-Fahrten werden ueberlagert'
+                    phase = f'Painting your video · second {sec_at:.0f} · gliding the camera through the shot'
                 else:
-                    phase = f'Das Video wird gebaut · Sekunde {sec_at:.0f} · Feinschliff und Farb-Korrektur'
+                    phase = f'Painting your video · second {sec_at:.0f} · final polish and color grade'
                 if frame_start_t is None:
                     frame_start_t = time.time()
                     frame_start_i = cur
@@ -1189,7 +1238,7 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
             except Exception:
                 pass
         elif ln.startswith('Fertig') or 'Encode fertig' in ln:
-            phase = 'Fertiges Video wird encodiert und gespeichert …'
+            phase = 'Encoding the final cut and saving it to your Library …'
             progress = 0.97
 
         if phase is not None or progress is not None or tail:
@@ -1200,6 +1249,14 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
             set_state(jid, **kw)
     p.wait()
     open(os.path.join(d, 'log.txt'), 'a', encoding='utf-8').write('\n'.join(log) + '\n')
+    # v88b: Frisch erzeugtes Transkript in den Cache legen (fuer den naechsten
+    # Upload derselben Datei). Nur bei Erfolg und wenn wirklich eins da ist.
+    if p.returncode == 0 and _cache and not os.path.exists(_cache) \
+            and os.path.exists(_tp):
+        try:
+            shutil.copyfile(_tp, _cache)
+        except Exception:
+            pass
     return p.returncode, log, out
 
 
@@ -1346,6 +1403,17 @@ def _cleanup_worker():
                         shutil.rmtree(d, ignore_errors=True)
                         JOBS.pop(jid, None)
                         print(f"Cleanup: Job {jid} nach {retention:.0f}d entfernt")
+            # v88b: Transkript-Cache aufraeumen (Dateien > 30 Tage). Winzig,
+            # aber soll nicht ewig wachsen.
+            tcut = _t.time() - 30 * 86400
+            if os.path.isdir(_TCACHE):
+                for fn in os.listdir(_TCACHE):
+                    fp = os.path.join(_TCACHE, fn)
+                    try:
+                        if os.path.isfile(fp) and os.path.getmtime(fp) < tcut:
+                            os.remove(fp)
+                    except OSError:
+                        pass
         except Exception as e:
             print(f"Cleanup-Fehler: {type(e).__name__}: {e}")
         _t.sleep(3600)
@@ -1622,6 +1690,30 @@ def api_delete_account(request: Request, response: Response,
     return {'ok': True}
 
 
+def _asset(name, media):
+    p = os.path.join(HERE, name)
+    if not os.path.exists(p):
+        raise HTTPException(404)
+    return FileResponse(p, media_type=media,
+                        headers={'Cache-Control': 'public, max-age=86400'})
+
+
+@app.get('/favicon.ico')
+@app.get('/favicon.png')
+def favicon():
+    return _asset('favicon.png', 'image/png')
+
+
+@app.get('/logo_white.png')
+def logo_white():
+    return _asset('logo_white.png', 'image/png')
+
+
+@app.get('/logo_dark.png')
+def logo_dark():
+    return _asset('logo_dark.png', 'image/png')
+
+
 @app.get('/', response_class=HTMLResponse)
 def landing():
     return _page('landing.html')
@@ -1758,7 +1850,7 @@ async def upload(request: Request, datei: UploadFile = File(...),
                 f"Missing {max(1, fehlt)} - please top up.")
 
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
-                 'user_id': uid,
+                 'user_id': uid, 'vhash': _video_hash(src),   # v88b: Transkript-Cache
                  'mode': mode, 'cfg_overrides': overrides,
                  'status': 'wartet', 'progress': 0.0,
                  'phase': 'Queued …',

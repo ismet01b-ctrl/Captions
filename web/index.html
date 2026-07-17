@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b0b0e">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/favicon.png">
 <title>DouchkoVE Captions</title>
 <style>
 /* ---------- Font-Faces (Preview in echter Schriftart) ---------- */
@@ -160,7 +162,10 @@ body {
 .hi .greeting .mut { color: var(--mut); }
 
 /* v84: Beta-Badge, Top-Nav, Credit-Chip, Seiten */
-.header .brand { position: relative; }
+.header .brand { position: relative; display: inline-flex; align-items: center; }
+.brand-logo { height: 26px; width: auto; margin-right: 9px; vertical-align: middle; }
+/* Hero-Logo ueber dem Login */
+.hero-logo { height: 64px; width: auto; margin: 0 auto 14px; display: block; }
 .brand-beta {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-style: normal; font-weight: 800; font-size: 9px; letter-spacing: 1px;
@@ -1020,6 +1025,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 <!-- ---------- LOGIN (Hero) ---------- -->
 <div id="loginView" class="hero" role="main">
   <div class="hero-inner">
+    <img class="hero-logo" src="/logo_white.png" alt="DouchkoVE logo">
     <div class="hero-brand">DouchkoVE</div>
     <div class="hero-tag">CAPTIONS</div>
     <h1 class="hero-title" id="authTitle">Premium captions.<br>In <span class="glow">minutes.</span></h1>
@@ -1061,7 +1067,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 <!-- ---------- APP (Wizard) ---------- -->
 <div id="appView" class="app">
   <header class="header">
-    <div class="brand">DouchkoVE<sup class="brand-beta">Beta</sup></div>
+    <div class="brand"><img class="brand-logo" src="/logo_white.png" alt="">DouchkoVE<sup class="brand-beta">Beta</sup></div>
     <nav class="topnav" id="topnav" aria-label="Sections">
       <a data-nav="create" class="on">Create</a>
       <a data-nav="library">Library</a>

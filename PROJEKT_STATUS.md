@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v88b: Logo, Fortschritts-Texte, Retro-Blur, Transkript-Cache.**
+  1) **Logo** (DV-Monogramm) integriert: aus dem Screenshot freigestellt
+     (Letterbox weg, Ink->Alpha) in Weiss-auf-transparent (`web/logo_white.png`)
+     und Dunkel-Variante; Favicon = weisses Logo auf violettem Rundquadrat
+     (`web/favicon.png`). Eingebaut in App-Header, Login-Hero und Landing-
+     Header (neben dem Schriftzug), als Favicon (Routen /favicon.png|ico,
+     /logo_white.png, /logo_dark.png) und ins Video-Wasserzeichen (Logo links
+     vom "DouchkoVE"-Schriftzug, gleiche dezente Transluzenz).
+  2) **Fortschritts-Texte** waren noch deutsch -> jetzt Englisch und kreativer
+     ("Listening to every word you said …", "Our AI director is reading your
+     script …", "Painting your video · second N · sliding text behind you" …).
+  3) **Retro-Blur behoben**: `apply_duplicate_trail` erkannte "Text" per Diff
+     comp-vs-Originalframe - auf Nacht-B-Roll (Blur/Grade/Warp veraendern das
+     Bild ueberall) deckte die Maske fast das ganze Bild ab und der Trail
+     schmierte alles zu. Guard: deckt die Maske > 6 % der Flaeche ab, kein
+     Trail. Retro-Trail zusaetzlich 0.50 -> 0.35 gezaehmt.
+  4) **Transkript-Cache** (Antwort auf Ismets Frage: ja, geht): pro Nutzer +
+     Videoinhalt-Hash + Sprache. Dasselbe Video wird nie zweimal transkribiert,
+     auch nicht nach erneutem Upload - Whisper-Aufruf faellt beim zweiten Mal
+     komplett weg. Cache-Cleanup nach 30 Tagen. Sprachwechsel = eigener Key
+     (re-transkribiert bewusst).
+  Getestet: 374/374 logic + render1 gruen; Watermark-Frame visuell (Logo +
+  Schriftzug), Logo/Favicon-Routen 200, Cache-Helfer (Hash stabil, Pfad,
+  anon=None), Retro-Trail 0.35.
 - **v88: UI-/Render-Feinschliff aus Ismets Feedback.**
   1) **Caption-Ueberlappung behoben** (der SHIBUYA/RIGHT-Doppelbild-Fehler):
      neue Modulfunktion `resolve_overlaps` verallgemeinert den v82-Stack-Fix
