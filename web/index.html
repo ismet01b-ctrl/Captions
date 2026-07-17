@@ -1000,48 +1000,6 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
   </div>
 
-  <!-- Forgot Password Modal (v81) -->
-  <div class="overlay hidden" id="forgotModal" role="dialog" aria-modal="true">
-    <div class="modal" style="max-width:420px;">
-      <div class="head">
-        <h3>Reset your password</h3>
-        <p>Enter your account email. We'll send you a reset link.</p>
-      </div>
-      <div class="body">
-        <form id="forgotForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
-          <input type="email" id="forgotEmail" placeholder="Email" required
-                 autocomplete="email" style="text-transform:none;">
-          <button class="btn" type="submit" id="forgotSend">Send reset link</button>
-        </form>
-      </div>
-      <div class="foot">
-        <div style="flex:1;"></div>
-        <button class="btn secondary" id="forgotClose">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- New Password Modal (v81) -->
-  <div class="overlay hidden" id="resetModal" role="dialog" aria-modal="true">
-    <div class="modal" style="max-width:420px;">
-      <div class="head">
-        <h3>Choose a new password</h3>
-        <p>Minimum 8 characters. You'll be signed in right after.</p>
-      </div>
-      <div class="body">
-        <form id="resetForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
-          <input type="password" id="resetPw" placeholder="New password" required
-                 minlength="8" autocomplete="new-password">
-          <button class="btn" type="submit" id="resetGo">Set password</button>
-        </form>
-      </div>
-      <div class="foot">
-        <div style="flex:1;"></div>
-        <button class="btn secondary" id="resetClose">Cancel</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Transcript Editor Modal (v80y) -->
   <div class="overlay hidden" id="transModal" role="dialog" aria-modal="true">
     <div class="modal" style="max-width:820px;">
@@ -1592,6 +1550,48 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <footer>DouchkoVE Captions v0.1 · Early Access · <a href="/terms" target="_blank" style="color:inherit;">Terms</a> · <a href="/privacy" target="_blank" style="color:inherit;">Privacy</a> · <a href="/imprint" target="_blank" style="color:inherit;">Imprint</a></footer>
   </main>
 </div>
+
+  <!-- Forgot Password Modal (v81) -->
+  <div class="overlay hidden" id="forgotModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:420px;">
+      <div class="head">
+        <h3>Reset your password</h3>
+        <p>Enter your account email. We'll send you a reset link.</p>
+      </div>
+      <div class="body">
+        <form id="forgotForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="email" id="forgotEmail" placeholder="Email" required
+                 autocomplete="email" style="text-transform:none;">
+          <button class="btn" type="submit" id="forgotSend">Send reset link</button>
+        </form>
+      </div>
+      <div class="foot">
+        <div style="flex:1;"></div>
+        <button class="btn secondary" id="forgotClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Password Modal (v81) -->
+  <div class="overlay hidden" id="resetModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:420px;">
+      <div class="head">
+        <h3>Choose a new password</h3>
+        <p>Minimum 8 characters. You'll be signed in right after.</p>
+      </div>
+      <div class="body">
+        <form id="resetForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="password" id="resetPw" placeholder="New password" required
+                 minlength="8" autocomplete="new-password">
+          <button class="btn" type="submit" id="resetGo">Set password</button>
+        </form>
+      </div>
+      <div class="foot">
+        <div style="flex:1;"></div>
+        <button class="btn secondary" id="resetClose">Cancel</button>
+      </div>
+    </div>
+  </div>
 
 <!-- Moments Editor Modal -->
 <div class="overlay hidden" id="momEditor" role="dialog" aria-modal="true"
