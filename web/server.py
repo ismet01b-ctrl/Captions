@@ -293,7 +293,7 @@ def _send_verify_mail(uid, email, name=''):
                    f'welcome to DouchkoVE! Please confirm your email address '
                    f'(needed before purchasing credits):\n\n'
                    f'{base}/app?verify={tok}\n\n'
-                   f'Link is valid for 48 hours.\n\n— DouchkoVE')
+                   f'Link is valid for 48 hours.\n\n- DouchkoVE')
         return True
     except Exception as e:
         print(f'Verify-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -503,7 +503,7 @@ async def api_checkout(request: Request, pack: str = Form(...)):
     except Exception as e:
         cls = type(e).__name__
         if cls == 'AuthenticationError':
-            msg = 'Payment provider rejected our credentials. Server-side config issue — support has been notified.'
+            msg = 'Payment provider rejected our credentials. Server-side config issue, support has been notified.'
         elif cls == 'APIConnectionError':
             msg = 'Could not reach the payment provider. Please try again in a minute.'
         else:
@@ -585,7 +585,7 @@ LOCK = threading.Lock()
 LOOKS = {
     'tiktok':    {'name': 'TikTok', 'desc': 'Word by word, bold, loud.'},
     'creator':   {'name': 'Creator', 'desc': 'Talking-head & business.'},
-    'elegant':   {'name': 'Elegant', 'desc': 'Dense captions, but classy — no jitter.'},
+    'elegant':   {'name': 'Elegant', 'desc': 'Dense captions, but classy, no jitter.'},
     'cinematic': {'name': 'Cinematic', 'desc': 'Few, big moments.'},
     'clean':     {'name': 'Clean', 'desc': 'Readable subtitles only.'},
 }
@@ -1304,7 +1304,7 @@ def api_forgot_password(request: Request, email: str = Form(...)):
                        f'for your DouchkoVE account.\n\n'
                        f'Reset link (valid 30 minutes):\n{link}\n\n'
                        f'If this wasn\'t you, just ignore this email - '
-                       f'your password stays unchanged.\n\n— DouchkoVE')
+                       f'your password stays unchanged.\n\n- DouchkoVE')
         except Exception as e:
             print(f'Mail-Versand fehlgeschlagen: {type(e).__name__}: {e}')
     return {'ok': True,

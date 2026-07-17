@@ -898,7 +898,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="hero-brand">DouchkoVE</div>
     <div class="hero-tag">CAPTIONS</div>
     <h1 class="hero-title" id="authTitle">Premium captions.<br>In <span class="glow">minutes.</span></h1>
-    <p class="hero-sub" id="authSub">Sign up — 2 free minutes of video to try it out.</p>
+    <p class="hero-sub" id="authSub">Sign up and get 2 free minutes of video to try it out.</p>
 
     <div id="authTabs" style="display:flex; gap:6px; margin: 0 auto 14px; max-width:340px;
                               background:rgba(0,0,0,0.3); border-radius:10px; padding:4px;">
@@ -966,13 +966,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="modal" style="max-width:520px;">
       <div class="head">
         <h3>Account settings</h3>
-        <p id="accEmail" style="color:var(--mut);">—</p>
+        <p id="accEmail" style="color:var(--mut);">-</p>
       </div>
       <div class="body">
         <div id="verifyBox" style="display:none; margin-bottom:20px; padding:12px 16px;
              background:rgba(245,196,81,0.1); border-left:3px solid #f5c451; border-radius:6px;">
           <p style="color:var(--fg); font-size:14px; margin-bottom:8px;">
-            Your email is not verified yet — purchasing is locked.</p>
+            Your email is not verified yet, so purchasing is locked.</p>
           <button class="btn secondary" id="btnResendVerify" type="button"
                   style="padding:8px 14px;">Resend verification email</button>
         </div>
@@ -996,6 +996,48 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <div class="foot">
         <div style="flex:1;"></div>
         <button class="btn secondary" id="accountClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forgot Password Modal (v81) -->
+  <div class="overlay hidden" id="forgotModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:420px;">
+      <div class="head">
+        <h3>Reset your password</h3>
+        <p>Enter your account email. We'll send you a reset link.</p>
+      </div>
+      <div class="body">
+        <form id="forgotForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="email" id="forgotEmail" placeholder="Email" required
+                 autocomplete="email" style="text-transform:none;">
+          <button class="btn" type="submit" id="forgotSend">Send reset link</button>
+        </form>
+      </div>
+      <div class="foot">
+        <div style="flex:1;"></div>
+        <button class="btn secondary" id="forgotClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Password Modal (v81) -->
+  <div class="overlay hidden" id="resetModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:420px;">
+      <div class="head">
+        <h3>Choose a new password</h3>
+        <p>Minimum 8 characters. You'll be signed in right after.</p>
+      </div>
+      <div class="body">
+        <form id="resetForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="password" id="resetPw" placeholder="New password" required
+                 minlength="8" autocomplete="new-password">
+          <button class="btn" type="submit" id="resetGo">Set password</button>
+        </form>
+      </div>
+      <div class="foot">
+        <div style="flex:1;"></div>
+        <button class="btn secondary" id="resetClose">Cancel</button>
       </div>
     </div>
   </div>
@@ -1092,7 +1134,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       </div>
       <h1 class="step-title">Your video</h1>
       <p class="step-sub">Drop it in or click to select. Max 3 minutes, 300 MB.
-        We auto-configure everything — you can fine-tune afterwards.</p>
+        We auto-configure everything, you can fine-tune afterwards.</p>
       <div class="card">
         <div id="drop" role="button" tabindex="0" aria-label="Select video file">
           <svg class="ic-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1148,7 +1190,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div class="acc-body">
           <div class="setting"><div class="setting-label">How long is the hook?</div>
             <div class="setting-desc">The first seconds with denser captions. 65-71% of viewers
-              drop off before this point — everything is decided here.
+              drop off before this point. This is where everything is decided.
               "Off" = no hook.</div>
             <div class="seg" data-cfg="effects.hook_seconds" data-opts="Off:0,8 sec:8,15 sec:15,30 sec:30,60 sec:60"></div>
           </div>
@@ -1161,7 +1203,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="row"><div class="grow">
               <div class="setting-label">Instant start</div>
               <div class="setting-desc">The strongest word of the first seconds is visible from frame 1.
-                No warm-up frame — viewers are hooked instantly.</div>
+                No warm-up frame, viewers are hooked instantly.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="effects.instant_hook" aria-label="Instant start">
               <span class="track"><span class="knob"></span></span></label>
@@ -1185,7 +1227,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <div class="setting"><div class="setting-label">Text pulses with the music beat</div>
             <div class="setting-desc">On top of the speech beat, also the kick/sub-bass.
               For videos with background music. Pure talking-head videos are
-              unaffected — detected automatically.</div>
+              unaffected, detected automatically.</div>
             <div class="slider" data-cfg="effects.music_beat" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
           <div class="setting"><div class="setting-label">Language in the video</div>
@@ -1242,7 +1284,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           </div>
           <div class="setting"><div class="setting-label">Word emerges from behind the person</div>
             <div class="setting-desc">Signature look 2026: the word sits behind the person and slides
-              out as they speak — the hidden part first.
+              out as they speak, the hidden part first.
               "Always" = every big word, "Auto" = alternating with other entrances.</div>
             <div class="seg" data-cfg="effects.emerge" data-opts="Auto:auto,Always:immer,Off:aus"></div>
           </div>
@@ -1281,14 +1323,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </div>
         <div class="acc-body">
           <div class="setting"><div class="setting-label">Video pauses on the strongest word (freeze frame)</div>
-            <div class="setting-desc">At the strongest moment the video freezes briefly — the caption
+            <div class="setting-desc">At the strongest moment the video freezes briefly, the caption
               keeps moving. A director's trick that forces attention onto the punchline.
               Only ONCE per video (more gets cheesy).</div>
             <div class="seg" data-cfg="effects.freeze_frame" data-opts="Off:0,Short (0.4 s):0.4,Classic (0.6 s):0.6,Long (1.0 s):1.0"></div>
           </div>
           <div class="setting"><div class="setting-label">Text leaves speed echoes (trail)</div>
-            <div class="setting-desc">The text leaves offset, faded copies behind itself —
-              music-video speed feel.</div>
+            <div class="setting-desc">The text leaves offset, faded copies behind itself, music-video speed feel.</div>
             <div class="seg" data-cfg="effects.trail" data-opts="Off:0,Subtle:0.35,Strong:0.7"></div>
           </div>
           <div class="setting"><div class="setting-label">Circular progress around numbers (counter ring)</div>
@@ -1297,8 +1338,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="seg" data-cfg="effects.counter_ring" data-opts="Off:0,On:0.55"></div>
           </div>
           <div class="setting"><div class="setting-label">Frame splits at peaks (split screen)</div>
-            <div class="setting-desc">The video splits horizontally into two halves with a gap —
-              text sits in between. Only at the strongest moments.</div>
+            <div class="setting-desc">The video splits horizontally into two halves with a gap, text sits in between. Only at the strongest moments.</div>
             <div class="seg" data-cfg="effects.split_screen" data-opts="Off:0,On:0.55"></div>
           </div>
           <div class="setting"><div class="setting-label">Text casts a shadow on the ground</div>
@@ -1325,7 +1365,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="slider" data-cfg="camera.strength" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
           <div class="setting"><div class="setting-label">Crash zoom on the strongest moment</div>
-            <div class="setting-desc">One fast, hard zoom onto the single most important word — with a
+            <div class="setting-desc">One fast, hard zoom onto the single most important word, with a
               snappy stop. Signature move for attention. Only once per clip.</div>
             <div class="slider" data-cfg="camera.crash" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
@@ -1333,7 +1373,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="row"><div class="grow">
               <div class="setting-label">Whip pan between sections</div>
               <div class="setting-desc">Fast, blurred camera swipe as a transition between topic sections.
-                Very energetic — Reels/Shorts, not cinematic.</div>
+                Very energetic. Reels/Shorts, not cinematic.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="camera.whip" aria-label="Whip-Pan">
               <span class="track"><span class="knob"></span></span></label>
@@ -1397,14 +1437,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           </div>
           <div class="setting"><div class="setting-label">How loud are the sound effects?</div>
             <div class="setting-desc">Impact sounds on words, whoosh on transitions, counter ticks on
-              numbers. Without a server-side sound pack the video stays silent —
-              this slider then has no effect.</div>
+              numbers. Without a server-side sound pack the video stays silent, this slider then has no effect.</div>
             <div class="slider" data-cfg="effects.sfx_volume" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
           <div class="setting">
             <div class="row"><div class="grow">
               <div class="setting-label">Master file for post-production</div>
-              <div class="setting-desc">Output MOV/ProRes instead of MP4 — for editing in
+              <div class="setting-desc">Output MOV/ProRes instead of MP4, for editing in
                 Premiere/DaVinci without quality loss.</div>
             </div>
             <label class="switch"><input type="checkbox" data-cfg="output.master" aria-label="Master">
@@ -1427,7 +1466,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <!-- STEP 4: RENDER -->
     <div class="step-view" data-step="4" role="tabpanel" aria-label="Render">
       <h1 class="step-title">Ready?</h1>
-      <p class="step-sub">One click — we build your video with all your settings.</p>
+      <p class="step-sub">One click, we build your video with all your settings.</p>
 
       <div class="card">
         <h3>Summary</h3>
@@ -1435,7 +1474,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div id="summary" class="sum-grid"></div>
         <div class="tpl-row" style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
           <select id="tplLoad" class="segseg-item" style="flex:1; min-width:180px; padding:8px 12px;">
-            <option value="">— Load saved setup —</option>
+            <option value="">- Load saved setup -</option>
           </select>
           <button class="btn secondary" id="btnTplSave" style="padding:8px 14px;">Save setup</button>
         </div>
@@ -1528,8 +1567,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <button class="btn secondary" id="btnAgain" style="flex:1; min-width:180px;">New video</button>
         </div>
         <p style="color:var(--mut); font-size:13px; margin-top:12px; line-height:1.5;">
-          Not quite happy? "Edit moments" opens the editor with the big text moments —
-          change text, swap effect, pick animation — then a re-render runs with your changes.
+          Not quite happy? "Edit moments" opens the editor with the big text moments, change text, swap effect, pick animation, then a re-render runs with your changes.
         </p>
       </div>
 
@@ -1618,7 +1656,7 @@ async function loadTemplates() {
     const d = await r.json();
     const sel = $('#tplLoad');
     if (!sel) return;
-    sel.innerHTML = '<option value="">— Load saved setup —</option>';
+    sel.innerHTML = '<option value="">- Load saved setup -</option>';
     (d.templates || []).forEach(t => {
       const o = document.createElement('option');
       o.value = t.name; o.textContent = t.name;
@@ -1810,7 +1848,7 @@ async function buildLooks() {
       await loadDefaults();
       rebuildAllWidgets();
       c.style.opacity = '1';
-      toast('Look "' + v.name + '" applied — all settings updated', 'ok', 2500);
+      toast('Look "' + v.name + '" applied, all settings updated', 'ok', 2500);
     };
     c.addEventListener('click', activate);
     c.addEventListener('keydown', e => {
@@ -1911,7 +1949,7 @@ function setAuthMode(mode) {
   $('#btnAuth').textContent = mode === 'register' ? 'Create account' : 'Sign in';
   $('#btnForgot').style.display = mode === 'login' ? 'block' : 'none';
   $('#authSub').textContent = mode === 'register'
-    ? 'Sign up — 2 free minutes of video to try it out.'
+    ? 'Sign up and get 2 free minutes of video to try it out.'
     : 'Welcome back.';
   $('#loginErr').classList.add('hidden');
 }
@@ -1990,7 +2028,7 @@ async function resumeActiveJob() {
     goStep(4);
     $('#progressCard').classList.remove('hidden');
     $('#btnRender').disabled = true;
-    toast('Your last render is still running — reconnected.', 'ok', 4000);
+    toast('Your last render is still running. Reconnected.', 'ok', 4000);
     if (saved.mode === 'analyze') pollAnalyze();
     else pollRender();
   } catch (e) {
@@ -1999,37 +2037,55 @@ async function resumeActiveJob() {
 }
 
 /* v80w: Passwort vergessen + Reset-Link-Handling */
-$('#btnForgot').addEventListener('click', async () => {
-  const email = $('#authEmail').value.trim() ||
-                prompt('Your account email:') || '';
+$('#btnForgot').addEventListener('click', () => {
+  $('#forgotEmail').value = $('#authEmail').value.trim();
+  $('#forgotModal').classList.remove('hidden');
+  setTimeout(() => $('#forgotEmail').focus(), 50);
+});
+$('#forgotClose').addEventListener('click', () => $('#forgotModal').classList.add('hidden'));
+$('#forgotForm').addEventListener('submit', async () => {
+  const email = $('#forgotEmail').value.trim();
   if (!email) return;
-  const fd = new FormData(); fd.append('email', email.trim());
+  const btn = $('#forgotSend'); btn.disabled = true;
+  const orig = btn.textContent; btn.textContent = 'Sending …';
+  const fd = new FormData(); fd.append('email', email);
   try {
     const r = await fetch('/api/forgot_password', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok) { toast(d.detail || 'Too many attempts.', 'err'); return; }
+    $('#forgotModal').classList.add('hidden');
     toast(d.msg || 'If this email is registered, a reset link is on its way.', 'ok', 6000);
   } catch (e) { toast('Connection error.', 'err'); }
+  finally { btn.disabled = false; btn.textContent = orig; }
 });
 
-async function handleResetLink() {
+let resetToken = null;
+function handleResetLink() {
   const tok = new URLSearchParams(location.search).get('reset');
   if (!tok) return false;
   history.replaceState({}, '', location.pathname);
-  const pw = prompt('Choose a new password (min. 8 characters):');
-  if (!pw) return true;
-  if (pw.length < 8) { toast('Password needs at least 8 characters.', 'err'); return true; }
+  resetToken = tok;
+  $('#resetModal').classList.remove('hidden');
+  setTimeout(() => $('#resetPw').focus(), 50);
+  return true;
+}
+$('#resetClose').addEventListener('click', () => $('#resetModal').classList.add('hidden'));
+$('#resetForm').addEventListener('submit', async () => {
+  const pw = $('#resetPw').value;
+  if (pw.length < 8) { toast('Password needs at least 8 characters.', 'err'); return; }
+  const btn = $('#resetGo'); btn.disabled = true;
   const fd = new FormData();
-  fd.append('token', tok); fd.append('password', pw);
+  fd.append('token', resetToken); fd.append('password', pw);
   try {
     const r = await fetch('/api/reset_password', { method: 'POST', body: fd });
     const d = await r.json();
-    if (!r.ok) { toast(d.detail || 'Reset failed.', 'err'); return true; }
-    toast('Password changed — you are signed in.', 'ok', 5000);
+    if (!r.ok) { toast(d.detail || 'Reset failed.', 'err'); return; }
+    $('#resetModal').classList.add('hidden');
+    toast('Password changed. You are signed in.', 'ok', 5000);
     enterApp(d);
   } catch (e) { toast('Connection error.', 'err'); }
-  return true;
-}
+  finally { btn.disabled = false; }
+});
 
 async function handleVerifyLink() {
   const tok = new URLSearchParams(location.search).get('verify');
@@ -2039,7 +2095,7 @@ async function handleVerifyLink() {
   try {
     const r = await fetch('/api/verify_email', { method: 'POST', body: fd });
     const d = await r.json();
-    if (r.ok) toast('Email verified — you can now purchase credits.', 'ok', 6000);
+    if (r.ok) toast('Email verified. You can now purchase credits.', 'ok', 6000);
     else toast(d.detail || 'Verification failed.', 'err', 6000);
   } catch (e) { toast('Connection error.', 'err'); }
 }
@@ -2047,7 +2103,7 @@ async function handleVerifyLink() {
 /* Auto-Login beim Seiten-Laden (Session-Cookie) */
 (async () => {
   await handleVerifyLink();
-  if (await handleResetLink()) return;
+  if (handleResetLink()) return;
   try {
     const r = await fetch('/api/me');
     const d = await r.json();
@@ -2186,7 +2242,7 @@ async function startCheckout(btn) {
 function handlePostCheckout() {
   const p = new URLSearchParams(location.search);
   if (p.get('bezahlt') === '1') {
-    toast('Payment successful — credit added.', 'ok', 6000);
+    toast('Payment successful. Credit added.', 'ok', 6000);
     setTimeout(refreshBalanceInHeader, 1500);
     history.replaceState({}, '', location.pathname);
   } else if (p.get('bezahlt') === '0') {
@@ -2293,7 +2349,7 @@ if ($('#transSave')) $('#transSave').addEventListener('click', async () => {
     if (!r.ok) { toast(d.detail || 'Saving failed.', 'err'); return; }
     $('#transModal').classList.add('hidden');
     $('#momEditor').classList.add('hidden');
-    toast(`${d.changed} words corrected — re-analyzing …`, 'ok', 4000);
+    toast(`${d.changed} words corrected. Re-analyzing …`, 'ok', 4000);
     $('#analyzeStatus').textContent = 'Re-analyzing with corrected transcript …';
     $('#btnAnalyze').disabled = true;
     pollAnalyze();
@@ -2564,7 +2620,7 @@ async function pollAnalyze() {
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     if (st.status === 'analysiert') {
-      $('#analyzeStatus').textContent = 'Analyse fertig — Editor oeffnet …';
+      $('#analyzeStatus').textContent = 'Analyse fertig. Editor oeffnet …';
       toast('Analysis done!', 'ok');
       openMomentsEditor();
       return;
@@ -2642,15 +2698,15 @@ function renderSuccess() {
     $('#statGrid').innerHTML += `
       <div class="stat"><div class="n" style="color:${col}">${sc}</div>
       <div class="l">Hook score</div></div>`;
-    if (sc >= 75) $('#doneSub').textContent = 'Strong opener — this one should hold viewers.';
+    if (sc >= 75) $('#doneSub').textContent = 'Strong opener. This one should hold viewers.';
     else if (sc >= 50) $('#doneSub').textContent = 'Solid video. Tip: edit moments to push your hook score up.';
-    else $('#doneSub').textContent = 'Rendered. Your hook is weak — try "Edit moments" to strengthen the first seconds.';
+    else $('#doneSub').textContent = 'Rendered. Your hook is weak. Try "Edit moments" to strengthen the first seconds.';
   }).catch(() => {});
   $('#btnRender').disabled = false;
   if (State.codeRest !== null) { State.codeRest = Math.max(0, State.codeRest - 1);
     $('#topRest').textContent = `${State.codeRest} videos left`; }
   confetti(40);
-  toast('Video done — nice!', 'ok', 4000);
+  toast('Video done!', 'ok', 4000);
 }
 
 function countChanged(obj) {
