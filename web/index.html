@@ -2513,6 +2513,7 @@ function setFile(f) {
   $('#fileInfo').classList.remove('hidden');
   $('#wiz1Next').disabled = false;
   toast('File ready', 'ok', 2000);
+  preUploadStart(f);   // v83: Upload + Transkription starten sofort
 }
 
 /* --------- Analyze / Render --------- */
@@ -2521,6 +2522,47 @@ $('#btnEditMoments').addEventListener('click', openMomentsEditor);
 
 async function startUpload(mode) {
   if (!State.file) { toast('Please upload a video first.', 'err'); return; }
+  // v83: Fast-Path. Das Video ist beim Auswaehlen schon hochgeladen und
+  // (meist) transkribiert - nur noch Settings senden und rendern.
+  if (State.preUpload && State.preFile === State.file) {
+    if (mode === 'full') {
+      if (State.file.duration) {
+        const needSec = Math.max(1, Math.ceil(State.file.duration));
+        if (needSec > (State.balanceSec || 0)) {
+          showError(`Not enough credit. Video needs ~${Math.ceil(needSec/60)} min, you have ${Math.floor((State.balanceSec||0)/60)} min.`);
+          setTimeout(showPricing, 300);
+          return;
+        }
+      }
+      $('#progressCard').classList.remove('hidden');
+      $('#doneCard').classList.add('hidden');
+      $('#errCard').classList.add('hidden');
+      $('#btnRender').disabled = true;
+      State.renderStart = Date.now();
+      const el = $('#progressPhase');
+      if (el) el.textContent = 'Starting …';
+    }
+    try { await State.preUpload; } catch (e) {}
+    if (State.preJid) {
+      try {
+        const fd0 = new FormData();
+        fd0.append('look', State.look);
+        fd0.append('code', State.code);
+        fd0.append('mode', mode);
+        fd0.append('cfg_overrides', JSON.stringify(diffCfg(State.cfgBase, State.cfg)));
+        const r0 = await fetch('/api/render_start/' + State.preJid, { method: 'POST', body: fd0 });
+        const d0 = await r0.json().catch(() => ({}));
+        if (r0.ok) { jobStarted(State.preJid, mode); return; }
+        if (r0.status === 402) {
+          showError(d0.detail || 'Insufficient credit.');
+          setTimeout(showPricing, 300);
+          return;
+        }
+        // 404 o.ae.: Pre-Job abgelaufen -> klassisch neu hochladen
+      } catch (e) { /* Netzfehler: klassisch versuchen */ }
+      State.preJid = null;
+    }
+  }
   // v80r: iOS gibt File-Handles frei wenn der Tab im Hintergrund war.
   // Vor dem Upload kurz anlesen - wenn das scheitert, ist die Auswahl
   // abgelaufen und der User muss die Datei neu waehlen.
@@ -2599,11 +2641,15 @@ async function startUpload(mode) {
     }
     showError(d.detail || d.msg || 'Upload failed.'); return;
   }
-  State.jid = d.job;
+  jobStarted(d.job, mode);
+}
+
+function jobStarted(jid, mode) {
+  State.jid = jid;
   // v80k: jid persistieren, damit ein Refresh mitten im Render den Job wieder findet
   try {
     localStorage.setItem('dve_active_job', JSON.stringify({
-      jid: d.job, mode, ts: Date.now()
+      jid, mode, ts: Date.now()
     }));
   } catch (e) {}
   if (mode === 'analyze') {
@@ -2613,6 +2659,49 @@ async function startUpload(mode) {
   } else {
     pollRender();
   }
+}
+
+/* v83: Sofort-Transkription. Beim Datei-Auswaehlen laedt das Video schon
+   im Hintergrund hoch und Whisper laeuft, waehrend der User noch Presets
+   einstellt. Beim Render-Klick gehen nur noch die Settings raus - kein
+   zweiter Upload, keine Whisper-Wartezeit. Scheitert irgendwas davon,
+   greift lautlos der klassische Weg. */
+function preUploadStart(f) {
+  State.preJid = null;
+  State.preFile = f;
+  State.preUpload = (async () => {
+    try {
+      const fd = new FormData();
+      fd.append('datei', f);
+      fd.append('look', State.look);
+      fd.append('code', State.code);
+      fd.append('mode', 'pre');
+      fd.append('cfg_overrides', JSON.stringify(diffCfg(State.cfgBase, State.cfg)));
+      const r = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (State.preFile !== f) return;   // andere Datei gewaehlt
+      State.preJid = d.job;
+      pollPre(d.job, f);
+    } catch (e) {}
+  })();
+}
+
+function pollPre(jid, f) {
+  const tick = async () => {
+    if (State.preJid !== jid || State.preFile !== f || State.jid === jid) return;
+    try {
+      const st = await (await fetch('/api/status/' + jid)).json();
+      if (st.status === 'vorbereitet') {
+        const el = document.querySelector('#fileInfo .fi-meta');
+        if (el) el.textContent = el.textContent.replace(/·.*$/, '· prepared ✓');
+        return;
+      }
+      if (st.status !== 'wartet' && st.status !== 'laeuft') return;
+    } catch (e) {}
+    setTimeout(tick, 3000);
+  };
+  setTimeout(tick, 3000);
 }
 
 function showError(msg, detail) {

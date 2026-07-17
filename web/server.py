@@ -1057,6 +1057,25 @@ def run_job(jid):
     j = JOBS[jid]
     d = job_dir(jid)
     mode = j.get('mode', 'full')
+    if mode == 'pre':
+        # v83: Sofort-Transkription. Laeuft im Hintergrund waehrend der User
+        # noch Presets einstellt. Schreibt quelle_transcript2.json - der
+        # volle Render findet den Cache automatisch und spart die Whisper-
+        # Wartezeit. Schlaegt sie fehl, ist das NICHT fatal: der Render
+        # transkribiert dann einfach selbst.
+        rc, log, out = _run_render(jid, extra_args=['--transcribe-only'],
+                                   out_name='plan.mp4', progress_start=0.10)
+        set_state(jid, status='vorbereitet', progress=1.0,
+                  phase='Transcript ready' if rc == 0 else 'Prepared')
+        # Hat der User waehrenddessen schon Render gedrueckt? Dann direkt
+        # weiter. dict.pop ist unter dem GIL atomar - entweder holt der
+        # Worker den Auftrag oder /api/render_start, nie beide.
+        nxt = JOBS[jid].pop('next_mode', None)
+        if nxt:
+            JOBS[jid]['mode'] = nxt
+            set_state(jid, status='wartet', progress=0.0, phase='Queued …')
+            QUEUE.put(jid)
+        return
     if mode == 'analyze':
         rc, log, out = _run_render(jid, extra_args=['--plan-only'],
                                    out_name='plan.mp4', progress_start=0.10)
@@ -1570,6 +1589,68 @@ async def upload(request: Request, datei: UploadFile = File(...),
                  'dauer': round(dur, 1), 'name': datei.filename}
     set_state(jid, **{k: v for k, v in JOBS[jid].items()
                       if k not in ('input', 'code')})
+    QUEUE.put(jid)
+    return {'job': jid, 'position': QUEUE.qsize()}
+
+
+@app.post('/api/render_start/{jid}')
+async def render_start(jid: str, request: Request, look: str = Form('creator'),
+                       code: str = Form(''), mode: str = Form('full'),
+                       cfg_overrides: str = Form('{}')):
+    """v83: Startet den Render auf einem bereits hochgeladenen Pre-Job.
+    Das Video liegt schon auf dem Server, die Transkription laeuft oder ist
+    fertig - hier kommen nur noch Look/Settings an. Spart den zweiten Upload
+    und die Whisper-Wartezeit komplett."""
+    ok, msg = check_auth(code, request)
+    if not ok:
+        raise HTTPException(403, msg)
+    j = JOBS.get(jid)
+    if not j or not os.path.exists(j.get('input', '')):
+        raise HTTPException(404, 'Upload expired - please upload again.')
+    u = _current_user(request)
+    uid = u['id'] if u else None
+    if j.get('user_id') != uid:
+        raise HTTPException(403, 'Not your upload.')
+    if mode not in ('full', 'analyze'):
+        mode = 'full'
+    if look in LOOKS:
+        j['look'] = look
+    try:
+        overrides = json.loads(cfg_overrides) if cfg_overrides else {}
+    except Exception:
+        overrides = {}
+    # Sprache nachtraeglich geaendert? Dann lief die Vorab-Transkription mit
+    # dem falschen Sprach-Hinweis - Cache verwerfen, der Render macht es neu.
+    old_lang = (j.get('cfg_overrides') or {}).get('language')
+    if overrides.get('language') != old_lang:
+        try:
+            os.remove(os.path.splitext(j['input'])[0] + '_transcript2.json')
+        except OSError:
+            pass
+    j['cfg_overrides'] = overrides
+    if u and mode == 'full':
+        need = max(1, int(round(j.get('dauer', 0))))
+        if u['balance_sec'] < need:
+            fehlt = need - u['balance_sec']
+            raise HTTPException(
+                402,
+                f"Not enough credit (video needs {need // 60}:"
+                f"{need % 60:02d} min, you have {u['balance_sec'] // 60}:"
+                f"{u['balance_sec'] % 60:02d} min). "
+                f"Missing {fehlt // 60 + 1} min - please top up.")
+    if j.get('status') in ('wartet', 'laeuft'):
+        # Pre-Transkription laeuft noch: Auftrag hinterlegen, der Worker
+        # reiht danach selbst ein. Race-sicher ueber atomares dict.pop
+        # (siehe run_job) - nachpruefen, ob der Worker GENAU jetzt fertig
+        # wurde und den Auftrag nicht mehr gesehen hat.
+        j['next_mode'] = mode
+        if j.get('status') == 'vorbereitet' and j.pop('next_mode', None):
+            j['mode'] = mode
+            set_state(jid, status='wartet', progress=0.0, phase='Queued …')
+            QUEUE.put(jid)
+        return {'job': jid, 'chained': True}
+    j['mode'] = mode
+    set_state(jid, status='wartet', progress=0.0, phase='Queued …')
     QUEUE.put(jid)
     return {'job': jid, 'position': QUEUE.qsize()}
 

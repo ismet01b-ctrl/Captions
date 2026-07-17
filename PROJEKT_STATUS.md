@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v83: Sofort-Transkription beim Datei-Auswaehlen (Web).** Vorher: Upload +
+  Whisper starteten erst beim Render-Klick - die Minuten, in denen der User
+  Presets einstellt, waren tote Zeit. Jetzt: Beim Auswaehlen laedt die Datei
+  sofort still im Hintergrund hoch (Job-Modus 'pre'), der Server laeuft
+  render.py --transcribe-only und legt quelle_transcript2.json ab (den Cache
+  nutzt der Render automatisch, war schon so). Der Render-Klick schickt nur
+  noch Look/Settings an POST /api/render_start/{jid} - kein zweiter Upload,
+  keine Whisper-Wartezeit. Details:
+  - Klick waehrend die Transkription noch laeuft: next_mode wird hinterlegt,
+    der Worker reiht danach selbst ein (race-sicher ueber atomares dict.pop,
+    beide Seiten koennen den Auftrag nur einmal ziehen).
+  - Sprache nachtraeglich geaendert: Transkript-Cache wird verworfen, der
+    Render transkribiert mit dem richtigen Sprach-Hinweis neu.
+  - Pre-Schritt scheitert (Netz, Key, was auch immer): NICHT fatal - Status
+    wird trotzdem 'vorbereitet', der volle Render transkribiert selbst.
+    Frontend-Fehler im Fast-Path fallen lautlos auf den klassischen
+    Upload-Weg zurueck (inkl. 404 wenn der Pre-Job abgelaufen ist).
+  - Nebeneffekt: der iOS-Stale-File-Fall (v80r) trifft den Fast-Path nicht
+    mehr, weil die Datei schon auf dem Server liegt.
+  - Abrechnung unveraendert: belastet wird erst der fertige Voll-Render,
+    einmal pro Job. Fremde Jobs starten: 403. Guthaben-Check auch im
+    render_start. Cleanup/Restore behandeln pre-Jobs wie alle anderen.
+  Getestet im Sandbox-Server E2E: pre-Upload -> vorbereitet -> render_start
+  (200, Job laeuft), Chained-Fall (Klick waehrend Pre laeuft -> haengt sich
+  an), Fremd-User -> 403. Whisper selbst failt in der Sandbox am Dummy-Key -
+  echter Durchlauf steht auf dem Server aus.
 - **v82: Hand-Made-Motion-Pass (Senior-Cutter-Look).** Grundlage: Research-Sweep
   (5 Agenten) zu High-End-Caption-Design 2026/27 (Material 3 / iOS-Springs /
   Netflix-Timed-Text / AE-Praxis) + zwei Code-Audits von render.py. Kernbefund:
