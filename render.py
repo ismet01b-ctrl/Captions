@@ -94,6 +94,29 @@ def ease_back(x):
     return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2
 def smoothstep(x):
     x = min(max(x, 0), 1); return x * x * (3 - 2 * x)
+def exit_env(over, dur=0.24):
+    """Hand-Made-Exit (v82): Deckkraft laesst LOS statt linear zu dimmen.
+    Ease-In-Kurve: haelt anfangs fast voll, beschleunigt in den Schnitt -
+    so raeumt ein Cutter Text weg (Anticipation auf das Naechste).
+    over = Sekunden seit p['end']. Rueckgabe 1 -> 0."""
+    if over <= 0: return 1.0
+    x = min(over / max(dur, 1e-6), 1.0)
+    return 1.0 - x * x * x
+def exit_pose(over, dur=0.24, drop=True):
+    """Begleit-Bewegung zum Exit: minimaler Scale-Settle + Richtungs-Drift.
+    Statischer Fade wirkt billig; 2-3% Bewegung verkauft die Absicht.
+    Rueckgabe (scale_mul, dy_pixelanteil 0..1 der Schrifthoehe)."""
+    if over <= 0: return 1.0, 0.0
+    x = min(over / max(dur, 1e-6), 1.0)
+    xe = x * x                                # ease-in: erst ruhig, dann weg
+    return 1.0 - 0.030 * xe, (0.10 if drop else -0.10) * xe
+def hand_jitter(seed):
+    """v82: Hand-Keyframe-Streuung. Ein Cutter setzt nie zwei Keyframes exakt
+    gleich - Dauer und Versatz streuen minimal. Deterministischer Pseudo-
+    zufall aus dem Wort-Index (jeder Render bleibt identisch reproduzierbar).
+    Rueckgabe -1..1."""
+    x = math.sin(float(seed) * 12.9898 + 78.233) * 43758.5453
+    return (x - math.floor(x)) * 2.0 - 1.0
 def spring(x, freq=3.4, damp=5.5):
     """Feder statt Kurve: schiesst leicht ueber das Ziel hinaus und pendelt sich
     ein - genau das Verhalten, das teure Motion-Graphics 2026 von billigen
@@ -378,7 +401,12 @@ def anim_apply(p, base, aud, dt):
         st = p.setdefault('_bs', 0.0)
         # Anstieg begrenzt (max +0.5/Frame): ein einzelner Spike kann den Text
         # nicht mehr anreissen, ein echter Akzent ueber 2 Frames schon.
-        st = max(min(ons, st + 0.5), st * 0.72)
+        # v82: zeitbasiert statt frame-basiert - bei 60fps-Material verfiel der
+        # Zustand doppelt so schnell, das Gefuehl haengt jetzt an Sekunden.
+        pdt = p.get('_bs_t', dt)
+        stp = dt - pdt if 0.0 < dt - pdt < 0.2 else (1.0 / 30.0)
+        p['_bs_t'] = dt
+        st = max(min(ons, st + 0.5 * stp * 30.0), st * (0.72 ** (stp * 30.0)))
         p['_bs'] = st
         sc *= 1.0 + 0.045 * BEAT_SYNC * st
         dy -= base.shape[0] * 0.012 * BEAT_SYNC * st   # weniger Hub -> kein Zucken
@@ -610,14 +638,15 @@ def _anim_core(p, base, aud, dt):
         op = min(dt / 0.06, 1.0)
 
     elif a == 'explosion':                    # radialer Aufschlag: Streifen fliegen weg + zurueck
-        e = min(dt / 0.55, 1.0)
-        # 0..0.35 auseinander, 0.35..1 wieder zusammen (impact + retract)
-        if e < 0.35:
-            spread = (e / 0.35)
+        # v82: Physik statt Dreieck - Dinge explodieren SCHNELL (ease_out
+        # 0.12s), der Rueckzug federt ein und schiesst 6% ueber die Ruhelage
+        # (Recoil). Konstante Geschwindigkeit war physikalisch tot.
+        if dt < 0.12:
+            spread = ease_out(dt / 0.12)
         else:
-            spread = 1.0 - (e - 0.35) / 0.65
-        spread = max(spread, 0.0)
-        if spread > 0.02:
+            spread = max(1.0 - spring(min((dt - 0.12) / 0.43, 1.4),
+                                      freq=2.2, damp=5.0), -0.06)
+        if abs(spread) > 0.02:
             h, w = base.shape[:2]
             n_col = 8                          # 8 vertikale Streifen
             cw = max(w // n_col, 6)
@@ -640,7 +669,13 @@ def _anim_core(p, base, aud, dt):
         op = min(dt / 0.05, 1.0)
 
     elif a == 'magnet':                       # umgekehrte Explosion: aus Streuung zusammenziehen
-        e = 1.0 - min(dt / 0.55, 1.0)         # startet gestreut, zieht zusammen
+        # v82: Magnete ziehen staerker je naeher - die Teile BESCHLEUNIGEN ins
+        # Zentrum (1-x^2) statt linear zu schrumpfen, und landen mit einem
+        # 1-Frame-Squash wenn alles einrastet.
+        xm = min(dt / 0.55, 1.0)
+        e = 1.0 - xm * xm
+        if 0.55 <= dt < 0.62:
+            sc = 1.0 - 0.03 * math.sin((dt - 0.55) / 0.07 * math.pi)
         if e > 0.02:
             h, w = base.shape[:2]
             n_col = 8
@@ -667,8 +702,11 @@ def _anim_core(p, base, aud, dt):
 
     elif a == 'wackel':                       # Cartoon-Wackel: vertikaler Sinus-Loop
         # Loopfaehig, kein Ende. Amplitude wird von der Stimme moduliert.
+        # v82: zweiter Sinus (1.7x Frequenz, 30% Amplitude, Wort-eigene Phase)
+        # - ein nackter Einzelsinus ist als synthetisch erkennbar.
         amp = base.shape[0] * (0.020 + 0.015 * a_rms)
-        dy = amp * math.sin(dt * 12.0)        # ~2 Hz
+        ph = math.pi * hand_jitter(p.get('kw_i', 0))
+        dy = amp * (math.sin(dt * 12.0) + 0.30 * math.sin(dt * 20.4 + ph))
         sc = 1.0 + 0.015 * math.sin(dt * 12.0 + math.pi / 2)
 
     elif a == 'regen':                        # Buchstaben-Streifen fallen von oben nacheinander
@@ -2321,7 +2359,7 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                         'stadt', 'metropole', 'downtown', 'bar', 'party',
                         'strahl', 'grell', 'blitz')),
               ('schub', ('boom', 'schub', 'power', 'wachstum',
-                         'durchbruch', 'skalier', 'raketen', 'explodiert',
+                         'durchbruch', 'skalier', 'raketen',
                          'wachsen', 'wächst', 'waechst', 'expandiert',
                          'stark', 'kraftvoll', 'antrieb', 'motor',
                          'beschleunigt', 'zoomt', 'shootet')),
@@ -2986,6 +3024,19 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 prev_was_keyword_sentence = False
             elif not satz_offen:
                 prev_was_keyword_sentence = False
+    # v82: Kein Doppelbild beim Gruppen-Wechsel. Endet eine stack-Gruppe
+    # praktisch nahtlos in die naechste an derselben Position, wird ihr Ende
+    # um die Exit-Dauer vorgezogen - der Abgang ist fertig, BEVOR das Neue
+    # steht (Broadcast-Regel: nie zwei Texte uebereinander am selben Ort).
+    _stk = sorted([p for p in plans if p['tpl'] == 'stack'],
+                  key=lambda p: p['start'])
+    for _a2, _b2 in zip(_stk, _stk[1:]):
+        _gap = _b2['start'] - _a2['end']
+        if 0 <= _gap < 0.22 \
+                and abs(_a2['target'][1] - _b2['target'][1]) < H * 0.05 \
+                and abs(_a2['target'][0] - _b2['target'][0]) < W * 0.30:
+            _a2['end'] = max(_a2['start'] + 0.3, _b2['start'] - 0.22)
+
     # HOOK v48: Sofort-Hook. 65-71% entscheiden in den ersten 3 Sekunden, ob sie
     # bleiben. Das staerkste fruehe Statement wird zur Hook-Karte: sie steht ab
     # Frame 1 und bleibt, bis das Statement gesprochen ist - kein leerer Anfang.
@@ -3093,7 +3144,11 @@ def camera_at(t, plans, words, cfg, W, H):
     strength = cfg['camera'].get('strength', 1.0)
     if strength <= 0:
         return 1.0, 0.0, 0.0, 0.0
-    breathe = 1.0 + 0.016 * strength * (0.5 - 0.5 * math.cos(2 * math.pi * t / 16.0))
+    # v82: zwei inkommensurable Frequenzen (16s + 7.3s) - ein Einzelsinus
+    # liest sich nach ~30s Material als mechanisch, die Ueberlagerung atmet
+    # wie eine gehaltene Kamera.
+    breathe = 1.0 + 0.016 * strength * (0.5 - 0.5 * math.cos(2 * math.pi * t / 16.0)) \
+        + 0.005 * strength * math.sin(2 * math.pi * t / 7.3 + 1.7)
     C = (W / 2, H / 2)
     best = (0.0, 1.0, 0.0, 0.0, 0.0)   # (Gewicht, z, px, py, rd)
 
@@ -3110,8 +3165,12 @@ def camera_at(t, plans, words, cfg, W, H):
             wt = t - p['whip_at']
             if -0.02 <= wt < 0.24:
                 e = wt / 0.24
-                # Sweep laeuft von der Seite herein und stoppt: sin-Bogen
-                sweep = math.sin(e * math.pi) * W * 0.075 * p.get('whip_dir', 1)
+                # Sweep laeuft von der Seite herein und stoppt. v82: asymmetrisch
+                # (30% rein, 70% settle) - ein echter Whip beschleunigt hart und
+                # laeuft weich aus, der symmetrische sin-Bogen wirkte mechanisch.
+                sw_env = (math.sin(min(e / 0.3, 1.0) * math.pi / 2) if e < 0.3
+                          else 1.0 - smoothstep((e - 0.3) / 0.7))
+                sweep = sw_env * W * 0.075 * p.get('whip_dir', 1)
                 consider(1.6, 1.0 + 0.02 * (1 - e), sweep * strength, 0.0, 0.0)
         mode = p.get('ccam')
         if mode in ('drift', 'capzoom'):
@@ -3487,7 +3546,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             obj['o_arr'], obj['f_arr'] = res
         else:
             obj['arr'] = res
-    active = [p for p in plans if p['start'] <= t < p['end'] + 0.25]
+    active = [p for p in plans if p['start'] <= t < p['end'] + 0.40]   # v82: Exit-Fenster
 
     # Hintergrund-Blur (v69): waehrend eines aktiven Moments den Hintergrund
     # weichzeichnen. Staerke folgt der max. Moment-Fade-Kurve, damit der
@@ -3540,7 +3599,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         dt = t - t0p
         if dt < 0: continue
         if dt < 0.14: strength = dt / 0.14
-        elif dt > dur: strength = max(0.0, 1 - (dt - dur) / 0.28)
+        elif dt > dur: strength = exit_env(dt - dur, 0.30)   # v82: haelt, dann los
         else: strength = 1.0
         behind_str = max(behind_str, strength)
         dim = (cfg['effects']['dim_behind'] if p['tpl'] == 'behind'
@@ -3563,9 +3622,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             fade = (strength if dt > dur else 1)
             apply_count(p, dt)
             if p.get('tokens'):
-                out_env = 1.0 if dt <= dur else max(0.0, 1 - (dt - dur) / 0.18)
+                out_env = exit_env(dt - dur, 0.20)   # v82: Cutter-Exit
                 for tok in p['tokens']:
-                    dtt = t - tok['t']
+                    dtt = t - tok['t'] + 0.07   # v82: Lese-Vorlauf
                     if dtt < 0 or out_env <= 0:
                         continue
                     apply_count(tok, t - tok['t'])
@@ -3586,7 +3645,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                         px_off, py_off = 0.0, 0.0
                         sc = 0.80 + 0.20 * e
                     else:
-                        e = ease_expo(dtt / 0.5)
+                        e = ease_expo(dtt / (0.5 * (1 + 0.10 * hand_jitter(tok['t'] * 37))))
                         entr = p.get('entr', 'rise')
                         px_off, py_off = 0.0, 0.0
                         sc = 0.965 + 0.035 * e
@@ -3632,10 +3691,12 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                           opacity=min(dtt / 0.12, 1) * out_env * aop_t)
             elif p.get('letters'):
                 for li, (sl, off) in enumerate(p['letters']):
-                    dl = dt - li * 0.05
+                    # v82: Stagger streut +-0.5 Frames - mechanisch gleiche
+                    # Abstaende sind der Vorlagen-Tell schlechthin.
+                    dl = dt - li * 0.05 + 0.015 * hand_jitter(p['kw_i'] * 31 + li)
                     if dl < 0:
                         continue
-                    e = ease_back(dl / 0.32)
+                    e = ease_back(dl / (0.32 * (1 + 0.08 * hand_jitter(p['kw_i'] * 7 + li))))
                     paste(comp, sl, W / 2 + sdx + off, by + sdy + (1 - e) * H * 0.055,
                           W, H, scale=0.9 + 0.1 * e, opacity=min(dl / 0.12, 1) * fade)
             else:
@@ -3644,10 +3705,11 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 arr_b, adx_b, ady_b, asc_b, aop_b = anim_apply(p, p['arr'], aud, dt)
                 oy_b = ady_b - (arr_b.shape[0] - p['arr'].shape[0]) / 2
                 live *= asc_b
-                ex = ease_expo(dt / 0.60)
+                # v82: Entrance-Dauer streut +-10% pro Wort (Hand-Keyframe)
+                ex = ease_expo(dt / (0.60 * (1 + 0.10 * hand_jitter(p['kw_i']))))
                 dx0 = dy0 = 0.0
                 sc = 1.04 - 0.04 * e
-                op = min(dt / 0.35, 1)
+                op = smoothstep(dt / 0.30)   # v82: Alpha folgt der Bewegung
                 entr = p.get('entr', 'rise')
                 if entr == 'edge_l':
                     dx0 = -(W * 0.55 + arr_b.shape[1] / 2) * (1 - ex)
@@ -3705,8 +3767,21 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 mb_amt = min((abs(dx0) + abs(dy0)) / (W * 0.02), 1.0) * 6.0
                 if entr == 'zoom':
                     mb_amt = (1 - ex) * 4.0
-                paste(comp, arr_b, W / 2 + sdx + dx0 + adx_b, by + oy_b + sdy + dy0,
-                      W, H, scale=sc * live, opacity=op * fade * aop_b, blur=mb_amt)
+                # v82: Abgang mit Absicht - der Exit SPIEGELT den Entrance.
+                # edge-Woerter gehen seitlich raus, zoom waechst nach vorn weg,
+                # der Rest weicht leicht nach oben zurueck (recede). Ein
+                # uniformer Exit fuer 9 Entrances war der letzte Preset-Tell.
+                x_sc, x_dv = exit_pose(dt - dur, 0.30, drop=False)
+                xo = min(max((dt - dur) / 0.30, 0.0), 1.0) ** 2
+                if xo > 0 and entr in ('edge_l', 'edge_r'):
+                    dx0 += (-1 if entr == 'edge_l' else 1) * W * 0.03 * xo
+                    x_dv = 0.0
+                elif xo > 0 and entr == 'zoom':
+                    x_sc = 2.0 - x_sc            # raus wie rein: nach vorn
+                    x_dv = 0.0
+                paste(comp, arr_b, W / 2 + sdx + dx0 + adx_b,
+                      by + oy_b + sdy + dy0 + x_dv * arr_b.shape[0],
+                      W, H, scale=sc * live * x_sc, opacity=op * fade * aop_b, blur=mb_amt)
         else:
             e = ease_out(min(dt / 0.34, 1))
             sdx, sdy = scene_shift(p)
@@ -3714,7 +3789,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             ady -= (arr_bl.shape[0] - p['arr'].shape[0]) / 2
             paste(comp, arr_bl, W / 2 + sdx + adx, p.get('by', H * 0.333) + sdy + ady,
                   W, H, scale=(1.16 - 0.16 * e) * asc,
-                  opacity=min(dt / 0.14, 1) * (strength if dt > dur else 1) * aop,
+                  opacity=smoothstep(dt / 0.20) * (strength if dt > dur else 1) * aop,
                   blur=(1 - e) * 11)
 
     if alpha is not None:
@@ -3737,17 +3812,33 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             comp = comp * (1.0 - k * sh[..., None])
         comp = person * alpha + comp * (1 - alpha)
 
-    def draw_small(p, g_out, tdx=0.0, tdy=0.0):
+    def draw_small(p, g_out, tdx=0.0, tdy=0.0, x_sc=1.0, x_dv=0.0):
         for it in p['small']:
             wd = words[it['i']]
-            dt = t - wd['start']
+            # v82: 70ms Vorlauf - Lesen ist schneller als Hoeren, das Wort
+            # steht beim Einsatz schon (Broadcast-Praxis: 50-100ms Lead).
+            dt = t - wd['start'] + 0.07
             if dt < 0: continue
-            e = ease_back(dt / 0.26)
-            paste(comp, it['arr'], it['cx'] + tdx, it['cy'] + tdy + (1 - e) * 26, W, H,
-                  scale=0.88 + 0.12 * e, opacity=min(dt / 0.10, 1) * g_out)
+            e = ease_back(dt / (0.26 * (1 + 0.08 * hand_jitter(it['i'] * 13))))  # v82
+            paste(comp, it['arr'], it['cx'] + tdx,
+                  it['cy'] + tdy + (1 - e) * H * 0.024 + x_dv * it['arr'].shape[0],
+                  W, H, scale=(0.88 + 0.12 * e) * x_sc,
+                  opacity=min(dt / 0.10, 1) * g_out)
 
     for p in active:
-        g_out = 1.0 if t <= p['end'] else max(0.0, 1 - (t - p['end']) / 0.22)
+        # v82: Cutter-Exit statt linearem Fade - Deckkraft haelt und laesst
+        # dann los, dazu minimaler Scale-Settle + Drift (exit_pose).
+        # Exit-Dauer skaliert mit der Schriftgroesse: grosse Display-Type
+        # braucht laengeren Abgang als ein 46px-Label (Netzhaut-Footprint).
+        # Power-3-Momente halten 40ms extra, bevor sie loslassen.
+        _a = p.get('arr') if 'arr' in p else p.get('f_arr')
+        ah = _a.shape[0] if _a is not None else H * 0.06
+        x_dur = 0.20 + 0.12 * min(ah / (H * 0.15), 1.0)
+        over = t - p['end']
+        if p.get('power', 2) >= 3:
+            over -= 0.04
+        g_out = exit_env(over, x_dur)
+        x_sc, x_dv = exit_pose(over, x_dur)
         tdx, tdy = track_offset(p, face_xy, cfg)
         if p['tpl'] == 'stack':
             # Personen-Tracking: die Gruppe haengt an der Person und geht mit,
@@ -3765,13 +3856,14 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             slide_dir = -1 if p.get('side', 0) == 0 else 1
             for it in p['front']:
                 wd = words[it['i']]
-                dt = t - wd['start']
+                dt = t - wd['start'] + 0.07     # v82: Lese-Vorlauf
                 if dt < 0: continue
-                e = ease_expo(dt / 0.38)
+                e = ease_expo(dt / (0.38 * (1 + 0.08 * hand_jitter(it['i']))))  # v82
                 paste(comp, it['arr'],
                       it['cx'] + fdx + slide_dir * (1 - e) * W * 0.045,
-                      it['cy'] + fdy + (1 - e) * 10, W, H,
-                      scale=0.97 + 0.03 * e, opacity=min(dt / 0.09, 1) * g_out)
+                      it['cy'] + fdy + (1 - e) * H * 0.009 + x_dv * it['arr'].shape[0],
+                      W, H, scale=(0.97 + 0.03 * e) * x_sc,
+                      opacity=min(dt / 0.09, 1) * g_out)
             continue
         if 'kw_i' not in p:
             continue                       # Kamera-Impulse: kein Text zu zeichnen
@@ -3779,7 +3871,10 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         dt = t - p.get('t0', wd['start'])  # Sofort-Hook: Karte laeuft ab Frame 1
         if p['tpl'] == 'cascade' and dt >= 0:
             n = len(p['letters'])
-            reveal = dt / 0.32
+            # v82: Wipe mit ease_out - startet schnell, landet weich. Ein
+            # linearer Crop mit konstanter Geschwindigkeit las sich wie ein
+            # Ladebalken, nicht wie kinetische Typo.
+            reveal = ease_out(dt / (0.32 * (1 + 0.10 * hand_jitter(p['kw_i']))))
             vis_px = None
             k_full = int(min(reveal * n, n))
             if k_full < n:
@@ -3791,9 +3886,10 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             paste(comp, arr_c,
                   p['cx'] + tdx + adx - (0 if vis_px is None
                                          else (p['arr'].shape[1] - vis_px) / 2),
-                  p['cy'] + tdy + ady, W, H, scale=asc,
+                  p['cy'] + tdy + ady + x_dv * p['arr'].shape[0],
+                  W, H, scale=asc * x_sc,
                   opacity=g_out * aop, crop_w=vis_px)
-            draw_small(p, g_out, tdx, tdy)
+            draw_small(p, g_out, tdx, tdy, x_sc, x_dv)
         elif p['tpl'] == 'ground' and dt >= 0:
             sdx, sdy = scene_shift(p)
             apply_count(p, dt)
@@ -3853,14 +3949,15 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                               else (0.10 if p.get('scene_blend') else 0.12),
                               grain=1.5 if p.get('glass') else 2.2,
                               occ=occ_g, blur=cam_blur + bl_e)
-                draw_small(p, g_out, 0.0, 0.0)
+                draw_small(p, g_out, 0.0, 0.0, x_sc, x_dv)
                 continue
             if p.get('letters'):
                 for li, (sl, off) in enumerate(p['letters']):
-                    dl = dt - li * 0.05
+                    # v82: Hand-Keyframe-Streuung (siehe behind-Pfad)
+                    dl = dt - li * 0.05 + 0.015 * hand_jitter(p['kw_i'] * 31 + li)
                     if dl < 0:
                         continue
-                    e = ease_back(dl / 0.32)
+                    e = ease_back(dl / (0.32 * (1 + 0.08 * hand_jitter(p['kw_i'] * 7 + li))))
                     if g_broll:
                         paste_scene(comp, sl, p.get('cx', W / 2) + sdx + off,
                                     p['cy'] + sdy + (1 - e) * H * 0.055,
@@ -3872,8 +3969,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                     occ=occ_g, blur=cam_blur)
                     else:
                         paste(comp, sl, p.get('cx', W / 2) + sdx + off,
-                              p['cy'] + sdy + (1 - e) * H * 0.055,
-                              W, H, scale=0.9 + 0.1 * e, opacity=min(dl / 0.12, 1) * g_out)
+                              p['cy'] + sdy + (1 - e) * H * 0.055 + x_dv * sl.shape[0],
+                              W, H, scale=(0.9 + 0.1 * e) * x_sc,
+                              opacity=min(dl / 0.12, 1) * g_out)
             else:
                 e = smoothstep(dt / 0.75)
                 live = 1.0 + 0.015 * min(dt / 2.5, 1.0)
@@ -3897,9 +3995,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                 blur=max(cam_blur, (1 - e) * 4.5 if not p.get('scene_blend') else 0.0))
                 else:
                     paste(comp, p['arr'], p.get('cx', W / 2) + sdx,
-                          p['cy'] + sdy + (1 - e) * H * 0.03,
-                          W, H, scale=(0.97 + 0.03 * e) * live,
-                          opacity=min(dt / 0.4, 1) * g_out, blur=(1 - e) * 4.5)
+                          p['cy'] + sdy + (1 - e) * H * 0.03 + x_dv * p['arr'].shape[0],
+                          W, H, scale=(0.97 + 0.03 * e) * live * x_sc,
+                          opacity=smoothstep(dt / 0.35) * g_out, blur=(1 - e) * 4.5)
             if p.get('refl') is not None and cfg['effects'].get('reflection', True):
                 r = p['refl']
                 if occ_g is not None:
@@ -3911,26 +4009,28 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     paste(comp, r, p.get('cx', W / 2) + sdx + p['refl_dx'],
                           p['cy'] + sdy + p['refl_dy'] + r.shape[0] / 2 + 3,
                           W, H, opacity=min(max(dt - 0.2, 0.0) / 0.5, 1.0) * g_out)
-            draw_small(p, g_out, sdx, sdy)
+            draw_small(p, g_out, sdx, sdy, x_sc, x_dv)
         elif p['tpl'] == 'blurin' and dt >= 0:
             apply_count(p, dt)
-            draw_small(p, g_out)  # blurin ist Hintergrund-Ebene, small bleibt ruhig
+            draw_small(p, g_out, 0.0, 0.0, x_sc, x_dv)  # blurin: small bleibt ruhig
         elif p['tpl'] == 'outline' and dt >= 0:
             apply_count(p, dt)
             e = ease_out(min(dt / 0.20, 1))
             fill_t = min(max((dt - 0.26) / 0.10, 0), 1)
             if fill_t < 1:
-                paste(comp, p['o_arr'], p['cx'] + tdx, p['cy'] + tdy + (1 - e) * 30, W, H,
+                paste(comp, p['o_arr'], p['cx'] + tdx,
+                      p['cy'] + tdy + (1 - e) * H * 0.028, W, H,
                       scale=0.94 + 0.06 * e, opacity=min(dt / 0.08, 1) * (1 - fill_t) * g_out)
             if fill_t > 0:
                 pop = 1.0 + 0.05 * math.sin(min(fill_t, 1) * math.pi)
                 arr_o, adx, ady, asc, aop = anim_apply(p, p['f_arr'], aud, dt)
                 ady -= (arr_o.shape[0] - p['f_arr'].shape[0]) / 2
-                paste(comp, arr_o, p['cx'] + tdx + adx, p['cy'] + tdy + ady, W, H,
-                      scale=pop * asc, opacity=fill_t * g_out * aop)
-            draw_small(p, g_out, tdx, tdy)
+                paste(comp, arr_o, p['cx'] + tdx + adx,
+                      p['cy'] + tdy + ady + x_dv * p['f_arr'].shape[0], W, H,
+                      scale=pop * asc * x_sc, opacity=fill_t * g_out * aop)
+            draw_small(p, g_out, tdx, tdy, x_sc, x_dv)
         elif p['tpl'] == 'behind':
-            draw_small(p, g_out)
+            draw_small(p, g_out, 0.0, 0.0, x_sc, x_dv)
 
     z, px, py, rd = camera_at(t, plans, words, cfg, W, H)
     if cam_state is not None:

@@ -340,15 +340,17 @@ def _scenario_logic(clip, transcript, tmp):
     # Lange Videos: Regie-Chunking deckt alles ab, schneidet an Satzgrenzen
     wl = [{'word': f'Wort{i}' + ('.' if i % 12 == 11 else ''),
            'start': i * .35, 'end': i * .35 + .3} for i in range(1000)]
+    # v80d: 3-Tupel (Kontext-Start, Ende, Auswahl-Start) mit 30-Wort-Overlap
     ch = R._regie_chunks(wl, max_words=400)
     cover = ch[0][0] == 0 and ch[-1][1] == 1000 and \
-        all(ch[k][1] == ch[k + 1][0] for k in range(len(ch) - 1))
-    sizes = all(b - a <= 400 for a, b in ch)
-    sent = all(wl[b - 1]['word'].endswith('.') for a, b in ch[:-1])
-    check('Regie-Chunking lange Videos', cover and sizes and sent and len(ch) >= 3,
-          f'{len(ch)} Etappen')
+        all(ch[k][1] == ch[k + 1][2] for k in range(len(ch) - 1))
+    sizes = all(b - s <= 400 for a, b, s in ch)
+    olap = all(a == max(0, s - 30) for a, b, s in ch[1:])
+    sent = all(wl[b - 1]['word'].endswith('.') for a, b, s in ch[:-1])
+    check('Regie-Chunking lange Videos', cover and sizes and olap and sent
+          and len(ch) >= 3, f'{len(ch)} Etappen, Overlap 30')
     check('Regie-Chunking kurze Videos = 1 Call',
-          R._regie_chunks(wl[:300], max_words=400) == [(0, 300)])
+          R._regie_chunks(wl[:300], max_words=400) == [(0, 300, 0)])
 
     # Power-3-Deckel: video-weit maximal zwei Hoehepunkte
     fm = {10: {'fx': 'behind', 'power': 3}, 200: {'fx': 'ground', 'power': 3},
@@ -1000,6 +1002,28 @@ def _scenario_logic(clip, transcript, tmp):
     _sp = [R.spring(x / 30.0) for x in range(50)]
     check('Feder ueberschwingt und beruhigt sich',
           max(_sp) > 1.02 and abs(R.spring(1.9) - 1.0) < 1e-6 and R.spring(0.0) == 0.0)
+    # ---- v82: Cutter-Exit ----
+    # exit_env haelt anfangs fast voll (Ease-In) und laesst dann los -
+    # ein linearer Fade waere bei over=20% schon auf 0.8, wir wollen > 0.95
+    check('exit_env haelt und laesst los',
+          R.exit_env(-0.1) == 1.0 and R.exit_env(0.0) == 1.0
+          and R.exit_env(0.048, 0.24) > 0.95
+          and R.exit_env(0.24, 0.24) < 1e-6
+          and R.exit_env(0.12, 0.24) > 1 - 0.12 / 0.24)
+    _ee = [R.exit_env(x * 0.24 / 20, 0.24) for x in range(21)]
+    check('exit_env monoton fallend', all(a >= b for a, b in zip(_ee, _ee[1:])))
+    # exit_pose: Ruhe vor dem Exit, dann Scale-Settle + Richtungs-Drift
+    check('exit_pose ruht vor dem Ende', R.exit_pose(0.0) == (1.0, 0.0))
+    _ps, _pd = R.exit_pose(0.24, 0.24, drop=True)
+    _ps2, _pd2 = R.exit_pose(0.24, 0.24, drop=False)
+    check('exit_pose settelt und driftet richtungsrichtig',
+          abs(_ps - 0.97) < 1e-6 and _pd > 0 and _pd2 < 0)
+    # hand_jitter: deterministisch (Render reproduzierbar), gestreut, begrenzt
+    _hj = [R.hand_jitter(i) for i in range(60)]
+    check('hand_jitter deterministisch und gestreut',
+          R.hand_jitter(7) == R.hand_jitter(7)
+          and all(-1.0 <= v <= 1.0 for v in _hj)
+          and len({round(v, 6) for v in _hj}) > 50)
     # Bewegungsunschaerfe: verwischt entlang der Richtung, Alpha bleibt erhalten
     _mb = R._motion_blur(_base, 14.0, 0.0)
     _ca = _mb[..., 3] > 0

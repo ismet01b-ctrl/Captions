@@ -3,6 +3,52 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v82: Hand-Made-Motion-Pass (Senior-Cutter-Look).** Grundlage: Research-Sweep
+  (5 Agenten) zu High-End-Caption-Design 2026/27 (Material 3 / iOS-Springs /
+  Netflix-Timed-Text / AE-Praxis) + zwei Code-Audits von render.py. Kernbefund:
+  Entrances waren stark (spring, morph, emerge, Motion-Blur), aber ALLE Exits
+  linear und uniform - der klarste Vorlagen-Tell. Umgesetzt:
+  1) `exit_env()`/`exit_pose()`: Exits halten erst fast voll (Ease-In 1-x^3)
+  und lassen dann los, dazu 3% Scale-Settle + Richtungs-Drift. Exit-Dauer
+  skaliert mit Schriftgroesse (0.20-0.32s), Power-3 haelt 40ms extra,
+  Exit SPIEGELT den Entrance (edge geht seitlich raus, zoom nach vorn,
+  Hintergrund-Text weicht nach oben). Aktiv-Fenster 0.25->0.40s (der alte
+  /0.28-Fade wurde am Fensterrand hart abgeschnitten - sichtbarer Pop).
+  2) `hand_jitter()`: deterministische Streuung pro Wort (Sinus-Hash) -
+  Entrance-Dauern +-8-10%, Letter-Stagger +-0.5 Frames. Ein Cutter setzt
+  nie zwei Keyframes exakt gleich; metronomische Gleichheit ist der Tell.
+  3) Lese-Vorlauf 70ms: kleine Woerter/Tokens erscheinen VOR dem gesprochenen
+  Wort (Broadcast-Praxis: Lesen fuehrt Hoeren, 50-100ms).
+  4) Lineare Alpha-Rampen -> smoothstep (behind/ground/blurin); Cascade-Wipe
+  mit ease_out statt Ladebalken-Linear; harte Pixel-Rises (26/10/30px) ->
+  aufloesungsrelativ (H*0.024/0.009/0.028).
+  5) Physik-Feinschliff: explosion = schneller ease_out-Impact + Feder-Recoil
+  (6% ueber Ruhelage); magnet beschleunigt ins Zentrum (1-x^2) + 1-Frame-
+  Landesquash; wackel mit zweitem inkommensurablem Sinus + Wort-Phase;
+  Kamera-breathe mit 2. Frequenz (7.3s); Whip-Pan asymmetrisch (30% rein,
+  70% settle); Beat-Sync-Decay zeitbasiert statt framebasiert (60fps-Material
+  verfiel doppelt so schnell).
+  6) Stack-Doppelbild-Fix: endet eine Gruppe nahtlos in die naechste an
+  derselben Position, wird ihr Ende um die Exit-Dauer vorgezogen (Broadcast-
+  Regel: nie zwei Texte uebereinander am selben Ort).
+  BUGFIX dabei: 'explodiert' stand in ZWEI Anim-Hint-Listen (schub UND
+  explosion); schub kam zuerst und schattete die explosion-Animation ab.
+  Selftest: 5 neue Tests (exit_env-Kurvenform, Monotonie, exit_pose-Richtung,
+  hand_jitter-Determinismus/Streuung); _regie_chunks-Test an v80d-3-Tupel
+  angepasst. Regression: 362/362 logic + 10/10 render + GUI_OK (Sandbox,
+  CPU, synthetisches Material - echte Wirkung prueft Ismet auf Windows).
+  Hinweis Sandbox-Fixture: /tmp/st_transcript.json muss eine BLANKE Wortliste
+  sein (kein {"words": ...}-Wrapper) mit realistischer Whisper-Schreibung
+  (Substantive gross), sonst greift die v80d-Phrasenregel nicht.
+  Ehrlich offen (v83-Kandidaten, aus den Audits): Captions an Schnitten
+  clampen (Shot-Change-Regel), Kerning (PIL rendert per-Glyph), em-relatives
+  Tracking, Baseline-Grid der 7 Vertikal-Anker, Palette pro Shot statt pro
+  Sekunde, Counter-Arrival-Spring, instant_hook-Desync-Deckel.
+- **v73-v81: Web-Plattform douchko.eu** (nur in Git-Historie dokumentiert):
+  Accounts (E-Mail+Passwort, bcrypt, Verifikation), Stripe-Checkout+Webhook,
+  Credits/Ledger, Free-Tier+Wasserzeichen, Transkript-Editor, 17 Sprachen,
+  Hook-Score, Resend-Mail, Job-Restore, DB-Backups, Emoji-Rendering,
+  Zwei-Stufen-Encode, Legal-Seiten (Impressum/Privacy/Terms).
 - **v60: Herausschieben steuerbar + Maskenqualitaet.**
   1) HERAUSSCHIEBEN (`effects.emerge`: auto | immer | aus): Das Wort steckt hinter
   der Person und wird von ihr hervorgeschoben - erst der Teil direkt hinter ihr,
