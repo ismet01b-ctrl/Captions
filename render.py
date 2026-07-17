@@ -1224,7 +1224,9 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     print(f"  {len(shots)} Szenen, {int(sum(r is not None for r in raw))}/{n} Frames mit Gesicht"
           + (f", {n_broll} Frames als B-Roll eingestuft" if n_broll else ""))
     sc = out_w / float(work_w)
-    return sm * sc, present, wsm * sc
+    # v85: interne Schnitt-Frames mitgeben (fuer Caption-Schnitt-Disziplin).
+    inner_cuts = [c for c in cuts if 0 < c < n]
+    return sm * sc, present, wsm * sc, inner_cuts
 
 # ---------------------------------------------------------------- sprites
 class Sprites:
@@ -1292,17 +1294,34 @@ class Sprites:
                 pass
         d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
         widths = [d0.textbbox((0, 0), ch, font=f)[2] for ch in txt]
-        total = sum(widths) + tracking2 * max(len(txt) - 1, 0)
+        # v85: Kerning. Bisher wurde jeder Buchstabe einzeln gesetzt und um seine
+        # eigene Ink-Breite vorgeschoben - PIL wendet Kerning-Paare (VA, To, AV,
+        # LT ...) aber nur an, wenn ein String am Stueck gezeichnet wird. Ergebnis
+        # waren optisch zu grosse Luecken an genau diesen Paaren, der klassische
+        # "burnt-in Auto-Caption"-Tell. Wir behalten das Einzel-Setzen (fuer
+        # Schatten/Extrusion/Buchstaben-Boxen), ziehen aber pro Paar die echte
+        # Kerning-Korrektur ab: kern = adv(prev+ch) - adv(prev) - adv(ch).
+        # Nicht-gekernte Paare bleiben damit exakt wie vorher.
+        kerns = [0.0] * len(txt)
+        for i in range(1, len(txt)):
+            try:
+                pv = txt[i - 1]
+                kerns[i] = (f.getlength(pv + txt[i]) - f.getlength(pv)
+                            - f.getlength(txt[i]))
+            except Exception:
+                kerns[i] = 0.0
+        total = sum(widths) + tracking2 * max(len(txt) - 1, 0) + sum(kerns)
         asc, desc = f.getmetrics()
         pad = (90 if glow else 40) * SS
-        img = Image.new('RGBA', (total + pad * 2, asc + desc + pad * 2), (0, 0, 0, 0))
+        img = Image.new('RGBA', (int(math.ceil(total)) + pad * 2, asc + desc + pad * 2), (0, 0, 0, 0))
         d = ImageDraw.Draw(img)
         front = Image.new('RGBA', img.size, (0, 0, 0, 0))
         dfr = ImageDraw.Draw(front)
         x = pad
         letters = []
         depth = max(int(size2 * 0.085), 6) if extrude else 0
-        for ch, cw in zip(txt, widths):
+        for ch, cw, kern in zip(txt, widths, kerns):
+            x += kern                         # v85: Paar an prev heranziehen
             if outline:
                 d.text((x, pad), ch, font=f, fill=(0, 0, 0, 0), stroke_width=4 * SS,
                        stroke_fill=color + (255,))
@@ -2498,7 +2517,7 @@ def make_counter(txt):
     return fmt, dur
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
-                palette_at=None):
+                palette_at=None, cut_times=None):
     KW_FX = cfg['effects']['keyword_rotation']
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
@@ -3128,6 +3147,33 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 n_whip += 1
         if n_whip:
             print(f"  Whip-Pan an {n_whip} Abschnittsgrenze(n)")
+
+    # v85: SCHNITT-DISZIPLIN (Broadcast-Regel, BBC/Netflix). Ein Untertitel darf
+    # nicht ueber einen harten Schnitt hinweg stehen bleiben - das ist der
+    # deutlichste "unbeaufsichtigte Auto-Pipeline"-Tell. Schnitte kennen wir aus
+    # der Szenen-Analyse (cut_times). Ragt das Ende eines Moments in den naechsten
+    # Shot, ziehen wir es so weit vor, dass der Abgang (exit_env, bis ~0.32s)
+    # noch VOR dem Schnitt fertig ist. Zu nah am Start liegende Schnitte lassen
+    # wir in Ruhe - dort lieber den kurzen Moment als einen Null-Frame-Blitz.
+    if cut_times and cfg['effects'].get('cut_snap', True):
+        cts = sorted(float(c) for c in cut_times)
+        EXIT_LEAD = 0.34          # Abgangsdauer + 1 Frame Puffer
+        MIN_SHOWN = 0.40          # so lange muss ein Moment mindestens stehen
+        n_clamp = 0
+        for p in plans:
+            st = p.get('start')
+            en = p.get('end')
+            if st is None or en is None:
+                continue
+            nxt = next((c for c in cts if c > st + MIN_SHOWN), None)
+            if nxt is None:
+                continue
+            limit = nxt - EXIT_LEAD
+            if en > limit and limit >= st + MIN_SHOWN:
+                p['end'] = limit
+                n_clamp += 1
+        if n_clamp:
+            print(f"  Schnitt-Disziplin: {n_clamp} Moment(e) enden vor dem Schnitt")
 
     plans.sort(key=lambda p: p['start'])
     return plans
@@ -4194,7 +4240,7 @@ def main():
         'schnell':  (3, 0.7, 'veryfast'),
         'standard': (2, 1.0, cfg['output'].get('preset', 'medium')),
         'maximal':  (1, 1.2, 'slow')}.get(speed, (2, 1.0, 'medium'))
-    face, has_face, face_w = track_faces(args.input, W, H, fps_str, det_step)
+    face, has_face, face_w, cut_frames = track_faces(args.input, W, H, fps_str, det_step)
     k2 = 41
     kern2 = np.ones(k2) / k2
     face_stable = np.stack([np.convolve(np.pad(face[:, j], k2 // 2, mode='edge'),
@@ -4404,7 +4450,9 @@ def main():
     elif cfg.get('colors', {}).get('adaptive', True):
         palette_at = scene_palette_sampler(args.input)
         print("Adaptive Farben: Captions greifen die Szenen-Toene auf")
-    plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos, palette_at)
+    cut_times = [c / float(fps_i) for c in cut_frames] if fps_i else []
+    plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
+                        palette_at, cut_times=cut_times)
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.

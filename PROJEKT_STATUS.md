@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v85: Schnitt-Disziplin + echtes Kerning (Render-Craft aus dem Audit).**
+  Zwei Typografie-/Timing-Punkte aus dem v82-Audit, die ein Video von
+  "Auto-Pipeline" zu "handgeschnitten" heben:
+  1) **Kerning.** `Sprites.text()` setzte jeden Buchstaben einzeln und schob
+     ihn um seine eigene Ink-Breite vor - PIL wendet Kerning-Paare (VA, To,
+     LT, Ta ...) aber nur an, wenn ein String am Stueck gezeichnet wird. Die
+     Folge waren zu grosse Luecken an genau diesen Paaren (der klassische
+     burnt-in-Tell). Jetzt wird pro Paar die echte Kerning-Korrektur
+     abgezogen (`kern = adv(prev+ch) - adv(prev) - adv(ch)`), das Einzel-
+     Setzen (fuer Schatten/Extrusion/Buchstaben-Boxen) bleibt erhalten.
+     Nicht-gekernte Paare sind exakt wie vorher; Serif-Display spart real
+     ~30px auf "TAVATo". Haengt an PIL-raqm (in Standard-Pillow-Wheels drin,
+     im Sandbox verifiziert - auf Windows/Server beim ersten echten Render
+     kurz gegenchecken).
+  2) **Schnitt-Disziplin (BBC/Netflix-Regel).** Ein Untertitel darf nicht
+     ueber einen harten Schnitt hinweg stehen bleiben. Die Szenen-Analyse
+     kannte die Schnitte laengst, beendete laufende Captions aber nie daran.
+     `track_faces` gibt die Schnitt-Frames jetzt mit, `build_plans` zieht das
+     Ende jedes Moments so weit vor, dass sein Abgang (exit_env, bis ~0.32s)
+     noch VOR dem Schnitt fertig ist (`cut_snap`, default an). Schnitte zu
+     nah am Start werden in Ruhe gelassen (lieber kurzer Moment als
+     Null-Frame-Blitz).
+  Selftest: +5 Tests (Kerning-Invariante + Sprite rendert; Schnitt-Straddle
+  mit/ohne Feature + Ende vorgezogen). Regression: 367/367 logic + 10/10
+  render + GUI_OK. Sandbox/CPU/synthetisch - echte Wirkung sieht Ismet auf
+  Windows mit echtem Material.
 - **v84: Eigene Seiten statt Popups + private Video-Bibliothek + Credits (Web).**
   Grosser Web-UI-Umbau, alles ueber einen Client-Router (Hash-Routen
   #/create #/library #/billing #/account) - keine Modals mehr fuer History/

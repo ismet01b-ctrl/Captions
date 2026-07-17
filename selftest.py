@@ -254,6 +254,30 @@ def _scenario_logic(clip, transcript, tmp):
           kp3 and kp3[0].get('count') is not None
           and ('builder' in kp3[0] or any('builder' in t for t in kp3[0].get('tokens', []))))
 
+    # v85: Kerning. Ein Paar darf nie breiter werden als die Einzelglyphen +
+    # Tracking - waere das Vorzeichen der Korrektur falsch, blaehte es auf.
+    _wa = S.text('A', 90, S.white)[1]
+    _wv = S.text('V', 90, S.white)[1]
+    _wav = S.text('AV', 90, S.white)[1]
+    check('Kerning: Paar nicht breiter als Einzelglyphen', _wav <= _wa + _wv + 4 + 1.0,
+          f'AV={_wav:.0f} A+V={_wa + _wv:.0f}')
+    check('Kerning: Sprite rendert weiterhin', S.text('AWAY', 90, S.white)[0].shape[2] == 4)
+
+    # v85: Schnitt-Disziplin. Ein Moment darf nicht ueber einen harten Schnitt
+    # stehen bleiben - sein Abgang muss VOR dem Schnitt fertig sein.
+    _wcut = [{'word': 'Alpha', 'start': 1.0, 'end': 1.4},
+             {'word': 'Beta', 'start': 1.5, 'end': 1.9},
+             {'word': 'Gamma', 'start': 2.0, 'end': 2.6}]
+    _pl_base = R.build_plans(_wcut, set(), cfg, S, W_, H_, lambda s, e: True)
+    _pl_snap = R.build_plans(_wcut, set(), cfg, S, W_, H_, lambda s, e: True,
+                             cut_times=[2.0])
+    _strad = lambda pl: any(p['start'] < 2.0 - 0.40 and p['end'] > 2.0 - 0.34 + 0.05
+                            for p in pl)
+    check('Schnitt-Disziplin: Fixture straddlet ohne Feature', _strad(_pl_base))
+    check('Schnitt-Disziplin: kein Straddle mit cut_times', not _strad(_pl_snap))
+    check('Schnitt-Disziplin: Ende wird vorgezogen',
+          max(p['end'] for p in _pl_snap) < max(p['end'] for p in _pl_base) - 0.05)
+
     # Hook-Intro: vorne dicht, hinten Akzente
     wlong = [{'word': f'Wort{i}', 'start': i * .5, 'end': i * .5 + .3} for i in range(60)]
     cfg_i = dict(cfg)
