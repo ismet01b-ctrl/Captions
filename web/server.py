@@ -1239,7 +1239,12 @@ def _page(name):
     p = os.path.join(HERE, name)
     if not os.path.exists(p):
         raise HTTPException(404)
-    return open(p, encoding='utf-8').read()
+    # v83a: HTML nie cachen. Ohne Cache-Control cachen iOS/Safari heuristisch
+    # tagelang - nach jedem Deploy lief bei Nutzern sonst das ALTE Frontend
+    # gegen den neuen Server. no-cache = Browser fragt jedes Mal nach
+    # (bekommt 200 mit frischem Inhalt), Assets/Videos bleiben unberuehrt.
+    return HTMLResponse(open(p, encoding='utf-8').read(),
+                        headers={'Cache-Control': 'no-cache, must-revalidate'})
 
 
 # v80m: Rate-Limit gegen Spam-Registrierungen (in-memory, pro IP)
