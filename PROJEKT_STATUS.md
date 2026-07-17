@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v88: UI-/Render-Feinschliff aus Ismets Feedback.**
+  1) **Caption-Ueberlappung behoben** (der SHIBUYA/RIGHT-Doppelbild-Fehler):
+     neue Modulfunktion `resolve_overlaps` verallgemeinert den v82-Stack-Fix
+     auf ALLE Text-Momente. Ueberlappen sich zwei Captions zeitlich (inkl.
+     Abgang) und liegen ihre Anker nah beieinander (< H*0.16 / < W*0.42), wird
+     der fruehere vorgezogen, bis er raeumt, bevor der spaetere steht. Laeuft
+     NACH der Hook-Logik (die t0 auf 0 zieht). Anker-Naehe schuetzt echte
+     Neben-Platzierungen (links/rechts). +3 Selftests.
+  2) **Live-Log entfernt** aus der Render-Fortschritts-Seite (zeigte rohes
+     mediapipe-stderr, wirkte kaputt). Ersetzt durch einen ruhigen Beta-
+     Hinweis: dauert in der Beta ein paar Minuten (CPU, Frame fuer Frame),
+     nach der Beta nur noch Sekunden; Seite darf geschlossen werden, Video
+     landet in der Library.
+  3) **Beta-Badge auf der Landing-Page** (auch mobil) - kleines "Beta" neben
+     dem Logo.
+  4) **Verify-Mail persoenlicher**: warme Mail von Ismet statt Formbrief
+     (Begruessung mit Username, Beta-Hinweis, "antworte einfach auf diese
+     Mail").
+  5) **Einstellungen entschlackt**: Step-3-Fine-Tune von 6 Akkordeons /
+     ~26 Reglern auf 3 Akkordeons / ~11 Regler. Text&Pacing (Hook, Woerter
+     pro Karte, Dichte, Sprache), Style&Effects (Font, Farbwelt, Wort-
+     Effekte, BG-Blur, Freistellung), Camera&Output (Kamera-Staerke,
+     Aufloesung). Entfernte Regler (hook_strength, instant_hook, chunk_hold,
+     beat/music-sync, emerge, anim, freeze/trail/counter/split/env_shadow,
+     crash/whip, adaptive, encode-speed, sfx-volume, master) behalten ihren
+     Preset-Wert - nur aus der UI raus, Feature bleibt.
+  Getestet: Selftest 374/374 logic + 10/10 render + GUI_OK; Playwright-Smoke
+  durch die echte Web-UI (Landing-Beta da, 3 Akkordeons, 5 FX-Chips, 15
+  Fonts, kein Live-Log, 0 JS-Fehler).
 - **v87: Drei neue Web-Looks (Editorial / Poster / Retro).** Die Preset-
   Auswahl auf douchko.eu geht von 5 auf 8. Jeder Look ist eine vollstaendige
   High-End-Konfig (Effekte/Kamera/Farben/Schrift), bewusst mit eigener

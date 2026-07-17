@@ -313,6 +313,38 @@ def _scenario_logic(clip, transcript, tmp):
     check('Farbwelt pro Shot: kein Tint-Sprung ueber Sekundengrenze',
           _samp(0.3) is _samp(1.2))
 
+    # v88: Ueberlappungs-Schutz. Zwei Momente an fast derselben Stelle, zeitlich
+    # ueberlappend -> der fruehere wird vorgezogen; nebeneinander bleibt frei.
+    _ov = [{'target': (540, 700), 't0': 0.0, 'start': 0.0, 'end': 4.0},
+           {'target': (560, 720), 'start': 2.0, 'end': 3.5},
+           {'target': (540, 700), 'start': 6.0, 'end': 7.0}]
+    _n = R.resolve_overlaps(_ov, 1080, 1920)
+    check('Ueberlappung: fruehes Ende vorgezogen',
+          _n == 1 and abs(_ov[0]['end'] - 1.88) < 1e-6, f"end={_ov[0]['end']:.2f}")
+    _side = [{'target': (200, 700), 'start': 0.0, 'end': 4.0},
+             {'target': (900, 700), 'start': 2.0, 'end': 3.5}]
+    check('Ueberlappung: nebeneinander bleibt unangetastet',
+          R.resolve_overlaps(_side, 1080, 1920) == 0)
+    # Nach build_plans darf kein Paar mit target ko-sichtbar+nah stehen
+    def _codisplay(pl):
+        ts = [p for p in pl if 'target' in p]
+        for _x in range(len(ts)):
+            for _y in range(_x + 1, len(ts)):
+                a, b = ts[_x], ts[_y]
+                lo = max(a.get('t0', a['start']), b.get('t0', b['start']))
+                hi = min(a['end'], b['end'])
+                if (hi - lo > 0.25
+                        and abs(a['target'][1] - b['target'][1]) < 1920 * 0.16
+                        and abs(a['target'][0] - b['target'][0]) < 1080 * 0.42):
+                    return True
+        return False
+    _wov = [{'word': w, 'start': 1.0 + i * .35, 'end': 1.0 + i * .35 + .3}
+            for i, w in enumerate(['So', 'right', 'Shibuya', 'crossing', 'now'])]
+    _plov = R.build_plans(_wov, {2}, cfg, S, 1080, 1920, lambda s, e: True,
+                          {2: {'fx': 'behind', 'power': 3, 'n': 1}},
+                          face_pos=lambda s, e: (540.0, 430.0, 220.0))
+    check('Ueberlappung: build_plans liefert kein Doppelbild', not _codisplay(_plov))
+
     # Hook-Intro: vorne dicht, hinten Akzente
     wlong = [{'word': f'Wort{i}', 'start': i * .5, 'end': i * .5 + .3} for i in range(60)]
     cfg_i = dict(cfg)

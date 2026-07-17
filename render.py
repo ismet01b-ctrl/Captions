@@ -2532,6 +2532,39 @@ def make_counter(txt):
         return txt[:m.start()] + s + txt[m.end():]
     return fmt, dur
 
+
+def resolve_overlaps(plans, W, H, exit_lead=0.34):
+    """v88: Verhindert, dass zwei Text-Momente gleichzeitig an fast derselben
+    Stelle stehen (der SHIBUYA/RIGHT-Doppelbild-Fehler). Ueberlappen sich zwei
+    Momente zeitlich - inkl. Abgang (exit_lead) - UND liegen ihre Anker nah
+    beieinander (< H*0.16 vertikal, < W*0.42 horizontal), wird das Ende des
+    FRUEHEREN so weit vorgezogen, dass er raeumt, bevor der spaetere steht.
+    Anker-Naehe schuetzt echte Neben-Platzierungen (links/rechts, oben/unten).
+    Wirkt auf Plaene mit 'target'=(x, y); Kamera-Impulse (ohne target) bleiben
+    unberuehrt. Rueckgabe: Anzahl vorgezogener Momente."""
+    txt = sorted([p for p in plans if 'target' in p],
+                 key=lambda p: p.get('t0', p['start']))
+    n = 0
+    for i in range(len(txt)):
+        a = txt[i]
+        a_t0 = a.get('t0', a['start'])
+        a_end0 = a['end']
+        new_end = a_end0
+        for b in txt[i + 1:]:
+            b_t0 = b.get('t0', b['start'])
+            if b_t0 >= a_end0 + exit_lead:
+                break                       # sortiert -> ab hier keiner mehr nah
+            if b_t0 <= a_t0 + 0.05:
+                continue                    # praktisch gleichzeitig gestartet
+            if (abs(a['target'][1] - b['target'][1]) < H * 0.16
+                    and abs(a['target'][0] - b['target'][0]) < W * 0.42):
+                new_end = min(new_end, max(a_t0 + 0.3, b_t0 - 0.12))
+        if new_end < a_end0 - 1e-3:
+            a['end'] = new_end
+            n += 1
+    return n
+
+
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None):
     KW_FX = cfg['effects']['keyword_rotation']
@@ -3087,18 +3120,6 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 prev_was_keyword_sentence = False
             elif not satz_offen:
                 prev_was_keyword_sentence = False
-    # v82: Kein Doppelbild beim Gruppen-Wechsel. Endet eine stack-Gruppe
-    # praktisch nahtlos in die naechste an derselben Position, wird ihr Ende
-    # um die Exit-Dauer vorgezogen - der Abgang ist fertig, BEVOR das Neue
-    # steht (Broadcast-Regel: nie zwei Texte uebereinander am selben Ort).
-    _stk = sorted([p for p in plans if p['tpl'] == 'stack'],
-                  key=lambda p: p['start'])
-    for _a2, _b2 in zip(_stk, _stk[1:]):
-        _gap = _b2['start'] - _a2['end']
-        if 0 <= _gap < 0.22 \
-                and abs(_a2['target'][1] - _b2['target'][1]) < H * 0.05 \
-                and abs(_a2['target'][0] - _b2['target'][0]) < W * 0.30:
-            _a2['end'] = max(_a2['start'] + 0.3, _b2['start'] - 0.22)
 
     # HOOK v48: Sofort-Hook. 65-71% entscheiden in den ersten 3 Sekunden, ob sie
     # bleiben. Das staerkste fruehe Statement wird zur Hook-Karte: sie steht ab
@@ -3191,6 +3212,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 n_whip += 1
         if n_whip:
             print(f"  Whip-Pan an {n_whip} Abschnittsgrenze(n)")
+
+    # v88: Kein Doppelbild - generalisiert ueber ALLE Text-Momente (siehe
+    # resolve_overlaps). Laeuft NACH dem Hook (der t0 auf 0 zieht), damit die
+    # Hook-Karte in der Ueberlappungs-Pruefung mitgezaehlt wird.
+    _n_ovl = resolve_overlaps(plans, W, H)
+    if _n_ovl:
+        print(f"  Ueberlappungs-Schutz: {_n_ovl} Moment(e) vorgezogen")
 
     # v85: SCHNITT-DISZIPLIN (Broadcast-Regel, BBC/Netflix). Ein Untertitel darf
     # nicht ueber einen harten Schnitt hinweg stehen bleiben - das ist der

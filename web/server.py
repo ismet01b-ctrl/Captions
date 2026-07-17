@@ -341,13 +341,27 @@ def _send_verify_mail(uid, email, name=''):
     con.commit()
     con.close()
     base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    hallo = f'Hey {name},' if name else 'Hey,'
+    subject = (f'Welcome to DouchkoVE, {name}!' if name
+               else 'Welcome to DouchkoVE!')
     try:
-        _send_mail(email, 'Verify your DouchkoVE email',
-                   f'Hi{" " + name if name else ""},\n\n'
-                   f'welcome to DouchkoVE! Please confirm your email address '
-                   f'(needed before purchasing credits):\n\n'
-                   f'{base}/app?verify={tok}\n\n'
-                   f'Link is valid for 48 hours.\n\n- DouchkoVE')
+        _send_mail(
+            email, subject,
+            f'{hallo}\n\n'
+            f"Ismet here, the person behind DouchkoVE. Thank you so much for "
+            f"signing up, it genuinely means a lot while we're still in beta.\n\n"
+            f'Just one quick step: tap the link below to confirm your email. '
+            f'Then your account is fully set up and your free credits are ready '
+            f'to use.\n\n'
+            f'{base}/app?verify={tok}\n\n'
+            f"Once you're in, drop a talking-head video and let the AI direction "
+            f"do its thing. Heads-up: we're in beta and every video is rendered "
+            f"on our own server, so it takes a few minutes for now. That will get "
+            f"much faster once we leave beta.\n\n"
+            f'If anything feels off or you have an idea, just reply to this '
+            f'email, it comes straight to me.\n\n'
+            f'The link is valid for 48 hours.\n\n'
+            f'Talk soon,\nIsmet from DouchkoVE')
         return True
     except Exception as e:
         print(f'Verify-Mail fehlgeschlagen: {type(e).__name__}: {e}')
