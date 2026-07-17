@@ -244,7 +244,19 @@ def _adjust_balance(uid, delta_sec, grund):
 
 # ---------------------------------------------------------------- Mail (v80w)
 def _send_mail(to, subject, body):
-    """SMTP-Versand (Gmail App-Passwort o.ae.). Wirft bei Fehler."""
+    """Mail-Versand. Bevorzugt Resend (HTTP/443, von Hostern nie geblockt),
+    faellt auf SMTP zurueck. Wirft bei Fehler."""
+    resend_key = os.environ.get('RESEND_API_KEY', '').strip()
+    if resend_key:
+        import requests as _rq
+        sender = os.environ.get('MAIL_FROM', 'onboarding@resend.dev')
+        r = _rq.post('https://api.resend.com/emails',
+                     headers={'Authorization': f'Bearer {resend_key}'},
+                     json={'from': f'DouchkoVE <{sender}>', 'to': [to],
+                           'subject': subject, 'text': body}, timeout=20)
+        if r.status_code >= 300:
+            raise RuntimeError(f'Resend {r.status_code}: {r.text[:200]}')
+        return
     import smtplib
     from email.mime.text import MIMEText
     host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
