@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
       libgles2 libegl1 libgomp1 \
       libgtk-3-0 libxkbcommon0 libdbus-1-3 \
-      fonts-dejavu fonts-noto \
+      fonts-dejavu fonts-noto fonts-noto-color-emoji \
       curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

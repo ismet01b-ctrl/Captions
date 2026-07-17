@@ -1325,6 +1325,80 @@ def rot_img(arr, deg):
     if abs(deg) < 0.2: return arr
     return np.array(Image.fromarray(arr).rotate(deg, expand=True, resample=Image.BICUBIC))
 
+# --- Emoji (v81e): Noto Color Emoji rendert nur in fester Bitmap-Groesse (109),
+# wird danach auf Zielhoehe skaliert. Ergebnis wird gecacht (pro Emoji+Hoehe).
+_EMOJI_FONT_PATH = None
+_EMOJI_CACHE = {}
+
+
+def _emoji_font():
+    global _EMOJI_FONT_PATH
+    if _EMOJI_FONT_PATH is None:
+        import glob
+        c = (glob.glob('/usr/share/fonts/**/NotoColorEmoji*.ttf', recursive=True) or
+             glob.glob('/usr/share/fonts/**/*Emoji*.ttf', recursive=True))
+        _EMOJI_FONT_PATH = c[0] if c else ''
+    return _EMOJI_FONT_PATH or None
+
+
+def emoji_sprite(emoji, height):
+    """BGRA-Array eines Emojis in gewuenschter Pixel-Hoehe, oder None."""
+    if not emoji:
+        return None
+    key = (emoji, int(height))
+    if key in _EMOJI_CACHE:
+        return _EMOJI_CACHE[key]
+    fp = _emoji_font()
+    if not fp:
+        return None
+    try:
+        f = ImageFont.truetype(fp, 109)          # Noto: fixe Bitmap-Groesse
+        img = Image.new('RGBA', (128, 128), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        try:
+            d.text((64, 64), emoji, font=f, embedded_color=True, anchor='mm')
+        except Exception:
+            d.text((8, 8), emoji, font=f, embedded_color=True)
+        arr = np.array(img)                       # RGBA
+        ys, xs = np.where(arr[:, :, 3] > 8)
+        if not len(ys):
+            _EMOJI_CACHE[key] = None
+            return None
+        arr = arr[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        h = max(int(height), 8)
+        w = max(int(arr.shape[1] * h / arr.shape[0]), 8)
+        arr = cv2.resize(arr, (w, h), interpolation=cv2.INTER_AREA)
+        bgra = arr[:, :, [2, 1, 0, 3]].copy()     # RGBA -> BGRA (Compositor-Format)
+        _EMOJI_CACHE[key] = bgra
+        return bgra
+    except Exception:
+        _EMOJI_CACHE[key] = None
+        return None
+
+
+def bake_emoji(arr, emoji, side='right'):
+    """Setzt das Emoji neben ein BGRA-Sprite und liefert ein breiteres Sprite.
+    So reist das Emoji durch alle Downstream-Effekte (Anim/Reflexion/Schatten)
+    mit, ohne dass die fx-spezifische Logik angefasst werden muss."""
+    if arr is None or not emoji:
+        return arr
+    eh = int(arr.shape[0] * 0.62)
+    em = emoji_sprite(emoji, eh)
+    if em is None:
+        return arr
+    gap = int(arr.shape[0] * 0.12)
+    new_w = arr.shape[1] + gap + em.shape[1]
+    out = np.zeros((arr.shape[0], new_w, 4), dtype=arr.dtype)
+    if side == 'left':
+        out[:, em.shape[1] + gap:] = arr
+        ex = 0
+    else:
+        out[:, :arr.shape[1]] = arr
+        ex = arr.shape[1] + gap
+    ey = (arr.shape[0] - em.shape[0]) // 2
+    out[ey:ey + em.shape[0], ex:ex + em.shape[1]] = em
+    return out
+
 def paste(canvas, rgba, cx, cy, W, H, scale=1.0, opacity=1.0, blur=0.0, crop_w=None):
     if scale <= 0.02 or opacity <= 0.01: return
     if crop_w is not None:
@@ -2859,6 +2933,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 else:
                     p['cy'] = H * (0.80 if not portrait else (0.72 if safe_z else 0.82))
                 sy = p['cy'] - H * 0.155
+            # v81e: Emoji ins Sprite backen. Nur einfache Ein-Array-Effekte
+            # (behind/cascade/blurin/ground). 'outline' hat zwei Layer + Zaehler
+            # bauen live -> dort bewusst kein Emoji, um Regression zu vermeiden.
+            if p.get('emoji') and 'arr' in p and not p.get('count') \
+                    and not p.get('letters') and not p.get('tokens'):
+                try:
+                    p['arr'] = bake_emoji(p['arr'], p['emoji'])
+                except Exception as _e:
+                    print(f"  Emoji uebersprungen ({type(_e).__name__})")
             p['target'] = (p.get('cx', W / 2), p.get('cy', p.get('by', H * 0.398)))
             gap = 28
             total = sum(it['w'] for it in small) + gap * max(len(small) - 1, 0)
