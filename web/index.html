@@ -159,6 +159,101 @@ body {
 .hi .greeting b { color: var(--fg); }
 .hi .greeting .mut { color: var(--mut); }
 
+/* v84: Beta-Badge, Top-Nav, Credit-Chip, Seiten */
+.header .brand { position: relative; }
+.brand-beta {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-style: normal; font-weight: 800; font-size: 9px; letter-spacing: 1px;
+  color: var(--acc2); background: var(--acc-soft); border: 1px solid var(--acc-soft);
+  padding: 2px 6px; border-radius: 6px; vertical-align: super; margin-left: 6px;
+  text-transform: uppercase;
+}
+.topnav { display: flex; gap: 4px; }
+.topnav a {
+  padding: 8px 14px; border-radius: 9px; font-size: 14px; font-weight: 600;
+  color: var(--mut); cursor: pointer; user-select: none; text-decoration: none;
+  transition: background var(--t-fast), color var(--t-fast); white-space: nowrap;
+}
+.topnav a:hover { background: var(--surf); color: var(--fg); }
+.topnav a.on { background: var(--acc-soft); color: var(--acc2); }
+.chip-credit {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 8px 14px; border-radius: 999px; font-weight: 800; font-size: 14px;
+  color: #1a1428; border: none;
+  background: linear-gradient(135deg, #f5c451, #d69a20);
+  box-shadow: 0 4px 14px -6px rgba(214,154,32,.6);
+  transition: transform var(--t-fast);
+}
+.chip-credit:hover { transform: translateY(-1px); }
+.chip-credit.low { background: linear-gradient(135deg,#e88a5a,#c85a3a); color:#fff; }
+.chip-credit svg { width: 15px; height: 15px; }
+.free-pill { font-size: 11px; color: #6dd48a; font-weight: 700; }
+.whoami { font-size: 14px; color: var(--fg); font-weight: 600; max-width: 140px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Seiten (Router) */
+.page { display: none; }
+.page.on { display: block; animation: pageIn .28s var(--ease-out-quart); }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.page-head { padding: 28px 32px 8px; max-width: 1000px; margin: 0 auto; }
+.page-head h1 { font-size: 28px; font-weight: 900; letter-spacing: -.5px; }
+.page-head p { color: var(--mut); font-size: 15px; margin-top: 6px; }
+.page-body { padding: 12px 32px 60px; max-width: 1000px; margin: 0 auto; }
+
+/* Library */
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr));
+  gap: 18px; }
+.lib-card { background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
+  overflow: hidden; display: flex; flex-direction: column; }
+.lib-thumb { position: relative; aspect-ratio: 16/9; background: #000;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; }
+.lib-thumb img, .lib-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-thumb .play { position: absolute; width: 54px; height: 54px; border-radius: 50%;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(4px); display: flex;
+  align-items: center; justify-content: center; pointer-events: none; }
+.lib-thumb .play svg { width: 22px; height: 22px; fill: #fff; margin-left: 3px; }
+.lib-meta { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.lib-name { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.lib-sub { font-size: 12px; color: var(--mut); }
+.lib-count { font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.lib-count.warn { color: #e88a5a; }
+.lib-count.ok { color: var(--mut); }
+.lib-actions { display: flex; gap: 8px; margin-top: 2px; }
+.lib-actions .btn { padding: 8px 12px; font-size: 13px; flex: 1; }
+
+/* Account & Billing generic */
+.panel { background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
+  padding: 22px 24px; margin-bottom: 18px; }
+.panel h3 { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+.panel .hint { color: var(--mut); font-size: 13px; margin-bottom: 16px; }
+.info-row { display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--line); gap: 16px; }
+.info-row:last-child { border-bottom: none; }
+.info-row .k { color: var(--mut); font-size: 14px; }
+.info-row .v { color: var(--fg); font-size: 14px; font-weight: 600; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; }
+.verify-badge { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.verify-badge.yes { color: #6dd48a; background: rgba(109,212,138,.12); }
+.verify-badge.no { color: #e88a5a; background: rgba(232,138,90,.12); }
+.danger-zone { border-color: rgba(224,80,58,.35); }
+.danger-zone summary { cursor: pointer; color: #e0503a; font-weight: 700; font-size: 14px;
+  list-style: none; padding: 4px 0; }
+.danger-zone summary::-webkit-details-marker { display: none; }
+.balance-hero { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.balance-hero .num { font-size: 44px; font-weight: 900; letter-spacing: -1px; }
+.balance-hero .unit { font-size: 16px; color: var(--mut); font-weight: 600; }
+.txn { display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--line); }
+.txn:last-child { border-bottom: none; }
+.txn .grund { font-size: 14px; color: var(--fg); }
+.txn .zeit { font-size: 12px; color: var(--mut); margin-top: 2px; }
+.txn .delta { font-weight: 800; font-size: 14px; }
+.txn .delta.plus { color: #6dd48a; }
+.txn .delta.minus { color: var(--mut); }
+.empty-state { text-align: center; padding: 56px 20px; color: var(--mut); }
+.empty-state svg { width: 44px; height: 44px; opacity: .5; margin-bottom: 14px; }
+
 /* Streak/Kontingent Ring */
 .ring-wrap { position: relative; width: 42px; height: 42px; }
 .ring-wrap svg { transform: rotate(-90deg); width: 100%; height: 100%; }
@@ -867,7 +962,15 @@ body {
 /* Responsive */
 @media (max-width: 1024px) { .main { padding: 24px; } }
 @media (max-width: 768px) {
-  .header { padding: 14px 16px; }
+  .header { padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
+  .header .brand { font-size: 18px; }
+  .topnav { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none;
+    border-top: 1px solid var(--line); padding-top: 8px; }
+  .topnav::-webkit-scrollbar { display: none; }
+  .whoami { display: none; }
+  .page-head { padding: 20px 16px 6px; }
+  .page-body { padding: 10px 16px 60px; }
+  .lib-grid { grid-template-columns: 1fr; }
   .main { padding: 20px 16px 60px; }
   .stepper { padding: 14px 16px 4px; }
   .step-title { font-size: 24px; }
@@ -909,7 +1012,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="hero-brand">DouchkoVE</div>
     <div class="hero-tag">CAPTIONS</div>
     <h1 class="hero-title" id="authTitle">Premium captions.<br>In <span class="glow">minutes.</span></h1>
-    <p class="hero-sub" id="authSub">Sign up and get 2 free minutes of video to try it out.</p>
+    <p class="hero-sub" id="authSub">Sign up and get 2 free credits to try it out.</p>
 
     <div id="authTabs" style="display:flex; gap:6px; margin: 0 auto 14px; max-width:340px;
                               background:rgba(0,0,0,0.3); border-radius:10px; padding:4px;">
@@ -925,8 +1028,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
     <form id="authForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;
           max-width:340px; margin:0 auto;">
-      <input type="text" id="authName" placeholder="First name (optional)"
-             autocomplete="given-name" style="text-transform:none;">
+      <input type="text" id="authName" placeholder="Username"
+             autocomplete="username" maxlength="24" style="text-transform:none;">
       <input type="email" id="authEmail" placeholder="Email" required
              autocomplete="email" style="text-transform:none;">
       <input type="password" id="authPassword" placeholder="Password (min. 8 characters)"
@@ -947,69 +1050,129 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 <!-- ---------- APP (Wizard) ---------- -->
 <div id="appView" class="app">
   <header class="header">
-    <div class="brand">DouchkoVE</div>
+    <div class="brand">DouchkoVE<sup class="brand-beta">Beta</sup></div>
+    <nav class="topnav" id="topnav" aria-label="Sections">
+      <a data-nav="create" class="on">Create</a>
+      <a data-nav="library">Library</a>
+      <a data-nav="billing">Billing</a>
+      <a data-nav="account">Account</a>
+    </nav>
     <div class="grow"></div>
-    <div class="hi">
-      <div class="greeting">
-        <b id="topName">Hallo</b><br>
-        <span class="mut" id="topRest">–</span><br>
-        <span id="topFree" style="font-size:11px; color:#6dd48a; display:none;"></span>
-      </div>
-      <div class="ring-wrap" id="ringWrap" title="Kontingent">
-        <svg viewBox="0 0 42 42">
-          <circle cx="21" cy="21" r="18" fill="none" stroke-width="4" class="ring-bg"/>
-          <circle cx="21" cy="21" r="18" fill="none" stroke-width="4" class="ring-fg"
-                  stroke-dasharray="113" stroke-dashoffset="113" id="ringFg"/>
-        </svg>
-        <div class="ring-num" id="ringNum">–</div>
-      </div>
-    </div>
-    <button class="btn secondary" id="btnBuy" style="padding:10px 16px;
-            background:linear-gradient(135deg, #f5c451, #d69a20); color:#1a1428;
-            border:none; font-weight:800;">+ Credits</button>
-    <button class="btn secondary" id="btnHistory" style="padding:10px 16px;">History</button>
-    <button class="btn secondary" id="btnAccount" style="padding:10px 16px;">Account</button>
+    <span id="topFree" class="free-pill" style="display:none;"></span>
+    <button class="chip-credit" id="creditChip" title="Your credits" data-nav="billing">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+           stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9.5h4a1.5 1.5 0 0 1 0 3h-2a1.5 1.5 0 0 0 0 3h4"/></svg>
+      <span id="creditNum">–</span>&nbsp;credits
+    </button>
+    <div class="whoami" id="topName">–</div>
     <button class="btn secondary" id="btnLogout" style="padding:10px 16px;">Sign out</button>
   </header>
 
-  <!-- Account Modal (v80m) -->
-  <div class="overlay hidden" id="accountModal" role="dialog" aria-modal="true">
-    <div class="modal" style="max-width:520px;">
-      <div class="head">
-        <h3>Account settings</h3>
-        <p id="accEmail" style="color:var(--mut);">-</p>
-      </div>
-      <div class="body">
-        <div id="verifyBox" style="display:none; margin-bottom:20px; padding:12px 16px;
-             background:rgba(245,196,81,0.1); border-left:3px solid #f5c451; border-radius:6px;">
-          <p style="color:var(--fg); font-size:14px; margin-bottom:8px;">
-            Your email is not verified yet, so purchasing is locked.</p>
-          <button class="btn secondary" id="btnResendVerify" type="button"
-                  style="padding:8px 14px;">Resend verification email</button>
+  <!-- ===== PAGE: LIBRARY ===== -->
+  <section class="page" id="page-library">
+    <div class="page-head">
+      <h1>Your library</h1>
+      <p>Every video you have rendered, private to your account. Files auto-delete
+         when their timer runs out - download anything you want to keep.</p>
+    </div>
+    <div class="page-body">
+      <div id="libGrid" class="lib-grid"></div>
+    </div>
+  </section>
+
+  <!-- ===== PAGE: BILLING ===== -->
+  <section class="page" id="page-billing">
+    <div class="page-head">
+      <h1>Billing</h1>
+      <p>Buy credits, see what you have spent. 1 credit = 1 minute of finished video.</p>
+    </div>
+    <div class="page-body">
+      <div class="panel">
+        <div class="balance-hero">
+          <span class="num" id="billCredits">–</span>
+          <span class="unit">credits available</span>
         </div>
-        <h4 style="margin-bottom:12px;">Change password</h4>
-        <form id="pwForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px;">
-          <input type="password" id="pwOld" placeholder="Current password" required autocomplete="current-password">
-          <input type="password" id="pwNew" placeholder="New password (min. 8 chars)" required autocomplete="new-password" minlength="8">
-          <button class="btn" type="submit" id="btnPwSave">Change password</button>
-        </form>
-        <hr style="border:0; border-top:1px solid var(--line); margin:20px 0;">
-        <h4 style="margin-bottom:8px; color:#e0a06a;">Delete account</h4>
-        <p style="color:var(--mut); font-size:13px; margin-bottom:12px;">
-          Permanently deletes your account, all history, saved setups, and any remaining credit.
-          <b>This cannot be undone.</b> Refunds are not possible for unused credit.
-        </p>
-        <form id="delForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
-          <input type="password" id="delPw" placeholder="Confirm with your password" required>
-          <button class="btn" type="submit" id="btnDel" style="background:#e0503a; color:white;">Delete my account permanently</button>
-        </form>
+        <p class="hint" id="billHint" style="margin-bottom:0;">Billed per started minute of source video.</p>
       </div>
-      <div class="foot">
-        <div style="flex:1;"></div>
-        <button class="btn secondary" id="accountClose">Close</button>
+      <div class="panel">
+        <h3>Top up</h3>
+        <p class="hint">The bigger the pack, the cheaper each credit. Credits stay valid for 6 months.</p>
+        <div id="pricingGrid" class="pricing-grid"></div>
+        <p style="margin-top:18px; color:var(--mut); font-size:12.5px;">
+          Secure payment via Stripe · Card or SEPA debit · Receipt by email.
+          By purchasing you agree to our <a href="/terms" target="_blank" style="color:var(--acc2);">Terms</a>.
+          Refund of unused credits within 14 days.
+        </p>
+      </div>
+      <div class="panel">
+        <h3>Transactions</h3>
+        <p class="hint">Purchases and renders on your account.</p>
+        <div id="historyBody"></div>
       </div>
     </div>
-  </div>
+  </section>
+
+  <!-- ===== PAGE: ACCOUNT ===== -->
+  <section class="page" id="page-account">
+    <div class="page-head">
+      <h1>Account</h1>
+      <p>Your profile and security settings.</p>
+    </div>
+    <div class="page-body">
+      <div class="panel">
+        <h3>Profile</h3>
+        <div class="info-row"><span class="k">Username</span><span class="v" id="accUsername">–</span></div>
+        <div class="info-row"><span class="k">Email</span><span class="v" id="accEmail">–</span></div>
+        <div class="info-row"><span class="k">Member since</span><span class="v" id="accCreated">–</span></div>
+        <div class="info-row">
+          <span class="k">Email status</span>
+          <span class="v">
+            <span id="accVerifyBadge" class="verify-badge no">unverified</span>
+            <button class="btn secondary" id="btnResendVerify" type="button"
+                    style="padding:6px 12px; font-size:12px; margin-left:8px; display:none;">Resend link</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Plan &amp; credits</h3>
+        <div class="info-row"><span class="k">Credits available</span><span class="v" id="accCredits">–</span></div>
+        <div class="info-row"><span class="k">Exports</span><span class="v" id="accWatermark">–</span></div>
+        <div class="info-row" id="accFreeRow" style="display:none;"><span class="k">Next free credits</span><span class="v" id="accFree">–</span></div>
+        <div style="margin-top:16px;">
+          <button class="btn" id="accGoBilling" data-nav="billing" style="padding:9px 16px;">Go to billing</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Security</h3>
+        <p class="hint">Change your password.</p>
+        <form id="pwForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
+          <input type="password" id="pwOld" placeholder="Current password" required autocomplete="current-password">
+          <input type="password" id="pwNew" placeholder="New password (min. 8 chars)" required autocomplete="new-password" minlength="8">
+          <button class="btn" type="submit" id="btnPwSave" style="align-self:flex-start; padding:9px 18px;">Change password</button>
+        </form>
+      </div>
+
+      <div class="panel danger-zone">
+        <details>
+          <summary>Danger zone</summary>
+          <div style="margin-top:14px;">
+            <h3 style="color:#e0503a;">Delete account</h3>
+            <p class="hint">
+              Permanently deletes your account, all library videos, saved setups, and any
+              remaining credit. <b style="color:var(--fg);">This cannot be undone.</b>
+              Refunds are not possible for unused credit.
+            </p>
+            <form id="delForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
+              <input type="password" id="delPw" placeholder="Confirm with your password" required>
+              <button class="btn" type="submit" id="btnDel" style="align-self:flex-start; background:#e0503a; color:white; padding:9px 18px;">Delete my account permanently</button>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
 
   <!-- Transcript Editor Modal (v80y) -->
   <div class="overlay hidden" id="transModal" role="dialog" aria-modal="true">
@@ -1031,41 +1194,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
   </div>
 
-  <!-- Pricing Modal -->
-  <div class="overlay hidden" id="pricingModal" role="dialog" aria-modal="true">
-    <div class="modal" style="max-width:960px;">
-      <div class="head">
-        <h3>Top up credits</h3>
-        <p>Cost per video drops with larger packs. Credits don't expire for 6 months.</p>
-      </div>
-      <div class="body">
-        <div id="pricingGrid" class="pricing-grid"></div>
-        <p style="margin-top:20px; color:var(--mut); font-size:13px; text-align:center;">
-          Secure payment via Stripe · Card or SEPA debit · Receipt by email<br>By purchasing you agree to our <a href="/terms" target="_blank" style="color:var(--acc2);">Terms</a>. Refund of unused credits within 14 days.
-        </p>
-      </div>
-      <div class="foot">
-        <div style="flex:1;"></div>
-        <button class="btn secondary" id="pricingClose">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- History Modal -->
-  <div class="overlay hidden" id="historyModal" role="dialog" aria-modal="true">
-    <div class="modal" style="max-width:720px;">
-      <div class="head">
-        <h3>Your history</h3>
-        <p>All purchases and renders at a glance.</p>
-      </div>
-      <div class="body" id="historyBody"></div>
-      <div class="foot">
-        <div style="flex:1;"></div>
-        <button class="btn secondary" id="historyClose">Close</button>
-      </div>
-    </div>
-  </div>
-
+  <!-- ===== PAGE: CREATE (Wizard) ===== -->
+  <section class="page on" id="page-create">
   <!-- Stepper -->
   <div class="stepper" id="stepper" role="tablist" aria-label="Schritte">
     <div class="step active" data-step="1" role="tab">
@@ -1536,6 +1666,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <button class="btn secondary" id="btnAgain" style="flex:1; min-width:180px;">New video</button>
         </div>
         <p style="color:var(--mut); font-size:13px; margin-top:12px; line-height:1.5;">
+          Saved to your <a data-nav="library" style="color:var(--acc2); cursor:pointer;">Library</a>.
           Not quite happy? "Edit moments" opens the editor with the big text moments, change text, swap effect, pick animation, then a re-render runs with your changes.
         </p>
       </div>
@@ -1558,8 +1689,9 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       </div>
     </div>
 
-    <footer>DouchkoVE Captions v0.1 · Early Access · <a href="/terms" target="_blank" style="color:inherit;">Terms</a> · <a href="/privacy" target="_blank" style="color:inherit;">Privacy</a> · <a href="/imprint" target="_blank" style="color:inherit;">Imprint</a></footer>
   </main>
+  </section><!-- /page-create -->
+  <footer>DouchkoVE Captions · Beta · <a href="/terms" target="_blank" style="color:inherit;">Terms</a> · <a href="/privacy" target="_blank" style="color:inherit;">Privacy</a> · <a href="/imprint" target="_blank" style="color:inherit;">Imprint</a></footer>
 </div>
 
   <!-- Forgot Password Modal (v81) -->
@@ -1960,7 +2092,7 @@ function setAuthMode(mode) {
   $('#btnAuth').textContent = mode === 'register' ? 'Create account' : 'Sign in';
   $('#btnForgot').style.display = mode === 'login' ? 'block' : 'none';
   $('#authSub').textContent = mode === 'register'
-    ? 'Sign up and get 2 free minutes of video to try it out.'
+    ? 'Sign up and get 2 free credits to try it out.'
     : 'Welcome back.';
   $('#loginErr').classList.add('hidden');
 }
@@ -1975,10 +2107,17 @@ async function doAuth() {
   const err = $('#loginErr');
   err.classList.add('hidden');
   if (!email || !pw) return;
-  if (authMode === 'register' && pw.length < 8) {
-    err.textContent = 'Password needs at least 8 characters.';
-    err.classList.remove('hidden');
-    return;
+  if (authMode === 'register') {
+    if (!name || name.length < 3) {
+      err.textContent = 'Please pick a username (at least 3 characters).';
+      err.classList.remove('hidden');
+      return;
+    }
+    if (pw.length < 8) {
+      err.textContent = 'Password needs at least 8 characters.';
+      err.classList.remove('hidden');
+      return;
+    }
   }
   const btn = $('#btnAuth'); btn.disabled = true;
   const orig = btn.textContent;
@@ -2006,7 +2145,8 @@ async function doAuth() {
 
 function enterApp(user) {
   State.code = 'user';
-  State.codeName = user.name || user.email.split('@')[0];
+  State.user = user;
+  State.codeName = user.username || user.name || user.email.split('@')[0];
   State.email = user.email;
   State.verified = user.verified !== false;
   State.balanceSec = user.balance_sec || 0;
@@ -2014,11 +2154,49 @@ function enterApp(user) {
   $('#loginView').classList.add('hidden');
   $('#appView').classList.add('show');
   $('#topName').textContent = State.codeName || 'Account';
-  const min = Math.floor(State.balanceSec / 60);
-  $('#topRest').textContent = `${min} min credit`;
-  updateRing(min || 1, Math.max(min, 5));
-  loadDefaults().then(rebuildAllWidgets).then(buildLooks).then(resumeActiveJob);
+  updateCreditHeader(State.balanceSec);
+  loadDefaults().then(rebuildAllWidgets).then(buildLooks).then(resumeActiveJob)
+    .then(() => routeFromHash());
 }
+
+/* v84: Credit-Anzeige im Header. 1 Credit = 1 Minute. */
+function updateCreditHeader(sec) {
+  const c = Math.floor((sec || 0) / 60);
+  const el = $('#creditNum'); if (el) el.textContent = String(c);
+  const chip = $('#creditChip');
+  if (chip) chip.classList.toggle('low', c < 3);
+}
+
+/* v84: Client-Router - eine echte Seite pro Bereich statt Popups. */
+const PAGES = ['create', 'library', 'billing', 'account'];
+function showSection(name) {
+  if (!PAGES.includes(name)) name = 'create';
+  PAGES.forEach(p => {
+    const pg = document.getElementById('page-' + p);
+    if (pg) pg.classList.toggle('on', p === name);
+  });
+  document.querySelectorAll('#topnav a').forEach(a =>
+    a.classList.toggle('on', a.dataset.nav === name));
+  if (location.hash !== '#/' + name) {
+    try { history.replaceState(null, '', '#/' + name); } catch (e) {}
+  }
+  window.scrollTo(0, 0);
+  if (name === 'library') renderLibrary();
+  if (name === 'billing') renderBilling();
+  if (name === 'account') renderAccount();
+}
+function routeFromHash() {
+  const m = (location.hash || '').match(/^#\/(\w+)/);
+  showSection(m ? m[1] : 'create');
+}
+window.addEventListener('hashchange', routeFromHash);
+document.addEventListener('click', (e) => {
+  const nav = e.target.closest('[data-nav]');
+  if (nav && $('#appView').classList.contains('show')) {
+    e.preventDefault();
+    showSection(nav.dataset.nav);
+  }
+});
 
 async function resumeActiveJob() {
   let saved;
@@ -2139,7 +2317,7 @@ function updateEngagementUI(d) {
   const tf = $('#topFree');
   if (tf) {
     if (d.purchased === false && typeof d.free_reset_days === 'number') {
-      tf.textContent = `+3 free min in ${d.free_reset_days}d`;
+      tf.textContent = `+3 free credits in ${d.free_reset_days}d`;
       tf.style.display = 'inline';
     } else tf.style.display = 'none';
   }
@@ -2182,28 +2360,31 @@ if ($('#onboardClose')) $('#onboardClose').addEventListener('click', () => {
 function refreshBalanceInHeader() {
   fetch('/api/me').then(r => r.json()).then(d => {
     if (!d.ok) return;
+    State.user = d;
     State.balanceSec = d.balance_sec;
     updateEngagementUI(d);
-    const m = Math.floor(d.balance_sec / 60);
-    $('#topRest').textContent = `${m} min credit`;
-    updateRing(m || 1, Math.max(m, 5));
-    if (m < 3) {
-      $('#topRest').style.color = '#e0a06a';
-      $('#topRest').textContent = `${m} min - running low`;
-    }
+    updateCreditHeader(d.balance_sec);
+    // Ist die Account/Billing-Seite gerade offen? Zahlen live nachziehen.
+    const cur = (location.hash || '').match(/^#\/(\w+)/);
+    if (cur && cur[1] === 'account') renderAccount();
+    if (cur && cur[1] === 'billing') renderBilling();
   });
 }
 
-async function showPricing() {
-  const r = await fetch('/api/pricing');
-  const d = await r.json();
-  const grid = $('#pricingGrid');
+/* v84: showPricing = zur Billing-Seite navigieren (kein Popup mehr). */
+function showPricing() { showSection('billing'); }
+
+async function renderPricingGrid() {
+  let d;
+  try { d = await (await fetch('/api/pricing')).json(); } catch (e) { return; }
+  const grid = $('#pricingGrid'); if (!grid) return;
   grid.innerHTML = '';
   const order = ['starter', 'creator', 'pro'];
   order.forEach(id => {
     const p = d.packs[id]; if (!p) return;
     const euro = (p.preis_cent / 100).toFixed(0);
-    const pMin = (p.preis_cent / 100 / p.minuten).toFixed(2);
+    const credits = p.credits || p.minuten;
+    const pC = (p.preis_cent / 100 / credits).toFixed(2);
     const isPop = p.empfohlen;
     const isBest = p.bester_wert;
     const cls = isBest ? 'best' : (isPop ? 'pop' : '');
@@ -2218,7 +2399,7 @@ async function showPricing() {
       ${tag}
       <h4>${p.name}</h4>
       <div class="preis"><span class="cur">€</span>${euro}</div>
-      <div class="ppm">€${pMin} / minute · ${p.minuten} min total</div>
+      <div class="ppm">${credits} credits · €${pC} / credit</div>
       <div class="beschr">${p.beschreibung_en || ''}</div>
       <ul class="p-features">${features}</ul>
       <div class="hinweis">${p.hinweis_en || ''}</div>
@@ -2227,7 +2408,13 @@ async function showPricing() {
     grid.appendChild(card);
   });
   grid.querySelectorAll('.kaufen').forEach(b => b.addEventListener('click', () => startCheckout(b)));
-  $('#pricingModal').classList.remove('hidden');
+}
+
+async function renderBilling() {
+  const c = Math.floor((State.balanceSec || 0) / 60);
+  const bc = $('#billCredits'); if (bc) bc.textContent = String(c);
+  await renderPricingGrid();
+  await renderTransactions();
 }
 
 async function startCheckout(btn) {
@@ -2253,8 +2440,8 @@ async function startCheckout(btn) {
 function handlePostCheckout() {
   const p = new URLSearchParams(location.search);
   if (p.get('bezahlt') === '1') {
-    toast('Payment successful. Credit added.', 'ok', 6000);
-    setTimeout(refreshBalanceInHeader, 1500);
+    toast('Payment successful. Credits added.', 'ok', 6000);
+    setTimeout(() => { refreshBalanceInHeader(); showSection('billing'); }, 1200);
     history.replaceState({}, '', location.pathname);
   } else if (p.get('bezahlt') === '0') {
     toast('Payment cancelled. Nothing charged.', 'info');
@@ -2262,48 +2449,147 @@ function handlePostCheckout() {
   }
 }
 
-async function showHistory() {
-  const r = await fetch('/api/history');
-  const d = await r.json();
-  const body = $('#historyBody');
-  if (!r.ok) { body.innerHTML = '<p style="color:var(--mut)">Not signed in.</p>'; }
-  else if (!d.items || !d.items.length) {
-    body.innerHTML = `<p style="color:var(--mut); text-align:center; padding:40px;">
-      No activity yet. Render your first video or top up credits.</p>`;
-  } else {
-    body.innerHTML = `<p style="margin-bottom:16px; color:var(--mut);">
-      Current credit: <b style="color:var(--fg)">${fmtMin(d.balance_sec)}</b></p>`;
-    d.items.forEach(it => {
-      const dt = new Date(it.zeit * 1000);
-      const plus = it.delta_sec >= 0;
-      const val = plus ? `+${fmtMin(it.delta_sec)}` : `-${fmtMin(-it.delta_sec)}`;
-      const grund = translateGrund(it.grund);
-      const el = document.createElement('div');
-      el.className = 'hist-item';
-      el.innerHTML = `
-        <div>
-          <div class="grund">${grund}</div>
-          <div class="zeit">${dt.toLocaleString()}</div>
-        </div>
-        <div class="delta ${plus ? 'plus' : 'minus'}">${val}</div>`;
-      body.appendChild(el);
-    });
+/* v84: Credits fuer die Anzeige. Betraege sind ganze Minuten -> ganze Credits. */
+function fmtCredits(sec) {
+  const c = Math.max(1, Math.round(Math.abs(sec) / 60));
+  return `${c} credit${c !== 1 ? 's' : ''}`;
+}
+
+async function renderTransactions() {
+  const body = $('#historyBody'); if (!body) return;
+  let d;
+  try { d = await (await fetch('/api/history')).json(); }
+  catch (e) { body.innerHTML = '<p class="hint">Could not load transactions.</p>'; return; }
+  if (!d || !d.items || !d.items.length) {
+    body.innerHTML = `<p class="hint" style="text-align:center; padding:24px 0;">
+      No transactions yet. Your purchases and renders will show up here.</p>`;
+    return;
   }
-  $('#historyModal').classList.remove('hidden');
+  body.innerHTML = '';
+  d.items.forEach(it => {
+    const dt = new Date(it.zeit * 1000);
+    const plus = it.delta_sec >= 0;
+    const val = (plus ? '+' : '-') + fmtCredits(it.delta_sec);
+    const el = document.createElement('div');
+    el.className = 'txn';
+    el.innerHTML = `
+      <div>
+        <div class="grund">${translateGrund(it.grund)}</div>
+        <div class="zeit">${dt.toLocaleString()}</div>
+      </div>
+      <div class="delta ${plus ? 'plus' : 'minus'}">${val}</div>`;
+    body.appendChild(el);
+  });
 }
 
 function translateGrund(g) {
   if (!g) return g;
   return g
     .replace(/^Willkommens-Guthaben$/, 'Welcome credit')
-    .replace(/^Kauf /, 'Purchase ')
-    .replace(/^Render /, 'Render ');
+    .replace(/^Welcome credit$/, 'Welcome credit')
+    .replace(/^Monthly free credit .*/, 'Monthly free credit')
+    .replace(/^Kauf .*/, 'Credit purchase')
+    .replace(/^Render \S+ \(\d+s\)$/, 'Video render')
+    .replace(/^Render /, 'Video render ');
 }
 
-if ($('#btnBuy')) $('#btnBuy').addEventListener('click', showPricing);
-if ($('#btnHistory')) $('#btnHistory').addEventListener('click', showHistory);
-if ($('#pricingClose')) $('#pricingClose').addEventListener('click', () => $('#pricingModal').classList.add('hidden'));
-if ($('#historyClose')) $('#historyClose').addEventListener('click', () => $('#historyModal').classList.add('hidden'));
+/* v84: Library-Seite - private, abspielbare Bibliothek mit Ablauf-Countdown. */
+function fmtCountdown(expiresAt) {
+  const left = expiresAt * 1000 - Date.now();
+  if (left <= 0) return { txt: 'Deleting soon', warn: true };
+  const d = Math.floor(left / 86400000);
+  const h = Math.floor((left % 86400000) / 3600000);
+  if (d >= 1) return { txt: `Deletes in ${d}d ${h}h`, warn: d < 1 };
+  const m = Math.floor((left % 3600000) / 60000);
+  return { txt: `Deletes in ${h}h ${m}m`, warn: true };
+}
+
+async function renderLibrary() {
+  const grid = $('#libGrid'); if (!grid) return;
+  grid.innerHTML = '<p class="hint">Loading …</p>';
+  let d;
+  try { d = await (await fetch('/api/library')).json(); }
+  catch (e) { grid.innerHTML = '<p class="hint">Could not load your library.</p>'; return; }
+  if (!d.items || !d.items.length) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        <p>No videos yet. Render your first one from the <a data-nav="create" style="color:var(--acc2); cursor:pointer;">Create</a> tab.</p>
+      </div>`;
+    return;
+  }
+  grid.innerHTML = '';
+  d.items.forEach(it => {
+    const cd = fmtCountdown(it.expires_at);
+    const card = document.createElement('div');
+    card.className = 'lib-card';
+    const secs = Math.round(it.dauer || 0);
+    const durTxt = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    card.innerHTML = `
+      <div class="lib-thumb" data-jid="${it.jid}">
+        <img src="/api/poster/${it.jid}" alt="" loading="lazy"
+             onerror="this.style.display='none'">
+        <div class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+      </div>
+      <div class="lib-meta">
+        <div class="lib-name" title="${(it.name || '').replace(/"/g, '&quot;')}">${it.name || 'Video'}</div>
+        <div class="lib-sub">${durTxt} min · ${new Date(it.created * 1000).toLocaleDateString()}</div>
+        <div class="lib-count ${cd.warn ? 'warn' : 'ok'}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
+          ${cd.txt}
+        </div>
+        <div class="lib-actions">
+          <a class="btn secondary" href="/api/video/${it.jid}?download=1">Download</a>
+        </div>
+      </div>`;
+    // Klick auf Thumbnail -> inline Player
+    card.querySelector('.lib-thumb').addEventListener('click', function () {
+      if (this.querySelector('video')) return;
+      const v = document.createElement('video');
+      v.src = '/api/video/' + it.jid;
+      v.controls = true; v.autoplay = true; v.playsInline = true;
+      this.innerHTML = '';
+      this.style.cursor = 'default';
+      this.appendChild(v);
+    });
+    grid.appendChild(card);
+  });
+}
+
+/* v84: Account-Seite fuellen. Frische Daten holen (created_at/purchased
+   fehlen in der schlanken Login-Antwort). */
+async function renderAccount() {
+  try {
+    const d = await (await fetch('/api/me')).json();
+    if (d.ok) { State.user = d; State.balanceSec = d.balance_sec;
+      State.verified = d.verified !== false; updateCreditHeader(d.balance_sec); }
+  } catch (e) {}
+  const u = State.user || {};
+  const set = (id, txt) => { const e = $('#' + id); if (e) e.textContent = txt; };
+  set('accUsername', u.username || u.name || '–');
+  set('accEmail', u.email || State.email || '–');
+  set('accCredits', String(Math.floor((State.balanceSec || 0) / 60)) + ' credits');
+  if (u.created_at) {
+    set('accCreated', new Date(u.created_at * 1000).toLocaleDateString());
+  } else set('accCreated', '–');
+  const verified = State.verified !== false;
+  const badge = $('#accVerifyBadge');
+  if (badge) {
+    badge.textContent = verified ? 'verified' : 'unverified';
+    badge.className = 'verify-badge ' + (verified ? 'yes' : 'no');
+  }
+  const rv = $('#btnResendVerify');
+  if (rv) rv.style.display = verified ? 'none' : 'inline-block';
+  set('accWatermark', u.purchased ? 'No watermark' : 'Watermark on exports');
+  const freeRow = $('#accFreeRow');
+  if (freeRow) {
+    if (u.purchased === false && typeof u.free_reset_days === 'number') {
+      freeRow.style.display = 'flex';
+      set('accFree', `+3 credits in ${u.free_reset_days}d`);
+    } else freeRow.style.display = 'none';
+  }
+}
 /* v80y: Transkript-Editor */
 let transOrig = [];
 async function openTranscriptEditor() {
@@ -2375,13 +2661,6 @@ if ($('#btnResendVerify')) $('#btnResendVerify').addEventListener('click', async
     toast(r.ok ? (d.msg || 'Sent.') : (d.detail || 'Failed.'), r.ok ? 'ok' : 'err');
   } catch (e) { toast('Connection error.', 'err'); }
 });
-if ($('#btnAccount')) $('#btnAccount').addEventListener('click', () => {
-  $('#verifyBox').style.display = State.verified === false ? 'block' : 'none';
-  $('#accEmail').textContent = State.email || '';
-  $('#pwOld').value = ''; $('#pwNew').value = ''; $('#delPw').value = '';
-  $('#accountModal').classList.remove('hidden');
-});
-if ($('#accountClose')) $('#accountClose').addEventListener('click', () => $('#accountModal').classList.add('hidden'));
 if ($('#pwForm')) $('#pwForm').addEventListener('submit', async () => {
   const old = $('#pwOld').value, nw = $('#pwNew').value;
   if (nw.length < 8) { toast('New password needs at least 8 characters.', 'err'); return; }
@@ -2412,10 +2691,12 @@ if ($('#delForm')) $('#delForm').addEventListener('submit', async () => {
 });
 
 function updateRing(rest, total) {
+  // v84: Ring durch Credit-Chip ersetzt. Stub bleibt fuer Alt-Aufrufe.
+  const fg = $('#ringFg'), nu = $('#ringNum');
+  if (!fg || !nu) return;
   const pct = total > 0 ? Math.max(0.02, rest / total) : 1;
-  const circ = 113;
-  $('#ringFg').setAttribute('stroke-dashoffset', String(circ * (1 - pct)));
-  $('#ringNum').textContent = String(rest);
+  fg.setAttribute('stroke-dashoffset', String(113 * (1 - pct)));
+  nu.textContent = String(rest);
 }
 
 $('#btnLogout').addEventListener('click', async () => {
@@ -2777,7 +3058,7 @@ async function pollRender() {
 function renderSuccess() {
   $('#doneCard').classList.remove('hidden');
   $('#resultVid').src = '/api/video/' + State.jid;
-  $('#dlLink').href = '/api/video/' + State.jid;
+  $('#dlLink').href = '/api/video/' + State.jid + '?download=1';
   // Peak-End: Stats + Confetti
   const dur = ((Date.now() - State.renderStart) / 1000);
   const min = Math.floor(dur / 60), sec = Math.floor(dur % 60);
@@ -2803,7 +3084,8 @@ function renderSuccess() {
     else $('#doneSub').textContent = 'Rendered. Your hook is weak. Try "Edit moments" to strengthen the first seconds.';
   }).catch(() => {});
   $('#btnRender').disabled = false;
-  if (State.codeRest !== null) { State.codeRest = Math.max(0, State.codeRest - 1);
+  if (State.codeRest !== null && $('#topRest')) {
+    State.codeRest = Math.max(0, State.codeRest - 1);
     $('#topRest').textContent = `${State.codeRest} videos left`; }
   confetti(40);
   toast('Video done!', 'ok', 4000);

@@ -3,6 +3,40 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v84: Eigene Seiten statt Popups + private Video-Bibliothek + Credits (Web).**
+  Grosser Web-UI-Umbau, alles ueber einen Client-Router (Hash-Routen
+  #/create #/library #/billing #/account) - keine Modals mehr fuer History/
+  Account/Kauf.
+  - **Header:** "DouchkoVE" mit kleinem "Beta"-Badge, Top-Nav (Create /
+    Library / Billing / Account), Credit-Chip (klickbar -> Billing),
+    Username, Sign out. Auf Mobil scrollt die Nav, Username blendet aus.
+  - **Library (neu):** private Bibliothek aller fertigen Renders des Users.
+    Kachel mit Standbild (/api/poster, beim ersten Abruf aus dem Video
+    gegriffen + gecacht), Klick spielt inline ab, Download-Button, und ein
+    Ablauf-Countdown pro Video ("Deletes in 6d 23h", RETENTION_DAYS).
+    Ownership hart: /api/video und /api/poster liefern 403 fuer fremde/
+    anonyme Zugriffe, wenn der Job eine user_id hat. /api/library listet
+    nur die eigenen fertigen Jobs.
+  - **Billing (eigene Kategorie):** Guthaben gross oben, Credit-Pakete
+    (Kauf), darunter Transaktionen (Kauf + Verbrauch als Ledger). Alles auf
+    einer Seite statt zwei Popups.
+  - **Account:** nicht mehr "Loeschen zuerst". Profil (Username, E-Mail,
+    Mitglied seit, Verifizierungs-Badge + Resend), Plan & Credits
+    (Guthaben, Wasserzeichen-Status, naechste Gratis-Credits), Passwort
+    aendern, und "Danger zone" (Konto loeschen) eingeklappt ganz unten.
+  - **Registrierung:** Username statt Vorname (3-24 Zeichen, Pflicht,
+    Server- und Client-validiert; keine globale Eindeutigkeit erzwungen -
+    reiner Anzeigename).
+  - **Credits statt Minuten:** 1 Credit = 1 Minute, abgerechnet pro
+    ANGEFANGENER Minute (cost_seconds), so ist die Balance immer glatt und
+    die Credit-Anzeige nie krumm. Intern bleibt der Sekunden-Ledger. Pakete,
+    Pre-Checks, Verbrauch, Header, History alles in Credit-Sprache.
+  Getestet: Backend-Unit (cost_seconds/credits_of/username), Sandbox-Server
+  E2E (register mit Username, /api/me, /api/library, /api/poster+Cache,
+  Ownership 403 fuer fremd+anonym, pricing-credits) und ein Playwright-
+  Smoke durch die echte SPA (Login -> Library-Kachel + Inline-Player ->
+  Billing-Pakete -> Account-Infos -> Credit-Chip-Navigation), 0 JS-Fehler
+  (nur favicon-404, vorbestehend).
 - **v83: Sofort-Transkription beim Datei-Auswaehlen (Web).** Vorher: Upload +
   Whisper starteten erst beim Render-Klick - die Minuten, in denen der User
   Presets einstellt, waren tote Zeit. Jetzt: Beim Auswaehlen laedt die Datei

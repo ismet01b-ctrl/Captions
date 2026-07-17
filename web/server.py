@@ -44,6 +44,24 @@ MAX_MB = int(os.environ.get('DVE_MAX_MB', '300'))
 MAX_SECONDS = int(os.environ.get('DVE_MAX_SECONDS', '180'))
 SESSION_DAYS = 30
 TRIAL_SECONDS = int(os.environ.get('DVE_TRIAL_SECONDS', '120'))  # 2 Min gratis
+RETENTION_DAYS = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
+
+
+# v84: Credits statt roher Minuten. Intern bleibt alles Sekunden (bewaehrt),
+# 1 Credit = 1 Minute Video. Abgerechnet wird pro ANGEFANGENER Minute -
+# so ist die Balance immer ein glattes Vielfaches von 60 und die Credit-
+# Anzeige nie krumm (Guthaben-Gutschriften sind ebenfalls ganze Minuten).
+import math as _math
+
+
+def credits_of(sec):
+    """Sekunden -> ganze Credits (fuer die Anzeige)."""
+    return int(sec) // 60
+
+
+def cost_seconds(dur_sec):
+    """Was ein Video kostet: pro angefangener Minute, mindestens 1 Credit."""
+    return max(1, _math.ceil(float(dur_sec) / 60.0)) * 60
 
 os.makedirs(JOBS_DIR, exist_ok=True)
 os.makedirs(DATA, exist_ok=True)
@@ -155,6 +173,17 @@ def _valid_email(s):
 
 def _valid_pw(s):
     return bool(s) and 8 <= len(s) <= 200
+
+
+_USERNAME_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9 _.-]{1,22})[A-Za-z0-9]$')
+
+
+def _valid_username(s):
+    """v84: Anzeigename (Username) statt Vorname. 3-24 Zeichen, Buchstaben/
+    Zahlen/Leerzeichen/._-, muss mit Buchstabe/Zahl anfangen und enden.
+    Keine globale Eindeutigkeit erzwungen - reiner Anzeigename, das haelt
+    die Registrierung reibungslos (kein 'Name vergeben')."""
+    return bool(s) and bool(_USERNAME_RE.match(s.strip()))
 
 
 def _create_user(email, pw, name=''):
@@ -375,6 +404,9 @@ def _require_user(request):
 # Pricing: Preis (Cent) und Guthaben (Sekunden). Marge kalkuliert auf
 # ~15-16 Cent Kosten pro Minute reales KI-Setup (Text-Regie 2-Pass +
 # selektive Vision-Regie + Whisper).
+# v84: Credit-Pakete. 1 Credit = 1 Minute fertiges Video, abgerechnet pro
+# angefangener Minute. 'minuten'/'sekunden' bleiben als interne Guthaben-
+# Groesse (Sekunden-Ledger), nach aussen wird in Credits gesprochen.
 PACKS = {
     'starter': {
         'name': 'Starter',
@@ -383,7 +415,8 @@ PACKS = {
         'sekunden': 20 * 60,
         'beschreibung_en': 'Test the waters. Enough for 6-8 short reels or 3-4 mid-length videos.',
         'hinweis_en': 'Credits valid for 6 months',
-        'features_en': ['20 minutes of finished video', 'All effects & animations',
+        'features_en': ['20 credits (1 credit = 1 minute of video)',
+                        'All effects & animations',
                         'Full moments editor access', 'Credits valid 6 months'],
     },
     'creator': {
@@ -391,10 +424,11 @@ PACKS = {
         'preis_cent': 1900,
         'minuten': 60,
         'sekunden': 60 * 60,
-        'beschreibung_en': 'Weekly posting schedule. Cheapest per-minute price under €0.35.',
+        'beschreibung_en': 'Weekly posting schedule. Cheapest per-credit price under €0.35.',
         'hinweis_en': 'Save 30% vs Starter · Most popular',
         'empfohlen': True,
-        'features_en': ['60 minutes of finished video', '30% cheaper per minute',
+        'features_en': ['60 credits (1 credit = 1 minute of video)',
+                        '30% cheaper per credit',
                         'Priority queue in busy hours', 'Credits valid 6 months'],
     },
     'pro': {
@@ -402,10 +436,11 @@ PACKS = {
         'preis_cent': 3900,
         'minuten': 150,
         'sekunden': 150 * 60,
-        'beschreibung_en': 'Daily creator or small agency. Lowest cost per minute we offer.',
+        'beschreibung_en': 'Daily creator or small agency. Lowest cost per credit we offer.',
         'hinweis_en': 'Save 42% vs Starter · Best value',
         'bester_wert': True,
-        'features_en': ['150 minutes of finished video', '42% cheaper per minute',
+        'features_en': ['150 credits (1 credit = 1 minute of video)',
+                        '42% cheaper per credit',
                         'Priority queue', 'Credits valid 6 months'],
     },
 }
@@ -476,8 +511,17 @@ app = FastAPI(title='DouchkoVE')
 
 @app.get('/api/pricing')
 def api_pricing():
-    return {'packs': PACKS,
+    # v84: Credits mitliefern (1 Credit = 1 Minute), Anzeige-Sprache im
+    # Frontend spricht Credits statt roher Minuten.
+    packs = {}
+    for pid, p in PACKS.items():
+        q = dict(p)
+        q['credits'] = int(p['sekunden']) // 60
+        packs[pid] = q
+    return {'packs': packs,
             'trial_sec': TRIAL_SECONDS,
+            'trial_credits': credits_of(TRIAL_SECONDS),
+            'credit_minutes': 1,
             'stripe_ready': _stripe() is not None}
 
 
@@ -1122,7 +1166,7 @@ def run_job(jid):
         # (Konkurrenz-Standard, sonst zahlt man jede Korrektur doppelt).
         uid = j.get('user_id')
         if uid and not _render_charged(uid, jid):
-            verbrauch = max(1, int(round(j.get('dauer', 0))))
+            verbrauch = cost_seconds(j.get('dauer', 0))
             _adjust_balance(uid, -verbrauch,
                             f'Render {jid} ({verbrauch}s)')
         set_state(jid, status='fertig', progress=1.0, phase='Done',
@@ -1165,7 +1209,7 @@ def _cleanup_worker():
     DVE_RETENTION_DAYS ueberschreibbar. Laeuft stuendlich.
     v80x: macht nebenbei den taeglichen users.db-Snapshot."""
     import time as _t
-    retention = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
+    retention = RETENTION_DAYS
     while True:
         _backup_users_db()
         try:
@@ -1271,8 +1315,12 @@ def api_register(request: Request, response: Response,
     if not _rate_limit_ok(ip):
         raise HTTPException(429, 'Too many sign-up attempts. Please try again in an hour.')
     email = (email or '').strip().lower()
+    name = (name or '').strip()
     if not _valid_email(email):
         raise HTTPException(400, 'Please enter a valid email address.')
+    if not _valid_username(name):
+        raise HTTPException(400, 'Please pick a username (3-24 characters, '
+                                 'letters, numbers, spaces, . _ -).')
     if not _valid_pw(password):
         raise HTTPException(400, 'Password needs at least 8 characters.')
     uid, err = _create_user(email, password, name)
@@ -1284,6 +1332,7 @@ def api_register(request: Request, response: Response,
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
     u = _find_user_by_id(uid)
     return {'ok': True, 'email': u['email'], 'name': u['name'],
+            'username': u['name'], 'credits': credits_of(u['balance_sec']),
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified'])}
 
 
@@ -1300,6 +1349,7 @@ def api_login(response: Response, email: str = Form(...),
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
     return {'ok': True, 'email': row['email'], 'name': row['name'],
+            'username': row['name'], 'credits': credits_of(row['balance_sec']),
             'balance_sec': row['balance_sec'], 'verified': bool(row['verified'])}
 
 
@@ -1328,6 +1378,8 @@ def api_me(request: Request):
     days_in_month = [31, 29 if lt.tm_year % 4 == 0 else 28, 31, 30, 31, 30,
                      31, 31, 30, 31, 30, 31][lt.tm_mon - 1]
     return {'ok': True, 'email': u['email'], 'name': u['name'],
+            'username': u['name'], 'credits': credits_of(u['balance_sec']),
+            'created_at': int(u['created_at']),
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified']),
             'renders': rc, 'purchased': _has_purchased(u['id']),
             'free_reset_days': days_in_month - lt.tm_mday + 1}
@@ -1575,16 +1627,16 @@ async def upload(request: Request, datei: UploadFile = File(...),
     uid = None
     if u:
         uid = u['id']
-        need = max(1, int(round(dur)))
+        need = cost_seconds(dur)
         if u['balance_sec'] < need:
             shutil.rmtree(d, ignore_errors=True)
-            fehlt = need - u['balance_sec']
+            fehlt = credits_of(need) - credits_of(u['balance_sec'])
             raise HTTPException(
                 402,
-                f"Not enough credit (video needs {need // 60}:"
-                f"{need % 60:02d} min, you have {u['balance_sec'] // 60}:"
-                f"{u['balance_sec'] % 60:02d} min). "
-                f"Missing {fehlt // 60 + 1} min - please top up.")
+                f"Not enough credits (video costs {credits_of(need)} "
+                f"credit{'s' if credits_of(need) != 1 else ''}, you have "
+                f"{credits_of(u['balance_sec'])}). "
+                f"Missing {max(1, fehlt)} - please top up.")
 
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
                  'user_id': uid,
@@ -1634,15 +1686,15 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
             pass
     j['cfg_overrides'] = overrides
     if u and mode == 'full':
-        need = max(1, int(round(j.get('dauer', 0))))
+        need = cost_seconds(j.get('dauer', 0))
         if u['balance_sec'] < need:
-            fehlt = need - u['balance_sec']
+            fehlt = credits_of(need) - credits_of(u['balance_sec'])
             raise HTTPException(
                 402,
-                f"Not enough credit (video needs {need // 60}:"
-                f"{need % 60:02d} min, you have {u['balance_sec'] // 60}:"
-                f"{u['balance_sec'] % 60:02d} min). "
-                f"Missing {fehlt // 60 + 1} min - please top up.")
+                f"Not enough credits (video costs {credits_of(need)} "
+                f"credit{'s' if credits_of(need) != 1 else ''}, you have "
+                f"{credits_of(u['balance_sec'])}). "
+                f"Missing {max(1, fehlt)} - please top up.")
     if j.get('status') in ('wartet', 'laeuft'):
         # Pre-Transkription laeuft noch: Auftrag hinterlegen, der Worker
         # reiht danach selbst ein. Race-sicher ueber atomares dict.pop
@@ -1675,13 +1727,91 @@ def status(jid: str):
     return out
 
 
+def _job_owner_ok(jid, request):
+    """v84: Nur der Ersteller darf ein Job-Video sehen. Jobs ohne user_id
+    (Alt-Bestand / Code-Login) bleiben ueber die jid zugaenglich - die ist
+    ohnehin ein nicht erratbares Geheimnis. Jobs MIT user_id sind privat."""
+    j = JOBS.get(jid)
+    if not j:
+        sp = os.path.join(job_dir(jid), 'state.json')
+        if os.path.exists(sp):
+            try:
+                j = json.load(open(sp, encoding='utf-8'))
+            except Exception:
+                j = None
+    owner = (j or {}).get('user_id')
+    if owner is None:
+        return True
+    u = _current_user(request)
+    return bool(u and u['id'] == owner)
+
+
 @app.get('/api/video/{jid}')
-def video(jid: str):
+def video(jid: str, request: Request, download: int = 0):
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This video belongs to another account.')
     p = os.path.join(job_dir(jid), 'fertig.mp4')
     if not os.path.exists(p):
         raise HTTPException(404, 'Not ready yet.')
-    return FileResponse(p, media_type='video/mp4',
-                        filename='DouchkoVE_Captions.mp4')
+    # download=1 erzwingt den Speichern-Dialog; sonst inline (Library-Player).
+    if download:
+        return FileResponse(p, media_type='video/mp4',
+                            filename='DouchkoVE_Captions.mp4')
+    return FileResponse(p, media_type='video/mp4')
+
+
+@app.get('/api/poster/{jid}')
+def poster(jid: str, request: Request):
+    """v84: Standbild fuer die Library-Kachel. Beim ersten Abruf aus dem
+    fertigen Video gegriffen und gecacht."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This video belongs to another account.')
+    d = job_dir(jid)
+    mp4 = os.path.join(d, 'fertig.mp4')
+    if not os.path.exists(mp4):
+        raise HTTPException(404, 'Not ready yet.')
+    poster_path = os.path.join(d, 'poster.jpg')
+    if not os.path.exists(poster_path):
+        try:
+            subprocess.run(
+                ['ffmpeg', '-y', '-v', 'error', '-ss', '0.8', '-i', mp4,
+                 '-frames:v', '1', '-vf', 'scale=360:-2', poster_path],
+                check=True, timeout=30)
+        except Exception:
+            raise HTTPException(404, 'No poster available.')
+    return FileResponse(poster_path, media_type='image/jpeg')
+
+
+@app.get('/api/library')
+def api_library(request: Request):
+    """v84: Private Bibliothek. Alle fertigen Renders des eingeloggten
+    Users, abspielbar, mit Ablauf-Countdown (Auto-Loeschung nach
+    RETENTION_DAYS)."""
+    u = _require_user(request)
+    items = []
+    for jid, j in list(JOBS.items()):
+        if j.get('user_id') != u['id']:
+            continue
+        if j.get('status') != 'fertig':
+            continue
+        d = job_dir(jid)
+        mp4 = os.path.join(d, 'fertig.mp4')
+        if not os.path.exists(mp4):
+            continue
+        try:
+            finished = os.path.getmtime(mp4)
+            expires = os.path.getmtime(d) + RETENTION_DAYS * 86400
+        except OSError:
+            continue
+        items.append({
+            'jid': jid,
+            'name': j.get('name') or 'video.mp4',
+            'dauer': j.get('dauer', 0),
+            'created': int(finished),
+            'expires_at': int(expires),
+        })
+    items.sort(key=lambda x: x['created'], reverse=True)
+    return {'items': items, 'retention_days': RETENTION_DAYS}
 
 
 @app.get('/api/moments/{jid}')
