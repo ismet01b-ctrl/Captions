@@ -2035,6 +2035,24 @@ def _scenario_security(tmp):
     # 15) Login gleicht Timing an (Dummy-Hash bei unbekannter Mail)
     check('Login: Timing-Angleich gegen Mail-Enumeration',
           '_verify_pw(password, _DUMMY_HASH)' in _src)
+    # 16) v94: _video_hash kollidiert nicht bei gleichem Anfang/Ende, anderer
+    # Mitte (der Bug, der einen deutschen Transkript-Cache an einen englischen
+    # Clip servierte). Zwei Dateien: identischer Kopf+Fuss, verschiedene Mitte.
+    import tempfile as _tf2
+    head = b'H' * 300000
+    tail = b'T' * 300000
+    mid_a = b'A' * 600000
+    mid_b = b'B' * 600000
+    pa = os.path.join(_tf2.gettempdir(), 'vh_a.bin')
+    pb = os.path.join(_tf2.gettempdir(), 'vh_b.bin')
+    open(pa, 'wb').write(head + mid_a + tail)
+    open(pb, 'wb').write(head + mid_b + tail)      # gleiche Groesse, Kopf, Fuss
+    ha, hb = SV._video_hash(pa), SV._video_hash(pb)
+    check('_video_hash: keine Kollision bei anderer Mitte',
+          bool(ha) and ha != hb, f'{ha[:8] if ha else None} vs {hb[:8] if hb else None}')
+    check('_video_hash: gleiche Datei -> gleicher Hash',
+          SV._video_hash(pa) == ha)
+    os.remove(pa); os.remove(pb)
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

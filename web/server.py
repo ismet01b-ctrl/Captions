@@ -75,17 +75,25 @@ os.makedirs(_TCACHE, exist_ok=True)
 
 
 def _video_hash(path):
-    """Schneller, stabiler Inhalts-Hash: Groesse + erste/letzte 256 KB. Reicht,
-    um dieselbe Datei wiederzuerkennen, ohne GB durchzulesen."""
+    """Schneller, stabiler Inhalts-Hash. v94: NICHT mehr nur Anfang+Ende.
+    Clips aus derselben App/Vorlage teilen oft identischen Header und Footer
+    (gleiche Groesse, gleiche erste/letzte 256 KB) -> zwei VERSCHIEDENE Videos
+    bekamen denselben Hash -> falscher Transkript-Cache wurde serviert (ein
+    deutscher Clip vergiftete einen englischen). Jetzt 8 Stellen QUER durch die
+    Datei lesen; die Mitte, wo sich der Inhalt garantiert unterscheidet, zaehlt
+    mit. Bleibt schnell (2 MB gelesen statt GB)."""
     import hashlib
     try:
         sz = os.path.getsize(path)
         h = hashlib.sha1(str(sz).encode())
+        chunk, points = 262144, 8
         with open(path, 'rb') as f:
-            h.update(f.read(262144))
-            if sz > 262144:
-                f.seek(max(0, sz - 262144))
-                h.update(f.read(262144))
+            if sz <= chunk:
+                return hashlib.sha1(str(sz).encode() + f.read()).hexdigest()
+            for k in range(points):
+                off = int((sz - chunk) * k / (points - 1))
+                f.seek(off)
+                h.update(f.read(chunk))
         return h.hexdigest()
     except Exception:
         return None
