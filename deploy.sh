@@ -90,7 +90,8 @@ fi
 echo
 log "Fertig. App laeuft auf https://$DOMAIN"
 log "Caddy holt Let's Encrypt-Zertifikat beim ersten HTTPS-Request (dauert ~30 s)."
-log "Admin-Uebersicht: https://$DOMAIN/admin/codes?schluessel=$DVE_ADMIN"
+log "Admin-Uebersicht (Schluessel jetzt per Header, nicht mehr in der URL):"
+log "  curl -H \"X-Admin-Key: \$DVE_ADMIN\" https://$DOMAIN/admin/codes"
 log ""
 log "Naechste Schritte:"
 log "  - Test aufrufen: https://$DOMAIN"
