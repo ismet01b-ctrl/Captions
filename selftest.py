@@ -496,6 +496,24 @@ def _scenario_logic(clip, transcript, tmp):
     R._apply_corrections(_fme, _wc, [{'phrase': 'ganz anderes', 'user_fx': 'ground'}])
     check('Ohne passende Korrektur bleibt alles', _fme[1]['fx'] == 'behind')
 
+    # Sprach-Intent: die Caption folgt der Ansage im Satz (Kern-Differenzierung).
+    def _W(s): return [{'word': w} for w in s.split()]
+    _si1 = {1: {'fx': 'outline', 'power': 2, 'n': 1}}
+    R._speech_intent(_si1, _W('schau die caption ist hinter mir jetzt'))
+    check('"hinter mir" -> Text hinter der Person', _si1[1]['fx'] == 'behind')
+    _si2 = {2: {'fx': 'behind', 'power': 3, 'n': 1}}
+    R._speech_intent(_si2, _W('das wort STREET auf dem boden liegt'))
+    check('"auf dem Boden" -> liegt am Boden',
+          _si2[2]['fx'] == 'ground' and _si2[2].get('szene') == 'boden'
+          and _si2[2].get('lage') == 'liegend')
+    _si3 = {2: {'fx': 'cascade', 'power': 3, 'n': 1}}
+    R._speech_intent(_si3, _W('mein name DouchkoVE ueber mir am himmel'))
+    check('"am Himmel" -> steigt ueber den Kopf',
+          _si3[2]['fx'] == 'behind' and _si3[2].get('szene') == 'himmel')
+    _si4 = {1: {'fx': 'outline', 'power': 2, 'n': 1}}
+    R._speech_intent(_si4, _W('das ist einfach ein normaler satz'))
+    check('Ohne Orts-Ansage bleibt der Effekt', _si4[1]['fx'] == 'outline')
+
     # Zahlen in der Fallback-Heuristik (jede Sprache)
     wn = [{'word': w, 'start': 1 + i * .3, 'end': 1.25 + i * .3} for i, w in
           enumerate(['Wir', 'zahlen', 'heute', '100', 'Euro', 'dafuer.'])]

@@ -1746,6 +1746,19 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   cascade = elegante Begriffe, Namen
   blurin = Themenwechsel, neue Kapitel
   ground = grosse Statements, Schluss-Sätze
+- INTERAKTION (WICHTIGSTE Regel - so hebt sich das Video von Konkurrenz ab):
+  Die Caption ist kein Aufkleber, sie REAGIERT auf das Gesagte. Wenn der
+  Sprecher die Position oder Bewegung eines Wortes ANSAGT, MUSS der Effekt
+  das abbilden - das Wort tut, was gesagt wird:
+    "hinter mir" / "behind me"        -> fx "behind" (Wort steht hinter der Person)
+    "auf dem Boden/der Strasse"       -> fx "ground", szene "boden", lage "liegend"
+    "ueber mir" / "am Himmel"         -> fx "behind", szene "himmel" (steigt ueber den Kopf)
+    "an der Wand"                     -> fx "ground", szene "wand", lage "stehend"
+    "im Wasser"                       -> fx "ground", szene "wasser", lage "liegend"
+    "es faellt/sinkt"    -> anim "sturz"    "es steigt/waechst" -> anim "anstieg"
+    "es zerbricht"       -> anim "bruch"    "verschwindet"      -> anim "schwund"
+  Denk pro Moment mit: Was passiert im Satz? Wo im Bild ergibt das Wort Sinn?
+  Lieber ein durchdachter Moment als drei beliebige.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \
@@ -2022,6 +2035,57 @@ def _regie_sanity(fx_map, words):
     return fx_map
 
 
+# Selbst-referenzielle Orts-/Lage-Ansagen im Gesprochenen. Sagt der Sprecher,
+# WO das Wort hin soll, MUSS die Caption das abbilden - genau das ist "der Text
+# interagiert mit dem Satz", nicht billig draufgeklatscht. (fx, szene, lage,
+# Trigger-Phrasen - Mehrwort, als Teilstring im Kontext gesucht.)
+_INTENT_SPATIAL = (
+    ('behind', '',       '',        ('hinter mir', 'hinter uns', 'hinter dir',
+                                     'hinter mich', 'behind me', 'behind us',
+                                     'behind you')),
+    ('ground', 'himmel', '',        ('ueber mir', 'ueber uns', 'ueberm kopf',
+                                     'am himmel', 'in den himmel', 'in the sky',
+                                     'above me', 'above us', 'up above',
+                                     'over my head')),
+    ('ground', 'boden',  'liegend', ('auf dem boden', 'am boden', 'auf der strasse',
+                                     'auf der strase', 'auf den boden', 'am boden liegt',
+                                     'on the ground', 'on the floor', 'on the street',
+                                     'on the pavement', 'on the road')),
+    ('ground', 'wasser', 'liegend', ('im wasser', 'auf dem wasser', 'in the water',
+                                     'on the water', 'unter wasser')),
+    ('ground', 'wand',   'stehend', ('an der wand', 'an die wand', 'on the wall',
+                                     'against the wall')),
+)
+
+def _speech_intent(fx_map, words):
+    """Wenn der Sprecher die Position des Wortes beschreibt ('hinter mir',
+    'auf dem Boden', 'ueber mir/am Himmel'), setzt die Caption GENAU das um -
+    egal was die generische Effekt-Wahl vorschlug. So folgt der Text dem, was
+    gesagt wird. Deterministisch; ueberstimmt nur bei eindeutiger Ansage.
+    Hinweis 'himmel' nutzt fx 'behind' + szene 'himmel' (steigt ueber den Kopf)."""
+    if not fx_map:
+        return fx_map
+    hits = 0
+    for i in list(fx_map):
+        n = int(fx_map[i].get('n', 1))
+        a = max(0, i - 3); b = min(len(words), i + n + 6)
+        ctx = ' '.join(clean(words[j].get('word', '')) for j in range(a, b)).lower()
+        for fx, szene, lage, triggers in _INTENT_SPATIAL:
+            if any(t in ctx for t in triggers):
+                # 'himmel' lebt hinter der Person und steigt ueber den Kopf
+                fx_map[i]['fx'] = 'behind' if szene == 'himmel' else fx
+                if szene:
+                    fx_map[i]['szene'] = szene
+                if lage:
+                    fx_map[i]['lage'] = lage
+                hits += 1
+                break
+    if hits:
+        print(f"  Sprach-Intent: {hits} Caption(s) folgen der Ansage "
+              f"(hinter/Boden/Himmel/Wasser/Wand)")
+    return fx_map
+
+
 def _corrections_path():
     return os.path.join(os.environ.get('DVE_DATA') or os.path.join(HERE, 'data'),
                         'corrections.json')
@@ -2139,7 +2203,8 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     if voice_wav:
         merged = _audio_boost(merged, words, voice_wav)
     merged = _regie_sanity(merged, words)
-    merged = _apply_corrections(merged, words, _load_corrections())
+    merged = _speech_intent(merged, words)          # Text folgt der Ansage
+    merged = _apply_corrections(merged, words, _load_corrections())  # Nutzer gewinnt zuletzt
     return _cap_power3(merged) if merged else None
 
 # ---- Zahlen: nicht jede Zahl ist eine Aussage.
