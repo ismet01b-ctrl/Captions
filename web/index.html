@@ -760,16 +760,21 @@ body {
   border: 1px solid var(--line); border-radius: 10px;
   font-size: 14px; font-weight: 600;
 }
-/* v81b: Modal-Inputs dunkel (waren Browser-Default weiss) */
-#forgotModal input, #resetModal input, #accountModal input {
+/* v81b: Modal-Inputs dunkel (waren Browser-Default weiss)
+   v94: Account-Seite (Security/Danger) war NICHT abgedeckt -> Felder weiss. */
+#forgotModal input, #resetModal input, #accountModal input,
+#page-account input[type=password], #page-account input[type=text],
+#page-account input[type=email] {
   width: 100%; padding: 12px 14px;
   background: var(--surf2); color: var(--fg);
   border: 1px solid var(--line); border-radius: 10px;
   font-size: 15px; text-transform: none;
 }
-#forgotModal input:focus, #resetModal input:focus, #accountModal input:focus {
+#forgotModal input:focus, #resetModal input:focus, #accountModal input:focus,
+#page-account input:focus {
   outline: none; border-color: var(--acc);
 }
+#page-account input::placeholder { color: var(--mut); }
 
 /* v80y: Transcript-Editor */
 .tw {
@@ -1357,28 +1362,10 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               Energetic = word by word (Reels/Shorts).</div>
             <div class="seg" data-cfg="effects.density" data-opts="Calm:sparsam,Balanced:akzente,Energetic:wortweise"></div>
           </div>
-          <div class="setting"><div class="setting-label">Language in the video</div>
-            <div class="setting-desc">Auto-detect works for ~50 languages. Picking one is a bit faster
-              and more reliable for heavy accents.</div>
-            <select data-cfg="language" class="lang-select" aria-label="Language">
-              <option value="auto">Auto-detect</option>
-              <option value="en">English</option>
-              <option value="de">German</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-              <option value="it">Italian</option>
-              <option value="pt">Portuguese</option>
-              <option value="nl">Dutch</option>
-              <option value="tr">Turkish</option>
-              <option value="pl">Polish</option>
-              <option value="ru">Russian</option>
-              <option value="uk">Ukrainian</option>
-              <option value="ar">Arabic</option>
-              <option value="hi">Hindi</option>
-              <option value="ja">Japanese</option>
-              <option value="ko">Korean</option>
-              <option value="zh">Chinese</option>
-            </select>
+          <div class="setting"><div class="setting-label">Language</div>
+            <div class="setting-desc">Detected automatically from your audio - no need to pick.
+              Supported: English, German, Spanish, French, Italian, Portuguese, Dutch, Turkish,
+              Polish, Russian, Ukrainian, Arabic, Hindi, Japanese, Korean, Chinese and ~35 more.</div>
           </div>
         </div>
       </div>
