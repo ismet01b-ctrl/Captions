@@ -2116,6 +2116,22 @@ def _scenario_lang(tmp):
     _r = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('Regie-Prompt: Aktion-Wort-als-Keyword-Regel vorhanden',
           'AKTION-WORT ALS KEYWORD' in _r and 'explodes->explosion' in _r)
+    # KERN von B: _apply_action_anim erzwingt Animationen ohne GPT
+    w2 = [{'word': w} for w in
+          'the word flies and everything explodes then shatter'.split()]
+    fm = R._apply_action_anim({}, w2)
+    anims = {w2[i]['word']: v.get('anim') for i, v in fm.items()}
+    check('Aktion-Anim erzwungen: flies->spur, explodes->explosion, shatter->bruch',
+          anims.get('flies') == 'spur' and anims.get('explodes') == 'explosion'
+          and anims.get('shatter') == 'bruch', str(anims))
+    fm2 = R._apply_action_anim({5: {'fx': 'outline', 'power': 3, 'n': 1}}, w2)
+    check('Aktion-Anim: vorhandenes Wort behaelt fx, kriegt nur Anim dazu',
+          fm2[5].get('fx') == 'outline' and fm2[5].get('anim') == 'explosion')
+    # Deutsch: "die Preise fallen" -> fallen wird sturz
+    wd = [{'word': w} for w in 'die preise fallen heute stark'.split()]
+    fmd = R._apply_action_anim({}, wd)
+    check('Aktion-Anim Deutsch: fallen->sturz',
+          any(v.get('anim') == 'sturz' for v in fmd.values()), str(fmd))
 
 
 def _scenario_premium(tmp):

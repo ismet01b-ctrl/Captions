@@ -2306,6 +2306,60 @@ def _looks_german(words):
     return sum(txt.count(m) for m in de) >= 3
 
 
+# v94: Aktion-/Wirkungs-Woerter -> GARANTIERTE Animation. GPT waehlt oft nur
+# Substantive, darum reicht der Prompt nicht: hier wird deterministisch, egal
+# was das LLM tut, fuer klare Aktions-Woerter (DE+EN) die passende Animation
+# erzwungen. So explodiert "explodes" wirklich, "shatter" zerbricht, "flies"
+# fliegt. Vorhandene Momente bekommen nur die fehlende Anim; neue werden
+# gedeckelt angelegt (max_new), damit es nicht zappelt.
+_ACTION_ANIM = {
+    'explode': 'explosion', 'explodes': 'explosion', 'exploded': 'explosion',
+    'exploding': 'explosion', 'burst': 'explosion', 'bursts': 'explosion',
+    'shatter': 'bruch', 'shatters': 'bruch', 'shattered': 'bruch',
+    'shattering': 'bruch', 'break': 'bruch', 'breaks': 'bruch', 'broke': 'bruch',
+    'broken': 'bruch', 'crack': 'bruch', 'cracks': 'bruch', 'cracked': 'bruch',
+    'collapse': 'bruch', 'collapses': 'bruch',
+    'fly': 'spur', 'flies': 'spur', 'flew': 'spur', 'flying': 'spur',
+    'shoot': 'spur', 'shoots': 'spur', 'race': 'spur', 'races': 'spur',
+    'rush': 'spur', 'rushes': 'spur',
+    'crash': 'sturz', 'crashes': 'sturz', 'crashed': 'sturz', 'fall': 'sturz',
+    'falls': 'sturz', 'fell': 'sturz', 'drop': 'sturz', 'drops': 'sturz',
+    'dropped': 'sturz', 'sink': 'sturz', 'sinks': 'sturz', 'plummet': 'sturz',
+    'plummets': 'sturz', 'tumble': 'sturz', 'tumbles': 'sturz',
+    'rise': 'anstieg', 'rises': 'anstieg', 'rose': 'anstieg', 'soar': 'anstieg',
+    'soars': 'anstieg', 'climb': 'anstieg', 'climbs': 'anstieg', 'grow': 'anstieg',
+    'grows': 'anstieg', 'surge': 'anstieg', 'surges': 'anstieg',
+    'pop': 'zoom_punch', 'pops': 'zoom_punch', 'hit': 'zoom_punch',
+    'hits': 'zoom_punch', 'boom': 'zoom_punch', 'slam': 'stempel', 'slams': 'stempel',
+    'disappear': 'schwund', 'disappears': 'schwund', 'vanish': 'schwund',
+    'vanishes': 'schwund',
+    'explodiert': 'explosion', 'explodieren': 'explosion', 'zerbricht': 'bruch',
+    'zerbrechen': 'bruch', 'bricht': 'bruch', 'brechen': 'bruch',
+    'zerspringt': 'bruch', 'fliegt': 'spur', 'fliegen': 'spur', 'faellt': 'sturz',
+    'fällt': 'sturz', 'fallen': 'sturz', 'stuerzt': 'sturz', 'stürzt': 'sturz',
+    'sinkt': 'sturz', 'sinken': 'sturz', 'kracht': 'sturz', 'steigt': 'anstieg',
+    'steigen': 'anstieg', 'waechst': 'anstieg', 'wächst': 'anstieg',
+    'knallt': 'zoom_punch', 'verschwindet': 'schwund', 'verschwinden': 'schwund',
+}
+
+
+def _apply_action_anim(fx_map, words, max_new=5):
+    """Erzwingt Animationen fuer Aktions-Woerter (siehe _ACTION_ANIM)."""
+    if not isinstance(fx_map, dict):
+        fx_map = {}
+    added = 0
+    for i, w in enumerate(words):
+        anim = _ACTION_ANIM.get(clean(w.get('word', '')).lower())
+        if not anim:
+            continue
+        if i in fx_map and isinstance(fx_map[i], dict):
+            fx_map[i].setdefault('anim', anim)      # vorhandenes Wort: Anim rein
+        elif added < max_new:
+            fx_map[i] = {'fx': 'behind', 'power': 2, 'n': 1, 'anim': anim}
+            added += 1
+    return fx_map
+
+
 def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     """LLM waehlt Keywords, Phrasen, Effekte und Wucht. Gibt {index: info} zurueck oder None.
     Lange Videos werden in Etappen analysiert, damit die JSON-Antwort nie abgeschnitten wird.
@@ -2378,6 +2432,7 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
         merged = _audio_boost(merged, words, voice_wav)
     merged = _regie_sanity(merged, words)
     merged = _speech_intent(merged, words)          # Text folgt der Ansage
+    merged = _apply_action_anim(merged, words)      # v94: Aktion -> Animation garantiert
     merged = _apply_corrections(merged, words, _load_corrections())  # Nutzer gewinnt zuletzt
     return _cap_power3(merged) if merged else None
 
@@ -5067,6 +5122,10 @@ def main():
                                          **({'lage': v['lage']} if v.get('lage') else {})}
                                         for i, v in sorted(fx_map.items())]},
                           open(regie_path, 'w', encoding='utf-8'))
+    if fx_map is not None:
+        # v94: Aktion->Animation auch auf dem regie3-Cache-Pfad erzwingen
+        # (dort laeuft ai_direct nicht). Idempotent zur ai_direct-Kette.
+        fx_map = _apply_action_anim(fx_map, words)
     if fx_map:
         kw = set(fx_map)
         manual = detect_keywords(words, {**cfg, 'keywords': {**cfg['keywords'], 'auto': False}},
