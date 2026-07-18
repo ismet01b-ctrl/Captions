@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 models/
 sfx/pack/
+sfx/incoming/
 data/
 *_transcript.json
 *_transcript2.json
