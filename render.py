@@ -4305,8 +4305,13 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
     _ring = float(cfg['effects'].get('counter_ring', 0.0) or 0.0)
     if _ring > 0.02:
         comp = apply_counter_ring(comp, active, t, W, H, _ring)
+    # Trail ist ein TEXT-Effekt (versetzte Text-Kopien). Er darf NUR laufen,
+    # wenn wirklich eine Caption auf dem Bild ist. Sonst erkennt der Diff
+    # comp-vs-frame die durch Kamera-Zoom/-Schwenk/Grade verschobenen
+    # Personen-Kanten als "Text" und dupliziert die Person -> sie wirkt doppelt,
+    # gerade in Passagen OHNE Caption. Kein aktiver Text -> kein Trail.
     _trail = float(cfg['effects'].get('trail', 0.0) or 0.0)
-    if _trail > 0.02:
+    if _trail > 0.02 and active:
         comp = apply_duplicate_trail(comp, frame, _trail)
     _split = float(cfg['effects'].get('split_screen', 0.0) or 0.0)
     if _split > 0.02:

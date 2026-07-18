@@ -226,22 +226,35 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
         w = words[p['kw_i']]['word'].strip()
         print(f"  SFX '{w}': Onset {off*1000:+.0f} ms, Pegel x{g:.2f}"
               + (' +Boom' if pw >= 3 else ''))
-    # Stacks (laufende Wortgruppen): fuehlbarer Micro-Tick, aber nie im Weg
+    # Folge-Captions (laufende Wortgruppen): JEDE bekommt einen dezenten
+    # Einflug-Sound. Vorher lief nur ein rate-begrenzter Micro-Tick (>=1s
+    # Abstand + nahe Keywords unterdrueckt) - Ergebnis: bei drei Captions
+    # hintereinander klang nur die erste, danach Stille -> wirkte unfertig.
+    # Jetzt fliegt jede Caption hoerbar ein (weicher Whoosh, sonst Tick),
+    # nur echtes Uebereinander und der Keyword-Einschlag selbst werden gemieden.
     last_tick = -9.0
     n_ticks = 0
+    soft = bank.get('whoosh_soft')
+    if soft is None:
+        soft = bank.get('whoosh')
+    if soft is None:
+        soft = bank.get('tick')
     for p in plans:
         if p.get('tpl') != 'stack':
             continue
         ts, _ = snap(p['start'])
-        if ts - last_tick < 1.0:
-            continue                       # Anti-Matsch: Ticks nicht haeufen
-        if any(abs(ts - kt) < 0.9 for kt in kw_times):
-            continue                       # Keyword-Momente behalten die Buehne
-        place(bank.get('tick'), ts, 0.30 * local_gain(ts))
+        if ts - last_tick < 0.28:
+            continue                       # nur echtes Uebereinander vermeiden
+        if any(abs(ts - kt) < 0.32 for kt in kw_times):
+            continue                       # nicht direkt auf den Keyword-Einschlag
+        g_soft = local_gain(ts)
+        place(soft, ts - 0.04, 0.42 * g_soft)
+        # feiner Akzent auf dem Wort-Einsatz obendrauf (fuellt die Stille)
+        place(bank.get('tick'), ts + 0.02, 0.22 * g_soft)
         last_tick = ts
         n_ticks += 1
     if n_ticks:
-        print(f"  SFX: {n_ticks} Micro-Ticks auf Wortgruppen")
+        print(f"  SFX: {n_ticks} Einflug-Sounds auf Folge-Captions")
         n_placed += n_ticks
     peak = np.abs(total).max()
     if peak > 1.0:
