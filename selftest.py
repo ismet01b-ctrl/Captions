@@ -618,6 +618,31 @@ def _scenario_logic(clip, transcript, tmp):
           and not kpg_w[0].get('lying') and not kpg_w[0].get('scene_blend')
           and kpg_w[0].get('refl') is None)
 
+    # v93: "liegt schon da" - Szenen-Moment beginnt VOR dem Wort; t_word
+    # haelt den Sprech-Zeitpunkt (Anker-Fenster + Fallback), flat_arr das
+    # Roh-Sprite fuer die gemessene Neigung.
+    check('Szenen-Text startet vor dem Wort',
+          bool(kpg_t) and kpg_t[0].get('t_word') is not None
+          and kpg_t[0]['start'] < kpg_t[0]['t_word'] - 0.9
+          and kpg_t[0].get('flat_arr') is not None)
+    # Neigung aus der Tiefenkarte (Naehe: nah=gross)
+    _H2, _W2 = 240, 200
+    _n1 = (np.arange(_H2, dtype=np.float32) / _H2)[:, None].repeat(_W2, 1)
+    _p1 = R.ground_pose(_n1, 100, 170, 80, 60, _W2, _H2)
+    check('Bodenneigung: gerade Flucht -> kein Roll',
+          _p1 is not None and abs(_p1[0]) < 6)
+    _n2 = (0.7 * (np.arange(_H2, dtype=np.float32) / _H2)[:, None]
+           + 0.3 * (np.arange(_W2, dtype=np.float32) / _W2)[None, :])
+    _p2 = R.ground_pose(_n2.astype(np.float32), 100, 170, 80, 60, _W2, _H2)
+    check('Bodenneigung: diagonale Flucht -> Roll',
+          _p2 is not None and _p2[0] < -10)
+    _pu = R.ground_pose(np.full((_H2, _W2), 0.5, np.float32),
+                        100, 170, 80, 60, _W2, _H2)
+    check('Bodenneigung: Draufsicht -> flach ohne Roll',
+          _pu is not None and _pu[0] == 0.0 and _pu[1] <= 0.6)
+    check('Kein Boden, der nach unten flieht',
+          R.ground_pose(1 - _n1, 100, 170, 80, 60, _W2, _H2) is None)
+
     # High-End-Look: kein Unterstrich mehr, nirgends
     wc2 = [{'word': w, 'start': 1 + i * .4, 'end': 1.3 + i * .4} for i, w in
            enumerate(['Eleganz', 'ist', 'leise'])]

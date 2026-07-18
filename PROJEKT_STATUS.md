@@ -3,6 +3,42 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v93: Szenen-Text ist Teil der Welt - liegt schon da, bewegt sich nicht,
+  Neigung folgt der echten Flaeche.** Ismets Abnahme-Kritik am STREET-Frame:
+  Neigung passte nicht zum Pflaster, und das Wort soll schon liegen, wenn
+  die Kamera hinschwenkt - ohne Eigenbewegung. Umgesetzt fuer alle
+  Szenen-Texte (Boden/Wasser/Wand):
+  1) **Gemessene Neigung (ground_pose)**: Aus der Tiefenkarte wird am Anker
+     die Fluchtrichtung der Flaeche gemessen (Naehe-Gradient): Roll folgt
+     der Diagonale des Pflasters, Pitch der Staerke des Gefaelles;
+     Draufsicht (uniforme Tiefe) = flach ohne Roll. Kein generisches
+     yaw/pitch mehr. Lazy gemessen, sobald die Flaeche sichtbar ist.
+  2) **Pre-Lying**: Szenen-Momente starten 1.5s vor dem Wort (t_word merkt
+     sich den Sprech-Zeitpunkt). Ab t_word-0.6 versucht der Anker jeden
+     Frame; gezeichnet wird erst, wenn die Kamera die Flaeche freigibt -
+     die Kamera findet ein Wort, das schon da liegt. Wird das verankerte
+     Wort vor dem Wort-Zeitpunkt komplett aus dem Bild geschoben, ankert es
+     still neu auf der jetzt sichtbaren Flaeche.
+  3) **Starr (rigid)**: liegender Text hat KEINE Eigenbewegung mehr - keine
+     Track-Daempfung, kein Drift-Deckel, kein Einflug, keine Anim, kein
+     Atmen. Er klebt exakt auf der Flaeche und verlaesst das Bild mit dem
+     Schwenk wie ein echtes gemaltes Objekt. Nur schneller 0.12s-Fade beim
+     ersten Erscheinen.
+  4) **Anker v3**: Fenster ab t_word-0.6 (frueher = Track-Referenz in der
+     Sprecher-Phase = Muell); Teilverdeckung bis 70% erlaubt (Arm vor dem
+     Wort = Signature-Look); B-Roll-Band = Bildmitte der freigeschwenkten
+     Flaeche (dort haelt die Kamera), Talking-Head-Band = unten; Decay-Union
+     0.6 gegen den 'Geist' der Person; immer voll im Bild.
+  5) **Schnitt-Erkennung entschaerft**: harter Pixel-Diff + KEINE kohaerente
+     Bewegung (Phasen-Korrelation) = Schnitt. Ein schneller Schwenk ist KEIN
+     Schnitt mehr - der Welt-Anker ueberlebt ihn (trk_fail-Toleranz 12).
+  Beweis (echter Promo-Clip, Frames): STREET liegt ab ~0.1s VOR dem Wort
+  voll lesbar mitten auf dem freigeschwenkten Pflaster (Draufsicht = flach,
+  wie die Steine), bleibt starr und gleitet mit dem Rueckschwenk natuerlich
+  aus dem Bild. Talking-Head-FIFTY (front_layer) unveraendert. Selftest
+  397/397 gruen (+5: Pre-Lying-Start, 4x Bodenneigung). Ehrlich: das
+  Lesbarkeits-Fenster diktiert die Kamerafuehrung (langsamer Schwenk +
+  laengerer Hold = laenger lesbar); GPU-Matte/GPT prueft Ismet live.
 - **v92: Interaktions-Pass - Captions tun, was gesagt wird, in JEDER
   Einstellung.** Systematischer Durchstich statt Einzelfixes; Ziel: das
   intelligenteste Caption-Tool, Text interagiert mit dem Gesagten.

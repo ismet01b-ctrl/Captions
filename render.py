@@ -1626,7 +1626,40 @@ def person_mask(alpha):
     return (a2 * keep).astype(np.float32)
 
 
-def ground_anchor(alpha, arr, W, H, avoid_x=None):
+def ground_pose(depth_n, cx, cy, bw, bh, W, H):
+    """Misst die NEIGUNG der Flaeche am Ankerpunkt aus der Tiefenkarte.
+    depth_n ist NAEHE (invers: nah = grosse Werte). Die Richtung fallender
+    Naehe = 'von der Kamera weg'; liegender Text richtet seine Oberkante
+    dorthin aus (Roll) und uebernimmt die Staerke des Gefaelles als
+    Perspektive (Pitch). None = keine klare liegende Flaeche messbar."""
+    if depth_n is None:
+        return None
+    x1 = int(max(cx - bw, 0)); x2 = int(min(cx + bw, W))
+    y1 = int(max(cy - bh, 0)); y2 = int(min(cy + bh, H))
+    reg = depth_n[y1:y2, x1:x2]
+    if reg.size < 400:
+        return None
+    reg = cv2.GaussianBlur(reg.astype(np.float32), (0, 0), 4)
+    gx = cv2.Sobel(reg, cv2.CV_32F, 1, 0, ksize=5)
+    gy = cv2.Sobel(reg, cv2.CV_32F, 0, 1, ksize=5)
+    mgx = float(np.median(gx)); mgy = float(np.median(gy))
+    mag = float(np.hypot(mgx, mgy))
+    if mag < 1e-5:
+        # Uniforme Tiefe = Kamera schaut SENKRECHT auf die Flaeche
+        # (Draufsicht). Kein Roll, kaum Foreshortening.
+        return 0.0, 0.55
+    ax, ay = -mgx / mag, -mgy / mag         # 'weg'-Richtung (Naehe faellt)
+    if ay > 0.25:
+        return None                          # flieht nach UNTEN -> kein Boden
+    roll = float(np.degrees(np.arctan2(ax, -ay)))
+    roll = max(-30.0, min(30.0, roll))
+    span = float(np.percentile(reg, 90) - np.percentile(reg, 10))
+    pitch = max(0.52, min(0.80, 0.45 + 0.55 * span))
+    return roll, pitch
+
+
+def ground_anchor(alpha, arr, W, H, avoid_x=None, band=(0.60, 1.02),
+                  allow_overhang=False, depth_n=None):
     """Sucht auf B-Roll MIT sichtbarer Person eine klare Bodenflaeche fuer
     liegenden Text. Ohne diese Suche landet der Text am Bild-Zentrum - und
     genau dort steht bei einem Selfie-Kameraschwenk-nach-unten die Person
@@ -1647,9 +1680,12 @@ def ground_anchor(alpha, arr, W, H, avoid_x=None):
     mx = tw / 2 + W * 0.03                # das Wort muss ganz im Bild bleiben
     my = th / 2 + H * 0.02
     xs = np.linspace(mx, W - mx, 9)
-    # Boden = unten. Nie ueber der Bildmitte ankern (dort schwebt der Text
-    # ueber der Szene statt auf ihr zu liegen).
-    ys = np.linspace(max(0.60 * H, my), min(0.93 * H, H - my), 12)
+    # band = vertikaler Suchbereich der Flaeche (Boden: unten, Wand: Mitte).
+    # allow_overhang: unten darf das Wort ueber den Rand haengen (Not-Option
+    # zum Sprech-Zeitpunkt). Vorher gilt: NUR voll lesbare Plaetze - der
+    # Schwenk gibt gleich mehr Flaeche frei, wir warten lieber einen Moment.
+    _edge = th * (0.2 if allow_overhang else 0.55)
+    ys = np.linspace(max(band[0] * H, my), min(band[1] * H, H - _edge), 12)
     if len(xs) == 0 or len(ys) == 0 or mx > W / 2 or my > H / 2:
         return None                       # Wort passt nicht sauber -> Standard
     best = None
@@ -1666,8 +1702,13 @@ def ground_anchor(alpha, arr, W, H, avoid_x=None):
                 if box.size == 0:
                     continue
                 cover = float((box > 0.35).mean())      # Personanteil in der Box
-                # wenig Person + vorne/unten (Strasse) + mittig ausgerichtet
-                score = -1.1 * cover + 0.6 * (cy / H) - 0.25 * abs(cx - W / 2) / W
+                # wenig Person + mittig. Tiefen-Bias haengt vom Kontext: im
+                # Talking-Head liegt der Boden UNTEN (stark nach vorn ziehen);
+                # bei breitem Band (Kamera-auf-die-Flaeche) zaehlt die MITTE
+                # der freigeschwenkten Flaeche - dort haelt die Kamera.
+                _deep = 0.15 if band[0] < 0.4 else 0.6
+                score = (-1.1 * cover + _deep * (cy / H)
+                         - 0.25 * abs(cx - W / 2) / W)
                 if avoid_x is not None:
                     # Talking-Head: weg von der Person ankern - sie laeuft/
                     # gestikuliert, die Gegenseite bleibt frei sichtbar.
@@ -1688,11 +1729,11 @@ def ground_anchor(alpha, arr, W, H, avoid_x=None):
     # unsichtbar am Default-Platz mitten auf der Person waere das Schlimmste.
     if best is None:
         best = fallback
-    # Ist selbst der beste Platz zur Haelfte Person (Sprecher fuellt das Bild,
-    # bewegt sich), ist punktgenaues Ankern Glueckssache - dann lieber der
-    # klassische Platz tief unter dem Sprecher (Caller-Default): dort bleiben
-    # die Raender sichtbar, die Person verdeckt nur die Mitte.
-    if best is None or best[3] > 0.55:
+    # Teilverdeckung ist erlaubt und ERWUENSCHT: Arm/Schulter VOR dem
+    # liegenden Wort ist der Signature-Look (Okklusion macht die Tiefe).
+    # Der Tiefen-Check unten verhindert zuverlaessig, dass auf dem Koerper
+    # selbst geankert wird - Cover allein muss darum nicht streng sein.
+    if best is None or best[3] > 0.70:
         return None
     return (best[1], best[2])
 
@@ -3386,6 +3427,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 else:
                     flat = S.text(txt, sz, S.white, extrude=g_ex, flat_light=lying)[0]
                     p['arr'] = persp_warp(flat, yaw=g_yaw, pitch=g_pitch)
+                    if lying:
+                        # Roh-Sprite aufheben: beim Ankern wird die Neigung der
+                        # ECHTEN Flaeche gemessen und der Text neu gewarpt.
+                        p['flat_arr'] = flat
                 p['lying'] = lying
                 if scene_ground:
                     p['scene_ground'] = True
@@ -3431,6 +3476,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 else:
                     p['cy'] = H * (0.80 if not portrait else (0.72 if safe_z else 0.82))
                 sy = p['cy'] - H * 0.155
+                # "LIEGT SCHON DA": Szenen-Text beginnt VOR dem gesprochenen
+                # Wort - die Kamera schwenkt auf ein Wort, das bereits in der
+                # Welt liegt. Gezeichnet wird erst, wenn der Anker die Flaeche
+                # wirklich sieht; t_word haelt den Sprech-Zeitpunkt fuer den
+                # Talking-Head-Fallback fest.
+                if (scene_ground or broll) and cfg['effects'].get('track3d', True):
+                    p['t_word'] = kw_t0
+                    p['start'] = max(p['start'] - 1.5, 0.0)
             # v81e: Emoji ins Sprite backen. Nur einfache Ein-Array-Effekte
             # (behind/cascade/blurin/ground). 'outline' hat zwei Layer + Zaehler
             # bauen live -> dort bewusst kein Emoji, um Regression zu vermeiden.
@@ -3926,6 +3979,12 @@ def apply_env_shadow(comp, frame, active, t, W, H, strength):
     for p in active:
         if p.get('tpl') != 'ground':
             continue
+        # GEMALTER Text (liegend) wirft keinen Schatten - Farbe hat keine
+        # Hoehe. Und vor dem Ankern liegt noch gar kein Wort da.
+        if p.get('lying') or p.get('front_layer'):
+            continue
+        if p.get('t_word') is not None and not p.get('_gnd_cal'):
+            continue
         t0p = p.get('t0', p.get('start', 0.0))
         dur = max(p['end'] - t0p, 0.6)
         dt = t - t0p
@@ -4361,7 +4420,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         if p.get('front_layer') and p['tpl'] == 'ground':
             # Boden-Text VOR der Person (kein freier Boden im Bild): liegt
             # perspektivisch flach ueber allem - lesbar statt unsichtbar.
-            _dtf = t - p.get('t0', p['start'])
+            # Basis ist der SPRECH-Zeitpunkt, nicht der vorgezogene Start.
+            _dtf = t - p.get('t_word', p.get('t0', p['start']))
             if _dtf >= 0:
                 _sdx, _sdy = scene_shift(p)
                 _e = smoothstep(_dtf / 0.75)
@@ -4429,36 +4489,81 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             # auf die klare Strasse verschieben (weg vom Bild-Zentrum, wo bei
             # Kameraschwenk-nach-unten Arm/Pulli stehen). Danach traegt die
             # Person-Matte die Okklusion: das Wort liegt hinter ihr auf dem Boden.
-            if ((p.get('scene_ground') or p.get('broll')) and p.get('lying')
-                    and alpha is not None and not p.get('_gnd_cal')):
-                # Maske ueber die ersten Frames VEREINIGEN, dann ankern: eine
-                # einzelne Frame-Maske ist bei Bewegung oft fragmentiert (nur
-                # der Kopf ueberlebt als groesste Komponente) - der Anker
-                # hielte die Brust fuer freien Boden und das Wort verschwaende
-                # unter dem Personen-Repaste. Die Union sieht die ganze
-                # Silhouette der ersten ~3 Frames.
+            _scene_cal = ((p.get('scene_ground') or p.get('broll'))
+                          and (p.get('lying') or p.get('szene') == 'wand')
+                          and alpha is not None)
+            # Schnitt waehrend der Anzeige: neue Szene -> neu ankern. Das Wort
+            # gehoert zur Flaeche der NEUEN Einstellung, nicht zur alten.
+            if (_scene_cal and p.get('_gnd_cal') and not p.get('front_layer')
+                    and p.get('_gnd_gen') is not None
+                    and p['_gnd_gen'] != track_gen):
+                p['_gnd_cal'] = False
+                p.pop('t_anchor', None)
+            if _scene_cal and not p.get('_gnd_cal'):
+                # Rollende Union der Personen-Maske (mit Decay): eine einzelne
+                # Frame-Maske ist bei Bewegung fragmentiert; eine ewige Union
+                # hielte jeden je besetzten Fleck fuer belegt. Der Anker wird
+                # JEDEN Frame versucht - sobald die Kamera die Flaeche
+                # freigibt, liegt das Wort dort. Vorher wird nichts gezeichnet:
+                # die Kamera findet ein Wort, das schon da ist.
                 _am = person_mask(alpha)
                 _acc = p.get('_gnd_acc')
-                p['_gnd_acc'] = _am if _acc is None else np.maximum(_acc, _am)
+                # Decay 0.6: schnell genug, dass der "Geist" der Person das
+                # frisch freigeschwenkte Pflaster nicht blockiert (2-3 Frames),
+                # aber traege genug gegen Einzel-Frame-Fragmente der Matte.
+                p['_gnd_acc'] = _am if _acc is None else np.maximum(_acc * 0.6, _am)
                 p['_gnd_n'] = p.get('_gnd_n', 0) + 1
-                if p['_gnd_n'] >= 3 or dt > 0.2:
-                    _avx = p.get('anchor', (None, None))[0]   # Personen-x
-                    _ga = ground_anchor(p['_gnd_acc'], p['arr'], W, H,
-                                        avoid_x=_avx)
+                _t_word = p.get('t_word', p['start'])
+                if p.get('broll') and float(_am.mean()) < 0.05:
+                    # Aerial ohne Person: Standard-Anker gilt sofort
+                    p['t_anchor'] = t
+                    p['_gnd_gen'] = track_gen
+                    p['_gnd_cal'] = True
+                    p.pop('_gnd_acc', None)
+                else:
+                    _ga = None
+                    # Anker-Fenster: fruehestens 0.6s vor dem Wort. Der
+                    # Regisseur timt den Schwenk auf das Wort - frueher ankern
+                    # hiesse: Track-Referenz in der Sprecher-Phase (Muell) und
+                    # eine Flaeche, die der Schwenk gleich wieder wegschiebt.
+                    if p['_gnd_n'] >= 2 and t >= _t_word - 0.6:
+                        _avx = p.get('anchor', (None, None))[0]   # Personen-x
+                        # Wo ist die Flaeche? Talking-Head: der Boden liegt
+                        # UNTER dem Sprecher (Band unten). B-Roll/Kamera nach
+                        # unten: praktisch das ganze Bild IST die Flaeche.
+                        if not p.get('lying') and p.get('szene') == 'wand':
+                            _band = (0.28, 0.72)
+                        elif p.get('broll'):
+                            _band = (0.22, 1.02)
+                        else:
+                            _band = (0.60, 1.02)
+                        # Overhang erlaubt: das Wort darf am unteren Rand
+                        # anliegen - der laufende Schwenk schiebt es voll ins
+                        # Bild (Welt-Verankerung). So liegt es schon da, wenn
+                        # die Kamera ankommt. Der Tiefen-Check (depth_n) stellt
+                        # sicher, dass dort wirklich eine Flaeche liegt.
+                        # Immer voll im Bild ankern: ab t_word-0.6 zeigt die
+                        # Kamera die Flaeche bereits gross genug.
+                        _ga = ground_anchor(p['_gnd_acc'], p['arr'], W, H,
+                                            avoid_x=_avx, band=_band)
                     if _ga:
                         p['cx'], p['cy'] = _ga
                         p.pop('d_ref', None)  # Tiefe neu am Boden messen
                         p.pop('H_ref', None)  # Track-Referenz am neuen Anker
-                    elif not p.get('broll'):
-                        # Kein freier Boden im Bild (der Sprecher fuellt es):
-                        # dann liegt das Wort VOR der Person auf dem Boden -
-                        # gezeichnet NACH dem Personen-Repaste, sonst waere es
-                        # komplett verdeckt und damit unsichtbar.
+                        p['t_anchor'] = t
+                        p['_gnd_gen'] = track_gen
+                        p['_gnd_cal'] = True
+                        p.pop('_gnd_acc', None)
+                    elif t >= _t_word and not p.get('broll'):
+                        # Bis zum gesprochenen Wort keine freie Flaeche (der
+                        # Sprecher fuellt das Bild): Wort liegt VOR der Person -
+                        # gezeichnet NACH dem Personen-Repaste, sonst unsichtbar.
                         p['front_layer'] = True
-                    p['_gnd_cal'] = True
-                    p.pop('_gnd_acc', None)
-                else:
-                    continue               # erst ankern, dann zeichnen
+                        p['_gnd_cal'] = True
+                        p.pop('_gnd_acc', None)
+                    else:
+                        continue           # liegt erst, wenn die Kamera die
+                                           # Flaeche freigibt
             if p.get('front_layer'):
                 continue                   # wird NACH dem Personen-Repaste gezeichnet
             sdx, sdy = scene_shift(p)
@@ -4496,22 +4601,66 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 if p.get('glass_frames'):
                     gf = p['glass_frames']
                     p['arr'] = gf[blender_engine.anim_loop_idx(dt, len(gf))]
-                d_tr = 0.9                       # Grund-Daempfung (AE-Praxis)
-                H_rel = d_tr * H_rel + (1 - d_tr) * np.eye(3)
-                H_rel /= H_rel[2, 2]
-                # Adaptiv: Drift des Text-Zentrums deckeln - der Text bleibt im
-                # Bild und lesbar, bewegt sich aber weiter echt mit der Welt
-                ctr = H_rel @ np.array([p.get('cx', W / 2), p['cy'], 1.0])
-                ctr /= ctr[2]
-                drift = float(np.hypot(ctr[0] - p.get('cx', W / 2), ctr[1] - p['cy']))
-                lim = H * 0.26
-                if drift > lim:
-                    d2 = lim / drift
-                    H_rel = d2 * H_rel + (1 - d2) * np.eye(3)
+                # GEMALT = starr: liegender Szenen-Text ist Teil der Welt.
+                # Keine Daempfung, kein Drift-Deckel - er klebt exakt auf der
+                # Flaeche und verlaesst das Bild mit dem Schwenk wie ein
+                # echtes Objekt. Nur stehende B-Roll-Texte behalten die
+                # weiche AE-Daempfung (Lesbarkeit).
+                rigid = bool(p.get('lying')) and not p.get('glass')
+                if not rigid:
+                    d_tr = 0.9                   # Grund-Daempfung (AE-Praxis)
+                    H_rel = d_tr * H_rel + (1 - d_tr) * np.eye(3)
                     H_rel /= H_rel[2, 2]
+                    # Adaptiv: Drift des Text-Zentrums deckeln - der Text bleibt
+                    # im Bild und lesbar, bewegt sich aber weiter echt mit
+                    ctr = H_rel @ np.array([p.get('cx', W / 2), p['cy'], 1.0])
+                    ctr /= ctr[2]
+                    drift = float(np.hypot(ctr[0] - p.get('cx', W / 2), ctr[1] - p['cy']))
+                    lim = H * 0.26
+                    if drift > lim:
+                        d2 = lim / drift
+                        H_rel = d2 * H_rel + (1 - d2) * np.eye(3)
+                        H_rel /= H_rel[2, 2]
+                # VOR dem gesprochenen Wort gilt: ist das verankerte Wort vom
+                # Schwenk komplett aus dem Bild geschoben worden (der Zuschauer
+                # hat es nie gesehen), wird still NEU geankert - auf der
+                # Flaeche, die JETZT sichtbar ist. So liegt das Wort genau da,
+                # wo die Kamera zum Sprech-Zeitpunkt ankommt.
+                if rigid and t < p.get('t_word', p['start']):
+                    _c2 = H_rel @ np.array([p.get('cx', W / 2), p['cy'], 1.0])
+                    _c2 /= _c2[2]
+                    _hw2 = p['arr'].shape[1] * 0.6
+                    _hh2 = p['arr'].shape[0] * 0.6
+                    if (_c2[0] < -_hw2 or _c2[0] > W + _hw2
+                            or _c2[1] < -_hh2 or _c2[1] > H + _hh2):
+                        p['_gnd_cal'] = False
+                        p.pop('t_anchor', None)
+                        p.pop('_pose_done', None)
+                        continue
+                # NEIGUNG lazy messen: sobald der Schwenk das Wort ins Bild
+                # geschoben hat, uebernimmt es die GEMESSENE Bodenebene -
+                # beim Ankern am Rand war die Flaeche noch nicht sichtbar.
+                if (rigid and not p.get('_pose_done')
+                        and p.get('flat_arr') is not None):
+                    _ctr = H_rel @ np.array([p.get('cx', W / 2), p['cy'], 1.0])
+                    _ctr /= _ctr[2]
+                    if 0.15 * H < _ctr[1] < 0.85 * H:
+                        _pose = ground_pose(depth_n, _ctr[0], _ctr[1],
+                                            p['flat_arr'].shape[1] * 0.7,
+                                            p['flat_arr'].shape[0] * 2.2, W, H)
+                        if _pose is not None:
+                            p['arr'] = rot_img(persp_warp(p['flat_arr'], yaw=0.0,
+                                                          pitch=_pose[1]),
+                                               _pose[0])
+                        p['_pose_done'] = True
                 e = smoothstep(dt / 0.75)
-                arr_t3, adx_g, dy_f, asc_g, aop_g = anim_apply(p, p['arr'], aud, dt)
-                dy_f -= (arr_t3.shape[0] - p['arr'].shape[0]) / 2
+                if rigid:
+                    # Keine Eigenbewegung: kein Einflug, keine Animation,
+                    # kein Atmen. Nur schneller Fade ab dem Anker-Moment.
+                    arr_t3, adx_g, dy_f, aop_g = p['arr'], 0.0, 0.0, 1.0
+                else:
+                    arr_t3, adx_g, dy_f, asc_g, aop_g = anim_apply(p, p['arr'], aud, dt)
+                    dy_f -= (arr_t3.shape[0] - p['arr'].shape[0]) / 2
                 g_op = g_opac
                 # "Aus dem Wasser": Glas-Text steigt aus der Flaeche auf -
                 # erst tief und verschwommen wie unter der Oberflaeche, dann klar
@@ -4521,12 +4670,15 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     bl_e = (1 - emerge) * 3.5
                     op_e = 0.35 + 0.65 * emerge
                 else:
-                    dy_e, bl_e, op_e = (1 - e) * H * 0.03, 0.0, 1.0
+                    dy_e = 0.0 if rigid else (1 - e) * H * 0.03
+                    bl_e, op_e = 0.0, 1.0
                 dy_e += dy_f
+                _tv = t - p.get('t_anchor', p.get('t0', p['start']))
+                _fade = min(_tv / 0.12, 1) if rigid else min(dt / 0.4, 1)
                 paste_tracked(comp, arr_t3, p.get('cx', W / 2) + adx_g, p['cy'],
                               H_rel, W, H,
                               dy_extra=dy_e,
-                              opacity=min(dt / 0.4, 1) * g_out * g_op * op_e * aop_g,
+                              opacity=_fade * g_out * g_op * op_e * aop_g,
                               refract=g_refract, ripple=g_ripple, grain=g_grain,
                               occ=occ_g, blur=cam_blur + bl_e)
                 draw_small(p, g_out, 0.0, 0.0, x_sc, x_dv)
@@ -4557,15 +4709,38 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     if p.get('glass_frames'):
                         gf = p['glass_frames']
                         p['arr'] = gf[blender_engine.anim_loop_idx(dt, len(gf))]
-                    arr_s, adx_s, dy_s, asc_s, aop_s = anim_apply(p, p['arr'], aud, dt)
-                    dy_s -= (arr_s.shape[0] - p['arr'].shape[0]) / 2
-                    paste_scene(comp, arr_s, p.get('cx', W / 2) + sdx + adx_s,
-                                p['cy'] + sdy + dy_s + (1 - e) * H * 0.03,
-                                W, H, scale=(0.97 + 0.03 * e) * live * asc_s,
-                                opacity=min(dt / 0.4, 1) * g_out * aop_s * g_opac,
-                                refract=g_refract, ripple=g_ripple, grain=g_grain,
-                                occ=occ_g,
-                                blur=max(cam_blur, (1 - e) * 4.5 if not (p.get('scene_blend') or gp) else 0.0))
+                    if p.get('lying') and not p.get('glass'):
+                        # GEMALT = starr, auch ohne Kamera-Track: kein Einflug,
+                        # kein Atmen - nur schneller Fade ab dem Anker-Moment.
+                        if (not p.get('_pose_done')
+                                and p.get('flat_arr') is not None):
+                            _pose = ground_pose(depth_n, p.get('cx', W / 2),
+                                                p['cy'],
+                                                p['flat_arr'].shape[1] * 0.7,
+                                                p['flat_arr'].shape[0] * 2.2,
+                                                W, H)
+                            if _pose is not None:
+                                p['arr'] = rot_img(
+                                    persp_warp(p['flat_arr'], yaw=0.0,
+                                               pitch=_pose[1]), _pose[0])
+                            p['_pose_done'] = True
+                        _tvs = t - p.get('t_anchor', p.get('t0', p['start']))
+                        paste_scene(comp, p['arr'], p.get('cx', W / 2) + sdx,
+                                    p['cy'] + sdy,
+                                    W, H, scale=1.0,
+                                    opacity=min(_tvs / 0.12, 1) * g_out * g_opac,
+                                    refract=g_refract, ripple=g_ripple,
+                                    grain=g_grain, occ=occ_g, blur=cam_blur)
+                    else:
+                        arr_s, adx_s, dy_s, asc_s, aop_s = anim_apply(p, p['arr'], aud, dt)
+                        dy_s -= (arr_s.shape[0] - p['arr'].shape[0]) / 2
+                        paste_scene(comp, arr_s, p.get('cx', W / 2) + sdx + adx_s,
+                                    p['cy'] + sdy + dy_s + (1 - e) * H * 0.03,
+                                    W, H, scale=(0.97 + 0.03 * e) * live * asc_s,
+                                    opacity=min(dt / 0.4, 1) * g_out * aop_s * g_opac,
+                                    refract=g_refract, ripple=g_ripple, grain=g_grain,
+                                    occ=occ_g,
+                                    blur=max(cam_blur, (1 - e) * 4.5 if not (p.get('scene_blend') or gp) else 0.0))
                 else:
                     paste(comp, p['arr'], p.get('cx', W / 2) + sdx,
                           p['cy'] + sdy + (1 - e) * H * 0.03 + x_dv * p['arr'].shape[0],
@@ -5354,11 +5529,13 @@ def main():
             prev_needed = False
 
         # --- Globale Kamerabewegung fuer die Szenen-Verankerung
+        coh_resp = None                    # Phasen-Korrelation dieses Frames
         if cfg['effects'].get('scene_lock', True):
             g = cv2.cvtColor(cv2.resize(frame.astype(np.uint8), (240, 136)),
                              cv2.COLOR_BGR2GRAY).astype(np.float32)
             if prev_gray is not None:
                 (sdx, sdy), resp = cv2.phaseCorrelate(prev_gray, g)
+                coh_resp = float(resp)
                 if resp > 0.12 and abs(sdx) < 40 and abs(sdy) < 40:
                     fx_full, fy_full = sdx * (W / 240.0), sdy * (W / 240.0)
                     ga = 0.30                      # geglaettetes Bewegungssignal
@@ -5385,8 +5562,15 @@ def main():
             tg = cv2.cvtColor(cv2.resize(frame.astype(np.uint8),
                                          (480, int(H * 480 / W))), cv2.COLOR_BGR2GRAY)
             if trk_prev is not None:
-                # Schnitt-Erkennung: harter Bildwechsel -> Track neu aufsetzen
-                if float(np.abs(tg.astype(np.float32) - trk_prev.astype(np.float32)).mean()) > 42:
+                # Schnitt-Erkennung: harter Bildwechsel -> Track neu aufsetzen.
+                # WICHTIG: ein schneller Schwenk sieht im Pixel-Diff auch
+                # "hart" aus, hat aber KOHAERENTE Bewegung (Phasen-Korrelation
+                # schlaegt an). Nur wenn beides fehlt, ist es ein Schnitt -
+                # sonst wuerde der Welt-Anker mitten im Schwenk zurueckgesetzt
+                # und das liegende Wort spraenge neu an.
+                _hard = float(np.abs(tg.astype(np.float32)
+                                     - trk_prev.astype(np.float32)).mean()) > 42
+                if _hard and (coh_resp is None or coh_resp < 0.25):
                     H_cum = np.eye(3); track_gen += 1; trk_fail = 0
                 else:
                     Hs_small, ok_t = update_homography(trk_prev, tg, np.eye(3))
@@ -5397,7 +5581,7 @@ def main():
                         trk_fail = 0
                     else:
                         trk_fail += 1
-                        if trk_fail > 8:
+                        if trk_fail > 12:
                             H_cum = np.eye(3); track_gen += 1; trk_fail = 0
             trk_prev = tg
         else:
