@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v92-sec: Sicherheits-Audit vor Stripe-Live - Credits, Zugriffsrechte,
+  Webhook.** Vollstaendiges Audit von Auth/Sessions/SQL/Credits/Stripe/
+  Uploads. Solide war schon: SQL 100% parametrisiert, bcrypt, Session-Cookie
+  httponly+secure+samesite, Video/Poster-Ownership, Webhook-Idempotenz,
+  Upload-Limits, DB-Backup. Behoben (alles Code, per Selftest gesichert):
+  1) **Credits-Race (Double-Spend) geschlossen**: Guthaben wird beim Upload
+     ATOMAR reserviert (`_reserve_credits`: ein bedingtes UPDATE, das nur
+     abzieht wenn genug da ist) statt nur geprueft und spaeter abgezogen.
+     Frueher konnte man mit 1 Credit N Videos gleichzeitig hochladen und N
+     Renders bekommen. Fehlgeschlagene Renders werden erstattet
+     (`_maybe_refund`, idempotent, nur wenn kein Video geliefert wurde).
+  2) **Stripe-Webhook ohne Secret wird abgelehnt** (503) statt durchgewunken -
+     vorher haette ohne gesetztes Secret jeder ein gefaelschtes
+     "Zahlung erfolgreich" schicken und sich Gratis-Guthaben schreiben koennen.
+  3) **IDOR geschlossen**: Ownership-Check (`_job_owner_ok`) jetzt auf ALLEN
+     Job-Endpoints (moments/transcript/thumb/status GET + moments/transcript
+     POST) - vorher konnten Fremde ueber die jid Transkripte/Momente/Frames
+     lesen bzw. fremde Jobs ueberschreiben.
+  4) **Login rate-limited** (20/15min/IP, eigener Bucket) gegen Passwort-
+     Brute-Force; Register/Reset hatten es schon.
+  5) **cfg_overrides-Whitelist**: nur bekannte Config-Sektionen, teure Regler
+     gedeckelt (Aufloesung <=1080p, ProRes-Master raus, Blender-Werte
+     begrenzt) - kein Ressourcen-Missbrauch pro Render mehr.
+  Selftest 403/403 gruen (+6 Security-Tests, isolierte Test-DB: Double-Spend-
+  Race, Refund-Idempotenz, Overrides-Deckel, Webhook-Secret-Pflicht,
+  Ownership-Abdeckung, Login-Limit). WICHTIG fuer Live: `STRIPE_WEBHOOK_SECRET`
+  in der .env MUSS gesetzt sein, sonst verweigert der Webhook (Absicht).
 - **v93: Szenen-Text ist Teil der Welt - liegt schon da, bewegt sich nicht,
   Neigung folgt der echten Flaeche.** Ismets Abnahme-Kritik am STREET-Frame:
   Neigung passte nicht zum Pflaster, und das Wort soll schon liegen, wenn

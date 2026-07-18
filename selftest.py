@@ -92,6 +92,7 @@ def main():
         _scenario_satzende(tmp)
         _scenario_kamera(tmp)
         _scenario_transkription(tmp)
+        _scenario_security(tmp)
 
     print()
     fails = [r for r in results if not r[1]]
@@ -1933,6 +1934,53 @@ def _scenario_transkription(tmp):
     cfg = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
     check('config.yaml: transcription-Block entfernt',
           'transcription' not in cfg)
+
+
+def _scenario_security(tmp):
+    """v92: Bezahl-relevante Sicherheit - Credits-Race, Refund, Webhook,
+    Zugriffsrechte, cfg_overrides, Login-Brute-Force. Isolierte Test-DB."""
+    print('\n--- Sicherheit / Credits ---')
+    import tempfile as _tf, time as _t
+    os.environ['DVE_DATA'] = _tf.mkdtemp(prefix='dve_sec_')
+    if 'server' in sys.modules:
+        del sys.modules['server']
+    sys.path.insert(0, os.path.join(HERE, 'web'))
+    import server as SV
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ('sec@test', 'x', 'Sec', 120, int(_t.time())))
+    con.commit()
+    uid = con.execute("SELECT id FROM users WHERE email='sec@test'").fetchone()['id']
+    con.close()
+    # 1) Kein Double-Spend: 5 gleichzeitige Reservierungen a 60s bei 120s -> genau 2
+    ok = sum(SV._reserve_credits(uid, 60, f'j{i}') for i in range(5))
+    bal = SV._find_user_by_id(uid)['balance_sec']
+    check('Credits: kein Double-Spend (Reservierung atomar)',
+          ok == 2 and bal == 0, f'{ok} durch, Rest {bal}s')
+    # 2) Refund idempotent
+    SV._refund_credits(uid, 'j0', 60)
+    SV._refund_credits(uid, 'j0', 60)
+    check('Credits: Refund idempotent (kein Doppel)',
+          SV._find_user_by_id(uid)['balance_sec'] == 60)
+    # 3) cfg_overrides-Whitelist + Deckel
+    ov = SV._sanitize_overrides({'output': {'height': 4320, 'master': True},
+                                 'effects': {'blender_samples': 99999, 'bg_blur': 0.5},
+                                 'boeses': {'x': 1}})
+    check('cfg_overrides: Whitelist + Ressourcen-Deckel',
+          ov.get('output', {}).get('height') == 1920
+          and 'master' not in ov.get('output', {})
+          and ov['effects']['blender_samples'] == 256
+          and ov['effects']['bg_blur'] == 0.5 and 'boeses' not in ov)
+    # 4-6) Quelltext-Garantien (Signatur-Pflicht, Ownership, Login-Limit)
+    _src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('Stripe-Webhook erzwingt Secret',
+          'if not secret:' in _src and 'Webhook secret not configured' in _src)
+    check('Ownership-Check auf allen Job-Endpoints',
+          _src.count('_job_owner_ok(jid, request)') >= 6,
+          f"{_src.count('_job_owner_ok(jid, request)')} Checks")
+    check('Login gegen Brute-Force gebremst', "bucket='login'" in _src)
+    shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 
 def _scenario_premium(tmp):

@@ -544,6 +544,67 @@ def _render_charged(user_id, jid):
     return row is not None
 
 
+def _reserve_credits(uid, need, jid):
+    """v92: Guthaben beim Upload ATOMAR reservieren (nicht erst nach dem
+    Render abziehen). Ein einziges bedingtes UPDATE zieht 'need' nur ab,
+    wenn wirklich genug da ist - fest gegen gleichzeitige Uploads
+    (SQLite serialisiert Writes). Frueher wurde nur *geprueft*, dann spaeter
+    abgezogen -> wer mit 1 Credit 10 Videos gleichzeitig hochlud, bekam 10.
+    Gibt True bei Erfolg (Guthaben abgezogen + Ledger), sonst False."""
+    if need <= 0:
+        return True
+    con = _db()
+    try:
+        cur = con.execute(
+            "UPDATE users SET balance_sec = balance_sec - ? "
+            "WHERE id = ? AND balance_sec >= ?", (need, uid, need))
+        if cur.rowcount != 1:
+            con.rollback()
+            return False
+        con.execute(
+            "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (uid, -need, f'Render {jid} ({need}s)', int(time.time())))
+        con.commit()
+        return True
+    finally:
+        con.close()
+
+
+def _refund_credits(uid, jid, need):
+    """Reservierung zurueckbuchen. Idempotent ueber den 'Refund {jid}'-Ledger-
+    Eintrag - Stripe/Worker koennen mehrfach ausloesen."""
+    if not uid or need <= 0:
+        return
+    con = _db()
+    try:
+        if con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
+                       (uid, f'Refund {jid}')).fetchone():
+            return
+        con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
+                    (need, uid))
+        con.execute(
+            "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (uid, need, f'Refund {jid}', int(time.time())))
+        con.commit()
+    finally:
+        con.close()
+
+
+def _maybe_refund(jid):
+    """Bei Job-Fehler die Reservierung erstatten - aber nur, wenn (noch) KEIN
+    fertiges Video ausgeliefert wurde. Ein fehlgeschlagener Re-Render eines
+    bereits gelieferten Videos wird NICHT erstattet (das Video existiert)."""
+    j = JOBS.get(jid) or {}
+    uid = j.get('user_id')
+    if not uid:
+        return
+    if os.path.exists(os.path.join(job_dir(jid), 'fertig.mp4')):
+        return
+    _refund_credits(uid, jid, cost_seconds(j.get('dauer', 0)))
+
+
 def _pack_processed(user_id, session_id):
     """Idempotenz-Check: wurde diese Stripe-Session bereits gutgeschrieben?"""
     con = _db()
@@ -639,11 +700,15 @@ async def api_stripe_webhook(request: Request):
     secret = os.environ.get('STRIPE_WEBHOOK_SECRET', '').strip()
     payload = await request.body()
     sig = request.headers.get('stripe-signature', '')
-    # v80l: Signatur separat verifizieren, dann mit Roh-JSON weiterarbeiten -
-    # spart Aerger mit StripeObject vs dict.
+    # v92 SECURITY: Ohne Webhook-Secret wird NICHT gutgeschrieben. Frueher
+    # wurde die Signatur nur geprueft "if secret" - ohne Secret akzeptierte
+    # der Endpoint jeden POST, jeder haette sich mit einem gefaelschten
+    # "checkout.session.completed" gratis Guthaben schreiben koennen. Die
+    # Signatur ist die EINZIGE Echtheits-Garantie und daher Pflicht.
+    if not secret:
+        raise HTTPException(503, 'Webhook secret not configured.')
     try:
-        if secret:
-            st.Webhook.construct_event(payload, sig, secret)  # nur Signatur-Check
+        st.Webhook.construct_event(payload, sig, secret)   # Signatur MUSS passen
         event = json.loads(payload)
     except Exception as e:
         raise HTTPException(400, f'Webhook invalid: {type(e).__name__}')
@@ -819,6 +884,38 @@ def deep_merge(base, override):
             out[k] = deep_merge(out[k], v)
         else:
             out[k] = v
+    return out
+
+
+_OV_SECTIONS = {'effects', 'camera', 'colors', 'fonts', 'keywords', 'output',
+                'matting_quality', 'matting_downsample', 'language'}
+
+def _sanitize_overrides(ov):
+    """v92 SECURITY: cfg_overrides kommt vom Client und wird tief in die
+    Render-Config gemerged. Ohne Filter koennte ein Nutzer beliebige Keys
+    setzen (4K-Aufloesung, ProRes-Master, riesige Blender-Werte) und so die
+    Server-Last pro Render hochtreiben. Nur bekannte Sektionen zulassen und
+    die teuren Regler hart deckeln."""
+    if not isinstance(ov, dict):
+        return {}
+    out = {k: v for k, v in ov.items() if k in _OV_SECTIONS}
+    o = out.get('output')
+    if isinstance(o, dict):
+        if 'height' in o:
+            try:
+                o['height'] = min(max(int(o['height']), 480), 1920)
+            except Exception:
+                o.pop('height', None)
+        o.pop('master', None)          # ProRes-Master nie per Override (Riesen-Files)
+    e = out.get('effects')
+    if isinstance(e, dict):
+        for k, cap in (('blender_samples', 256), ('blender_anim_frames', 24),
+                       ('blender_width', 1920)):
+            if k in e:
+                try:
+                    e[k] = min(int(e[k]), cap)
+                except Exception:
+                    e.pop(k, None)
     return out
 
 
@@ -1311,6 +1408,7 @@ def run_job(jid):
         set_state(jid, status='fehler', progress=0,
                   msg='Analysis failed.',
                   detail='\n'.join([x for x in log[-15:] if x.strip()]))
+        _maybe_refund(jid)
         return
 
     _extra = []
@@ -1327,6 +1425,7 @@ def run_job(jid):
         set_state(jid, status='fehler', progress=0,
                   msg='Server is not fully configured '
                       '(AI key missing). Please contact support.')
+        _maybe_refund(jid)
         return
     for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
         if line.startswith('FEHLER:'):
@@ -1337,6 +1436,7 @@ def run_job(jid):
             set_state(jid, status='fehler', progress=0,
                       msg=line.replace('FEHLER:', '').strip(),
                       detail='\n'.join(ctx))
+            _maybe_refund(jid)
             return
     if rc == 0 and os.path.exists(out):
         count_use(j['code'])
@@ -1355,6 +1455,7 @@ def run_job(jid):
         set_state(jid, status='fehler', progress=0,
                   msg='Render failed.',
                   detail='\n'.join(letzte))
+        _maybe_refund(jid)
     # Quellvideo aufheben, damit "Momente-Editor" nach Analyse den Re-Render kann.
     # Erst beim Job-Cleanup loeschen.
 
@@ -1485,13 +1586,15 @@ def _page(name):
 _REG_ATTEMPTS = {}       # ip -> [timestamps]
 
 
-def _rate_limit_ok(ip, window_sec=3600, max_attempts=5):
-    """Max 5 Registrierungen pro Stunde pro IP. Reicht fuer echte Nutzer,
-    stoppt automatisierten Spam."""
+def _rate_limit_ok(ip, window_sec=3600, max_attempts=5, bucket='reg'):
+    """Rate-Limit pro IP und Aktion (getrennte Buckets: reg/login/reset).
+    Reicht fuer echte Nutzer, stoppt automatisierten Spam + Passwort-
+    Brute-Force. In-Memory (ein Web-Prozess)."""
+    key = f'{bucket}:{ip}'
     now = time.time()
-    xs = [t for t in _REG_ATTEMPTS.get(ip, []) if now - t < window_sec]
+    xs = [t for t in _REG_ATTEMPTS.get(key, []) if now - t < window_sec]
     xs.append(now)
-    _REG_ATTEMPTS[ip] = xs[-max_attempts:]
+    _REG_ATTEMPTS[key] = xs[-max_attempts:]
     return len(xs) <= max_attempts
 
 
@@ -1527,10 +1630,14 @@ def api_register(request: Request, response: Response,
 
 
 @app.post('/api/login')
-def api_login(response: Response, email: str = Form(...),
+def api_login(request: Request, response: Response, email: str = Form(...),
               password: str = Form(...)):
     """v80h: Login. Gleiche Fehlermeldung fuer 'nicht vorhanden' und 'Passwort
     falsch', damit man E-Mails nicht enumerieren kann."""
+    # v92 SECURITY: Rate-Limit gegen Passwort-Brute-Force (20 Versuche / 15 min / IP)
+    ip = request.client.host if request.client else 'unknown'
+    if not _rate_limit_ok(ip, window_sec=900, max_attempts=20, bucket='login'):
+        raise HTTPException(429, 'Too many login attempts. Please wait a few minutes.')
     email = (email or '').strip().lower()
     row = _find_user_by_email(email)
     if not row or not _verify_pw(password, row['pw_hash']):
@@ -1827,6 +1934,7 @@ async def upload(request: Request, datei: UploadFile = File(...),
         overrides = json.loads(cfg_overrides) if cfg_overrides else {}
     except Exception:
         overrides = {}
+    overrides = _sanitize_overrides(overrides)
     jid = uuid.uuid4().hex[:12]
     d = job_dir(jid)
     os.makedirs(d, exist_ok=True)
@@ -1866,15 +1974,18 @@ async def upload(request: Request, datei: UploadFile = File(...),
     if u:
         uid = u['id']
         need = cost_seconds(dur)
-        if u['balance_sec'] < need:
+        # v92: ATOMAR reservieren statt nur pruefen (schliesst den Race, in dem
+        # gleichzeitige Uploads mehrfach denselben Credit ausgeben). Klappt es
+        # nicht, ist zu wenig Guthaben da. Bei Render-Fehler wird erstattet.
+        if not _reserve_credits(uid, need, jid):
             shutil.rmtree(d, ignore_errors=True)
-            fehlt = credits_of(need) - credits_of(u['balance_sec'])
+            have = credits_of(u['balance_sec'])
+            fehlt = credits_of(need) - have
             raise HTTPException(
                 402,
                 f"Not enough credits (video costs {credits_of(need)} "
                 f"credit{'s' if credits_of(need) != 1 else ''}, you have "
-                f"{credits_of(u['balance_sec'])}). "
-                f"Missing {max(1, fehlt)} - please top up.")
+                f"{have}). Missing {max(1, fehlt)} - please top up.")
 
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
                  'user_id': uid, 'vhash': _video_hash(src),   # v88b: Transkript-Cache
@@ -1914,6 +2025,7 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
         overrides = json.loads(cfg_overrides) if cfg_overrides else {}
     except Exception:
         overrides = {}
+    overrides = _sanitize_overrides(overrides)
     # Sprache nachtraeglich geaendert? Dann lief die Vorab-Transkription mit
     # dem falschen Sprach-Hinweis - Cache verwerfen, der Render macht es neu.
     old_lang = (j.get('cfg_overrides') or {}).get('language')
@@ -1951,7 +2063,9 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
 
 
 @app.get('/api/status/{jid}')
-def status(jid: str):
+def status(jid: str, request: Request):
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
     j = JOBS.get(jid)
     if not j:
         # State evtl. auf Platte
@@ -2053,8 +2167,10 @@ def api_library(request: Request):
 
 
 @app.get('/api/moments/{jid}')
-def get_moments(jid: str):
+def get_moments(jid: str, request: Request):
     """Momente-Datei aus der Analyse laden."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
@@ -2138,8 +2254,10 @@ def delete_template(request: Request, name: str, code: str = ''):
 
 
 @app.get('/api/transcript/{jid}')
-def get_transcript(jid: str):
+def get_transcript(jid: str, request: Request):
     """v80y: Transkript zum Korrigieren laden."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
@@ -2157,6 +2275,8 @@ async def save_transcript(request: Request, jid: str,
     ok, msg = check_auth(code, request)
     if not ok:
         raise HTTPException(403, msg)
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
@@ -2197,11 +2317,13 @@ async def save_transcript(request: Request, jid: str,
 
 
 @app.get('/api/thumb/{jid}/{name}')
-def get_thumb(jid: str, name: str):
+def get_thumb(jid: str, name: str, request: Request):
     """Video-Frame-Preview fuer einen Moment (v80e). Wird im Momente-Editor
     hinter der Text-Preview eingeblendet, damit man sieht was zu dem
     Zeitpunkt wirklich im Bild ist."""
     from fastapi.responses import FileResponse
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
@@ -2269,6 +2391,8 @@ async def save_and_render(request: Request, jid: str,
     ok, msg = check_auth(code, request)
     if not ok:
         raise HTTPException(403, msg)
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
