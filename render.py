@@ -1807,6 +1807,12 @@ STOPWORDS = {
 REGIE_PROMPT = """Du bist Senior-Editor fuer Premium-Talking-Head-Videos. Du bekommst das \
 Transkript zweimal: als Fliesstext (fuer den Sinn) und als indizierte Wortliste [i]Wort (fuer die Auswahl).
 
+Du bist der Regisseur - triff eigene, mutige Entscheidungen. Halte dich nicht \
+an ein Schema-F: VARIIERE Effekt-Wahl, Betonung, Rhythmus und Animationen je \
+nach Inhalt. Zwei verschiedene Videos duerfen sich NICHT gleich anfuehlen - \
+nutze die ganze Bandbreite (nicht immer dieselben zwei Effekte). Was der Inhalt \
+verlangt, entscheidest DU, nicht eine feste Regel.
+
 Vorgehen:
 1. Erfasse die Kernbotschaft des Videos.
 2. Waehle die Woerter, die die Geschichte TRAGEN: Zahlen, Namen, Fachbegriffe, emotionale \
