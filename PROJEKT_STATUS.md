@@ -3,6 +3,41 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v91: Boden-Text liegt wirklich auf der Strasse (nicht auf der Person).**
+  Bug (aus echtem Promo-Clip): das grosse Signature-Wort ("STREET") auf
+  B-Roll landete auf dem Pulli/Arm statt auf dem Pflaster. Zwei Ursachen,
+  beide behoben:
+  1) **Anker am Bild-Zentrum**: liegender Boden-Text wurde fix mittig
+     verankert - bei einem Selfie-Kameraschwenk-nach-unten steht dort die
+     Person. Neu: `ground_anchor()` nutzt die RVM-Person-Matte, spart die
+     Person aus und sucht die klare Strasse (voll im Bild, Anker auf Boden,
+     leicht vorne). Greift nur bei sichtbarer Person; echtes Aerial-B-Roll
+     (kaum Person) behaelt den Standard-Anker.
+  2) **Okklusion & Matte fehlten auf B-Roll**: die Person-Matte wurde in
+     ground-B-Roll-Fenstern gar nicht berechnet, und die Tiefen-Referenz
+     wurde am Text-Ort (= auf der Person) gemessen -> Okklusion griff nie.
+     Neu: Matting laeuft auch in ground-B-Roll-Fenstern, und `occ_for`
+     vereinigt Tiefe MIT der Person-Matte -> die Person laeuft sauber VOR
+     dem liegenden Wort (Wort liegt hinter ihr auf dem Boden).
+  3) **Wasser != fester Boden**: `scene_blend` (Wasser-Wellen/Refract) lief
+     bisher auf JEDEM liegenden Text - Strasse sah "fluessig" aus. Neu:
+     nur szene='wasser' -> `scene_blend`; fester Boden -> `ground_paint`
+     (flach aufgemalt, kein Refract, wenig Ripple, leicht transluzent, die
+     Pflaster-Textur scheint durch). Liegender Boden-Text wird ausserdem
+     schmaler gefasst, damit er nach der Perspektive ganz im Bild bleibt.
+  Zusatz (gleicher Promo-Fix): kurze isolierte Keyword-Momente auf B-Roll
+  fielen an der 1s-Mindestbuehne raus, weil die Verlaengerung als "laeuft in
+  B-Roll" abgelehnt wurde - fuer szenen-verankerten Text ist das falsch
+  (er braucht die Person nicht). Jetzt darf broll-Text ueber das Wort hinaus
+  stehen bleiben.
+  Getestet (Sandbox CPU, synthetisch): Selftest 376/376 gruen (+2 fuer
+  `ground_anchor`: meidet die Person / aus bei leerem Bild; "Liegend auf
+  Boden" = ground_paint statt scene_blend). Am echten Promo-Clip verifiziert
+  (Frames): STREET liegt flach auf dem Pflaster vor der Person, getrackt,
+  voll lesbar, Arm deckt nur den oberen Rand. `broll_captions` bleibt eine
+  Pro-Render-Option (Default = B-Roll textfrei), kein Default-Umbau.
+  Echte GPU-/Qualitaetswirkung sieht Ismet erst auf Windows mit echtem
+  Material.
 - **v89: Wechselgruende sichtbar machen - anonyme Demo + Director's Cut.**
   Strategie-Erkenntnis: Der Produkt-Unterschied (Text IN der Szene statt
   Karaoke AUF dem Video) war vor dem Kauf unsichtbar; und "Credits statt

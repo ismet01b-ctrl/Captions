@@ -1602,6 +1602,53 @@ def paste_tracked(canvas, rgba, cx, cy, H_rel, W, H, dy_extra=0.0, **blend_kwarg
     _blend_region(canvas, sub, x1, y1, W, H, **blend_kwargs)
 
 
+def ground_anchor(alpha, arr, W, H):
+    """Sucht auf B-Roll MIT sichtbarer Person eine klare Bodenflaeche fuer
+    liegenden Text. Ohne diese Suche landet der Text am Bild-Zentrum - und
+    genau dort steht bei einem Selfie-Kameraschwenk-nach-unten die Person
+    (Arm/Pulli), sodass der Text auf der Person klebt statt auf der Strasse.
+
+    Idee: die Person (RVM-Matte, alpha>0.35) wird ausgespart, aus den freien
+    Boden-Pixeln wird eine Ankerstelle gewaehlt - bevorzugt tief/vorne (die
+    Strasse direkt vor der Person) und mit freier Mitte (der Anker selbst
+    liegt auf dem Boden). Der Arm/Koerper deckt spaeter nur den oberen Rand
+    des Wortes ab - das ist der Look: das Wort liegt hinter der Person auf
+    dem Pflaster.
+
+    Gibt (cx, cy) zurueck oder None (kaum Person -> Standard-Anker behalten)."""
+    a2 = alpha[..., 0] if alpha.ndim == 3 else alpha
+    if float(a2.mean()) < 0.06:
+        return None                       # kaum Person -> echtes Aerial-B-Roll
+    tw, th = arr.shape[1], arr.shape[0]
+    mx = tw / 2 + W * 0.03                # das Wort muss ganz im Bild bleiben
+    my = th / 2 + H * 0.02
+    xs = np.linspace(mx, W - mx, 9)
+    ys = np.linspace(max(0.46 * H, my), min(0.86 * H, H - my), 12)
+    if len(xs) == 0 or len(ys) == 0 or mx > W / 2 or my > H / 2:
+        return None                       # Wort passt nicht sauber -> Standard
+    best = None
+    for cy in ys:
+        for cx in xs:
+            x1 = int(cx - tw / 2); x2 = int(cx + tw / 2)
+            y1 = int(cy - th / 2); y2 = int(cy + th / 2)
+            box = a2[max(y1, 0):y2, max(x1, 0):x2]
+            if box.size == 0:
+                continue
+            cover = float((box > 0.35).mean())          # Personanteil in der Box
+            cs = 8
+            cb = a2[int(cy) - cs:int(cy) + cs, int(cx) - cs:int(cx) + cs]
+            center_free = float((cb < 0.35).mean()) if cb.size else 0.0
+            if center_free < 0.7:                        # Anker muss auf Boden sitzen
+                continue
+            # wenig Person + leicht vorne (Strasse) + mittig ausgerichtet
+            score = -cover + 0.20 * (cy / H) - 0.35 * abs(cx - W / 2) / W
+            if best is None or score > best[0]:
+                best = (score, cx, cy)
+    if best is None:
+        return None
+    return (best[1], best[2])
+
+
 # ---------------------------------------------------------------- keywords + plans
 STOPWORDS = {
     'aber', 'also', 'auch', 'bevor', 'beim', 'dabei', 'dann', 'denn', 'dein', 'deine',
@@ -2819,7 +2866,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # Moment komplett weg statt kurz aufzublitzen.
             kw_t0 = words[i]['start']
             disp_end = min(max(end, kw_t0 + 1.2), end + 1.5)
-            if disp_end > end and not voiceover and not face_ok(end, disp_end):
+            # Szenen-verankerter Text (broll: liegt am Boden / in der Szene)
+            # braucht die Person nicht - er darf ueber das gesprochene Wort
+            # hinaus stehen bleiben, auch wenn danach kein Gesicht kommt. Nur
+            # personen-gebundener Text (behind/blurin) wuerde ins Leere laufen.
+            if (disp_end > end and not voiceover and not broll
+                    and not face_ok(end, disp_end)):
                 disp_end = end             # Verlaengerung wuerde in B-Roll laufen
             if disp_end - kw_t0 < 1.0:
                 prev_was_keyword = False
@@ -3043,8 +3095,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 standing = broll and not lying
                 g_pitch = 0.68 if lying else (0.06 if standing else 0.5)
                 g_ex = False if lying else S.ex
+                # Liegender Boden-Text schmaler fassen: nach der Perspektive
+                # (persp_warp) wird er breiter - sonst laeuft "STREET" aus dem
+                # Bild. Stehender/Wasser-Text darf breiter sein.
+                _gw = (0.58 if lying else 0.72) if not portrait \
+                    else (0.52 if lying else (0.62 if safe_z else 0.9))
                 sz = S.fit(txt, int(H * 0.20) if not portrait else int(H * 0.10),
-                           int(W * 0.72 if not portrait else W * (0.62 if safe_z else 0.9)), font=S.f_serif)
+                           int(W * _gw), font=S.f_serif)
                 g_yaw = -6 if (side_toggle % 2 == 0) else 6
                 if S.kinetic and not p.get('count') and not lying:
                     flat, tot, lets = S.text(txt, sz, S.white, per_letter=True, extrude=g_ex)
@@ -3053,8 +3110,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 else:
                     flat = S.text(txt, sz, S.white, extrude=g_ex, flat_light=lying)[0]
                     p['arr'] = persp_warp(flat, yaw=g_yaw, pitch=g_pitch)
+                p['lying'] = lying
                 if lying:
-                    p['scene_blend'] = True        # Wellen laufen durch die Buchstaben
+                    if szene == 'wasser':
+                        p['scene_blend'] = True     # Wasser: Wellen laufen durch die Buchstaben
+                    else:
+                        p['ground_paint'] = True    # fester Boden: flach aufgemalt, nicht fluessig
                 if broll and cfg['effects'].get('track3d', True):
                     p['track3d'] = True            # planares Kamera-Tracking
                 if cfg['effects'].get('reflection', True) and not lying:
@@ -3649,19 +3710,30 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
     a_rms, a_bass, a_onset = aud
 
     def occ_for(p):
-        """Tiefen-Okklusion: Maske der Bildteile, die NAEHER sind als der Text.
-        d_ref wird beim ersten aktiven Frame am Text-Ort gemessen."""
-        if depth_n is None:
+        """Okklusion: Maske der Bildteile, die VOR dem Text liegen.
+        Zwei Quellen, vereinigt: (1) Tiefen-Fenster (Objekte naeher als der
+        Text), (2) die Person-Matte selbst. Gerade auf B-Roll mit sichtbarer
+        Person ist die Matte die verlaessliche Quelle - so laeuft die Person
+        sauber VOR dem liegenden Boden-Text, statt dass der Text auf ihr klebt.
+        d_ref wird beim ersten aktiven Frame am (kalibrierten) Text-Ort gemessen."""
+        occ_d = None
+        if depth_n is not None:
+            if 'd_ref' not in p:
+                cx_ = int(p.get('cx', W / 2)); cy_ = int(p.get('cy', H * 0.8))
+                hw = int(min(p['arr'].shape[1] * 0.40, W * 0.3))
+                hh = int(min(p['arr'].shape[0] * 0.28, H * 0.12))
+                reg = depth_n[max(cy_ - hh, 0):min(cy_ + hh, H),
+                              max(cx_ - hw, 0):min(cx_ + hw, W)]
+                p['d_ref'] = float(np.median(reg)) if reg.size else 0.5
+            occ_d = np.clip((depth_n - p['d_ref'] - 0.07) / 0.10, 0, 1)
+            occ_d = cv2.GaussianBlur(occ_d, (0, 0), 4)
+        occ_a = None
+        if p.get('broll') and alpha is not None:
+            occ_a = (alpha[..., 0] if alpha.ndim == 3 else alpha).astype(np.float32)
+        if occ_d is None and occ_a is None:
             return None
-        if 'd_ref' not in p:
-            cx_ = int(p.get('cx', W / 2)); cy_ = int(p.get('cy', H * 0.8))
-            hw = int(min(p['arr'].shape[1] * 0.40, W * 0.3))
-            hh = int(min(p['arr'].shape[0] * 0.28, H * 0.12))
-            reg = depth_n[max(cy_ - hh, 0):min(cy_ + hh, H),
-                          max(cx_ - hw, 0):min(cx_ + hw, W)]
-            p['d_ref'] = float(np.median(reg)) if reg.size else 0.5
-        occ = np.clip((depth_n - p['d_ref'] - 0.07) / 0.10, 0, 1)
-        occ = cv2.GaussianBlur(occ, (0, 0), 4)
+        occ = occ_a if occ_d is None else (occ_d if occ_a is None
+                                           else np.maximum(occ_d, occ_a))
         prev = p.get('_occ_prev')
         if prev is not None and prev.shape == occ.shape:
             occ = 0.6 * occ + 0.4 * prev
@@ -4027,6 +4099,18 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                   opacity=g_out * aop, crop_w=vis_px)
             draw_small(p, g_out, tdx, tdy, x_sc, x_dv)
         elif p['tpl'] == 'ground' and dt >= 0:
+            # v91: liegender Boden-Text auf B-Roll MIT Person -> Anker einmalig
+            # auf die klare Strasse verschieben (weg vom Bild-Zentrum, wo bei
+            # Kameraschwenk-nach-unten Arm/Pulli stehen). Danach traegt die
+            # Person-Matte die Okklusion: das Wort liegt hinter ihr auf dem Boden.
+            if (p.get('broll') and p.get('lying') and alpha is not None
+                    and not p.get('_gnd_cal')):
+                _ga = ground_anchor(alpha, p['arr'], W, H)
+                if _ga:
+                    p['cx'], p['cy'] = _ga
+                    p.pop('d_ref', None)      # Tiefe neu am Boden messen
+                    p.pop('H_ref', None)      # Track-Referenz am neuen Anker
+                p['_gnd_cal'] = True
             sdx, sdy = scene_shift(p)
             apply_count(p, dt)
             if p.get('cshadow') is not None:
@@ -4036,6 +4120,17 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             g_broll = p.get('broll')
             occ_g = occ_for(p) if g_broll else None
             cam_blur = min(scene_vel * 0.45, 5.0) if g_broll else 0.0
+            # Blend-Charakter: Wasser wellt/bricht (refract, ripple), fester
+            # Boden ist flach aufgemalt (kein Refract, wenig Ripple, leicht
+            # transparent, damit die Pflaster-Textur durchscheint).
+            gp = p.get('ground_paint')
+            g_refract = 1.0 if p.get('scene_blend') else 0.0
+            g_ripple = (0.06 if p.get('glass')
+                        else 0.05 if gp
+                        else (0.10 if p.get('scene_blend') else 0.12))
+            g_grain = 1.5 if p.get('glass') else (1.6 if gp else 2.2)
+            g_opac = (0.90 if gp else 0.74 if p.get('scene_blend')
+                      else (1.0 if p.get('glass') else 0.97))
             tracked = (g_broll and p.get('track3d') and H_cum is not None)
             if tracked:
                 # Planares Kamera-Tracking: Referenz beim ersten aktiven Frame,
@@ -4064,8 +4159,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 e = smoothstep(dt / 0.75)
                 arr_t3, adx_g, dy_f, asc_g, aop_g = anim_apply(p, p['arr'], aud, dt)
                 dy_f -= (arr_t3.shape[0] - p['arr'].shape[0]) / 2
-                g_op = (0.74 if p.get('scene_blend')
-                        else (1.0 if p.get('glass') else 0.97))
+                g_op = g_opac
                 # "Aus dem Wasser": Glas-Text steigt aus der Flaeche auf -
                 # erst tief und verschwommen wie unter der Oberflaeche, dann klar
                 if p.get('glass') and p.get('material', 'wasser') == 'wasser':
@@ -4080,10 +4174,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                               H_rel, W, H,
                               dy_extra=dy_e,
                               opacity=min(dt / 0.4, 1) * g_out * g_op * op_e * aop_g,
-                              refract=1.0 if p.get('scene_blend') else 0.0,
-                              ripple=0.06 if p.get('glass')
-                              else (0.10 if p.get('scene_blend') else 0.12),
-                              grain=1.5 if p.get('glass') else 2.2,
+                              refract=g_refract, ripple=g_ripple, grain=g_grain,
                               occ=occ_g, blur=cam_blur + bl_e)
                 draw_small(p, g_out, 0.0, 0.0, x_sc, x_dv)
                 continue
@@ -4098,10 +4189,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                         paste_scene(comp, sl, p.get('cx', W / 2) + sdx + off,
                                     p['cy'] + sdy + (1 - e) * H * 0.055,
                                     W, H, scale=0.9 + 0.1 * e,
-                                    opacity=min(dl / 0.12, 1) * g_out
-                                    * (0.74 if p.get('scene_blend') else 0.97),
-                                    refract=1.0 if p.get('scene_blend') else 0.0,
-                                    ripple=0.10 if p.get('scene_blend') else 0.12,
+                                    opacity=min(dl / 0.12, 1) * g_out * g_opac,
+                                    refract=g_refract, ripple=g_ripple,
                                     occ=occ_g, blur=cam_blur)
                     else:
                         paste(comp, sl, p.get('cx', W / 2) + sdx + off,
@@ -4120,15 +4209,10 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     paste_scene(comp, arr_s, p.get('cx', W / 2) + sdx + adx_s,
                                 p['cy'] + sdy + dy_s + (1 - e) * H * 0.03,
                                 W, H, scale=(0.97 + 0.03 * e) * live * asc_s,
-                                opacity=min(dt / 0.4, 1) * g_out * aop_s
-                                * (0.74 if p.get('scene_blend')
-                                   else (1.0 if p.get('glass') else 0.97)),
-                                refract=1.0 if p.get('scene_blend') else 0.0,
-                                ripple=0.06 if p.get('glass')
-                                else (0.10 if p.get('scene_blend') else 0.12),
-                                grain=1.5 if p.get('glass') else 2.2,
+                                opacity=min(dt / 0.4, 1) * g_out * aop_s * g_opac,
+                                refract=g_refract, ripple=g_ripple, grain=g_grain,
                                 occ=occ_g,
-                                blur=max(cam_blur, (1 - e) * 4.5 if not p.get('scene_blend') else 0.0))
+                                blur=max(cam_blur, (1 - e) * 4.5 if not (p.get('scene_blend') or gp) else 0.0))
                 else:
                     paste(comp, p['arr'], p.get('cx', W / 2) + sdx,
                           p['cy'] + sdy + (1 - e) * H * 0.03 + x_dv * p['arr'].shape[0],
@@ -4768,7 +4852,10 @@ def main():
     total_est = (max(int(args.duration * fps), 1) if args.duration else n_frames) + 8
     need_alpha = np.zeros(total_est, dtype=bool)
     for p in plans:
-        if p['tpl'] in ('behind', 'blurin'):
+        # v91: ground-B-Roll braucht die Person-Matte, damit liegender Text
+        # auf klarem Boden verankert wird UND die Person davor laeuft
+        # (Text liegt hinter ihr auf der Strasse, nicht auf ihrem Pulli).
+        if p['tpl'] in ('behind', 'blurin') or (p['tpl'] == 'ground' and p.get('broll')):
             a = max(int((p['start'] - 0.2) * fps), 0)
             b = min(int((p['end'] + 0.6) * fps) + 1, total_est)
             need_alpha[a:b] = True

@@ -508,8 +508,11 @@ def _scenario_logic(clip, transcript, tmp):
     plg = R.build_plans(wg, {1}, cfg, S, W_, H_, lambda s, e: False,
                         {1: {'fx': 'behind', 'power': 3, 'n': 1}})
     kpg = [p for p in plg if 'kw_i' in p]
-    check('Liegend im Wasser (power 3)', bool(kpg) and kpg[0]['tpl'] == 'ground'
-          and kpg[0].get('scene_blend') is True and kpg[0].get('refl') is None
+    # Ohne szene-Angabe = fester Boden: flach aufgemalt (ground_paint), NICHT
+    # gewellt wie Wasser (scene_blend). Wasser ist der Sonderfall szene='wasser'.
+    check('Liegend auf Boden (power 3)', bool(kpg) and kpg[0]['tpl'] == 'ground'
+          and kpg[0].get('ground_paint') is True
+          and not kpg[0].get('scene_blend') and kpg[0].get('refl') is None
           and kpg[0].get('cshadow') is None,
           kpg[0]['tpl'] if kpg else 'kein Plan')
     plg_s = R.build_plans(wg, {1}, cfg, S, W_, H_, lambda s, e: False,
@@ -840,9 +843,10 @@ def _scenario_logic(clip, transcript, tmp):
     check('SFX volle Abdeckung', bool(ok_sfx), f'{n_sfx} Sounds')
     shutil.rmtree(tmp_sfx2, ignore_errors=True)
 
-    # Szenen-Integration: liegender Text traegt scene_blend, Talking-Head nicht
+    # Szenen-Integration: liegender Boden-Text traegt ground_paint (flach
+    # aufgemalt), Wasser traegt scene_blend; Talking-Head-Ground keines von beiden.
     check('Ground blendet in die Szene',
-          bool(kpg) and kpg[0].get('scene_blend') is True)
+          bool(kpg) and kpg[0].get('ground_paint') is True)
     plg_th = R.build_plans(wg, {1}, cfg, S, W_, H_, lambda s, e: True,
                            {1: {'fx': 'ground', 'power': 2, 'n': 1}})
     kpg_th = [p for p in plg_th if 'kw_i' in p]
@@ -913,6 +917,26 @@ def _scenario_logic(clip, transcript, tmp):
     kps = [p for p in pls if 'kw_i' in p]
     check('Stehend trotz Power 3', bool(kps) and not kps[0].get('scene_blend')
           and kps[0].get('refl') is not None)
+
+    # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
+    # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
+    # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
+    ga_alpha = np.zeros((H_, W_, 1), dtype=np.float32)
+    ga_alpha[:int(H_ * 0.60), int(W_ * 0.20):int(W_ * 0.85)] = 1.0   # Koerper/Arm
+    ga_arr = np.zeros((int(H_ * 0.10), int(W_ * 0.55), 4), dtype=np.uint8)
+    ga_arr[..., 3] = 255
+    ga = R.ground_anchor(ga_alpha, ga_arr, W_, H_)
+    tw2, th2 = ga_arr.shape[1], ga_arr.shape[0]
+    in_frame = ga is not None and (tw2 / 2 <= ga[0] <= W_ - tw2 / 2
+                                   and th2 / 2 <= ga[1] <= H_ - th2 / 2)
+    on_ground = ga is not None and float(ga_alpha[int(ga[1]), int(ga[0]), 0]) < 0.35
+    below_person = ga is not None and ga[1] > H_ * 0.55
+    check('Boden-Anker meidet die Person',
+          bool(in_frame and on_ground and below_person),
+          f'{ga}' if ga else 'None')
+    # Ohne Person (echtes Aerial-B-Roll) -> kein Umanker, Standard bleibt
+    check('Boden-Anker aus bei leerem Bild',
+          R.ground_anchor(np.zeros((H_, W_, 1), np.float32), ga_arr, W_, H_) is None)
 
     # Planarer Kamera-Track: Homographie erkennt Kamerabewegung,
     # paste_tracked bewegt den Text wie ein Objekt in der Welt
