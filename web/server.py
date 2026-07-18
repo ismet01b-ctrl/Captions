@@ -703,6 +703,10 @@ _CSP = (
 )
 
 
+# Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
+DVE_BUILD = 'v92-sec2'
+
+
 @app.middleware('http')
 async def _security_headers(request, call_next):
     resp = await call_next(request)
@@ -711,6 +715,7 @@ async def _security_headers(request, call_next):
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     resp.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    resp.headers['X-DVE-Version'] = DVE_BUILD
     return resp
 
 
