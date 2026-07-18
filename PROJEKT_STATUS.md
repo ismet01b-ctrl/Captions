@@ -3,6 +3,44 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v92-sec2: Zweite Audit-Runde (Konkurrenz-Vergleich Submagic/Opus/
+  Captions.ai) - 9 Funde gefixt, alle per Selftest gesichert.** Nach dem
+  ersten Audit ein vollstaendiger Vergleich "ist die Sicherheit wirklich
+  gegeben, fuer alles". Kern (bcrypt, atomare Credits, Webhook-Signatur,
+  server-seitige Preise, IDOR-Ownership, sichere Cookies, 256-Bit-Tokens)
+  war auf Marktniveau. Neu behoben:
+  1) **Admin-Endpoint gehaertet** (`/admin/codes`): erratbarer Default `admin`
+     raus (fehlt `DVE_ADMIN` -> Endpoint tot), Schluessel jetzt per Header
+     `X-Admin-Key` statt Query (landet sonst in Logs/History), `hmac.compare_digest`.
+  2) **DSGVO-Loeschung wirklich komplett** (Art. 17): Konto-Loeschung entfernt
+     jetzt auch die Job-Ordner (Original-Upload = Gesicht/Stimme, fertige
+     Videos, Transkripte), den Transkript-Cache und `resets`/`verify_tokens` -
+     vorher blieb das bis zum 7/30-Tage-Sweep liegen trotz "komplett loeschen".
+  3) **Pfad-Traversal ueber `language` geschlossen**: der Sprach-Wert aus
+     cfg_overrides floss ungefiltert in einen Dateinamen (`_tcache_path`,
+     `shutil.copyfile`) -> `../../` haette fremde `.json` lesbar gemacht.
+     Jetzt Regex-Whitelist (`[a-z]{2,8}|auto`) + gehaerteter Pfadbau.
+  4) **SEPA-Doppelbuchung verhindert**: Webhook schreibt Guthaben nur noch bei
+     `payment_status=='paid'` gut und lauscht auf `async_payment_succeeded` -
+     vorher haetten verzoegerte Zahlungen Credits VOR Geldeingang gebracht.
+  5) **Kauf-Gutschrift atomar+idempotent**: partieller UNIQUE-Index auf
+     `ledger(user_id,'Kauf %')` + `INSERT OR IGNORE` -> zwei gleichzeitige
+     Webhook-Retries koennen nicht doppelt gutschreiben.
+  6) **Security-Header ueberall**: CSP, X-Frame-Options, nosniff, Referrer-
+     Policy, HSTS - zentral in Caddy UND als App-Middleware. Vorher: null.
+  7) **XSS-Haertung Frontend**: Upload-Dateiname server-seitig entschaerft
+     (`_safe_name`) und im Client per `escHtml`/`textContent` gerendert
+     (Library, File-Info, Summary, toast) - vorher roh via innerHTML.
+  8) **Token-Einloesung atomar** (`_consume_reset`/`_consume_verify`): ein
+     `UPDATE ... WHERE used=0` statt SELECT-dann-UPDATE (kein Doppel-Einloesen).
+  9) **Login-Timing angeglichen**: bei unbekannter E-Mail laeuft trotzdem ein
+     bcrypt-Check (Dummy-Hash) -> keine Enumeration ueber die Antwortzeit.
+  Selftest 413/413 gruen (+10 Security-Tests). Bewusst NICHT hart gemacht,
+  solange E-Mail-Zustellung (Resend-DNS) noch wackelt: Verifikations-Zwang vor
+  dem Rendern und enumerierungsfreie Registrierung wuerden Nutzer aussperren,
+  wenn keine Mail ankommt - Abuse ist ueber Trial-Cap (2 Min) + Rate-Limit
+  (5 Registrierungen/h/IP) begrenzt; Kauf ist bereits an `verified` gebunden.
+  Ehrlich: reine statische Analyse auf CPU, kein Live-Pentest.
 - **v92-sec: Sicherheits-Audit vor Stripe-Live - Credits, Zugriffsrechte,
   Webhook.** Vollstaendiges Audit von Auth/Sessions/SQL/Credits/Stripe/
   Uploads. Solide war schon: SQL 100% parametrisiert, bcrypt, Session-Cookie

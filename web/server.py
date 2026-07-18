@@ -16,6 +16,7 @@ Was NEU vs. v59:
 """
 import copy
 import glob
+import hmac
 import json
 import os
 import re
@@ -93,12 +94,26 @@ def _video_hash(path):
 def _tcache_path(uid, vhash, lang):
     if not uid or not vhash:
         return None
-    lang = (lang or 'auto').strip().lower() or 'auto'
+    # v92-sec: lang landet im Dateinamen. Ein Angreifer koennte ueber
+    # cfg_overrides["language"] = "../../.." Pfad-Traversal ausloesen (der
+    # Cache wird per shutil.copyfile gelesen/geschrieben). Hart auf reine
+    # Kleinbuchstaben eindampfen - kein Slash, kein Punkt, kein '..'.
+    lang = re.sub(r'[^a-z]', '', (lang or 'auto').strip().lower())[:8] or 'auto'
+    uid = int(uid)                                  # int-Cast entfernt jeden Trick
     return os.path.join(_TCACHE, f'{uid}_{vhash}_{lang}.json')
 
 
 def _job_transcript_path(src):
     return os.path.splitext(src)[0] + '_transcript2.json'
+
+
+def _safe_name(name):
+    """v92-sec: Angezeigter Upload-Dateiname. Nur Basename, Steuerzeichen und
+    Winkelklammern raus, Laenge gekappt. Verhindert, dass ein praeparierter
+    Dateiname (z.B. '<img onerror=...>.mp4') irgendwo als HTML wirkt."""
+    base = os.path.basename(name or '').strip()
+    base = re.sub(r'[\x00-\x1f<>]', '', base)
+    return base[:80] or 'video.mp4'
 
 
 # ================================================================
@@ -158,6 +173,17 @@ def _init_users_db():
         con.execute("ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
         con.execute("UPDATE users SET verified = 1")
         con.commit()
+    # v92-sec: Kauf-Gutschriften gegen Doppelbuchung absichern. Stripe kann
+    # denselben Webhook mehrfach senden; ohne DB-Constraint konnten zwei
+    # gleichzeitige Deliveries beide am Idempotenz-SELECT vorbei und doppelt
+    # gutschreiben. Partieller UNIQUE-Index nur auf 'Kauf %' - Renders/Refunds/
+    # Monthly bleiben unberuehrt. Falls Altdaten Duplikate haben, nicht crashen.
+    try:
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_ledger_kauf "
+                    "ON ledger(user_id, grund) WHERE grund LIKE 'Kauf %'")
+        con.commit()
+    except sqlite3.IntegrityError as e:
+        print(f'WARN: ux_ledger_kauf nicht angelegt (Altdaten-Duplikate?): {e}')
     con.close()
 
 
@@ -196,6 +222,12 @@ def _verify_pw(pw, stored):
         except Exception:
             return False
     return False
+
+
+# v92-sec: Fester Dummy-Hash. Bei Login mit unbekannter E-Mail wird trotzdem
+# eine bcrypt-Pruefung gefahren, damit die Antwortzeit gleich bleibt und man
+# nicht per Timing erraten kann, welche E-Mails existieren.
+_DUMMY_HASH = _hash_pw(secrets.token_hex(16))
 
 
 EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
@@ -405,32 +437,45 @@ def _send_verify_mail(uid, email, name=''):
 def _consume_verify(token):
     if not token:
         return None
+    # v92-sec: ATOMAR konsumieren. Frueher SELECT dann UPDATE - zwei parallele
+    # Requests konnten beide den SELECT passieren. Jetzt markiert ein einziges
+    # UPDATE ... WHERE used=0 den Token; nur wer rowcount==1 gewinnt.
     con = _db()
-    row = con.execute(
-        "SELECT user_id FROM verify_tokens WHERE token = ? AND used = 0 "
-        "AND expires_at > ?", (token, int(time.time()))).fetchone()
-    if row:
-        con.execute("UPDATE verify_tokens SET used = 1 WHERE token = ?", (token,))
+    try:
+        cur = con.execute(
+            "UPDATE verify_tokens SET used = 1 WHERE token = ? AND used = 0 "
+            "AND expires_at > ?", (token, int(time.time())))
+        if cur.rowcount != 1:
+            con.rollback()
+            return None
+        row = con.execute("SELECT user_id FROM verify_tokens WHERE token = ?",
+                          (token,)).fetchone()
         con.execute("UPDATE users SET verified = 1 WHERE id = ?",
                     (row['user_id'],))
         con.commit()
-    con.close()
-    return row['user_id'] if row else None
+        return row['user_id']
+    finally:
+        con.close()
 
 
 def _consume_reset(token):
-    """Token pruefen + als benutzt markieren. Gibt user_id oder None."""
+    """Token pruefen + als benutzt markieren (atomar). Gibt user_id oder None."""
     if not token:
         return None
     con = _db()
-    row = con.execute(
-        "SELECT user_id FROM resets WHERE token = ? AND used = 0 "
-        "AND expires_at > ?", (token, int(time.time()))).fetchone()
-    if row:
-        con.execute("UPDATE resets SET used = 1 WHERE token = ?", (token,))
+    try:
+        cur = con.execute(
+            "UPDATE resets SET used = 1 WHERE token = ? AND used = 0 "
+            "AND expires_at > ?", (token, int(time.time())))
+        if cur.rowcount != 1:
+            con.rollback()
+            return None
+        row = con.execute("SELECT user_id FROM resets WHERE token = ?",
+                          (token,)).fetchone()
         con.commit()
-    con.close()
-    return row['user_id'] if row else None
+        return row['user_id']
+    finally:
+        con.close()
 
 
 def _current_user(request):
@@ -615,7 +660,58 @@ def _pack_processed(user_id, session_id):
     return row is not None
 
 
+def _credit_purchase(uid, sec, session_id):
+    """v92-sec: Kauf ATOMAR + idempotent gutschreiben. Der 'INSERT OR IGNORE'
+    prallt am partiellen UNIQUE-Index (user_id, 'Kauf {id}') ab, wenn dieselbe
+    Stripe-Session schon verbucht ist - auch bei zwei gleichzeitigen Webhooks.
+    Nur wenn wirklich eine neue Zeile entstand, wird das Guthaben erhoeht.
+    Gibt True zurueck, wenn frisch gutgeschrieben wurde."""
+    con = _db()
+    try:
+        cur = con.execute(
+            "INSERT OR IGNORE INTO ledger (user_id, delta_sec, grund, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (uid, sec, f'Kauf {session_id}', int(time.time())))
+        if cur.rowcount != 1:
+            con.commit()
+            return False                     # schon verbucht
+        con.execute("UPDATE users SET balance_sec = MAX(0, balance_sec + ?) "
+                    "WHERE id = ?", (sec, uid))
+        con.commit()
+        return True
+    finally:
+        con.close()
+
+
 app = FastAPI(title='DouchkoVE')
+
+
+# v92-sec: Security-Header auf JEDER Antwort. Zweite Verteidigungslinie gegen
+# XSS (CSP), Clickjacking (frame-ancestors/XFO), Token-Leak per Referer
+# (Referrer-Policy) und MIME-Sniffing (nosniff). Caddy setzt sie am Rand
+# zusaetzlich - hier greifen sie auch, falls die App direkt erreichbar ist.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "        # index.html nutzt Inline-<script> + onclick=
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "media-src 'self' blob:; "
+    "font-src 'self'; "
+    "connect-src 'self' https://api.stripe.com; "
+    "frame-ancestors 'none'; base-uri 'none'; "
+    "form-action 'self' https://checkout.stripe.com"
+)
+
+
+@app.middleware('http')
+async def _security_headers(request, call_next):
+    resp = await call_next(request)
+    resp.headers['Content-Security-Policy'] = _CSP
+    resp.headers['X-Frame-Options'] = 'DENY'
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    resp.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return resp
 
 
 @app.get('/api/pricing')
@@ -713,9 +809,18 @@ async def api_stripe_webhook(request: Request):
     except Exception as e:
         raise HTTPException(400, f'Webhook invalid: {type(e).__name__}')
     ev_type = event.get('type')
-    if ev_type != 'checkout.session.completed':
+    # v92-sec: Bei Karte kommt 'completed' sofort mit payment_status='paid'.
+    # Bei SEPA/verzoegerten Methoden ist 'completed' noch NICHT bezahlt
+    # (payment_status='unpaid'/'processing') - das Geld kommt erst spaeter per
+    # 'async_payment_succeeded'. Frueher wurde bei 'completed' bedingungslos
+    # gutgeschrieben -> SEPA-Nutzer haetten Credits VOR (evtl. scheiterndem)
+    # Geldeingang bekommen. Jetzt: nur gutschreiben, wenn wirklich bezahlt.
+    if ev_type not in ('checkout.session.completed',
+                       'checkout.session.async_payment_succeeded'):
         return {'ok': True, 'ignored': ev_type}
     sess = event.get('data', {}).get('object', {})
+    if sess.get('payment_status') != 'paid':
+        return {'ok': True, 'pending': sess.get('payment_status')}
     meta = sess.get('metadata') or {}
     try:
         uid = int(meta.get('user_id'))
@@ -724,9 +829,10 @@ async def api_stripe_webhook(request: Request):
         sess_id = sess.get('id', '')
     except Exception:
         raise HTTPException(400, 'Metadata incomplete.')
-    if _pack_processed(uid, sess_id):
+    # Atomar + idempotent (siehe _credit_purchase). Doppelte/erneute Webhooks
+    # fuer dieselbe Session koennen nicht doppelt gutschreiben.
+    if not _credit_purchase(uid, sec, sess_id):
         return {'ok': True, 'idempotent': True}
-    _adjust_balance(uid, sec, f'Kauf {sess_id}')
     print(f"Kauf verbucht: user={uid} pack={pack} +{sec // 60} Min")
     return {'ok': True, 'gutgeschrieben_sek': sec}
 
@@ -899,6 +1005,15 @@ def _sanitize_overrides(ov):
     if not isinstance(ov, dict):
         return {}
     out = {k: v for k, v in ov.items() if k in _OV_SECTIONS}
+    # v92-sec: language fliesst bis in einen Dateinamen (Transkript-Cache).
+    # Nur ein sauberer Sprachcode oder 'auto' darf durch - alles andere raus,
+    # damit kein Pfad-Traversal moeglich ist.
+    if 'language' in out:
+        lv = str(out.get('language') or '').strip().lower()
+        if not re.fullmatch(r'[a-z]{2,8}|auto', lv):
+            out.pop('language', None)
+        else:
+            out['language'] = lv
     o = out.get('output')
     if isinstance(o, dict):
         if 'height' in o:
@@ -1640,7 +1755,13 @@ def api_login(request: Request, response: Response, email: str = Form(...),
         raise HTTPException(429, 'Too many login attempts. Please wait a few minutes.')
     email = (email or '').strip().lower()
     row = _find_user_by_email(email)
-    if not row or not _verify_pw(password, row['pw_hash']):
+    if not row:
+        # v92-sec: Auch ohne Treffer eine bcrypt-Pruefung fahren, damit die
+        # Antwortzeit gleich lang ist - sonst verraet das Timing, welche
+        # E-Mails existieren (Login-Text ist bewusst schon identisch).
+        _verify_pw(password, _DUMMY_HASH)
+        raise HTTPException(401, 'Email or password is wrong.')
+    if not _verify_pw(password, row['pw_hash']):
         raise HTTPException(401, 'Email or password is wrong.')
     tok, exp = _create_session(row['id'])
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
@@ -1781,9 +1902,30 @@ def api_delete_account(request: Request, response: Response,
     if not _verify_pw(password, u['pw_hash']):
         raise HTTPException(401, 'Password is wrong.')
     uid = u['id']
+    # v92-sec (DSGVO Art. 17): WIRKLICH alles loeschen. Frueher blieben die
+    # gerenderten Videos, die Original-Uploads (Gesicht/Stimme!), Transkripte
+    # und der Transkript-Cache bis zum Retention-Sweep (7/30 Tage) liegen -
+    # obwohl "komplett loeschen" versprochen war. Jetzt: Job-Ordner von Platte,
+    # tcache-Dateien, In-Memory-Jobs, plus resets/verify_tokens.
+    my_jids = [jid for jid, j in list(JOBS.items()) if j.get('user_id') == uid]
+    for jid in my_jids:
+        shutil.rmtree(job_dir(jid), ignore_errors=True)
+        JOBS.pop(jid, None)
+    try:
+        pref = f'{uid}_'
+        for fn in os.listdir(_TCACHE):
+            if fn.startswith(pref):
+                try:
+                    os.remove(os.path.join(_TCACHE, fn))
+                except OSError:
+                    pass
+    except OSError:
+        pass
     con = _db()
     con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM ledger WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM resets WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM verify_tokens WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM users WHERE id = ?", (uid,))
     con.commit()
     con.close()
@@ -1992,7 +2134,7 @@ async def upload(request: Request, datei: UploadFile = File(...),
                  'mode': mode, 'cfg_overrides': overrides,
                  'status': 'wartet', 'progress': 0.0,
                  'phase': 'Queued …',
-                 'dauer': round(dur, 1), 'name': datei.filename}
+                 'dauer': round(dur, 1), 'name': _safe_name(datei.filename)}
     set_state(jid, **{k: v for k, v in JOBS[jid].items()
                       if k not in ('input', 'code')})
     QUEUE.put(jid)
@@ -2423,7 +2565,13 @@ async def save_and_render(request: Request, jid: str,
 
 
 @app.get('/admin/codes')
-def admin_codes(schluessel: str = ''):
-    if schluessel != os.environ.get('DVE_ADMIN', 'admin'):
+def admin_codes(request: Request):
+    """v92-sec: Admin-Schluessel jetzt (1) ohne erratbaren Default 'admin'
+    (fehlt DVE_ADMIN -> Endpoint tot), (2) per Header X-Admin-Key statt
+    Query-Parameter (landet sonst in Access-Logs/History/Referer),
+    (3) timing-safe verglichen."""
+    key = os.environ.get('DVE_ADMIN', '').strip()
+    given = request.headers.get('x-admin-key', '')
+    if not key or not hmac.compare_digest(given, key):
         raise HTTPException(403, 'Access denied.')
     return load_codes()

@@ -1728,11 +1728,27 @@ function applyTemplate(name) {
     });
 }
 
+// v92-sec: HTML-escapen fuer alle Stellen, die per innerHTML gerendert werden
+// und (potenziell) Nutzer-/Dateinamen enthalten.
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function toast(msg, kind='info', dur=4000) {
   const el = document.createElement('div');
   el.className = 'toast' + (kind !== 'info' ? ' ' + kind : '');
   el.setAttribute('role', 'status');
-  el.innerHTML = `<span>${msg}</span><button class="close" aria-label="Schliessen">&times;</button>`;
+  // v92-sec: Nachricht als Textknoten (nicht innerHTML) - falls je eine
+  // Server-Fehlermeldung Nutzereingaben zurueckspiegelt, kein XSS.
+  const span = document.createElement('span');
+  span.textContent = msg;
+  const btn = document.createElement('button');
+  btn.className = 'close';
+  btn.setAttribute('aria-label', 'Schliessen');
+  btn.innerHTML = '&times;';
+  el.appendChild(span);
+  el.appendChild(btn);
   $('#toasts').appendChild(el);
   const close = () => el.remove();
   el.querySelector('.close').addEventListener('click', close);
@@ -2472,7 +2488,7 @@ async function renderLibrary() {
         <div class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
       </div>
       <div class="lib-meta">
-        <div class="lib-name" title="${(it.name || '').replace(/"/g, '&quot;')}">${it.name || 'Video'}</div>
+        <div class="lib-name" title="${(it.name || '').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">${escHtml(it.name || 'Video')}</div>
         <div class="lib-sub">${durTxt} min · ${new Date(it.created * 1000).toLocaleDateString()}</div>
         <div class="lib-count ${cd.warn ? 'warn' : 'ok'}">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
@@ -2727,7 +2743,7 @@ function setFile(f) {
       </svg>
     </div>
     <div>
-      <div class="fi-name">${f.name}</div>
+      <div class="fi-name">${escHtml(f.name)}</div>
       <div class="fi-meta">${(f.size / 1048576).toFixed(1)} MB · ready</div>
     </div>`;
   $('#fileInfo').classList.remove('hidden');
@@ -3115,7 +3131,7 @@ function buildSummary() {
   const tiles = [];
   tiles.push(_tile({
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`,
-    head: 'File', val: State.file ? State.file.name : '–',
+    head: 'File', val: State.file ? escHtml(State.file.name) : '–',
     sub: State.file ? `${(State.file.size/1048576).toFixed(1)} MB` : '',
     wide: true,
   }));

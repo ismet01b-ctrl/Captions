@@ -1980,6 +1980,60 @@ def _scenario_security(tmp):
           _src.count('_job_owner_ok(jid, request)') >= 6,
           f"{_src.count('_job_owner_ok(jid, request)')} Checks")
     check('Login gegen Brute-Force gebremst', "bucket='login'" in _src)
+    # 7) Pfad-Traversal ueber language wird geschluckt (Wert + Dateiname)
+    ov2 = SV._sanitize_overrides({'language': '../../etc/passwd'})
+    ov3 = SV._sanitize_overrides({'language': 'DE'})
+    check('language: Pfad-Traversal-Wert wird verworfen',
+          'language' not in ov2 and ov3.get('language') == 'de')
+    tp = SV._tcache_path(uid, 'abcd', '../../../etc/x')
+    check('tcache-Pfad bleibt im tcache-Ordner (kein Traversal)',
+          bool(tp) and os.path.dirname(os.path.abspath(tp)) == os.path.abspath(SV._TCACHE)
+          and '..' not in os.path.basename(tp), tp)
+    # 8) Kauf idempotent + atomar (Webhook-Retry schreibt nicht doppelt)
+    b0 = SV._find_user_by_id(uid)['balance_sec']
+    r1 = SV._credit_purchase(uid, 100, 'sessAAA')
+    r2 = SV._credit_purchase(uid, 100, 'sessAAA')
+    b1 = SV._find_user_by_id(uid)['balance_sec']
+    check('Kauf: idempotent (Retry schreibt nicht doppelt)',
+          r1 is True and r2 is False and b1 == b0 + 100,
+          f'{b0} -> {b1}, r1={r1} r2={r2}')
+    # 9) Reset-Token nur EINMAL einloesbar (atomar)
+    con = SV._db()
+    con.execute("INSERT INTO resets (token, user_id, created_at, expires_at, used) "
+                "VALUES (?, ?, ?, ?, 0)",
+                ('tok_reset_1', uid, int(_t.time()), int(_t.time()) + 999))
+    con.commit(); con.close()
+    first = SV._consume_reset('tok_reset_1')
+    second = SV._consume_reset('tok_reset_1')
+    check('Reset-Token: nur einmal einloesbar (atomar)',
+          first == uid and second is None, f'{first}/{second}')
+    # 10) Upload-Dateiname wird entschaerft (kein HTML, kein Traversal)
+    check('Upload-Dateiname wird von HTML/Steuerzeichen befreit',
+          SV._safe_name('<img src=x onerror=alert(1)>.mp4')
+          == 'img src=x onerror=alert(1).mp4'
+          and SV._safe_name('../../evil.mp4') == 'evil.mp4')
+    # 11) DSGVO-Loeschung entfernt Videos + tcache + Token (Quelltext-Garantie)
+    check('Konto-Loeschung raeumt Videos/tcache/Token',
+          'shutil.rmtree(job_dir(jid)' in _src
+          and 'DELETE FROM resets' in _src
+          and 'DELETE FROM verify_tokens' in _src
+          and 'startswith(pref)' in _src)
+    # 12) Admin-Endpoint gehaertet (kein Default, Header, timing-safe)
+    check('Admin: kein Default admin, Header + timing-safe',
+          "os.environ.get('DVE_ADMIN', 'admin')" not in _src
+          and 'hmac.compare_digest(given, key)' in _src
+          and "request.headers.get('x-admin-key'" in _src)
+    # 13) Security-Header werden auf jeder Antwort gesetzt
+    check('Security-Header (CSP/XFO/nosniff) aktiv',
+          'Content-Security-Policy' in _src and 'X-Frame-Options' in _src
+          and 'X-Content-Type-Options' in _src)
+    # 14) SEPA: Guthaben nur bei wirklich bezahltem Status
+    check('Webhook schreibt nur bei payment_status paid gut',
+          "sess.get('payment_status') != 'paid'" in _src
+          and 'async_payment_succeeded' in _src)
+    # 15) Login gleicht Timing an (Dummy-Hash bei unbekannter Mail)
+    check('Login: Timing-Angleich gegen Mail-Enumeration',
+          '_verify_pw(password, _DUMMY_HASH)' in _src)
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

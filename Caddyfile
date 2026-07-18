@@ -6,6 +6,15 @@
     request_body {
         max_size 500MB
     }
+    # v92-sec: Security-Header zentral am Rand (zusaetzlich zur App-Middleware).
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://api.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://checkout.stripe.com"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        -Server
+    }
     reverse_proxy app:8000 {
         transport http {
             read_timeout 30m
