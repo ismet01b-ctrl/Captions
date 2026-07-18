@@ -2021,6 +2021,57 @@ def _regie_sanity(fx_map, words):
         print(f"  Regie-Check: {dropped} unpassende Sound-Animation(en) entfernt")
     return fx_map
 
+
+def _corrections_path():
+    return os.path.join(os.environ.get('DVE_DATA') or os.path.join(HERE, 'data'),
+                        'corrections.json')
+
+def _load_corrections(path=None):
+    """Global gelernte Korrekturen (aus frueheren Momente-Editor-Edits)."""
+    try:
+        data = json.load(open(path or _corrections_path(), encoding='utf-8'))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+def _norm_phrase(s):
+    return ' '.join(clean(w).lower() for w in str(s or '').split() if clean(w))
+
+def _apply_corrections(fx_map, words, corrections):
+    """Phase 2 'aus Fehlern lernen' (global, deterministisch): wo der Nutzer
+    dieselbe Phrase schon einmal anders wollte - anderer Effekt, Animation
+    entfernt/gesetzt, oder Moment ganz deaktiviert - zieht die KI-Wahl jetzt
+    automatisch dorthin nach. Braucht kein GPT. Die juengste Korrektur pro
+    Phrase gewinnt."""
+    if not fx_map or not corrections:
+        return fx_map
+    by_phrase = {}
+    for c in corrections:
+        p = _norm_phrase(c.get('phrase', ''))
+        if p:
+            by_phrase[p] = c                    # spaetere ueberschreiben fruehere
+    applied = 0
+    for i in list(fx_map):
+        n = int(fx_map[i].get('n', 1))
+        phrase = _norm_phrase(' '.join(clean(words[j].get('word', ''))
+                              for j in range(i, min(i + n, len(words)))))
+        c = by_phrase.get(phrase)
+        if not c:
+            continue
+        if c.get('user_aktiv') is False:        # Nutzer hatte den Moment geloescht
+            fx_map.pop(i, None); applied += 1; continue
+        if c.get('user_fx') and c['user_fx'] != fx_map[i].get('fx'):
+            fx_map[i]['fx'] = c['user_fx']; applied += 1
+        if 'user_anim' in c:
+            if c['user_anim']:
+                fx_map[i]['anim'] = c['user_anim']
+            else:
+                fx_map[i].pop('anim', None)
+            applied += 1
+    if applied:
+        print(f"  Gelernt: {applied} Korrektur(en) aus frueheren Edits angewandt")
+    return fx_map
+
 def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     """LLM waehlt Keywords, Phrasen, Effekte und Wucht. Gibt {index: info} zurueck oder None.
     Lange Videos werden in Etappen analysiert, damit die JSON-Antwort nie abgeschnitten wird.
@@ -2088,6 +2139,7 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     if voice_wav:
         merged = _audio_boost(merged, words, voice_wav)
     merged = _regie_sanity(merged, words)
+    merged = _apply_corrections(merged, words, _load_corrections())
     return _cap_power3(merged) if merged else None
 
 # ---- Zahlen: nicht jede Zahl ist eine Aussage.

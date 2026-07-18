@@ -481,6 +481,21 @@ def _scenario_logic(clip, transcript, tmp):
     check('Rein visuelle Anim wird nicht angetastet',
           _fm_vis[6].get('anim') == 'schweben')
 
+    # Phase 2: aus frueheren Editor-Korrekturen lernen (global, deterministisch)
+    _wc = [{'word': w} for w in ['Die', 'STREET', 'liegt', 'da', '.',
+                                 'Kein', 'Abo', 'mehr', '.']]
+    _corr = [{'phrase': 'STREET', 'user_fx': 'ground', 'user_anim': ''}]
+    _fmc = {1: {'fx': 'behind', 'power': 3, 'n': 1, 'anim': 'bruch'}}
+    R._apply_corrections(_fmc, _wc, _corr)
+    check('Gelernte Korrektur zieht Effekt nach',
+          _fmc[1]['fx'] == 'ground' and _fmc[1].get('anim') is None)
+    _fmd = {6: {'fx': 'outline', 'power': 2, 'n': 1}}
+    R._apply_corrections(_fmd, _wc, [{'phrase': 'Abo', 'user_aktiv': False}])
+    check('Gelernte Deaktivierung entfernt den Moment', 6 not in _fmd)
+    _fme = {1: {'fx': 'behind', 'power': 2, 'n': 1}}
+    R._apply_corrections(_fme, _wc, [{'phrase': 'ganz anderes', 'user_fx': 'ground'}])
+    check('Ohne passende Korrektur bleibt alles', _fme[1]['fx'] == 'behind')
+
     # Zahlen in der Fallback-Heuristik (jede Sprache)
     wn = [{'word': w, 'start': 1 + i * .3, 'end': 1.25 + i * .3} for i, w in
           enumerate(['Wir', 'zahlen', 'heute', '100', 'Euro', 'dafuer.'])]

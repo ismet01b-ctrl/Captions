@@ -2214,6 +2214,54 @@ def get_thumb(jid: str, name: str):
     return FileResponse(thumb_path, media_type='image/jpeg')
 
 
+CORRECTIONS_PATH = os.path.join(DATA, 'corrections.json')
+
+def _load_corrections():
+    try:
+        d = json.load(open(CORRECTIONS_PATH, encoding='utf-8'))
+        return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+def _capture_corrections(old_mom_path, edited):
+    """Vergleicht die neuen (editierten) Momente mit dem vorherigen Stand und
+    speichert JEDE Aenderung (Effekt getauscht, Animation weg/gesetzt, Moment
+    deaktiviert) global. Beim naechsten Render zieht die KI-Wahl automatisch
+    dorthin nach (Phase 2 'aus Fehlern lernen', global)."""
+    if not os.path.exists(old_mom_path):
+        return
+    try:
+        old = {m.get('i'): m for m in json.load(open(old_mom_path, encoding='utf-8'))}
+    except Exception:
+        return
+    corr = _load_corrections()
+    changed = 0
+    for m in edited:
+        o = old.get(m.get('i'))
+        if o is None:
+            continue
+        phrase = (o.get('text') or m.get('text') or '').strip()
+        if not phrase:
+            continue
+        rec = {}
+        if m.get('fx') and str(m.get('fx')) != str(o.get('fx', '')):
+            rec['user_fx'] = str(m['fx'])
+        if str(m.get('anim', '')) != str(o.get('anim', '')):
+            rec['user_anim'] = str(m.get('anim', ''))
+        if bool(m.get('aktiv', True)) != bool(o.get('aktiv', True)):
+            rec['user_aktiv'] = bool(m.get('aktiv', True))
+        if rec:
+            rec['phrase'] = phrase
+            corr.append(rec)
+            changed += 1
+    if changed:
+        os.makedirs(DATA, exist_ok=True)
+        json.dump(corr[-500:], open(CORRECTIONS_PATH, 'w', encoding='utf-8'),
+                  ensure_ascii=False, indent=1)
+        print(f"Gelernt: {changed} Korrektur(en) gespeichert "
+              f"({len(corr[-500:])} gesamt)")
+
+
 @app.post('/api/moments/{jid}')
 async def save_and_render(request: Request, jid: str,
                           moments: str = Form(...), code: str = Form('')):
@@ -2230,6 +2278,13 @@ async def save_and_render(request: Request, jid: str,
         raise HTTPException(400, 'Moments JSON invalid.')
     base = os.path.splitext(j['input'])[0]
     mom_path = base + '_momente.json'
+    # v92 Phase 2: aus dem Edit lernen. Diff gegen die VORHERIGE Momente-Datei
+    # (KI-Original bzw. letzter Stand) - was der Nutzer aendert, wird global
+    # gespeichert und beim naechsten Render automatisch beruecksichtigt.
+    try:
+        _capture_corrections(mom_path, mom)
+    except Exception as e:
+        print(f"Korrektur-Erfassung uebersprungen ({type(e).__name__})")
     json.dump(mom, open(mom_path, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
     # Voll-Render mit den neuen Momenten
