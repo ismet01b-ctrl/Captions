@@ -245,6 +245,15 @@ def _scenario_logic(clip, transcript, tmp):
     f14 = R.make_counter('14 MILLIARDEN EURO')
     check('Zaehler zaehlt hoch', f14 and f14[0](0.0).startswith('0')
           and f14[0](99).startswith('14'))
+    # Jahreszahl darf NICHT hochzaehlen (ein Jahr ist keine Menge) - sonst rollt
+    # "2026" von 0 hoch und ist vorbei, bevor die 2026 ueberhaupt steht.
+    check('Jahreszahl zaehlt nicht hoch',
+          R.make_counter('2026') is None and R.make_counter('IM JAHR 2026') is None
+          and R.make_counter('1999') is None and R.make_counter('2100') is None)
+    check('Echte Menge zaehlt weiterhin',
+          R.make_counter('14 MILLIARDEN') is not None
+          and R.make_counter('2200') is not None
+          and R.make_counter('850 EURO') is not None)
     ws3 = [{'word': '87', 'start': 1.0, 'end': 1.3},
            {'word': 'Prozent', 'start': 1.35, 'end': 1.7}]
     pl3 = R.build_plans(ws3, {0}, cfg, S, W_, H_, lambda s, e: True,
@@ -415,13 +424,17 @@ def _scenario_logic(clip, transcript, tmp):
     _rsrc_sfx = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
     check('Keine Klang-Synthese mehr',
           '_phantom_sub' not in _rsrc_sfx and '_bandsweep_noise' not in _rsrc_sfx)
-    # Ohne Pack: sauber stumm, kein Crash
+    # Ohne Pack: sauber stumm, kein Crash. Wichtig: LEEREN, existierenden Ordner
+    # uebergeben - ein nicht existierender Pfad wuerde auf den echten Pack
+    # zurueckfallen (der jetzt im Repo liegt) und der Test waere sinnlos.
     _tmp_np = tempfile.mkdtemp()
     _out_np = os.path.join(_tmp_np, 'leer.wav')
+    _empty_pack = os.path.join(_tmp_np, 'leerpack')
+    os.makedirs(_empty_pack, exist_ok=True)
     _n_np = sfx_engine.build_sfx_track(
         [{'tpl': 'behind', 'kw_i': 0, 'start': 1.0, 'end': 2.0}],
         [{'word': ' Test', 'start': 1.0, 'end': 1.4}], 3.0,
-        os.path.join(_tmp_np, 'nichts'), _out_np, powers={0: 2})
+        _empty_pack, _out_np, powers={0: 2})
     check('Ohne Sound-Pack laeuft es stumm durch',
           _n_np == 0 and os.path.exists(_out_np),
           'keine Ersatztoene, kein Absturz')

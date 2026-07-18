@@ -2565,6 +2565,13 @@ def make_counter(txt):
         return None
     if target <= 1:
         return None
+    # Jahreszahlen sind KEINE Menge - ein Jahr zaehlt nicht von 0 hoch.
+    # "im Jahr 2026" soll einfach "2026" zeigen, nicht von 0 auf 2026 rollen
+    # (und dabei vorbei sein, bevor die 2026 ueberhaupt steht). 4-stellige
+    # Ganzzahl im Jahres-Bereich -> nur anzeigen, nicht zaehlen.
+    if dec_sep is None and grp_sep is None and raw.isdigit() and len(raw) == 4 \
+            and 1500 <= int(raw) <= 2100:
+        return None
     dur = 0.9 if target < 1000 else 1.15
 
     def fmt(dt):
@@ -2923,6 +2930,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 elif len(phrase) >= 2:            # Wortzahl geaendert: als Block setzen
                     phrase = phrase[:1]
             _cnt = make_counter(txt)
+            if _cnt:
+                # Der Zaehler muss KOMPLETT hochlaufen UND das Ziel danach lesbar
+                # stehen bleiben. Sonst ist der Moment vorbei, bevor die Zahl oben
+                # ankommt (Bug: "2026" verschwindet, bevor die Zahl steht). Die
+                # Zahl darf ruhig ueber die naechste Wortgruppe hinaus stehen.
+                _need = kw_t0 + _cnt[1] + 0.45
+                if _need > end:
+                    end = min(_need, end + 1.5)
             if _cnt and fx == 'cascade':
                 fx = 'outline'          # Zahlen zaehlen immer hoch: Cascade kann das
                                         # nicht tragen -> Zahlen-Buehne ist outline
