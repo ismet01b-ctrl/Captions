@@ -2116,6 +2116,16 @@ def _scenario_lang(tmp):
     _r = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('Regie-Prompt: Aktion-Wort-als-Keyword-Regel vorhanden',
           'AKTION-WORT ALS KEYWORD' in _r and 'explodes->explosion' in _r)
+    # v94: Modell-kompatibler Request-Body (gpt-5 braucht max_completion_tokens,
+    # kein temperature; gpt-4o das Alte).
+    b4 = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 800, 0.2)
+    b5 = R._oai_json('gpt-5', [{'role': 'user', 'content': 'x'}], 800, 0.2)
+    check('_oai_json gpt-4o: max_tokens + temperature',
+          b4.get('max_tokens') == 800 and b4.get('temperature') == 0.2
+          and 'max_completion_tokens' not in b4)
+    check('_oai_json gpt-5: max_completion_tokens, kein temperature',
+          b5.get('max_completion_tokens') == 800 and 'temperature' not in b5
+          and 'max_tokens' not in b5)
 
 
 def _scenario_premium(tmp):

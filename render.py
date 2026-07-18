@@ -980,6 +980,20 @@ Regeln: Wasser/Boden gross im Bild + grosser Moment -> "liegend". Klare Flaeche 
 Mittelgrund -> "stehend". Sprecher-Nahaufnahme -> "frei". Im Zweifel "frei".
 Antworte NUR mit JSON: {"momente": [{"i": <Index>, "szene": "...", "lage": "...", "fx": "<optional>"}]}"""
 
+def _oai_json(model, messages, max_toks, temperature):
+    """v94: chat/completions-Body, modell-kompatibel. Neuere Modelle (gpt-5,
+    o-Serie) verlangen max_completion_tokens und lehnen ein abweichendes
+    temperature ab; gpt-4o akzeptiert beides. Ohne das faellt ein neues Modell
+    still auf die Heuristik zurueck."""
+    new = str(model).startswith(('gpt-5', 'o1', 'o3', 'o4'))
+    body = {'model': model, 'messages': messages,
+            'response_format': {'type': 'json_object'}}
+    body['max_completion_tokens' if new else 'max_tokens'] = max_toks
+    if not new:
+        body['temperature'] = temperature
+    return body
+
+
 def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2):
     """Regie v4 (Vision): schaut sich pro gewaehltem Moment einen Frame an und
     entscheidet Material ('szene') und Lage ('liegend'/'stehend'/'frei').
@@ -1015,10 +1029,10 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2):
         r = requests.post(
             'https://api.openai.com/v1/chat/completions',
             headers={'Authorization': f'Bearer {key}'},
-            json={'model': model, 'temperature': 0.1, 'max_tokens': 1500,
-                  'response_format': {'type': 'json_object'},
-                  'messages': [{'role': 'system', 'content': SZENE_PROMPT},
-                               {'role': 'user', 'content': content}]},
+            json=_oai_json(model,
+                           [{'role': 'system', 'content': SZENE_PROMPT},
+                            {'role': 'user', 'content': content}],
+                           max_toks=1500, temperature=0.1),
             timeout=180)
         r.raise_for_status()
         data = json.loads(r.json()['choices'][0]['message']['content'])
@@ -2052,11 +2066,11 @@ def _regie_validate(fx_map, words, model, key):
         r = requests.post(
             'https://api.openai.com/v1/chat/completions',
             headers={'Authorization': f'Bearer {key}'},
-            json={'model': model, 'temperature': 0.0, 'max_tokens': 800,
-                  'response_format': {'type': 'json_object'},
-                  'messages': [{'role': 'system', 'content': prompt},
-                               {'role': 'user', 'content': json.dumps(
-                                   entries, ensure_ascii=False)}]},
+            json=_oai_json(model,
+                           [{'role': 'system', 'content': prompt},
+                            {'role': 'user', 'content': json.dumps(
+                                entries, ensure_ascii=False)}],
+                           max_toks=800, temperature=0.0),
             timeout=90)
         r.raise_for_status()
         data = json.loads(r.json()['choices'][0]['message']['content'])
@@ -2351,10 +2365,10 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
             r = requests.post(
                 'https://api.openai.com/v1/chat/completions',
                 headers={'Authorization': f'Bearer {key}'},
-                json={'model': model, 'temperature': 0.2, 'max_tokens': 3000,
-                      'response_format': {'type': 'json_object'},
-                      'messages': [{'role': 'system', 'content': REGIE_PROMPT},
-                                   {'role': 'user', 'content': listing}]},
+                json=_oai_json(model,
+                               [{'role': 'system', 'content': REGIE_PROMPT},
+                                {'role': 'user', 'content': listing}],
+                               max_toks=3000, temperature=0.2),
                 timeout=120)
             r.raise_for_status()
             res = parse_regie(r.json()['choices'][0]['message']['content'], words, language)
