@@ -3846,7 +3846,7 @@ def kill_spill(person, alpha, frame):
     return person * (1 - 0.35 * kante) + grau * (0.35 * kante)
 
 
-def apply_duplicate_trail(comp, frame, strength, offset_px=14, layers=3):
+def apply_duplicate_trail(comp, frame, strength, alpha=None, offset_px=14, layers=3):
     """Post-Effekt: der Text hinterlaesst versetzte Kopien fuer Speed-Gefuehl.
 
     Extrahiert die Text-Region ueber ein Diff comp vs. frame (die Stellen, wo
@@ -3868,6 +3868,17 @@ def apply_duplicate_trail(comp, frame, strength, offset_px=14, layers=3):
     # der Flaeche ab, ist es kein isolierter Text mehr -> kein Trail.
     if float(text_mask.mean()) > 0.06:
         return comp
+    # v93b: Die Person NIE mittrailen. Kamera-Schwenk/Grade verschieben die
+    # Personenkante gegenueber `frame` -> der Diff haelt sie faelschlich fuer
+    # Text und der Versatz erzeugt einen halbtransparenten Doppelgaenger der
+    # Person (senkrechte Kamm-Streifen am Kiefer/Hals). Personen-Matte hart aus
+    # der Text-Maske schneiden (leicht geweitet, damit auch die Kante raus ist).
+    if alpha is not None:
+        pm = person_mask(alpha)
+        pm = cv2.dilate((pm > 0.15).astype(np.uint8), np.ones((9, 9), np.uint8))
+        text_mask *= (1.0 - pm.astype(np.float32))
+        if float(text_mask.sum()) < 500:
+            return comp
     text_mask = cv2.GaussianBlur(text_mask, (0, 0), 1.6)
     out = comp.astype(np.float32).copy()
     for k in range(1, layers + 1):
@@ -4825,7 +4836,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
     # gerade in Passagen OHNE Caption. Kein aktiver Text -> kein Trail.
     _trail = float(cfg['effects'].get('trail', 0.0) or 0.0)
     if _trail > 0.02 and active:
-        comp = apply_duplicate_trail(comp, frame, _trail)
+        comp = apply_duplicate_trail(comp, frame, _trail, alpha)
     _split = float(cfg['effects'].get('split_screen', 0.0) or 0.0)
     if _split > 0.02:
         comp = apply_split_screen(comp, frame, active, t, W, H, _split)

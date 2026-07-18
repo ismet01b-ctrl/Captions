@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v93b: Personen-Doppelgaenger in der TikTok-Voreinstellung behoben.**
+  Frames von Ismet zeigten die Person halbtransparent gedoppelt (senkrechte
+  Kamm-Streifen am Kiefer/Hals, Text mit Echo-Schatten `|||VIDEO`). Ursache:
+  der Duplicate-Trail (`apply_duplicate_trail`) erkennt "Text" ueber ein Diff
+  comp-vs-frame - Kamera-Schwenk/Grade verschieben aber auch die Personen-/
+  Hintergrundkanten, die landen faelschlich in der Text-Maske und werden nach
+  links versetzt gedoppelt. Die TikTok-Voreinstellung hatte `trail: 0.45`
+  (zwei weitere Looks 0.30/0.35). Zwei Fixes: (1) Trail in ALLEN Presets aus
+  (0.0) - der Effekt ist ein Diff-Hack, der Text nie sauber von bewegtem Bild
+  trennt und wirkt billig, das Gegenteil von "wie ein Cutter". (2) Funktion
+  gehaertet: mit Person-Matte wird die Person hart aus der Trail-Maske
+  geschnitten - selbst wenn der Regler manuell an ist, kann die Person nie
+  wieder doppeln. Selftest: neuer `_scenario_trail` (ohne Matte doppelt die
+  Person, mit Matte nicht; echter Text bekommt weiter Trail; kein Preset hat
+  Trail an). 416/416 + Render 10/10 gruen. Ehrlich: auf echtem Windows-Material
+  muss Ismet gegenpruefen, dass der Geist wirklich weg ist.
 - **v92-sec2: Zweite Audit-Runde (Konkurrenz-Vergleich Submagic/Opus/
   Captions.ai) - 9 Funde gefixt, alle per Selftest gesichert.** Nach dem
   ersten Audit ein vollstaendiger Vergleich "ist die Sicherheit wirklich

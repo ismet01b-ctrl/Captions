@@ -93,6 +93,7 @@ def main():
         _scenario_kamera(tmp)
         _scenario_transkription(tmp)
         _scenario_security(tmp)
+        _scenario_trail(tmp)
 
     print()
     fails = [r for r in results if not r[1]]
@@ -2035,6 +2036,39 @@ def _scenario_security(tmp):
     check('Login: Timing-Angleich gegen Mail-Enumeration',
           '_verify_pw(password, _DUMMY_HASH)' in _src)
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
+
+
+def _scenario_trail(tmp):
+    """v93b: Der Duplicate-Trail darf die Person NIE doppeln. Frueher hielt der
+    Diff comp-vs-frame bewegte Personenkanten (Kamera/Grade) fuer Text und schob
+    sie als halbtransparenten Geist nach links (der Typ wirkte doppelt). Mit
+    uebergebener Person-Matte muss die Person aus dem Trail rausfallen."""
+    print('\n--- Trail: kein Personen-Doppelgaenger ---')
+    sys.path.insert(0, HERE)
+    import render as R
+    import re as _re
+    frame0 = np.zeros((200, 200, 3), np.uint8)
+    comp0 = frame0.copy()
+    comp0[:, 40:46] = 170            # duenne bewegte Personen-KANTE (Diff, <6 % Flaeche)
+    comp0[90:110, 150:180] = 240     # echter Text rechts
+    alpha = np.zeros((200, 200), np.float32)
+    alpha[:, 0:46] = 1.0             # Person = linke Haelfte
+    band = slice(0, 38)
+    out_bad = R.apply_duplicate_trail(comp0.copy(), frame0, 0.5, None)
+    out_good = R.apply_duplicate_trail(comp0.copy(), frame0, 0.5, alpha)
+    ghost_bad = int(np.abs(out_bad[:, band].astype(int) - comp0[:, band].astype(int)).sum())
+    ghost_good = int(np.abs(out_good[:, band].astype(int) - comp0[:, band].astype(int)).sum())
+    check('Trail doppelt die Person nicht (Matte schneidet sie raus)',
+          ghost_good == 0 and ghost_bad > 0,
+          f'ohne Matte={ghost_bad}, mit Matte={ghost_good}')
+    tband = slice(100, 150)          # echter Text bekommt weiter seinen Trail
+    text_trail = int(np.abs(out_good[:, tband].astype(int)
+                            - comp0[:, tband].astype(int)).sum())
+    check('Trail wirkt weiterhin auf echten Text', text_trail > 0, f'{text_trail}')
+    _s = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    trails = [float(x) for x in _re.findall(r"'trail':\s*([0-9.]+)", _s)]
+    check('Kein Preset hat Trail an (Person-Doppler-Quelle aus)',
+          bool(trails) and all(t == 0.0 for t in trails), f'{trails}')
 
 
 def _scenario_premium(tmp):
