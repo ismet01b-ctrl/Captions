@@ -1780,6 +1780,14 @@ Nur wenn es wirklich passt - kein Deko-Zwang. Beispiele: \
 Geld/Umsatz "💰" · Wachstum "🚀" · Absturz "📉" · Rekord "🏆" · Schock "⚠️" · \
 Zeit "⏰" · Herz/Emotion "❤️" · Fakt/Beweis "✅" · Verbot "🚫" · Idee "💡" · \
 Sieg "🔥" · Krise "🆘". Kein Emoji bei neutralem Text.
+- ZAHLEN: nur eine MENGE ist ein Zahl-Moment (Betrag, Anzahl, Prozent, \
+"14 Milliarden", "87 Prozent", "850 Euro"). Jahreszahlen, Datum und Uhrzeiten \
+sind KEINE Menge und zaehlen NICHT hoch - "2026" ist ein Label. Markiere ein \
+Jahr hoechstens als normalen Moment, nie als Zaehler.
+- SOUND-ANIMATIONEN (bruch, sturz, anstieg, wende, druck, schwund, knall) loesen \
+einen hoerbaren Effekt aus. Vergib sie NUR, wenn die Handlung wirklich im Satz \
+steht ("bricht", "faellt", "steigt", ...). Steht sie nicht da: KEINE Animation. \
+Lieber kein Effekt als ein falscher Sound auf einem harmlosen Wort.
 Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Effekt>", "power": <1-3>, "anim": "<optional>", "emoji": "<optional>"}]}"""
 
 def parse_regie(text, words, language='de'):
@@ -1984,6 +1992,35 @@ def _cap_power3(fx_map, keep=2):
                 fx_map[i]['power'] = 2
     return fx_map
 
+
+# Animationen mit EIGENEM Effekt-Sound (siehe sfx_engine.ANIM_SFX). Genau die
+# duerfen nicht geraten werden: sitzt ein 'bruch' auf einem Wort, das nichts
+# zerbricht, knallt ein Schwert/Glas-Sound daneben.
+_SFX_ANIMS = ('bruch', 'sturz', 'anstieg', 'wende', 'druck', 'schwund', 'knall')
+
+def _regie_sanity(fx_map, words):
+    """Deterministische Leitplanke NACH der KI-Regie (kein GPT noetig).
+    Sound-Animationen bleiben nur stehen, wenn ihr Ausloeser wirklich im
+    Keyword ODER im Satz-Kontext vorkommt (gleiche Vokabel wie anim_for).
+    Sonst wird die Animation entfernt - der Moment bleibt, nur der falsche
+    Sound faellt weg. So verstehen wir den Satz wenigstens strukturell."""
+    if not fx_map:
+        return fx_map
+    hints = dict(ANIM_HINTS)
+    dropped = 0
+    for i in list(fx_map):
+        anim = fx_map[i].get('anim')
+        if anim in _SFX_ANIMS:
+            n = int(fx_map[i].get('n', 1))
+            a = max(0, i - 4); b = min(len(words), i + n + 5)
+            ctx = ' '.join(clean(words[j].get('word', '')) for j in range(a, b))
+            if not any(_anim_hit(ctx, k) for k in hints.get(anim, ())):
+                fx_map[i].pop('anim', None)
+                dropped += 1
+    if dropped:
+        print(f"  Regie-Check: {dropped} unpassende Sound-Animation(en) entfernt")
+    return fx_map
+
 def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     """LLM waehlt Keywords, Phrasen, Effekte und Wucht. Gibt {index: info} zurueck oder None.
     Lange Videos werden in Etappen analysiert, damit die JSON-Antwort nie abgeschnitten wird.
@@ -2050,6 +2087,7 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
         merged = _regie_validate(merged, words, model, key)
     if voice_wav:
         merged = _audio_boost(merged, words, voice_wav)
+    merged = _regie_sanity(merged, words)
     return _cap_power3(merged) if merged else None
 
 # ---- Zahlen: nicht jede Zahl ist eine Aussage.

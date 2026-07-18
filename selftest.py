@@ -463,6 +463,24 @@ def _scenario_logic(clip, transcript, tmp):
     threes = sorted(i for i, v in fm.items() if v['power'] == 3)
     check('Power-3-Deckel video-weit', threes == [10, 900], str(threes))
 
+    # Regie-Selbstkontrolle: Sound-Animationen (bruch/sturz/...) nur behalten,
+    # wenn ihr Ausloeser wirklich im Satz steht - sonst falscher Sound.
+    _wsan = [{'word': w} for w in
+             ['Deutschland', 'bricht', 'seine', 'Versprechen', '.',
+              'Der', 'Umsatz', 'ist', 'stabil', 'geblieben', '.']]
+    _fm_ok = {0: {'fx': 'behind', 'power': 3, 'n': 1, 'anim': 'bruch'}}
+    R._regie_sanity(_fm_ok, _wsan)
+    check('Sound-Anim bleibt bei echtem Ausloeser',
+          _fm_ok[0].get('anim') == 'bruch')
+    _fm_bad = {6: {'fx': 'outline', 'power': 2, 'n': 1, 'anim': 'bruch'}}
+    R._regie_sanity(_fm_bad, _wsan)
+    check('Sound-Anim faellt ohne Ausloeser weg (kein Fehl-Sound)',
+          _fm_bad[6].get('anim') is None and 6 in _fm_bad)
+    _fm_vis = {6: {'fx': 'cascade', 'power': 2, 'n': 1, 'anim': 'schweben'}}
+    R._regie_sanity(_fm_vis, _wsan)
+    check('Rein visuelle Anim wird nicht angetastet',
+          _fm_vis[6].get('anim') == 'schweben')
+
     # Zahlen in der Fallback-Heuristik (jede Sprache)
     wn = [{'word': w, 'start': 1 + i * .3, 'end': 1.25 + i * .3} for i, w in
           enumerate(['Wir', 'zahlen', 'heute', '100', 'Euro', 'dafuer.'])]
