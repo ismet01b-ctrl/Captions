@@ -1836,20 +1836,35 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   blurin = Themenwechsel, neue Kapitel
   ground = grosse Statements, Schluss-Sätze
 - INTERAKTION (WICHTIGSTE Regel - so hebt sich das Video von Konkurrenz ab):
-  Die Caption ist kein Aufkleber, sie REAGIERT auf das Gesagte. Wenn der
-  Sprecher die Position oder Bewegung eines Wortes ANSAGT, MUSS der Effekt
-  das abbilden - das Wort tut, was gesagt wird:
-    "hinter mir" / "behind me"        -> fx "behind" (Wort steht hinter der Person)
-    "auf dem Boden/der Strasse"       -> fx "ground", szene "boden", lage "liegend"
-    "ueber mir" / "am Himmel"         -> fx "behind", szene "himmel" (steigt ueber den Kopf)
-    "an der Wand"                     -> fx "ground", szene "wand", lage "stehend"
-    "im Wasser"                       -> fx "ground", szene "wasser", lage "liegend"
-    "es faellt/sinkt"    -> anim "sturz"    "es steigt/waechst" -> anim "anstieg"
-    "es zerbricht"       -> anim "bruch"    "verschwindet"      -> anim "schwund"
-  Denk pro Moment mit: Was passiert im Satz? Wo im Bild ergibt das Wort Sinn?
-  Diese Platzierungen funktionieren in JEDER Einstellung - auch wenn der
-  Sprecher selbst gross im Bild ist (Talking-Head). Waehle sie mutig, sobald
-  der Satz sie ansagt. Lieber ein durchdachter Moment als drei beliebige.
+  Die Caption ist kein Aufkleber, sie REAGIERT auf das Gesagte. Wenn der Satz
+  eine Position, Bewegung, Wucht oder Veraenderung NENNT, ist die passende
+  Animation PFLICHT - nicht optional. Das ist der Kern des Produkts. Die Regeln
+  gelten in JEDER Sprache: erkenne die HANDLUNG, egal ob deutsch oder englisch.
+  ORT (fx + szene + lage):
+    "hinter mir" / "behind me"        -> fx "behind"
+    "auf dem Boden/der Strasse" / "on the ground/floor" -> fx "ground", szene "boden", lage "liegend"
+    "ueber mir" / "above me" / "am Himmel" / "in the sky" -> fx "behind", szene "himmel"
+    "an der Wand" / "on the wall"      -> fx "ground", szene "wand", lage "stehend"
+    "im Wasser" / "in the water"       -> fx "ground", szene "wasser", lage "liegend"
+  HANDLUNG (anim) - DE und EN, jedes Aktions-/Wucht-Wort loest den Effekt aus:
+    faellt/sinkt/drops/falls/sinks/crashes                 -> "sturz"
+    steigt/waechst/rises/grows/soars/climbs/skyrockets     -> "anstieg"
+    zerbricht/shatter/breaks/cracks/collapses              -> "bruch"
+    explodiert/explodes/bursts/blows up                    -> "explosion"
+    knallt/pop/boom/punch/bang/wumms/Pointe                -> "zoom_punch"
+    fliegt/schiesst/flies/shoots/races/rushes/instant      -> "spur"
+    verschwindet/disappears/gone/vanishes                  -> "schwund"
+    Sog/zieht an/pulls/draws/magnet                        -> "magnet"
+    regnet/faellt herab/rain/drips/pours                   -> "regen"
+    endgueltig/beschlossen/final/official/stamped/proof    -> "stempel"
+    Last/Zwang/erdrueckt/pressure/weight/crushing          -> "druck"
+    Staerke/Macht/Wucht/power/strength/heavy               -> "gewicht"
+  Denk pro Moment mit: Was TUT das Wort im Satz? Dann tut es das auch im Bild.
+  Diese Reaktionen funktionieren in JEDER Einstellung - auch im Talking-Head,
+  wenn der Sprecher gross im Bild ist. Waehle sie MUTIG, sobald der Satz sie
+  ansagt. Jeder power-3-Moment und der Hook MUESSEN sichtbar reagieren.
+  NUR auf komplett neutralem Text (reine Aussage ohne Handlung/Wucht) keine
+  Animation - dann lieber ein sauberer Moment als ein falscher Effekt.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \
@@ -1878,7 +1893,9 @@ Keyword selbst nur der Handelnde oder das Opfer ist.
 Beispiel: "Deutschland bricht seine Versprechen" -> Keyword "Deutschland" bekommt \
 "anim": "bruch" (das Wort zerbricht sichtbar).
 Beispiel: "die Mieten steigen ins Unermessliche" -> Keyword "Mieten" bekommt "anim": "anstieg".
-Beispiel: "unser Umsatz explodiert" -> "anim": "schub". Sonst weglassen.
+Beispiel: "unser Umsatz explodiert" (bildlich = starkes Wachstum) -> "anim": "schub"; \
+"die Bombe explodiert" (woertlich) -> "anim": "explosion". Waehle nach der \
+GEMEINTEN Handlung. Nennt der Satz eine Handlung/Wucht, ist die Animation Pflicht.
 - Optional "emoji": EIN einzelnes Unicode-Emoji das die Aussage untermalt. \
 Nur wenn es wirklich passt - kein Deko-Zwang. Beispiele: \
 Geld/Umsatz "💰" · Wachstum "🚀" · Absturz "📉" · Rekord "🏆" · Schock "⚠️" · \
