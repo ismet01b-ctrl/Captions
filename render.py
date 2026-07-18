@@ -1865,6 +1865,16 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   ansagt. Jeder power-3-Moment und der Hook MUESSEN sichtbar reagieren.
   NUR auf komplett neutralem Text (reine Aussage ohne Handlung/Wucht) keine
   Animation - dann lieber ein sauberer Moment als ein falscher Effekt.
+- AKTION-WORT ALS KEYWORD (Ausnahme sticht "keine Verben"): Wenn der Satz die
+  HANDLUNG selbst betont oder ansagt - imperativ/meta wie "the word flies",
+  "explodes should hit", "broken should shatter", "it disappears", oder ein
+  Aktions-Satz wie "prices crash", "sales explode" - dann waehle das AKTION-WORT
+  SELBST als Keyword (n=1, auch wenn es ein Verb ist: flies, explodes, shatter,
+  crash) und gib ihm ZWINGEND die passende Animation (flies->spur,
+  explodes->explosion, shatter/broken->bruch, hit->zoom_punch, disappears->schwund,
+  crash->sturz). Das Wort tut dann im Bild genau das, was es sagt - das ist der
+  staerkste Effekt ueberhaupt. Nur wenn es ein klares OBJEKT gibt, das die
+  Handlung erleidet (z.B. "die Mieten steigen"), nimm lieber das Objekt + Anim.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \
@@ -1913,7 +1923,9 @@ Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Eff
 
 def parse_regie(text, words, language='de'):
     import json as _json
-    non_de = language not in ('de', 'auto', None, '')
+    if language in (None, '', 'auto'):          # v94: 'auto' aus Inhalt aufloesen
+        language = 'de' if _looks_german(words) else 'en'
+    non_de = language != 'de'
     try:
         data = _json.loads(text)
         out = {}
@@ -2279,6 +2291,21 @@ def _apply_corrections(fx_map, words, corrections):
         print(f"  Gelernt: {applied} Korrektur(en) aus frueheren Edits angewandt")
     return fx_map
 
+def _looks_german(words):
+    """v94: Rate die Sprache aus dem Transkript. Bei language='auto' wurde alles
+    als Deutsch behandelt (non_de=False) - dann verwarf der Phrasen-Filter
+    englische Kleinbuchstaben-Woerter ('flies', 'shatter') und die Deutsch-
+    Regeln passten nicht. Diese Heuristik laeuft auch auf gecachten Transkripten
+    (kein Whisper-Aufruf noetig)."""
+    txt = ' ' + ' '.join(w.get('word', '') for w in words).lower() + ' '
+    if any(c in txt for c in 'äöüß'):
+        return True
+    de = (' der ', ' die ', ' das ', ' und ', ' ist ', ' nicht ', ' ein ',
+          ' den ', ' dem ', ' mit ', ' auf ', ' fuer ', ' wir ', ' ich ',
+          ' sich ', ' auch ', ' eine ', ' werden ', ' haben ')
+    return sum(txt.count(m) for m in de) >= 3
+
+
 def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     """LLM waehlt Keywords, Phrasen, Effekte und Wucht. Gibt {index: info} zurueck oder None.
     Lange Videos werden in Etappen analysiert, damit die JSON-Antwort nie abgeschnitten wird.
@@ -2290,6 +2317,10 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     key = os.environ.get('OPENAI_API_KEY')
     if not key:
         return None
+    # v94: 'auto' aus dem Inhalt aufloesen, damit Nicht-Deutsch (z.B. Englisch)
+    # die richtigen Regeln bekommt (Kleinbuchstaben-Keywords erlaubt).
+    if language in (None, '', 'auto'):
+        language = 'de' if _looks_german(words) else 'en'
     chunks = _regie_chunks(words)
     lang_hint = '' if language in ('de', 'auto', None, '') else \
         f"SPRACHE: Das Transkript ist nicht deutsch ({language}). " \

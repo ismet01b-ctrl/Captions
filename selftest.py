@@ -94,6 +94,7 @@ def main():
         _scenario_transkription(tmp)
         _scenario_security(tmp)
         _scenario_trail(tmp)
+        _scenario_lang(tmp)
 
     print()
     fails = [r for r in results if not r[1]]
@@ -2087,6 +2088,34 @@ def _scenario_trail(tmp):
     trails = [float(x) for x in _re.findall(r"'trail':\s*([0-9.]+)", _s)]
     check('Kein Preset hat Trail an (Person-Doppler-Quelle aus)',
           bool(trails) and all(t == 0.0 for t in trails), f'{trails}')
+
+
+def _scenario_lang(tmp):
+    """v94: Sprache aus Inhalt erkennen (auch bei 'auto') + Aktion-Wort darf
+    Keyword werden. Frueher wurde Englisch als Deutsch behandelt -> lowercase
+    'flies'/'shatter' verworfen, Aktion-Woerter nie animiert."""
+    print('\n--- Sprache & Aktion-Keywords ---')
+    sys.path.insert(0, HERE)
+    import render as R
+    de = [{'word': w} for w in
+          'der markt ist heute nicht gut und wir haben ein problem'.split()]
+    en = [{'word': w} for w in
+          'the word flies explodes and everything should shatter now'.split()]
+    check('Sprach-Erkennung: Deutsch erkannt', R._looks_german(de) is True)
+    check('Sprach-Erkennung: Englisch ist nicht Deutsch',
+          R._looks_german(en) is False)
+    # Englisches Aktion-Wort (lowercase Verb) mit Anim muss Keyword werden
+    words = [{'word': 'explodes', 'start': 0.0, 'end': 0.4},
+             {'word': 'now', 'start': 0.4, 'end': 0.7}]
+    reg = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":3,"anim":"explosion"}]}'
+    out = R.parse_regie(reg, words, 'auto')
+    check('parse_regie: englisches Aktion-Wort wird Keyword + behaelt Anim',
+          out is not None and 0 in out and out[0].get('anim') == 'explosion',
+          str(out))
+    # Prompt sagt der KI, Aktion-Woerter zu waehlen + zu animieren
+    _r = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('Regie-Prompt: Aktion-Wort-als-Keyword-Regel vorhanden',
+          'AKTION-WORT ALS KEYWORD' in _r and 'explodes->explosion' in _r)
 
 
 def _scenario_premium(tmp):
