@@ -2944,10 +2944,20 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['by'] = Z_BEHIND if not portrait else v_zone(start, end)
                 sy = p['by'] + (H * 0.24 if not portrait else H * 0.15)
             elif fx == 'behind':
+                # v90: 'himmel' = das Wort steigt HINTER dem Kopf hervor und endet
+                # KOMPLETT UEBER dem Kopf, voll lesbar (Schluss-Signatur, z.B. der
+                # Markenname). Kein emerge (das haelt es hinter der Person), sondern
+                # hoch platziert + Aufwaerts-Einflug.
+                if isinstance(info, dict) and info.get('szene') == 'himmel' \
+                        and face_pos is not None:
+                    _fp = face_pos(start, end)
+                    if _fp:
+                        p['entr'] = 'rise'
+                        p['by'] = max(float(_fp[1]) - H * 0.25, H * 0.06)
                 # HERAUSSCHIEBEN braucht Ueberlappung: liegt das Wort ueber dem
                 # Kopf, verdeckt die Person nichts und der Effekt ist unsichtbar.
                 # Darum wird es auf Kopf-/Schulterhoehe gelegt.
-                if p.get('entr') == 'emerge' and face_pos is not None:
+                elif p.get('entr') == 'emerge' and face_pos is not None:
                     _fp = face_pos(start, end)
                     if _fp:
                         p['by'] = max(min(float(_fp[1]) - H * 0.055, H * 0.62),
