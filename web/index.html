@@ -760,6 +760,14 @@ body {
   border: 1px solid var(--line); border-radius: 10px;
   font-size: 14px; font-weight: 600;
 }
+/* v94: Preset-Dropdowns dunkel (waren Browser-Default weiss) */
+.tpl-select {
+  background: var(--surf2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 10px;
+  font-size: 14px; font-weight: 600; padding: 10px 12px;
+}
+.tpl-select:focus { outline: none; border-color: var(--acc); }
+.tpl-select option { background: var(--surf2); color: var(--fg); }
 /* v81b: Modal-Inputs dunkel (waren Browser-Default weiss)
    v94: Account-Seite (Security/Danger) war NICHT abgedeckt -> Felder weiss. */
 #forgotModal input, #resetModal input, #accountModal input,
@@ -1321,6 +1329,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <h1 class="step-title">Pick your look</h1>
       <p class="step-sub">A starting point. You can fine-tune next.</p>
       <div class="look-grid" id="looks"></div>
+      <div id="myPresetsRow" class="hidden" style="margin-top:18px; max-width:340px;">
+        <p class="step-sub" style="margin-bottom:6px;">Or load one of your saved presets:</p>
+        <select id="tplLoadTop" class="tpl-select" style="width:100%;" aria-label="Your saved presets">
+          <option value="">- Your saved presets -</option>
+        </select>
+      </div>
       <div class="wiz-nav">
         <button class="btn secondary" data-back="1">Back</button>
         <div class="grow"></div>
@@ -1455,7 +1469,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <p class="desc">Here's your video recipe. Looks right? Then let's build.</p>
         <div id="summary" class="sum-grid"></div>
         <div class="tpl-row" style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
-          <select id="tplLoad" class="segseg-item" style="flex:1; min-width:180px; padding:8px 12px;">
+          <select id="tplLoad" class="tpl-select" style="flex:1; min-width:180px;">
             <option value="">- Load saved setup -</option>
           </select>
           <button class="btn secondary" id="btnTplSave" style="padding:8px 14px;">Save setup</button>
@@ -1676,15 +1690,43 @@ async function loadTemplates() {
   try {
     const r = await fetch('/api/templates?code=' + encodeURIComponent(State.code));
     const d = await r.json();
+    const list = d.templates || [];
+    const fill = (sel, placeholder) => {
+      if (!sel) return;
+      sel.innerHTML = '<option value="">' + placeholder + '</option>';
+      list.forEach(t => {
+        const o = document.createElement('option');
+        o.value = t.name; o.textContent = t.name;
+        sel.appendChild(o);
+      });
+    };
+    fill($('#tplLoad'), '- Load saved setup -');
+    fill($('#tplLoadTop'), '- Your saved presets -');
+    // v94: Der Balken zeigt immer das zuletzt gespeicherte Preset.
     const sel = $('#tplLoad');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">- Load saved setup -</option>';
-    (d.templates || []).forEach(t => {
-      const o = document.createElement('option');
-      o.value = t.name; o.textContent = t.name;
-      sel.appendChild(o);
-    });
+    if (sel && list.length) sel.value = list[list.length - 1].name;
+    const row = $('#myPresetsRow');
+    if (row) row.classList.toggle('hidden', list.length === 0);
+    updateTplSaveBtn();
   } catch (e) {}
+}
+// v94: Wurden Einstellungen geaendert -> Button fordert zum Speichern auf.
+function updateTplSaveBtn() {
+  const btn = $('#btnTplSave');
+  if (!btn) return;
+  let changed = 0;
+  try {
+    // Baseline = zuletzt gespeichertes/geladenes Preset, sonst Preset-Defaults.
+    const base = State.savedCfg || State.cfgBase;
+    changed = countChanged(diffCfg(base, State.cfg));
+  } catch (e) {}
+  if (changed > 0) {
+    btn.textContent = 'Save preset?';
+    btn.classList.remove('secondary');
+  } else {
+    btn.textContent = 'Save setup';
+    btn.classList.add('secondary');
+  }
 }
 async function saveTemplate() {
   const name = prompt('Name for this setup?', 'My TikTok setup');
@@ -1697,6 +1739,7 @@ async function saveTemplate() {
   const r = await fetch('/api/templates', { method: 'POST', body: fd });
   if (r.ok) {
     toast(`Setup "${name.trim()}" gespeichert.`, 'ok');
+    State.savedCfg = JSON.parse(JSON.stringify(State.cfg));   // v94: jetzt sauber
     loadTemplates();
   } else {
     toast('Saving failed.', 'err');
@@ -1710,8 +1753,10 @@ function applyTemplate(name) {
       if (!t) return;
       if (t.settings.look) State.look = t.settings.look;
       if (t.settings.cfg) State.cfg = JSON.parse(JSON.stringify(t.settings.cfg));
+      State.savedCfg = JSON.parse(JSON.stringify(State.cfg));   // v94: gilt als sauber
       toast(`Setup "${name}" geladen.`, 'ok');
       if (typeof buildSummary === 'function') buildSummary();
+      updateTplSaveBtn();
     });
 }
 
@@ -2661,6 +2706,7 @@ function goStep(n) {
     v.classList.toggle('active', parseInt(v.dataset.step) === n);
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (n === 2) loadTemplates();               // v94: eigene Presets auch hier
   if (n === 4) { buildSummary(); loadTemplates(); }
 }
 
@@ -3173,6 +3219,7 @@ function buildSummary() {
     sub: changed === 0 ? 'preset values only' : 'vs. preset defaults',
   }));
   $('#summary').innerHTML = tiles.join('');
+  if (typeof updateTplSaveBtn === 'function') updateTplSaveBtn();
 }
 
 /* --------- Momente-Editor --------- */
@@ -3403,7 +3450,10 @@ window.addEventListener('keydown', e => {
 $('#momCancel').addEventListener('click', () => $('#momEditor').classList.add('hidden'));
 if ($('#btnTplSave')) $('#btnTplSave').addEventListener('click', saveTemplate);
 if ($('#tplLoad')) $('#tplLoad').addEventListener('change', (e) => {
-  if (e.target.value) { applyTemplate(e.target.value); e.target.value = ''; }
+  if (e.target.value) applyTemplate(e.target.value);   // v94: Auswahl bleibt sichtbar
+});
+if ($('#tplLoadTop')) $('#tplLoadTop').addEventListener('change', (e) => {
+  if (e.target.value) applyTemplate(e.target.value);
 });
 $('#momSave').addEventListener('click', async () => {
   syncFromDom();
