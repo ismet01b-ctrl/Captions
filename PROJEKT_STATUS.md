@@ -3,6 +3,47 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v92: Interaktions-Pass - Captions tun, was gesagt wird, in JEDER
+  Einstellung.** Systematischer Durchstich statt Einzelfixes; Ziel: das
+  intelligenteste Caption-Tool, Text interagiert mit dem Gesagten.
+  1) **'ground' wird immer honoriert**: Der Effekt ist eine PLATZIERUNGS-
+     Ansage. Vorher wurde er im Talking-Head weggemappt, weil 'ground' in
+     keiner Look-Rotation steht -> "liegt auf dem Boden" konnte mit Gesicht
+     im Bild NIE auf dem Boden landen. Jetzt: Wunsch 'ground' zaehlt immer.
+  2) **Szenen-Text ueberall (scene_ground)**: liegend (Boden/Wasser) und
+     Wand-Text laufen jetzt auch MIT Person im Bild ueber den Premium-Pfad:
+     Perspektive, Person-Okklusion, planares Kamera-Tracking, Matting-/
+     Tiefen-Fenster. Kein stehendes Billboard mit Spiegelung mehr.
+  3) **person_mask()**: bereinigte Personen-Maske (Opening gegen Bruecken,
+     groesste Komponente, Dilation fuer Haare/Finger). Genutzt von Okklusion,
+     Boden-Anker, Bokeh, kill_spill, Personen-Schatten und Repaste - die rohe
+     RVM-Matte malte Halos um Hintergrund-Blobs (Autos, Pflaster).
+  4) **Boden-Anker v2**: Union der Personen-Maske ueber die ersten ~3 Frames
+     (eine Einzel-Maske ist bei Bewegung fragmentiert), avoid_x = Face-Track
+     (Gegenseite der Person bevorzugen), Kaskade der Freiflaechen-Schwelle,
+     nie ueber der Bildmitte. Findet er keinen freien Boden (Sprecher fuellt
+     das Bild): **front_layer** - das Wort liegt perspektivisch VOR der
+     Person (nach dem Repaste gezeichnet). Lesbar statt unsichtbar.
+  5) **Fenster-Render-Bug**: need_depth/need_track wurden mit fi statt der
+     absoluten Frame-Nummer (fa) indiziert - bei --window waren Tracking und
+     Tiefen-Okklusion schlicht nie aktiv. Volle Renders waren korrekt.
+  6) **Sprach-Intent v2**: Ansage gilt nur im SELBEN Satz wie das Keyword
+     ("behind me." im Vorsatz zieht "STREET." nicht mehr um); bei mehreren
+     Ansagen gewinnt die naechste; Umlaut-Varianten (ueber/über, straße).
+  7) **Bokeh diszipliniert**: kein bg_blur auf Szenen-Text (die Szene ist
+     der Star) und nur noch fuer echte Keyword-Momente (nicht fuer Stacks);
+     Tiefenkarte raus aus dem Bokeh (Kanten-Halos).
+  8) **REGIE_PROMPT**: Interaktions-Regel verschaerft - Platzierungen
+     funktionieren in jeder Einstellung, mutig waehlen, wenn der Satz sie
+     ansagt.
+  Beweis (echter Promo-Clip, Frames geprueft): "FIFTY" liegt im Talking-Head
+  lesbar vorn auf dem Boden (front_layer, kein freier Boden im Bild);
+  "STREET" liegt weiter getrackt auf dem Pflaster (B-Roll, keine Regression);
+  Halos massiv reduziert. Selftest 392/392 gruen (+4: Boden liegt im
+  Talking-Head, Tracking/Spiegelung/Schatten-Regeln, Wand-Text,
+  Intent-Satzgrenze). Ehrlich: CPU-Matte auf schwierigem Material zeigt
+  weiter leichte Kanten; echte GPU-Qualitaet + GPT-Regie sieht Ismet auf
+  dem Server/Windows.
 - **v91: Boden-Text liegt wirklich auf der Strasse (nicht auf der Person).**
   Bug (aus echtem Promo-Clip): das grosse Signature-Wort ("STREET") auf
   B-Roll landete auf dem Pulli/Arm statt auf dem Pflaster. Zwei Ursachen,

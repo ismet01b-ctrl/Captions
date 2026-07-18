@@ -513,6 +513,13 @@ def _scenario_logic(clip, transcript, tmp):
     _si4 = {1: {'fx': 'outline', 'power': 2, 'n': 1}}
     R._speech_intent(_si4, _W('das ist einfach ein normaler satz'))
     check('Ohne Orts-Ansage bleibt der Effekt', _si4[1]['fx'] == 'outline')
+    # v92: Ansage gilt nur im SELBEN Satz. "behind me." im Vorsatz darf das
+    # naechste Keyword (STREET, Regie sagt Boden) NICHT hinter die Person ziehen.
+    _si5 = {4: {'fx': 'ground', 'power': 3, 'n': 1,
+                'szene': 'boden', 'lage': 'liegend'}}
+    R._speech_intent(_si5, _W('They hide behind me. STREET. A fifty hour edit.'))
+    check('Ansage endet an der Satzgrenze',
+          _si5[4]['fx'] == 'ground' and _si5[4].get('szene') == 'boden')
 
     # Zahlen in der Fallback-Heuristik (jede Sprache)
     wn = [{'word': w, 'start': 1 + i * .3, 'end': 1.25 + i * .3} for i, w in
@@ -585,6 +592,31 @@ def _scenario_logic(clip, transcript, tmp):
     check('Stehend mit Spiegelung (power 2)', bool(kpg_s)
           and kpg_s[0].get('refl') is not None
           and not kpg_s[0].get('scene_blend'))
+
+    # v92: "liegt auf dem Boden" MUSS liegen - auch im Talking-Head (Gesicht
+    # im Bild). Frueher wurde 'ground' dort weggemappt ('ground' steht in
+    # keiner Look-Rotation) bzw. zum stehenden Billboard degradiert.
+    plg_th = R.build_plans(wg, {1}, cfg, S, W_, H_, lambda s, e: True,
+                           {1: {'fx': 'ground', 'power': 2, 'n': 1,
+                                'szene': 'boden', 'lage': 'liegend'}})
+    kpg_t = [p for p in plg_th if 'kw_i' in p]
+    check('Boden-Text liegt auch im Talking-Head',
+          bool(kpg_t) and kpg_t[0]['tpl'] == 'ground'
+          and kpg_t[0].get('lying') is True
+          and kpg_t[0].get('scene_ground') is True
+          and kpg_t[0].get('ground_paint') is True)
+    check('Szenen-Text: Tracking an, Spiegelung/Schatten aus',
+          bool(kpg_t) and kpg_t[0].get('track3d') is True
+          and kpg_t[0].get('refl') is None and kpg_t[0].get('cshadow') is None
+          and kpg_t[0]['cy'] > H_ * 0.6)
+    plg_w = R.build_plans(wg, {1}, cfg, S, W_, H_, lambda s, e: True,
+                          {1: {'fx': 'ground', 'power': 2, 'n': 1,
+                               'szene': 'wand', 'lage': 'stehend'}})
+    kpg_w = [p for p in plg_w if 'kw_i' in p]
+    check('Wand-Text steht an der Wand (Talking-Head)',
+          bool(kpg_w) and kpg_w[0].get('scene_ground') is True
+          and not kpg_w[0].get('lying') and not kpg_w[0].get('scene_blend')
+          and kpg_w[0].get('refl') is None)
 
     # High-End-Look: kein Unterstrich mehr, nirgends
     wc2 = [{'word': w, 'start': 1 + i * .4, 'end': 1.3 + i * .4} for i, w in
@@ -2055,8 +2087,11 @@ def _scenario_premium(tmp):
     # 5) composite_frame ruft Blur nur bei aktivem Moment auf B-Roll nicht
     _gsrc_bl = open(os.path.join(HERE, 'gui.py'), encoding='utf-8').read()
     _rsrc_bl = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
-    check('Blur nur ausserhalb B-Roll',
-          "if p.get('broll'):" in _rsrc_bl and 'apply_bg_blur(' in _rsrc_bl)
+    # v92: auch Szenen-Text (Boden/Wand/Wasser) bleibt bokeh-frei - die
+    # Szene, in der der Text liegt, darf nicht weichgezeichnet werden.
+    check('Blur nur ausserhalb B-Roll/Szenen-Text',
+          "if p.get('broll') or p.get('scene_ground')" in _rsrc_bl
+          and 'apply_bg_blur(' in _rsrc_bl)
     check('Blur-Regler in der GUI',
           'bgblur_var' in _gsrc_bl and 'Hintergrund weichzeichnen' in _gsrc_bl)
     check('Blur im Kundenprofil gesichert',

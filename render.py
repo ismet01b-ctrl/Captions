@@ -1602,7 +1602,31 @@ def paste_tracked(canvas, rgba, cx, cy, H_rel, W, H, dy_extra=0.0, **blend_kwarg
     _blend_region(canvas, sub, x1, y1, W, H, **blend_kwargs)
 
 
-def ground_anchor(alpha, arr, W, H):
+def person_mask(alpha):
+    """Bereinigt die RVM-Matte zu einer verlaesslichen PERSONEN-Maske: nur die
+    groesste zusammenhaengende Flaeche bleibt. Die rohe Matte markiert gern
+    kleine Hintergrund-Blobs (Autos, Pflaster-Flecken) als 'Person' - die
+    wuerden Okklusion, Boden-Anker und Bokeh mit Halos zerfressen."""
+    a2 = alpha[..., 0] if alpha.ndim == 3 else alpha
+    a2 = a2.astype(np.float32)
+    bw = (a2 > 0.45).astype(np.uint8)
+    # Opening: duenne Bruecken zwischen Person und Fehl-Blobs (Autos,
+    # Pflaster) kappen, sonst haengen sie an derselben Komponente.
+    bw = cv2.morphologyEx(bw, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(bw, 8)
+    if n <= 1:
+        return a2
+    big = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    if stats[big, cv2.CC_STAT_AREA] < a2.size * 0.02:
+        return a2                          # nichts Substanzielles -> roh lassen
+    # Dilatieren: weiche Kanten (Haare, Finger) der ECHTEN Person zurueckholen,
+    # entfernte Blobs bleiben draussen.
+    keep = cv2.dilate((lab == big).astype(np.uint8),
+                      np.ones((13, 13), np.uint8))
+    return (a2 * keep).astype(np.float32)
+
+
+def ground_anchor(alpha, arr, W, H, avoid_x=None):
     """Sucht auf B-Roll MIT sichtbarer Person eine klare Bodenflaeche fuer
     liegenden Text. Ohne diese Suche landet der Text am Bild-Zentrum - und
     genau dort steht bei einem Selfie-Kameraschwenk-nach-unten die Person
@@ -1616,35 +1640,59 @@ def ground_anchor(alpha, arr, W, H):
     dem Pflaster.
 
     Gibt (cx, cy) zurueck oder None (kaum Person -> Standard-Anker behalten)."""
-    a2 = alpha[..., 0] if alpha.ndim == 3 else alpha
+    a2 = person_mask(alpha)
     if float(a2.mean()) < 0.06:
         return None                       # kaum Person -> echtes Aerial-B-Roll
     tw, th = arr.shape[1], arr.shape[0]
     mx = tw / 2 + W * 0.03                # das Wort muss ganz im Bild bleiben
     my = th / 2 + H * 0.02
     xs = np.linspace(mx, W - mx, 9)
-    ys = np.linspace(max(0.46 * H, my), min(0.86 * H, H - my), 12)
+    # Boden = unten. Nie ueber der Bildmitte ankern (dort schwebt der Text
+    # ueber der Szene statt auf ihr zu liegen).
+    ys = np.linspace(max(0.60 * H, my), min(0.93 * H, H - my), 12)
     if len(xs) == 0 or len(ys) == 0 or mx > W / 2 or my > H / 2:
         return None                       # Wort passt nicht sauber -> Standard
     best = None
-    for cy in ys:
-        for cx in xs:
-            x1 = int(cx - tw / 2); x2 = int(cx + tw / 2)
-            y1 = int(cy - th / 2); y2 = int(cy + th / 2)
-            box = a2[max(y1, 0):y2, max(x1, 0):x2]
-            if box.size == 0:
-                continue
-            cover = float((box > 0.35).mean())          # Personanteil in der Box
-            cs = 8
-            cb = a2[int(cy) - cs:int(cy) + cs, int(cx) - cs:int(cx) + cs]
-            center_free = float((cb < 0.35).mean()) if cb.size else 0.0
-            if center_free < 0.7:                        # Anker muss auf Boden sitzen
-                continue
-            # wenig Person + leicht vorne (Strasse) + mittig ausgerichtet
-            score = -cover + 0.20 * (cy / H) - 0.35 * abs(cx - W / 2) / W
-            if best is None or score > best[0]:
-                best = (score, cx, cy)
+    # Kaskade: erst klar freie Bodenflaeche verlangen, dann schrittweise
+    # lockern - besser leicht von der Person angeschnitten (Okklusion macht
+    # daraus "liegt hinter ihr") als gar kein Boden-Text.
+    fallback = None
+    for thr in (0.7, 0.5, 0.35):
+        for cy in ys:
+            for cx in xs:
+                x1 = int(cx - tw / 2); x2 = int(cx + tw / 2)
+                y1 = int(cy - th / 2); y2 = int(cy + th / 2)
+                box = a2[max(y1, 0):y2, max(x1, 0):x2]
+                if box.size == 0:
+                    continue
+                cover = float((box > 0.35).mean())      # Personanteil in der Box
+                # wenig Person + vorne/unten (Strasse) + mittig ausgerichtet
+                score = -1.1 * cover + 0.6 * (cy / H) - 0.25 * abs(cx - W / 2) / W
+                if avoid_x is not None:
+                    # Talking-Head: weg von der Person ankern - sie laeuft/
+                    # gestikuliert, die Gegenseite bleibt frei sichtbar.
+                    score += 0.5 * abs(cx - avoid_x) / W
+                if thr == 0.7 and (fallback is None or score > fallback[0]):
+                    fallback = (score, cx, cy, cover)   # bester Platz ueberhaupt
+                cs = 8
+                cb = a2[int(cy) - cs:int(cy) + cs, int(cx) - cs:int(cx) + cs]
+                center_free = float((cb < 0.35).mean()) if cb.size else 0.0
+                if center_free < thr:                    # Anker muss auf Boden sitzen
+                    continue
+                if best is None or score > best[0]:
+                    best = (score, cx, cy, cover)
+        if best is not None:
+            break
+    # NIE aufgeben: findet die Kaskade nichts Freies, nimm den am wenigsten
+    # verdeckten Platz. Die Okklusion macht daraus "liegt hinter der Person" -
+    # unsichtbar am Default-Platz mitten auf der Person waere das Schlimmste.
     if best is None:
+        best = fallback
+    # Ist selbst der beste Platz zur Haelfte Person (Sprecher fuellt das Bild,
+    # bewegt sich), ist punktgenaues Ankern Glueckssache - dann lieber der
+    # klassische Platz tief unter dem Sprecher (Caller-Default): dort bleiben
+    # die Raender sichtbar, die Person verdeckt nur die Mitte.
+    if best is None or best[3] > 0.55:
         return None
     return (best[1], best[2])
 
@@ -1758,7 +1806,9 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
     "es faellt/sinkt"    -> anim "sturz"    "es steigt/waechst" -> anim "anstieg"
     "es zerbricht"       -> anim "bruch"    "verschwindet"      -> anim "schwund"
   Denk pro Moment mit: Was passiert im Satz? Wo im Bild ergibt das Wort Sinn?
-  Lieber ein durchdachter Moment als drei beliebige.
+  Diese Platzierungen funktionieren in JEDER Einstellung - auch wenn der
+  Sprecher selbst gross im Bild ist (Talking-Head). Waehle sie mutig, sobald
+  der Satz sie ansagt. Lieber ein durchdachter Moment als drei beliebige.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \
@@ -2044,10 +2094,12 @@ _INTENT_SPATIAL = (
                                      'hinter mich', 'behind me', 'behind us',
                                      'behind you')),
     ('ground', 'himmel', '',        ('ueber mir', 'ueber uns', 'ueberm kopf',
+                                     'über mir', 'über uns', 'überm kopf',
                                      'am himmel', 'in den himmel', 'in the sky',
                                      'above me', 'above us', 'up above',
                                      'over my head')),
     ('ground', 'boden',  'liegend', ('auf dem boden', 'am boden', 'auf der strasse',
+                                     'auf der straße', 'auf die strasse',
                                      'auf der strase', 'auf den boden', 'am boden liegt',
                                      'on the ground', 'on the floor', 'on the street',
                                      'on the pavement', 'on the road')),
@@ -2065,21 +2117,54 @@ def _speech_intent(fx_map, words):
     Hinweis 'himmel' nutzt fx 'behind' + szene 'himmel' (steigt ueber den Kopf)."""
     if not fx_map:
         return fx_map
+    n_w = len(words)
+
+    def _tok(j):
+        return clean(words[j].get('word', '')).lower()
+
+    def _satzende(j):
+        return str(words[j].get('word', '')).rstrip().endswith(('.', '!', '?'))
+
+    hat_punkt = any(_satzende(j) for j in range(n_w))
     hits = 0
     for i in list(fx_map):
         n = int(fx_map[i].get('n', 1))
-        a = max(0, i - 3); b = min(len(words), i + n + 6)
-        ctx = ' '.join(clean(words[j].get('word', '')) for j in range(a, b)).lower()
+        # Die Ansage gilt nur im SELBEN Satz wie das Keyword. Sonst zieht
+        # "hinter mir." aus dem Vorsatz das naechste Wort mit um ("STREET"
+        # direkt nach "behind me." wuerde faelschlich hinter die Person gehen).
+        if hat_punkt:
+            a = i
+            while a > 0 and not _satzende(a - 1):
+                a -= 1
+            b = min(i + n - 1, n_w - 1)
+            while b < n_w - 1 and not _satzende(b):
+                b += 1
+            b += 1
+        else:
+            a = max(0, i - 3); b = min(n_w, i + n + 4)
+        toks = [_tok(j) for j in range(a, b)]
+        # Bei mehreren Ansagen im Satz gewinnt die naechste am Keyword.
+        best = None
         for fx, szene, lage, triggers in _INTENT_SPATIAL:
-            if any(t in ctx for t in triggers):
-                # 'himmel' lebt hinter der Person und steigt ueber den Kopf
-                fx_map[i]['fx'] = 'behind' if szene == 'himmel' else fx
-                if szene:
-                    fx_map[i]['szene'] = szene
-                if lage:
-                    fx_map[i]['lage'] = lage
-                hits += 1
-                break
+            for trig in triggers:
+                tt = trig.split()
+                L = len(tt)
+                for k in range(0, len(toks) - L + 1):
+                    if toks[k:k + L] == tt:
+                        dist = min(abs((a + k) - i),
+                                   abs((a + k + L - 1) - (i + n - 1)))
+                        if best is None or dist < best[0]:
+                            best = (dist, fx, szene, lage)
+        if best is None:
+            continue
+        _, fx, szene, lage = best
+        # 'himmel' lebt hinter der Person und steigt ueber den Kopf
+        fx_map[i]['fx'] = 'behind' if szene == 'himmel' else fx
+        if szene:
+            fx_map[i]['szene'] = szene
+        if lage:
+            fx_map[i]['lage'] = lage
+        hits += 1
     if hits:
         print(f"  Sprach-Intent: {hits} Caption(s) folgen der Ansage "
               f"(hinter/Boden/Himmel/Wasser/Wand)")
@@ -3068,8 +3153,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     fx = 'ground'
                 else:
                     fx = 'cascade'
-            elif wish in KW_FX:
-                fx = wish                     # KI-Regie hat entschieden
+            elif wish in KW_FX or wish == 'ground':
+                # 'ground' ist eine PLATZIERUNGS-Ansage (Boden/Wasser/Wand),
+                # kein blosser Stil - sie muss honoriert werden, auch wenn sie
+                # nicht in der Look-Rotation steht. Sonst landet "liegt auf dem
+                # Boden" im Talking-Head nie auf dem Boden, sondern wird zu
+                # behind/cascade wegge-mappt.
+                fx = wish                     # KI-Regie / Sprach-Intent hat entschieden
             else:
                 fx = KW_FX[kwc % len(KW_FX)]; kwc += 1
             txt = ' '.join(clean(words[j]['word']).upper() for j in phrase)
@@ -3256,20 +3346,36 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # Vision-Regie hat Vorrang: sie hat den Frame gesehen.
                 # Fallback ohne Vision: power entscheidet.
                 p['szene'] = szene
+                # WICHTIG: "liegt auf dem Boden/im Wasser" MUSS liegen - auch
+                # wenn eine Person im Bild ist. Frueher lag der Text nur auf
+                # B-Roll (ohne Gesicht); im Talking-Head wurde daraus ein
+                # stehendes Billboard mit Spiegelung -> wirkte draufgeklatscht.
                 if lage == 'liegend':
-                    lying = broll
+                    lying = True
                 elif lage in ('stehend', 'frei'):
                     lying = False
                 else:
-                    lying = broll and (pw_g >= 3 or szene in ('wasser', 'boden'))
-                standing = broll and not lying
-                g_pitch = 0.68 if lying else (0.06 if standing else 0.5)
+                    lying = (szene in ('wasser', 'boden')) or (broll and pw_g >= 3)
+                on_wall = (szene == 'wand') and not lying
+                # scene_ground: der Text lebt IN einer Flaeche der Szene
+                # (Boden/Wasser/Wand) - perspektivisch, von der Person verdeckt,
+                # kamera-getrackt. Das ist der Premium-Pfad, unabhaengig davon,
+                # ob gerade ein Gesicht im Bild ist.
+                scene_ground = lying or on_wall
+                standing_br = broll and not lying
+                g_pitch = 0.68 if lying else (0.12 if on_wall
+                                              else (0.06 if standing_br else 0.5))
                 g_ex = False if lying else S.ex
                 # Liegender Boden-Text schmaler fassen: nach der Perspektive
                 # (persp_warp) wird er breiter - sonst laeuft "STREET" aus dem
-                # Bild. Stehender/Wasser-Text darf breiter sein.
-                _gw = (0.58 if lying else 0.72) if not portrait \
-                    else (0.52 if lying else (0.62 if safe_z else 0.9))
+                # Bild. Im Talking-Head noch schmaler: er liegt auf der freien
+                # Bodenflaeche VOR der Person, nicht als Riesen-Sticker
+                # ueber der Szene. Stehender Text darf breiter sein.
+                if lying:
+                    _gw = (0.58 if broll else 0.48) if not portrait \
+                        else (0.52 if broll else 0.42)
+                else:
+                    _gw = 0.72 if not portrait else (0.62 if safe_z else 0.9)
                 sz = S.fit(txt, int(H * 0.20) if not portrait else int(H * 0.10),
                            int(W * _gw), font=S.f_serif)
                 g_yaw = -6 if (side_toggle % 2 == 0) else 6
@@ -3281,18 +3387,26 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     flat = S.text(txt, sz, S.white, extrude=g_ex, flat_light=lying)[0]
                     p['arr'] = persp_warp(flat, yaw=g_yaw, pitch=g_pitch)
                 p['lying'] = lying
+                if scene_ground:
+                    p['scene_ground'] = True
                 if lying:
                     if szene == 'wasser':
                         p['scene_blend'] = True     # Wasser: Wellen laufen durch die Buchstaben
                     else:
                         p['ground_paint'] = True    # fester Boden: flach aufgemalt, nicht fluessig
-                if broll and cfg['effects'].get('track3d', True):
-                    p['track3d'] = True            # planares Kamera-Tracking
-                if cfg['effects'].get('reflection', True) and not lying:
+                if (scene_ground or broll) and cfg['effects'].get('track3d', True):
+                    p['track3d'] = True            # planares Kamera-Tracking (Flaeche)
+                # Spiegelung nur beim klassischen stehenden Billboard - Szenen-
+                # Text (liegend/Wand) spiegelt nicht, das saehe geklebt aus.
+                if cfg['effects'].get('reflection', True) and not lying \
+                        and not scene_ground:
                     r, rdy, rdx = make_reflection(p['arr'])
                     if r is not None:
                         p['refl'], p['refl_dy'], p['refl_dx'] = r, rdy, rdx
-                if not broll:                      # Kontakt-Schatten nur auf festem Boden
+                # Kontakt-Schatten nur fuer das stehende Billboard im Talking-
+                # Head. Auf die Flaeche GEMALTER Text (liegend) wirft keinen
+                # Schatten - Farbe hat keine Hoehe.
+                if not broll and not scene_ground:
                     sh, sdy_, sdx_ = make_contact_shadow(p['arr'])
                     if sh is not None:
                         p['cshadow'], p['csh_dy'], p['csh_dx'] = sh, sdy_, sdx_
@@ -3302,9 +3416,18 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                                                yaw=_y, pitch=_pt))
                 side_toggle += 1
                 p['cx'] = W / 2
-                if broll and cfg['effects'].get('track3d', True):
-                    # weit voraus verankern: der Text kommt auf uns zu und waechst
-                    p['cy'] = H * (0.60 if not portrait else 0.58)
+                if (scene_ground or broll) and cfg['effects'].get('track3d', True):
+                    if lying and not broll:
+                        # Talking-Head: tief unter dem Sprecher - dort liegt der
+                        # Boden, die Person verdeckt hoechstens die Wort-Mitte.
+                        # ground_anchor verschiebt beim ersten Frame auf die
+                        # freie Flaeche, wenn die Matte eine hergibt.
+                        p['cy'] = H * (0.78 if not portrait else 0.86)
+                    elif on_wall and not broll:
+                        p['cy'] = H * (0.45 if not portrait else 0.42)
+                    else:
+                        # B-Roll: weit voraus verankern - kommt auf uns zu
+                        p['cy'] = H * (0.60 if not portrait else 0.58)
                 else:
                     p['cy'] = H * (0.80 if not portrait else (0.72 if safe_z else 0.82))
                 sy = p['cy'] - H * 0.155
@@ -3856,8 +3979,9 @@ def apply_bg_blur(frame, alpha, depth_n, strength, W, H):
     blurred = cv2.resize(blurred_small, (W, H))
     # Vordergrund-Maske (was scharf bleibt): 1.0 = scharf, 0.0 = voll blur.
     if alpha is not None:
-        fg = alpha[..., 0] if alpha.ndim == 3 else alpha
-        fg = np.clip(fg.astype(np.float32), 0, 1)
+        # Bereinigte Personen-Maske: Hintergrund-Blobs der rohen Matte wuerden
+        # als scharfe Inseln im Bokeh stehen (Halos um Autos/Pflaster).
+        fg = np.clip(person_mask(alpha), 0, 1)
         # Etwas ausdehnen, damit die Text-Zone um die Person auch scharf bleibt
         # und der Uebergang natuerlich weich verlaeuft (Bokeh-Rand).
         fg = cv2.GaussianBlur(fg, (0, 0), max(H * 0.008, 2.0))
@@ -3898,12 +4022,16 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             occ_d = np.clip((depth_n - p['d_ref'] - 0.07) / 0.10, 0, 1)
             occ_d = cv2.GaussianBlur(occ_d, (0, 0), 4)
         occ_a = None
-        if p.get('broll') and alpha is not None:
-            occ_a = (alpha[..., 0] if alpha.ndim == 3 else alpha).astype(np.float32)
+        if (p.get('scene_ground') or p.get('broll')) and alpha is not None:
+            occ_a = person_mask(alpha)     # nur die echte Person, keine Blobs
         if occ_d is None and occ_a is None:
             return None
-        occ = occ_a if occ_d is None else (occ_d if occ_a is None
-                                           else np.maximum(occ_d, occ_a))
+        # Ist die saubere Person-Matte da, occludiert NUR sie den Szenen-Text
+        # (die Person steht davor, das Wort liegt dahinter in der Szene). Die
+        # grobe Tiefenkarte wuerde den Text an jeder Hintergrund-Kante (Autos,
+        # Bordstein) zerschneiden -> haessliche Umrisse. Tiefe nur ohne Matte
+        # (echtes Aerial-B-Roll ohne Person).
+        occ = occ_a if occ_a is not None else occ_d
         prev = p.get('_occ_prev')
         if prev is not None and prev.shape == occ.shape:
             occ = 0.6 * occ + 0.4 * prev
@@ -3934,7 +4062,11 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
     if bg_blur > 0.02 and active and (alpha is not None or depth_n is not None):
         bstr = 0.0
         for p in active:
-            if p.get('broll'):
+            # Szenen-Text (Boden/Wand/Wasser): die Szene ist der Star - kein
+            # Bokeh drueber. Verhindert ausserdem Matte-Halos im Hintergrund.
+            # Und Bokeh nur fuer echte Keyword-Momente - laufende Wortgruppen
+            # (Stacks) rechtfertigen keinen Tiefenschaerfe-Eingriff.
+            if p.get('broll') or p.get('scene_ground') or 'kw_i' not in p:
                 continue
             dur = max(p['end'] - p.get('t0', p['start']), 0.9)
             dtp = t - p.get('t0', p['start'])
@@ -3950,7 +4082,10 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             s *= 0.75 + 0.25 * (float(p.get('power', 2)) - 1) / 2.0
             bstr = max(bstr, s)
         if bstr > 0.02:
-            frame = apply_bg_blur(frame, alpha, depth_n, bg_blur * bstr, W, H)
+            # NUR die Person-Matte fuer die Tiefenschaerfe nutzen, NICHT die
+            # grobe Tiefenkarte: seit Szenen-Text auch mit Gesicht Tiefe rechnet,
+            # wuerde depth_n hier sichtbare Kanten-Halos im Hintergrund ziehen.
+            frame = apply_bg_blur(frame, alpha, None, bg_blur * bstr, W, H)
 
     comp = frame.copy()
     person = frame if alpha is not None else None
@@ -4171,16 +4306,21 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                   blur=(1 - e) * 11)
 
     if alpha is not None:
+        # Bereinigte Personen-Maske fuer ALLES, was die Person zurueck ueber
+        # den Text legt: die rohe Matte markiert Hintergrund-Blobs (Autos,
+        # Pflaster) als 'Person' - kill_spill/Schatten/Repaste zeichnen dann
+        # sichtbare Umrisse um diese Blobs (Halos im ganzen Bild).
+        alpha_p = person_mask(alpha)[..., None]
         # Kein Farbsaum: der Caption-Text hinter der Person darf nicht um die
         # Schulter herumleuchten.
         if cfg['effects'].get('matte_spill', True):
-            person = kill_spill(person, alpha, frame)
+            person = kill_spill(person, alpha_p, frame)
         # KONTAKTSCHATTEN: Die Person wirft einen weichen Schatten auf die
         # Textebene hinter ihr. Ohne ihn ist der Text nur ausgeschnitten - mit
         # ihm sitzt er IM Raum. Genau daran erkennt man 2026 den Unterschied
         # zwischen Vorlagen-Look und Produktion.
         if PERSON_SHADOW > 0 and behind_str > 0.02:
-            a0 = alpha[..., 0]
+            a0 = alpha_p[..., 0]
             sig = max(min(W, H) * 0.016, 3.0)
             sh = cv2.GaussianBlur(a0, (0, 0), sig)
             M = np.float32([[1, 0, W * 0.008], [0, 1, H * 0.012]])   # Licht von oben links
@@ -4188,7 +4328,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             sh = np.clip(sh - a0, 0, 1)          # nur ausserhalb der Person
             k = 0.55 * PERSON_SHADOW * behind_str
             comp = comp * (1.0 - k * sh[..., None])
-        comp = person * alpha + comp * (1 - alpha)
+        comp = person * alpha_p + comp * (1 - alpha_p)
 
     def draw_small(p, g_out, tdx=0.0, tdy=0.0, x_sc=1.0, x_dv=0.0):
         for it in p['small']:
@@ -4218,6 +4358,22 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         g_out = exit_env(over, x_dur)
         x_sc, x_dv = exit_pose(over, x_dur)
         tdx, tdy = track_offset(p, face_xy, cfg)
+        if p.get('front_layer') and p['tpl'] == 'ground':
+            # Boden-Text VOR der Person (kein freier Boden im Bild): liegt
+            # perspektivisch flach ueber allem - lesbar statt unsichtbar.
+            _dtf = t - p.get('t0', p['start'])
+            if _dtf >= 0:
+                _sdx, _sdy = scene_shift(p)
+                _e = smoothstep(_dtf / 0.75)
+                arr_fl, adx_fl, dy_fl, asc_fl, aop_fl = anim_apply(p, p['arr'], aud, _dtf)
+                dy_fl -= (arr_fl.shape[0] - p['arr'].shape[0]) / 2
+                paste_scene(comp, arr_fl, p.get('cx', W / 2) + _sdx + adx_fl,
+                            p['cy'] + _sdy + dy_fl + (1 - _e) * H * 0.03,
+                            W, H, scale=(0.97 + 0.03 * _e) * asc_fl,
+                            opacity=min(_dtf / 0.4, 1) * g_out * aop_fl * 0.92,
+                            refract=0.0, ripple=0.05, grain=1.6,
+                            occ=None, blur=0.0)
+            continue
         if p['tpl'] == 'stack':
             # Personen-Tracking: die Gruppe haengt an der Person und geht mit,
             # wenn das gerade passt (Gesicht da, keine B-Roll). Sanft per EMA.
@@ -4273,21 +4429,48 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             # auf die klare Strasse verschieben (weg vom Bild-Zentrum, wo bei
             # Kameraschwenk-nach-unten Arm/Pulli stehen). Danach traegt die
             # Person-Matte die Okklusion: das Wort liegt hinter ihr auf dem Boden.
-            if (p.get('broll') and p.get('lying') and alpha is not None
-                    and not p.get('_gnd_cal')):
-                _ga = ground_anchor(alpha, p['arr'], W, H)
-                if _ga:
-                    p['cx'], p['cy'] = _ga
-                    p.pop('d_ref', None)      # Tiefe neu am Boden messen
-                    p.pop('H_ref', None)      # Track-Referenz am neuen Anker
-                p['_gnd_cal'] = True
+            if ((p.get('scene_ground') or p.get('broll')) and p.get('lying')
+                    and alpha is not None and not p.get('_gnd_cal')):
+                # Maske ueber die ersten Frames VEREINIGEN, dann ankern: eine
+                # einzelne Frame-Maske ist bei Bewegung oft fragmentiert (nur
+                # der Kopf ueberlebt als groesste Komponente) - der Anker
+                # hielte die Brust fuer freien Boden und das Wort verschwaende
+                # unter dem Personen-Repaste. Die Union sieht die ganze
+                # Silhouette der ersten ~3 Frames.
+                _am = person_mask(alpha)
+                _acc = p.get('_gnd_acc')
+                p['_gnd_acc'] = _am if _acc is None else np.maximum(_acc, _am)
+                p['_gnd_n'] = p.get('_gnd_n', 0) + 1
+                if p['_gnd_n'] >= 3 or dt > 0.2:
+                    _avx = p.get('anchor', (None, None))[0]   # Personen-x
+                    _ga = ground_anchor(p['_gnd_acc'], p['arr'], W, H,
+                                        avoid_x=_avx)
+                    if _ga:
+                        p['cx'], p['cy'] = _ga
+                        p.pop('d_ref', None)  # Tiefe neu am Boden messen
+                        p.pop('H_ref', None)  # Track-Referenz am neuen Anker
+                    elif not p.get('broll'):
+                        # Kein freier Boden im Bild (der Sprecher fuellt es):
+                        # dann liegt das Wort VOR der Person auf dem Boden -
+                        # gezeichnet NACH dem Personen-Repaste, sonst waere es
+                        # komplett verdeckt und damit unsichtbar.
+                        p['front_layer'] = True
+                    p['_gnd_cal'] = True
+                    p.pop('_gnd_acc', None)
+                else:
+                    continue               # erst ankern, dann zeichnen
+            if p.get('front_layer'):
+                continue                   # wird NACH dem Personen-Repaste gezeichnet
             sdx, sdy = scene_shift(p)
             apply_count(p, dt)
             if p.get('cshadow') is not None:
                 paste(comp, p['cshadow'], p.get('cx', W / 2) + sdx + p['csh_dx'],
                       p['cy'] + sdy + p['csh_dy'] + p['cshadow'].shape[0] * 0.30,
                       W, H, opacity=min(dt / 0.5, 1.0) * g_out)
-            g_broll = p.get('broll')
+            # Szenen-Text (Boden/Wasser/Wand) laeuft ueber denselben Premium-
+            # Pfad wie B-Roll: perspektivisch in der Flaeche, von der Person
+            # verdeckt, kamera-getrackt - auch wenn ein Gesicht im Bild ist.
+            g_broll = p.get('scene_ground') or p.get('broll')
             occ_g = occ_for(p) if g_broll else None
             cam_blur = min(scene_vel * 0.45, 5.0) if g_broll else 0.0
             # Blend-Charakter: Wasser wellt/bricht (refract, ripple), fester
@@ -5030,7 +5213,8 @@ def main():
         # v91: ground-B-Roll braucht die Person-Matte, damit liegender Text
         # auf klarem Boden verankert wird UND die Person davor laeuft
         # (Text liegt hinter ihr auf der Strasse, nicht auf ihrem Pulli).
-        if p['tpl'] in ('behind', 'blurin') or (p['tpl'] == 'ground' and p.get('broll')):
+        if p['tpl'] in ('behind', 'blurin') or (p['tpl'] == 'ground'
+                and (p.get('scene_ground') or p.get('broll'))):
             a = max(int((p['start'] - 0.2) * fps), 0)
             b = min(int((p['end'] + 0.6) * fps) + 1, total_est)
             need_alpha[a:b] = True
@@ -5041,7 +5225,7 @@ def main():
     dsess = None
     if cfg['effects'].get('occlusion', True):
         for p in plans:
-            if p['tpl'] == 'ground' and p.get('broll'):
+            if p['tpl'] == 'ground' and (p.get('scene_ground') or p.get('broll')):
                 a = max(int((p['start'] - 0.2) * fps), 0)
                 b = min(int((p['end'] + 0.6) * fps) + 1, total_est)
                 need_depth[a:b] = True
@@ -5062,7 +5246,7 @@ def main():
     need_track = np.zeros(total_est, dtype=bool)
     if cfg['effects'].get('track3d', True):
         for p in plans:
-            if p['tpl'] == 'ground' and p.get('broll'):
+            if p['tpl'] == 'ground' and (p.get('scene_ground') or p.get('broll')):
                 a = max(int((p['start'] - 0.35) * fps), 0)
                 b = min(int((p['end'] + 0.6) * fps) + 1, total_est)
                 need_track[a:b] = True
@@ -5194,7 +5378,10 @@ def main():
             scene_smooth[1] += a * (scene_cum[1] - scene_smooth[1])
 
         # --- Planarer Kamera-Track (nur in Szenen-Text-Fenstern)
-        if fi < len(need_track) and need_track[fi]:
+        # fa = absolute Frame-Nummer: bei Fenster-Renders (--window) zaehlt fi
+        # ab Fensterstart - need_track/need_depth sind aber absolut indiziert.
+        # Mit fi waren Tracking + Tiefe im Fenster-Render schlicht nie aktiv.
+        if fa < len(need_track) and need_track[fa]:
             tg = cv2.cvtColor(cv2.resize(frame.astype(np.uint8),
                                          (480, int(H * 480 / W))), cv2.COLOR_BGR2GRAY)
             if trk_prev is not None:
@@ -5220,7 +5407,7 @@ def main():
 
         # --- Tiefe fuer Okklusion (nur in Szenen-Text-Fenstern)
         depth_n = None
-        if dsess is not None and fi < len(need_depth) and need_depth[fi]:
+        if dsess is not None and fa < len(need_depth) and need_depth[fa]:
             small_d = cv2.resize(frame.astype(np.uint8), (d_w, d_h))
             rgbn = (small_d[..., ::-1].astype(np.float32) / 255.0 - D_MEAN) / D_STD
             pred = dsess.run(None, {d_in_name: rgbn.transpose(2, 0, 1)[None]})[0][0]
@@ -5237,7 +5424,7 @@ def main():
                                aud=(float(aud_rms[ai]), float(aud_bass[ai]),
                                     float(aud_onset[ai])),
                                depth_n=depth_n, scene_vel=scene_vel,
-                               H_cum=(H_cum if (fi < len(need_track) and need_track[fi])
+                               H_cum=(H_cum if (fa < len(need_track) and need_track[fa])
                                       else None),
                                track_gen=track_gen)
         if not win or t >= win[0] - 1e-6:
