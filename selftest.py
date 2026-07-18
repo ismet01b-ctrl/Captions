@@ -2084,10 +2084,12 @@ def _scenario_trail(tmp):
     text_trail = int(np.abs(out_good[:, tband].astype(int)
                             - comp0[:, tband].astype(int)).sum())
     check('Trail wirkt weiterhin auf echten Text', text_trail > 0, f'{text_trail}')
-    _s = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
-    trails = [float(x) for x in _re.findall(r"'trail':\s*([0-9.]+)", _s)]
-    check('Kein Preset hat Trail an (Person-Doppler-Quelle aus)',
-          bool(trails) and all(t == 0.0 for t in trails), f'{trails}')
+    # Trail darf wieder an sein (Dynamik) - aber der Aufruf MUSS die Person-Maske
+    # uebergeben, sonst doppelt er die Person (v93b-Haertung greift auch bei
+    # aktivem Trail). Person-Ausschluss selbst ist oben schon geprueft.
+    _rp = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('Trail-Aufruf uebergibt Person-Maske (kein Doppler bei aktivem Trail)',
+          'apply_duplicate_trail(comp, frame, _trail, alpha)' in _rp)
 
 
 def _scenario_lang(tmp):

@@ -1850,14 +1850,14 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   blurin = Themenwechsel, neue Kapitel
   ground = grosse Statements, Schluss-Sätze
 - INTERAKTION (WICHTIGSTE Regel - so hebt sich das Video von Konkurrenz ab):
-  Die Caption ist kein Aufkleber, sie REAGIERT auf das Gesagte. Wenn eine
-  Position, Bewegung, Wucht oder Veraenderung der KERN dieses Moments ist, gib
-  die passende Animation. ENTSCHEIDEND ist der Kontext, nicht das blosse Wort:
-  Nur wenn die Handlung wirklich HIER passiert (der Sprecher betont sie, sie
-  ist der Punkt des Satzes) - NICHT bei beilaeufiger, metaphorischer oder rein
-  erwaehnender Nutzung ("mir explodiert der Kopf vor Ideen" = ruhig, KEIN
-  Effekt). Lieber kein Effekt als ein falscher. Die Regeln gelten in JEDER
-  Sprache: erkenne die HANDLUNG, egal ob deutsch oder englisch.
+  Die Caption ist kein Aufkleber, sie REAGIERT auf das Gesagte - das Video soll
+  LEBEN. Steckt Bewegung, Wucht oder Veraenderung im Satz, gib MUTIG die
+  passende Animation; ein reaktives Video ist besser als ein stilles. Die
+  Mehrheit der starken Momente darf sich bewegen. Ueberspring den Effekt NUR
+  bei klar bildlicher/beilaeufiger Nutzung ("mir explodiert der Kopf vor Ideen"
+  = ruhig) oder ganz neutralem Text - dort kein falscher Effekt. Im Zweifel:
+  lieber lebendig als steif. Die Regeln gelten in JEDER Sprache: erkenne die
+  HANDLUNG, egal ob deutsch oder englisch.
   ORT (fx + szene + lage):
     "hinter mir" / "behind me"        -> fx "behind"
     "auf dem Boden/der Strasse" / "on the ground/floor" -> fx "ground", szene "boden", lage "liegend"
@@ -1877,10 +1877,10 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
     endgueltig/beschlossen/final/official/stamped/proof    -> "stempel"
     Last/Zwang/erdrueckt/pressure/weight/crushing          -> "druck"
     Staerke/Macht/Wucht/power/strength/heavy               -> "gewicht"
-  Denk pro Moment mit: Ist die Handlung wirklich der Punkt HIER? Dann - und nur
-  dann - tut das Wort im Bild, was es sagt. Diese Reaktionen funktionieren in
-  JEDER Einstellung, auch im Talking-Head. Ein starker, echt passender Effekt
-  schlaegt fuenf beliebige.
+  Denk pro Moment mit: Was TUT das Wort? Passt eine Bewegung, dann gib sie -
+  das Wort tut im Bild, was es sagt. Diese Reaktionen funktionieren in JEDER
+  Einstellung, auch im Talking-Head. Setz sie regelmaessig ein, damit das Video
+  atmet - nur nicht auf harmlosen/bildlichen Woertern.
 - AKTION-WORT ALS KEYWORD (Ausnahme sticht "keine Verben"): Wenn die HANDLUNG
   selbst der Kern des Satzes ist - imperativ/meta wie "the word flies",
   "broken should shatter", oder ein Aktions-Satz wie "prices crash", "sales

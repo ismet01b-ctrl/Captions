@@ -1069,7 +1069,7 @@ def build_config(look, overrides=None):
                 'dim_behind': 0.42, 'dim_blurin': 0.34,
                 'beat_sync': 0.90, 'music_beat': 0.85, 'person_shadow': 0.60,
                 'zahl_gap': 10,
-                'bg_blur': 0.60, 'freeze_frame': 0.50, 'trail': 0.0,
+                'bg_blur': 0.60, 'freeze_frame': 0.50, 'trail': 0.22,
                 'counter_ring': 0.55, 'split_screen': 0.30, 'env_shadow': 0.15,
                 'emerge': 'immer', 'anim': True,
                 'keyword_rotation': ['behind', 'outline', 'ground'],
