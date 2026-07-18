@@ -1836,10 +1836,14 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   blurin = Themenwechsel, neue Kapitel
   ground = grosse Statements, Schluss-Sätze
 - INTERAKTION (WICHTIGSTE Regel - so hebt sich das Video von Konkurrenz ab):
-  Die Caption ist kein Aufkleber, sie REAGIERT auf das Gesagte. Wenn der Satz
-  eine Position, Bewegung, Wucht oder Veraenderung NENNT, ist die passende
-  Animation PFLICHT - nicht optional. Das ist der Kern des Produkts. Die Regeln
-  gelten in JEDER Sprache: erkenne die HANDLUNG, egal ob deutsch oder englisch.
+  Die Caption ist kein Aufkleber, sie REAGIERT auf das Gesagte. Wenn eine
+  Position, Bewegung, Wucht oder Veraenderung der KERN dieses Moments ist, gib
+  die passende Animation. ENTSCHEIDEND ist der Kontext, nicht das blosse Wort:
+  Nur wenn die Handlung wirklich HIER passiert (der Sprecher betont sie, sie
+  ist der Punkt des Satzes) - NICHT bei beilaeufiger, metaphorischer oder rein
+  erwaehnender Nutzung ("mir explodiert der Kopf vor Ideen" = ruhig, KEIN
+  Effekt). Lieber kein Effekt als ein falscher. Die Regeln gelten in JEDER
+  Sprache: erkenne die HANDLUNG, egal ob deutsch oder englisch.
   ORT (fx + szene + lage):
     "hinter mir" / "behind me"        -> fx "behind"
     "auf dem Boden/der Strasse" / "on the ground/floor" -> fx "ground", szene "boden", lage "liegend"
@@ -1859,22 +1863,19 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
     endgueltig/beschlossen/final/official/stamped/proof    -> "stempel"
     Last/Zwang/erdrueckt/pressure/weight/crushing          -> "druck"
     Staerke/Macht/Wucht/power/strength/heavy               -> "gewicht"
-  Denk pro Moment mit: Was TUT das Wort im Satz? Dann tut es das auch im Bild.
-  Diese Reaktionen funktionieren in JEDER Einstellung - auch im Talking-Head,
-  wenn der Sprecher gross im Bild ist. Waehle sie MUTIG, sobald der Satz sie
-  ansagt. Jeder power-3-Moment und der Hook MUESSEN sichtbar reagieren.
-  NUR auf komplett neutralem Text (reine Aussage ohne Handlung/Wucht) keine
-  Animation - dann lieber ein sauberer Moment als ein falscher Effekt.
-- AKTION-WORT ALS KEYWORD (Ausnahme sticht "keine Verben"): Wenn der Satz die
-  HANDLUNG selbst betont oder ansagt - imperativ/meta wie "the word flies",
-  "explodes should hit", "broken should shatter", "it disappears", oder ein
-  Aktions-Satz wie "prices crash", "sales explode" - dann waehle das AKTION-WORT
-  SELBST als Keyword (n=1, auch wenn es ein Verb ist: flies, explodes, shatter,
-  crash) und gib ihm ZWINGEND die passende Animation (flies->spur,
-  explodes->explosion, shatter/broken->bruch, hit->zoom_punch, disappears->schwund,
-  crash->sturz). Das Wort tut dann im Bild genau das, was es sagt - das ist der
-  staerkste Effekt ueberhaupt. Nur wenn es ein klares OBJEKT gibt, das die
-  Handlung erleidet (z.B. "die Mieten steigen"), nimm lieber das Objekt + Anim.
+  Denk pro Moment mit: Ist die Handlung wirklich der Punkt HIER? Dann - und nur
+  dann - tut das Wort im Bild, was es sagt. Diese Reaktionen funktionieren in
+  JEDER Einstellung, auch im Talking-Head. Ein starker, echt passender Effekt
+  schlaegt fuenf beliebige.
+- AKTION-WORT ALS KEYWORD (Ausnahme sticht "keine Verben"): Wenn die HANDLUNG
+  selbst der Kern des Satzes ist - imperativ/meta wie "the word flies",
+  "broken should shatter", oder ein Aktions-Satz wie "prices crash", "sales
+  explode" - DARFST du das Aktion-Wort selbst als Keyword waehlen (n=1, auch ein
+  Verb) und ihm die passende Animation geben (flies->spur, explodes->explosion,
+  shatter/broken->bruch, crash->sturz). Aber nur wenn die Handlung wirklich
+  gemeint ist - nicht bei beilaeufiger oder bildlicher Erwaehnung. Gibt es ein
+  klares OBJEKT, das die Handlung erleidet ("die Mieten steigen"), nimm lieber
+  das Objekt + Anim.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \
@@ -1905,7 +1906,7 @@ Beispiel: "Deutschland bricht seine Versprechen" -> Keyword "Deutschland" bekomm
 Beispiel: "die Mieten steigen ins Unermessliche" -> Keyword "Mieten" bekommt "anim": "anstieg".
 Beispiel: "unser Umsatz explodiert" (bildlich = starkes Wachstum) -> "anim": "schub"; \
 "die Bombe explodiert" (woertlich) -> "anim": "explosion". Waehle nach der \
-GEMEINTEN Handlung. Nennt der Satz eine Handlung/Wucht, ist die Animation Pflicht.
+GEMEINTEN Handlung - und nur wenn sie wirklich der Punkt des Moments ist.
 - Optional "emoji": EIN einzelnes Unicode-Emoji das die Aussage untermalt. \
 Nur wenn es wirklich passt - kein Deko-Zwang. Beispiele: \
 Geld/Umsatz "💰" · Wachstum "🚀" · Absturz "📉" · Rekord "🏆" · Schock "⚠️" · \
