@@ -1282,6 +1282,30 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </form>
       </div>
 
+      <div class="panel">
+        <details>
+          <summary>Reference styles (admin)</summary>
+          <div style="margin-top:14px;">
+            <p class="hint">Upload a short video with high-end captions. The AI
+              looks at a few frames, describes its editing STYLE (pacing, density,
+              which words get emphasized, hook) and uses that to steer its own
+              editorial choices on future renders. It does not copy the look
+              (fonts/animations stay ours) or the words. Affects all renders.</p>
+            <div style="display:flex; flex-direction:column; gap:10px; max-width:420px;">
+              <input type="password" id="refAdminKey" placeholder="Admin key"
+                     style="width:100%;">
+              <input type="text" id="refName" placeholder="Name for this style (optional)"
+                     style="width:100%;">
+              <input type="file" id="refFile" accept="video/*" style="color:var(--mut);">
+              <button class="btn" type="button" id="btnRefLearn"
+                      style="align-self:flex-start; padding:9px 18px;">Learn style from video</button>
+              <div id="refStatus" class="hint" style="display:none;"></div>
+            </div>
+            <div id="refList" style="margin-top:16px; display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
+        </details>
+      </div>
+
       <div class="panel danger-zone">
         <details>
           <summary>Danger zone</summary>
@@ -2741,6 +2765,79 @@ if ($('#delForm')) $('#delForm').addEventListener('submit', async () => {
   } catch (e) { toast('Connection error.', 'err'); }
   finally { btn.disabled = false; }
 });
+
+/* v96o: Referenz-Stile (Admin) - Video hochladen, KI lernt den Stil */
+function refKey() { return ($('#refAdminKey') && $('#refAdminKey').value.trim()) || ''; }
+function renderRefList(refs) {
+  const box = $('#refList');
+  if (!box) return;
+  if (!refs || !refs.length) { box.innerHTML = '<div class="hint">No learned styles yet.</div>'; return; }
+  box.innerHTML = refs.map((r, i) => `
+    <div style="border:1px solid var(--line); border-radius:10px; padding:10px 12px;">
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline;">
+        <b>${escHtml(r.name || 'Style')}</b>
+        <button class="btn secondary" data-refdel="${i}" style="padding:4px 10px; font-size:12px;">Remove</button>
+      </div>
+      <div class="hint" style="margin-top:6px;">${escHtml(r.beispiel || '')}</div>
+    </div>`).join('');
+  box.querySelectorAll('[data-refdel]').forEach(b => b.addEventListener('click', () => refDelete(parseInt(b.dataset.refdel))));
+}
+async function refLoadList() {
+  const k = refKey();
+  if (!k) return;
+  try {
+    const r = await fetch('/api/reference/list', { headers: { 'x-admin-key': k } });
+    if (!r.ok) return;
+    const d = await r.json();
+    renderRefList(d.refs);
+  } catch (e) {}
+}
+async function refDelete(idx) {
+  const k = refKey();
+  if (!k) { toast('Enter the admin key first.', 'err'); return; }
+  const fd = new FormData(); fd.append('idx', String(idx));
+  try {
+    const r = await fetch('/api/reference/delete', { method: 'POST', headers: { 'x-admin-key': k }, body: fd });
+    const d = await r.json();
+    if (r.ok) renderRefList(d.refs);
+    else toast(d.detail || 'Failed.', 'err');
+  } catch (e) { toast('Connection error.', 'err'); }
+}
+if ($('#refAdminKey')) $('#refAdminKey').addEventListener('change', () => {
+  try { localStorage.setItem('dve_admin_key', refKey()); } catch (e) {}
+  refLoadList();
+});
+if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
+  const k = refKey();
+  const f = $('#refFile') && $('#refFile').files[0];
+  const st = $('#refStatus');
+  if (!k) { toast('Enter the admin key first.', 'err'); return; }
+  if (!f) { toast('Choose a reference video first.', 'err'); return; }
+  const btn = $('#btnRefLearn'); btn.disabled = true;
+  if (st) { st.style.display = 'block'; st.textContent = 'Analyzing style … (this can take up to a minute)'; }
+  try {
+    const fd = new FormData();
+    fd.append('datei', f);
+    fd.append('name', ($('#refName') && $('#refName').value) || '');
+    const r = await fetch('/api/reference/learn', { method: 'POST', headers: { 'x-admin-key': k }, body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      if (st) st.textContent = 'Learned: ' + (d.entry && d.entry.name || 'style');
+      renderRefList(d.refs);
+      if ($('#refFile')) $('#refFile').value = '';
+      if ($('#refName')) $('#refName').value = '';
+      toast('Style learned.', 'ok');
+    } else {
+      if (st) st.textContent = '';
+      toast(d.detail || 'Failed to analyze.', 'err');
+    }
+  } catch (e) { if (st) st.textContent = ''; toast('Connection error.', 'err'); }
+  finally { btn.disabled = false; }
+});
+try {
+  const _ak = localStorage.getItem('dve_admin_key');
+  if (_ak && $('#refAdminKey')) { $('#refAdminKey').value = _ak; refLoadList(); }
+} catch (e) {}
 
 function updateRing(rest, total) {
   // v84: Ring durch Credit-Chip ersetzt. Stub bleibt fuer Alt-Aufrufe.

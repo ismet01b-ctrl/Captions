@@ -12,8 +12,15 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
   unserer Engine. Video-Dateien direkt in die JSON zu legen bringt nichts (der
   Text-Teil der KI kann kein Video ansehen) - erst die Vision-Analyse macht
   daraus einen nutzbaren Stilhinweis. Fehlertolerant ohne Key. Selftest 467/467.
-  OFFEN: Web-Button zum Hochladen der Referenzvideos (damit ohne Terminal
-  nutzbar) - noch nicht gebaut.
+- **v96o: Web-Button - Referenz-Videos ohne Terminal hochladen.**
+  Account-Seite -> "Reference styles (admin)": Admin-Key, optionaler Name,
+  Video-Upload -> `/api/reference/learn` laesst Vision den Stil beschreiben und
+  speichert ihn; Liste zum Ansehen/Loeschen (`/api/reference/list`,
+  `/api/reference/delete`). Alle drei Endpoints ADMIN-gated (timing-safe), weil
+  Referenzen GLOBAL alle Renders beeinflussen - nicht jeder User darf den Stil
+  aller aendern. Admin-Key wird lokal gemerkt. Selftest 468/468. EHRLICH: die
+  Vision-Analyse braucht den echten OPENAI_API_KEY auf dem Server; Sandbox testet
+  Endpoints/Auth/Struktur, nicht die Beschreibungs-Qualitaet.
 - **v96m: KI schneidet nach aktuellem Standard + einspeisbare Trend-Referenzen.**
   Frage: waehlt die KI nach heutigem Standard, braucht sie Vorlagen/Trend-Bezug?
   Ehrliche Antwort: die KI funktioniert ohne Vorlagen, aber few-shot-Referenzen

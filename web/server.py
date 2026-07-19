@@ -712,7 +712,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96n-learnstyle'
+DVE_BUILD = 'v96o-refui'
 
 
 @app.middleware('http')
@@ -2598,6 +2598,90 @@ async def save_and_render(request: Request, jid: str,
                       if k not in ('input', 'code')})
     QUEUE.put(jid)
     return {'ok': True, 'job': jid, 'position': QUEUE.qsize()}
+
+
+def _admin_ok(request: Request):
+    key = os.environ.get('DVE_ADMIN', '').strip()
+    given = request.headers.get('x-admin-key', '')
+    return bool(key) and hmac.compare_digest(given, key)
+
+
+def _reference_file():
+    # regie_reference.json liegt im Projekt-Root neben render.py
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'regie_reference.json')
+
+
+def _load_references():
+    try:
+        d = json.load(open(_reference_file(), encoding='utf-8'))
+        return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+@app.get('/api/reference/list')
+def reference_list(request: Request):
+    """v96o: gelernte Stil-Referenzen (Admin). Global - beeinflusst ALLE Renders."""
+    if not _admin_ok(request):
+        raise HTTPException(403, 'Access denied.')
+    return {'refs': _load_references()}
+
+
+@app.post('/api/reference/learn')
+async def reference_learn(request: Request, datei: UploadFile = File(...),
+                          name: str = Form('')):
+    """v96o: Referenz-Video hochladen -> GPT-4o-Vision beschreibt den Stil ->
+    als Stil-Referenz speichern. Admin-only, da global wirksam."""
+    if not _admin_ok(request):
+        raise HTTPException(403, 'Access denied.')
+    ext = os.path.splitext(datei.filename or '')[1].lower() or '.mp4'
+    if ext not in ('.mp4', '.mov', '.m4v', '.webm', '.mkv'):
+        raise HTTPException(400, 'Only video files (mp4, mov, webm, mkv).')
+    d = os.path.join(DATA, 'reftmp')
+    os.makedirs(d, exist_ok=True)
+    tmp = os.path.join(d, uuid.uuid4().hex[:10] + ext)
+    groesse = 0
+    with open(tmp, 'wb') as f:
+        while True:
+            chunk = await datei.read(1 << 20)
+            if not chunk:
+                break
+            groesse += len(chunk)
+            if groesse > 200 * 1024 * 1024:
+                f.close(); os.remove(tmp)
+                raise HTTPException(413, 'Reference video too large (max 200 MB).')
+            f.write(chunk)
+    try:
+        import render as _R
+        entry = _R.analyze_reference_video(
+            tmp, name=(_safe_name(name) or _safe_name(datei.filename or 'Referenz')))
+    except Exception as e:
+        entry = None
+        print(f'reference_learn Fehler: {type(e).__name__}: {e}')
+    finally:
+        try: os.remove(tmp)
+        except OSError: pass
+    if not entry:
+        raise HTTPException(502, 'Could not analyze the video '
+                                 '(AI key missing or analysis failed).')
+    return {'entry': entry, 'refs': _load_references()}
+
+
+@app.post('/api/reference/delete')
+def reference_delete(request: Request, idx: int = Form(...)):
+    """v96o: eine gelernte Stil-Referenz loeschen (Admin)."""
+    if not _admin_ok(request):
+        raise HTTPException(403, 'Access denied.')
+    refs = _load_references()
+    if 0 <= idx < len(refs):
+        refs.pop(idx)
+        try:
+            json.dump(refs, open(_reference_file(), 'w', encoding='utf-8'),
+                      ensure_ascii=False, indent=2)
+        except Exception:
+            raise HTTPException(500, 'Could not save.')
+    return {'refs': refs}
 
 
 @app.get('/admin/codes')

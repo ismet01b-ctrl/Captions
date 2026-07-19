@@ -2059,6 +2059,21 @@ def _scenario_security(tmp):
     # 15) Login gleicht Timing an (Dummy-Hash bei unbekannter Mail)
     check('Login: Timing-Angleich gegen Mail-Enumeration',
           '_verify_pw(password, _DUMMY_HASH)' in _src)
+    # 15b) v96o: Referenz-Stil-Endpoints sind admin-gated (global wirksam)
+    _old_admin = os.environ.get('DVE_ADMIN')
+    os.environ['DVE_ADMIN'] = 'geheim123'
+
+    class _Rq:
+        def __init__(self, h): self.headers = h
+    ok_admin = SV._admin_ok(_Rq({'x-admin-key': 'geheim123'}))
+    bad_admin = SV._admin_ok(_Rq({'x-admin-key': 'falsch'}))
+    if _old_admin is None:
+        os.environ.pop('DVE_ADMIN', None)
+    else:
+        os.environ['DVE_ADMIN'] = _old_admin
+    check('Referenz-Stil: Endpoints admin-gated (timing-safe)',
+          ok_admin is True and bad_admin is False
+          and '/api/reference/learn' in _src and 'if not _admin_ok(request):' in _src)
     # 16) v94: _video_hash kollidiert nicht bei gleichem Anfang/Ende, anderer
     # Mitte (der Bug, der einen deutschen Transkript-Cache an einen englischen
     # Clip servierte). Zwei Dateien: identischer Kopf+Fuss, verschiedene Mitte.
