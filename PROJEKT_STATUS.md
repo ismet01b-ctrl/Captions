@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v97c: Flow-Caption Bewegung/Tracking + Preset-Umfang.**
+  Ismet: "Ich will, dass sich auch mal captions passend bewegen, und diese mit
+  Tracking verfolgt werden." + Frage nach Preset-Geltung. (1) SANFTES Folgen:
+  der Flow-Block folgt der Person wieder, aber stark gedaempft (EMA 0.10) und
+  eng begrenzt (Clamp W*0.045) - fuehlt sich verbunden an, wandert NICHT
+  (der alte 0.22/0.09-Follow hatte die Struktur gebrochen). Schaltbar per
+  `effects.caption_follow` (Default true). (2) Keyword-Settle: das getippte
+  Anker-Wort landet minimal groesser und setzt sich weich auf 1.0 - gezielte,
+  ruhige Bewegung statt Deko. (3) Preset-Umfang: Flow gilt fuer alle Presets
+  ausser 'Clean' (dort caption_flow:false -> schlichte lesbare Untertitel, wie
+  vorgesehen). Antwort auf die Frage: Flag steht global auf true in config.yaml,
+  kein Preset ausser Clean ueberschreibt es. Selftest bleibt gruen. EHRLICH:
+  Follow-Staerke ist auf ruhiges Talking-Head getunt - echte Wirkung bei viel
+  Bewegung auf Windows pruefen; Feintuning der Daempfung/Clamp jederzeit moeglich.
 - **v97b: Flow-Caption STRUKTUR (Nachbesserung).**
   Ismet: "Die captions haben keine Struktur, sie sind einfach irgendwo
   platziert." Ursache: (1) greedy Breiten-Umbruch + (2) Personen-Tracking

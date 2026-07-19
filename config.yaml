@@ -60,6 +60,8 @@ effects:
                               # (Referenz-Look @migs.visuals) - Anker-Wort
                               # gross+getippt+Glow, Abschlusswort kursiv-Akzent.
                               # Dramatik-Momente (behind/cascade) bleiben.
+  caption_follow: true        # v97c: Flow-Block folgt der Person sanft +
+                              # gedaempft + begrenzt (Struktur bleibt). Aus = fest.
   anim: true
   motion_blur: true
   intro_hook: true

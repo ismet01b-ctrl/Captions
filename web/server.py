@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v97b-flowstruktur'
+DVE_BUILD = 'v97c-flowfollow'
 
 
 @app.middleware('http')
@@ -1229,6 +1229,9 @@ def build_config(look, overrides=None):
                 'sfx_volume': 0.0, 'sfx': False,
                 'reflection': False, 'occlusion': False, 'track3d': False,
                 'safe_zone': True,
+                # v97c: 'Clean' bleibt schlichte lesbare Untertitel - kein
+                # Flow-Aufbau, keine Keyword-Hervorhebung/Gold-Akzent.
+                'caption_flow': False,
             },
             'camera': {
                 'strength': 0.0, 'crash': 0.0, 'whip': False, 'side_every': 10,

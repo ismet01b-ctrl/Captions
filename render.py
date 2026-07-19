@@ -5544,12 +5544,22 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                             occ=None, blur=0.0)
             continue
         if p['tpl'] == 'flow':
-            # v97 Flow-Caption: Inline-Aufbau, LINKS buendig, FEST im Bild
-            # verankert (kein Personen-Tracking - das liess die Captions
-            # herumwandern; Struktur braucht eine stabile Position). Verbinder
-            # poppen weich, das Anker-Wort wird getippt (Wipe ueber die letters),
-            # Kursiv-Akzent poppt.
+            # v97c Flow-Caption: STRUKTUR bleibt (feste Rollen-Zeilen, links).
+            # Der Block ist verankert, folgt der Person aber SANFT - stark
+            # gedaempft (0.10) und eng begrenzt (W*0.045): fuehlt sich verbunden
+            # an, wandert nicht (der fruehere 0.22/0.09-Follow brach die Struktur).
+            # Schaltbar per effects.caption_follow. Dazu ein dezenter Settle auf
+            # dem Keyword ("passend bewegen").
             fdx = fdy = 0.0
+            if cfg['effects'].get('caption_follow', True) and not p.get('broll') \
+                    and 'anchor' in p:
+                tgt = (face_xy[0] - p['anchor'][0], face_xy[1] - p['anchor'][1])
+                fp = p.setdefault('fpos', [0.0, 0.0])
+                fp[0] += 0.10 * (tgt[0] - fp[0])
+                fp[1] += 0.10 * (tgt[1] - fp[1])
+                lim = W * 0.045
+                fdx = max(-lim, min(fp[0] * 0.6, lim))
+                fdy = max(-lim * 0.5, min(fp[1] * 0.5, lim * 0.5))
             for it in p['front']:
                 wd = words[it['i']]
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf
@@ -5564,11 +5574,14 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                         frac = reveal * n - k_full
                         l0, l1 = it['letters'][k_full]
                         vis_px = (l0 + (l1 - l0) * frac) + 40
+                    # dezenter Settle: Keyword landet minimal groesser und
+                    # setzt sich weich auf 1.0 (gezielte, ruhige Bewegung)
+                    k_settle = 1.0 + 0.05 * (1 - smoothstep(min(dt / 0.42, 1.0)))
                     paste(comp, it['arr'],
                           it['cx'] + fdx - (0 if vis_px is None
                                             else (it['arr'].shape[1] - vis_px) / 2),
                           it['cy'] + fdy + x_dv * it['arr'].shape[0],
-                          W, H, scale=x_sc,
+                          W, H, scale=x_sc * k_settle,
                           opacity=g_out, crop_w=vis_px)
                 else:
                     e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
