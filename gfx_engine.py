@@ -608,12 +608,163 @@ def render_demo3(input_video, out_video, progress=print):
     return True
 
 
+def _scene_accent(frame):
+    """Akzentfarbe AUS der Szene: der saturierteste helle Farbton -> so gehoert
+    der Text ins Bild (amber-Lampe -> amber, gruener Scope -> gruen)."""
+    small = cv2.resize(frame, (64, 114))
+    hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV).reshape(-1, 3).astype(np.float32)
+    score = (hsv[:, 1] / 255.0) * (hsv[:, 2] / 255.0) ** 0.6
+    k = int(np.argmax(score))
+    h = hsv[k, 0]
+    # kraeftige, gehobene Version des Szenen-Farbtons
+    pick = cv2.cvtColor(np.uint8([[[h, 210, 255]]]), cv2.COLOR_HSV2BGR)[0, 0]
+    if float(score[k]) < 0.18:                     # kaum Farbe -> warmes Off-White
+        return (245, 238, 225)
+    return (int(pick[2]), int(pick[1]), int(pick[0]))   # RGB
+
+
+def render_editorial(input_video, out_video, progress=print):
+    """PROTOTYP Editorial-Look (wie die 2 Referenzvideos): neutrale schwere Sans
+    (Inter-Black), gestapelte Groessen-Hierarchie links, das Hero-Wort riesig +
+    Szenen-Farbe + Glow, ganze Typo HINTER der Person durchgewebt (RVM-Matte),
+    weiches Blur-in statt Bounce. Kein Outline-Balken, kein Deko. Restraint."""
+    if cv2 is None:
+        return False
+    from PIL import ImageFilter
+    import onnxruntime as ort
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        return False
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    try:
+        sess = ort.InferenceSession(os.path.join(HERE, 'models/rvm.onnx'),
+                                    providers=['CPUExecutionProvider'])
+        rec = [np.zeros((1, 1, 1, 1), np.float32)] * 4
+        dsr = np.array([0.25], np.float32)
+    except Exception:
+        sess = None
+    fp = os.path.join(HERE, 'fonts', 'inter_black.ttf')
+
+    def F(px):
+        try:
+            return ImageFont.truetype(fp, int(px))
+        except Exception:
+            return _font(int(px))
+    sz_h = int(H * 0.118) * SS          # Hero-Wort
+    sz_n = int(H * 0.050) * SS          # Neben-Woerter
+    # (Wort, start, hero?) - in echt aus Whisper-Timing
+    PHRASES = [
+        [('this', 0.6, 0), ('is', 0.95, 0), ('the', 1.15, 0), ('DIFFERENCE', 1.45, 1)],
+        [('watch', 3.1, 0), ('how', 3.4, 0), ('it', 3.7, 0), ('MOVES', 3.95, 1)],
+        [('nobody', 5.4, 0), ('edits', 5.8, 0), ('like', 6.15, 0), ('THIS', 6.45, 1)],
+        [('thats', 7.6, 0), ('the', 7.9, 0), ('SECRET', 8.2, 1)],
+    ]
+    off_w = (244, 240, 232, 255)
+    tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), fps, (W, H))
+    accent = (245, 238, 225)
+    i = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        t = i / fps
+        if i % 6 == 0:                              # Farbe selten neu picken (stabil)
+            accent = _scene_accent(frame)
+
+        ph = None
+        for p in PHRASES:
+            if p[0][1] - 0.15 <= t < p[-1][1] + 1.5:
+                ph = p
+                break
+
+        matte = None
+        if sess is not None:
+            src = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            out = sess.run(None, {'src': src.transpose(2, 0, 1)[None], 'r1i': rec[0],
+                                  'r2i': rec[1], 'r3i': rec[2], 'r4i': rec[3],
+                                  'downsample_ratio': dsr})
+            rec = out[2:6]
+            if ph is not None:
+                matte = np.clip(out[1][0, 0], 0.0, 1.0)[..., None]
+
+        if ph is not None:
+            pe = ph[-1][1] + 1.5
+            p_out = 1.0 if t < pe - 0.35 else max(0.0, (pe - t) / 0.35)
+            vis = [w for w in ph if t >= w[1] - 0.02]
+            txt_layer = Image.new('RGBA', (W * SS, H * SS), (0, 0, 0, 0))
+            glow_layer = Image.new('RGBA', (W * SS, H * SS), (0, 0, 0, 0))
+            # gestapelt links, vertikal um die obere Bildmitte
+            heights = [sz_h if w[2] else sz_n for w in vis]
+            gap = int(sz_n * 0.34)
+            total = sum(int(h * 1.02) for h in heights) + gap * max(len(vis) - 1, 0)
+            x = int(W * 0.06) * SS
+            y = int(H * 0.30) * SS
+            for (w, hgt) in zip(vis, heights):
+                word, ws, hero = w
+                col = (accent[0], accent[1], accent[2], 255) if hero else off_w
+                wi = _word_img(word.upper() if hero else word, F(hgt), col,
+                               stroke=0, stroke_col=(0, 0, 0, 0))
+                ap_t = min(max((t - ws) / 0.30, 0.0), 1.0)     # 300ms weiches Ein
+                e = _smoothstep(ap_t)
+                op = e * p_out
+                if op <= 0:
+                    y += int(hgt * 1.02) + gap
+                    continue
+                cur = wi
+                if ap_t < 1.0:                                  # Blur-in
+                    cur = wi.filter(ImageFilter.GaussianBlur((1 - e) * 7))
+                a = cur.getchannel('A').point(lambda v: int(v * op))
+                cur = cur.copy(); cur.putalpha(a)
+                yr = int((1 - e) * 10 * SS)
+                px, py = x, y + yr
+                # weicher Schatten fuer Tiefe (dezent)
+                txt_layer.alpha_composite(_soft_shadow(cur, 9, 90), (px, py + 5 * SS))
+                if hero:                                        # Glow in Szenenfarbe
+                    g = Image.new('RGBA', cur.size, (0, 0, 0, 0))
+                    ga = cur.getchannel('A')
+                    g.paste((accent[0], accent[1], accent[2], int(190 * op)), (0, 0), ga)
+                    g = g.filter(ImageFilter.GaussianBlur(16))
+                    glow_layer.alpha_composite(g, (px, py))
+                txt_layer.alpha_composite(cur, (px, py))
+                y += int(hgt * 1.02) + gap
+
+            base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).convert('RGBA')
+            base.alpha_composite(glow_layer.resize((W, H), Image.LANCZOS))
+            base.alpha_composite(txt_layer.resize((W, H), Image.LANCZOS))
+            comp = np.array(base.convert('RGB')).astype(np.float32)
+            if matte is not None:                               # Person kommt VORN
+                bn = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32)
+                comp = comp * (1 - matte) + bn * matte
+            frame = cv2.cvtColor(comp.astype(np.uint8), cv2.COLOR_RGB2BGR)
+        vw.write(frame)
+        i += 1
+    cap.release()
+    vw.release()
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', tmp, '-i', input_video,
+                        '-map', '0:v:0', '-map', '1:a:0?', '-c:v', 'libx264',
+                        '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+                        '-shortest', out_video], check=True, timeout=300)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    progress('Editorial-Prototyp fertig')
+    return True
+
+
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument('input')
     ap.add_argument('output')
-    ap.add_argument('--demo', default='3', choices=['1', '2', '3'])
+    ap.add_argument('--demo', default='ed',
+                    choices=['1', '2', '3', 'ed'])
     a = ap.parse_args()
-    fn = {'1': render_demo, '2': render_demo2, '3': render_demo3}[a.demo]
+    fn = {'1': render_demo, '2': render_demo2, '3': render_demo3,
+          'ed': render_editorial}[a.demo]
     raise SystemExit(0 if fn(a.input, a.output) else 1)
