@@ -3561,6 +3561,102 @@ def compose_phrase(phrase, words, S, W, H, portrait=False, safe=False):
     return out
 
 
+_FLOW_CONN = {'im', 'in', 'am', 'an', 'auf', 'aus', 'bei', 'der', 'die', 'das',
+              'dem', 'den', 'des', 'ein', 'eine', 'mit', 'von', 'vom', 'zum',
+              'zur', 'zu', 'fuer', 'für', 'und', 'ist', 'es', 'so', 'wie', 'was',
+              'wir', 'ich', 'du', 'er', 'sie', 'als', 'wenn', 'doch', 'nur',
+              'of', 'to', 'the', 'a', 'an', 'at', 'on', 'in', 'for', 'and',
+              'is', 'it', 'its', "it's", 'so', 'as', 'do', 'i', 'you', 'we',
+              'why', 'how', 'that', 'this', 'not', 'but', 'just', 'my', 'your'}
+
+
+def compose_flow(g, words, S, W, H, portrait=False, kw_lower=None):
+    """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
+    Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
+      - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
+      - EIN Anker-Wort (laengstes Inhaltswort) = Display-schwer, GROSS, Glow,
+        wird per Schreibmaschine enthuellt (letters mitgegeben)
+      - optionales Abschlusswort kleingeschrieben = kursive Serif in Akzentfarbe
+    Nutzt die LOOK-Fonts + Akzentfarbe (Hybrid: Filler fliesst, Dramatik bleibt).
+    Rueckgabe: (items, total_h, anchor_index_or_None). items tragen absolute
+    cx/cy relativ zu einem Block-Ursprung y=0 (Aufrufer verschiebt vertikal)."""
+    idxs = list(g)
+    cont = [i for i in idxs
+            if clean(words[i]['word']).lower().strip(".,!?;:") not in _FLOW_CONN
+            and len(clean(words[i]['word'])) >= 2]
+    anchor = None
+    if len(idxs) >= 3 and cont:
+        cand = cont[int(np.argmax([len(clean(words[i]['word'])) for i in cont]))]
+        if len(clean(words[cand]['word'])) >= 5:
+            anchor = cand
+    accent = None
+    if len(idxs) >= 4 and cont:
+        last = cont[-1]
+        raw_last = clean(words[last]['word'])
+        if last != anchor and raw_last[:1].islower() and len(raw_last) >= 3:
+            accent = last
+    pf = 0.62 if not portrait else 1.0
+    sz_n = int(H * 0.050 * pf)
+    sz_k = int(H * 0.074 * pf)
+    sz_a = int(H * 0.056 * pf)
+    items = []
+    for i in idxs:
+        raw = clean(words[i]['word'])
+        if i == anchor:
+            up = raw.upper()
+            sz = S.fit(up, sz_k, int(W * 0.86), font=S.f_sans_b)
+            arr, tw, lets = S.text(up, sz, S.white, font=S.f_sans_b,
+                                   glow=True, per_letter=True, tracking=2)
+            items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'key',
+                          'letters': lets, 't': words[i]['start']})
+        elif i == accent:
+            cap = raw.lower().capitalize()
+            sz = S.fit(cap, sz_a, int(W * 0.5), font=S.f_script)
+            arr = rot_img(S.text(cap, sz, S.accent, font=S.f_script)[0], -7)
+            items.append({'i': i, 'arr': arr, 'w': arr.shape[1], 'role': 'accent',
+                          't': words[i]['start']})
+        else:
+            arr, tw = S.text(raw, sz_n, S.white, tracking=6, font=S.f_sans)
+            items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'norm',
+                          't': words[i]['start']})
+    # Inline-Fluss mit Umbruch, Zeilen unten ausgerichtet (gemeinsame Grundlinie)
+    max_w = int(W * 0.86)
+    x0 = int(W * 0.07)
+    space = int(W * 0.032)
+    gap = int(H * 0.014)
+    # Vorschub nach ECHTER Textbreite (nicht der Glow-gepolsterten Array-Breite),
+    # damit die Woerter eng wie in der Referenz stehen. Zentriert wird das
+    # (symmetrisch gepolsterte) Sprite - Textmitte == Array-Mitte.
+    for it in items:
+        it['adv'] = it['w'] if it.get('role') != 'accent' else it['arr'].shape[1]
+    rows = []
+    cur = []
+    cur_w = 0
+    for it in items:
+        aw = it['adv']
+        if cur and cur_w + space + aw > max_w:
+            rows.append(cur)
+            cur = []
+            cur_w = 0
+        cur.append(it)
+        cur_w += (space if len(cur) > 1 else 0) + aw
+    if cur:
+        rows.append(cur)
+    y = 0
+    for row in rows:
+        row_h = max(it['arr'].shape[0] for it in row)
+        x = x0
+        for it in row:
+            aw = it['adv']
+            hpx = it['arr'].shape[0]
+            it['cx'] = x + aw / 2.0
+            it['cy'] = y + row_h - hpx / 2.0      # unten ausgerichtet
+            x += aw + space
+        y += row_h + gap
+    total_h = max(y - gap, 1)
+    return items, total_h, anchor
+
+
 def letter_slices(arr, letters):
     """Zerlegt ein Wort-Sprite in Buchstaben-Streifen fuer kinetische Animation."""
     w = arr.shape[1]
@@ -4464,6 +4560,33 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     print("  Hoehepunkt-Variation: Motion aufgebrochen")
                 big_used.add(_sig)
             plans.append(p)
+        elif cfg['effects'].get('caption_flow', True):
+            # v97 Flow-Caption (Referenz-Look): Chunk baut sich INLINE auf,
+            # Anker-Wort gross+getippt+Glow, Abschlusswort kursiv-Akzent.
+            items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait)
+            # Referenz-Look: Block im OBEREN Drittel (nicht mittig ueber dem
+            # Gesicht). Bei Hochformat oben verankert, sonst zentriert.
+            zc = v_zone(start, end) if portrait else Z_MAIN
+            y0 = int(H * 0.13) if portrait else (zc - tot_h / 2.0)
+            for it in items:
+                it['cy'] += y0
+            ccam = 'none' if broll else next_side_cam()
+            sp = {'tpl': 'flow', 'front': items, 'start': start, 'end': end,
+                  'side': 0, 'ccam': ccam, 'target': (int(W * 0.07), zc),
+                  'broll': broll}
+            if anchor_i is not None:                 # leiser Tick auf den Anker
+                sp['flow'] = True
+                sp['flow_anchor'] = anchor_i
+                sp['flow_t'] = words[anchor_i]['start']
+            if face_pos is not None and not broll:
+                ax, ay, _ = face_pos(start, end)
+                sp['anchor'] = (ax, ay)
+            plans.append(sp)
+            if satz_offen and words[g[-1]]['word'].rstrip().endswith(('.', '!', '?')):
+                prev_was_keyword_sentence = False
+            elif not satz_offen:
+                prev_was_keyword_sentence = False
+            continue
         else:
             side, sx = pick_side(start, end, side_toggle)
             sx = int(sx)
@@ -5381,7 +5504,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         # Power-3-Momente halten 40ms extra, bevor sie loslassen.
         _a = p.get('arr') if 'arr' in p else p.get('f_arr')
         ah = _a.shape[0] if _a is not None else H * 0.06
-        x_dur = 0.20 + 0.12 * min(ah / (H * 0.15), 1.0)
+        # v97: Flow-Caption raeumt knackig, damit ein Satz weg ist, bevor der
+        # naechste an derselben Stelle steht (kein Doppel-Stack im Fluss).
+        x_dur = 0.15 if p['tpl'] == 'flow' else 0.20 + 0.12 * min(ah / (H * 0.15), 1.0)
         over = t - p['end']
         if p.get('power', 2) >= 3:
             over -= 0.04
@@ -5404,6 +5529,48 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                             opacity=min(_dtf / 0.4, 1) * g_out * aop_fl * 0.92,
                             refract=0.0, ripple=0.05, grain=1.6,
                             occ=None, blur=0.0)
+            continue
+        if p['tpl'] == 'flow':
+            # v97 Flow-Caption: Inline-Aufbau. Verbinder poppen weich rein, das
+            # Anker-Wort wird per Schreibmaschine enthuellt (Wipe ueber die
+            # letters), Kursiv-Akzent poppt. Personen-Tracking wie beim Stack.
+            fdx = fdy = 0.0
+            if cfg['effects'].get('tracking', True) and not p.get('broll') \
+                    and 'anchor' in p:
+                tgt = (face_xy[0] - p['anchor'][0], face_xy[1] - p['anchor'][1])
+                fp = p.setdefault('fpos', [0.0, 0.0])
+                fp[0] += 0.22 * (tgt[0] - fp[0])
+                fp[1] += 0.22 * (tgt[1] - fp[1])
+                lim = W * 0.09
+                fdx = max(-lim, min(fp[0] * 0.85, lim))
+                fdy = max(-lim * 0.6, min(fp[1] * 0.6, lim * 0.6))
+            for it in p['front']:
+                wd = words[it['i']]
+                dt = t - wd['start'] + 0.07          # Lese-Vorlauf
+                if dt < 0:
+                    continue
+                if it.get('role') == 'key' and it.get('letters'):
+                    n = len(it['letters'])
+                    reveal = ease_out(dt / (0.17 * (1 + 0.08 * hand_jitter(it['i']))))
+                    vis_px = None
+                    k_full = int(min(reveal * n, n))
+                    if k_full < n:
+                        frac = reveal * n - k_full
+                        l0, l1 = it['letters'][k_full]
+                        vis_px = (l0 + (l1 - l0) * frac) + 40
+                    paste(comp, it['arr'],
+                          it['cx'] + fdx - (0 if vis_px is None
+                                            else (it['arr'].shape[1] - vis_px) / 2),
+                          it['cy'] + fdy + x_dv * it['arr'].shape[0],
+                          W, H, scale=x_sc,
+                          opacity=g_out, crop_w=vis_px)
+                else:
+                    e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
+                    paste(comp, it['arr'],
+                          it['cx'] + fdx,
+                          it['cy'] + fdy + (1 - e) * H * 0.020 + x_dv * it['arr'].shape[0],
+                          W, H, scale=(0.86 + 0.14 * e) * x_sc,
+                          opacity=min(dt / 0.10, 1) * g_out)
             continue
         if p['tpl'] == 'stack':
             # Personen-Tracking: die Gruppe haengt an der Person und geht mit,

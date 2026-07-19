@@ -223,6 +223,19 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
     _big_i = 0                             # v96i: zaehlt grosse Momente fuer Variation
     kw_times = []                          # fuer den Anti-Matsch-Limiter der Stacks
     for p in plans:
+        if p.get('flow'):
+            # v97 Flow-Caption: leiser Tick auf das Anker-Wort (Schreibmaschine).
+            # Kein Riser/Boom - Filler-Text soll klingen, nicht dramatisieren.
+            _fa = p.get('flow_anchor')
+            if _fa is None:
+                continue
+            _ft = p.get('flow_t', words[_fa]['start'])
+            _t0, _ = snap(_ft)
+            _tick = V('tick') if 'tick' in bank else None
+            if _tick is not None:
+                place(_tick, _t0, 0.42 * local_gain(_t0))
+                n_placed += 1
+            continue
         if 'kw_i' not in p:
             continue
         t_raw = p.get('t0', words[p['kw_i']]['start'])   # Sofort-Hook: Sound ab Frame 1

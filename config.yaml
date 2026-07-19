@@ -56,6 +56,10 @@ effects:
   text_style: 3d
   finish: true
   density: akzente
+  caption_flow: true          # v97: Filler-Captions bauen sich inline auf
+                              # (Referenz-Look @migs.visuals) - Anker-Wort
+                              # gross+getippt+Glow, Abschlusswort kursiv-Akzent.
+                              # Dramatik-Momente (behind/cascade) bleiben.
   anim: true
   motion_blur: true
   intro_hook: true

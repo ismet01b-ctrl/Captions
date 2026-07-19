@@ -208,7 +208,12 @@ def _scenario_2c(clip, transcript, tmp):
                  if len(words[i]['word'].strip()) > 3 and len(words[i + 1]['word'].strip()) > 3),
                 None)
     if pair is not None:
-        json.dump({'keywords': [{'i': pair, 'n': 2, 'fx': 'ground', 'power': 2}]},
+        # Cache MIT gueltigem ref_fp (seit v96x Pflicht, sonst wird er verworfen
+        # und die Regie braucht die API - hier bewusst ohne API testen).
+        sys.path.insert(0, HERE)
+        import render as R
+        json.dump({'ref_fp': R._ref_fingerprint(),
+                   'keywords': [{'i': pair, 'n': 2, 'fx': 'ground', 'power': 2}]},
                   open(os.path.splitext(ph_src)[0] + '_regie3.json', 'w'))
         out7 = os.path.join(tmp, 'st_phrase.mp4')
         code, log = render(ph_src, transcript, out7,
@@ -369,13 +374,57 @@ def _scenario_logic(clip, transcript, tmp):
                          40: {'fx': 'behind', 'power': 2, 'n': 1}},
                         face_pos=lambda s, e: (960.0, 430.0, 220.0))
     early = sum(1 for p in pli if p['start'] < 15)
-    late = sum(1 for p in pli if p['start'] >= 15 and p['tpl'] == 'stack')
-    check('Hook-Intro dicht/duenn', early >= 8 and late == 0, f'{early} vorn, {late} Stacks hinten')
+    late = sum(1 for p in pli if p['start'] >= 15 and p['tpl'] in ('stack', 'flow'))
+    check('Hook-Intro dicht/duenn', early >= 8 and late == 0, f'{early} vorn, {late} Filler hinten')
 
-    # Personen-Follow: Stacks tragen Anker
-    stacks = [p for p in pli if p['tpl'] == 'stack']
-    check('Follow-Anker an Stacks',
-          bool(stacks) and all('anchor' in p or p.get('broll') for p in stacks))
+    # Personen-Follow: Filler-Captions (Flow/Stack) tragen Anker
+    fillers = [p for p in pli if p['tpl'] in ('stack', 'flow')]
+    check('Follow-Anker an Filler-Captions',
+          bool(fillers) and all('anchor' in p or p.get('broll') for p in fillers))
+
+    # v97 Flow-Caption: Default-Filler baut sich inline auf (Referenz-Look)
+    wf = [{'word': w, 'start': 1 + j * .32, 'end': 1.25 + j * .32}
+          for j, w in enumerate(['why', 'do', 'most', 'edits', 'feel', 'cheap'])]
+    gf = list(range(len(wf)))
+    itf, toth, anch = R.compose_flow(gf, wf, S, W_, H_, portrait=True)
+    roles_f = [it['role'] for it in itf]
+    check('Flow: Anker = laengstes Inhaltswort',
+          anch is not None and R.clean(wf[anch]['word']) == 'edits', str(anch))
+    check('Flow: genau ein Keyword', roles_f.count('key') == 1, str(roles_f))
+    check('Flow: Keyword traegt letters (Schreibmaschine)',
+          all(it.get('letters') for it in itf if it['role'] == 'key'))
+    check('Flow: Abschlusswort ist Kursiv-Akzent',
+          roles_f.count('accent') == 1 and itf[-1]['role'] == 'accent', str(roles_f))
+    # keine horizontale Ueberlappung innerhalb einer Zeile (nach Grundlinie)
+    _rows = {}
+    for it in itf:
+        _rows.setdefault(round(it['cy']), []).append(it)
+    _ovl = False
+    for _r in _rows.values():
+        _r = sorted(_r, key=lambda z: z['cx'])
+        for _a, _b in zip(_r, _r[1:]):
+            if _a['cx'] + _a['adv'] / 2 > _b['cx'] - _b['adv'] / 2 + 2:
+                _ovl = True
+    check('Flow: keine Wort-Ueberlappung in der Zeile', not _ovl)
+    # nur Verbinder -> kein erzwungenes Keyword
+    wf2 = [{'word': w, 'start': j * .3, 'end': j * .3 + .2}
+           for j, w in enumerate(['the', 'of', 'a', 'to'])]
+    _, _, anch2 = R.compose_flow(list(range(4)), wf2, S, W_, H_, portrait=True)
+    check('Flow: reine Verbinder ohne Keyword', anch2 is None)
+    # build_plans: Flag an -> tpl 'flow', Flag aus -> tpl 'stack'
+    cfg_fl = dict(cfg); cfg_fl['effects'] = dict(cfg['effects'], caption_flow=True)
+    cfg_st = dict(cfg); cfg_st['effects'] = dict(cfg['effects'], caption_flow=False)
+    pf_on = R.build_plans(wf, set(), cfg_fl, S, W_, H_, lambda s, e: True, {},
+                          face_pos=lambda s, e: (960.0, 430.0, 220.0))
+    pf_off = R.build_plans(wf, set(), cfg_st, S, W_, H_, lambda s, e: True, {},
+                           face_pos=lambda s, e: (960.0, 430.0, 220.0))
+    check('Flow-Flag an -> tpl flow',
+          any(p['tpl'] == 'flow' for p in pf_on) and not any(p['tpl'] == 'stack' for p in pf_on))
+    check('Flow-Flag aus -> tpl stack (Rueckfall)',
+          any(p['tpl'] == 'stack' for p in pf_off) and not any(p['tpl'] == 'flow' for p in pf_off))
+    _flowp = next((p for p in pf_on if p['tpl'] == 'flow' and p.get('flow')), None)
+    check('Flow-Plan traegt flow_anchor fuer SFX-Tick',
+          _flowp is not None and 'flow_anchor' in _flowp)
 
     # Editorial-Collage: Rollen Auftakt/Kern/Script
     wc = [{'word': w, 'start': 1 + j * .4, 'end': 1.3 + j * .4}

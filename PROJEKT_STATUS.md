@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v97: Flow-Caption-Effekt (Referenz-Look @migs.visuals) - Hybrid.**
+  Ismets Ziel-Referenzen (2 Videos) sind reine Typo-Choreografie, nicht Deko:
+  der Filler-Text baut sich INLINE Wort fuer Wort auf (stehend, ersetzt sich
+  nicht), mit Hierarchie im Stack - Verbinder in mittlerer Support-Sans, EIN
+  Anker-Wort gross+fett+GROSSBUCHSTABEN mit Glow (per Schreibmaschine enthuellt),
+  ein Abschlusswort kursiv (Playfair) in Akzentfarbe. Entscheidung HYBRID:
+  Filler-Captions fliessen im migs-Stil, die dramatischen KI-Keyword-Momente
+  (behind/cascade/Kamera-Crash) bleiben unangetastet - DouchkoVEs Signatur +
+  Referenz-Flow. Umsetzung: neue `compose_flow()` (Rollen/Layout mit Umbruch,
+  Grundlinie unten), neuer `tpl='flow'` im else-Zweig von build_plans (nur wenn
+  `effects.caption_flow: true`, sonst Rueckfall auf alten `stack`), Draw-Branch
+  in composite_frame (Wort-Reveal, Keyword-Wipe ueber die letters, Kursiv-Pop),
+  Block im OBEREN Drittel statt mittig ueberm Gesicht, knackiger Flow-Exit
+  (x_dur 0.15) damit ein Satz raeumt, bevor der naechste an derselben Stelle
+  steht. Sound: leiser Tick auf das Anker-Wort (sfx_engine, `flow`-Zweig, kein
+  Riser/Boom - Filler klingt, dramatisiert nicht). Nutzt die LOOK-Fonts +
+  Akzentfarbe (adaptiv). Auf echtem Talking-Head-Clip verifiziert (Frames).
+  Selftest 505/505 (Logic 495 inkl. 9 neue Flow-Tests, render1 6, 2a/2b 1,
+  2c 2) + GUI-Smoke OK. Nebenbei: render2c "Phrasen-Highlight" wurde
+  API-unabhaengig gemacht (Cache mit gueltigem ref_fp, wie beabsichtigt).
+  EHRLICH: Text im Demo ist Platzhalter - echtes Material zeigt Ismets KI-Texte;
+  Keyword-/Akzent-Wahl im Filler ist heuristisch (laengstes Inhaltswort). Echte
+  Wirkung auf Windows mit echtem Material + Sound-Pack pruefen.
 - **v96z: Behind-Wort lesbar + Referenz-LOOK wird kopiert.**
   (1) Lesbarkeits-Bug (bestand unabhaengig vom Lernen): ein behind-Wort, das
   schmaler ist als der Kopf (~1.7x Gesichtsbox inkl. Haare), verschwand komplett
