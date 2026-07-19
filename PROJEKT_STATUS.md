@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v95b: KI-Regie reagiert auf den Sound-Pegel.**
+  Wunsch: Captions/Regie/Motion sollen an der ECHTEN Stimme haengen, nicht nur
+  am Text. Neu: `_word_loudness()` misst den Sprech-Pegel pro Wort (RMS aus der
+  vorhandenen wav, 50ms-Fenster) und markiert die lautesten Substanz-Woerter
+  mit "!", die leisesten mit "~". Diese Marken stehen jetzt in der WORTLISTE,
+  die an GPT geht - plus eine Prompt-Regel AUDIO-DYNAMIK: laute Woerter =
+  starke Moment-Kandidaten, mehr power, wuchtigere Effekte/Anims (explosion,
+  zoom_punch, bruch); leise = ruhig (cascade, schweben, wenig power) oder kein
+  Moment. So sitzt die Caption-Wucht dort, wo die Stimme sie setzt. Der alte
+  `_audio_boost` (Power-Bump NACH der KI, +1 Stufe) bleibt als Sicherheitsnetz.
+  Additiv, kein Umbau: fehlt die wav, laeuft die Regie wie bisher. Selftest
+  433/433 (synthetische laut/leise-wav + Prompt-Check). Ehrlich: die Sound->
+  Effekt-Kopplung wirkt nur mit echtem Key + echtem Material sichtbar; Sandbox
+  prueft die Pegel-Messung und die Prompt-Verankerung, nicht den Geschmack.
 - **v95: Pre-Flow-Abrechnung repariert (Transkription ist gratis).**
   Frage von Ismet: "Kostet das Transkribieren Geld?" - Antwort: Nein, jetzt
   garantiert. Die Vorab-Transkription laeuft schon beim Datei-Auswaehlen

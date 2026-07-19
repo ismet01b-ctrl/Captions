@@ -1938,6 +1938,16 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   "outline" oder "cascade" (vorne, klar sichtbar). "behind" nur fuer ruhige,
   dramatische Hoehepunkte OHNE bewegte Animation. Kurz: soll man die Bewegung
   SEHEN, gehoert das Wort nach VORN, nicht hinter die Person.
+- AUDIO-DYNAMIK (der Sound entscheidet mit): In der Wortliste ist der ECHTE
+  Sprech-Pegel markiert - ein "!" hinter einem Wort heisst, der Sprecher wird
+  hier LAUT/betont (Stimmspitze), ein "~" heisst leise/zurueckgenommen. Koppel
+  deine Wahl daran: laute Woerter (!) sind starke Moment-Kandidaten - hoehere
+  "power", wuchtigere Effekte/Animationen (explosion, zoom_punch, bruch,
+  anstieg), sie tragen die Energie. Leise Woerter (~) bekommen ruhige,
+  zurueckhaltende Behandlung (cascade, schweben, kleine power) oder gar keinen
+  Moment. So sitzt die Wucht der Caption genau dort, wo auch die Stimme sie
+  setzt - das Video fuehlt sich echt an. Der Pegel ist ein starker Hinweis,
+  kein Zwang: ein inhaltlich schwaches lautes Fuellwort bleibt trotzdem tabu.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \
@@ -2137,6 +2147,61 @@ def _regie_validate(fx_map, words, model, key):
     except Exception as e:
         print(f"  Validator uebersprungen ({type(e).__name__})")
     return fx_map
+
+
+def _word_loudness(words, voice_wav_path):
+    """v95: Sprech-Pegel PRO WORT fuer die KI-Regie. Markiert die lautesten
+    Substanz-Woerter (!) und die leisesten (~), damit GPT Effekt/Motion/Wucht
+    an die ECHTE Stimme koppeln kann - nicht nur an den Text. Reiner RMS aus
+    der vorhandenen wav (50ms-Fenster), keine Extra-Modelle. Gibt
+    {wort_index: '!'|'~'} nur fuer auffaellige waehlbare Woerter zurueck; bei
+    fehlender/kaputter wav ein leeres dict (dann laeuft die Regie wie bisher)."""
+    out = {}
+    if not words or not voice_wav_path or not os.path.exists(voice_wav_path):
+        return out
+    try:
+        import wave
+        with wave.open(voice_wav_path, 'rb') as wf:
+            sr = wf.getframerate()
+            nch = wf.getnchannels()
+            sw = wf.getsampwidth()
+            raw = wf.readframes(wf.getnframes())
+        if sw != 2:
+            return out
+        samp = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        if nch > 1:
+            samp = samp.reshape(-1, nch).mean(axis=1)
+        win = max(1, sr // 20)               # 50ms-Fenster (feiner als _audio_boost)
+        n_win = len(samp) // win
+        if n_win < 4:
+            return out
+        rms = np.sqrt(np.array([np.mean(samp[i * win:(i + 1) * win] ** 2)
+                                for i in range(n_win)], dtype=np.float32) + 1e-9)
+        vals = {}
+        for i, w in enumerate(words):
+            raw_w = clean(w['word'])
+            if raw_w.lower() in STOPWORDS or not raw_w.strip():
+                continue                     # nur waehlbare Substanz-Woerter
+            s = float(w.get('start', 0.0))
+            e = float(w.get('end', s + 0.3))
+            k0 = max(0, int(s * 20) - 1)
+            k1 = min(n_win, int(e * 20) + 3)  # bis +150ms Nachhall
+            band = rms[k0:k1]
+            if band.size:
+                vals[i] = float(band.max())
+        if len(vals) < 4:
+            return out
+        arr = np.array(list(vals.values()), dtype=np.float32)
+        hi = float(np.quantile(arr, 0.80))    # top 20% = laut
+        lo = float(np.quantile(arr, 0.30))    # untere 30% = leise
+        for i, v in vals.items():
+            if v >= hi:
+                out[i] = '!'
+            elif v <= lo:
+                out[i] = '~'
+    except Exception as e:
+        print(f"  Wort-Lautstaerke uebersprungen ({type(e).__name__})")
+    return out
 
 
 def _audio_boost(fx_map, words, voice_wav_path):
@@ -2393,6 +2458,9 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     lang_hint = '' if language in ('de', 'auto', None, '') else \
         f"SPRACHE: Das Transkript ist nicht deutsch ({language}). " \
         f"Wende die Regeln sinngemaess auf diese Sprache an.\n\n"
+    # v95: echten Sprech-Pegel pro Wort holen, damit die KI Effekt/Wucht am
+    # Sound koppelt (! = laut/betont, ~ = leise). Fehlt die wav, bleibt es leer.
+    loud = _word_loudness(words, voice_wav) if voice_wav else {}
     merged = {}
     for ci, (a, b, sel) in enumerate(chunks):
         part = words[a:b]
@@ -2410,10 +2478,14 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
             raw = clean(w['word'])
             if raw.lower() in STOPWORDS or not raw.strip():
                 continue
-            wl_toks.append(f"[{i}]{raw}")
+            wl_toks.append(f"[{i}]{raw}{loud.get(i, '')}")   # v95: Pegel-Marke
+        pegel_hint = ('\n\nPEGEL: "!" = hier wird der Sprecher LAUT/betont '
+                      '(Stimmspitze), "~" = leise/zurueckgenommen. Koppel '
+                      'Effekt und Wucht daran (siehe AUDIO-DYNAMIK).'
+                      if loud else '')
         listing = lang_hint + part_hint + 'TRANSKRIPT:\n' + prose + \
                   '\n\nWORTLISTE (nur waehlbare Substanz-Woerter, ' \
-                  'Fuellwoerter wurden entfernt):\n' + ' '.join(wl_toks)
+                  'Fuellwoerter wurden entfernt):\n' + ' '.join(wl_toks) + pegel_hint
         try:
             r = requests.post(
                 'https://api.openai.com/v1/chat/completions',

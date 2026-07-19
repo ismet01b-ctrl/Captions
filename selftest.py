@@ -2155,6 +2155,37 @@ def _scenario_lang(tmp):
     check('_oai_json gpt-5: max_completion_tokens, kein temperature',
           b5.get('max_completion_tokens') == 800 and 'temperature' not in b5
           and 'max_tokens' not in b5)
+    # v95: Sprech-Pegel pro Wort -> die KI-Regie reagiert auf den Sound.
+    import wave as _wave, tempfile as _tf
+    import numpy as _np
+    sr = 44100
+    segs = [('rocket', 0.0, 0.4, 0.85), ('whisper', 0.6, 1.0, 0.02),
+            ('boom', 1.2, 1.6, 0.90), ('murmur', 1.8, 2.2, 0.02),
+            ('crash', 2.4, 2.8, 0.88)]
+    buf = _np.zeros(int(3.0 * sr), dtype=_np.float32)
+    tone = lambda n, a: a * _np.sin(2 * _np.pi * 180 * _np.arange(n) / sr)
+    for _, s, e, amp in segs:
+        i0, i1 = int(s * sr), int(e * sr)
+        buf[i0:i1] = tone(i1 - i0, amp)
+    wpath = os.path.join(_tf.gettempdir(), 'dve_loud.wav')
+    with _wave.open(wpath, 'wb') as wf:
+        wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
+        wf.writeframes((buf * 32767).astype('<i2').tobytes())
+    lwords = [{'word': w, 'start': s, 'end': e} for w, s, e, _ in segs]
+    lmap = R._word_loudness(lwords, wpath)
+    loud_idx = {i for i, (_, _, _, a) in enumerate(segs) if a > 0.5}
+    soft_idx = {i for i, (_, _, _, a) in enumerate(segs) if a < 0.1}
+    got_loud = {i for i, m in lmap.items() if m == '!'}
+    got_soft = {i for i, m in lmap.items() if m == '~'}
+    check('Sprech-Pegel: laute Woerter als "!" markiert (KI reagiert auf Sound)',
+          got_loud and got_loud.issubset(loud_idx) and got_soft.issubset(soft_idx)
+          and got_soft, f'laut={got_loud} leise={got_soft}')
+    check('Sprech-Pegel: ohne wav leer (Regie laeuft wie bisher)',
+          R._word_loudness(lwords, None) == {}
+          and R._word_loudness(lwords, '/nope.wav') == {})
+    check('Regie-Prompt: AUDIO-DYNAMIK koppelt Effekt an Pegel',
+          'AUDIO-DYNAMIK' in _r and 'Stimmspitze' in _r)
+    os.remove(wpath)
 
 
 def _scenario_premium(tmp):
