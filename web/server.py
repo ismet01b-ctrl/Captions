@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96x-refwired'
+DVE_BUILD = 'v96y-refvisible'
 
 
 @app.middleware('http')
@@ -1416,6 +1416,17 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
         ln = line.strip()
         # letzte 8 nicht-leeren Zeilen als log_tail
         tail = [x for x in log[-40:] if x.strip()][-8:]
+
+        # v96y: Referenz-Beweis in den Job-State - der User sieht am fertigen
+        # Job, ob (und wie viele) Stil-Referenzen den Schnitt gesteuert haben.
+        if ln.startswith('Stil-Referenzen:'):
+            try:
+                _m = re.search(r'(\d+)\s+aktiv', ln)
+                set_state(jid, stil_refs=int(_m.group(1)) if _m else 0)
+            except Exception:
+                pass
+        elif ln.startswith('Stil-Anker:'):
+            set_state(jid, stil_anker=ln.split('Stil-Anker:', 1)[1].strip())
 
         phase = None
         progress = None

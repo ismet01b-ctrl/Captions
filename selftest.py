@@ -2211,7 +2211,8 @@ def _scenario_lang(tmp):
     _rb = R._load_regie_reference()
     check('Stil-Referenzen: regie_reference.json wird als Prompt-Block geladen',
           isinstance(_rb, str) and 'STIL-REFERENZEN' in _rb
-          and 'kopiere aber KEINE Woerter' in _rb)
+          and 'Kopiere NIE deren Woerter' in _rb
+          and 'VERBINDLICH' in _rb)
     check('Stil-Referenzen: fehlende/leere Datei -> kein Block (kein Crash)',
           R._load_regie_reference.__code__.co_argcount == 0
           and 'ref_block + lang_hint' in _r)
@@ -2266,6 +2267,36 @@ def _scenario_lang(tmp):
     check('Stil-Referenzen: Anwendung wird geloggt (aktiv/keine)',
           'Stil-Referenzen: {_n_refs} aktiv' in _r.replace('f"', '"')
           or 'aktiv - fliessen in die KI-Regie ein' in _r)
+    # (d) v96y: Referenz-Parameter wirken DETERMINISTISCH auf die Config
+    _refd = _tfx.mkdtemp(prefix='dve_refy_')
+    _old_dd2 = os.environ.get('DVE_DATA')
+    os.environ['DVE_DATA'] = _refd
+    try:
+        json.dump([{'name': 'A', 'beispiel': 'x',
+                    'params': {'words_per_group': 2, 'min_gap_seconds': 4,
+                               'hook_strength': 0.9, 'wucht': 'ruhig'}}],
+                  open(os.path.join(_refd, 'regie_reference.json'), 'w'))
+        _cfgy = {'effects': {'words_per_group': 3, 'words_per_group_max': 5,
+                             'hook_strength': 0.5, 'sfx_volume': 0.6},
+                 'keywords': {'min_gap_seconds': 6},
+                 'camera': {'strength': 0.7}}
+        _line = R._apply_reference_params(_cfgy)
+    finally:
+        if _old_dd2 is None:
+            os.environ.pop('DVE_DATA', None)
+        else:
+            os.environ['DVE_DATA'] = _old_dd2
+        shutil.rmtree(_refd, ignore_errors=True)
+    check('Stil-Anker: Parameter wirken deterministisch auf die Config',
+          _cfgy['effects']['words_per_group'] == 2
+          and _cfgy['keywords']['min_gap_seconds'] == 4.0
+          and _cfgy['effects']['hook_strength'] == 0.9
+          and _cfgy['camera']['strength'] < 0.7          # 'ruhig' senkt Kamera
+          and _line.startswith('Stil-Anker:'), _line)
+    check('Stil-Anker: im Render-Main verdrahtet + Server zeigt Beweis im Job',
+          '_apply_reference_params(cfg)' in _r
+          and "startswith('Stil-Referenzen:')" in
+          open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read())
     # v94: sichtbare Aktion-Animation darf nicht hinter der Person verschwinden
     words_v = [{'word': 'explodes', 'start': 0.0, 'end': 0.4}]
     reg_v = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":3,"anim":"explosion"}]}'

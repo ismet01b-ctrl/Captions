@@ -3246,9 +3246,10 @@ async function loadDirectorReport() {
   if (!box) return;
   box.classList.add('hidden');
   try {
-    const [moms, labels] = await Promise.all([
+    const [moms, labels, st] = await Promise.all([
       (await fetch('/api/moments/' + State.jid)).json(),
-      (await fetch('/api/fx_labels')).json()]);
+      (await fetch('/api/fx_labels')).json(),
+      fetch('/api/status/' + State.jid).then(r => r.json()).catch(() => ({}))]);
     const L = Object.fromEntries(labels);
     const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
     const act = (Array.isArray(moms) ? moms : []).filter(m => m.aktiv !== false);
@@ -3263,11 +3264,18 @@ async function loadDirectorReport() {
           ${esc(L[m.fx] || m.fx)}${m.anim ? ' · ' + esc(m.anim) : ''}${m.power >= 3 ? ' · <b style="color:var(--acc2)">peak</b>' : ''}
         </span>
       </div>`).join('');
+    // v96y: Beweis, ob (und wie) gelernte Stil-Referenzen den Schnitt steuerten
+    let refLine = '';
+    if (typeof st.stil_refs === 'number') {
+      refLine = st.stil_refs > 0
+        ? `<p style="font-size:12px; color:#6dd48a; margin:-4px 0 8px;">Style anchor: ${st.stil_refs} learned reference${st.stil_refs > 1 ? 's' : ''} shaped this edit${st.stil_anker ? ' (' + esc(st.stil_anker) + ')' : ''}.</p>`
+        : `<p style="font-size:12px; color:var(--mut2); margin:-4px 0 8px;">No learned style references were active for this render.</p>`;
+    }
     box.innerHTML = `
       <h4 style="font-size:14px; font-weight:800; margin-bottom:2px;">Director's cut</h4>
       <p style="font-size:12.5px; color:var(--mut); margin-bottom:8px;">
         The moments our AI direction picked, and what it did with them.
-        Want different ones? Use "Edit moments".</p>${rows}`;
+        Want different ones? Use "Edit moments".</p>${refLine}${rows}`;
     box.classList.remove('hidden');
   } catch (e) {}
 }

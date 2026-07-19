@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96y: Referenz-Einfluss SICHTBAR gemacht (deterministisch + UI-Beweis).**
+  "Sieht 1:1 aus wie vorher" hatte nach v96x zwei moegliche Restursachen: der
+  Prompt-Hinweis ist fuer GPT zu weich (deterministisches gpt-5 trifft bei
+  aehnlichem Anker dieselbe Wahl), und niemand konnte SEHEN, ob Referenzen
+  ueberhaupt aktiv waren. Beides behoben: (1) Beim Stil-Lernen extrahiert ein
+  zweiter JSON-Call MESSBARE Parameter (words_per_group, min_gap_seconds,
+  hook_strength, wucht) und speichert sie am Referenz-Eintrag ('params').
+  `_apply_reference_params` wendet den Mittelwert der neuesten Referenzen
+  DETERMINISTISCH auf die Config an (Chunk-Laenge, Highlight-Dichte, Hook,
+  wucht -> Kamera/SFX-Pegel, gedeckelt) - der Effekt ist sichtbar, egal wie
+  GPT den Prompt gewichtet. Log-Zeile "Stil-Anker: chunks=..., gap=..., ...".
+  (2) UI-Beweis: der Server parst "Stil-Referenzen: N aktiv"/"Stil-Anker: ..."
+  aus dem Render-Log in den Job-State; der Director's Cut zeigt "Style anchor:
+  N learned reference(s) shaped this edit (...)" bzw. "No learned style
+  references were active" - nie wieder raten. (3) Prompt-Anweisung verschaerft
+  (VERBINDLICH fuer Dichte/Chunks/Wucht/Hook), Fingerprint deckt jetzt die
+  ganze Referenz-Datei ab (auch Parameter-Aenderungen invalidieren den
+  Regie-Cache). WICHTIG: bestehende Referenzen haben noch keine 'params' -
+  einmal NEU lernen, dann greift der deterministische Anker.
+  Selftest 483/483 + Render green.
 - **v96x: Voll-Audit "KI wendet Gelerntes nicht an" - 4 Bruchstellen gefixt.**
   Kompletter Ketten-Audit (tcache, Presets/Looks, Referenz-Kette, Docker/Env)
   per 4 parallelen Quelltext-Pruefungen. Befund: Looks sind unschuldig (kein

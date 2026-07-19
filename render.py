@@ -2433,6 +2433,11 @@ def analyze_reference_video(video_path, name=None, model='gpt-4o',
         desc = desc + "\n" + aud
     entry = {'name': (name or os.path.splitext(os.path.basename(video_path))[0])[:60],
              'beispiel': desc}
+    # v96y: MESSBARE Parameter aus der Beschreibung ziehen - die wirken
+    # deterministisch auf die Render-Config (sichtbar), nicht nur als Prompt.
+    params = _style_params_from_desc(desc, model, key)
+    if params:
+        entry['params'] = params
     if save:
         path = _reference_store_path()
         try:
@@ -2496,17 +2501,134 @@ def _load_regie_reference():
         lines.append(f"- {nm + ': ' if nm else ''}{bsp}")
     if not lines:
         return ''
-    return ("STIL-REFERENZEN (aktuelle, starke Videos - richte Geschmack, Dichte "
-            "und Wucht danach aus, kopiere aber KEINE Woerter):\n"
+    return ("STIL-REFERENZEN (aktuelle, starke Videos): Diese Referenzen sind "
+            "VERBINDLICH fuer Dichte, Chunk-Laenge, Wucht und Hook-Verhalten - "
+            "richte deine Auswahl messbar daran aus und weiche nur ab, wo harte "
+            "Regeln (Sperrliste, Sichtbarkeit) es verlangen. Kopiere NIE deren "
+            "Woerter, nur den Stil:\n"
             + '\n'.join(lines) + "\n\n")
 
 
+def _style_params_from_desc(desc, model='gpt-4o', key=None):
+    """v96y: extrahiert aus der Prosa-Stilbeschreibung MESSBARE Regie-Parameter
+    (JSON-Call, billig, ohne Vision). Diese Parameter wirken deterministisch auf
+    die Render-Config - so ist der Referenz-Einfluss SICHTBAR, nicht nur ein
+    weicher Prompt-Hinweis. Fehlertolerant: {} bei jedem Problem."""
+    key = key or os.environ.get('OPENAI_API_KEY')
+    if not key or not desc:
+        return {}
+    import requests
+    try:
+        r = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}'},
+            json=_oai_json(model, [{'role': 'user', 'content':
+                "Extrahiere aus dieser Caption-Stilbeschreibung die Parameter als "
+                "json: {\"words_per_group\": <1-5, Woerter pro Caption>, "
+                "\"min_gap_seconds\": <3-15, Sekunden zwischen Highlights - "
+                "hohe Dichte = kleiner Wert>, \"hook_strength\": <0.0-1.0, wie "
+                "aggressiv der Anfang ist>, \"wucht\": \"ruhig\"|\"normal\"|"
+                "\"wuchtig\"}. Nur das JSON.\n\nBESCHREIBUNG:\n" + desc}],
+                           max_toks=150, temperature=0.0),
+            timeout=60)
+        r.raise_for_status()
+        data = json.loads(r.json()['choices'][0]['message']['content'])
+        out = {}
+        try:
+            out['words_per_group'] = min(max(int(data.get('words_per_group')), 1), 5)
+        except Exception:
+            pass
+        try:
+            out['min_gap_seconds'] = min(max(float(data.get('min_gap_seconds')), 3.0), 15.0)
+        except Exception:
+            pass
+        try:
+            out['hook_strength'] = min(max(float(data.get('hook_strength')), 0.0), 1.0)
+        except Exception:
+            pass
+        if str(data.get('wucht', '')).lower() in ('ruhig', 'normal', 'wuchtig'):
+            out['wucht'] = str(data['wucht']).lower()
+        return out
+    except Exception as e:
+        print(f"  Stil-Parameter uebersprungen ({type(e).__name__})")
+        return {}
+
+
+def _reference_params():
+    """v96y: gemittelte Stil-Parameter der neuesten Referenzen (die 'params'
+    tragen). {} wenn keine vorhanden - dann bleibt die Config unangetastet."""
+    path = _reference_store_path()
+    if not os.path.exists(path):
+        path = os.path.join(HERE, 'regie_reference.json')
+    try:
+        refs = json.load(open(path, encoding='utf-8'))
+    except Exception:
+        return {}
+    if not isinstance(refs, list):
+        return {}
+    ps = [r.get('params') for r in refs[-6:]
+          if isinstance(r, dict) and isinstance(r.get('params'), dict)]
+    if not ps:
+        return {}
+    out = {}
+    for k in ('words_per_group', 'min_gap_seconds', 'hook_strength'):
+        vals = [p[k] for p in ps if isinstance(p.get(k), (int, float))]
+        if vals:
+            out[k] = sum(vals) / len(vals)
+    wu = [p.get('wucht') for p in ps if p.get('wucht')]
+    if wu:
+        out['wucht'] = max(set(wu), key=wu.count)
+    return out
+
+
+def _apply_reference_params(cfg):
+    """v96y: wendet die Referenz-Parameter DETERMINISTISCH auf die Config an -
+    Chunk-Laenge, Highlight-Dichte, Hook-Aggressivitaet, Wucht. Der Effekt ist
+    damit sichtbar/messbar, unabhaengig davon wie stark GPT den Prompt-Hinweis
+    gewichtet. Gibt eine Log-Zeile zurueck (oder '')."""
+    p = _reference_params()
+    if not p:
+        return ''
+    parts = []
+    if 'words_per_group' in p:
+        v = int(round(p['words_per_group']))
+        cfg['effects']['words_per_group'] = v
+        cfg['effects']['words_per_group_max'] = max(v + 2, 3)
+        parts.append(f"chunks={v}")
+    if 'min_gap_seconds' in p:
+        v = round(float(p['min_gap_seconds']), 1)
+        cfg['keywords']['min_gap_seconds'] = v
+        parts.append(f"gap={v}s")
+    if 'hook_strength' in p:
+        v = round(float(p['hook_strength']), 2)
+        cfg['effects']['hook_strength'] = v
+        parts.append(f"hook={v}")
+    if p.get('wucht'):
+        w = p['wucht']
+        # Wucht wirkt auf Kamera-Staerke + SFX-Pegel (gedeckelt, kein Extrem)
+        if w == 'wuchtig':
+            cfg['camera']['strength'] = min(float(cfg['camera'].get('strength', 0.7)) + 0.15, 1.0)
+            cfg['effects']['sfx_volume'] = min(float(cfg['effects'].get('sfx_volume', 0.6)) + 0.1, 1.0)
+        elif w == 'ruhig':
+            cfg['camera']['strength'] = max(float(cfg['camera'].get('strength', 0.7)) - 0.2, 0.2)
+            cfg['effects']['sfx_volume'] = max(float(cfg['effects'].get('sfx_volume', 0.6)) - 0.15, 0.2)
+        parts.append(f"wucht={w}")
+    return 'Stil-Anker: ' + ', '.join(parts) if parts else ''
+
+
 def _ref_fingerprint():
-    """v96x: Fingerprint des EFFEKTIVEN Referenz-Blocks. Steht im Regie-Cache
-    (_regie3.json) - aendert sich der Block (Stil gelernt/geloescht), ist der
-    Cache ungueltig und die KI plant neu mit den aktuellen Referenzen."""
+    """v96x/y: Fingerprint der EFFEKTIVEN Referenz-Datei (Block + Parameter).
+    Steht im Regie-Cache (_regie3.json) - aendert sich irgendwas am Gelernten,
+    ist der Cache ungueltig und die KI plant neu mit den aktuellen Referenzen."""
     import hashlib
-    return hashlib.md5(_load_regie_reference().encode('utf-8')).hexdigest()
+    path = _reference_store_path()
+    if not os.path.exists(path):
+        path = os.path.join(HERE, 'regie_reference.json')
+    try:
+        raw = open(path, 'rb').read()
+    except Exception:
+        raw = b''
+    return hashlib.md5(raw).hexdigest()
 
 
 def parse_regie(text, words, language='de'):
@@ -5632,6 +5754,13 @@ def main():
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config, encoding='utf-8'))
+    # v96y: gelernte Stil-Referenzen wirken DETERMINISTISCH auf die Config
+    # (Chunk-Laenge, Highlight-Dichte, Hook, Wucht) - zusaetzlich zum Prompt.
+    # So ist der Referenz-Einfluss sichtbar, egal wie GPT den Hinweis gewichtet.
+    if not args.transcribe_only:
+        _anker = _apply_reference_params(cfg)
+        if _anker:
+            print(_anker)
     global MOTION_BLUR, BEAT_SYNC, PERSON_SHADOW
     MOTION_BLUR = bool(cfg.get('effects', {}).get('motion_blur', True))
     BEAT_SYNC = float(cfg.get('effects', {}).get('beat_sync', 0.7))
