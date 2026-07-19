@@ -2054,6 +2054,15 @@ def _scenario_security(tmp):
     check('_video_hash: gleiche Datei -> gleicher Hash',
           SV._video_hash(pa) == ha)
     os.remove(pa); os.remove(pb)
+    # 17) v95 Pre-Flow-Abrechnung: Vorab-Transkription (mode 'pre') bucht NICHTS
+    # ab (nur Balance-Check), abgebucht wird erst atomar in render_start -
+    # idempotent gegen Doppel-Klick ueber _render_charged. Kein Gratis-Render,
+    # kein Doppel-Abzug.
+    check('Pre-Upload transkribiert gratis, full/analyze reservieren atomar',
+          "if mode == 'pre':" in _src
+          and 'elif not _reserve_credits(uid, need, jid):' in _src)
+    check('render_start reserviert atomar + idempotent (kein Doppel-Abzug)',
+          'if not _render_charged(uid, jid) and not _reserve_credits(uid, need, jid):' in _src)
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

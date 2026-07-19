@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v95: Pre-Flow-Abrechnung repariert (Transkription ist gratis).**
+  Frage von Ismet: "Kostet das Transkribieren Geld?" - Antwort: Nein, jetzt
+  garantiert. Die Vorab-Transkription laeuft schon beim Datei-Auswaehlen
+  (`mode: 'pre'`), waehrend der User noch Presets einstellt. Bug: der Upload
+  buchte fuer JEDEN eingeloggten Modus atomar ab - auch fuer 'pre'. Wer ein
+  Video auswaehlte und dann abbrach, verlor Guthaben; und `render_start`
+  scheiterte danach am Balance-Check (Guthaben war schon weg). Fix: 'pre'
+  prueft nur noch, ob genug Guthaben DA ist (kein Prewarming fuer 0-Credit-
+  User, spart Whisper-Kosten), bucht aber NICHTS ab. Abgebucht wird erst
+  atomar in `render_start` (der echte Render-Klick) - idempotent gegen
+  Doppel-Klick/Retry ueber `_render_charged` (kein Doppel-Abzug), bei
+  Render-Fehler erstattet `_maybe_refund`. Kein Gratis-Render-Loch, keine
+  Falsch-Abbuchung. Selftest 430/430 (2 neue Abrechnungs-Checks). Ehrlich:
+  Der Client-Fast-Path (Upload+Transkription beim Auswaehlen -> beim Render
+  nur noch `render_start`) existiert seit v83; v95 macht die Geld-Logik
+  dahinter korrekt.
 - **v94: GPT-5-Regie, Hash-Kollisions-Fix, Retention-Psychologie, UI-Politur.**
   Root cause "Effekte kommen nicht": `_video_hash` las nur Anfang+Ende der
   Datei - zwei VERSCHIEDENE Clips teilten denselben Transkript-Cache (deutscher

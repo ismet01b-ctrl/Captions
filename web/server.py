@@ -712,7 +712,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v92-sec2'
+DVE_BUILD = 'v95-preflow'
 
 
 @app.middleware('http')
@@ -2129,10 +2129,26 @@ async def upload(request: Request, datei: UploadFile = File(...),
     if u:
         uid = u['id']
         need = cost_seconds(dur)
+        # v95: Vorab-Transkription (mode 'pre') kostet NICHTS. Sie laeuft schon,
+        # waehrend der User noch Presets einstellt - abgebucht wird erst beim
+        # echten Render (/api/render_start reserviert dann atomar). Hier nur
+        # pruefen, dass ueberhaupt genug Guthaben DA ist - sonst lohnt das
+        # Prewarming nicht (der User koennte eh nicht rendern) und wir sparen
+        # Ismets Whisper-Kosten.
+        if mode == 'pre':
+            if u['balance_sec'] < need:
+                shutil.rmtree(d, ignore_errors=True)
+                have = credits_of(u['balance_sec'])
+                fehlt = credits_of(need) - have
+                raise HTTPException(
+                    402,
+                    f"Not enough credits (video costs {credits_of(need)} "
+                    f"credit{'s' if credits_of(need) != 1 else ''}, you have "
+                    f"{have}). Missing {max(1, fehlt)} - please top up.")
         # v92: ATOMAR reservieren statt nur pruefen (schliesst den Race, in dem
         # gleichzeitige Uploads mehrfach denselben Credit ausgeben). Klappt es
         # nicht, ist zu wenig Guthaben da. Bei Render-Fehler wird erstattet.
-        if not _reserve_credits(uid, need, jid):
+        elif not _reserve_credits(uid, need, jid):
             shutil.rmtree(d, ignore_errors=True)
             have = credits_of(u['balance_sec'])
             fehlt = credits_of(need) - have
@@ -2192,14 +2208,19 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
     j['cfg_overrides'] = overrides
     if u and mode == 'full':
         need = cost_seconds(j.get('dauer', 0))
-        if u['balance_sec'] < need:
-            fehlt = credits_of(need) - credits_of(u['balance_sec'])
+        # v95: Das ist der Abbuch-Punkt des Pre-Flows. Der Upload (mode 'pre')
+        # hat NUR transkribiert, nichts abgebucht - erst hier wird atomar
+        # reserviert. Idempotent gegen Doppel-Klick/Retry ueber den Ledger-
+        # Eintrag 'Render {jid}': war schon reserviert, nicht doppelt ziehen.
+        # Bei Render-Fehler erstattet _maybe_refund.
+        if not _render_charged(uid, jid) and not _reserve_credits(uid, need, jid):
+            have = credits_of(u['balance_sec'])
+            fehlt = credits_of(need) - have
             raise HTTPException(
                 402,
                 f"Not enough credits (video costs {credits_of(need)} "
                 f"credit{'s' if credits_of(need) != 1 else ''}, you have "
-                f"{credits_of(u['balance_sec'])}). "
-                f"Missing {max(1, fehlt)} - please top up.")
+                f"{have}). Missing {max(1, fehlt)} - please top up.")
     if j.get('status') in ('wartet', 'laeuft'):
         # Pre-Transkription laeuft noch: Auftrag hinterlegen, der Worker
         # reiht danach selbst ein. Race-sicher ueber atomares dict.pop
