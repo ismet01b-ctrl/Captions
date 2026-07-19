@@ -2124,6 +2124,18 @@ def _scenario_lang(tmp):
     check('Regie-Prompt: Selbstbezug-Regel (Captions hoeren zu)',
           'SELBSTBEZUG AUF DIE CAPTIONS' in _r
           and 'meine Captions explodieren' in _r)
+    # v94: sichtbare Aktion-Animation darf nicht hinter der Person verschwinden
+    words_v = [{'word': 'explodes', 'start': 0.0, 'end': 0.4}]
+    reg_v = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":3,"anim":"explosion"}]}'
+    out_v = R.parse_regie(reg_v, words_v, 'en')
+    check('Sichtbarkeit: bewegte Aktion (explosion) nicht "behind" -> nach vorn',
+          out_v and out_v[0]['anim'] == 'explosion' and out_v[0]['fx'] != 'behind',
+          str(out_v))
+    # ruhige Anim (gewicht) darf hinter der Person bleiben
+    reg_g = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":2,"anim":"gewicht"}]}'
+    out_g = R.parse_regie(reg_g, words_v, 'en')
+    check('Sichtbarkeit: ruhige Anim (gewicht) bleibt behind',
+          out_g and out_g[0]['fx'] == 'behind')
     # v94: Modell-kompatibler Request-Body (gpt-5 braucht max_completion_tokens,
     # kein temperature; gpt-4o das Alte).
     b4 = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 800, 0.2)

@@ -195,6 +195,12 @@ ANIM_LIST = ('glitch', 'puls', 'welle', 'zittern', 'neon', 'schub', 'bruch',
              'kippen', 'explosion', 'magnet', 'wackel', 'regen', 'zoom_punch',
              'rutsche', 'stempel')
 
+# v94: Animationen mit GROSSER, sichtbarer Bewegung. Hinter der Person
+# ("behind") gehen sie unter - solche Momente werden nach vorn geholt.
+_VISIBLE_ANIM = frozenset((
+    'explosion', 'bruch', 'sturz', 'anstieg', 'spur', 'zoom_punch',
+    'regen', 'magnet', 'stempel', 'kippen', 'wackel', 'rutsche'))
+
 # Bewegungsunschaerfe global (aus config.yaml gesetzt). Sie ist der groesste
 # einzelne Qualitaetsunterschied: ohne sie springt Text von Frame zu Frame und
 # wirkt aufgeklebt - mit ihr sitzt er im Bild.
@@ -1916,6 +1922,13 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   "bruch", verschwinden -> "schwund") - sofern es zum Moment passt. Das ist der
   staerkste Beweis, dass das Video lebt: der Zuschauer sieht sofort, die
   Captions HOEREN zu.
+- SICHTBARKEIT VOR VERSTECKEN: Ein Wort, dessen ANIMATION der Punkt ist (es
+  soll explodieren, zerbrechen, fliegen, stuerzen), darf NICHT fx "behind" sein
+  - hinter der Person und gedimmt sieht man den Effekt nicht. Waehle dann eine
+  SICHTBARE Platzierung: "ground" (grosses Statement, liegt frei im Bild),
+  "outline" oder "cascade" (vorne, klar sichtbar). "behind" nur fuer ruhige,
+  dramatische Hoehepunkte OHNE bewegte Animation. Kurz: soll man die Bewegung
+  SEHEN, gehoert das Wort nach VORN, nicht hinter die Person.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \
@@ -2021,6 +2034,11 @@ def parse_regie(text, words, language='de'):
                     anim = str(item.get('anim', '')).strip().lower()
                     if anim in ANIM_LIST:
                         entry['anim'] = anim
+                        # v94: Sichtbarkeit erzwingen (kein Anim-Zwang, nur
+                        # Platzierung). Eine bewegte Aktion hinter der Person
+                        # ("behind") sieht man nicht -> nach vorn holen.
+                        if anim in _VISIBLE_ANIM and entry['fx'] == 'behind':
+                            entry['fx'] = 'outline'
                     emo = str(item.get('emoji', '')).strip()
                     # nur echte Emoji-Bereiche zulassen, kein Text/HTML
                     if emo and 1 <= len(emo) <= 4 and any(
