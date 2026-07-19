@@ -38,6 +38,9 @@ from fastapi.staticfiles import StaticFiles
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 DATA = os.environ.get('DVE_DATA', os.path.join(HERE, 'data'))
+# v96p: Besitzer-Konto. Nur dieses Konto sieht/bedient die Stil-Referenzen
+# (global wirksam). Ueberschreibbar per DVE_OWNER.
+OWNER_EMAIL = os.environ.get('DVE_OWNER', 'ismet-01_b@hotmail.de').strip().lower()
 JOBS_DIR = os.path.join(DATA, 'jobs')
 CODES_FILE = os.path.join(DATA, 'codes.json')
 USERS_DB = os.path.join(DATA, 'users.db')
@@ -712,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96o-refui'
+DVE_BUILD = 'v96p-owneronly'
 
 
 @app.middleware('http')
@@ -1813,6 +1816,7 @@ def api_me(request: Request):
             'created_at': int(u['created_at']),
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified']),
             'renders': rc, 'purchased': _has_purchased(u['id']),
+            'is_owner': str(u['email']).strip().lower() == OWNER_EMAIL,
             'free_reset_days': days_in_month - lt.tm_mday + 1}
 
 
@@ -2606,6 +2610,14 @@ def _admin_ok(request: Request):
     return bool(key) and hmac.compare_digest(given, key)
 
 
+def _owner_ok(request: Request):
+    """v96p: Nur das Besitzer-Konto (OWNER_EMAIL) darf die Stil-Referenzen
+    sehen/aendern - sie wirken global auf alle Renders. Ueber die Session, kein
+    Extra-Key noetig."""
+    u = _current_user(request)
+    return bool(u) and str(u.get('email', '')).strip().lower() == OWNER_EMAIL
+
+
 def _reference_file():
     # regie_reference.json liegt im Projekt-Root neben render.py
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -2623,7 +2635,7 @@ def _load_references():
 @app.get('/api/reference/list')
 def reference_list(request: Request):
     """v96o: gelernte Stil-Referenzen (Admin). Global - beeinflusst ALLE Renders."""
-    if not _admin_ok(request):
+    if not _owner_ok(request):
         raise HTTPException(403, 'Access denied.')
     return {'refs': _load_references()}
 
@@ -2632,8 +2644,8 @@ def reference_list(request: Request):
 async def reference_learn(request: Request, datei: UploadFile = File(...),
                           name: str = Form('')):
     """v96o: Referenz-Video hochladen -> GPT-4o-Vision beschreibt den Stil ->
-    als Stil-Referenz speichern. Admin-only, da global wirksam."""
-    if not _admin_ok(request):
+    als Stil-Referenz speichern. Nur Besitzer-Konto, da global wirksam."""
+    if not _owner_ok(request):
         raise HTTPException(403, 'Access denied.')
     ext = os.path.splitext(datei.filename or '')[1].lower() or '.mp4'
     if ext not in ('.mp4', '.mov', '.m4v', '.webm', '.mkv'):
@@ -2670,8 +2682,8 @@ async def reference_learn(request: Request, datei: UploadFile = File(...),
 
 @app.post('/api/reference/delete')
 def reference_delete(request: Request, idx: int = Form(...)):
-    """v96o: eine gelernte Stil-Referenz loeschen (Admin)."""
-    if not _admin_ok(request):
+    """v96o: eine gelernte Stil-Referenz loeschen (nur Besitzer-Konto)."""
+    if not _owner_ok(request):
         raise HTTPException(403, 'Access denied.')
     refs = _load_references()
     if 0 <= idx < len(refs):

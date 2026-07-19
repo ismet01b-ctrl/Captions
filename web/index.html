@@ -1282,9 +1282,9 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </form>
       </div>
 
-      <div class="panel">
+      <div class="panel hidden" id="refPanel">
         <details>
-          <summary>Reference styles (admin)</summary>
+          <summary>Reference styles</summary>
           <div style="margin-top:14px;">
             <p class="hint">Upload a short video with high-end captions. The AI
               looks at a few frames, describes its editing STYLE (pacing, density,
@@ -1292,8 +1292,6 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               editorial choices on future renders. It does not copy the look
               (fonts/animations stay ours) or the words. Affects all renders.</p>
             <div style="display:flex; flex-direction:column; gap:10px; max-width:420px;">
-              <input type="password" id="refAdminKey" placeholder="Admin key"
-                     style="width:100%;">
               <input type="text" id="refName" placeholder="Name for this style (optional)"
                      style="width:100%;">
               <input type="file" id="refFile" accept="video/*" style="color:var(--mut);">
@@ -2645,6 +2643,7 @@ async function renderAccount() {
   const set = (id, txt) => { const e = $('#' + id); if (e) e.textContent = txt; };
   set('accUsername', u.username || u.name || '–');
   set('accEmail', u.email || State.email || '–');
+  refApplyOwner(u.is_owner === true);   // Stil-Referenzen nur fuers Besitzer-Konto
   set('accCredits', String(Math.floor((State.balanceSec || 0) / 60)) + ' credits');
   if (u.created_at) {
     set('accCreated', new Date(u.created_at * 1000).toLocaleDateString());
@@ -2766,8 +2765,7 @@ if ($('#delForm')) $('#delForm').addEventListener('submit', async () => {
   finally { btn.disabled = false; }
 });
 
-/* v96o: Referenz-Stile (Admin) - Video hochladen, KI lernt den Stil */
-function refKey() { return ($('#refAdminKey') && $('#refAdminKey').value.trim()) || ''; }
+/* v96o/p: Referenz-Stile - nur fuer das Besitzer-Konto, Session-Auth */
 function renderRefList(refs) {
   const box = $('#refList');
   if (!box) return;
@@ -2783,35 +2781,32 @@ function renderRefList(refs) {
   box.querySelectorAll('[data-refdel]').forEach(b => b.addEventListener('click', () => refDelete(parseInt(b.dataset.refdel))));
 }
 async function refLoadList() {
-  const k = refKey();
-  if (!k) return;
   try {
-    const r = await fetch('/api/reference/list', { headers: { 'x-admin-key': k } });
+    const r = await fetch('/api/reference/list');
     if (!r.ok) return;
     const d = await r.json();
     renderRefList(d.refs);
   } catch (e) {}
 }
 async function refDelete(idx) {
-  const k = refKey();
-  if (!k) { toast('Enter the admin key first.', 'err'); return; }
   const fd = new FormData(); fd.append('idx', String(idx));
   try {
-    const r = await fetch('/api/reference/delete', { method: 'POST', headers: { 'x-admin-key': k }, body: fd });
+    const r = await fetch('/api/reference/delete', { method: 'POST', body: fd });
     const d = await r.json();
     if (r.ok) renderRefList(d.refs);
     else toast(d.detail || 'Failed.', 'err');
   } catch (e) { toast('Connection error.', 'err'); }
 }
-if ($('#refAdminKey')) $('#refAdminKey').addEventListener('change', () => {
-  try { localStorage.setItem('dve_admin_key', refKey()); } catch (e) {}
-  refLoadList();
-});
+// Panel nur fuer das Besitzer-Konto zeigen (Server erzwingt es zusaetzlich).
+function refApplyOwner(isOwner) {
+  const p = $('#refPanel');
+  if (!p) return;
+  p.classList.toggle('hidden', !isOwner);
+  if (isOwner) refLoadList();
+}
 if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
-  const k = refKey();
   const f = $('#refFile') && $('#refFile').files[0];
   const st = $('#refStatus');
-  if (!k) { toast('Enter the admin key first.', 'err'); return; }
   if (!f) { toast('Choose a reference video first.', 'err'); return; }
   const btn = $('#btnRefLearn'); btn.disabled = true;
   if (st) { st.style.display = 'block'; st.textContent = 'Analyzing style … (this can take up to a minute)'; }
@@ -2819,7 +2814,7 @@ if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
     const fd = new FormData();
     fd.append('datei', f);
     fd.append('name', ($('#refName') && $('#refName').value) || '');
-    const r = await fetch('/api/reference/learn', { method: 'POST', headers: { 'x-admin-key': k }, body: fd });
+    const r = await fetch('/api/reference/learn', { method: 'POST', body: fd });
     const d = await r.json().catch(() => ({}));
     if (r.ok) {
       if (st) st.textContent = 'Learned: ' + (d.entry && d.entry.name || 'style');
@@ -2834,10 +2829,6 @@ if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
   } catch (e) { if (st) st.textContent = ''; toast('Connection error.', 'err'); }
   finally { btn.disabled = false; }
 });
-try {
-  const _ak = localStorage.getItem('dve_admin_key');
-  if (_ak && $('#refAdminKey')) { $('#refAdminKey').value = _ak; refLoadList(); }
-} catch (e) {}
 
 function updateRing(rest, total) {
   // v84: Ring durch Credit-Chip ersetzt. Stub bleibt fuer Alt-Aufrufe.

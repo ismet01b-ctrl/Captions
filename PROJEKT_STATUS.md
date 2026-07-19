@@ -12,6 +12,12 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
   unserer Engine. Video-Dateien direkt in die JSON zu legen bringt nichts (der
   Text-Teil der KI kann kein Video ansehen) - erst die Vision-Analyse macht
   daraus einen nutzbaren Stilhinweis. Fehlertolerant ohne Key. Selftest 467/467.
+- **v96p: Stil-Referenz-Menue nur fuer das Besitzer-Konto.**
+  Statt Admin-Key jetzt an ismet-01_b@hotmail.de gebunden (per DVE_OWNER
+  ueberschreibbar). `_owner_ok` prueft die Session (case-insensitiv), alle drei
+  Referenz-Endpoints (list/learn/delete) sind darauf gegated; /api/me liefert
+  `is_owner`, das Panel ist NUR fuer dieses Konto sichtbar (Server erzwingt es
+  zusaetzlich). Kein Admin-Key-Feld mehr. Selftest 468/468.
 - **v96o: Web-Button - Referenz-Videos ohne Terminal hochladen.**
   Account-Seite -> "Reference styles (admin)": Admin-Key, optionaler Name,
   Video-Upload -> `/api/reference/learn` laesst Vision den Stil beschreiben und
