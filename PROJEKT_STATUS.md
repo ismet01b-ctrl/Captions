@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96f: Animations-Vorschau im Momente-Editor.**
+  Wunsch: beim Waehlen einer Animation sehen, wie sie aussieht. Neu: die
+  Vorschau-Zelle spielt eine CSS-Annaeherung der gewaehlten Animation ab
+  (explosion/bruch/sturz/anstieg/spur/kippen/wende/puls/welle/gewicht/schweben/
+  fokus/schwund/magnet/neon ... auf 15 Keyframe-Familien gemappt). Spielt beim
+  Wechsel der Animation-Auswahl und beim Klick/Tap auf die Vorschau ab ("tap ▶"),
+  nicht bei jedem Tastendruck. Rein clientseitig - kein Render, keine Kosten,
+  sofortiges Feedback. EHRLICH: es ist eine Annaeherung fuer das GEFUEHL, nicht
+  der exakte Render (der echte Effekt mit Person/Occlusion/3D kommt erst im
+  Video). Frontend-Change (index.html), Python-Selftests unveraendert 454/454.
 - **v96e: Kein Video sieht mehr aus wie das andere.**
   Zwei Ursachen fuer den "alle Videos gleich"-Eindruck behoben: (1) der
   Variations-Seed war nur die WORTZAHL - zwei verschiedene Videos mit gleich

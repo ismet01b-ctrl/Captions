@@ -939,6 +939,47 @@ body {
   color: #f5e6c8; }
 .mom-preview.pow-1 .txt { font-size: 11px; }
 .mom-preview.pow-3 .txt { font-size: 15px; }
+.mom-preview { cursor: pointer; }
+.mom-preview .play-hint {
+  position: absolute; right: 3px; bottom: 2px; z-index: 2;
+  font-size: 8px; line-height: 1; opacity: .55; color: #fff;
+  pointer-events: none; letter-spacing: .3px;
+}
+/* v96f: Live-Vorschau der Animation im Momente-Editor. Reine CSS-Annaeherung,
+   die das GEFUEHL der Bewegung zeigt (keine echte Render-Kosten). Wird beim
+   Auswaehlen und beim Klick auf die Vorschau abgespielt. */
+@keyframes pa-pop { 0%{transform:scale(.35);opacity:0} 55%{transform:scale(1.28);opacity:1} 100%{transform:scale(1)} }
+@keyframes pa-break { 0%{transform:none} 18%{transform:translate(-2px,1px) rotate(-7deg)} 38%{transform:translate(3px,-1px) rotate(6deg)} 60%{transform:translate(-2px,1px) rotate(-4deg)} 80%{transform:translate(1px,0) rotate(2deg)} 100%{transform:none} }
+@keyframes pa-drop { 0%{transform:translateY(-130%);opacity:0} 60%{transform:translateY(12%);opacity:1} 80%{transform:translateY(-5%)} 100%{transform:translateY(0)} }
+@keyframes pa-rise { 0%{transform:translateY(130%);opacity:0} 70%{transform:translateY(-7%);opacity:1} 100%{transform:translateY(0)} }
+@keyframes pa-slide { 0%{transform:translateX(-150%);opacity:0} 70%{transform:translateX(7%);opacity:1} 100%{transform:translateX(0)} }
+@keyframes pa-flip { 0%{transform:perspective(220px) rotateX(-92deg);opacity:0} 100%{transform:perspective(220px) rotateX(0);opacity:1} }
+@keyframes pa-turn { 0%{transform:perspective(220px) rotateY(90deg);opacity:0} 100%{transform:perspective(220px) rotateY(0);opacity:1} }
+@keyframes pa-shake { 0%,100%{transform:translateX(0)} 15%{transform:translateX(-3px) skewX(-4deg)} 35%{transform:translateX(3px) skewX(4deg)} 55%{transform:translateX(-2px)} 75%{transform:translateX(2px)} }
+@keyframes pa-pulse { 0%,100%{transform:scale(1)} 45%{transform:scale(1.22)} }
+@keyframes pa-wave { 0%,100%{transform:skewY(0) translateY(0)} 50%{transform:skewY(-7deg) translateY(-6%)} }
+@keyframes pa-heavy { 0%{transform:translateY(-35%) scaleY(1.25);opacity:0} 60%{transform:translateY(0) scaleY(.82);opacity:1} 100%{transform:scaleY(1)} }
+@keyframes pa-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-16%)} }
+@keyframes pa-focus { 0%{filter:blur(6px);opacity:0} 100%{filter:blur(0);opacity:1} }
+@keyframes pa-vanish { 0%{opacity:1;transform:scale(1)} 100%{opacity:.08;transform:scale(.65)} }
+@keyframes pa-magnet { 0%{letter-spacing:9px;opacity:0} 100%{letter-spacing:-0.3px;opacity:1} }
+@keyframes pa-neon { 0%,100%{text-shadow:0 0 4px currentColor} 50%{text-shadow:0 0 12px currentColor,0 0 22px currentColor} }
+.mom-preview .txt.pa-pop    { animation: pa-pop    .8s var(--ease-out-quart); }
+.mom-preview .txt.pa-break  { animation: pa-break  .8s ease; }
+.mom-preview .txt.pa-drop   { animation: pa-drop   .85s var(--ease-out-quart); }
+.mom-preview .txt.pa-rise   { animation: pa-rise   .85s var(--ease-out-quart); }
+.mom-preview .txt.pa-slide  { animation: pa-slide  .8s var(--ease-out-quart); }
+.mom-preview .txt.pa-flip   { animation: pa-flip   .8s var(--ease-out-quart); }
+.mom-preview .txt.pa-turn   { animation: pa-turn   .8s var(--ease-out-quart); }
+.mom-preview .txt.pa-shake  { animation: pa-shake  .7s ease; }
+.mom-preview .txt.pa-pulse  { animation: pa-pulse  .7s ease 2; }
+.mom-preview .txt.pa-wave   { animation: pa-wave   .9s ease 2; }
+.mom-preview .txt.pa-heavy  { animation: pa-heavy  .8s var(--ease-out-quart); }
+.mom-preview .txt.pa-float  { animation: pa-float  1.1s ease 2; }
+.mom-preview .txt.pa-focus  { animation: pa-focus  .8s var(--ease-out-quart); }
+.mom-preview .txt.pa-vanish { animation: pa-vanish .9s ease; }
+.mom-preview .txt.pa-magnet { animation: pa-magnet .8s var(--ease-out-quart); }
+.mom-preview .txt.pa-neon   { animation: pa-neon   .8s ease 2; }
 
 /* Toast */
 .toasts {
@@ -3278,7 +3319,7 @@ async function openMomentsEditor() {
     row.innerHTML = `
       <input type="checkbox" data-i="${i}" data-k="aktiv" ${m.aktiv !== false ? 'checked' : ''}>
       <div class="zeit">${(m.zeit || 0).toFixed(1)}s</div>
-      <div class="mom-preview" data-i="${i}"><div class="txt"></div></div>
+      <div class="mom-preview" data-i="${i}"><div class="txt"></div><span class="play-hint">tap ▶</span></div>
       <input type="text" data-i="${i}" data-k="text" value="${(m.text || '').replace(/"/g, '&quot;')}">
       <select data-i="${i}" data-k="fx">${fxOpts}</select>
       <select data-i="${i}" data-k="power">${powerOpts}</select>
@@ -3292,6 +3333,9 @@ async function openMomentsEditor() {
     row.querySelector('[data-k=szene]').value = m.szene || 'auto';
     row.querySelector('[data-k=lage]').value = m.lage || 'auto';
     updatePreview(row, m);
+    // v96f: Klick auf die Vorschau spielt die aktuell gewaehlte Animation neu ab
+    const pvEl = row.querySelector('.mom-preview');
+    if (pvEl) pvEl.addEventListener('click', () => playAnim(pvEl, pvEl.dataset.anim || ''));
   });
   let debTimer;
   body.querySelectorAll('input, select').forEach(el => {
@@ -3395,14 +3439,49 @@ function renderTimeline() {
   tl.appendChild(track);
 }
 
+// v96f: Animation -> CSS-Vorschau-Klasse. Zeigt das GEFUEHL der Bewegung im
+// Editor, damit man vor dem Rendern sieht, was eine Animation macht.
+const ANIM_KF = {
+  explosion:'pop', zoom_punch:'pop', knall:'pop', stempel:'pop',
+  bruch:'break', sturz:'drop', regen:'drop', anstieg:'rise', schub:'rise',
+  spur:'slide', rutsche:'slide', kippen:'flip', wende:'turn',
+  wackel:'shake', zittern:'shake', glitch:'shake', puls:'pulse',
+  welle:'wave', gewicht:'heavy', druck:'heavy', schweben:'float',
+  fokus:'focus', enthuellen:'focus', schwund:'vanish', magnet:'magnet',
+  neon:'neon'
+};
+function playAnim(pv, anim) {
+  if (!pv) return;
+  const t = pv.querySelector('.txt');
+  if (!t) return;
+  // vorhandene pa-* Klasse entfernen, Reflow erzwingen -> Animation startet neu
+  t.className = t.className.replace(/\bpa-\w+/g, '').trim();
+  const kf = ANIM_KF[anim];
+  if (!kf) return;
+  void t.offsetWidth;
+  t.classList.add('pa-' + kf);
+}
 function updatePreview(rowEl, m) {
   const pv = rowEl.querySelector('.mom-preview');
   if (!pv) return;
   const fx = m.fx || 'behind';
   const power = m.power || 2;
+  const txtEl0 = pv.querySelector('.txt');
+  const paKeep = txtEl0 ? (txtEl0.className.match(/\bpa-\w+/g) || []) : [];
   pv.className = 'mom-preview fx-' + fx + ' pow-' + power;
   const txt = (m.text || '').split(' ').slice(0, 3).join(' ').toUpperCase();
-  pv.querySelector('.txt').textContent = txt.slice(0, 14) || '·';
+  const txtEl = pv.querySelector('.txt');
+  txtEl.textContent = txt.slice(0, 14) || '·';
+  // Nur wenn die Animation-Auswahl WECHSELT abspielen (nicht bei jedem Tastendruck)
+  const anim = m.anim || '';
+  const hint = pv.querySelector('.play-hint');
+  if (hint) hint.style.display = ANIM_KF[anim] ? '' : 'none';
+  if (pv.dataset.anim !== anim) {
+    pv.dataset.anim = anim;
+    playAnim(pv, anim);
+  } else if (paKeep.length) {
+    txtEl.classList.add(paKeep[0]);      // laufende Vorschau nicht abwuergen
+  }
   // v80e: Video-Frame als Hintergrund. Erst wenn wirklich vorhanden - sonst
   // bleibt der Farbverlauf. onerror leert den Style, damit kaputte Referenzen
   // nicht dauerhaft ein Broken-Image-Rauschen zeigen.
