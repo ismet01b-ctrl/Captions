@@ -2166,6 +2166,17 @@ def _scenario_lang(tmp):
     check('Stil-Referenzen: fehlende/leere Datei -> kein Block (kein Crash)',
           R._load_regie_reference.__code__.co_argcount == 0
           and 'ref_block + lang_hint' in _r)
+    # v96n: aus Referenz-Video lernen (Vision) - Struktur + Fehlertoleranz
+    _k = os.environ.pop('OPENAI_API_KEY', None)
+    try:
+        _none = R.analyze_reference_video('/tmp/st_clip.mp4', save=False)
+    finally:
+        if _k is not None:
+            os.environ['OPENAI_API_KEY'] = _k
+    check('Stil-Lernen: ohne Key -> None (kein Crash)', _none is None)
+    check('Stil-Lernen: Vision-Frames + Stil-Prompt (kein Woerter-Kopieren)',
+          'STYLE_LEARN_PROMPT' in _r and 'KEINE Woerter abtippen' in _r
+          and 'analyze_reference_video' in _r and "refs[-12:]" in _r)
     # v94: sichtbare Aktion-Animation darf nicht hinter der Person verschwinden
     words_v = [{'word': 'explodes', 'start': 0.0, 'end': 0.4}]
     reg_v = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":3,"anim":"explosion"}]}'

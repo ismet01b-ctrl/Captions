@@ -2315,6 +2315,85 @@ Lieber kein Effekt als ein falscher Sound auf einem harmlosen Wort.
 Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Effekt>", "power": <1-3>, "anim": "<optional>", "emoji": "<optional>"}]}"""
 
 
+STYLE_LEARN_PROMPT = (
+    "Du siehst mehrere Frames aus EINEM kurzen Video mit hochwertigen Captions. "
+    "Beschreibe NUR den STIL und den Schnitt-Rhythmus als Vorbild fuer eine "
+    "Caption-Regie - KEINE Inhalte, KEINE Woerter abtippen. In 2-3 knappen "
+    "Saetzen: Wie viele Woerter pro Caption? Wie dicht sitzen Highlights? Welche "
+    "Art Woerter wird betont (Zahlen, Aktionen, Pointen)? Wie wuchtig/ruhig sind "
+    "die Effekte? Wie ist der Hook am Anfang? Schreib es als Handlungsanweisung "
+    "('Startet mit ...', 'Nutzt ...'), damit eine andere Regie den Geschmack "
+    "nachahmen kann. Antworte auf Deutsch, nur der Beschreibungstext."
+)
+
+
+def analyze_reference_video(video_path, name=None, model='gpt-4o',
+                            n_frames=6, save=True):
+    """v96n: Lernt aus einem REFERENZ-Video mit High-End-Captions. Sampelt ein
+    paar Frames, laesst GPT-4o-Vision den STIL beschreiben (Pacing, Dichte,
+    betonte Woerter, Effekt-Wucht, Hook) und legt das als Stil-Referenz in
+    regie_reference.json ab. WICHTIG/EHRLICH: die Regie-KI uebernimmt daraus
+    EDITORIALE Entscheidungen (wo + wie stark), NICHT den exakten Look - Fonts,
+    Animationen und Kamera kommen aus unserer Engine, nicht aus dem Referenz-
+    video. Gibt den Eintrag zurueck oder None."""
+    key = os.environ.get('OPENAI_API_KEY')
+    if not key or not os.path.exists(video_path):
+        return None
+    import requests
+    try:
+        dur = float(subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=nw=1:nk=1', video_path],
+            capture_output=True, text=True, timeout=20).stdout.strip() or 0)
+    except Exception:
+        dur = 0
+    frames = []
+    for k in range(max(n_frames, 1)):
+        t = (dur * (k + 0.5) / n_frames) if dur > 0 else k * 1.0
+        b = _frame_b64(video_path, t)
+        if b:
+            frames.append(b)
+    if not frames:
+        return None
+    content = [{'type': 'text', 'text': STYLE_LEARN_PROMPT}]
+    for b in frames:
+        content.append({'type': 'image_url',
+                        'image_url': {'url': f'data:image/jpeg;base64,{b}',
+                                      'detail': 'low'}})
+    try:
+        r = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}'},
+            json=_oai_json(model, [{'role': 'user', 'content': content}],
+                           max_toks=400, temperature=0.3),
+            timeout=120)
+        r.raise_for_status()
+        desc = r.json()['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        print(f"Stil-Lernen nicht verfuegbar ({type(e).__name__})")
+        return None
+    if not desc:
+        return None
+    entry = {'name': (name or os.path.splitext(os.path.basename(video_path))[0])[:60],
+             'beispiel': desc}
+    if save:
+        path = os.path.join(HERE, 'regie_reference.json')
+        try:
+            refs = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else []
+            if not isinstance(refs, list):
+                refs = []
+        except Exception:
+            refs = []
+        refs.append(entry)
+        try:
+            json.dump(refs[-12:], open(path, 'w', encoding='utf-8'),
+                      ensure_ascii=False, indent=2)   # max 12 Referenzen halten
+        except Exception as e:
+            print(f"Referenz nicht gespeichert ({type(e).__name__})")
+    print(f"Stil-Referenz gelernt: {entry['name']}")
+    return entry
+
+
 def _load_regie_reference():
     """v96m: STIL-REFERENZEN. Ismet kann in regie_reference.json aktuelle,
     starke Beispiele hinterlegen (Trend-Bezug), an denen sich die Regie-KI

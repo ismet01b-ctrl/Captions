@@ -3,6 +3,17 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96n: Aus Referenz-Videos lernen (Vision -> Stil-Referenz).**
+  `analyze_reference_video()`: sampelt Frames eines High-End-Caption-Videos,
+  laesst GPT-4o-Vision den STIL beschreiben (Pacing, Dichte, betonte Woerter,
+  Effekt-Wucht, Hook) und legt das als Stil-Referenz in regie_reference.json ab
+  (max 12). EHRLICH: die Regie-KI uebernimmt daraus EDITORIALE Entscheidungen
+  (wo + wie stark), NICHT den exakten Look - Fonts/Animationen/Kamera kommen aus
+  unserer Engine. Video-Dateien direkt in die JSON zu legen bringt nichts (der
+  Text-Teil der KI kann kein Video ansehen) - erst die Vision-Analyse macht
+  daraus einen nutzbaren Stilhinweis. Fehlertolerant ohne Key. Selftest 467/467.
+  OFFEN: Web-Button zum Hochladen der Referenzvideos (damit ohne Terminal
+  nutzbar) - noch nicht gebaut.
 - **v96m: KI schneidet nach aktuellem Standard + einspeisbare Trend-Referenzen.**
   Frage: waehlt die KI nach heutigem Standard, braucht sie Vorlagen/Trend-Bezug?
   Ehrliche Antwort: die KI funktioniert ohne Vorlagen, aber few-shot-Referenzen
