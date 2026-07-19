@@ -2928,6 +2928,8 @@ function jobStarted(jid, mode) {
     $('#btnAnalyze').disabled = true;
     pollAnalyze();
   } else {
+    if (State.progRAF) cancelAnimationFrame(State.progRAF);
+    State.progRAF = null; State.progShown = 0; State.progTarget = 0;
     pollRender();
   }
 }
@@ -3013,19 +3015,37 @@ function fmtDur(s) {
   return m + ':' + String(sec).padStart(2, '0');
 }
 
+// v95: fluessiger Fortschritt. Der Server meldet nur alle ~1.2s einen Sprung -
+// hier easen wir den Ring per rAF weich dorthin und lassen ihn zwischen den
+// Polls leicht weiterkriechen, damit es nie "eingefroren" aussieht.
+function progAnim() {
+  const cur = State.progShown || 0;
+  let tgt = State.progTarget || 0;
+  // Zwischen zwei Polls sanft weiterkriechen (max. bis kurz vors Ziel-Delta),
+  // damit auch bei langsamen Phasen sichtbar Bewegung ist.
+  const creepCap = Math.min(tgt + 0.02, 0.995);
+  tgt = Math.max(tgt, Math.min(creepCap, cur + 0.0006));
+  const next = cur + (tgt - cur) * 0.12;   // Ease-Out
+  State.progShown = next;
+  $('#prFg').setAttribute('stroke-dashoffset', String(264 * (1 - next)));
+  $('#prPct').textContent = String(Math.round(next * 100));
+  if (State.renderStart) {
+    $('#progressElapsed').textContent = fmtDur((Date.now() - State.renderStart) / 1000);
+  }
+  State.progRAF = requestAnimationFrame(progAnim);
+}
+
 async function pollRender() {
+  if (!State.progRAF) progAnim();   // Smoother laeuft unabhaengig vom Poll
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
-    const pct = Math.round((st.progress || 0) * 100);
-    const dashoff = 264 * (1 - (st.progress || 0));
-    $('#prFg').setAttribute('stroke-dashoffset', String(dashoff));
-    $('#prPct').textContent = String(pct);
+    State.progTarget = st.progress || 0;
     $('#progressPhase').textContent = st.phase || 'Bereit …';
-    if (State.renderStart) {
-      $('#progressElapsed').textContent = fmtDur((Date.now() - State.renderStart) / 1000);
-    }
     $('#progressEta').textContent = st.eta_sec != null ? fmtDur(st.eta_sec) : '–';
     if (st.status === 'fertig') {
+      State.progTarget = 1;
+      if (State.progRAF) cancelAnimationFrame(State.progRAF);
+      State.progRAF = null; State.progShown = 0;
       $('#progressCard').classList.add('hidden');
       renderSuccess();
       refreshBalanceInHeader();
@@ -3033,11 +3053,13 @@ async function pollRender() {
       return;
     }
     if (st.status === 'fehler') {
+      if (State.progRAF) cancelAnimationFrame(State.progRAF);
+      State.progRAF = null; State.progShown = 0;
       showError(st.msg || 'Render failed', st.detail || '');
       return;
     }
   } catch (e) {}
-  setTimeout(pollRender, 2000);
+  setTimeout(pollRender, 1200);   // schneller pollen -> feinere Spruenge
 }
 
 /* v89: Director's cut - macht die unsichtbare KI-Regie sichtbar. */
