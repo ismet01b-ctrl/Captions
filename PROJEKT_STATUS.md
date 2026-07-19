@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96: Multi-Person - alles funktioniert auch, wenn mehrere im Video reden.**
+  Bisher war die Pipeline auf EINEN Talking-Head ausgelegt: das Face-Tracking
+  behielt pro Frame nur das staerkste Gesicht (`max(score)`), darauf hingen
+  B-Roll-Erkennung, Safe-Zone, Platzierung, Kamera und `face_cover`. Ein
+  Gespraech mit zwei Personen konnte a) als B-Roll wegfallen (Groessen-/
+  Identitaets-Filter) und b) Text ueber das zweite Gesicht legen.
+  Jetzt (Hybrid, von Ismet gewaehlt): das Tracking erfasst ALLE Gesichter pro
+  Frame, ordnet sie zu stabilen Personen-Spuren (`_faces_tracks`, Nearest-
+  Neighbor) und bestimmt den ACTIVE-SPEAKER ueber die Mund-Bewegung (Frame-
+  Differenz im unteren Drittel der Gesichtsbox, `_active_index`; ohne klare
+  Bewegung -> groesstes Gesicht). Position/Kamera/Effekte/behind folgen dem
+  aktiven Sprecher. Der Text weicht per Multi-Face-Safe-Zone (`_free_x_multi`)
+  ALLEN Gesichtern aus (breiteste freie Luecke). Bei erkanntem Gespraech
+  (>=2 Gesichter in >10% der Frames) werden Sprecher-Identitaets- UND Groessen-
+  Filter abgeschaltet, damit kein echtes Gespraech als B-Roll verworfen wird.
+  Bei nur einer Person aendert sich nichts. Selftest 442/442 + alle Render-
+  Etappen green (reine Helfer synthetisch getestet: Spur-Zuordnung, Active-
+  Speaker-Wahl, Safe-Zone, B-Roll-Fix). EHRLICH: Der Active-Speaker laeuft
+  ueber eine Bewegungs-Heuristik (kein Audio-Visual-Sync-Modell) - bei schlechtem
+  Licht/starker Ueberlappung kann er mal danebenliegen. Sandbox testet nur mit
+  synthetischem Einzelperson-Clip; echte Zwei-Personen-Qualitaet siehst du erst
+  auf Windows mit echtem Material.
 - **v95c: KI entscheidet, ob "behind" hinter der Person sichtbar ist.**
   Problem: Bei einer Nahaufnahme (Person ganz nah an der Kamera, fuellt fast das
   ganze Bild) legt "behind" den Text hinter die Person und dimmt ihn - man sieht

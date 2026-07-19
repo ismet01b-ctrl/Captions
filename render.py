@@ -1184,6 +1184,92 @@ def make_reflection(arr, squash=0.55, strength=0.35):
     return ref, dy, dx
 
 # ---------------------------------------------------------------- face tracking
+def _faces_tracks(dets_seq, max_d):
+    """v96 (Multi-Person): ordnet die Gesichter aufeinanderfolgender Frames zu
+    stabilen Personen-Spuren (greedy Nearest-Neighbor ueber den Mittelpunkt) und
+    summiert pro Spur die Mund-Bewegung. Rein & deterministisch (testbar).
+    dets_seq[i] = Liste von [cx, cy, w, motion] pro Frame.
+    Rueckgabe: (track_of, track_motion)
+      track_of[i][j]   = Spur-ID des j-ten Gesichts in Frame i
+      track_motion[id] = aufsummierte Mund-Bewegung dieser Spur."""
+    track_of = []
+    track_motion = {}
+    prev = []                      # (track_id, cx, cy) der letzten belegten Spuren
+    next_id = 0
+    for faces in dets_seq:
+        row = []
+        used_prev = set()
+        for f in faces:
+            cx, cy = f[0], f[1]
+            best, best_d = None, max_d
+            for pi, (tid, px, py) in enumerate(prev):
+                if pi in used_prev:
+                    continue
+                d = ((cx - px) ** 2 + (cy - py) ** 2) ** 0.5
+                if d < best_d:
+                    best, best_d, best_pi = tid, d, pi
+            if best is None:
+                best = next_id
+                next_id += 1
+            else:
+                used_prev.add(best_pi)
+            row.append(best)
+            track_motion[best] = track_motion.get(best, 0.0) + (f[3] if len(f) > 3 else 0.0)
+        track_of.append(row)
+        prev = [(row[j], faces[j][0], faces[j][1]) for j in range(len(faces))]
+    return track_of, track_motion
+
+
+def _active_index(faces, tids, track_motion):
+    """Waehlt das AKTIVE (sprechende) Gesicht eines Frames: die Spur mit der
+    meisten Mund-Bewegung. Ist die Bewegung ueberall ~0 (kein klarer Sprecher),
+    faellt es auf das groesste Gesicht zurueck. Rein & testbar.
+    faces[j] = [cx, cy, w, ...], tids[j] = Spur-ID von faces[j]."""
+    if not faces:
+        return -1
+    mots = [track_motion.get(tids[j], 0.0) for j in range(len(faces))]
+    mx = max(mots)
+    if mx > 1.5:                                   # klare Mund-Bewegung vorhanden
+        return int(max(range(len(faces)), key=lambda j: mots[j]))
+    return int(max(range(len(faces)), key=lambda j: faces[j][2]))   # sonst groesstes
+
+
+def _free_x_multi(faces, W, sprite_w, toggle):
+    """v96: Text-Mittelpunkt im Querformat, der KEIN Gesicht ueberdeckt - auch
+    wenn mehrere Personen im Bild sind. Sucht die breiteste freie Luecke (links
+    der linkesten Person, zwischen zwei Personen, rechts der rechtesten) und legt
+    den Text dorthin, sofern der Sprite hineinpasst. Findet sich keine Luecke,
+    kommt der Text auf die Seite mit dem meisten Rand. Rein & testbar.
+    faces = Liste (cx, w) in Bild-Pixeln. Rueckgabe: (side -1/1, cx)."""
+    m = W * 0.045
+    half = sprite_w / 2.0
+    if not faces:
+        cx = W * 0.224 if toggle % 2 == 0 else W * 0.766
+        return (-1 if cx < W / 2 else 1), cx
+    # Belegte Intervalle (Person + Sicherheitsabstand), sortiert
+    occ = sorted((max(cx - w * 1.3, 0), min(cx + w * 1.3, W)) for cx, w in faces)
+    # Freie Luecken zwischen den belegten Intervallen (inkl. Raender)
+    gaps = []
+    cursor = m
+    for a, b in occ:
+        if a - cursor > 0:
+            gaps.append((cursor, a))
+        cursor = max(cursor, b)
+    if W - m - cursor > 0:
+        gaps.append((cursor, W - m))
+    # Luecken, in die der Text passt - die breiteste gewinnt
+    fit = [(a, b) for a, b in gaps if (b - a) >= sprite_w]
+    if fit:
+        a, b = max(fit, key=lambda g: g[1] - g[0])
+        cx = (a + b) / 2.0
+    elif gaps:
+        a, b = max(gaps, key=lambda g: g[1] - g[0])
+        cx = min(max((a + b) / 2.0, m + half), W - m - half)
+    else:
+        cx = W / 2.0
+    return (-1 if cx < W / 2 else 1), cx
+
+
 def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     work_w = 512
     work_h = max(int(512 * out_h / out_w) // 2 * 2, 2)
@@ -1201,7 +1287,9 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
         min_detection_confidence=0.4)
     detector = vision.FaceDetector.create_from_options(opts)
     raw, hists, face_hists = [], [], []
-    last_det = None
+    dets_seq = []                  # v96: ALLE Gesichter pro Frame [cx,cy,w,motion]
+    last_dets = []
+    prev_gray = None
     fi_a = 0
     for frame in iter_frames(video_path, work_w, work_h, fps_str):
         tiny = cv2.resize(frame, (160, 90))
@@ -1210,20 +1298,48 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
         cv2.normalize(hist, hist)
         hists.append(hist)
         if fi_a % det_step != 0:
-            raw.append(list(last_det) if last_det else None)
+            dets_seq.append([list(d) for d in last_dets])   # halten
+            raw.append(list(last_dets[0][:3]) if last_dets else None)
             face_hists.append(None)
             fi_a += 1
             continue
         fi_a += 1
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = detector.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=img))
+        faces = []
         if res.detections:
-            d = max(res.detections, key=lambda d: d.categories[0].score)
-            bb = d.bounding_box
-            last_det = [bb.origin_x + bb.width / 2, bb.origin_y + bb.height / 2, bb.width]
-            raw.append(list(last_det))
-            x0, y0 = max(bb.origin_x, 0), max(bb.origin_y, 0)
-            crop = frame[y0:y0 + max(bb.height, 4), x0:x0 + max(bb.width, 4)]
+            for d in res.detections:
+                bb = d.bounding_box
+                cx = bb.origin_x + bb.width / 2.0
+                cy = bb.origin_y + bb.height / 2.0
+                # v96: Mund-/Lippen-Bewegung = Frame-Differenz im unteren Drittel
+                # der Gesichtsbox. Wer spricht, bewegt dort am meisten -> Basis
+                # fuer die Active-Speaker-Wahl.
+                mot = 0.0
+                if prev_gray is not None:
+                    y0m = max(int(bb.origin_y + bb.height * 0.55), 0)
+                    y1m = min(int(bb.origin_y + bb.height), gray.shape[0])
+                    x0m = max(int(bb.origin_x), 0)
+                    x1m = min(int(bb.origin_x + bb.width), gray.shape[1])
+                    if y1m > y0m and x1m > x0m:
+                        cur = gray[y0m:y1m, x0m:x1m].astype(np.float32)
+                        pre = prev_gray[y0m:y1m, x0m:x1m].astype(np.float32)
+                        if cur.shape == pre.shape and cur.size:
+                            mot = float(np.abs(cur - pre).mean())
+                faces.append([cx, cy, float(bb.width), mot,
+                              float(bb.height), float(d.categories[0].score),
+                              int(bb.origin_x), int(bb.origin_y)])
+        prev_gray = gray
+        # nach Score sortiert (staerkste Detektion zuerst)
+        faces.sort(key=lambda f: f[5], reverse=True)
+        dets_seq.append([f[:4] for f in faces])
+        last_dets = [f[:4] for f in faces]
+        if faces:
+            d0 = faces[0]
+            raw.append([d0[0], d0[1], d0[2]])
+            x0, y0 = max(d0[6], 0), max(d0[7], 0)
+            crop = frame[y0:y0 + max(int(d0[4]), 4), x0:x0 + max(int(d0[2]), 4)]
             if crop.size:
                 ch = cv2.calcHist([cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)], [0, 1], None,
                                   [8, 8], [0, 180, 0, 256])
@@ -1232,10 +1348,24 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
             else:
                 face_hists.append(None)
         else:
-            last_det = None
             raw.append(None)
             face_hists.append(None)
     n = len(raw)
+    # v96: Personen-Spuren + Active-Speaker. Ist mehr als eine Person im Bild,
+    # bestimmt die Mund-Bewegung, wer gerade spricht - Position/Kamera/Effekte
+    # folgen dann dem aktiven Sprecher (Hybrid). Bei nur einer Person aendert
+    # sich nichts.
+    max_faces = max((len(f) for f in dets_seq), default=0)
+    multi_person = sum(len(f) >= 2 for f in dets_seq) > 0.10 * max(n, 1)
+    if max_faces >= 2:
+        track_of, track_motion = _faces_tracks(dets_seq, work_w * 0.14)
+        for i in range(n):
+            fs = dets_seq[i]
+            if not fs:
+                continue
+            aj = _active_index(fs, track_of[i], track_motion)
+            if aj >= 0:
+                raw[i] = [fs[aj][0], fs[aj][1], fs[aj][2]]   # Primaer = Sprecher
 
     # --- Schnitte finden (Histogramm-Korrelation zwischen Nachbar-Frames)
     cuts = [0]
@@ -1256,8 +1386,12 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     ref_w = float(np.median(widths)) if widths else None
 
     det = [r is not None for r in raw]
+    # v96: Der Sprecher-Identitaets-Filter (nur EIN Gesicht gilt als "der
+    # Sprecher") wuerde in einem Gespraech die zweite Person als Fremd-Gesicht
+    # verwerfen. Bei Multi-Person also AUS - beide reden, beide zaehlen. Bei
+    # einer Person filtert er weiter Stock-Footage-Gesichter raus.
     valid = [h for h in face_hists if h is not None]
-    if len(valid) > 10:
+    if not multi_person and len(valid) > 10:
         avg = sum(valid) / len(valid)
         sims = [cv2.compareHist(h, avg, cv2.HISTCMP_CORREL) if h is not None else -1
                 for h in face_hists]
@@ -1274,7 +1408,11 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
         det_shot = [raw[i] for i in range(a, b) if det[i]]
         ratio = len(det_shot) / max(b - a, 1)
         is_head = ratio > 0.55
-        if is_head and ref_w and det_shot:
+        # v96: Die Groessen-Schranke (Gesicht muss zur typischen Sprecher-Groesse
+        # passen) filtert Stock-Footage. Bei Multi-Person haben zwei Personen in
+        # unterschiedlicher Tiefe legitim verschiedene Groessen - dann NICHT nach
+        # Groesse aussortieren, sonst faellt ein echtes Gespraech als B-Roll raus.
+        if is_head and ref_w and det_shot and not multi_person:
             mw = float(np.median([r[2] for r in det_shot]))
             if not (0.55 * ref_w <= mw <= 1.9 * ref_w):
                 is_head = False              # Gesicht da, aber falsche Groesse -> B-Roll
@@ -1305,12 +1443,17 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     wsm = np.convolve(np.pad(np.array(wfill, dtype=float), k // 2, mode='edge'),
                       kernel, 'valid')[:n]
     n_broll = int((~present).sum())
+    _npf = sum(len(f) >= 2 for f in dets_seq)
     print(f"  {len(shots)} Szenen, {int(sum(r is not None for r in raw))}/{n} Frames mit Gesicht"
-          + (f", {n_broll} Frames als B-Roll eingestuft" if n_broll else ""))
+          + (f", {n_broll} Frames als B-Roll eingestuft" if n_broll else "")
+          + (f", Multi-Person in {_npf} Frames" if multi_person else ""))
     sc = out_w / float(work_w)
     # v85: interne Schnitt-Frames mitgeben (fuer Caption-Schnitt-Disziplin).
     inner_cuts = [c for c in cuts if 0 < c < n]
-    return sm * sc, present, wsm * sc, inner_cuts
+    # v96: ALLE Gesichter pro Frame in Output-Pixeln (fuer die Multi-Face-Safe-
+    # Zone - Text soll KEINES der Gesichter ueberdecken).
+    faces_seq = [[(f[0] * sc, f[1] * sc, f[2] * sc) for f in fr] for fr in dets_seq]
+    return sm * sc, present, wsm * sc, inner_cuts, faces_seq
 
 # ---------------------------------------------------------------- sprites
 class Sprites:
@@ -3128,7 +3271,7 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
 
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
-                palette_at=None, cut_times=None):
+                palette_at=None, cut_times=None, faces_at=None):
     KW_FX = cfg['effects']['keyword_rotation']
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
@@ -3145,6 +3288,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         if face_pos is None:
             cx = left_x if toggle % 2 == 0 else right_x
             return (-1 if cx < W / 2 else 1), cx
+        # v96: Sind MEHRERE Gesichter im Bild, den Text in die breiteste Luecke
+        # legen, die KEINES der Gesichter ueberdeckt (Multi-Face-Safe-Zone).
+        if faces_at is not None:
+            _fs = faces_at(start, end)
+            if len(_fs) >= 2:
+                return _free_x_multi(_fs, W, W * 0.42, toggle)
         fx_x, _, fw = face_pos(start, end)
         person_half = max(fw * 2.1, W * 0.10)
         if abs(fx_x - W / 2) < W * 0.09:
@@ -5185,7 +5334,8 @@ def main():
         'schnell':  (3, 0.7, 'veryfast'),
         'standard': (2, 1.0, cfg['output'].get('preset', 'medium')),
         'maximal':  (1, 1.2, 'slow')}.get(speed, (2, 1.0, 'medium'))
-    face, has_face, face_w, cut_frames = track_faces(args.input, W, H, fps_str, det_step)
+    face, has_face, face_w, cut_frames, faces_seq = track_faces(
+        args.input, W, H, fps_str, det_step)
     k2 = 41
     kern2 = np.ones(k2) / k2
     face_stable = np.stack([np.convolve(np.pad(face[:, j], k2 // 2, mode='edge'),
@@ -5200,6 +5350,19 @@ def main():
         if b <= a: a, b = max(len(face) - 2, 0), len(face)
         return (float(face[a:b, 0].mean()), float(face[a:b, 1].mean()),
                 float(face_w[a:b].mean()))
+    def faces_at(start, end):
+        """v96: ALLE Gesichter (x, w) im Zeitfenster - fuer die Multi-Face-Safe-
+        Zone. Nimmt aus dem Fenster den Frame mit den MEISTEN Gesichtern (so
+        wird keine kurz verdeckte zweite Person uebersehen) und mittelt je Spur
+        grob ueber die x-Position. Leere Liste = keine Gesichter."""
+        a, b = int(start * fps_i), min(int(end * fps_i) + 1, len(faces_seq))
+        if b <= a:
+            return []
+        best = []
+        for i in range(a, b):
+            if len(faces_seq[i]) > len(best):
+                best = faces_seq[i]
+        return [(fx, fw) for (fx, fy, fw) in best]
     S = Sprites(cfg, W, H)
     n_est = (max(int(args.duration * fps), 1) if args.duration else n_frames) + 8
     if voice_wav and os.path.exists(voice_wav) and cfg['effects'].get('anim', True):
@@ -5410,7 +5573,7 @@ def main():
         palette_at = scene_palette_sampler(args.input, cut_times)
         print("Adaptive Farben: Captions greifen die Szenen-Toene auf (pro Shot)")
     plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
-                        palette_at, cut_times=cut_times)
+                        palette_at, cut_times=cut_times, faces_at=faces_at)
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.

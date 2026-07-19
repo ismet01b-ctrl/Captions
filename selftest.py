@@ -95,6 +95,7 @@ def main():
         _scenario_security(tmp)
         _scenario_trail(tmp)
         _scenario_lang(tmp)
+        _scenario_multiperson(tmp)
 
     print()
     fails = [r for r in results if not r[1]]
@@ -2200,6 +2201,55 @@ def _scenario_lang(tmp):
     check('Szene-Prompt: KI entscheidet ob behind sichtbar ist',
           'LOHNT SICH "behind"' in _r and 'Person ~X% der Breite' in _r
           and 'face_cover' in _r)
+
+
+def _scenario_multiperson(tmp):
+    """v96: Mehrere Personen im Gespraech. Tracking erfasst alle, Active-Speaker
+    via Mund-Bewegung, Text weicht ALLEN Gesichtern aus, B-Roll-Filter kippt
+    ein echtes Gespraech nicht mehr weg."""
+    print('\n--- Multi-Person / Gespraech ---')
+    sys.path.insert(0, HERE)
+    import render as R
+    # 1) Spur-Zuordnung: zwei Personen (links wackelt viel, rechts kaum) ueber
+    #    drei Frames -> zwei stabile Spuren, links traegt mehr Bewegung.
+    dets = [
+        [[100, 200, 60, 8.0], [400, 200, 60, 0.2]],
+        [[104, 202, 60, 9.0], [402, 201, 60, 0.1]],
+        [[102, 201, 60, 7.0], [401, 200, 60, 0.3]],
+    ]
+    track_of, motion = R._faces_tracks(dets, max_d=80)
+    # linke Gesichter (Spalte 0) teilen sich eine Spur, rechte eine andere
+    left_tracks = {track_of[i][0] for i in range(3)}
+    right_tracks = {track_of[i][1] for i in range(3)}
+    check('Multi-Face: stabile Personen-Spuren (2 Personen, 2 Spuren)',
+          len(left_tracks) == 1 and len(right_tracks) == 1
+          and left_tracks != right_tracks, f'{track_of}')
+    check('Active-Speaker: Spur mit mehr Mund-Bewegung gewinnt',
+          motion[next(iter(left_tracks))] > motion[next(iter(right_tracks))])
+    # 2) _active_index waehlt in einem Frame das bewegte (sprechende) Gesicht
+    faces = dets[1]
+    aj = R._active_index(faces, track_of[1], motion)
+    check('Active-Speaker: aktives Gesicht ist der Sprecher (nicht das andere)',
+          faces[aj][0] == 104)
+    # bei ~0 Bewegung ueberall faellt es auf das groesste Gesicht zurueck
+    faces_still = [[100, 200, 50, 0.0], [400, 200, 90, 0.0]]
+    to = [10, 11]; mo = {10: 0.0, 11: 0.0}
+    check('Active-Speaker: ohne Bewegung -> groesstes Gesicht',
+          R._active_index(faces_still, to, mo) == 1)
+    # 3) Multi-Face-Safe-Zone: Text landet in einer Luecke, die KEIN Gesicht
+    #    ueberdeckt. Zwei Personen bei x=250 und x=1650 (Breite 1920).
+    W = 1920
+    side, cx = R._free_x_multi([(250, 120), (1650, 120)], W, W * 0.42, 0)
+    # verbotene Zonen: 250 +-156, 1650 +-156 -> Mitte ist frei
+    def _covers(cx, faces, half):
+        return any(abs(cx - fx) < fw * 1.3 + half for fx, fw in faces)
+    check('Multi-Face-Safe-Zone: Text deckt KEIN Gesicht ab',
+          not _covers(cx, [(250, 120), (1650, 120)], W * 0.21),
+          f'cx={cx:.0f}')
+    # 4) B-Roll-Filter kippt bei Multi-Person nicht mehr nach Groesse (Quelltext)
+    _r2 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('B-Roll: Groessen-Schranke bei Multi-Person aus (Gespraech bleibt)',
+          'and not multi_person' in _r2 and 'faces_seq' in _r2)
 
 
 def _scenario_premium(tmp):
