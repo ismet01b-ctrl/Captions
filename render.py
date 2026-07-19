@@ -3472,9 +3472,19 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 + 9.0 * zrel(i))
 
     plans, side_toggle, kwc, camc, scamc = [], 0, 0, 0, 0
-    # Variation: pro Video eigene Mischung (Seed aus der Wortzahl -> reproduzierbar)
-    _seed = len(words) * 7919
+    # v96e: Variation PRO VIDEO. Frueher war der Seed nur die Wortzahl - zwei
+    # verschiedene Videos mit gleich vielen Woertern bekamen dieselbe Mischung,
+    # und der Keyword-Effekt lief stur ab Index 0 (jedes Video: behind, cascade,
+    # ...). Jetzt kommt der Seed aus dem INHALT (Transkript-Text) - jedes andere
+    # Video bekommt eine andere, aber reproduzierbare Reihenfolge. Gleiches Video
+    # -> gleiches Ergebnis (Cache/Re-Render stabil), verschiedene Videos ->
+    # sichtbar andere Effekt-Mischung, Platzierung, Kamera.
+    import zlib as _zlib
+    _txt = ' '.join(w.get('word', '') for w in words).encode('utf-8', 'ignore')
+    _seed = (_zlib.crc32(_txt) ^ (len(words) * 2654435761)) & 0xffffffff
     rot_cam = Rotator(CAM_FX or ['none'], _seed)
+    rot_kw = Rotator(KW_FX or ['cascade'], _seed + 4)   # Keyword-Effekt-Mischung
+    side_toggle = _seed % 2                              # mal links, mal rechts zuerst
     rot_entr = Rotator(('edge_l', 'edge_r', 'rise', 'drop', 'zoom', 'swing', 'flip', 'morph',
                         'emerge'),
                        _seed + 1)
@@ -3659,7 +3669,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # behind/cascade wegge-mappt.
                 fx = wish                     # KI-Regie / Sprach-Intent hat entschieden
             else:
-                fx = KW_FX[kwc % len(KW_FX)]; kwc += 1
+                fx = rot_kw.next(); kwc += 1     # v96e: seed-gemischt statt stur
             txt = ' '.join(clean(words[j]['word']).upper() for j in phrase)
             _ov = info.get('txt') if isinstance(info, dict) else None
             words_c = words

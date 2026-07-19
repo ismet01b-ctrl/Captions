@@ -2298,6 +2298,22 @@ def _scenario_multiperson(tmp):
           spuk_gone)
     check('Gesichts-Erkennung: hoehere Aufloesung + niedrigere Confidence',
           'det_up' in _r2 and 'min_detection_confidence=0.25' in _r2)
+    # 7) v96e: Variation pro Video - Seed aus dem INHALT, Keyword-Effekt seed-
+    #    gemischt statt stur ab Index 0.
+    import zlib as _zl
+    _sa = _zl.crc32('der markt steigt heute stark'.encode())
+    _sb = _zl.crc32('ganz anderes video mit anderem text'.encode())
+    _fx = ('behind', 'cascade', 'blurin', 'outline', 'ground')
+    _rA = R.Rotator(_fx, _sa + 4); seqA = [_rA.next() for _ in range(6)]
+    _rA2 = R.Rotator(_fx, _sa + 4); seqA2 = [_rA2.next() for _ in range(6)]
+    _rB = R.Rotator(_fx, _sb + 4); seqB = [_rB.next() for _ in range(6)]
+    check('Variation: anderer Inhalt -> andere Effekt-Reihenfolge',
+          seqA != seqB, f'{seqA} vs {seqB}')
+    check('Variation: gleicher Inhalt -> reproduzierbar (Re-Render stabil)',
+          seqA == seqA2)
+    check('Variation: Keyword-Effekt seed-gemischt (nicht stur ab Index 0)',
+          'rot_kw = Rotator' in _r2 and 'rot_kw.next()' in _r2
+          and 'crc32' in _r2)
 
 
 def _scenario_premium(tmp):

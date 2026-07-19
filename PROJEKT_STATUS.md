@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96e: Kein Video sieht mehr aus wie das andere.**
+  Zwei Ursachen fuer den "alle Videos gleich"-Eindruck behoben: (1) der
+  Variations-Seed war nur die WORTZAHL - zwei verschiedene Videos mit gleich
+  vielen Woertern bekamen dieselbe Stil-Mischung. Jetzt kommt der Seed aus dem
+  INHALT (crc32 des Transkript-Texts): jedes andere Video -> andere, aber
+  reproduzierbare Mischung; gleiches Video -> gleiches Ergebnis (Cache/Re-Render
+  stabil). (2) Der Keyword-Effekt lief bei fehlender KI-Ansage stur ab Index 0
+  (jedes Video: behind, cascade, blurin, ...). Jetzt ueber den seed-gemischten
+  Rotator (Shuffle-Bag: jeder Effekt gleich oft, nie direkt doppelt) - die
+  Effekt-Reihenfolge unterscheidet sich sichtbar. Auch die Start-Seite (side_
+  toggle) haengt am Seed. Zusammen mit der KI-Regie (variiert ueber Inhalt +
+  Prompt) und der SFX-Variation (v96d) fuehlen sich zwei Videos jetzt anders an.
+  Selftest 454/454 + Render green.
 - **v96d: Mehr SFX-Abwechslung (nicht immer derselbe Klick).**
   Der Tick/Klick lief oft (cascade-Buchstabenlaeufer, outline, blurin, Folge-
   Captions) - und jeder Slot hatte nur EINE Datei, also immer exakt derselbe
