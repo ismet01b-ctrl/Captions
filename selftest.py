@@ -2156,6 +2156,16 @@ def _scenario_lang(tmp):
     check('Regie-Prompt: Selbstbezug-Regel (Captions hoeren zu)',
           'SELBSTBEZUG AUF DIE CAPTIONS' in _r
           and 'meine Captions explodieren' in _r)
+    # v96m: aktueller Standard verankert + Stil-Referenzen (Trend-Bezug) einspeisbar
+    check('Regie-Prompt: aktueller Short-Form-Standard 2026 verankert',
+          'AKTUELLER SHORT-FORM-STANDARD' in _r and 'STIL-REFERENZEN' in _r)
+    _rb = R._load_regie_reference()
+    check('Stil-Referenzen: regie_reference.json wird als Prompt-Block geladen',
+          isinstance(_rb, str) and 'STIL-REFERENZEN' in _rb
+          and 'kopiere aber KEINE Woerter' in _rb)
+    check('Stil-Referenzen: fehlende/leere Datei -> kein Block (kein Crash)',
+          R._load_regie_reference.__code__.co_argcount == 0
+          and 'ref_block + lang_hint' in _r)
     # v94: sichtbare Aktion-Animation darf nicht hinter der Person verschwinden
     words_v = [{'word': 'explodes', 'start': 0.0, 'end': 0.4}]
     reg_v = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":3,"anim":"explosion"}]}'

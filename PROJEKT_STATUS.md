@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96m: KI schneidet nach aktuellem Standard + einspeisbare Trend-Referenzen.**
+  Frage: waehlt die KI nach heutigem Standard, braucht sie Vorlagen/Trend-Bezug?
+  Ehrliche Antwort: die KI funktioniert ohne Vorlagen, aber few-shot-Referenzen
+  + ein expliziter Standard-Anker heben die Qualitaet und halten sie aktuell.
+  Zwei Bausteine: (1) Fester Block AKTUELLER SHORT-FORM-STANDARD (2026) im
+  Regie-Prompt - Hook in Sek 0-2, 2-3-Wort-Chunks, nur Schluesselwort betont,
+  Bewegung mit Absicht, Eskalation zum Ende, Muster-Bruch. (2) `regie_reference.
+  json` - Ismet legt dort aktuelle, starke Video-Beispiele als Prosa-Stilhinweis
+  ab (Trend-Bezug); `_load_regie_reference` speist sie als STIL-REFERENZEN in den
+  Prompt (Geschmack/Dichte/Wucht nachahmen, NIE die Woerter kopieren). Fehlt die
+  Datei, laeuft alles wie bisher. So bleibt die Regie ohne Codeaenderung aktuell -
+  neue Trends einfach in die JSON schreiben. Selftest 465/465 + Render green.
+  EHRLICH: Wirkung nur mit echtem Key sichtbar; die mitgelieferten 2 Beispiele
+  sind Platzhalter - ersetze sie durch echte aktuelle Referenzen.
 - **v96l: Effekt-Audit + SFX-Luecke bei wuchtigen Animationen geschlossen.**
   Audit (alle grün): 26 Animationen sind implementiert (anim_apply), im Regie-
   Prompt angeboten UND vom Parser akzeptiert (Whitelist gegen ANIM_LIST). fx

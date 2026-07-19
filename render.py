@@ -2296,7 +2296,56 @@ Jahr hoechstens als normalen Moment, nie als Zaehler.
 einen hoerbaren Effekt aus. Vergib sie NUR, wenn die Handlung wirklich im Satz \
 steht ("bricht", "faellt", "steigt", ...). Steht sie nicht da: KEINE Animation. \
 Lieber kein Effekt als ein falscher Sound auf einem harmlosen Wort.
+- AKTUELLER SHORT-FORM-STANDARD (viral, 2026 - so schneidet die Spitze heute):
+  * HOOK in Sekunde 0-2: der erste sichtbare Moment ist der staerkste Reiz -
+    Zahl, steile These oder Widerspruch. Nie mit Aufwaermen anfangen.
+  * 2-3 Wort-Chunks, die 600-900 ms stehen - kein Wort-Ping-Pong (liest sich
+    billig), keine ganzen Saetze (liest sich wie Fernsehen).
+  * NUR das Schluesselwort betont, nicht der halbe Satz. Ein Highlight sticht
+    nur, wenn drumherum Ruhe ist.
+  * Bewegung mit Absicht: der Effekt bebildert die AUSSAGE (steigt->anstieg,
+    bricht->bruch), er ist keine Deko. Ein ruhiger Moment ist besser als ein
+    zappelnder ohne Grund.
+  * ESKALATION: die groessten Momente (power 3) sitzen spaet, auf der Pointe/
+    Aufloesung - nicht alles vorne verschiessen.
+  * KEIN Muster zweimal hintereinander: Effekt-Typ, Wucht und Rhythmus wechseln,
+    sonst stumpft das Auge ab (Muster-Bruch = Kern moderner Retention).
+  Wenn dir STIL-REFERENZEN mitgegeben werden, richte dich an ihrem Geschmack aus
+  (Auswahl, Dichte, Wucht) - kopiere aber nie deren Woerter, nur den Stil.
 Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Effekt>", "power": <1-3>, "anim": "<optional>", "emoji": "<optional>"}]}"""
+
+
+def _load_regie_reference():
+    """v96m: STIL-REFERENZEN. Ismet kann in regie_reference.json aktuelle,
+    starke Beispiele hinterlegen (Trend-Bezug), an denen sich die Regie-KI
+    ausrichtet - Geschmack/Dichte/Wucht, NICHT die Woerter. Format: Liste von
+    {"name": "...", "beispiel": "kurzer Prosa-Hinweis, was hier stark ist"}.
+    Fehlt die Datei, laeuft alles wie bisher. Gibt einen fertigen Prompt-Block
+    oder '' zurueck."""
+    path = os.path.join(HERE, 'regie_reference.json')
+    if not os.path.exists(path):
+        return ''
+    try:
+        refs = json.load(open(path, encoding='utf-8'))
+    except Exception:
+        return ''
+    if not isinstance(refs, list) or not refs:
+        return ''
+    lines = []
+    for r in refs[:6]:
+        if not isinstance(r, dict):
+            continue
+        bsp = str(r.get('beispiel', '')).strip()
+        if not bsp:
+            continue
+        nm = str(r.get('name', '')).strip()
+        lines.append(f"- {nm + ': ' if nm else ''}{bsp}")
+    if not lines:
+        return ''
+    return ("STIL-REFERENZEN (aktuelle, starke Videos - richte Geschmack, Dichte "
+            "und Wucht danach aus, kopiere aber KEINE Woerter):\n"
+            + '\n'.join(lines) + "\n\n")
+
 
 def parse_regie(text, words, language='de'):
     import json as _json
@@ -2765,6 +2814,7 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     # v95: echten Sprech-Pegel pro Wort holen, damit die KI Effekt/Wucht am
     # Sound koppelt (! = laut/betont, ~ = leise). Fehlt die wav, bleibt es leer.
     loud = _word_loudness(words, voice_wav) if voice_wav else {}
+    ref_block = _load_regie_reference()      # v96m: Stil-Referenzen (Trend-Bezug)
     merged = {}
     for ci, (a, b, sel) in enumerate(chunks):
         part = words[a:b]
@@ -2787,7 +2837,7 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
                       '(Stimmspitze), "~" = leise/zurueckgenommen. Koppel '
                       'Effekt und Wucht daran (siehe AUDIO-DYNAMIK).'
                       if loud else '')
-        listing = lang_hint + part_hint + 'TRANSKRIPT:\n' + prose + \
+        listing = ref_block + lang_hint + part_hint + 'TRANSKRIPT:\n' + prose + \
                   '\n\nWORTLISTE (nur waehlbare Substanz-Woerter, ' \
                   'Fuellwoerter wurden entfernt):\n' + ' '.join(wl_toks) + pegel_hint
         try:
