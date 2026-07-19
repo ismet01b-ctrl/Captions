@@ -3,6 +3,15 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96k: Grosse Momente sehen wirklich verschieden aus (echter Fix).**
+  v96i griff zu frueh: es prueft (fx, anim), aber Mehrwort-Hoehepunkte werden
+  IMMER zur 'behind'-Komposition - der fx-Wechsel verpuffte, zwei Hoehepunkte
+  sahen gleich aus. Jetzt wird die Kombi NACH dem Setzen aller sichtbaren
+  Attribute geprueft: (Effekt-Ebene tpl, Animation, Einflug entr, Kamera).
+  Wiederholt sich ein Hoehepunkt, wird die MOTION aufgebrochen - anderer Einflug
+  + andere Kamera, und nur wenn's dann noch identisch waere, eine andere Impact-
+  Animation. Kein zweiter Hoehepunkt bewegt sich mehr wie der davor.
+  Selftest 461/461 + Render green.
 - **v96j: Hoehepunkt-SFX klingt wirklich anders + Elapsed-Zeit ueberlebt Reload.**
   - **SFX**: v96i rotierte boom/slam/impact - hatte das Pack aber nur EINEN Boom,
     kam trotzdem immer derselbe Sound. Jetzt ein FESTER, klar hoerbarer Pitch-

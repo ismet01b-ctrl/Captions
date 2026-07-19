@@ -712,7 +712,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96j-bigpitch'
+DVE_BUILD = 'v96k-bigmotion'
 
 
 @app.middleware('http')

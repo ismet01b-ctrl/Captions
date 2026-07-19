@@ -2342,9 +2342,10 @@ def _scenario_multiperson(tmp):
           'mom-cut' in _html and 'fx-behind.has-cut' in _html
           and "'cut'" in _r2)
     # 9) v96i: grosse Momente wiederholen sich nicht (visuell + SFX)
-    check('Hoehepunkt: keine exakte (fx,anim)-Wiederholung bei power 3',
-          'big_used = set()' in _r2 and 'big_used.add' in _r2
-          and '_pw_here >= 3' in _r2)
+    check('Hoehepunkt: keine visuelle Wiederholung (tpl,anim,entr,cam) bei power 3',
+          'big_used = set()' in _r2 and 'big_used.add(_sig)' in _r2
+          and "_sig = (p.get('tpl'), p.get('anim') or '', p.get('entr'), _cam)" in _r2
+          and 'Motion aufgebrochen' in _r2)
     _se2 = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
     check('Hoehepunkt-SFX: Einschlag rotiert + klarer Pitch-Versatz je Moment',
           "_lows = [s for s in ('boom', 'slam', 'impact')" in _se2

@@ -3786,25 +3786,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['count'] = {'fmt': _cnt[0], 'dur': _cnt[1]}
                 print(f"  Zaehler-Moment: {txt}")
 
-            # v96i: GROSSE Momente (power 3) duerfen sich nicht exakt wiederholen -
-            # kein zweiter Hoehepunkt mit derselben (Effekt, Animation)-Kombi.
-            # Nur bei EXAKTER Doppelung eingreifen (Effekt gleich UND Animation
-            # gleich), damit die KI-Wahl sonst unangetastet bleibt. Zuerst einen
-            # anderen Effekt aus der Rotation ziehen; hilft das nicht, wenigstens
-            # die Animation nicht wiederholen.
             _pw_here = int(info.get('power', 2)) if isinstance(info, dict) else 2
-            if _pw_here >= 3 and not broll and not _cnt:
-                _sig = (fx, p.get('anim') or '')
-                if _sig in big_used:
-                    for _ in range(len(KW_FX) or 1):
-                        _alt = rot_kw.next()
-                        if _alt != fx and (_alt, p.get('anim') or '') not in big_used:
-                            fx = _alt
-                            break
-                    if (fx, p.get('anim') or '') in big_used and p.get('anim'):
-                        p['anim'] = ''            # zumindest die Anim nicht doppeln
-                        print("  Hoehepunkt-Variation: Wiederholung aufgebrochen")
-                big_used.add((fx, p.get('anim') or ''))
 
             if broll:
                 p['ccam'] = 'none'
@@ -4033,6 +4015,40 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if face_pos is not None and not broll:
                 ax, ay, _ = face_pos(start, end)
                 p['anchor'] = (ax, ay)
+            # v96k: GROSSE Momente duerfen sich VISUELL nicht wiederholen. Jetzt -
+            # nachdem ALLE sichtbaren Attribute stehen (Effekt-Ebene, Animation,
+            # Einflug, Kamera) - die volle Kombi pruefen. Denn Mehrwort-Hoehepunkte
+            # werden immer zur 'behind'-Komposition, ein blosser fx-Wechsel vorher
+            # verpufft. Taucht die Kombi bei einem frueheren Hoehepunkt schon auf,
+            # wird die MOTION aufgebrochen: anderer Einflug + andere Kamera, und nur
+            # wenn's dann noch gleich ist, eine andere (Impact-)Animation.
+            if _pw_here >= 3 and not broll:
+                _cam = p.get('cam') or p.get('ccam') or 'none'
+                _sig = (p.get('tpl'), p.get('anim') or '', p.get('entr'), _cam)
+                if _sig in big_used:
+                    for _ in range(9):
+                        _e = (rot_entr_safe if safe_z else rot_entr).next()
+                        if _e != p.get('entr') and (_em_moeglich or _e != 'emerge'):
+                            p['entr'] = _e
+                            break
+                    if CAM_FX and p.get('cam') is not None:
+                        for _ in range(len(CAM_FX)):
+                            _c = rot_cam.next()
+                            if _c != _cam:
+                                p['cam'] = _c
+                                break
+                    _cam = p.get('cam') or p.get('ccam') or 'none'
+                    _sig = (p.get('tpl'), p.get('anim') or '', p.get('entr'), _cam)
+                    if _sig in big_used and p.get('anim'):
+                        for _a in ('explosion', 'zoom_punch', 'bruch', 'sturz',
+                                   'anstieg', 'stempel', 'kippen'):
+                            _s2 = (p.get('tpl'), _a, p.get('entr'), _cam)
+                            if _s2 not in big_used:
+                                p['anim'] = _a
+                                _sig = _s2
+                                break
+                    print("  Hoehepunkt-Variation: Motion aufgebrochen")
+                big_used.add(_sig)
             plans.append(p)
         else:
             side, sx = pick_side(start, end, side_toggle)
