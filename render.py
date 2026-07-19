@@ -1003,14 +1003,18 @@ Regeln: Wasser/Boden gross im Bild + grosser Moment -> "liegend". Klare Flaeche 
 Mittelgrund -> "stehend". Sprecher-Nahaufnahme -> "frei". Im Zweifel "frei".
 Antworte NUR mit JSON: {"momente": [{"i": <Index>, "szene": "...", "lage": "...", "fx": "<optional>"}]}"""
 
-def _oai_json(model, messages, max_toks, temperature):
+def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     """v94: chat/completions-Body, modell-kompatibel. Neuere Modelle (gpt-5,
     o-Serie) verlangen max_completion_tokens und lehnen ein abweichendes
     temperature ab; gpt-4o akzeptiert beides. Ohne das faellt ein neues Modell
-    still auf die Heuristik zurueck."""
+    still auf die Heuristik zurueck.
+    v96t: json_mode=False fuer PROSA-Antworten (Stil-Lernen). Mit
+    response_format=json_object verlangt OpenAI das Wort "json" im Prompt und
+    erzwingt JSON - ein Prosa-Prompt scheitert dann mit 400."""
     new = str(model).startswith(('gpt-5', 'o1', 'o3', 'o4'))
-    body = {'model': model, 'messages': messages,
-            'response_format': {'type': 'json_object'}}
+    body = {'model': model, 'messages': messages}
+    if json_mode:
+        body['response_format'] = {'type': 'json_object'}
     body['max_completion_tokens' if new else 'max_tokens'] = max_toks
     if not new:
         body['temperature'] = temperature
@@ -2365,7 +2369,7 @@ def analyze_reference_video(video_path, name=None, model='gpt-4o',
             'https://api.openai.com/v1/chat/completions',
             headers={'Authorization': f'Bearer {key}'},
             json=_oai_json(model, [{'role': 'user', 'content': content}],
-                           max_toks=400, temperature=0.3),
+                           max_toks=400, temperature=0.3, json_mode=False),
             timeout=120)
         r.raise_for_status()
         desc = r.json()['choices'][0]['message']['content'].strip()

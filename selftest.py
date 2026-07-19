@@ -2234,6 +2234,12 @@ def _scenario_lang(tmp):
     check('_oai_json gpt-5: max_completion_tokens, kein temperature',
           b5.get('max_completion_tokens') == 800 and 'temperature' not in b5
           and 'max_tokens' not in b5)
+    # v96t: Prosa-Modus (Stil-Lernen) darf KEIN response_format json_object haben
+    bj = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 400, 0.3)
+    bp = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 400, 0.3,
+                     json_mode=False)
+    check('_oai_json: Prosa-Modus ohne response_format (Stil-Lernen 400-Fix)',
+          'response_format' in bj and 'response_format' not in bp)
     # v95: Sprech-Pegel pro Wort -> die KI-Regie reagiert auf den Sound.
     import wave as _wave, tempfile as _tf
     import numpy as _np
