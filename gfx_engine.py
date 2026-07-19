@@ -757,14 +757,193 @@ def render_editorial(input_video, out_video, progress=print):
     return True
 
 
+def render_stackbuild(input_video, out_video, progress=print):
+    """PROTOTYP der EFFEKTE aus den 2 Referenzvideos (@migs.visuals /
+    @johnbucog_) - NICHT der Text, den macht die KI-Regie. Reine Typo-
+    Choreografie:
+      1. Aufbau-Stack: Woerter stapeln sich Wort fuer Wort, ersetzen sich NICHT.
+      2. Hierarchie inline: kleine Verbinder = mittlere Sans; KEYWORD = gross,
+         fett, GROSSBUCHSTABEN, weisser Glow; Akzent = kursive Serif, warmes Gold.
+      3. Keyword-Reveal = Schreibmaschine (Buchstabe fuer Buchstabe, ~0.16s),
+         volle Breite reserviert -> kein Layout-Zittern.
+      4. Verbinder/Akzent = weicher Pop-in (Scale + Fade).
+      5. Weicher Schatten fuer Lesbarkeit, dezenter Glow auf Hervorhebung.
+    Text bleibt im oberen Drittel VOR der Person (migs-Look)."""
+    if cv2 is None:
+        return False
+    from PIL import ImageFilter
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        return False
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fdir = os.path.join(HERE, 'fonts')
+
+    def FF(name, px):
+        try:
+            return ImageFont.truetype(os.path.join(fdir, name), int(px))
+        except Exception:
+            return _font(int(px))
+    sz_n = int(H * 0.049) * SS           # Verbinder
+    sz_h = int(H * 0.076) * SS           # Keyword (GROSS)
+    sz_a = int(H * 0.058) * SS           # Kursiv-Akzent
+    F_N = lambda: FF('poppins_b.ttf', sz_n)
+    F_H = lambda: FF('inter_black.ttf', sz_h)
+    F_A = lambda: FF('playfair_i.ttf', sz_a)
+    COL_N = (250, 248, 245, 255)
+    COL_H = (255, 255, 255, 255)
+    COL_A = (255, 189, 74, 255)          # warmes Gold
+    # (Wort, dt, art) art: 'n' normal | 'H' hero-keyword | 'a' kursiv-akzent
+    # In echt kommt das aus Whisper-Timing + KI-Regie (Keyword/Akzent-Wahl).
+    SENT = [
+        (0.5, [('why', 0.0, 'n'), ('do', 0.22, 'n'), ('most', 0.44, 'n'),
+               ('EDITS', 0.70, 'H'), ('feel', 1.20, 'n'), ('cheap', 1.45, 'a')]),
+        (4.2, [('its', 0.0, 'n'), ('not', 0.22, 'n'), ('the', 0.40, 'n'),
+               ('CAMERA', 0.62, 'H'), ('its', 1.15, 'n'), ('the', 1.33, 'n'),
+               ('details', 1.55, 'a')]),
+        (7.9, [('this', 0.0, 'n'), ('is', 0.22, 'n'), ('what', 0.40, 'n'),
+               ('PREMIUM', 0.64, 'H'), ('feels', 1.20, 'n'), ('like', 1.42, 'a')]),
+    ]
+    HOLD = 1.0                           # Satz haelt nach letztem Wort
+    tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), fps, (W, H))
+
+    def measure(txt, font):
+        l, t, r, b = font.getbbox(txt if txt else 'X')
+        asc, desc = font.getmetrics()
+        return (r - l), asc, desc, l
+
+    def sprite(txt, font, col, box_w=None):
+        w_full, asc, desc, lbear = measure(txt if txt else 'X', font)
+        w = box_w if box_w is not None else w_full
+        im = Image.new('RGBA', (max(w, 1) + 8, asc + desc + 8), (0, 0, 0, 0))
+        if txt:
+            ImageDraw.Draw(im).text((4 - lbear, 4), txt, font=font, fill=col)
+        return im, asc
+
+    i = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        t = i / fps
+        sent = None
+        for s0, words in SENT:
+            if s0 - 0.12 <= t < s0 + words[-1][1] + HOLD + 0.45:
+                sent = (s0, words)
+                break
+        if sent is not None:
+            s0, words = sent
+            t_end = s0 + words[-1][1] + HOLD
+            s_out = 1.0 if t < t_end else max(0.0, (t_end + 0.35 - t) / 0.35)
+            fonts = {'n': F_N(), 'H': F_H(), 'a': F_A()}
+            cols = {'n': COL_N, 'H': COL_H, 'a': COL_A}
+            # --- Layout: inline-Fluss mit Umbruch, Grundlinie ausgerichtet ---
+            max_w = int(W * 0.88) * SS
+            x0 = int(W * 0.06) * SS
+            space = int(W * 0.020) * SS
+            items = []
+            for (word, dt, art) in words:
+                ws = s0 + dt
+                if t < ws - 0.02:
+                    continue
+                fnt = fonts[art]
+                disp = word.upper() if art == 'H' else word
+                full_w, asc, desc, _ = measure(disp, fnt)
+                items.append((word, disp, art, ws, fnt, full_w, asc, desc))
+            # in Zeilen brechen (volle Breite je Wort -> stabil)
+            lines = []
+            cur = []
+            cur_w = 0
+            for it in items:
+                ww = it[5]
+                if cur and cur_w + space + ww > max_w:
+                    lines.append(cur)
+                    cur = []
+                    cur_w = 0
+                cur.append(it)
+                cur_w += (space if len(cur) > 1 else 0) + ww
+            if cur:
+                lines.append(cur)
+            txt_layer = Image.new('RGBA', (W * SS, H * SS), (0, 0, 0, 0))
+            glow_layer = Image.new('RGBA', (W * SS, H * SS), (0, 0, 0, 0))
+            y = int(H * 0.11) * SS
+            for line in lines:
+                l_asc = max(it[6] for it in line)
+                l_desc = max(it[7] for it in line)
+                baseline = y + l_asc
+                x = x0
+                for (word, disp, art, ws, fnt, full_w, asc, desc) in line:
+                    col = cols[art]
+                    # Reveal-Fortschritt
+                    if art == 'H':                       # Schreibmaschine
+                        pr = min(max((t - ws) / 0.16, 0.0), 1.0)
+                        n = max(1, int(math.ceil(pr * len(disp)))) if pr > 0 else 0
+                        shown = disp[:n]
+                        op = min(max((t - ws) / 0.08, 0.0), 1.0) * s_out
+                        spr, sasc = sprite(shown, fnt, col, box_w=full_w)
+                        scale = 1.0
+                    else:                                # weicher Pop-in
+                        e = _smoothstep(min(max((t - ws) / 0.14, 0.0), 1.0))
+                        op = e * s_out
+                        spr, sasc = sprite(disp, fnt, col)
+                        scale = 0.86 + 0.14 * e
+                    if op <= 0.01:
+                        x += full_w + space
+                        continue
+                    if scale != 1.0:
+                        nw = max(1, int(spr.width * scale))
+                        nh = max(1, int(spr.height * scale))
+                        spr = spr.resize((nw, nh), Image.LANCZOS)
+                        sasc = int(sasc * scale)
+                    a = spr.getchannel('A').point(lambda v: int(v * op))
+                    spr = spr.copy()
+                    spr.putalpha(a)
+                    px = x
+                    py = baseline - sasc - 4
+                    if art in ('H', 'a'):                # Glow auf Hervorhebung
+                        gcol = (255, 255, 255) if art == 'H' else (255, 176, 66)
+                        g = Image.new('RGBA', spr.size, (0, 0, 0, 0))
+                        g.paste(gcol + (int(150 * op),), (0, 0), spr.getchannel('A'))
+                        g = g.filter(ImageFilter.GaussianBlur(13))
+                        glow_layer.alpha_composite(g, (px, py))
+                    txt_layer.alpha_composite(spr, (px, py))
+                    x += full_w + space
+                y = baseline + l_desc + int(sz_n * 0.30)
+            # weicher Schatten aus der ganzen Text-Ebene (Lesbarkeit)
+            shadow = _soft_shadow(txt_layer, blur=10, alpha=120)
+            base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).convert('RGBA')
+            base.alpha_composite(shadow.resize((W, H), Image.LANCZOS), (0, 3))
+            base.alpha_composite(glow_layer.resize((W, H), Image.LANCZOS))
+            base.alpha_composite(txt_layer.resize((W, H), Image.LANCZOS))
+            frame = cv2.cvtColor(np.array(base.convert('RGB')), cv2.COLOR_RGB2BGR)
+        vw.write(frame)
+        i += 1
+    cap.release()
+    vw.release()
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', tmp, '-i', input_video,
+                        '-map', '0:v:0', '-map', '1:a:0?', '-c:v', 'libx264',
+                        '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+                        '-shortest', out_video], check=True, timeout=300)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    progress('Stack-Build-Prototyp fertig')
+    return True
+
+
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument('input')
     ap.add_argument('output')
     ap.add_argument('--demo', default='ed',
-                    choices=['1', '2', '3', 'ed'])
+                    choices=['1', '2', '3', 'ed', 'sb'])
     a = ap.parse_args()
     fn = {'1': render_demo, '2': render_demo2, '3': render_demo3,
-          'ed': render_editorial}[a.demo]
+          'ed': render_editorial, 'sb': render_stackbuild}[a.demo]
     raise SystemExit(0 if fn(a.input, a.output) else 1)
