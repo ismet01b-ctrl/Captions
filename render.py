@@ -990,6 +990,14 @@ Moment, wie der Text zur UMGEBUNG gehoert:
 "frei" = klassisches Overlay (Person im Bild, unruhiger Hintergrund).
 - Optional "fx": NUR wenn der Frame einen anderen Effekt verlangt als geplant \
 (z.B. geplant "behind", aber keine Person im Bild -> "ground").
+- LOHNT SICH "behind" HIER? "behind" legt den Text HINTER die Person und dimmt \
+ihn. Das wirkt nur, wenn RUND um die Person genug freie Flaeche ist. Fuellt die \
+Person das Bild fast aus (Nahaufnahme, ganz nah an der Kamera - im Text steht \
+dann ein hoher Prozentwert "Person ~X% der Breite"), bleibt vom Text hinter ihr \
+kaum etwas sichtbar. Entscheide dann bewusst UM auf eine sichtbare Platzierung \
+("outline"/"cascade" vorne, oder "ground" als grosses Statement). Ist reichlich \
+Hintergrund frei, darf "behind" bleiben. Du entscheidest pro Frame - es ist kein \
+Zwang, nur: verschenke keinen Moment hinter einem Gesicht, das alles verdeckt.
 
 Regeln: Wasser/Boden gross im Bild + grosser Moment -> "liegend". Klare Flaeche im \
 Mittelgrund -> "stehend". Sprecher-Nahaufnahme -> "frei". Im Zweifel "frei".
@@ -1009,21 +1017,27 @@ def _oai_json(model, messages, max_toks, temperature):
     return body
 
 
-def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2):
+def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2,
+                    face_cover=None):
     """Regie v4 (Vision): schaut sich pro gewaehltem Moment einen Frame an und
     entscheidet Material ('szene') und Lage ('liegend'/'stehend'/'frei').
     Ergaenzt fx_map in-place. Faellt bei jedem Fehler lautlos auf Text-Regie zurueck.
 
     v80e: min_power (Default 2) filtert billige power=1-Momente raus. Die kriegen
-    keine Vision-Analyse - fuer die reicht Text-Regie. Spart 60% Vision-Kosten."""
+    keine Vision-Analyse - fuer die reicht Text-Regie. Spart 60% Vision-Kosten.
+    v95c: face_cover {index: Gesichts-Breitenanteil 0..1} - die KI bekommt pro
+    Moment, wie sehr die Person das Bild fuellt, und entscheidet, ob 'behind'
+    (hinter der Person) ueberhaupt sichtbar waere. Zusaetzlich ein konservativer
+    Backstop bei extremer Nahaufnahme (schuetzt auch den Kein-Vision-Pfad)."""
     import requests
+    face_cover = face_cover or {}
     key = os.environ.get('OPENAI_API_KEY')
     if not key or not fx_map:
-        return fx_map
+        return _behind_cover_backstop(fx_map, face_cover)
     idx = [i for i in sorted(fx_map)
            if int(fx_map[i].get('power', 2)) >= min_power][:24]
     if not idx:
-        return fx_map                          # nur schwache Momente = kein Vision-Call
+        return _behind_cover_backstop(fx_map, face_cover)
     content = []
     sent = []
     for i in idx:
@@ -1032,8 +1046,11 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2):
             continue
         txt = ' '.join(clean(words[j]['word'])
                        for j in range(i, min(i + fx_map[i].get('n', 1), len(words))))
+        cov = face_cover.get(i)
+        cov_txt = f" Person ~{int(cov * 100)}% der Breite." if cov else ''
         content.append({'type': 'text',
-                        'text': f"MOMENT [{i}] Text: \"{txt}\" geplant: {fx_map[i].get('fx')}"})
+                        'text': f"MOMENT [{i}] Text: \"{txt}\" "
+                                f"geplant: {fx_map[i].get('fx')}.{cov_txt}"})
         content.append({'type': 'image_url',
                         'image_url': {'url': f'data:image/jpeg;base64,{b64}',
                                       'detail': 'low'}})
@@ -1069,6 +1086,28 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2):
         print(f"Vision-Regie: {n_v} Momente an die Umgebung angepasst")
     except Exception as e:
         print(f"Vision-Regie nicht verfuegbar ({type(e).__name__}), Text-Regie bleibt.")
+    return _behind_cover_backstop(fx_map, face_cover)
+
+
+def _behind_cover_backstop(fx_map, face_cover, thresh=0.52):
+    """v95c: Sicherheitsnetz gegen unsichtbares 'behind'. Fuellt die Person das
+    Bild fast aus (Gesichts-Breite >= thresh der Bildbreite = ganz nah an der
+    Kamera), sieht man vom gedimmten Text hinter ihr praktisch nichts. Dann auf
+    eine sichtbare Platzierung wechseln. Konservativ (nur extreme Nahaufnahmen),
+    damit es die feinere KI-Entscheidung nicht ueberstimmt - und es greift auch,
+    wenn gar keine Vision-KI lief (kein Key)."""
+    if not fx_map or not face_cover:
+        return fx_map
+    moved = 0
+    for i, v in fx_map.items():
+        if v.get('fx') != 'behind':
+            continue
+        if face_cover.get(i, 0.0) >= thresh:
+            # Grosses Statement -> ground, sonst klar sichtbares outline.
+            v['fx'] = 'ground' if int(v.get('power', 2)) >= 3 else 'outline'
+            moved += 1
+    if moved:
+        print(f"  Sichtbarkeit: {moved} 'behind' bei Nahaufnahme -> nach vorn")
     return fx_map
 
 def persp_warp(arr, yaw=0.0, pitch=0.0):
@@ -5195,10 +5234,23 @@ def main():
                                cfg['keywords'].get('ai_model', 'gpt-4o'),
                                voice_wav=voice_wav,
                                validate=cfg['keywords'].get('ai_validate', True))
+            if fx_map:
+                # v95c: Gesichts-Breitenanteil pro Moment (0..1) - wie sehr
+                # fuellt die Person das Bild. Speist die 'behind'-Entscheidung
+                # (KI + Backstop): hinter einem bildfuellenden Gesicht sieht man
+                # den Text nicht.
+                face_cover = {i: min(max(face_pos(words[i].get('start', 0),
+                                                  words[i].get('end', 0))[2] / max(W, 1),
+                                         0.0), 1.0)
+                              for i in list(fx_map)}
             if fx_map and cfg['keywords'].get('ai_vision', True):
                 fx_map = ai_scene_direct(words, fx_map, args.input,
                                          cfg['keywords'].get('ai_model', 'gpt-4o'),
-                                         min_power=int(cfg['keywords'].get('vision_min_power', 2)))
+                                         min_power=int(cfg['keywords'].get('vision_min_power', 2)),
+                                         face_cover=face_cover)
+            elif fx_map:
+                # Vision aus, aber der Backstop soll trotzdem greifen.
+                fx_map = _behind_cover_backstop(fx_map, face_cover)
             if fx_map:
                 json.dump({'keywords': [{'i': i, 'fx': v['fx'], 'power': v['power'],
                                          'n': v.get('n', 1),

@@ -2186,6 +2186,20 @@ def _scenario_lang(tmp):
     check('Regie-Prompt: AUDIO-DYNAMIK koppelt Effekt an Pegel',
           'AUDIO-DYNAMIK' in _r and 'Stimmspitze' in _r)
     os.remove(wpath)
+    # v95c: 'behind' lohnt sich nicht, wenn die Person das Bild fuellt.
+    fxm = {0: {'fx': 'behind', 'power': 3}, 1: {'fx': 'behind', 'power': 2},
+           2: {'fx': 'behind', 'power': 2}, 3: {'fx': 'outline', 'power': 2}}
+    cover = {0: 0.60, 1: 0.20, 2: 0.55, 3: 0.70}   # 0,2 = Nahaufnahme
+    out = R._behind_cover_backstop(dict((k, dict(v)) for k, v in fxm.items()), cover)
+    check('behind@Nahaufnahme: power3 -> ground, power2 -> outline, Rest bleibt',
+          out[0]['fx'] == 'ground' and out[2]['fx'] == 'outline'
+          and out[1]['fx'] == 'behind' and out[3]['fx'] == 'outline', str(out))
+    check('behind-Backstop: ohne Coverage-Daten unveraendert',
+          R._behind_cover_backstop({0: {'fx': 'behind', 'power': 3}}, {})
+          == {0: {'fx': 'behind', 'power': 3}})
+    check('Szene-Prompt: KI entscheidet ob behind sichtbar ist',
+          'LOHNT SICH "behind"' in _r and 'Person ~X% der Breite' in _r
+          and 'face_cover' in _r)
 
 
 def _scenario_premium(tmp):

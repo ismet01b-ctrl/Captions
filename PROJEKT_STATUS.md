@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v95c: KI entscheidet, ob "behind" hinter der Person sichtbar ist.**
+  Problem: Bei einer Nahaufnahme (Person ganz nah an der Kamera, fuellt fast das
+  ganze Bild) legt "behind" den Text hinter die Person und dimmt ihn - man sieht
+  praktisch nichts. Loesung: Der Gesichts-Breitenanteil pro Moment (aus dem
+  vorhandenen Face-Tracking, `face_w/W`) geht jetzt als "Person ~X% der Breite"
+  in die Vision-Regie, plus SZENE_PROMPT-Regel: fuellt die Person das Bild, weg
+  von "behind" hin zu sichtbar (outline/cascade/ground). Die KI ENTSCHEIDET pro
+  Frame (kein Zwang). Dazu ein konservativer Backstop `_behind_cover_backstop`
+  (Gesichts-Breite >= 52% -> power3 wird ground, sonst outline), der nur bei
+  extremer Nahaufnahme greift und auch wirkt, wenn keine Vision-KI lief (kein
+  Key). Selftest 436/436 + render1 green. Ehrlich: sichtbar erst mit echtem
+  Material; Sandbox prueft Backstop-Logik + Prompt/Signal-Verdrahtung.
 - **v95b: KI-Regie reagiert auf den Sound-Pegel.**
   Wunsch: Captions/Regie/Motion sollen an der ECHTEN Stimme haengen, nicht nur
   am Text. Neu: `_word_loudness()` misst den Sprech-Pegel pro Wort (RMS aus der
