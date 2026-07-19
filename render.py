@@ -2434,7 +2434,7 @@ def analyze_reference_video(video_path, name=None, model='gpt-4o',
     entry = {'name': (name or os.path.splitext(os.path.basename(video_path))[0])[:60],
              'beispiel': desc}
     if save:
-        path = os.path.join(HERE, 'regie_reference.json')
+        path = _reference_store_path()
         try:
             refs = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else []
             if not isinstance(refs, list):
@@ -2451,14 +2451,29 @@ def analyze_reference_video(video_path, name=None, model='gpt-4o',
     return entry
 
 
+def _reference_store_path():
+    """v96w: gelernte Stil-Referenzen liegen im PERSISTENTEN DATA-Ordner
+    (DVE_DATA), NICHT im Git-Repo - sonst wuerde jeder Deploy (Docker-Rebuild)
+    die Datei mit der Repo-Version ueberschreiben und das Gelernte waere weg.
+    Genau das war der Grund, warum die KI das Gelernte nicht anwandte."""
+    data = os.environ.get('DVE_DATA')
+    if data:
+        try:
+            os.makedirs(data, exist_ok=True)
+        except Exception:
+            pass
+        return os.path.join(data, 'regie_reference.json')
+    return os.path.join(HERE, 'regie_reference.json')
+
+
 def _load_regie_reference():
-    """v96m: STIL-REFERENZEN. Ismet kann in regie_reference.json aktuelle,
-    starke Beispiele hinterlegen (Trend-Bezug), an denen sich die Regie-KI
-    ausrichtet - Geschmack/Dichte/Wucht, NICHT die Woerter. Format: Liste von
-    {"name": "...", "beispiel": "kurzer Prosa-Hinweis, was hier stark ist"}.
-    Fehlt die Datei, laeuft alles wie bisher. Gibt einen fertigen Prompt-Block
-    oder '' zurueck."""
-    path = os.path.join(HERE, 'regie_reference.json')
+    """v96m: STIL-REFERENZEN. Ismet kann Beispiele hinterlegen (Trend-Bezug), an
+    denen sich die Regie-KI ausrichtet - Geschmack/Dichte/Wucht, NICHT die
+    Woerter. Liest ZUERST die gelernten (persistent, DATA), sonst die im Repo
+    mitgelieferten Defaults. Gibt einen fertigen Prompt-Block oder '' zurueck."""
+    path = _reference_store_path()
+    if not os.path.exists(path):
+        path = os.path.join(HERE, 'regie_reference.json')   # mitgelieferte Defaults
     if not os.path.exists(path):
         return ''
     try:

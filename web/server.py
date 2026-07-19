@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96v-refdetail'
+DVE_BUILD = 'v96w-refpersist'
 
 
 @app.middleware('http')
@@ -2626,9 +2626,10 @@ def _owner_ok(request: Request):
 
 
 def _reference_file():
-    # regie_reference.json liegt im Projekt-Root neben render.py
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        'regie_reference.json')
+    # v96w: PERSISTENT im DATA-Ordner (ueberlebt Deploys). Der Render liest
+    # denselben Pfad (render._reference_store_path). Frueher lag es im Repo ->
+    # jeder Deploy ueberschrieb das Gelernte -> KI wandte es nicht an.
+    return os.path.join(DATA, 'regie_reference.json')
 
 
 def _load_references():
