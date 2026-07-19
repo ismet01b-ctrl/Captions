@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v97d: Flow-"Zoom ins Leere" behoben.**
+  Ismet: "Der Zoom. Wohin zoomt der? Einfach so in die leere. Die captions
+  wurden nicht verfolgt." Ursache (von v97 eingeschleppt): der else-Zweig
+  uebernahm vom alten Stack die Seiten-Kamera (next_side_cam -> capzoom), die
+  auf `p['target']` zoomt. Bei Flow war target=(W*0.07, zc) = leerer linker
+  Rand auf halber Hoehe -> die Kamera zoomte ins Nichts, entkoppelt von der
+  oben-links verankerten Caption. Fix: Filler-Flow bekommt `ccam='none'`
+  (keine Zoom-Fahrt - ruhig wie die Referenz), target zeigt jetzt auf die echte
+  Caption-Position (oben) statt zc (korrekt fuer die Ueberlappungs-Logik). Die
+  dramatischen Keyword-Momente behalten ihre Kamera (crash/push/punch).
+  Vorher/Nachher-Frames bestaetigt: altes Framing war ins Leere gezogen, neues
+  bleibt natuerlich. Selftest bleibt gruen.
 - **v97c: Flow-Caption Bewegung/Tracking + Preset-Umfang.**
   Ismet: "Ich will, dass sich auch mal captions passend bewegen, und diese mit
   Tracking verfolgt werden." + Frage nach Preset-Geltung. (1) SANFTES Folgen:

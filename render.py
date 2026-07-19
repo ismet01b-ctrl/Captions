@@ -4583,9 +4583,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             y0 = int(H * 0.13) if portrait else (zc - tot_h / 2.0)
             for it in items:
                 it['cy'] += y0
-            ccam = 'none' if broll else next_side_cam()
+            # v97d: KEINE Seiten-/Cap-Zoom-Fahrt auf Filler-Flow. Die zog frueher
+            # zur alten Stack-Seite bzw. zum Ziel (W*0.07, zc) = leerer linker
+            # Rand auf halber Hoehe -> "Zoom ins Leere", entkoppelt von der oben
+            # verankerten Caption. Filler bleibt ruhig (wie die Referenz); die
+            # dramatischen Keyword-Momente behalten ihre Kamera.
             sp = {'tpl': 'flow', 'front': items, 'start': start, 'end': end,
-                  'side': 0, 'ccam': ccam, 'target': (int(W * 0.07), zc),
+                  'side': 0, 'ccam': 'none',
+                  'target': (int(W * 0.07), int(y0 + tot_h / 2.0)),
                   'broll': broll}
             if anchor_i is not None:                 # leiser Tick auf den Anker
                 sp['flow'] = True
