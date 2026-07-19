@@ -2216,6 +2216,9 @@ async function resumeActiveJob() {
     }
     // Es laeuft noch. Sprung in Step 4 und Polling wieder aufnehmen.
     State.jid = saved.jid;
+    // v96j: Elapsed-Zeit weiterlaufen lassen statt bei 0 neu zu starten -
+    // renderStart aus dem gespeicherten Job-Start wiederherstellen.
+    State.renderStart = saved.ts || Date.now();
     goStep(4);
     $('#progressCard').classList.remove('hidden');
     $('#btnRender').disabled = true;

@@ -241,8 +241,17 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
             lg = local_gain(t0)
             _lows = [s for s in ('boom', 'slam', 'impact') if s in bank] or ['boom']
             _low = _lows[_big_i % len(_lows)]
-            place(V('riser'), t0 - 0.85, 0.7 * lg)
-            place(V(_low), t0 + 0.02, 0.85 * lg)
+            # v96j: DEUTLICHE Variation, auch wenn das Pack nur EINEN Boom hat.
+            # Fester, klar hoerbarer Pitch-Versatz pro grossem Moment (nicht nur
+            # der Mikro-Jitter) - so klingt kein Hoehepunkt wie der davor.
+            _bp = (1.0, 0.87, 1.14, 0.93, 1.08, 0.82)[_big_i % 6]
+            _rp = (1.0, 1.10, 0.90, 1.06, 0.86, 1.15)[_big_i % 6]
+            _riser = bank.get('riser')
+            if _riser is not None:
+                place(_pitch(_riser, _rp), t0 - 0.85, 0.7 * lg)
+            _lowsig = bank.get(_low)
+            if _lowsig is not None:
+                place(_pitch(_lowsig, _bp), t0 + 0.02, (0.80 + 0.06 * (_big_i % 3)) * lg)
             _big_i += 1
         if p.get('count'):
             # Zaehler-SFX rollt exakt so lange wie die Zahl hochzaehlt

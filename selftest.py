@@ -2346,9 +2346,13 @@ def _scenario_multiperson(tmp):
           'big_used = set()' in _r2 and 'big_used.add' in _r2
           and '_pw_here >= 3' in _r2)
     _se2 = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
-    check('Hoehepunkt-SFX: Einschlag rotiert (boom/slam/impact) + V()-Variation',
+    check('Hoehepunkt-SFX: Einschlag rotiert + klarer Pitch-Versatz je Moment',
           "_lows = [s for s in ('boom', 'slam', 'impact')" in _se2
-          and '_big_i % len(_lows)' in _se2 and 'place(V(_low)' in _se2)
+          and '_pitch(_lowsig, _bp)' in _se2 and '_pitch(_riser, _rp)' in _se2)
+    # zwei aufeinanderfolgende grosse Momente -> hoerbar anderer Pitch (Tabellen
+    # unterscheiden sich an Index 0 vs 1)
+    check('Hoehepunkt-SFX: Pitch-Tabellen variieren zwischen den Momenten',
+          '(1.0, 0.87, 1.14' in _se2 and '(1.0, 1.10, 0.90' in _se2)
 
 
 def _scenario_premium(tmp):

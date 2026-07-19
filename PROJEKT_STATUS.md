@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96j: Hoehepunkt-SFX klingt wirklich anders + Elapsed-Zeit ueberlebt Reload.**
+  - **SFX**: v96i rotierte boom/slam/impact - hatte das Pack aber nur EINEN Boom,
+    kam trotzdem immer derselbe Sound. Jetzt ein FESTER, klar hoerbarer Pitch-
+    Versatz pro grossem Moment (Riser UND Einschlag, eigene Tabellen), zusaetzlich
+    zur Slot-Rotation. Auch mit nur einer Boom-Datei klingt kein Hoehepunkt wie
+    der davor.
+  - **Elapsed-Timer**: beim Neuladen der Seite waehrend eines Renders sprang die
+    verstrichene Zeit auf 0. Jetzt wird `renderStart` aus dem gespeicherten Job-
+    Start (ts) wiederhergestellt - der Zaehler laeuft korrekt weiter.
+  Selftest 461/461 + Render green.
 - **v96i: Grosse Momente wiederholen sich nicht - weder visuell noch im Sound.**
   - **Visuell**: kein zweiter Hoehepunkt (power 3) mit derselben (Effekt,
     Animation)-Kombi. `big_used` merkt sich die benutzten Kombis; bei EXAKTER
