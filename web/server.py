@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96q-reffeedback'
+DVE_BUILD = 'v96r-refdiag'
 
 
 @app.middleware('http')
@@ -2650,34 +2650,42 @@ async def reference_learn(request: Request, datei: UploadFile = File(...),
     ext = os.path.splitext(datei.filename or '')[1].lower() or '.mp4'
     if ext not in ('.mp4', '.mov', '.m4v', '.webm', '.mkv'):
         raise HTTPException(400, 'Only video files (mp4, mov, webm, mkv).')
-    d = os.path.join(DATA, 'reftmp')
-    os.makedirs(d, exist_ok=True)
-    tmp = os.path.join(d, uuid.uuid4().hex[:10] + ext)
-    groesse = 0
-    with open(tmp, 'wb') as f:
-        while True:
-            chunk = await datei.read(1 << 20)
-            if not chunk:
-                break
-            groesse += len(chunk)
-            if groesse > 200 * 1024 * 1024:
-                f.close(); os.remove(tmp)
-                raise HTTPException(413, 'Reference video too large (max 200 MB).')
-            f.write(chunk)
+    tmp = None
     try:
+        d = os.path.join(DATA, 'reftmp')
+        os.makedirs(d, exist_ok=True)
+        tmp = os.path.join(d, uuid.uuid4().hex[:10] + ext)
+        groesse = 0
+        with open(tmp, 'wb') as f:
+            while True:
+                chunk = await datei.read(1 << 20)
+                if not chunk:
+                    break
+                groesse += len(chunk)
+                if groesse > 200 * 1024 * 1024:
+                    raise HTTPException(413, 'Reference video too large (max 200 MB).')
+                f.write(chunk)
+        if not os.environ.get('OPENAI_API_KEY'):
+            raise HTTPException(400, 'Server has no OPENAI_API_KEY set - the AI '
+                                     'cannot look at the video. Set it in the '
+                                     'server environment and try again.')
         import render as _R
         entry = _R.analyze_reference_video(
             tmp, name=(_safe_name(name) or _safe_name(datei.filename or 'Referenz')))
+        if not entry:
+            raise HTTPException(502, 'The AI could not analyze this video '
+                                     '(no frames extracted or the vision request '
+                                     'failed). Try a shorter mp4.')
+        return {'entry': entry, 'refs': _load_references()}
+    except HTTPException:
+        raise
     except Exception as e:
-        entry = None
-        print(f'reference_learn Fehler: {type(e).__name__}: {e}')
+        # Owner-only Endpoint -> echten Grund zeigen, damit man es diagnostizieren kann.
+        raise HTTPException(500, f'{type(e).__name__}: {e}')
     finally:
-        try: os.remove(tmp)
-        except OSError: pass
-    if not entry:
-        raise HTTPException(502, 'Could not analyze the video '
-                                 '(AI key missing or analysis failed).')
-    return {'entry': entry, 'refs': _load_references()}
+        if tmp:
+            try: os.remove(tmp)
+            except OSError: pass
 
 
 @app.post('/api/reference/delete')
