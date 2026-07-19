@@ -457,12 +457,163 @@ def render_demo(input_video, out_video, accent=(255, 122, 26), progress=print):
     return bool(okv)
 
 
+def _ease_over(t, over=1.10):
+    """Snap-in mit Overshoot + Settle (die Kern-Kurve fuer teuren Look):
+    schnell auf 'over', federt auf 1.0. t in 0..1."""
+    t = min(max(t, 0.0), 1.0)
+    e = 1.0 - (1.0 - t) ** 3                     # ease-out-cubic (snap)
+    return 1.0 + (over - 1.0) * math.sin(min(t / 0.62, 1.0) * math.pi) * (1.0 - t * 0.35) \
+        if t < 1.0 else 1.0
+
+
+def _word_img(txt, font, col, stroke, stroke_col=(8, 8, 10, 255)):
+    dummy = ImageDraw.Draw(Image.new('RGBA', (8, 8)))
+    bb = dummy.textbbox((0, 0), txt, font=font, stroke_width=stroke)
+    pad = stroke + 10
+    img = Image.new('RGBA', (bb[2] - bb[0] + pad * 2, bb[3] - bb[1] + pad * 2),
+                    (0, 0, 0, 0))
+    ImageDraw.Draw(img).text((pad - bb[0], pad - bb[1]), txt, font=font,
+                             fill=col, stroke_width=stroke, stroke_fill=stroke_col)
+    return img
+
+
+def render_demo3(input_video, out_video, progress=print):
+    """Der ECHTE High-End-Short-Form-Standard (Recherche 2026): wort-fuer-Wort
+    synchron, Inter-Black all-caps mit schwarzem Outline, EIN Keyword gelb, das
+    aktive Wort bekommt einen Scale-Bump. Timing macht den teuren Look:
+    Snap-in mit Overshoot+Settle (~140ms), Motion-Blur nur am Anschlag, kurze
+    Stille zwischen Phrasen, dezenter Drop-Shadow. Restraint statt Deko."""
+    if cv2 is None:
+        return False
+    from PIL import ImageFilter
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        return False
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    YEL = (247, 194, 4, 255)
+    WHT = (252, 252, 250, 255)
+    sz = int(H * 0.058) * SS
+    try:
+        font = ImageFont.truetype(os.path.join(HERE, 'fonts', 'inter_black.ttf'), sz)
+    except Exception:
+        font = _font(sz)
+    stroke = max(int(sz * 0.11), 3)
+
+    # Phrasen (Wort, start, dauer_bis_naechstes, keyword?) - wie ein echter
+    # Talking-Head-Rhythmus. In echt kommt das aus dem Whisper-Wort-Timing.
+    PHRASES = [
+        [('THIS', 0.6), ('CHANGES', 0.95), ('EVERYTHING', 1.35, True)],
+        [('WATCH', 2.7), ('HOW', 3.0), ('FAST', 3.35, True), ('IT', 3.75), ('MOVES', 3.95)],
+        [('NOBODY', 5.2), ('EDITS', 5.6), ('LIKE', 5.95), ('THIS', 6.2, True)],
+        [('THATS', 7.4), ('THE', 7.7), ('DIFFERENCE', 8.0, True)],
+    ]
+    # jedes Wort vorab rendern (weiss + gelb Variante)
+    cache = {}
+    for ph in PHRASES:
+        for w in ph:
+            t = w[0]
+            key = len(w) > 2 and w[2]
+            cache[(t, False)] = _word_img(t, font, WHT, stroke)
+            if key:
+                cache[(t, True)] = _word_img(t, font, YEL, stroke)
+
+    def phrase_end(ph):
+        return ph[-1][1] + 1.0                    # letztes Wort haelt ~1s
+
+    tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), fps, (W, H))
+    i = 0
+    gap = int(W * 0.018)
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        t = i / fps
+        # aktive Phrase finden
+        ph = None
+        for p in PHRASES:
+            if p[0][1] - 0.12 <= t < phrase_end(p) + 0.25:
+                ph = p
+                break
+        if ph is not None:
+            pe = phrase_end(ph)
+            p_out = 1.0 if t < pe else max(0.0, 1.0 - (t - pe) / 0.25)   # Phrase blendet weich aus
+            vis = [w for w in ph if t >= w[1] - 0.02]
+            if vis:
+                # Layout: eine zentrierte Zeile, bei Bedarf 2 Zeilen
+                items = []
+                for w in vis:
+                    key = len(w) > 2 and w[2]
+                    img = cache[(w[0], bool(key))]
+                    ap_t = (t - w[1]) / 0.14                     # 140ms Pop
+                    sc = _ease_over(ap_t, 1.12) if ap_t < 1 else 1.0
+                    items.append((w, img, sc, ap_t))
+                # Zeilen umbrechen (max ~92% Breite)
+                maxw = W * SS * 0.92
+                lines, cur, cw = [], [], 0
+                for it in items:
+                    iw = it[1].width * (it[2] if it[2] > 1 else 1.0)
+                    if cur and cw + iw + gap * SS > maxw:
+                        lines.append((cur, cw)); cur, cw = [], 0
+                    cur.append(it); cw += iw + gap * SS
+                if cur:
+                    lines.append((cur, cw))
+                ov = Image.new('RGBA', (W * SS, H * SS), (0, 0, 0, 0))
+                line_h = int(sz * 1.18)
+                total_h = line_h * len(lines)
+                y = int(H * 0.70) * SS - total_h // 2
+                for (ln, lw) in lines:
+                    x = int(W * SS - (lw - gap * SS)) // 2
+                    for (w, img, sc, ap_t) in ln:
+                        iw = img.width
+                        sw, sh = max(int(iw * sc), 1), max(int(img.height * sc), 1)
+                        wi = img.resize((sw, sh), Image.LANCZOS)
+                        # Motion-Blur nur am Anschlag (erste ~40ms)
+                        if 0 <= ap_t < 0.3:
+                            wi = wi.filter(ImageFilter.GaussianBlur((0.3 - ap_t) * 9))
+                        op = min(max(ap_t / 0.5, 0.0), 1.0) * p_out
+                        yr = int((1 - min(ap_t, 1.0)) * 14 * SS) if ap_t < 1 else 0
+                        if op < 1.0:
+                            a2 = wi.getchannel('A').point(lambda v: int(v * op))
+                            wi = wi.copy(); wi.putalpha(a2)
+                        # Drop-Shadow
+                        sh_im = _soft_shadow(wi, 8, 120)
+                        cxw = x + iw // 2
+                        px = int(cxw - sw // 2)
+                        py = int(y + (line_h - sh) // 2 + yr)
+                        ov.alpha_composite(sh_im, (px, py + 5 * SS))
+                        ov.alpha_composite(wi, (px, py))
+                        x += iw + gap * SS
+                    y += line_h
+                base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).convert('RGBA')
+                base.alpha_composite(ov.resize((W, H), Image.LANCZOS))
+                frame = cv2.cvtColor(np.array(base.convert('RGB')), cv2.COLOR_RGB2BGR)
+        vw.write(frame)
+        i += 1
+    cap.release()
+    vw.release()
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', tmp, '-i', input_video,
+                        '-map', '0:v:0', '-map', '1:a:0?', '-c:v', 'libx264',
+                        '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+                        '-shortest', out_video], check=True, timeout=300)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    progress('Standard-Demo v3 fertig')
+    return True
+
+
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument('input')
     ap.add_argument('output')
-    ap.add_argument('--v1', action='store_true')
+    ap.add_argument('--demo', default='3', choices=['1', '2', '3'])
     a = ap.parse_args()
-    fn = render_demo if a.v1 else render_demo2
+    fn = {'1': render_demo, '2': render_demo2, '3': render_demo3}[a.demo]
     raise SystemExit(0 if fn(a.input, a.output) else 1)
