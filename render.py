@@ -383,9 +383,11 @@ def _bruch_shards(base, rng, n=4):
         rel = (k - (n - 1) / 2.0) / max((n - 1) / 2.0, 1e-6)
         shards.append({
             'arr': piece,
-            'dx': rel * w * 0.028 + (float(rng.random()) - 0.5) * w * 0.008,
-            'dy': (float(rng.random()) - 0.25) * h * 0.10,
-            'rot': rel * 3.2 + (float(rng.random()) - 0.5) * 1.6,
+            # v94: kraeftiger - Scherben fliegen weiter auseinander und kippen
+            # staerker (vorher kaum sichtbar).
+            'dx': rel * w * 0.060 + (float(rng.random()) - 0.5) * w * 0.020,
+            'dy': (float(rng.random()) - 0.25) * h * 0.22,
+            'rot': rel * 6.5 + (float(rng.random()) - 0.5) * 3.0,
         })
     return shards
 
@@ -493,7 +495,7 @@ def _anim_core(p, base, aud, dt):
         prog = min(max((dt - 0.30) / 0.50, 0.0), 1.0)
         if prog > 0.001:
             h, w = base.shape[:2]
-            pad_x, pad_y = int(w * 0.09) + 6, int(h * 0.16) + 6
+            pad_x, pad_y = int(w * 0.20) + 6, int(h * 0.34) + 6   # v94: mehr Platz fuer weiteren Flug
             key = (base.shape, id(base))
             cache = p.get('_bruch')
             if not cache or cache['shape'] != base.shape:
@@ -656,22 +658,29 @@ def _anim_core(p, base, aud, dt):
             h, w = base.shape[:2]
             n_col = 8                          # 8 vertikale Streifen
             cw = max(w // n_col, 6)
-            pad = int(w * 0.25) + 6
-            out = np.zeros((h, w + 2 * pad, 4), base.dtype)
+            # v94: dramatischer - Streifen fliegen deutlich weiter (0.22 -> 0.48)
+            # und driften zusaetzlich vertikal auseinander (echter 2D-Aufschlag).
+            padx = int(w * 0.50) + 6
+            pady = int(h * 0.30) + 6
+            out = np.zeros((h + 2 * pady, w + 2 * padx, 4), base.dtype)
             for i in range(n_col):
                 x0 = i * cw
                 x1 = min(x0 + cw, w)
                 if x1 <= x0:
                     continue
                 seg = base[:, x0:x1]
-                # radial vom Zentrum weg
                 cx = (x0 + x1) / 2 - w / 2
-                dx_s = int(cx / (w / 2) * (w * 0.22) * spread)
-                dst_x = pad + x0 + dx_s
-                if 0 <= dst_x <= w + 2 * pad - (x1 - x0):
-                    np.maximum(out[:, dst_x:dst_x + (x1 - x0)], seg,
-                               out=out[:, dst_x:dst_x + (x1 - x0)])
+                dx_s = int(cx / (w / 2) * (w * 0.48) * spread)
+                # aeussere Streifen fliegen auch nach oben/unten weg
+                dy_s = int((abs(cx) / (w / 2)) * (h * 0.22) * spread
+                           * (1 if i % 2 else -1))
+                dst_x = padx + x0 + dx_s
+                dst_y = pady + dy_s
+                if 0 <= dst_x <= w + 2 * padx - (x1 - x0) and 0 <= dst_y <= h + 2 * pady - h:
+                    np.maximum(out[dst_y:dst_y + h, dst_x:dst_x + (x1 - x0)], seg,
+                               out=out[dst_y:dst_y + h, dst_x:dst_x + (x1 - x0)])
             arr = out
+        sc = 1.0 + 0.22 * max(spread, 0.0)     # Scale-Pop beim Aufschlag
         op = min(dt / 0.05, 1.0)
 
     elif a == 'magnet':                       # umgekehrte Explosion: aus Streuung zusammenziehen
