@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96w-refpersist'
+DVE_BUILD = 'v96x-refwired'
 
 
 @app.middleware('http')
@@ -1021,6 +1021,23 @@ def _sanitize_overrides(ov):
     if not isinstance(ov, dict):
         return {}
     out = {k: v for k, v in ov.items() if k in _OV_SECTIONS}
+    # v96x: Sektionen muessen Dicts sein (ausser language) - 'keywords': null
+    # o.ae. wuerde build_config crashen.
+    for k in list(out):
+        if k not in ('language', 'matting_quality', 'matting_downsample') \
+                and not isinstance(out[k], dict):
+            out.pop(k)
+    # v96x QUALITAET: Die KI-Regie ist der Kern und NIE abschaltbar - kein
+    # Override/Template darf keywords.ai/ai_model/ai_vision/ai_validate setzen.
+    # (Alte gespeicherte Presets pinnten sonst z.B. still ai_model='gpt-4o'
+    # gegen den neuen gpt-5-Default oder koennten die Regie ganz abschalten.)
+    kwo = out.get('keywords')
+    if isinstance(kwo, dict):
+        _KW_OK = {'include', 'exclude', 'auto', 'emphasize_last',
+                  'min_gap_seconds'}
+        out['keywords'] = {k: v for k, v in kwo.items() if k in _KW_OK}
+        if not out['keywords']:
+            out.pop('keywords')
     # v92-sec: language fliesst bis in einen Dateinamen (Transkript-Cache).
     # Nur ein sauberer Sprachcode oder 'auto' darf durch - alles andere raus,
     # damit kein Pfad-Traversal moeglich ist.
@@ -2626,10 +2643,15 @@ def _owner_ok(request: Request):
 
 
 def _reference_file():
-    # v96w: PERSISTENT im DATA-Ordner (ueberlebt Deploys). Der Render liest
-    # denselben Pfad (render._reference_store_path). Frueher lag es im Repo ->
-    # jeder Deploy ueberschrieb das Gelernte -> KI wandte es nicht an.
-    return os.path.join(DATA, 'regie_reference.json')
+    # v96x: EXAKT derselbe Pfad wie der Render (render._reference_store_path) -
+    # sonst schreiben Web und Render bei fehlendem DVE_DATA (lokal/Windows) an
+    # zwei verschiedene Orte und der Render findet das Gelernte nie. Im Docker
+    # (DVE_DATA=/data) identisch mit DATA/regie_reference.json.
+    try:
+        import render as _R
+        return _R._reference_store_path()
+    except Exception:
+        return os.path.join(DATA, 'regie_reference.json')
 
 
 def _load_references():

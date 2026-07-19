@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96x: Voll-Audit "KI wendet Gelerntes nicht an" - 4 Bruchstellen gefixt.**
+  Kompletter Ketten-Audit (tcache, Presets/Looks, Referenz-Kette, Docker/Env)
+  per 4 parallelen Quelltext-Pruefungen. Befund: Looks sind unschuldig (kein
+  Preset setzt keywords.*), tcache cached nur das Transkript, Docker-Env sauber
+  (DVE_DATA=/data, Volume persistent, env vererbt). Vier ECHTE Bruchstellen
+  gefixt: (1) Regie-Cache-Bypass: existierte _regie3.json (Analyze-Flow,
+  Re-Render nach Momente-Edit), lief ai_direct NIE - frisch gelernte Referenzen
+  wirkten auf diese Renders nicht. Jetzt traegt _regie3.json einen ref_fp-
+  Fingerprint; aendern sich die Referenzen, wird der Cache verworfen und die KI
+  plant neu. (2) refs[:6]-Bug: der Loader nahm die AELTESTEN 6, der Store haengt
+  neue hinten an - ab der 7. Referenz fiel das frisch Gelernte aus dem Prompt.
+  Jetzt refs[-6:] (neueste). (3) Kein Anwendungs-Log: ein leerer Block war
+  unsichtbar. Jetzt loggt ai_direct "Stil-Referenzen: N aktiv" bzw. "keine
+  gefunden" - im Job-Log beweisbar. (4) Overrides/Templates konnten die KI-Regie
+  abschalten oder das Modell pinnen: _sanitize_overrides liess die keywords-
+  Sektion ungefiltert durch (alte gespeicherte Presets pinnten z.B. still
+  ai_model='gpt-4o' gegen den gpt-5-Default; keywords:null crashte
+  build_config). Jetzt Whitelist (include/exclude/auto/emphasize_last/
+  min_gap_seconds) - ai/ai_model/ai_vision/ai_validate sind NIE per Client
+  aenderbar (KI-Regie = Kern, nicht optional), Nicht-Dict-Sektionen fliegen
+  raus. Bonus: server._reference_file nutzt exakt render._reference_store_path
+  (kein Pfad-Split ohne DVE_DATA, relevant fuer Windows-lokal).
+  Selftest 481/481 + Render green.
 - **v96n: Aus Referenz-Videos lernen (Vision -> Stil-Referenz).**
   `analyze_reference_video()`: sampelt Frames eines High-End-Caption-Videos,
   laesst GPT-4o-Vision den STIL beschreiben (Pacing, Dichte, betonte Woerter,

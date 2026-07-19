@@ -1998,6 +1998,20 @@ def _scenario_security(tmp):
           and 'master' not in ov.get('output', {})
           and ov['effects']['blender_samples'] == 256
           and ov['effects']['bg_blur'] == 0.5 and 'boeses' not in ov)
+    # v96x: KI-Regie NIE per Override/Template abschaltbar; Nicht-Dict-Sektionen
+    # (keywords: null) crashen build_config nicht mehr.
+    ovk = SV._sanitize_overrides({'keywords': {'ai': False, 'ai_model': 'gpt-4o',
+                                               'ai_vision': False,
+                                               'include': ['Zins'],
+                                               'min_gap_seconds': 8},
+                                  'effects': None, 'camera': 'kaputt'})
+    check('cfg_overrides: keywords.ai/ai_model/ai_vision nicht ueberschreibbar',
+          'ai' not in ovk.get('keywords', {})
+          and 'ai_model' not in ovk.get('keywords', {})
+          and 'ai_vision' not in ovk.get('keywords', {})
+          and ovk['keywords']['include'] == ['Zins']
+          and ovk['keywords']['min_gap_seconds'] == 8
+          and 'effects' not in ovk and 'camera' not in ovk, str(ovk))
     # 4-6) Quelltext-Garantien (Signatur-Pflicht, Ownership, Login-Limit)
     _src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('Stripe-Webhook erzwingt Secret',
@@ -2219,6 +2233,39 @@ def _scenario_lang(tmp):
     check('Stil-Lernen: Audio/SFX wird separat aus der Tonspur analysiert',
           isinstance(_as, str) and ('AUDIO/SFX' in _as or _as == '')
           and 'def _ref_audio_summary' in _r and 'aud = _ref_audio_summary' in _r)
+    # v96x: Referenzen wirken WIRKLICH - drei Garantien:
+    # (a) die NEUESTEN Referenzen landen im Prompt (Store haengt hinten an)
+    import tempfile as _tfx
+    _refdir = _tfx.mkdtemp(prefix='dve_refx_')
+    _old_dd = os.environ.get('DVE_DATA')
+    os.environ['DVE_DATA'] = _refdir
+    try:
+        json.dump([{'name': f'R{k}', 'beispiel': f'Stilhinweis Nummer {k}'}
+                   for k in range(1, 9)],
+                  open(os.path.join(_refdir, 'regie_reference.json'), 'w',
+                       encoding='utf-8'))
+        _blk = R._load_regie_reference()
+        _fp1 = R._ref_fingerprint()
+        json.dump([{'name': 'NEU', 'beispiel': 'Ganz neuer Stil'}],
+                  open(os.path.join(_refdir, 'regie_reference.json'), 'w',
+                       encoding='utf-8'))
+        _fp2 = R._ref_fingerprint()
+    finally:
+        if _old_dd is None:
+            os.environ.pop('DVE_DATA', None)
+        else:
+            os.environ['DVE_DATA'] = _old_dd
+        shutil.rmtree(_refdir, ignore_errors=True)
+    check('Stil-Referenzen: die NEUESTEN 6 landen im Prompt (nicht die aeltesten)',
+          'Nummer 8' in _blk and 'Nummer 1' not in _blk, _blk[:120])
+    # (b) Regie-Cache wird bei geaenderten Referenzen verworfen (Fingerprint)
+    check('Stil-Referenzen: Regie-Cache invalidiert bei Referenz-Aenderung',
+          _fp1 != _fp2 and "'ref_fp': _ref_fingerprint()" in _r
+          and 'alte Regie verworfen' in _r)
+    # (c) Anwendung ist im Job-Log beweisbar
+    check('Stil-Referenzen: Anwendung wird geloggt (aktiv/keine)',
+          'Stil-Referenzen: {_n_refs} aktiv' in _r.replace('f"', '"')
+          or 'aktiv - fliessen in die KI-Regie ein' in _r)
     # v94: sichtbare Aktion-Animation darf nicht hinter der Person verschwinden
     words_v = [{'word': 'explodes', 'start': 0.0, 'end': 0.4}]
     reg_v = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":3,"anim":"explosion"}]}'

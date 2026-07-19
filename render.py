@@ -2483,7 +2483,10 @@ def _load_regie_reference():
     if not isinstance(refs, list) or not refs:
         return ''
     lines = []
-    for r in refs[:6]:
+    # v96x: die NEUESTEN 6 (der Store haengt neue hinten an und haelt refs[-12:];
+    # refs[:6] nahm die aeltesten - ab der 7. Referenz fiel das frisch Gelernte
+    # aus dem Prompt).
+    for r in refs[-6:]:
         if not isinstance(r, dict):
             continue
         bsp = str(r.get('beispiel', '')).strip()
@@ -2496,6 +2499,14 @@ def _load_regie_reference():
     return ("STIL-REFERENZEN (aktuelle, starke Videos - richte Geschmack, Dichte "
             "und Wucht danach aus, kopiere aber KEINE Woerter):\n"
             + '\n'.join(lines) + "\n\n")
+
+
+def _ref_fingerprint():
+    """v96x: Fingerprint des EFFEKTIVEN Referenz-Blocks. Steht im Regie-Cache
+    (_regie3.json) - aendert sich der Block (Stil gelernt/geloescht), ist der
+    Cache ungueltig und die KI plant neu mit den aktuellen Referenzen."""
+    import hashlib
+    return hashlib.md5(_load_regie_reference().encode('utf-8')).hexdigest()
 
 
 def parse_regie(text, words, language='de'):
@@ -2966,6 +2977,13 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     # Sound koppelt (! = laut/betont, ~ = leise). Fehlt die wav, bleibt es leer.
     loud = _word_loudness(words, voice_wav) if voice_wav else {}
     ref_block = _load_regie_reference()      # v96m: Stil-Referenzen (Trend-Bezug)
+    # v96x: BEWEIS im Job-Log, ob Referenzen wirklich in den Prompt fliessen -
+    # vorher war ein leerer/verlorener Block unsichtbar ("KI wendet nichts an").
+    if ref_block:
+        _n_refs = sum(1 for l in ref_block.splitlines() if l.startswith('- '))
+        print(f"Stil-Referenzen: {_n_refs} aktiv - fliessen in die KI-Regie ein")
+    else:
+        print("Stil-Referenzen: keine gefunden (Regie laeuft ohne Stil-Anker)")
     merged = {}
     for ci, (a, b, sel) in enumerate(chunks):
         part = words[a:b]
@@ -5768,8 +5786,20 @@ def main():
     if cfg['keywords'].get('ai', True):
         regie_path = os.path.splitext(args.input)[0] + '_regie3.json'
         if os.path.exists(regie_path):
-            fx_map = parse_regie(open(regie_path, encoding='utf-8').read(), words,
-                                 cfg.get('language', 'de'))
+            # v96x: Regie-Cache ist nur gueltig, wenn die Stil-Referenzen seit
+            # seinem Entstehen UNVERAENDERT sind. Sonst (User hat inzwischen
+            # einen Stil gelernt/geloescht) wird der Cache verworfen und die
+            # KI plant neu MIT den aktuellen Referenzen - vorher wirkte ein
+            # frisch gelernter Stil auf Analyze-/Re-Render-Jobs nie.
+            _rtxt = open(regie_path, encoding='utf-8').read()
+            try:
+                _rfp = json.loads(_rtxt).get('ref_fp')
+            except Exception:
+                _rfp = None
+            if _rfp == _ref_fingerprint():
+                fx_map = parse_regie(_rtxt, words, cfg.get('language', 'de'))
+            else:
+                print("Stil-Referenzen geaendert - alte Regie verworfen, KI plant neu")
         if fx_map is None:
             print("KI-Regie analysiert das Transkript...")
             fx_map = ai_direct(words, cfg.get('language', 'de'),
@@ -5794,7 +5824,8 @@ def main():
                 # Vision aus, aber der Backstop soll trotzdem greifen.
                 fx_map = _behind_cover_backstop(fx_map, face_cover)
             if fx_map:
-                json.dump({'keywords': [{'i': i, 'fx': v['fx'], 'power': v['power'],
+                json.dump({'ref_fp': _ref_fingerprint(),   # v96x: Cache-Gueltigkeit
+                           'keywords': [{'i': i, 'fx': v['fx'], 'power': v['power'],
                                          'n': v.get('n', 1),
                                          **({'anim': v['anim']} if v.get('anim') else {}),
                                          **({'szene': v['szene']} if v.get('szene') else {}),
