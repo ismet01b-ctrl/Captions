@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96d: Mehr SFX-Abwechslung (nicht immer derselbe Klick).**
+  Der Tick/Klick lief oft (cascade-Buchstabenlaeufer, outline, blurin, Folge-
+  Captions) - und jeder Slot hatte nur EINE Datei, also immer exakt derselbe
+  Sound. Neu: (1) pro Slot koennen Varianten liegen (slot_1.wav, slot_2.wav ...),
+  `load_variants` laedt alle, der Picker `V(slot)` wechselt reihum durch;
+  (2) Mikro-Variation `_pitch` + Pegel-Jitter pro Platzierung (deterministische
+  Folge) - so klingt selbst mit nur EINER Datei jeder Einsatz minimal anders.
+  Alle wiederkehrenden Platzierungen (tick/whoosh_soft/whoosh/impact) laufen jetzt
+  ueber V(). `fetch_pack` laedt beim Sound-Pack-Download bis zu 2 weitere CC0-
+  Treffer je Slot als Varianten. Kein Synthetik, weiter nur echte CC0-Sounds.
+  Selftest 451/451 + Render green. EHRLICH: hoerbar wird die Abwechslung erst
+  im echten Ton (Sandbox prueft Varianten-Laden + Pitch-Shift, nicht den Klang).
 - **v96c: Bessere Gesichts-Erkennung (auch nicht-frontal) + robustere Safe-Zones.**
   Wunsch: Gesichter, die nicht frontal in die Kamera schauen, muessen auch
   erkannt werden und die Safe-Zone bei mehreren Personen halten.

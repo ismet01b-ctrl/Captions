@@ -688,6 +688,20 @@ def _scenario_logic(clip, transcript, tmp):
     check('Sound-Pack: alle Slots definiert',
           set(_SP.SLOTS) == set(_SE.SLOTS), f'{len(_SE.SLOTS)} Slots')
     check('Sound-Pack wird geladen', len(_SE.load_bank(folder2)) == len(_SE.SLOTS))
+    # v96d: SFX-Variation - Varianten-Dateien + Mikro-Pitch, damit nicht jeder
+    # Klick identisch klingt.
+    _mk('tick_1', 900); _mk('tick_2', 700)          # zwei Tick-Varianten dazu
+    _var = _SE.load_variants(folder2)
+    check('SFX-Varianten: tick laedt Haupt + 2 Varianten (mehr Abwechslung)',
+          len(_var.get('tick', [])) == 3 and len(_var.get('impact', [])) == 1,
+          f"tick={len(_var.get('tick', []))}")
+    _base = _var['tick'][0]
+    _hi = _SE._pitch(_base, 1.05); _lo = _SE._pitch(_base, 0.95)
+    check('SFX-Mikro-Pitch: veraendert Laenge/Klang (kein identischer Klick)',
+          len(_hi) < len(_base) < len(_lo)
+          and _SE._pitch(_base, 1.0) is _base)
+    os.remove(os.path.join(folder2, 'tick_1.wav'))
+    os.remove(os.path.join(folder2, 'tick_2.wav'))
     # LIZENZ: es darf NUR CC0 durchkommen. Andere Lizenzen = Rechtsproblem.
     _fake = {'results': [
         {'id': 1, 'name': 'CC0 Sound', 'duration': 0.5, 'num_downloads': 9,

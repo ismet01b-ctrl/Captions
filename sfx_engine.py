@@ -65,6 +65,46 @@ def load_bank(folder=None):
     return bank
 
 
+# v96d: Mikro-Variation. Selbst mit EINER Datei pro Slot soll nicht jeder Klick
+# identisch klingen (der "immer gleiche Maus-Klick"). Deterministische Folge aus
+# leichten Pitch- und Pegel-Abweichungen pro Platzierung + optionale Varianten-
+# Dateien (slot_1.wav ...), die reihum durchgewechselt werden.
+_JIT_P = (1.000, 0.955, 1.052, 0.928, 1.081, 0.985, 1.033, 0.910, 1.068, 0.972)
+_JIT_G = (1.00, 0.90, 1.09, 0.94, 1.06, 0.88, 1.10, 0.97, 1.04, 0.92)
+
+
+def _pitch(sig, f):
+    """Leichter Pitch-/Zeit-Shift durch Resampling (f>1 = kuerzer+heller)."""
+    if sig is None or len(sig) < 8 or abs(f - 1.0) < 1e-3:
+        return sig
+    idx = np.arange(0, len(sig) - 1, f, dtype=np.float32)
+    return np.interp(idx, np.arange(len(sig)), sig).astype(np.float32)
+
+
+def load_variants(folder=None):
+    """Wie load_bank, aber pro Slot ALLE Varianten: slot.wav + slot_1.wav ...
+    Rueckgabe: {slot: [signal, ...]} - erste ist die Hauptdatei."""
+    pdir = folder or pack_folder()
+    out = {}
+    if not os.path.isdir(pdir):
+        return out
+    for slot in SLOTS:
+        sigs = []
+        names = [slot + '.wav'] + [f'{slot}_{k}.wav' for k in range(1, 6)]
+        for name in names:
+            p = os.path.join(pdir, name)
+            if os.path.exists(p):
+                try:
+                    s = load_wav(p)
+                    if len(s) > 64:
+                        sigs.append(s)
+                except Exception:
+                    pass
+        if sigs:
+            out[slot] = sigs
+    return out
+
+
 def load_wav(path):
     with wave.open(path, 'rb') as w:
         n = w.getnframes()
@@ -103,6 +143,26 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
     fehlt = [s for s in SLOTS if s not in bank]
     print(f"Sound-Pack: {len(bank)}/{len(SLOTS)} echte Sounds geladen"
           + (f" (fehlen: {', '.join(fehlt)})" if fehlt else ""))
+    # v96d: Varianten + Mikro-Variation, damit sich wiederkehrende Sounds (v.a.
+    # der Tick/Klick) nicht identisch anhoeren. V(slot) wechselt reihum durch
+    # die Varianten-Dateien und legt pro Aufruf einen leichten Pitch/Pegel-Jitter
+    # drauf - auch bei nur einer Datei klingt jeder Einsatz minimal anders.
+    _variants = load_variants(folder if (folder and os.path.isdir(folder)) else None)
+    _vc = {}
+    _nvar = sum(len(v) for v in _variants.values())
+    if _nvar > len(_variants):
+        print(f"  SFX-Varianten: {_nvar} Dateien fuer {len(_variants)} Slots "
+              f"(mehr Abwechslung)")
+
+    def V(slot):
+        """Naechste Variante eines Slots mit Pitch/Pegel-Jitter - oder None."""
+        vs = _variants.get(slot)
+        if not vs:
+            return bank.get(slot)          # kein Varianten-Eintrag -> Original
+        c = _vc.get(slot, 0)
+        _vc[slot] = c + 1
+        sig = vs[c % len(vs)]
+        return _pitch(sig, _JIT_P[c % len(_JIT_P)]) * _JIT_G[c % len(_JIT_G)]
     total = np.zeros(int((duration + 1.5) * SR), dtype=np.float32)
 
     env, hop, ref = None, 441, None
@@ -207,21 +267,21 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
             print(f"  SFX '{clean_word(words[p['kw_i']]['word'])}': Hochzaehlen ({cdur:.1f}s)")
             continue
         if tpl == 'behind':
-            place(bank.get('whoosh'), t0 - 0.30, 0.8 * g)
-            place(bank.get('impact'), t0 - 0.02, 1.0 * g)
+            place(V('whoosh'), t0 - 0.30, 0.8 * g)
+            place(V('impact'), t0 - 0.02, 1.0 * g)
         elif tpl == 'blurin':
-            place(bank.get('riser'), t0 - 0.78, 0.9 * g)
-            place(bank.get('tick'), t0 + 0.30, 0.5 * g)
+            place(V('riser'), t0 - 0.78, 0.9 * g)
+            place(V('tick'), t0 + 0.30, 0.5 * g)
         elif tpl == 'cascade':
-            place(bank.get('whoosh_soft'), t0 - 0.05, 0.9 * g)
+            place(V('whoosh_soft'), t0 - 0.05, 0.9 * g)
             for k, dt_l in enumerate((0.10, 0.19, 0.27)):     # Buchstaben-Laeufer
-                place(bank.get('tick'), t0 + dt_l, (0.30 - k * 0.07) * g)
+                place(V('tick'), t0 + dt_l, (0.30 - k * 0.07) * g)
         elif tpl == 'ground':
-            place(bank.get('whoosh_soft'), t0 - 0.05, 0.9 * g)
-            place(bank.get('impact'), t0 + 0.12, 0.45 * g)        # der Text "steht"
+            place(V('whoosh_soft'), t0 - 0.05, 0.9 * g)
+            place(V('impact'), t0 + 0.12, 0.45 * g)        # der Text "steht"
         elif tpl == 'outline':
-            place(bank.get('whoosh_soft'), t0 - 0.05, 0.55 * g)
-            place(bank.get('tick'), t0 + 0.26, 0.9 * g)
+            place(V('whoosh_soft'), t0 - 0.05, 0.55 * g)
+            place(V('tick'), t0 + 0.26, 0.9 * g)
         n_placed += 1
         w = words[p['kw_i']]['word'].strip()
         print(f"  SFX '{w}': Onset {off*1000:+.0f} ms, Pegel x{g:.2f}"
@@ -234,11 +294,8 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
     # nur echtes Uebereinander und der Keyword-Einschlag selbst werden gemieden.
     last_tick = -9.0
     n_ticks = 0
-    soft = bank.get('whoosh_soft')
-    if soft is None:
-        soft = bank.get('whoosh')
-    if soft is None:
-        soft = bank.get('tick')
+    _soft_slot = ('whoosh_soft' if 'whoosh_soft' in bank
+                  else 'whoosh' if 'whoosh' in bank else 'tick')
     for p in plans:
         if p.get('tpl') != 'stack':
             continue
@@ -248,9 +305,9 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
         if any(abs(ts - kt) < 0.32 for kt in kw_times):
             continue                       # nicht direkt auf den Keyword-Einschlag
         g_soft = local_gain(ts)
-        place(soft, ts - 0.04, 0.42 * g_soft)
+        place(V(_soft_slot), ts - 0.04, 0.42 * g_soft)   # jede Caption variiert
         # feiner Akzent auf dem Wort-Einsatz obendrauf (fuellt die Stille)
-        place(bank.get('tick'), ts + 0.02, 0.22 * g_soft)
+        place(V('tick'), ts + 0.02, 0.22 * g_soft)
         last_tick = ts
         n_ticks += 1
     if n_ticks:
