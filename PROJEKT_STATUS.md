@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96i: Grosse Momente wiederholen sich nicht - weder visuell noch im Sound.**
+  - **Visuell**: kein zweiter Hoehepunkt (power 3) mit derselben (Effekt,
+    Animation)-Kombi. `big_used` merkt sich die benutzten Kombis; bei EXAKTER
+    Doppelung wird zuerst ein anderer Effekt aus der Rotation gezogen, sonst
+    wenigstens die Animation nicht wiederholt. Nur bei exakter Doppelung
+    eingegriffen - die KI-Wahl bleibt sonst unangetastet.
+  - **SFX**: der grosse Einschlag war immer riser+boom (identisch). Jetzt rotiert
+    der tiefe Hit durch die vorhandenen Slots (boom/slam/impact) und V() legt
+    Pitch/Pegel-Variation drauf - jeder Hoehepunkt klingt anders.
+  Selftest 460/460 + Render green.
 - **v96h: Editor-"behind"-Vorschau sitzt jetzt WIRKLICH hinter der Person.**
   Die v96g-Loesung (Text nur dimmen) reichte nicht - die Person war im flachen
   Thumbnail eingebacken, CSS konnte den Text nicht ZWISCHEN Hintergrund und

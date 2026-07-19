@@ -210,6 +210,7 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
             total[i:j] += sig[:j - i] * gain
 
     n_placed = 0
+    _big_i = 0                             # v96i: zaehlt grosse Momente fuer Variation
     kw_times = []                          # fuer den Anti-Matsch-Limiter der Stacks
     for p in plans:
         if 'kw_i' not in p:
@@ -232,10 +233,17 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
                 place(bank[_nm], t0 + _off, _gn * g)
             print(f"  SFX '{clean_word(words[p['kw_i']]['word'])}': "
                   f"{_an} ({_nm})")
-        # Grosse Momente (power 3) bekommen eine eigene Ebene: Riser rein, Boom drunter
+        # Grosse Momente (power 3): eigene Ebene aus Riser + tiefem Einschlag.
+        # v96i: zwei Hoehepunkte duerfen nicht gleich KLINGEN -> der Einschlag
+        # rotiert durch die vorhandenen tiefen Slots (boom/slam/impact) und V()
+        # legt Pitch/Pegel-Variation drauf. So sitzt jeder grosse Moment anders.
         if pw >= 3:
-            place(bank.get('riser'), t0 - 0.85, 0.7 * local_gain(t0))
-            place(bank.get('boom'), t0 + 0.02, 0.85 * local_gain(t0))
+            lg = local_gain(t0)
+            _lows = [s for s in ('boom', 'slam', 'impact') if s in bank] or ['boom']
+            _low = _lows[_big_i % len(_lows)]
+            place(V('riser'), t0 - 0.85, 0.7 * lg)
+            place(V(_low), t0 + 0.02, 0.85 * lg)
+            _big_i += 1
         if p.get('count'):
             # Zaehler-SFX rollt exakt so lange wie die Zahl hochzaehlt
             cdur = 1.0

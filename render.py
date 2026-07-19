@@ -3526,6 +3526,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     rot_cam = Rotator(CAM_FX or ['none'], _seed)
     rot_kw = Rotator(KW_FX or ['cascade'], _seed + 4)   # Keyword-Effekt-Mischung
     side_toggle = _seed % 2                              # mal links, mal rechts zuerst
+    big_used = set()      # v96i: (fx, anim) bereits benutzter GROSSER Momente -
+                          #       kein Hoehepunkt darf visuell exakt gleich sein
     rot_entr = Rotator(('edge_l', 'edge_r', 'rise', 'drop', 'zoom', 'swing', 'flip', 'morph',
                         'emerge'),
                        _seed + 1)
@@ -3783,6 +3785,26 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if _cnt:
                 p['count'] = {'fmt': _cnt[0], 'dur': _cnt[1]}
                 print(f"  Zaehler-Moment: {txt}")
+
+            # v96i: GROSSE Momente (power 3) duerfen sich nicht exakt wiederholen -
+            # kein zweiter Hoehepunkt mit derselben (Effekt, Animation)-Kombi.
+            # Nur bei EXAKTER Doppelung eingreifen (Effekt gleich UND Animation
+            # gleich), damit die KI-Wahl sonst unangetastet bleibt. Zuerst einen
+            # anderen Effekt aus der Rotation ziehen; hilft das nicht, wenigstens
+            # die Animation nicht wiederholen.
+            _pw_here = int(info.get('power', 2)) if isinstance(info, dict) else 2
+            if _pw_here >= 3 and not broll and not _cnt:
+                _sig = (fx, p.get('anim') or '')
+                if _sig in big_used:
+                    for _ in range(len(KW_FX) or 1):
+                        _alt = rot_kw.next()
+                        if _alt != fx and (_alt, p.get('anim') or '') not in big_used:
+                            fx = _alt
+                            break
+                    if (fx, p.get('anim') or '') in big_used and p.get('anim'):
+                        p['anim'] = ''            # zumindest die Anim nicht doppeln
+                        print("  Hoehepunkt-Variation: Wiederholung aufgebrochen")
+                big_used.add((fx, p.get('anim') or ''))
 
             if broll:
                 p['ccam'] = 'none'

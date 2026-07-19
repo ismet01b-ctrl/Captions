@@ -2341,6 +2341,14 @@ def _scenario_multiperson(tmp):
     check('Editor: behind legt Personen-Cutout ueber den Text (has-cut)',
           'mom-cut' in _html and 'fx-behind.has-cut' in _html
           and "'cut'" in _r2)
+    # 9) v96i: grosse Momente wiederholen sich nicht (visuell + SFX)
+    check('Hoehepunkt: keine exakte (fx,anim)-Wiederholung bei power 3',
+          'big_used = set()' in _r2 and 'big_used.add' in _r2
+          and '_pw_here >= 3' in _r2)
+    _se2 = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
+    check('Hoehepunkt-SFX: Einschlag rotiert (boom/slam/impact) + V()-Variation',
+          "_lows = [s for s in ('boom', 'slam', 'impact')" in _se2
+          and '_big_i % len(_lows)' in _se2 and 'place(V(_low)' in _se2)
 
 
 def _scenario_premium(tmp):
