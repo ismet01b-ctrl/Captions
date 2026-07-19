@@ -2060,11 +2060,40 @@ def _scenario_security(tmp):
     # 15) Login gleicht Timing an (Dummy-Hash bei unbekannter Mail)
     check('Login: Timing-Angleich gegen Mail-Enumeration',
           '_verify_pw(password, _DUMMY_HASH)' in _src)
-    # 15b) v96p: Referenz-Stil-Endpoints nur fuers Besitzer-Konto (global wirksam)
+    # 15b) v96p/s: Referenz-Stil-Endpoints nur fuers Besitzer-Konto (global wirksam)
     check('Referenz-Stil: nur Besitzer-Konto (OWNER_EMAIL), Session-gate',
           'OWNER_EMAIL' in _src and 'def _owner_ok' in _src
-          and _src.count('if not _owner_ok(request):') == 3
+          and _src.count('if not _owner_ok(request):') >= 3
           and "'is_owner':" in _src and '/api/reference/learn' in _src)
+    # 15c) v96s Regression: _owner_ok muss mit einer echten sqlite3.Row klappen
+    # (Row hat KEIN .get() - genau das war die 500-Ursache). Mit einem dict waere
+    # der Bug unentdeckt geblieben, darum bewusst eine Row.
+    import sqlite3 as _sq3
+
+    class _Rq2:
+        def __init__(self, email):
+            self._e = email
+            self.cookies = {}
+        # _owner_ok ruft _current_user(request); wir patchen das gleich
+    _con = _sq3.connect(':memory:'); _con.row_factory = _sq3.Row
+    _row_owner = _con.execute("SELECT 'Ismet-01_b@HOTMAIL.de' AS email").fetchone()
+    _row_other = _con.execute("SELECT 'wer@anders.de' AS email").fetchone()
+    _con.close()
+    _old_cur = SV._current_user
+    _old_owner_env = os.environ.get('DVE_OWNER')
+    try:
+        SV.OWNER_EMAIL = 'ismet-01_b@hotmail.de'
+        SV._current_user = lambda req: req._row
+        r_ok = _Rq2(''); r_ok._row = _row_owner
+        r_no = _Rq2(''); r_no._row = _row_other
+        r_anon = _Rq2(''); r_anon._row = None
+        owner_true = SV._owner_ok(r_ok)
+        owner_false = SV._owner_ok(r_no)
+        anon_false = SV._owner_ok(r_anon)
+    finally:
+        SV._current_user = _old_cur
+    check('Referenz-Stil: _owner_ok klappt mit sqlite3.Row (kein .get-500)',
+          owner_true is True and owner_false is False and anon_false is False)
     # 16) v94: _video_hash kollidiert nicht bei gleichem Anfang/Ende, anderer
     # Mitte (der Bug, der einen deutschen Transkript-Cache an einen englischen
     # Clip servierte). Zwei Dateien: identischer Kopf+Fuss, verschiedene Mitte.

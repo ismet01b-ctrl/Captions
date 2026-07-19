@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96s-diagbtn'
+DVE_BUILD = 'v96t-ownerfix'
 
 
 @app.middleware('http')
@@ -2613,9 +2613,16 @@ def _admin_ok(request: Request):
 def _owner_ok(request: Request):
     """v96p: Nur das Besitzer-Konto (OWNER_EMAIL) darf die Stil-Referenzen
     sehen/aendern - sie wirken global auf alle Renders. Ueber die Session, kein
-    Extra-Key noetig."""
+    Extra-Key noetig. Hinweis: _current_user liefert eine sqlite3.Row - die hat
+    KEIN .get(), darum Klammer-Zugriff (der .get()-Fehler war die 500-Ursache)."""
     u = _current_user(request)
-    return bool(u) and str(u.get('email', '')).strip().lower() == OWNER_EMAIL
+    if not u:
+        return False
+    try:
+        email = u['email']
+    except Exception:
+        return False
+    return str(email or '').strip().lower() == OWNER_EMAIL
 
 
 def _reference_file():
