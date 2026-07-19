@@ -2250,6 +2250,18 @@ def _scenario_multiperson(tmp):
     _r2 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('B-Roll: Groessen-Schranke bei Multi-Person aus (Gespraech bleibt)',
           'and not multi_person' in _r2 and 'faces_seq' in _r2)
+    # 5) Automatischer Modus-Schalter: narrator / talking_head / conversation
+    check('Modus: kaum Gesicht -> narrator (Erzaehler/Voiceover)',
+          R._video_mode(0.05, False) == 'narrator'
+          and R._video_mode(0.0, False) == 'narrator')
+    check('Modus: ein Gesicht meist im Bild -> talking_head',
+          R._video_mode(0.80, False) == 'talking_head')
+    check('Modus: mehrere Personen -> conversation (auch bei viel Gesicht)',
+          R._video_mode(0.90, True) == 'conversation'
+          and R._video_mode(0.05, True) == 'conversation')
+    check('Modus narrator: behind -> outline + zentriert (face_pos None)',
+          "video_mode == 'narrator'" in _r2
+          and "_v['fx'] = 'outline'" in _r2 and 'face_pos=None' in _r2)
 
 
 def _scenario_premium(tmp):

@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96b: Automatischer Modus-Schalter (Erzaehler / Talking-Head / Gespraech).**
+  Ismet muss nichts umstellen - der Render erkennt selbst, was fuer ein Video es
+  ist, und setzt die Captions passend. `_video_mode(face_frac, multi_person)`
+  aus den Tracking-Statistiken:
+  - **narrator** (Gesicht in <35% der Frames: Voiceover, Screen-Recording,
+    B-Roll mit Erzaehler) -> zentrierte, editoriale Platzierung (face_pos/faces_at
+    = None), und 'behind' wird zu 'outline' (ohne Person ergibt "hinter der
+    Person" keinen Sinn).
+  - **talking_head** (ein Gesicht meist im Bild) -> Face-relative Platzierung
+    wie gehabt.
+  - **conversation** (mehrere Personen, v96) -> Active-Speaker + Multi-Face-
+    Safe-Zone.
+  Der erkannte Modus wird ins Log geschrieben. Selftest 446/446 + Render green
+  (der synthetische Clip hat kein Gesicht -> narrator-Zweig lief real durch).
 - **v96: Multi-Person - alles funktioniert auch, wenn mehrere im Video reden.**
   Bisher war die Pipeline auf EINEN Talking-Head ausgelegt: das Face-Tracking
   behielt pro Frame nur das staerkste Gesicht (`max(score)`), darauf hingen

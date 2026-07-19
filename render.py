@@ -1270,6 +1270,23 @@ def _free_x_multi(faces, W, sprite_w, toggle):
     return (-1 if cx < W / 2 else 1), cx
 
 
+def _video_mode(face_frac, multi_person, min_head=0.35):
+    """v96b: Automatischer Modus-Schalter. Aus dem Gesichts-Anteil (Anteil der
+    Frames mit erkanntem Sprecher-Gesicht) und dem Multi-Person-Flag ergibt sich,
+    wie die Captions gesetzt werden:
+      'conversation'  = mehrere Personen reden -> Active-Speaker + Multi-Safe-Zone
+      'talking_head'  = eine Person meist im Bild -> Face-relative Platzierung
+      'narrator'      = kaum/kein Gesicht (Voiceover, Screen-Recording, B-Roll mit
+                        Erzaehler) -> zentrierte, editoriale Platzierung, kein
+                        'behind' (es ist nichts da, wovor/wohinter der Text koennte)
+    Rein & testbar."""
+    if multi_person:
+        return 'conversation'
+    if face_frac >= min_head:
+        return 'talking_head'
+    return 'narrator'
+
+
 def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     work_w = 512
     work_h = max(int(512 * out_h / out_w) // 2 * 2, 2)
@@ -1453,7 +1470,7 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     # v96: ALLE Gesichter pro Frame in Output-Pixeln (fuer die Multi-Face-Safe-
     # Zone - Text soll KEINES der Gesichter ueberdecken).
     faces_seq = [[(f[0] * sc, f[1] * sc, f[2] * sc) for f in fr] for fr in dets_seq]
-    return sm * sc, present, wsm * sc, inner_cuts, faces_seq
+    return sm * sc, present, wsm * sc, inner_cuts, faces_seq, multi_person
 
 # ---------------------------------------------------------------- sprites
 class Sprites:
@@ -5334,8 +5351,16 @@ def main():
         'schnell':  (3, 0.7, 'veryfast'),
         'standard': (2, 1.0, cfg['output'].get('preset', 'medium')),
         'maximal':  (1, 1.2, 'slow')}.get(speed, (2, 1.0, 'medium'))
-    face, has_face, face_w, cut_frames, faces_seq = track_faces(
+    face, has_face, face_w, cut_frames, faces_seq, multi_person = track_faces(
         args.input, W, H, fps_str, det_step)
+    # v96b: Automatischer Modus-Schalter. Kaum Gesicht = Erzaehler/Voiceover ->
+    # zentrierte editoriale Captions; ein Gesicht = Talking-Head; mehrere =
+    # Gespraech. Ismet muss nichts umstellen, der Render erkennt es selbst.
+    face_frac = float(has_face.mean()) if len(has_face) else 0.0
+    video_mode = _video_mode(face_frac, multi_person)
+    print(f"Modus automatisch: {video_mode} "
+          f"(Gesicht in {face_frac*100:.0f}% der Frames"
+          + (", mehrere Personen" if multi_person else "") + ")")
     k2 = 41
     kern2 = np.ones(k2) / k2
     face_stable = np.stack([np.convolve(np.pad(face[:, j], k2 // 2, mode='edge'),
@@ -5572,8 +5597,22 @@ def main():
     elif cfg.get('colors', {}).get('adaptive', True):
         palette_at = scene_palette_sampler(args.input, cut_times)
         print("Adaptive Farben: Captions greifen die Szenen-Toene auf (pro Shot)")
-    plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
-                        palette_at, cut_times=cut_times, faces_at=faces_at)
+    # v96b: Erzaehler-/Voiceover-Modus. Kaum Gesicht im Bild -> Captions NICHT
+    # an einer (kaum vorhandenen) Person ausrichten, sondern zentriert-editorial
+    # setzen (face_pos/faces_at = None laesst build_plans das freie, mittige
+    # Layout waehlen). 'behind' ergibt ohne Person keinen Sinn -> auf sichtbares
+    # 'outline' umlegen.
+    if video_mode == 'narrator':
+        if fx_map:
+            for _v in fx_map.values():
+                if _v.get('fx') == 'behind':
+                    _v['fx'] = 'outline'
+        plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map,
+                            face_pos=None, palette_at=palette_at,
+                            cut_times=cut_times, faces_at=None)
+    else:
+        plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
+                            palette_at, cut_times=cut_times, faces_at=faces_at)
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.
