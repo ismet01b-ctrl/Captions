@@ -1909,6 +1909,13 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   gemeint ist - nicht bei beilaeufiger oder bildlicher Erwaehnung. Gibt es ein
   klares OBJEKT, das die Handlung erleidet ("die Mieten steigen"), nimm lieber
   das Objekt + Anim.
+- SELBSTBEZUG AUF DIE CAPTIONS: Spricht der Sprecher ueber die Captions oder
+  Woerter SELBST ("meine Captions explodieren", "watch this word fly", "der
+  Text zerbricht gleich"), dann MUSS genau diese Caption die angesagte Handlung
+  ausfuehren (explodieren -> "explosion", fliegen -> "spur", zerbrechen ->
+  "bruch", verschwinden -> "schwund") - sofern es zum Moment passt. Das ist der
+  staerkste Beweis, dass das Video lebt: der Zuschauer sieht sofort, die
+  Captions HOEREN zu.
 - "power": 1 (dezent), 2 (normal), 3 (Hoehepunkt des Videos, maximal ein bis zwei 3er).
 - Optional "anim", NUR wenn der Inhalt es verlangt. Verfuegbar:
   "glitch" (Fehler, Hack, Schock) · "puls" (Herz, Beat, Energie) · \

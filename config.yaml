@@ -50,7 +50,7 @@ effects:
   dim_blurin: 0.3
   tracking: true
   sfx: true
-  sfx_volume: 0.5
+  sfx_volume: 0.6
   broll_captions: false
   scene_lock: true
   text_style: 3d

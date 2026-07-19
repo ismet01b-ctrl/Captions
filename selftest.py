@@ -2121,6 +2121,9 @@ def _scenario_lang(tmp):
     check('Regie-Prompt: Retention-Dramaturgie verankert',
           'RETENTION-DRAMATURGIE' in _r and 'OFFENE SCHLEIFE' in _r
           and 'ESKALATION' in _r and 'MUSTER-BRUCH' in _r)
+    check('Regie-Prompt: Selbstbezug-Regel (Captions hoeren zu)',
+          'SELBSTBEZUG AUF DIE CAPTIONS' in _r
+          and 'meine Captions explodieren' in _r)
     # v94: Modell-kompatibler Request-Body (gpt-5 braucht max_completion_tokens,
     # kein temperature; gpt-4o das Alte).
     b4 = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 800, 0.2)
