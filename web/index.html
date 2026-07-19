@@ -1295,8 +1295,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               <input type="text" id="refName" placeholder="Name for this style (optional)"
                      style="width:100%;">
               <input type="file" id="refFile" accept="video/*" style="color:var(--mut);">
-              <button class="btn" type="button" id="btnRefLearn"
-                      style="align-self:flex-start; padding:9px 18px;">Learn style from video</button>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn" type="button" id="btnRefLearn"
+                        style="padding:9px 18px;">Learn style from video</button>
+                <button class="btn secondary" type="button" id="btnRefDiag"
+                        style="padding:9px 18px;">Diagnose</button>
+              </div>
               <div id="refStatus" class="hint" style="display:none;"></div>
             </div>
             <div id="refList" style="margin-top:16px; display:flex; flex-direction:column; gap:8px;"></div>
@@ -2812,6 +2816,17 @@ function refApplyOwner(isOwner) {
   p.classList.toggle('hidden', !isOwner);
   if (isOwner) refLoadList();
 }
+if ($('#btnRefDiag')) $('#btnRefDiag').addEventListener('click', async () => {
+  refSetStatus('Checking server …', 'info');
+  try {
+    const r = await fetch('/api/reference/diag');
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { refSetStatus('✗ Diagnose HTTP ' + r.status + ' ' + (d.detail || ''), 'err'); return; }
+    const lines = Object.entries(d).map(([k, v]) => k + ': ' + JSON.stringify(v));
+    refSetStatus(lines.join('\n'), d.openai_key ? 'ok' : 'err');
+    const st = $('#refStatus'); if (st) st.style.whiteSpace = 'pre-wrap';
+  } catch (e) { refSetStatus('✗ Connection error on diagnose.', 'err'); }
+});
 if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
   const f = $('#refFile') && $('#refFile').files[0];
   if (!f) { refSetStatus('Choose a reference video first.', 'err'); return; }

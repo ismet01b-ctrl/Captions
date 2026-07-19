@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96r-refdiag'
+DVE_BUILD = 'v96s-diagbtn'
 
 
 @app.middleware('http')
@@ -2630,6 +2630,38 @@ def _load_references():
         return d if isinstance(d, list) else []
     except Exception:
         return []
+
+
+@app.get('/api/reference/diag')
+def reference_diag(request: Request):
+    """v96s: Umgebungs-Check fuer das Stil-Lernen (owner-only). GET ohne Upload -
+    zeigt genau, warum /learn scheitert (Key, ffmpeg, render-Import, Schreibrecht)."""
+    if not _owner_ok(request):
+        raise HTTPException(403, 'Access denied.')
+    import shutil as _sh
+    out = {'build': DVE_BUILD, 'openai_key': bool(os.environ.get('OPENAI_API_KEY')),
+           'ffmpeg': bool(_sh.which('ffmpeg')), 'ffprobe': bool(_sh.which('ffprobe')),
+           'data_writable': os.access(DATA, os.W_OK)}
+    rf = _reference_file()
+    out['ref_file'] = rf
+    out['ref_dir_writable'] = os.access(os.path.dirname(rf), os.W_OK)
+    out['ref_file_writable'] = (os.access(rf, os.W_OK) if os.path.exists(rf)
+                                else out['ref_dir_writable'])
+    try:
+        d = os.path.join(DATA, 'reftmp')
+        os.makedirs(d, exist_ok=True)
+        _t = os.path.join(d, 'diag.txt')
+        open(_t, 'w').write('ok'); os.remove(_t)
+        out['tmp_writable'] = True
+    except Exception as e:
+        out['tmp_writable'] = f'{type(e).__name__}: {e}'
+    try:
+        import render as _R
+        out['render_import'] = True
+        out['has_analyze'] = hasattr(_R, 'analyze_reference_video')
+    except Exception as e:
+        out['render_import'] = f'{type(e).__name__}: {e}'
+    return out
 
 
 @app.get('/api/reference/list')
