@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v94: GPT-5-Regie, Hash-Kollisions-Fix, Retention-Psychologie, UI-Politur.**
+  Root cause "Effekte kommen nicht": `_video_hash` las nur Anfang+Ende der
+  Datei - zwei VERSCHIEDENE Clips teilten denselben Transkript-Cache (deutscher
+  Plan wurde englischem Clip serviert). Fix: 8 Lesepunkte quer durch die Datei
+  (+Selftest gegen Kollision). `language: auto` wird jetzt aus dem INHALT
+  aufgeloest (`_looks_german`) - vorher liefen englische Clips unter
+  Deutsch-Regeln (lowercase-Keywords verworfen). Regie-Modell per
+  `keywords.ai_model: gpt-5` (Requests modell-kompatibel via `_oai_json`:
+  `max_completion_tokens`, kein temperature bei neuen Modellen - sonst
+  stiller Heuristik-Fallback). Dynamik nach Ueberdaempfung zurueckgeholt
+  (Prompt lebendig, TikTok-Trail 0.22, person-sicher dank v93b-Maske).
+  NEU: **Retention-Dramaturgie** im Regie-Prompt (Hook, offene Schleife,
+  Muster-Bruch, Eskalation, Mikro-Belohnung) - die Psychologie bestimmt, wo
+  Momente liegen und wie stark, in jedem Look auf seine Art; KI variiert
+  bewusst (keine zwei Videos gleich), Garantien (Safe-Zones, Caps, kein
+  B-Roll-Text) bleiben im Code. Ein deterministischer Aktion->Anim-Zwang wurde
+  gebaut und auf Ismets Einwand REVERTIERT (Wort-Erwaehnung != Moment; die KI
+  entscheidet kontextabhaengig). UI: dunkle Preset-Dropdowns (+Account-Inputs),
+  Setup-Balken zeigt letztes Preset + "Save preset?" bei Aenderungen, eigene
+  Presets als Dropdown auf der Look-Seite (bewusst KEINE Karten - sollen sich
+  von unseren Presets unterscheiden), Sprach-Picker raus (Auto-Detect + Info).
+  Selftests 425/425. Ehrlich: KI-Wirkung (gpt-5, Dramaturgie) ist nur auf
+  echtem Material mit echtem Key sichtbar - Sandbox testet Struktur, nicht
+  Geschmack.
 - **v93b: Personen-Doppelgaenger in der TikTok-Voreinstellung behoben.**
   Frames von Ismet zeigten die Person halbtransparent gedoppelt (senkrechte
   Kamm-Streifen am Kiefer/Hals, Text mit Echo-Schatten `|||VIDEO`). Ursache:

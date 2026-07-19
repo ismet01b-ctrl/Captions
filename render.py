@@ -1817,7 +1817,20 @@ Vorgehen:
 1. Erfasse die Kernbotschaft des Videos.
 2. Waehle die Woerter, die die Geschichte TRAGEN: Zahlen, Namen, Fachbegriffe, emotionale \
 Spitzen, Pointen, Kontraste.
-3. Verteile ueber das Video: ein starker Moment frueh (Hook), einer am Ende (Abschluss).
+3. Baue eine RETENTION-DRAMATURGIE - Psychologie, die Zuschauer bis zum Ende haelt:
+   - HOOK (erste Sekunden): der erste Moment verspricht oder provoziert - man
+     muss sofort spueren, dass Bleiben sich lohnt. Frueh und kraeftig.
+   - OFFENE SCHLEIFE: wirft das Video frueh eine Frage/These auf, lass sie
+     stehen und lege den staerksten Moment (power 3) auf die AUFLOESUNG weiter
+     hinten - wer die Antwort will, bleibt dran.
+   - MUSTER-BRUCH: nie zweimal hintereinander dasselbe Gefuehl. Wechsle
+     Effekt-Typ, Rhythmus und Wucht, bevor Monotonie entsteht.
+   - ESKALATION: die Intensitaet steigt zum Ende hin - vorne nicht alles
+     verschiessen, der Hoehepunkt kommt spaet.
+   - MIKRO-BELOHNUNG: Zahlen, Beweise, Pointen sichtbar auszahlen (Zaehler,
+     outline) - kleine Belohnungen ziehen zum Weiterschauen.
+   Diese Dramaturgie bestimmt, WO deine Momente liegen und wie stark sie sind -
+   in JEDEM Look, vom lauten TikTok bis zum ruhigen Clean, jeweils auf seine Art.
 
 Regeln:
 - Etwa 1 Moment pro 6-8 Sekunden Sprechzeit. Lieber weniger als mehr.

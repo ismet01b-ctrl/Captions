@@ -1329,6 +1329,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <h1 class="step-title">Pick your look</h1>
       <p class="step-sub">A starting point. You can fine-tune next.</p>
       <div class="look-grid" id="looks"></div>
+      <div id="myPresetsRow" class="hidden" style="margin-top:18px; max-width:340px;">
+        <p class="step-sub" style="margin-bottom:6px;">Or start from one of your own presets:</p>
+        <select id="tplLoadTop" class="tpl-select" style="width:100%;" aria-label="Your presets">
+          <option value="">- Your presets -</option>
+        </select>
+      </div>
       <div class="wiz-nav">
         <button class="btn secondary" data-back="1">Back</button>
         <div class="grow"></div>
@@ -1695,39 +1701,16 @@ async function loadTemplates() {
       });
     };
     fill($('#tplLoad'), '- Load saved setup -');
+    fill($('#tplLoadTop'), '- Your presets -');
     // v94: Der Balken zeigt immer das zuletzt gespeicherte Preset.
     const sel = $('#tplLoad');
     if (sel && list.length) sel.value = list[list.length - 1].name;
-    renderOwnPresetCards(list);               // v94: eigene Presets als Karten
+    // Eigene Presets als Dropdown auf der Look-Seite - bewusst KEINE Karten,
+    // sie sollen sich sichtbar von unseren Presets unterscheiden.
+    const row = $('#myPresetsRow');
+    if (row) row.classList.toggle('hidden', list.length === 0);
     updateTplSaveBtn();
   } catch (e) {}
-}
-// v94: Eigene Presets als Karten bei den Looks (Step 2) anwaehlbar machen.
-function renderOwnPresetCards(list) {
-  const el = $('#looks');
-  if (!el) return;
-  el.querySelectorAll('.look-card.own').forEach(c => c.remove());
-  (list || []).forEach(t => {
-    const c = document.createElement('div');
-    c.className = 'look-card own';
-    c.setAttribute('role', 'radio');
-    c.setAttribute('tabindex', '0');
-    c.innerHTML =
-      '<div class="checkmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>' +
-      '<div class="lp-preview"><span>' + escHtml((t.name || '').toUpperCase()) + '</span></div>' +
-      '<h4>' + escHtml(t.name || 'Preset') + '</h4><p>Your saved preset</p>';
-    const activate = () => {
-      el.querySelectorAll('.look-card').forEach(x => x.classList.remove('on'));
-      c.classList.add('on');
-      applyTemplate(t.name);
-      toast('Preset "' + (t.name || '') + '" applied', 'ok', 2000);
-    };
-    c.addEventListener('click', activate);
-    c.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
-    });
-    el.appendChild(c);
-  });
 }
 // v94: Wurden Einstellungen geaendert -> Button fordert zum Speichern auf.
 function updateTplSaveBtn() {
@@ -3470,6 +3453,12 @@ $('#momCancel').addEventListener('click', () => $('#momEditor').classList.add('h
 if ($('#btnTplSave')) $('#btnTplSave').addEventListener('click', saveTemplate);
 if ($('#tplLoad')) $('#tplLoad').addEventListener('change', (e) => {
   if (e.target.value) applyTemplate(e.target.value);   // v94: Auswahl bleibt sichtbar
+});
+if ($('#tplLoadTop')) $('#tplLoadTop').addEventListener('change', (e) => {
+  if (!e.target.value) return;
+  applyTemplate(e.target.value);
+  // Eigenes Preset aktiv -> keine Standard-Karte mehr markiert lassen
+  $$('#looks .look-card').forEach(x => x.classList.remove('on'));
 });
 $('#momSave').addEventListener('click', async () => {
   syncFromDom();
