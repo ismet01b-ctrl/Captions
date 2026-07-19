@@ -2766,27 +2766,35 @@ if ($('#delForm')) $('#delForm').addEventListener('submit', async () => {
 });
 
 /* v96o/p: Referenz-Stile - nur fuer das Besitzer-Konto, Session-Auth */
+function refSetStatus(msg, kind) {
+  const st = $('#refStatus');
+  if (!st) return;
+  st.style.display = msg ? 'block' : 'none';
+  st.textContent = msg || '';
+  st.style.color = kind === 'err' ? '#e0785a' : (kind === 'ok' ? '#6dd48a' : 'var(--mut)');
+}
 function renderRefList(refs) {
   const box = $('#refList');
   if (!box) return;
-  if (!refs || !refs.length) { box.innerHTML = '<div class="hint">No learned styles yet.</div>'; return; }
-  box.innerHTML = refs.map((r, i) => `
+  const head = '<div style="font-size:12px; color:var(--mut2); margin-bottom:4px;">Learned styles (' + ((refs && refs.length) || 0) + ')</div>';
+  if (!refs || !refs.length) { box.innerHTML = head + '<div class="hint">No learned styles yet. Upload a video with captions and press "Learn style from video".</div>'; return; }
+  box.innerHTML = head + refs.map((r, i) => `
     <div style="border:1px solid var(--line); border-radius:10px; padding:10px 12px;">
       <div style="display:flex; justify-content:space-between; gap:10px; align-items:baseline;">
         <b>${escHtml(r.name || 'Style')}</b>
         <button class="btn secondary" data-refdel="${i}" style="padding:4px 10px; font-size:12px;">Remove</button>
       </div>
-      <div class="hint" style="margin-top:6px;">${escHtml(r.beispiel || '')}</div>
+      <div class="hint" style="margin-top:6px;">${escHtml(r.beispiel || '(no description)')}</div>
     </div>`).join('');
   box.querySelectorAll('[data-refdel]').forEach(b => b.addEventListener('click', () => refDelete(parseInt(b.dataset.refdel))));
 }
 async function refLoadList() {
   try {
     const r = await fetch('/api/reference/list');
-    if (!r.ok) return;
+    if (!r.ok) { renderRefList([]); return; }
     const d = await r.json();
-    renderRefList(d.refs);
-  } catch (e) {}
+    renderRefList(d.refs || []);
+  } catch (e) { renderRefList([]); }
 }
 async function refDelete(idx) {
   const fd = new FormData(); fd.append('idx', String(idx));
@@ -2806,10 +2814,9 @@ function refApplyOwner(isOwner) {
 }
 if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
   const f = $('#refFile') && $('#refFile').files[0];
-  const st = $('#refStatus');
-  if (!f) { toast('Choose a reference video first.', 'err'); return; }
+  if (!f) { refSetStatus('Choose a reference video first.', 'err'); return; }
   const btn = $('#btnRefLearn'); btn.disabled = true;
-  if (st) { st.style.display = 'block'; st.textContent = 'Analyzing style … (this can take up to a minute)'; }
+  refSetStatus('Analyzing style … this can take up to a minute. Keep this open.', 'info');
   try {
     const fd = new FormData();
     fd.append('datei', f);
@@ -2817,16 +2824,19 @@ if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
     const r = await fetch('/api/reference/learn', { method: 'POST', body: fd });
     const d = await r.json().catch(() => ({}));
     if (r.ok) {
-      if (st) st.textContent = 'Learned: ' + (d.entry && d.entry.name || 'style');
-      renderRefList(d.refs);
+      refSetStatus('✓ Learned "' + (d.entry && d.entry.name || 'style') + '". '
+        + (d.entry && d.entry.beispiel ? d.entry.beispiel : ''), 'ok');
+      renderRefList(d.refs || []);
       if ($('#refFile')) $('#refFile').value = '';
       if ($('#refName')) $('#refName').value = '';
-      toast('Style learned.', 'ok');
     } else {
-      if (st) st.textContent = '';
-      toast(d.detail || 'Failed to analyze.', 'err');
+      // Bleibt sichtbar stehen - kein fluechtiger Toast mehr.
+      let msg = d.detail || ('Failed (HTTP ' + r.status + ').');
+      if (r.status === 502) msg += '  → Most likely the server has no OPENAI_API_KEY set (needed for the AI to look at the video).';
+      if (r.status === 403) msg += '  → This account is not the owner account.';
+      refSetStatus('✗ ' + msg, 'err');
     }
-  } catch (e) { if (st) st.textContent = ''; toast('Connection error.', 'err'); }
+  } catch (e) { refSetStatus('✗ Connection error - upload interrupted. Try a shorter clip.', 'err'); }
   finally { btn.disabled = false; }
 });
 
