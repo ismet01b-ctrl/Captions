@@ -3612,8 +3612,8 @@ def compose_flow(g, words, S, W, H, portrait=False, kw_lower=None):
         elif i == accent:
             cap = raw.lower().capitalize()
             sz = S.fit(cap, sz_a, int(W * 0.5), font=S.f_script)
-            arr = rot_img(S.text(cap, sz, S.accent, font=S.f_script)[0], -7)
-            items.append({'i': i, 'arr': arr, 'w': arr.shape[1], 'role': 'accent',
+            arr, tw = S.text(cap, sz, S.accent, font=S.f_script)   # Kursive gibt
+            items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'accent',  # den Slant
                           't': words[i]['start']})
         else:
             arr, tw = S.text(raw, sz_n, S.white, tracking=6, font=S.f_sans)
@@ -3623,37 +3623,50 @@ def compose_flow(g, words, S, W, H, portrait=False, kw_lower=None):
     max_w = int(W * 0.86)
     x0 = int(W * 0.07)
     space = int(W * 0.032)
-    gap = int(H * 0.014)
-    # Vorschub nach ECHTER Textbreite (nicht der Glow-gepolsterten Array-Breite),
-    # damit die Woerter eng wie in der Referenz stehen. Zentriert wird das
-    # (symmetrisch gepolsterte) Sprite - Textmitte == Array-Mitte.
+    # STRUKTUR wie in der Referenz: klare Zeilen nach ROLLE statt wildem
+    # Breiten-Umbruch. Verbinder-vor-Keyword = Zeile 1, das KEYWORD = eigene
+    # Zeile, Rest (inkl. Kursiv-Akzent) = Zeile darunter. Alles LINKS buendig,
+    # konstante Zeilenhoehe nach dem groessten Font der Zeile. Vorschub nach
+    # echter Textbreite; zentriert wird das symmetrisch gepolsterte Sprite.
     for it in items:
-        it['adv'] = it['w'] if it.get('role') != 'accent' else it['arr'].shape[1]
+        it['adv'] = it['w']
     rows = []
-    cur = []
-    cur_w = 0
-    for it in items:
-        aw = it['adv']
-        if cur and cur_w + space + aw > max_w:
+    if anchor is not None:
+        pos = idxs.index(anchor)
+        pre = items[:pos]
+        key = [items[pos]]
+        post = items[pos + 1:]
+        if pre:
+            rows.append(pre)
+        rows.append(key)
+        if post:
+            rows.append(post)
+    else:
+        cur = []
+        cur_w = 0
+        for it in items:
+            aw = it['adv']
+            if cur and cur_w + space + aw > max_w:
+                rows.append(cur)
+                cur = []
+                cur_w = 0
+            cur.append(it)
+            cur_w += (space if len(cur) > 1 else 0) + aw
+        if cur:
             rows.append(cur)
-            cur = []
-            cur_w = 0
-        cur.append(it)
-        cur_w += (space if len(cur) > 1 else 0) + aw
-    if cur:
-        rows.append(cur)
+
+    def _rsz(it):
+        return sz_k if it['role'] == 'key' else (sz_a if it['role'] == 'accent' else sz_n)
     y = 0
     for row in rows:
-        row_h = max(it['arr'].shape[0] for it in row)
+        line_h = int(max(_rsz(it) for it in row) * 1.20)
         x = x0
         for it in row:
-            aw = it['adv']
-            hpx = it['arr'].shape[0]
-            it['cx'] = x + aw / 2.0
-            it['cy'] = y + row_h - hpx / 2.0      # unten ausgerichtet
-            x += aw + space
-        y += row_h + gap
-    total_h = max(y - gap, 1)
+            it['cx'] = x + it['adv'] / 2.0
+            it['cy'] = y + line_h / 2.0           # in der Zeilen-Mitte
+            x += it['adv'] + space
+        y += line_h
+    total_h = max(y, 1)
     return items, total_h, anchor
 
 
@@ -5531,19 +5544,12 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                             occ=None, blur=0.0)
             continue
         if p['tpl'] == 'flow':
-            # v97 Flow-Caption: Inline-Aufbau. Verbinder poppen weich rein, das
-            # Anker-Wort wird per Schreibmaschine enthuellt (Wipe ueber die
-            # letters), Kursiv-Akzent poppt. Personen-Tracking wie beim Stack.
+            # v97 Flow-Caption: Inline-Aufbau, LINKS buendig, FEST im Bild
+            # verankert (kein Personen-Tracking - das liess die Captions
+            # herumwandern; Struktur braucht eine stabile Position). Verbinder
+            # poppen weich, das Anker-Wort wird getippt (Wipe ueber die letters),
+            # Kursiv-Akzent poppt.
             fdx = fdy = 0.0
-            if cfg['effects'].get('tracking', True) and not p.get('broll') \
-                    and 'anchor' in p:
-                tgt = (face_xy[0] - p['anchor'][0], face_xy[1] - p['anchor'][1])
-                fp = p.setdefault('fpos', [0.0, 0.0])
-                fp[0] += 0.22 * (tgt[0] - fp[0])
-                fp[1] += 0.22 * (tgt[1] - fp[1])
-                lim = W * 0.09
-                fdx = max(-lim, min(fp[0] * 0.85, lim))
-                fdy = max(-lim * 0.6, min(fp[1] * 0.6, lim * 0.6))
             for it in p['front']:
                 wd = words[it['i']]
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf

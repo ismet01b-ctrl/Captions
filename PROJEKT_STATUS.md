@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v97b: Flow-Caption STRUKTUR (Nachbesserung).**
+  Ismet: "Die captions haben keine Struktur, sie sind einfach irgendwo
+  platziert." Ursache: (1) greedy Breiten-Umbruch + (2) Personen-Tracking
+  liessen die Bloecke herumwandern. Fix: feste Zeilen nach ROLLE statt
+  Breiten-Umbruch (Verbinder-vor-Keyword = Zeile 1, KEYWORD = eigene Zeile,
+  Rest inkl. Kursiv-Akzent = Zeile darunter), alles LINKS buendig mit
+  konstanter Zeilenhoehe; Block FEST im Bild verankert (kein Tracking mehr fuer
+  Flow - stabile Position ist Voraussetzung fuer Struktur); Kursiv-Akzent ohne
+  Rotation (die Kursive gibt den Slant). Auf echtem Clip verifiziert: klarer,
+  konsistenter Aufbau statt Streuung. Selftest weiter 505/505.
 - **v97: Flow-Caption-Effekt (Referenz-Look @migs.visuals) - Hybrid.**
   Ismets Ziel-Referenzen (2 Videos) sind reine Typo-Choreografie, nicht Deko:
   der Filler-Text baut sich INLINE Wort fuer Wort auf (stehend, ersetzt sich

@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v97-flowcaption'
+DVE_BUILD = 'v97b-flowstruktur'
 
 
 @app.middleware('http')
