@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96z: Behind-Wort lesbar + Referenz-LOOK wird kopiert.**
+  (1) Lesbarkeits-Bug (bestand unabhaengig vom Lernen): ein behind-Wort, das
+  schmaler ist als der Kopf (~1.7x Gesichtsbox inkl. Haare), verschwand komplett
+  hinter der Person. Jetzt wird die Schrift vergroessert, bis das Wort deutlich
+  beidseitig herausragt; reicht das Randlimit nicht, kommt es UEBER den Kopf.
+  Breite Woerter bleiben auf Personenhoehe (emerge intakt, Alt-Test gruen).
+  (2) Stil-Kopie vertieft: der Parameter-Call sieht jetzt die Original-FRAMES
+  und extrahiert zusaetzlich accent_hex (dominante Caption-Farbe) + density.
+  _apply_reference_params kopiert beides deterministisch (Referenz-Farbe wird
+  Caption-Akzentfarbe, schlaegt adaptive Szenen-Toene; Dichte uebernommen).
+  Mehrere Referenzen werden gemittelt - je mehr, desto stabiler der Anker.
+  WICHTIG: Referenzen einmal NEU lernen (alte Eintraege haben keine Farb-/
+  Dichte-Parameter). Selftest 486/486 + render1/render2a green. EHRLICH: "Stil
+  1:1 kopieren" heisst hier Farbe/Dichte/Chunks/Wucht/Hook - Fonts und exakte
+  Animations-Looks bleiben unsere Engine.
 - **v96y: Referenz-Einfluss SICHTBAR gemacht (deterministisch + UI-Beweis).**
   "Sieht 1:1 aus wie vorher" hatte nach v96x zwei moegliche Restursachen: der
   Prompt-Hinweis ist fuer GPT zu weich (deterministisches gpt-5 trifft bei
