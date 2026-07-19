@@ -121,6 +121,234 @@ def _text_sprite(txt, sz, col=(255, 255, 255, 255), stroke=3):
     return img
 
 
+def _smoothstep(t):
+    t = min(max(t, 0.0), 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def _letter_sprites(txt, sz, col=(250, 248, 244, 255)):
+    """Buchstaben einzeln (fuer Stagger-Animation), plus Gesamtbreite."""
+    f = _font(sz)
+    dummy = ImageDraw.Draw(Image.new('RGBA', (8, 8)))
+    lets = []
+    for i, ch in enumerate(txt):
+        x_off = dummy.textlength(txt[:i], font=f)
+        bb = dummy.textbbox((0, 0), ch, font=f)
+        img = Image.new('RGBA', (max(bb[2] - bb[0] + 8, 4),
+                                 max(bb[3] - bb[1] + 24, 4)), (0, 0, 0, 0))
+        ImageDraw.Draw(img).text((4 - bb[0], 12 - bb[1]), ch, font=f, fill=col)
+        lets.append((x_off, bb[1], img))
+    total = dummy.textlength(txt, font=f)
+    return lets, total
+
+
+def _soft_shadow(img, blur=7, alpha=110):
+    """Weicher Schlagschatten aus der Alpha-Maske - liegt AUF der Szene."""
+    from PIL import ImageFilter
+    a = img.getchannel('A').point(lambda v: int(v * alpha / 255))
+    sh = Image.new('RGBA', img.size, (8, 8, 10, 0))
+    sh.putalpha(a)
+    return sh.filter(ImageFilter.GaussianBlur(blur))
+
+
+# ---------------------------------------------------------------- Demo v2 (AE)
+def render_demo2(input_video, out_video, progress=print):
+    """AE-Look statt Sticker-Pack: (1) Kinetic-Type (Buchstaben-Stagger mit
+    Blur-in + Rise, Hairline-Unterstrich), (2) grosser Text laeuft HINTER der
+    Person durch (RVM-Matte pro Frame), (3) Zahl mit Hairline-Ring, (4) subtiler
+    Zoom-Punch OHNE Weiss-Blitz. Alle Overlays KLEBEN im Raum (globales
+    Kamera-Drift-Tracking via Phasenkorrelation), weiche Schlagschatten,
+    Film-Grain auf der Grafik, gedeckte Farben (off-white statt Deko-Orange)."""
+    if cv2 is None:
+        return False
+    from PIL import ImageFilter
+    import onnxruntime as ort
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        return False
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    off_w = (250, 248, 244, 255)
+
+    # RVM fuer echte Occlusion (Text hinter der Person)
+    try:
+        sess = ort.InferenceSession(os.path.join(HERE, 'models/rvm.onnx'),
+                                    providers=['CPUExecutionProvider'])
+        rec = [np.zeros((1, 1, 1, 1), np.float32)] * 4
+        dsr = np.array([0.25], np.float32)
+    except Exception:
+        sess = None
+
+    # Momente
+    T_KIN = (0.8, 2.6)          # Kinetic-Type "PREMIUM LOOK"
+    T_BEH = (3.1, 6.0)          # "BEHIND" wandert hinter der Person durch
+    T_NUM = (6.4, 8.2)          # "250%" mit Hairline-Ring
+    T_PCH = (8.5, 9.3)          # subtiler Zoom-Punch
+
+    kin_txt = 'PREMIUM LOOK'
+    kin_sz = int(H * 0.045) * SS
+    kin_lets, kin_w = _letter_sprites(kin_txt, kin_sz)
+    beh_img = _text_sprite('BEHIND', int(H * 0.16) * SS,
+                           (250, 248, 244, 235), stroke=0)
+    num_img = _text_sprite('250%', int(H * 0.075) * SS, off_w, stroke=0)
+
+    rng = np.random.default_rng(7)
+    tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), fps, (W, H))
+    prev_small = None
+    drift = np.zeros(2, np.float32)
+    i = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        t = i / fps
+
+        # --- globales Kamera-Drift (Overlays kleben im Raum, nicht am Screen)
+        small = cv2.cvtColor(cv2.resize(frame, (320, 180)),
+                             cv2.COLOR_BGR2GRAY).astype(np.float32)
+        if prev_small is not None:
+            (dx, dy), _resp = cv2.phaseCorrelate(prev_small, small)
+            drift += np.array([dx * W / 320.0, dy * H / 180.0], np.float32)
+        prev_small = small
+        ddx, ddy = int(round(-drift[0])), int(round(-drift[1]))
+
+        # --- RVM-Matte (nur berechnet, waehrend/vor dem Behind-Fenster)
+        matte = None
+        if sess is not None and t < T_BEH[1] + 0.3:
+            src = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            out = sess.run(None, {'src': src.transpose(2, 0, 1)[None],
+                                  'r1i': rec[0], 'r2i': rec[1],
+                                  'r3i': rec[2], 'r4i': rec[3],
+                                  'downsample_ratio': dsr})
+            rec = out[2:6]
+            if T_BEH[0] <= t < T_BEH[1]:
+                matte = np.clip(out[1][0, 0], 0.0, 1.0)[..., None]
+
+        ov = Image.new('RGBA', (W * SS, H * SS), (0, 0, 0, 0))
+        d = ImageDraw.Draw(ov)
+        used = False
+
+        # (1) Kinetic-Type: Buchstaben-Stagger, Blur-in + Rise, Hairline drunter
+        if T_KIN[0] <= t < T_KIN[1]:
+            used = True
+            k = (t - T_KIN[0]) / (T_KIN[1] - T_KIN[0])
+            fade = 1.0 if k < 0.85 else max(0.0, 1.0 - (k - 0.85) / 0.15)
+            x0 = (W * SS - kin_w) // 2 + ddx * SS
+            y0 = int(H * 0.72) * SS + ddy * SS
+            for li, (xo, _bt, lim) in enumerate(kin_lets):
+                lp = min(max((t - T_KIN[0] - li * 0.045) / 0.32, 0.0), 1.0)
+                if lp <= 0:
+                    continue
+                e = ease_out_quart(lp)
+                let = lim
+                if lp < 1.0:
+                    let = lim.filter(ImageFilter.GaussianBlur((1 - e) * 5))
+                a = let.getchannel('A').point(lambda v: int(v * e * fade))
+                let = let.copy(); let.putalpha(a)
+                ly = y0 + int((1 - e) * 16 * SS)
+                ov.alpha_composite(_soft_shadow(let, 6, 90),
+                                   (int(x0 + xo), ly + 4 * SS))
+                ov.alpha_composite(let, (int(x0 + xo), ly))
+            up = _smoothstep((t - T_KIN[0] - 0.45) / 0.5)
+            if up > 0:
+                yl = y0 + kin_lets[0][2].height + 2 * SS
+                cxl = x0 + kin_w / 2
+                half = kin_w / 2 * up
+                d.line([(cxl - half, yl), (cxl + half, yl)],
+                       fill=(250, 248, 244, int(215 * fade)), width=2 * SS)
+
+        # (3) Zahl mit Hairline-Ring, klebt im Raum
+        if T_NUM[0] <= t < T_NUM[1]:
+            used = True
+            k = (t - T_NUM[0]) / (T_NUM[1] - T_NUM[0])
+            fade = 1.0 if k < 0.85 else max(0.0, 1.0 - (k - 0.85) / 0.15)
+            e = ease_out_quart(min((t - T_NUM[0]) / 0.3, 1.0))
+            nx = (W * SS - num_img.width) // 2 + ddx * SS
+            ny = int(H * 0.68) * SS + ddy * SS
+            ni = num_img
+            a = ni.getchannel('A').point(lambda v: int(v * e * fade))
+            ni = ni.copy(); ni.putalpha(a)
+            ov.alpha_composite(_soft_shadow(ni, 7, 100), (nx, ny + 5 * SS))
+            ov.alpha_composite(ni, (nx, ny))
+            rp = _smoothstep((t - T_NUM[0] - 0.18) / 0.5)
+            if rp > 0:
+                pad = num_img.width * 0.14
+                box = (nx - pad, ny - pad * 0.7,
+                       nx + num_img.width + pad, ny + num_img.height + pad * 0.4)
+                d.arc(box, -80, -80 + 372 * rp,
+                      fill=(250, 248, 244, int(230 * fade)), width=int(2.5 * SS))
+
+        # (2) Text HINTER der Person: langsamer Lauf + echte Occlusion
+        beh_layer = None
+        if T_BEH[0] <= t < T_BEH[1] and matte is not None:
+            used = True
+            k = (t - T_BEH[0]) / (T_BEH[1] - T_BEH[0])
+            fade = min(k / 0.10, 1.0) * (1.0 if k < 0.88 else
+                                         max(0.0, 1.0 - (k - 0.88) / 0.12))
+            trav = _smoothstep(k)
+            bx = int(W * SS * (0.58 - 0.28 * trav)) - beh_img.width // 2 \
+                + int(ddx * SS * 1.12)
+            by = int(H * 0.30) * SS + ddy * SS
+            bl = Image.new('RGBA', (W * SS, H * SS), (0, 0, 0, 0))
+            bi = beh_img.copy()
+            a = bi.getchannel('A').point(lambda v: int(v * fade))
+            bi.putalpha(a)
+            bl.alpha_composite(bi, (bx, by))
+            beh_layer = bl
+
+        if used or beh_layer is not None:
+            base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) \
+                .convert('RGBA')
+            if beh_layer is not None:
+                comp = base.copy()
+                comp.alpha_composite(beh_layer.resize((W, H), Image.LANCZOS))
+                cn = np.array(comp.convert('RGB')).astype(np.float32)
+                bn = np.array(base.convert('RGB')).astype(np.float32)
+                merged = cn * (1 - matte) + bn * matte      # Person bleibt VORN
+                base = Image.fromarray(merged.astype(np.uint8)).convert('RGBA')
+            sm = ov.resize((W, H), Image.LANCZOS)
+            # Film-Grain nur auf der Grafik (Material-Match)
+            sa = np.array(sm)
+            if sa[..., 3].any():
+                noise = rng.normal(0, 5, sa.shape[:2])[..., None]
+                sa[..., :3] = np.clip(sa[..., :3].astype(np.float32)
+                                      + noise * (sa[..., 3:4] / 255.0),
+                                      0, 255).astype(np.uint8)
+                sm = Image.fromarray(sa)
+            base.alpha_composite(sm)
+            frame = cv2.cvtColor(np.array(base.convert('RGB')), cv2.COLOR_RGB2BGR)
+
+        # (4) subtiler Zoom-Punch: Spring-Scale + Richtungs-Blur, KEIN Blitz
+        if T_PCH[0] <= t < T_PCH[1]:
+            k = (t - T_PCH[0]) / (T_PCH[1] - T_PCH[0])
+            sc = 1.0 + 0.05 * math.sin(min(k / 0.55, 1.0) * math.pi) \
+                * (1.0 - k * 0.5)
+            M = cv2.getRotationMatrix2D((W / 2, H / 2), 0, sc)
+            frame = cv2.warpAffine(frame, M, (W, H),
+                                   borderMode=cv2.BORDER_REFLECT)
+            if k < 0.35:                       # Motion-Blur nur am Anschlag
+                frame = cv2.blur(frame, (1, 5))
+        vw.write(frame)
+        i += 1
+    cap.release()
+    vw.release()
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', tmp,
+                        '-i', input_video, '-map', '0:v:0', '-map', '1:a:0?',
+                        '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p',
+                        '-c:a', 'aac', '-shortest', out_video],
+                       check=True, timeout=300)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    progress('AE-Demo v2 fertig')
+    return True
+
+
 # ---------------------------------------------------------------- Demo-Render
 def render_demo(input_video, out_video, accent=(255, 122, 26), progress=print):
     """Demo: 4 Motion-Graphics + 1 lokaler VFX auf echtem Material. Jeder Moment
@@ -234,5 +462,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('input')
     ap.add_argument('output')
+    ap.add_argument('--v1', action='store_true')
     a = ap.parse_args()
-    raise SystemExit(0 if render_demo(a.input, a.output) else 1)
+    fn = render_demo if a.v1 else render_demo2
+    raise SystemExit(0 if fn(a.input, a.output) else 1)
