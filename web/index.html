@@ -933,6 +933,16 @@ body {
   text-shadow: none; filter: blur(0.4px);
 }
 .mom-preview.fx-behind .play-hint { color: #ffe08a; }
+/* v96h: echte "behind"-Vorschau. Ein freigestelltes Personen-PNG (RVM-Matte,
+   serverseitig) liegt OBEN, der Text darunter -> der Text sitzt wirklich hinter
+   der Person. Nur bei fx-behind sichtbar und nur wenn das Cutout geladen ist. */
+.mom-cut {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center; z-index: 2;
+  pointer-events: none; display: none;
+}
+.mom-preview.fx-behind.has-cut .mom-cut { display: block; }
+.mom-preview.fx-behind.has-cut .txt { opacity: 0.92; filter: none; z-index: 1; }
 .mom-preview .txt {
   color: white; font-weight: 900; font-size: 13px;
   letter-spacing: -0.3px; text-shadow: 0 2px 6px rgba(0,0,0,.7);
@@ -3328,7 +3338,7 @@ async function openMomentsEditor() {
     row.innerHTML = `
       <input type="checkbox" data-i="${i}" data-k="aktiv" ${m.aktiv !== false ? 'checked' : ''}>
       <div class="zeit">${(m.zeit || 0).toFixed(1)}s</div>
-      <div class="mom-preview" data-i="${i}"><div class="txt"></div><span class="play-hint">tap ▶</span></div>
+      <div class="mom-preview" data-i="${i}"><div class="txt"></div><img class="mom-cut" alt=""><span class="play-hint">tap ▶</span></div>
       <input type="text" data-i="${i}" data-k="text" value="${(m.text || '').replace(/"/g, '&quot;')}">
       <select data-i="${i}" data-k="fx">${fxOpts}</select>
       <select data-i="${i}" data-k="power">${powerOpts}</select>
@@ -3503,6 +3513,22 @@ function updatePreview(rowEl, m) {
       probe.src = url;
       pv.dataset.thumb = url;
     }
+  }
+  // v96h: Personen-Cutout laden -> "behind" sitzt wirklich hinter der Person.
+  // Erst wenn das PNG erfolgreich laedt, wird die has-cut-Klasse gesetzt.
+  const cutImg = pv.querySelector('.mom-cut');
+  if (cutImg && m.cut && State.jid) {
+    const curl = '/api/thumb/' + State.jid + '/' + m.cut;
+    if (cutImg.dataset.src !== curl) {
+      cutImg.dataset.src = curl;
+      cutImg.onload = () => pv.classList.add('has-cut');
+      cutImg.onerror = () => pv.classList.remove('has-cut');
+      cutImg.src = curl;
+    } else if (cutImg.complete && cutImg.naturalWidth > 0) {
+      pv.classList.add('has-cut');       // schon geladen -> Klasse erneut setzen
+    }
+  } else if (cutImg) {
+    pv.classList.remove('has-cut');
   }
   // Aktiv-Zustand: ausgegraut wenn aus
   pv.style.opacity = m.aktiv === false ? '0.35' : '1';

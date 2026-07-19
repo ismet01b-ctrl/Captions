@@ -712,7 +712,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96g-sfxsync'
+DVE_BUILD = 'v96h-behindcut'
 
 
 @app.middleware('http')
@@ -2503,13 +2503,15 @@ def get_thumb(jid: str, name: str, request: Request):
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
-    if not name.endswith('.jpg') or '/' in name or '\\' in name or '..' in name:
+    if (not (name.endswith('.jpg') or name.endswith('.png'))
+            or '/' in name or '\\' in name or '..' in name):
         raise HTTPException(400, 'Invalid thumbnail name.')
     thumb_dir = os.path.splitext(j['input'])[0] + '_thumbs'
     thumb_path = os.path.join(thumb_dir, name)
     if not os.path.exists(thumb_path):
         raise HTTPException(404, 'Thumbnail not found.')
-    return FileResponse(thumb_path, media_type='image/jpeg')
+    return FileResponse(thumb_path,
+                        media_type='image/png' if name.endswith('.png') else 'image/jpeg')
 
 
 CORRECTIONS_PATH = os.path.join(DATA, 'corrections.json')

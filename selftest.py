@@ -2322,6 +2322,25 @@ def _scenario_multiperson(tmp):
     check('Variation: Keyword-Effekt seed-gemischt (nicht stur ab Index 0)',
           'rot_kw = Rotator' in _r2 and 'rot_kw.next()' in _r2
           and 'crc32' in _r2)
+    # 8) v96h: Personen-Cutout fuer die echte "behind"-Vorschau im Editor.
+    import numpy as _np8
+    _cf = os.path.join(tempfile.gettempdir(), 'cutframe.jpg')
+    _co = os.path.join(tempfile.gettempdir(), 'cutframe_cut.png')
+    R.cv2.imwrite(_cf, (_np8.random.rand(90, 120, 3) * 255).astype('uint8'))
+    _okc = R._person_cutout_png(_cf, _co)
+    ok_shape = True
+    if _okc:
+        _im = R.cv2.imread(_co, R.cv2.IMREAD_UNCHANGED)
+        ok_shape = _im is not None and _im.ndim == 3 and _im.shape[2] == 4
+    check('Cutout: fehlertolerant, bei Erfolg RGBA-PNG (Freistellung)',
+          (_okc is False) or ok_shape, f'ok={_okc}')
+    for _p in (_cf, _co):
+        try: os.remove(_p)
+        except OSError: pass
+    _html = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('Editor: behind legt Personen-Cutout ueber den Text (has-cut)',
+          'mom-cut' in _html and 'fx-behind.has-cut' in _html
+          and "'cut'" in _r2)
 
 
 def _scenario_premium(tmp):

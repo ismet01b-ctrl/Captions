@@ -1311,6 +1311,47 @@ def _free_x_multi(faces, W, sprite_w, toggle):
     return (-1 if cx < W / 2 else 1), cx
 
 
+_CUT_SESS = None
+
+
+def _person_cutout_png(frame_path, out_png):
+    """v96h: Personen-Freistellung eines EINZELNEN Frames als RGBA-PNG (Person
+    deckend, Rest transparent) - fuer die Momente-Editor-Vorschau, damit 'behind'
+    dort wirklich HINTER der Person sitzt. Nutzt dieselbe RVM-Matte wie der
+    Render, auf ein Bild angewandt (Recurrent-State = 0). Lazy, fehlertolerant:
+    fehlt onnxruntime/Modell, gibt es einfach kein Cutout (Vorschau bleibt flach)."""
+    global _CUT_SESS
+    if _CUT_SESS is False:
+        return False
+    try:
+        if _CUT_SESS is None:
+            import onnxruntime as ort
+            mp = os.path.join(HERE, 'models/rvm.onnx')
+            if not os.path.exists(mp):
+                _CUT_SESS = False
+                return False
+            _CUT_SESS = ort.InferenceSession(mp, providers=['CPUExecutionProvider'])
+        img = cv2.imread(frame_path)
+        if img is None:
+            return False
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        src = rgb.transpose(2, 0, 1)[None]
+        z = np.zeros((1, 1, 1, 1), np.float32)
+        dsr = np.array([0.4], np.float32)
+        out = _CUT_SESS.run(None, {'src': src, 'r1i': z, 'r2i': z, 'r3i': z,
+                                   'r4i': z, 'downsample_ratio': dsr})
+        pha = out[1]
+        a = (np.clip(pha[0, 0], 0.0, 1.0) * 255).astype(np.uint8)
+        bgra = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+        bgra[:, :, 3] = a
+        cv2.imwrite(out_png, bgra)
+        return True
+    except Exception as e:
+        _CUT_SESS = False
+        print(f"  Cutout-Vorschau uebersprungen ({type(e).__name__})")
+        return False
+
+
 def _video_mode(face_frac, multi_person, min_head=0.35):
     """v96b: Automatischer Modus-Schalter. Aus dem Gesichts-Anteil (Anteil der
     Frames mit erkanntem Sprecher-Gesicht) und dem Multi-Person-Flag ergibt sich,
@@ -5575,6 +5616,7 @@ def main():
         os.makedirs(thumb_dir, exist_ok=True)
     except Exception:
         thumb_dir = None
+    _cut_ok = [None]        # RVM-Session fuer Personen-Freistellung (lazy)
     prev = {}
     if os.path.exists(mom_path):
         try:
@@ -5611,6 +5653,14 @@ def main():
                     pass
                 if not os.path.exists(thumb_path):
                     thumb_rel = ''
+        # v96h: Personen-Cutout fuer die Vorschau, damit 'behind' im Editor
+        # wirklich hinter der Person sitzt. Nur wenn ein Thumb da ist.
+        cut_rel = ''
+        if thumb_dir and thumb_rel:
+            _cut = f'{i:06d}_cut.png'
+            _cutp = os.path.join(thumb_dir, _cut)
+            if os.path.exists(_cutp) or _person_cutout_png(thumb_path, _cutp):
+                cut_rel = _cut
         _mom_export.append({'i': i, 'text': txt, 'zeit': round(words[i]['start'], 2),
                             'fx': info.get('fx', 'behind'),
                             'power': int(info.get('power', 2)), 'n': n,
@@ -5618,7 +5668,7 @@ def main():
                             'szene': info.get('szene') or '',
                             'lage': info.get('lage') or '',
                             'emoji': info.get('emoji') or '',
-                            'thumb': thumb_rel})
+                            'thumb': thumb_rel, 'cut': cut_rel})
         if i in prev:                       # fruehere Korrekturen behalten
             for k in ('aktiv', 'fx', 'power', 'anim', 'text', 'szene', 'lage', 'emoji'):
                 if k in prev[i]:

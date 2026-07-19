@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96h: Editor-"behind"-Vorschau sitzt jetzt WIRKLICH hinter der Person.**
+  Die v96g-Loesung (Text nur dimmen) reichte nicht - die Person war im flachen
+  Thumbnail eingebacken, CSS konnte den Text nicht ZWISCHEN Hintergrund und
+  Person legen. Jetzt echte Freistellung: `_person_cutout_png` matte pro Moment
+  ein RGBA-PNG der Person (dieselbe RVM-Matte wie der Render, auf den Thumb-Frame
+  angewandt, `{i}_cut.png`). Der Editor legt fuer 'behind' die Ebenen bg-Thumb ->
+  Text -> Personen-Cutout - der Text sitzt sichtbar hinter der Person, genau wie
+  im Video. Fehlertolerant: ohne onnxruntime/Modell kein Cutout, Vorschau bleibt
+  flach (kein Crash). Thumb-Endpoint serviert jetzt auch .png. Selftest 458/458
+  + Render green.
 - **v96g: SFX-Sync + Hook-Variation + "behind"-Vorschau ehrlicher.**
   - **Klick-Sync**: die Tick-Akzente sassen bis zu 0.30s HINTER dem Wort
     (outline +0.26, blurin +0.30, cascade bis +0.27) - klang unsynchron. Jetzt
