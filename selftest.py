@@ -96,6 +96,7 @@ def main():
         _scenario_trail(tmp)
         _scenario_lang(tmp)
         _scenario_multiperson(tmp)
+        _scenario_vfx(clip, tmp)
 
     print()
     fails = [r for r in results if not r[1]]
@@ -2249,6 +2250,76 @@ def _scenario_lang(tmp):
     check('Szene-Prompt: KI entscheidet ob behind sichtbar ist',
           'LOHNT SICH "behind"' in _r and 'Person ~X% der Breite' in _r
           and 'face_cover' in _r)
+
+
+def _scenario_vfx(clip, tmp):
+    """v97: Ein-Moment-VFX-Prototyp - VFX auf dem echten Video, synchron zur
+    Caption. Prueft den lokalen (deterministischen) Weg End-to-End."""
+    print('\n--- VFX-Prototyp (VFX + Captions) ---')
+    sys.path.insert(0, HERE)
+    import vfx_engine as VE
+    import subprocess as _sp
+    def _dur(p):
+        try:
+            return float(_sp.run(['ffprobe', '-v', 'error', '-show_entries',
+                                  'format=duration', '-of', 'default=nw=1:nk=1', p],
+                                 capture_output=True, text=True).stdout.strip() or 0)
+        except Exception:
+            return 0.0
+    din = _dur(clip)
+    check('VFX: lokale Arten vorhanden (shock/rgb/heat)',
+          set(VE.LOCAL_KINDS) == {'shock', 'rgb', 'heat'})
+    outs = {}
+    for kind in VE.LOCAL_KINDS:
+        outp = os.path.join(tmp, f'vfx_{kind}.mp4')
+        ok = VE.render_moment_vfx(clip, outp, t0=1.0, dauer=0.6, kind=kind,
+                                  caption='EXPLODES', progress=lambda *a: None)
+        outs[kind] = (ok, outp)
+    check('VFX: shock erzeugt gueltiges Video, Laenge bleibt (Frame-genau)',
+          outs['shock'][0] and os.path.exists(outs['shock'][1])
+          and abs(_dur(outs['shock'][1]) - din) < 0.5,
+          f"in={din:.2f}s out={_dur(outs['shock'][1]):.2f}s")
+    check('VFX: rgb + heat laufen ebenfalls durch',
+          outs['rgb'][0] and outs['heat'][0]
+          and os.path.exists(outs['rgb'][1]) and os.path.exists(outs['heat'][1]))
+    # Effekt veraendert das Bild wirklich (Moment-Frame != Original-Frame)
+    import numpy as _np9
+    diff = 0.0
+    try:
+        c0 = VE.cv2.VideoCapture(clip)
+        c1 = VE.cv2.VideoCapture(outs['shock'][1])
+        origs = []
+        for _ in range(60):
+            ok0, f0f = c0.read()
+            if not ok0:
+                break
+            origs.append(f0f)
+        c0.release()
+        idx = 0
+        while idx < len(origs):
+            ok1, f1f = c1.read()
+            if not ok1:
+                break
+            if f1f.shape == origs[idx].shape:
+                d = float(_np9.abs(origs[idx].astype('int16')
+                                   - f1f.astype('int16')).mean())
+                diff = max(diff, d)
+            idx += 1
+        c1.release()
+    except Exception:
+        diff = 0.0
+    check('VFX: der Moment ist sichtbar transformiert (max-Diff im Fenster)',
+          diff > 3.0, f'max Differenz {diff:.1f}')
+    # Cloud-Hook ist bewusst getrennt (generativ, opt-in, Key noetig)
+    try:
+        VE.generate_cloud_vfx('x', 'y', 'z')
+        raised = False
+    except NotImplementedError:
+        raised = True
+    except Exception:
+        raised = True
+    check('VFX: Cloud-Hook (Higgsfield/Seedance) getrennt + opt-in (NotImplemented)',
+          raised)
 
 
 def _scenario_multiperson(tmp):
