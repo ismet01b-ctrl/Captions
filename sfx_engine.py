@@ -271,17 +271,17 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
             place(V('impact'), t0 - 0.02, 1.0 * g)
         elif tpl == 'blurin':
             place(V('riser'), t0 - 0.78, 0.9 * g)
-            place(V('tick'), t0 + 0.30, 0.5 * g)
+            place(V('tick'), t0 + 0.12, 0.5 * g)           # v96g: naeher am Wort
         elif tpl == 'cascade':
             place(V('whoosh_soft'), t0 - 0.05, 0.9 * g)
-            for k, dt_l in enumerate((0.10, 0.19, 0.27)):     # Buchstaben-Laeufer
+            for k, dt_l in enumerate((0.04, 0.11, 0.18)):     # Buchstaben-Laeufer, enger am Onset
                 place(V('tick'), t0 + dt_l, (0.30 - k * 0.07) * g)
         elif tpl == 'ground':
             place(V('whoosh_soft'), t0 - 0.05, 0.9 * g)
-            place(V('impact'), t0 + 0.12, 0.45 * g)        # der Text "steht"
+            place(V('impact'), t0 + 0.08, 0.45 * g)        # der Text "steht"
         elif tpl == 'outline':
             place(V('whoosh_soft'), t0 - 0.05, 0.55 * g)
-            place(V('tick'), t0 + 0.26, 0.9 * g)
+            place(V('tick'), t0 + 0.08, 0.9 * g)           # v96g: sitzt auf dem Wort
         n_placed += 1
         w = words[p['kw_i']]['word'].strip()
         print(f"  SFX '{w}': Onset {off*1000:+.0f} ms, Pegel x{g:.2f}"
@@ -294,6 +294,7 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
     # nur echtes Uebereinander und der Keyword-Einschlag selbst werden gemieden.
     last_tick = -9.0
     n_ticks = 0
+    _acc_i = 0
     _soft_slot = ('whoosh_soft' if 'whoosh_soft' in bank
                   else 'whoosh' if 'whoosh' in bank else 'tick')
     for p in plans:
@@ -305,9 +306,19 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
         if any(abs(ts - kt) < 0.32 for kt in kw_times):
             continue                       # nicht direkt auf den Keyword-Einschlag
         g_soft = local_gain(ts)
-        place(V(_soft_slot), ts - 0.04, 0.42 * g_soft)   # jede Caption variiert
-        # feiner Akzent auf dem Wort-Einsatz obendrauf (fuellt die Stille)
-        place(V('tick'), ts + 0.02, 0.22 * g_soft)
+        place(V(_soft_slot), ts - 0.04, 0.42 * g_soft)   # weicher Einflug, variiert
+        # v96g: der Klick-Akzent lief bisher auf JEDER Folge-Caption -> im dichten
+        # Hook ein monotoner Klick-Teppich. Jetzt im 3er-Zyklus: lauter Tick /
+        # leiser Tick / GAR KEINER (Atempause) - dazu variiert V() Pitch/Pegel.
+        # Ergebnis: weniger Klicks, mehr Abwechslung, v.a. im Hook. Tick sitzt
+        # eng auf dem Wort-Einsatz (+0.02) statt hinterher.
+        _acc_i += 1
+        _cyc = _acc_i % 3
+        if _cyc == 0:
+            place(V('tick'), ts + 0.02, 0.24 * g_soft)
+        elif _cyc == 1:
+            place(V('tick'), ts + 0.02, 0.15 * g_soft)   # leiser, andere Variante
+        # _cyc == 2: kein Akzent -> bricht die Monotonie
         last_tick = ts
         n_ticks += 1
     if n_ticks:

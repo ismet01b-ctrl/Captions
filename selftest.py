@@ -702,6 +702,14 @@ def _scenario_logic(clip, transcript, tmp):
           and _SE._pitch(_base, 1.0) is _base)
     os.remove(os.path.join(folder2, 'tick_1.wav'))
     os.remove(os.path.join(folder2, 'tick_2.wav'))
+    # v96g: Klick sitzt enger am Wort (Sync) + Folge-Akzent im 3er-Zyklus statt
+    # auf jeder Caption (weniger Klick-Teppich, mehr Hook-Variation).
+    _se_src = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
+    check('SFX-Sync: outline/blurin-Tick sitzt nah am Wort (kein 0.26/0.30 mehr)',
+          't0 + 0.08, 0.9 * g' in _se_src and 't0 + 0.12, 0.5 * g' in _se_src
+          and 't0 + 0.26' not in _se_src and 't0 + 0.30' not in _se_src)
+    check('SFX-Hook: Folge-Akzent im 3er-Zyklus (nicht auf jeder Caption)',
+          '_cyc = _acc_i % 3' in _se_src and '_cyc == 2' in _se_src)
     # LIZENZ: es darf NUR CC0 durchkommen. Andere Lizenzen = Rechtsproblem.
     _fake = {'results': [
         {'id': 1, 'name': 'CC0 Sound', 'duration': 0.5, 'num_downloads': 9,

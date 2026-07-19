@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96g: SFX-Sync + Hook-Variation + "behind"-Vorschau ehrlicher.**
+  - **Klick-Sync**: die Tick-Akzente sassen bis zu 0.30s HINTER dem Wort
+    (outline +0.26, blurin +0.30, cascade bis +0.27) - klang unsynchron. Jetzt
+    eng am Onset (outline/blurin +0.08/+0.12, cascade +0.04/0.11/0.18).
+  - **Hook-Variation / weniger Klick-Teppich**: der Folge-Caption-Akzent lief
+    auf JEDER Caption -> im dichten Hook ein monotoner Klick. Jetzt im 3er-Zyklus
+    lauter Tick / leiser Tick / GAR KEINER (Atempause), dazu V()-Pitch/Pegel-
+    Variation. Weniger Klicks, mehr Abwechslung genau da, wo es auffiel.
+  - **Editor-"behind"-Vorschau**: zeigte den Text hell VOR der Person (statische
+    Vorschau ohne Freistellung) - wirkte falsch. Jetzt wird "behind" gedimmt und
+    UNTER das dunkle Overlay gelegt, sitzt sichtbar "hinten". EHRLICH: echte
+    Freistellung/Occlusion gibt es nur im Video, die Vorschau ist eine Andeutung.
+  Selftest 456/456 + Render green.
 - **v96f: Animations-Vorschau im Momente-Editor.**
   Wunsch: beim Waehlen einer Animation sehen, wie sie aussieht. Neu: die
   Vorschau-Zelle spielt eine CSS-Annaeherung der gewaehlten Animation ab

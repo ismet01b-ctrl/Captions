@@ -919,11 +919,20 @@ body {
   background-size: cover; background-position: center;
 }
 .mom-preview::after {
-  content: ''; position: absolute; inset: 0;
+  content: ''; position: absolute; inset: 0; z-index: 0;
   background: linear-gradient(135deg, rgba(0,0,0,0.35), rgba(0,0,0,0.55));
   pointer-events: none;
 }
 .mom-preview .txt { position: relative; z-index: 1; }
+/* v96g: "behind" = Text LIEGT HINTER der Person. In der Vorschau gibt es keine
+   echte Freistellung, aber der Text darf nicht wie eine helle Front-Caption
+   wirken: er wird gedimmt und UNTER das dunkle Overlay gelegt (z-index 0),
+   damit er sichtbar "hinten" sitzt. */
+.mom-preview.fx-behind .txt {
+  z-index: 0; opacity: 0.5; transform: scale(0.9);
+  text-shadow: none; filter: blur(0.4px);
+}
+.mom-preview.fx-behind .play-hint { color: #ffe08a; }
 .mom-preview .txt {
   color: white; font-weight: 900; font-size: 13px;
   letter-spacing: -0.3px; text-shadow: 0 2px 6px rgba(0,0,0,.7);
