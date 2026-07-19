@@ -2212,6 +2212,13 @@ def _scenario_lang(tmp):
     check('Stil-Lernen: Vision-Frames + Stil-Prompt (kein Woerter-Kopieren)',
           'STYLE_LEARN_PROMPT' in _r and 'KEINE Woerter abtippen' in _r
           and 'analyze_reference_video' in _r and "refs[-12:]" in _r)
+    # v96v: detaillierte Analyse (6 visuelle Punkte) + Audio/SFX aus der Tonspur
+    check('Stil-Lernen: detaillierter Prompt (Hook/Chunks/Typo/Bewegung/Rhythmus)',
+          '1) HOOK' in _r and '4) TYPO' in _r and '6) RHYTHMUS' in _r)
+    _as = R._ref_audio_summary('/tmp/st_clip.mp4')
+    check('Stil-Lernen: Audio/SFX wird separat aus der Tonspur analysiert',
+          isinstance(_as, str) and ('AUDIO/SFX' in _as or _as == '')
+          and 'def _ref_audio_summary' in _r and 'aud = _ref_audio_summary' in _r)
     # v94: sichtbare Aktion-Animation darf nicht hinter der Person verschwinden
     words_v = [{'word': 'explodes', 'start': 0.0, 'end': 0.4}]
     reg_v = '{"keywords":[{"i":0,"n":1,"fx":"behind","power":3,"anim":"explosion"}]}'

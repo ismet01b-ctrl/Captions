@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96u-prosafix'
+DVE_BUILD = 'v96v-refdetail'
 
 
 @app.middleware('http')

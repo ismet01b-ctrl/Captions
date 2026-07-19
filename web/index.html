@@ -1287,10 +1287,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <summary>Reference styles</summary>
           <div style="margin-top:14px;">
             <p class="hint">Upload a short video with high-end captions. The AI
-              looks at a few frames, describes its editing STYLE (pacing, density,
-              which words get emphasized, hook) and uses that to steer its own
-              editorial choices on future renders. It does not copy the look
-              (fonts/animations stay ours) or the words. Affects all renders.</p>
+              analyzes it in detail — hook, chunk length, which words get
+              emphasized, typography/placement, motion, retention rhythm — and
+              also measures the audio track (SFX density, punch, loud/quiet
+              dynamics). It uses that to steer its own editorial choices on future
+              renders. It does not copy the look (fonts/animations stay ours), the
+              words, or the sounds. Affects all renders.</p>
             <div style="display:flex; flex-direction:column; gap:10px; max-width:420px;">
               <input type="text" id="refName" placeholder="Name for this style (optional)"
                      style="width:100%;">

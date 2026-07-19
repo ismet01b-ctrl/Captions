@@ -2321,14 +2321,63 @@ Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Eff
 
 STYLE_LEARN_PROMPT = (
     "Du siehst mehrere Frames aus EINEM kurzen Video mit hochwertigen Captions. "
-    "Beschreibe NUR den STIL und den Schnitt-Rhythmus als Vorbild fuer eine "
-    "Caption-Regie - KEINE Inhalte, KEINE Woerter abtippen. In 2-3 knappen "
-    "Saetzen: Wie viele Woerter pro Caption? Wie dicht sitzen Highlights? Welche "
-    "Art Woerter wird betont (Zahlen, Aktionen, Pointen)? Wie wuchtig/ruhig sind "
-    "die Effekte? Wie ist der Hook am Anfang? Schreib es als Handlungsanweisung "
-    "('Startet mit ...', 'Nutzt ...'), damit eine andere Regie den Geschmack "
-    "nachahmen kann. Antworte auf Deutsch, nur der Beschreibungstext."
+    "Analysiere DETAILLIERT den Caption- und Schnitt-STIL als Vorbild fuer eine "
+    "Caption-Regie - KEINE Inhalte, KEINE Woerter abtippen. Gehe auf JEDEN Punkt "
+    "kurz ein (je 1 knapper Satz, als Handlungsanweisung 'Startet mit ...', "
+    "'Nutzt ...'):\n"
+    "1) HOOK: Wie startet das Video in den ersten 1-2 Sekunden?\n"
+    "2) CHUNKS: Wie viele Woerter pro Caption, wie lange stehen sie?\n"
+    "3) BETONUNG: Welche Art Woerter wird hervorgehoben (Zahlen, Aktionen, "
+    "Pointen, Namen)? Wie oft (Dichte)?\n"
+    "4) TYPO/PLATZIERUNG: Groesse, Position (mittig/unten/hinter Person), "
+    "Farb-Akzente, Umriss/Schatten?\n"
+    "5) BEWEGUNG: Welche Art Animation/Effekte (dezent vs. wuchtig, "
+    "Kamera-Bewegung, Zoom-Punches)?\n"
+    "6) RHYTHMUS/RETENTION: Wie wechselt die Intensitaet, gibt es Muster-Brueche, "
+    "eskaliert es zum Ende?\n"
+    "Antworte auf Deutsch, nur der Analyse-Text, mit den Nummern."
 )
+
+
+def _ref_audio_summary(video_path):
+    """v96v: analysiert die AUDIOSPUR des Referenz-Videos (Vision hoert nichts).
+    Rein lokal aus der Wellenform: Schlag-/Betonungs-Dichte, Beat-Regelmaessigkeit,
+    Laut-Leise-Dynamik. Gibt einen knappen Prosa-Satz zurueck (oder '')."""
+    import wave as _wave
+    import tempfile as _tf
+    wavp = _tf.NamedTemporaryFile(suffix='.wav', delete=False).name
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', video_path,
+                        '-ac', '1', '-ar', '22050', wavp], check=True, timeout=60)
+        with _wave.open(wavp, 'rb') as wf:
+            sr = wf.getframerate()
+            raw = wf.readframes(wf.getnframes())
+        sig = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        if len(sig) < sr:                       # <1s Audio -> nichts Belastbares
+            return ''
+        win = max(1, sr // 20)                  # 50ms
+        n = len(sig) // win
+        rms = np.sqrt(np.array([np.mean(sig[i * win:(i + 1) * win] ** 2)
+                                for i in range(n)], dtype=np.float32) + 1e-9)
+        d = np.clip(np.diff(rms, prepend=rms[:1]), 0, None)
+        pos = d[d > 0]
+        thr = float(np.quantile(pos, 0.9)) if pos.size else 0.0
+        hits = int((d > thr).sum()) if thr > 0 else 0
+        dur = len(sig) / float(sr)
+        hpm = hits / max(dur / 60.0, 1e-6)      # Schlaege pro Minute
+        dyn = float(rms.max() / (np.median(rms) + 1e-9))
+        dens = 'hoch' if hpm > 40 else 'mittel' if hpm > 18 else 'niedrig'
+        dynd = 'starke' if dyn > 4 else 'moderate' if dyn > 2 else 'flache'
+        return (f"7) AUDIO/SFX (aus der Tonspur gemessen): ~{hpm:.0f} betonte "
+                f"Schlaege/Minute (Dichte {dens}), {dynd} Laut-Leise-Dynamik - "
+                f"halte die SFX-Dichte/Wucht sinngemaess aehnlich.")
+    except Exception:
+        return ''
+    finally:
+        try:
+            os.remove(wavp)
+        except OSError:
+            pass
 
 
 def analyze_reference_video(video_path, name=None, model='gpt-4o',
@@ -2378,6 +2427,10 @@ def analyze_reference_video(video_path, name=None, model='gpt-4o',
         return None
     if not desc:
         return None
+    # v96v: Audio/SFX separat aus der Tonspur analysieren (Vision hoert nichts)
+    aud = _ref_audio_summary(video_path)
+    if aud:
+        desc = desc + "\n" + aud
     entry = {'name': (name or os.path.splitext(os.path.basename(video_path))[0])[:60],
              'beispiel': desc}
     if save:
