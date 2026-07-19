@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96c: Bessere Gesichts-Erkennung (auch nicht-frontal) + robustere Safe-Zones.**
+  Wunsch: Gesichter, die nicht frontal in die Kamera schauen, muessen auch
+  erkannt werden und die Safe-Zone bei mehreren Personen halten.
+  - **Hoehere Detektions-Aufloesung**: BlazeFace sucht jetzt auf einem 1.8x
+    hochskalierten Bild (`det_up`) - angewinkelte, halb abgewandte und kleinere
+    Koepfe werden deutlich besser gefunden; Boxen werden zurueckskaliert.
+  - **Niedrigere Confidence** (0.4 -> 0.25): faengt schwaechere/schraege
+    Detektionen. Die dadurch moeglichen Fehltreffer siebt die Spur-Mindestlaenge
+    wieder aus.
+  - **Spur-Glaettung** (`_smooth_tracks`): dreht sich ein Kopf kurz weg (ein paar
+    Frames ohne Detektion), wird die Luecke interpoliert und die Box an den
+    Raendern gehalten - die Safe-Zone vergisst die Person NICHT mehr und der Text
+    springt nicht auf sie. Einzelne Spuk-Detektionen (min_len<2) fliegen raus.
+  - **Koerperbreite Safe-Zone** (`_free_x_multi` Faktor 1.3 -> 1.9): gesperrt wird
+    Schulter-/Koerperbreite, nicht nur die Gesichtsbox - v.a. bei seitlich
+    gedrehten Personen schneidet der Text niemanden mehr an.
+  - Multi-Person wird aus den GEGLAETTETEN Spuren bestimmt (kurz abgewandte
+    zweite Person zaehlt weiter als Gespraech).
+  Selftest 449/449 + alle Render-Etappen green (Spur-Glaettung, Spuk-Filter,
+  Safe-Zone synthetisch getestet). EHRLICH: die echte Erkennungs-Rate bei
+  Profil-/Schraeg-Gesichtern ist nur auf Windows mit echtem Mehr-Personen-
+  Material messbar; Sandbox-Clip hat keine Gesichter. BlazeFace bleibt ein
+  Gesichts-Detektor - eine komplett vom Ruecken gefilmte Person hat kein
+  Gesicht und wird nur ueber die gehaltene Spur (kurze Wegdreh-Phasen) erfasst.
 - **v96b: Automatischer Modus-Schalter (Erzaehler / Talking-Head / Gespraech).**
   Ismet muss nichts umstellen - der Render erkennt selbst, was fuer ein Video es
   ist, und setzt die Captions passend. `_video_mode(face_frac, multi_person)`

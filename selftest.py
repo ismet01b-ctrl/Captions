@@ -2262,6 +2262,28 @@ def _scenario_multiperson(tmp):
     check('Modus narrator: behind -> outline + zentriert (face_pos None)',
           "video_mode == 'narrator'" in _r2
           and "_v['fx'] = 'outline'" in _r2 and 'face_pos=None' in _r2)
+    # 6) v96c: Spur-Glaettung - kurz weggedrehter Kopf (Luecke) bleibt fuer die
+    #    Safe-Zone erhalten; einzelne Spuk-Detektion wird verworfen.
+    #    Person A: Frames 0,1,2, LUECKE 3-4 (weggedreht), 5,6. Plus Spuk in F1.
+    dets2 = [
+        [[100, 200, 60, 3.0]],
+        [[102, 201, 60, 3.0], [800, 500, 20, 0.0]],   # Spuk (nur hier)
+        [[101, 200, 60, 3.0]],
+        [],                                            # weggedreht
+        [],                                            # weggedreht
+        [[103, 202, 60, 3.0]],
+        [[104, 201, 60, 3.0]],
+    ]
+    to2, _m2 = R._faces_tracks(dets2, max_d=60)
+    boxes, tids = R._smooth_tracks(dets2, to2, hold=3, min_len=2)
+    filled = all(len(boxes[i]) >= 1 for i in (3, 4))   # Luecke gehalten
+    spuk_gone = all(all(abs(b[0] - 800) > 1 for b in boxes[i]) for i in range(7))
+    check('Spur-Glaettung: weggedrehter Kopf bleibt in der Safe-Zone (Luecke gehalten)',
+          filled, f'F3={boxes[3]} F4={boxes[4]}')
+    check('Spur-Glaettung: einzelne Spuk-Detektion wird verworfen',
+          spuk_gone)
+    check('Gesichts-Erkennung: hoehere Aufloesung + niedrigere Confidence',
+          'det_up' in _r2 and 'min_detection_confidence=0.25' in _r2)
 
 
 def _scenario_premium(tmp):

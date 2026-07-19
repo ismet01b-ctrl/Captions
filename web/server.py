@@ -712,7 +712,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96b-automode'
+DVE_BUILD = 'v96c-facedet'
 
 
 @app.middleware('http')

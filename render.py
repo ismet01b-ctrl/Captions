@@ -1220,6 +1220,44 @@ def _faces_tracks(dets_seq, max_d):
     return track_of, track_motion
 
 
+def _smooth_tracks(dets_seq, track_of, hold=6, min_len=2):
+    """v96c: macht die Gesichts-Spuren robust gegen weggedrehte Koepfe. Ein
+    Gesicht, das kurz zur Seite/weg schaut, wird ein paar Frames NICHT erkannt -
+    ohne Ausgleich vergisst die Safe-Zone die Person und der Text springt auf
+    sie. Hier werden (a) Luecken innerhalb einer Spur interpoliert, (b) die Box
+    vor der ersten / nach der letzten Detektion kurz gehalten und (c) Spuren, die
+    zu selten auftauchen (Spuk-Fehldetektion durch niedrige Confidence), ganz
+    verworfen. Rein & testbar.
+    Rueckgabe: (boxes, tids) - je Frame Liste der (cx,cy,w) bzw. Spur-IDs."""
+    n = len(dets_seq)
+    seen = {}
+    for i in range(n):
+        for j, f in enumerate(dets_seq[i]):
+            seen.setdefault(track_of[i][j], {})[i] = list(f[:3])
+    boxes = [[] for _ in range(n)]
+    tids = [[] for _ in range(n)]
+    for tid, fr in seen.items():
+        if len(fr) < min_len:
+            continue                         # zu selten -> Fehldetektion, weg
+        keys = sorted(fr)
+        for i in keys:
+            boxes[i].append(fr[i]); tids[i].append(tid)
+        for a, b in zip(keys, keys[1:]):     # Luecken interpolieren
+            gap = b - a
+            if 1 < gap <= 2 * hold + 1:
+                for i in range(a + 1, b):
+                    t = (i - a) / gap
+                    boxes[i].append([fr[a][k] + (fr[b][k] - fr[a][k]) * t
+                                     for k in range(3)])
+                    tids[i].append(tid)
+        first, last = keys[0], keys[-1]      # Raender kurz halten
+        for i in range(max(0, first - hold), first):
+            boxes[i].append(list(fr[first])); tids[i].append(tid)
+        for i in range(last + 1, min(last + 1 + hold, n)):
+            boxes[i].append(list(fr[last])); tids[i].append(tid)
+    return boxes, tids
+
+
 def _active_index(faces, tids, track_motion):
     """Waehlt das AKTIVE (sprechende) Gesicht eines Frames: die Spur mit der
     meisten Mund-Bewegung. Ist die Bewegung ueberall ~0 (kein klarer Sprecher),
@@ -1246,8 +1284,11 @@ def _free_x_multi(faces, W, sprite_w, toggle):
     if not faces:
         cx = W * 0.224 if toggle % 2 == 0 else W * 0.766
         return (-1 if cx < W / 2 else 1), cx
-    # Belegte Intervalle (Person + Sicherheitsabstand), sortiert
-    occ = sorted((max(cx - w * 1.3, 0), min(cx + w * 1.3, W)) for cx, w in faces)
+    # Belegte Intervalle (Person + Sicherheitsabstand), sortiert. Faktor 1.9:
+    # der Koerper/die Schultern sind deutlich breiter als die Gesichtsbox - v.a.
+    # bei zur Seite gedrehten Personen. Lieber etwas grosszuegig sperren, damit
+    # der Text niemanden anschneidet.
+    occ = sorted((max(cx - w * 1.9, 0), min(cx + w * 1.9, W)) for cx, w in faces)
     # Freie Luecken zwischen den belegten Intervallen (inkl. Raender)
     gaps = []
     cursor = m
@@ -1299,10 +1340,19 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision
     print("Gesichts-Tracking + Szenen-Analyse...")
+    # v96c: niedrigere Confidence (0.4->0.25) faengt angewinkelte / halb
+    # abgewandte / kleinere Gesichter, die frontal-optimierte Modelle sonst
+    # verwerfen. Die dadurch moeglichen Fehldetektionen werden ueber die
+    # Spur-Mindestlaenge (_smooth_tracks) wieder ausgesiebt.
     opts = vision.FaceDetectorOptions(
         base_options=mp_python.BaseOptions(model_asset_path=os.path.join(HERE, 'models/face.tflite')),
-        min_detection_confidence=0.4)
+        min_detection_confidence=0.25)
     detector = vision.FaceDetector.create_from_options(opts)
+    # v96c: Gesichter in HOEHERER Aufloesung suchen. BlazeFace erkennt nicht-
+    # frontale und kleinere Koepfe deutlich besser, wenn das Bild groesser ist;
+    # die gefundenen Boxen werden zurueck in den Arbeits-Raum skaliert.
+    det_up = 1.8
+    det_w, det_h = int(work_w * det_up), int(work_h * det_up)
     raw, hists, face_hists = [], [], []
     dets_seq = []                  # v96: ALLE Gesichter pro Frame [cx,cy,w,motion]
     last_dets = []
@@ -1322,31 +1372,37 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
             continue
         fi_a += 1
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        big = cv2.resize(frame, (det_w, det_h), interpolation=cv2.INTER_LINEAR)
+        img = cv2.cvtColor(big, cv2.COLOR_BGR2RGB)
         res = detector.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=img))
         faces = []
         if res.detections:
             for d in res.detections:
                 bb = d.bounding_box
-                cx = bb.origin_x + bb.width / 2.0
-                cy = bb.origin_y + bb.height / 2.0
+                # Box aus dem hochskalierten Bild zurueck in den Arbeits-Raum
+                bx = bb.origin_x / det_up
+                by = bb.origin_y / det_up
+                bw = bb.width / det_up
+                bh = bb.height / det_up
+                cx = bx + bw / 2.0
+                cy = by + bh / 2.0
                 # v96: Mund-/Lippen-Bewegung = Frame-Differenz im unteren Drittel
                 # der Gesichtsbox. Wer spricht, bewegt dort am meisten -> Basis
                 # fuer die Active-Speaker-Wahl.
                 mot = 0.0
                 if prev_gray is not None:
-                    y0m = max(int(bb.origin_y + bb.height * 0.55), 0)
-                    y1m = min(int(bb.origin_y + bb.height), gray.shape[0])
-                    x0m = max(int(bb.origin_x), 0)
-                    x1m = min(int(bb.origin_x + bb.width), gray.shape[1])
+                    y0m = max(int(by + bh * 0.55), 0)
+                    y1m = min(int(by + bh), gray.shape[0])
+                    x0m = max(int(bx), 0)
+                    x1m = min(int(bx + bw), gray.shape[1])
                     if y1m > y0m and x1m > x0m:
                         cur = gray[y0m:y1m, x0m:x1m].astype(np.float32)
                         pre = prev_gray[y0m:y1m, x0m:x1m].astype(np.float32)
                         if cur.shape == pre.shape and cur.size:
                             mot = float(np.abs(cur - pre).mean())
-                faces.append([cx, cy, float(bb.width), mot,
-                              float(bb.height), float(d.categories[0].score),
-                              int(bb.origin_x), int(bb.origin_y)])
+                faces.append([cx, cy, float(bw), mot,
+                              float(bh), float(d.categories[0].score),
+                              int(bx), int(by)])
         prev_gray = gray
         # nach Score sortiert (staerkste Detektion zuerst)
         faces.sort(key=lambda f: f[5], reverse=True)
@@ -1368,21 +1424,27 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
             raw.append(None)
             face_hists.append(None)
     n = len(raw)
-    # v96: Personen-Spuren + Active-Speaker. Ist mehr als eine Person im Bild,
-    # bestimmt die Mund-Bewegung, wer gerade spricht - Position/Kamera/Effekte
-    # folgen dann dem aktiven Sprecher (Hybrid). Bei nur einer Person aendert
-    # sich nichts.
-    max_faces = max((len(f) for f in dets_seq), default=0)
-    multi_person = sum(len(f) >= 2 for f in dets_seq) > 0.10 * max(n, 1)
-    if max_faces >= 2:
+    # v96/v96c: Personen-Spuren, geglaettet (Luecken bei weggedrehten Koepfen
+    # gefuellt, Fehldetektionen ausgesiebt) + Active-Speaker ueber Mund-Bewegung.
+    # Position/Kamera/Effekte folgen dem aktiven Sprecher (Hybrid). Aus den
+    # geglaetteten Spuren kommen auch die Multi-Face-Safe-Zone-Boxen.
+    smooth_boxes = [[] for _ in range(n)]
+    if any(dets_seq):
         track_of, track_motion = _faces_tracks(dets_seq, work_w * 0.14)
+        _hold = int(round(6 / max(det_step, 1))) + 2
+        smooth_boxes, smooth_tids = _smooth_tracks(dets_seq, track_of,
+                                                   hold=_hold, min_len=2)
         for i in range(n):
-            fs = dets_seq[i]
-            if not fs:
-                continue
-            aj = _active_index(fs, track_of[i], track_motion)
-            if aj >= 0:
-                raw[i] = [fs[aj][0], fs[aj][1], fs[aj][2]]   # Primaer = Sprecher
+            fb = smooth_boxes[i]
+            if fb:
+                aj = _active_index(fb, smooth_tids[i], track_motion)
+                raw[i] = [fb[aj][0], fb[aj][1], fb[aj][2]]    # Primaer = Sprecher
+            else:
+                raw[i] = None                                 # Spuk-Detektion weg
+    # Multi-Person aus den GEGLAETTETEN Spuren (haelt eine kurz abgewandte
+    # zweite Person - sonst wuerde ein Gespraech faelschlich als Einzelperson
+    # eingestuft und die Safe-Zone gegen die zweite Person entfiele).
+    multi_person = sum(len(fr) >= 2 for fr in smooth_boxes) > 0.10 * max(n, 1)
 
     # --- Schnitte finden (Histogramm-Korrelation zwischen Nachbar-Frames)
     cuts = [0]
@@ -1460,16 +1522,18 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     wsm = np.convolve(np.pad(np.array(wfill, dtype=float), k // 2, mode='edge'),
                       kernel, 'valid')[:n]
     n_broll = int((~present).sum())
-    _npf = sum(len(f) >= 2 for f in dets_seq)
+    _npf = sum(len(f) >= 2 for f in smooth_boxes)
     print(f"  {len(shots)} Szenen, {int(sum(r is not None for r in raw))}/{n} Frames mit Gesicht"
           + (f", {n_broll} Frames als B-Roll eingestuft" if n_broll else "")
           + (f", Multi-Person in {_npf} Frames" if multi_person else ""))
     sc = out_w / float(work_w)
     # v85: interne Schnitt-Frames mitgeben (fuer Caption-Schnitt-Disziplin).
     inner_cuts = [c for c in cuts if 0 < c < n]
-    # v96: ALLE Gesichter pro Frame in Output-Pixeln (fuer die Multi-Face-Safe-
-    # Zone - Text soll KEINES der Gesichter ueberdecken).
-    faces_seq = [[(f[0] * sc, f[1] * sc, f[2] * sc) for f in fr] for fr in dets_seq]
+    # v96/v96c: ALLE Gesichter pro Frame in Output-Pixeln aus den GEGLAETTETEN
+    # Spuren (kurz weggedrehte Koepfe bleiben drin) - fuer die Multi-Face-Safe-
+    # Zone, damit der Text KEINES der Gesichter ueberdeckt.
+    faces_seq = [[(b[0] * sc, b[1] * sc, b[2] * sc) for b in fr]
+                 for fr in smooth_boxes]
     return sm * sc, present, wsm * sc, inner_cuts, faces_seq, multi_person
 
 # ---------------------------------------------------------------- sprites
