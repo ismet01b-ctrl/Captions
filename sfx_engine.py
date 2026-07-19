@@ -26,13 +26,23 @@ SLOTS = ('impact', 'whoosh', 'whoosh_soft', 'riser', 'tick', 'counter', 'boom',
          'crack', 'fall', 'rise', 'turn', 'press', 'vanish', 'slam')
 
 ANIM_SFX = {
-    'bruch':   ('crack',  0.02, 0.95),
-    'sturz':   ('fall',  -0.05, 0.85),
-    'anstieg': ('rise',  -0.10, 0.80),
-    'wende':   ('turn',  -0.04, 0.75),
-    'druck':   ('press',  0.00, 0.70),
-    'schwund': ('vanish', 0.15, 0.65),
-    'knall':   ('slam',   0.00, 1.18),   # Punchline sitzt lauter (Feed-Standard)
+    'bruch':      ('crack',  0.02, 0.95),
+    'sturz':      ('fall',  -0.05, 0.85),
+    'anstieg':    ('rise',  -0.10, 0.80),
+    'wende':      ('turn',  -0.04, 0.75),
+    'druck':      ('press',  0.00, 0.70),
+    'schwund':    ('vanish', 0.15, 0.65),
+    'knall':      ('slam',   0.00, 1.18),   # Punchline sitzt lauter (Feed-Standard)
+    # v96l: wuchtige, sichtbare Animationen hatten KEINEN eigenen Sound - sie
+    # knallten im Bild, blieben aber (unter power 3) tonlos. Jetzt bekommt jede
+    # einen passenden Einschlag/Whoosh (V() variiert Pitch, siehe build_sfx_track).
+    'explosion':  ('slam',   0.00, 1.05),   # radialer Aufschlag
+    'zoom_punch': ('slam',   0.00, 0.95),   # harter Skalen-Push
+    'stempel':    ('slam',   0.02, 1.00),   # knallt drauf wie ein Stempel
+    'spur':       ('whoosh', -0.05, 0.80),  # schiesst mit Tempo herein
+    'rutsche':    ('whoosh',  0.00, 0.60),  # rutscht seitlich rein
+    'magnet':     ('turn',   -0.06, 0.55),  # zieht zusammen (Reverse-Whoosh)
+    'regen':      ('fall',    0.00, 0.55),  # Streifen fallen herab
 }
 
 def pack_folder(here=None):
@@ -230,7 +240,7 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
         if _an in ANIM_SFX:
             _nm, _off, _gn = ANIM_SFX[_an]
             if _nm in bank:
-                place(bank[_nm], t0 + _off, _gn * g)
+                place(V(_nm), t0 + _off, _gn * g)   # V(): Pitch/Pegel variiert
             print(f"  SFX '{clean_word(words[p['kw_i']]['word'])}': "
                   f"{_an} ({_nm})")
         # Grosse Momente (power 3): eigene Ebene aus Riser + tiefem Einschlag.

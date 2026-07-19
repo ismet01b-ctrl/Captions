@@ -2354,6 +2354,13 @@ def _scenario_multiperson(tmp):
     # unterscheiden sich an Index 0 vs 1)
     check('Hoehepunkt-SFX: Pitch-Tabellen variieren zwischen den Momenten',
           '(1.0, 0.87, 1.14' in _se2 and '(1.0, 1.10, 0.90' in _se2)
+    # v96l: wuchtige sichtbare Animationen haben jetzt einen eigenen Sound
+    # (waren vorher unter power 3 tonlos). Direkt gegen ANIM_SFX pruefen.
+    import sfx_engine as _SEa
+    check('SFX-Luecke: wuchtige Anims (explosion/zoom_punch/stempel/spur) klingen',
+          all(a in _SEa.ANIM_SFX for a in
+              ('explosion', 'zoom_punch', 'stempel', 'spur', 'rutsche', 'magnet', 'regen'))
+          and 'place(V(_nm)' in _se2)
 
 
 def _scenario_premium(tmp):

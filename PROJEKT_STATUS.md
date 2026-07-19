@@ -3,6 +3,17 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v96l: Effekt-Audit + SFX-Luecke bei wuchtigen Animationen geschlossen.**
+  Audit (alle grün): 26 Animationen sind implementiert (anim_apply), im Regie-
+  Prompt angeboten UND vom Parser akzeptiert (Whitelist gegen ANIM_LIST). fx
+  (behind/cascade/blurin/outline/ground) laufen alle, anim_apply wird auf JEDEM
+  fx-Typ aufgerufen -> fx+anim+Kamera+SFX kombinieren sich frei; die KI kann pro
+  Moment fx/anim/szene/lage/power/emoji unabhaengig setzen. GEFUNDENE LUECKE:
+  nur 7 Anims hatten einen eigenen Action-Sound - wuchtige, sichtbare
+  Animationen (explosion, zoom_punch, stempel, spur, rutsche, magnet, regen)
+  knallten im Bild, blieben aber unter power 3 tonlos. Jetzt haben sie passende
+  Einschlaege/Whooshes (slam/whoosh/turn/fall), der Anim-Sound laeuft ueber V()
+  (Pitch/Pegel variiert). Selftest 462/462 + Render green.
 - **v96k: Grosse Momente sehen wirklich verschieden aus (echter Fix).**
   v96i griff zu frueh: es prueft (fx, anim), aber Mehrwort-Hoehepunkte werden
   IMMER zur 'behind'-Komposition - der fx-Wechsel verpuffte, zwei Hoehepunkte
