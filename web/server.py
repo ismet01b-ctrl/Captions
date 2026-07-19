@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v96y-refvisible'
+DVE_BUILD = 'v96z-stylecopy'
 
 
 @app.middleware('http')

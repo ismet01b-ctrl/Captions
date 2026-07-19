@@ -2433,9 +2433,9 @@ def analyze_reference_video(video_path, name=None, model='gpt-4o',
         desc = desc + "\n" + aud
     entry = {'name': (name or os.path.splitext(os.path.basename(video_path))[0])[:60],
              'beispiel': desc}
-    # v96y: MESSBARE Parameter aus der Beschreibung ziehen - die wirken
-    # deterministisch auf die Render-Config (sichtbar), nicht nur als Prompt.
-    params = _style_params_from_desc(desc, model, key)
+    # v96y/z: MESSBARE Parameter aus Beschreibung + FRAMES ziehen (Farbe/Dichte
+    # praezise) - die wirken deterministisch auf die Render-Config (sichtbar).
+    params = _style_params_from_desc(desc, model, key, frames=frames)
     if params:
         entry['params'] = params
     if save:
@@ -2509,28 +2509,38 @@ def _load_regie_reference():
             + '\n'.join(lines) + "\n\n")
 
 
-def _style_params_from_desc(desc, model='gpt-4o', key=None):
-    """v96y: extrahiert aus der Prosa-Stilbeschreibung MESSBARE Regie-Parameter
-    (JSON-Call, billig, ohne Vision). Diese Parameter wirken deterministisch auf
-    die Render-Config - so ist der Referenz-Einfluss SICHTBAR, nicht nur ein
-    weicher Prompt-Hinweis. Fehlertolerant: {} bei jedem Problem."""
+def _style_params_from_desc(desc, model='gpt-4o', key=None, frames=None):
+    """v96y/z: extrahiert MESSBARE Stil-Parameter - mit den Original-FRAMES
+    (Vision, praezise Farben/Groessen), sonst nur aus der Prosa. Die Parameter
+    wirken deterministisch auf die Render-Config - so wird der Referenz-Stil
+    KOPIERT, nicht nur als weicher Prompt-Hinweis gereicht. {} bei Problemen."""
     key = key or os.environ.get('OPENAI_API_KEY')
     if not key or not desc:
         return {}
     import requests
+    ask = ("Du siehst Frames eines Videos mit Premium-Captions plus eine "
+           "Stilbeschreibung. Extrahiere die Parameter als json: "
+           "{\"words_per_group\": <1-5, Woerter pro Caption>, "
+           "\"min_gap_seconds\": <3-15, Sekunden zwischen Highlights - hohe "
+           "Dichte = kleiner Wert>, \"hook_strength\": <0.0-1.0, wie aggressiv "
+           "der Anfang ist>, \"wucht\": \"ruhig\"|\"normal\"|\"wuchtig\", "
+           "\"accent_hex\": <\"#RRGGBB\" der dominanten Highlight-Farbe der "
+           "Captions, oder null wenn keine klare Akzentfarbe>, "
+           "\"density\": \"akzente\"|\"durchgehend\" (stehen nur einzelne "
+           "Highlights oder laufen Captions durchgehend)}. Nur das JSON.\n\n"
+           "BESCHREIBUNG:\n" + desc)
+    content = [{'type': 'text', 'text': ask}]
+    for b in (frames or [])[:4]:
+        content.append({'type': 'image_url',
+                        'image_url': {'url': f'data:image/jpeg;base64,{b}',
+                                      'detail': 'low'}})
     try:
         r = requests.post(
             'https://api.openai.com/v1/chat/completions',
             headers={'Authorization': f'Bearer {key}'},
-            json=_oai_json(model, [{'role': 'user', 'content':
-                "Extrahiere aus dieser Caption-Stilbeschreibung die Parameter als "
-                "json: {\"words_per_group\": <1-5, Woerter pro Caption>, "
-                "\"min_gap_seconds\": <3-15, Sekunden zwischen Highlights - "
-                "hohe Dichte = kleiner Wert>, \"hook_strength\": <0.0-1.0, wie "
-                "aggressiv der Anfang ist>, \"wucht\": \"ruhig\"|\"normal\"|"
-                "\"wuchtig\"}. Nur das JSON.\n\nBESCHREIBUNG:\n" + desc}],
-                           max_toks=150, temperature=0.0),
-            timeout=60)
+            json=_oai_json(model, [{'role': 'user', 'content': content}],
+                           max_toks=200, temperature=0.0),
+            timeout=90)
         r.raise_for_status()
         data = json.loads(r.json()['choices'][0]['message']['content'])
         out = {}
@@ -2548,6 +2558,11 @@ def _style_params_from_desc(desc, model='gpt-4o', key=None):
             pass
         if str(data.get('wucht', '')).lower() in ('ruhig', 'normal', 'wuchtig'):
             out['wucht'] = str(data['wucht']).lower()
+        hx = str(data.get('accent_hex') or '').strip()
+        if re.fullmatch(r'#?[0-9a-fA-F]{6}', hx):
+            out['accent_hex'] = '#' + hx.lstrip('#').lower()
+        if str(data.get('density', '')).lower() in ('akzente', 'durchgehend'):
+            out['density'] = str(data['density']).lower()
         return out
     except Exception as e:
         print(f"  Stil-Parameter uebersprungen ({type(e).__name__})")
@@ -2578,6 +2593,18 @@ def _reference_params():
     wu = [p.get('wucht') for p in ps if p.get('wucht')]
     if wu:
         out['wucht'] = max(set(wu), key=wu.count)
+    # v96z: Look-Merkmale - Akzentfarbe (RGB gemittelt) + Caption-Dichte
+    cols = []
+    for p in ps:
+        hx = str(p.get('accent_hex') or '').lstrip('#')
+        if re.fullmatch(r'[0-9a-fA-F]{6}', hx):
+            cols.append(tuple(int(hx[k:k + 2], 16) for k in (0, 2, 4)))
+    if cols:
+        out['accent'] = [int(sum(c[k] for c in cols) / len(cols))
+                         for k in range(3)]
+    de = [p.get('density') for p in ps if p.get('density')]
+    if de:
+        out['density'] = max(set(de), key=de.count)
     return out
 
 
@@ -2613,6 +2640,16 @@ def _apply_reference_params(cfg):
             cfg['camera']['strength'] = max(float(cfg['camera'].get('strength', 0.7)) - 0.2, 0.2)
             cfg['effects']['sfx_volume'] = max(float(cfg['effects'].get('sfx_volume', 0.6)) - 0.15, 0.2)
         parts.append(f"wucht={w}")
+    # v96z: LOOK kopieren - Akzentfarbe der Referenz wird zur Caption-
+    # Akzentfarbe (feste Farbe schlaegt adaptive Szenen-Toene), Dichte
+    # (akzente vs durchgehend) wird uebernommen.
+    if p.get('accent'):
+        cfg.setdefault('colors', {})['accent'] = list(p['accent'])
+        cfg['colors']['adaptive'] = False
+        parts.append('farbe=#%02x%02x%02x' % tuple(p['accent']))
+    if p.get('density'):
+        cfg['effects']['density'] = p['density']
+        parts.append(f"dichte={p['density']}")
     return 'Stil-Anker: ' + ', '.join(parts) if parts else ''
 
 
@@ -4168,16 +4205,52 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     if _fp:
                         p['by'] = max(min(float(_fp[1]) - H * 0.055, H * 0.62),
                                       H * 0.10)
-                sz = S.fit(txt, int(H * 0.213) if not portrait else int(H * 0.11), int(W * (0.62 if safe_z else 0.94) if portrait else W * 0.885))
-                if S.kinetic and not p.get('count'):
-                    arr, tot, lets = S.text(txt, sz, S.accent, glow=True,
-                                            per_letter=True, extrude=S.ex)
-                    p['arr'] = arr
-                    p['letters'] = letter_slices(arr, lets)
-                else:
-                    p['arr'] = persp_warp(rot_img(S.text(txt, sz, S.accent, glow=True,
-                                                         extrude=S.ex)[0],
-                                                  p['tilt'] * 0.6), yaw=p['tilt'] * 4.5)
+                _bh_limit = int(W * (0.62 if safe_z else 0.94) if portrait else W * 0.885)
+                sz = S.fit(txt, int(H * 0.213) if not portrait else int(H * 0.11), _bh_limit)
+
+                def _build_behind(_s):
+                    if S.kinetic and not p.get('count'):
+                        arr, tot, lets = S.text(txt, _s, S.accent, glow=True,
+                                                per_letter=True, extrude=S.ex)
+                        p['arr'] = arr
+                        p['letters'] = letter_slices(arr, lets)
+                    else:
+                        p['arr'] = persp_warp(rot_img(S.text(txt, _s, S.accent, glow=True,
+                                                             extrude=S.ex)[0],
+                                                      p['tilt'] * 0.6), yaw=p['tilt'] * 4.5)
+                _build_behind(sz)
+                # v96z LESBARKEIT: Ist das Wort schmaler als der Kopf (inkl.
+                # Haare ~1.7x Gesichtsbox), verschwindet es hinter der Person -
+                # nur Anfangs-/Endbuchstabe ragen heraus (unlesbar). Dann:
+                # (1) Schrift vergroessern, bis das Wort DEUTLICH breiter ist
+                # als der Kopf; reicht das nicht (Randlimit), (2) das Wort
+                # UEBER den Kopf legen - lieber sichtbar als versteckt.
+                if face_pos is not None and not broll:
+                    _fpv = face_pos(start, end)
+                    _kopf = float(_fpv[2]) * 1.7 if _fpv else 0.0
+                    if _kopf > 0:
+                        def _vis_w():
+                            _ax = np.where(p['arr'][..., 3] > 8)[1]
+                            return (int(_ax.max() - _ax.min()) if _ax.size
+                                    else p['arr'].shape[1])
+                        _tw = _vis_w()
+                        if _tw < _kopf * 1.25:
+                            _gr = min(_kopf * 1.35 / max(_tw, 1),
+                                      _bh_limit / max(_tw, 1))
+                            if _gr > 1.02:
+                                sz = int(sz * _gr)
+                                _build_behind(sz)
+                                _tw = _vis_w()
+                            if _tw < _kopf * 1.10:
+                                p['by'] = max(float(_fpv[1]) - _kopf * 0.85,
+                                              H * 0.07)
+                                if p.get('entr') == 'emerge':
+                                    p['entr'] = 'rise'
+                                print(f"  Lesbarkeit: '{txt}' schmaler als der "
+                                      f"Kopf -> ueber den Kopf gelegt")
+                            else:
+                                print(f"  Lesbarkeit: '{txt}' vergroessert "
+                                      f"(ragt beidseitig heraus)")
                 if p.get('count'):
                     p['builder'] = (lambda s, _sz=sz, _tl=p['tilt']:
                                     persp_warp(rot_img(S.text(s, _sz, S.accent, glow=True,

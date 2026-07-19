@@ -918,6 +918,32 @@ def _scenario_logic(clip, transcript, tmp):
                                {0: {'fx': 'behind', 'power': 3, 'n': 1}})
     check('Ohne Person kein Herausschieben',
           all(p.get('entr') != 'emerge' for p in _pl_nf if 'kw_i' in p))
+    # v96z LESBARKEIT: schmales Wort hinter riesigem Kopf. (a) Kopf so breit,
+    # dass selbst das Randlimit nicht reicht -> Wort kommt UEBER den Kopf.
+    with _cl2.redirect_stdout(_io2.StringIO()):
+        _pl_big = R.build_plans([{'word': ' Go', 'start': 1.0, 'end': 1.9}], {0},
+                                copy.deepcopy(cfg), S, W_, H_, lambda a, b: True,
+                                {0: {'fx': 'behind', 'power': 3, 'n': 1}},
+                                face_pos=lambda a, b: (960.0, 430.0, 1200.0))
+    _pb = [p for p in _pl_big if 'kw_i' in p]
+    check('Lesbarkeit: schmales Wort + Riesen-Kopf -> ueber den Kopf gelegt',
+          _pb and _pb[0].get('by', 9999) <= H_ * 0.075 + 2,
+          f"by={_pb[0].get('by', -1):.0f}" if _pb else '-')
+    # (b) Kopf gross, aber Platz vorhanden -> Wort wird VERGROESSERT, bis es
+    # deutlich beidseitig am Kopf herausragt (statt dahinter zu verschwinden).
+    with _cl2.redirect_stdout(_io2.StringIO()):
+        _pl_mid = R.build_plans([{'word': ' Go', 'start': 1.0, 'end': 1.9}], {0},
+                                copy.deepcopy(cfg), S, W_, H_, lambda a, b: True,
+                                {0: {'fx': 'behind', 'power': 3, 'n': 1}},
+                                face_pos=lambda a, b: (960.0, 430.0, 400.0))
+    _pm = [p for p in _pl_mid if 'kw_i' in p]
+    _vw = 0
+    if _pm and _pm[0].get('arr') is not None:
+        import numpy as _npv
+        _ax = _npv.where(_pm[0]['arr'][..., 3] > 8)[1]
+        _vw = int(_ax.max() - _ax.min()) if _ax.size else 0
+    check('Lesbarkeit: Wort wird vergroessert (breiter als Kopf x1.1)',
+          _vw >= 400 * 1.7 * 1.1, f'Wortbreite {_vw}px vs Kopf {int(400*1.7)}px')
     # Maskenqualitaet muss die Detailstufe wirklich anheben
     _rsrc_q = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('Maskenqualitaet verdrahtet',
@@ -2293,6 +2319,30 @@ def _scenario_lang(tmp):
           and _cfgy['effects']['hook_strength'] == 0.9
           and _cfgy['camera']['strength'] < 0.7          # 'ruhig' senkt Kamera
           and _line.startswith('Stil-Anker:'), _line)
+    # (e) v96z: LOOK wird kopiert - Akzentfarbe + Dichte der Referenz
+    _refl = _tfx.mkdtemp(prefix='dve_refl_')
+    _old_dd3 = os.environ.get('DVE_DATA')
+    os.environ['DVE_DATA'] = _refl
+    try:
+        json.dump([{'name': 'L', 'beispiel': 'x',
+                    'params': {'accent_hex': '#ffd700',
+                               'density': 'durchgehend'}}],
+                  open(os.path.join(_refl, 'regie_reference.json'), 'w'))
+        _cfgl = {'effects': {'density': 'akzente', 'sfx_volume': 0.6},
+                 'keywords': {}, 'camera': {'strength': 0.7},
+                 'colors': {'accent': [255, 122, 26], 'adaptive': True}}
+        _linel = R._apply_reference_params(_cfgl)
+    finally:
+        if _old_dd3 is None:
+            os.environ.pop('DVE_DATA', None)
+        else:
+            os.environ['DVE_DATA'] = _old_dd3
+        shutil.rmtree(_refl, ignore_errors=True)
+    check('Stil-Anker: LOOK kopiert (Akzentfarbe + Dichte der Referenz)',
+          _cfgl['colors']['accent'] == [255, 215, 0]
+          and _cfgl['colors']['adaptive'] is False
+          and _cfgl['effects']['density'] == 'durchgehend'
+          and 'farbe=#ffd700' in _linel, _linel)
     check('Stil-Anker: im Render-Main verdrahtet + Server zeigt Beweis im Job',
           '_apply_reference_params(cfg)' in _r
           and "startswith('Stil-Referenzen:')" in
