@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v97f: KI-Flow - GPT waehlt Anker-/Akzent-Wort der Flow-Captions.**
+  Ismet: "Ich dachte die ki entscheidet fast alles." Bisher war das Flow-
+  Keyword die Laengen-Heuristik (laengstes Inhaltswort) - wirkte zufaellig.
+  Jetzt: `ai_flow_direct()` - EIN GPT-Call pro Video bekommt alle Filler-
+  Chunks mit Wort-Indizes und waehlt pro Chunk das bedeutungstragende
+  Anker-Wort (Substantiv/Verb/Zahl/Name) + optional ein emotionales
+  Akzent-Wort (accent=null unterdrueckt bewusst auch den Heuristik-Akzent).
+  Validierung strikt in `_parse_flow_sel()` (Index im Chunk, kein Fuellwort,
+  Substanzlaenge) - Unsinn faellt still auf die Heuristik zurueck. Cache
+  neben dem Input (_flow3.json), Log "KI-Flow: N Anker gewaehlt".
+  compose_flow nimmt die Wahl per flow_sel, build_plans reicht flow_map durch.
+  BEWEIS (Frames): Heuristik setzt 'EDITS' gross, KI-Wahl setzt 'CHEAP' -
+  die Pointe, nicht das laengste Wort. Selftest 502/502 (5 neue KI-Flow-Tests)
+  + render1/2c + GUI gruen. EHRLICH: Sandbox ohne echten Key - der echte
+  GPT-Call ist auf Windows/Server zu verifizieren; Fallback-Pfad ist getestet.
 - **v97e: Keine geparkte Hook-Karte bei aktivem Flow.**
   Ismet (Screenshot IMG_6578): "Es wird ein 'Titel generiert mit einem random
   Word' das bleibt die ganze Zeit oben (unpassend) und die captions kommen

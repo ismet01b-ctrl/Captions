@@ -425,6 +425,33 @@ def _scenario_logic(clip, transcript, tmp):
     _flowp = next((p for p in pf_on if p['tpl'] == 'flow' and p.get('flow')), None)
     check('Flow-Plan traegt flow_anchor fuer SFX-Tick',
           _flowp is not None and 'flow_anchor' in _flowp)
+    # v97f: KI-Flow - GPT-Wahl fuer Anker/Akzent, validiert; Heuristik-Fallback
+    wsel = [{'word': x, 'start': 1 + j * .3, 'end': 1.2 + j * .3}
+            for j, x in enumerate(['this', 'trick', 'saves', 'real', 'money', 'fast'])]
+    gsel = [list(range(6))]
+    sel_ok = R._parse_flow_sel({'chunks': [{'g': 0, 'kw': 4, 'accent': 5}]}, gsel, wsel)
+    check('KI-Flow: gueltige Wahl uebernommen',
+          sel_ok.get(0, {}).get('kw') == 4 and sel_ok[0].get('accent') == 5, str(sel_ok))
+    sel_bad = R._parse_flow_sel({'chunks': [
+        {'g': 0, 'kw': 99},                          # Index nicht im Chunk
+        {'g': 7, 'kw': 1},                           # unbekannter Chunk
+        {'g': 0, 'kw': 0}]}, gsel, wsel)             # 'this' = Fuellwort
+    check('KI-Flow: ungueltige Wahl verworfen', sel_bad == {}, str(sel_bad))
+    itk, _, anck = R.compose_flow(gsel[0], wsel, S, W_, H_, portrait=True,
+                                  flow_sel={'kw': 4, 'accent': 5})
+    check('KI-Flow: compose_flow nutzt die KI-Wahl',
+          anck == 4 and [it['role'] for it in itk].count('accent') == 1
+          and itk[-1]['role'] == 'accent',
+          f"anchor={anck} roles={[it['role'] for it in itk]}")
+    _, _, anch_fb = R.compose_flow(gsel[0], wsel, S, W_, H_, portrait=True,
+                                   flow_sel={'kw': 99})   # Unsinn -> Heuristik
+    check('KI-Flow: Unsinn-Wahl faellt auf Heuristik zurueck', anch_fb is not None)
+    # accent explizit null -> KEIN Heuristik-Akzent (KI hat entschieden)
+    itn, _, _ = R.compose_flow(gsel[0], wsel, S, W_, H_, portrait=True,
+                               flow_sel={'kw': 4, 'accent': None})
+    check('KI-Flow: accent=null unterdrueckt Heuristik-Akzent',
+          all(it['role'] != 'accent' for it in itn))
+
     # v97e: bei aktivem Flow wird KEINE Hook-Karte fest oben geparkt (sonst
     # kollidiert sie mit dem Flow-Text, der drueber laeuft).
     whk = [{'word': x, 'start': 0.5 + j * .35, 'end': 0.7 + j * .35}

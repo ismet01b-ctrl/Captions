@@ -3570,7 +3570,7 @@ _FLOW_CONN = {'im', 'in', 'am', 'an', 'auf', 'aus', 'bei', 'der', 'die', 'das',
               'why', 'how', 'that', 'this', 'not', 'but', 'just', 'my', 'your'}
 
 
-def compose_flow(g, words, S, W, H, portrait=False, kw_lower=None):
+def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None):
     """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
     Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
       - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
@@ -3584,13 +3584,23 @@ def compose_flow(g, words, S, W, H, portrait=False, kw_lower=None):
     cont = [i for i in idxs
             if clean(words[i]['word']).lower().strip(".,!?;:") not in _FLOW_CONN
             and len(clean(words[i]['word'])) >= 2]
+    # v97f: KI-Wahl zuerst (GPT waehlt Anker/Akzent inhaltlich, wie ein Editor).
+    # Die Laengen-Heuristik bleibt Fallback (kein Key / KI ohne Meinung).
+    sel = flow_sel or {}
     anchor = None
-    if len(idxs) >= 3 and cont:
+    _ka = sel.get('kw')
+    if _ka in idxs and len(clean(words[_ka]['word'])) >= 3 \
+            and clean(words[_ka]['word']).lower() not in _FLOW_CONN:
+        anchor = _ka
+    if anchor is None and len(idxs) >= 3 and cont:
         cand = cont[int(np.argmax([len(clean(words[i]['word'])) for i in cont]))]
         if len(clean(words[cand]['word'])) >= 5:
             anchor = cand
     accent = None
-    if len(idxs) >= 4 and cont:
+    _acc = sel.get('accent')
+    if _acc in idxs and _acc != anchor and len(clean(words[_acc]['word'])) >= 3:
+        accent = _acc
+    if accent is None and 'accent' not in sel and len(idxs) >= 4 and cont:
         last = cont[-1]
         raw_last = clean(words[last]['word'])
         if last != anchor and raw_last[:1].islower() and len(raw_last) >= 3:
@@ -3668,6 +3678,81 @@ def compose_flow(g, words, S, W, H, portrait=False, kw_lower=None):
         y += line_h
     total_h = max(y, 1)
     return items, total_h, anchor
+
+
+def _parse_flow_sel(data, groups, words):
+    """v97f: Validiert die KI-Flow-Wahl. Rueckgabe {g_first_index: {'kw': i,
+    'accent': i|None}} - nur Eintraege, deren Indizes wirklich im Chunk liegen
+    und Substanz haben. Ungueltiges wird verworfen (Fallback: Heuristik)."""
+    out = {}
+    if not isinstance(data, dict):
+        return out
+    by_first = {g[0]: list(g) for g in groups}
+    for ch in data.get('chunks', []) or []:
+        if not isinstance(ch, dict):
+            continue
+        try:
+            g0 = int(ch.get('g'))
+            kw = int(ch.get('kw'))
+        except (TypeError, ValueError):
+            continue
+        g = by_first.get(g0)
+        if not g or kw not in g:
+            continue
+        t = clean(words[kw]['word'])
+        if len(t) < 3 or t.lower() in _FLOW_CONN:
+            continue
+        entry = {'kw': kw, 'accent': None}
+        acc = ch.get('accent')
+        if acc is not None:
+            try:
+                acc = int(acc)
+            except (TypeError, ValueError):
+                acc = None
+            if acc is not None and acc in g and acc != kw \
+                    and len(clean(words[acc]['word'])) >= 3:
+                entry['accent'] = acc
+            else:
+                acc = None
+        out[g0] = entry
+    return out
+
+
+def ai_flow_direct(words, groups, language='de', model='gpt-4o'):
+    """v97f: GPT waehlt pro Filler-Chunk das ANKER-Wort (wird gross+getippt)
+    und optional ein Akzent-Wort (kursiv, warm) - inhaltlich, wie ein Editor,
+    statt Laengen-Heuristik. EIN Call pro Video. None bei fehlendem Key/Fehler."""
+    key = os.environ.get('OPENAI_API_KEY', '').strip()
+    if not key or not groups:
+        return None
+    lines = []
+    for g in groups:
+        toks = ' '.join(f"{j}:{clean(words[j]['word'])}" for j in g)
+        lines.append(f"g={g[0]} | {toks}")
+    lang_hint = {'de': 'Deutsch', 'en': 'Englisch'}.get(language, language or 'de')
+    sysm = ("Du bist Cutter fuer Premium-Social-Edits (Sprache: " + lang_hint + "). "
+            "Pro Text-Chunk waehlst du GENAU EIN Anker-Wort 'kw': das "
+            "bedeutungstragende Wort, das ein Editor gross setzen wuerde "
+            "(Substantiv/Verb/Zahl/Name - traegt die Aussage, NIE Fuellwort). "
+            "Optional 'accent': ein weiches emotionales Schlusswort "
+            "(Adjektiv/Adverb), sonst null. Nutze die mitgegebenen Indizes. "
+            'Antworte NUR mit JSON: {"chunks": [{"g": <g>, "kw": <index>, '
+            '"accent": <index|null>}]}')
+    try:
+        r = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}'},
+            json=_oai_json(model, [{'role': 'system', 'content': sysm},
+                                   {'role': 'user', 'content': '\n'.join(lines)}],
+                           max_toks=min(120 + 30 * len(groups), 4000),
+                           temperature=0.0),
+            timeout=120)
+        r.raise_for_status()
+        data = json.loads(r.json()['choices'][0]['message']['content'])
+    except Exception as e:
+        print(f"KI-Flow nicht verfuegbar ({type(e).__name__}), nutze Heuristik.")
+        return None
+    return _parse_flow_sel(data, groups, words)
 
 
 def letter_slices(arr, letters):
@@ -3880,7 +3965,7 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
 
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
-                palette_at=None, cut_times=None, faces_at=None):
+                palette_at=None, cut_times=None, faces_at=None, flow_map=None):
     KW_FX = cfg['effects']['keyword_rotation']
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
@@ -4576,7 +4661,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         elif cfg['effects'].get('caption_flow', True):
             # v97 Flow-Caption (Referenz-Look): Chunk baut sich INLINE auf,
             # Anker-Wort gross+getippt+Glow, Abschlusswort kursiv-Akzent.
-            items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait)
+            items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait,
+                                                  flow_sel=(flow_map or {}).get(g[0]))
             # Referenz-Look: Block im OBEREN Drittel (nicht mittig ueber dem
             # Gesicht). Bei Hochformat oben verankert, sonst zentriert.
             zc = v_zone(start, end) if portrait else Z_MAIN
@@ -6394,6 +6480,36 @@ def main():
     # setzen (face_pos/faces_at = None laesst build_plans das freie, mittige
     # Layout waehlen). 'behind' ergibt ohne Person keinen Sinn -> auf sichtbares
     # 'outline' umlegen.
+    # v97f: KI-Flow - GPT waehlt pro Filler-Chunk das Anker-/Akzent-Wort
+    # (inhaltlich, wie ein Editor) statt der Laengen-Heuristik. EIN Call pro
+    # Video, gecacht neben dem Input (_flow3.json). Fallback: Heuristik.
+    flow_map = None
+    if cfg['effects'].get('caption_flow', True) and cfg['keywords'].get('ai', True):
+        _fgroups = list(build_groups(words, cfg['effects'].get('words_per_group', 3),
+                                     min_hold=float(cfg['effects'].get('chunk_hold_min', 0.65)),
+                                     hard_max=int(cfg['effects'].get('words_per_group_max', 5))))
+        flow_path = os.path.splitext(args.input)[0] + '_flow3.json'
+        if os.path.exists(flow_path):
+            try:
+                _raw = json.load(open(flow_path, encoding='utf-8'))
+                flow_map = _parse_flow_sel(_raw, _fgroups, words)
+            except Exception:
+                flow_map = None
+        if flow_map is None:
+            _sel = ai_flow_direct(words, _fgroups, cfg.get('language', 'de'),
+                                  cfg['keywords'].get('ai_model', 'gpt-4o'))
+            if _sel:
+                flow_map = _sel
+                try:
+                    json.dump({'chunks': [{'g': k, 'kw': v['kw'],
+                                           'accent': v.get('accent')}
+                                          for k, v in sorted(flow_map.items())]},
+                              open(flow_path, 'w', encoding='utf-8'))
+                except OSError:
+                    pass
+        if flow_map:
+            print(f"KI-Flow: {len(flow_map)} Anker gewaehlt")
+
     if video_mode == 'narrator':
         if fx_map:
             for _v in fx_map.values():
@@ -6401,10 +6517,12 @@ def main():
                     _v['fx'] = 'outline'
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map,
                             face_pos=None, palette_at=palette_at,
-                            cut_times=cut_times, faces_at=None)
+                            cut_times=cut_times, faces_at=None,
+                            flow_map=flow_map)
     else:
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
-                            palette_at, cut_times=cut_times, faces_at=faces_at)
+                            palette_at, cut_times=cut_times, faces_at=faces_at,
+                            flow_map=flow_map)
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.

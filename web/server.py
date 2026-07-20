@@ -715,7 +715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v97e-nohookcard'
+DVE_BUILD = 'v97f-kiflow'
 
 
 @app.middleware('http')
