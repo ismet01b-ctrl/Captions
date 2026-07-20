@@ -8,6 +8,7 @@ Kanten - genau das vermeidet dieses Modul.
 
 Prototyp-CLI baut ein Demo-Video mit mehreren Momenten auf echtem Material.
 """
+import json
 import math
 import os
 import subprocess
@@ -967,6 +968,52 @@ def _elastic(t):
                                        + (5.0 / 9.2) * math.sin(9.2 * t))
 
 
+# Vertrag fuer die Web-UI: welche Felder der Nutzer anpassen darf, mit Typ,
+# Default-Quelle und Grenzen. Das Frontend baut daraus automatisch die Regler
+# ("full customizable"); das Backend validiert dagegen. Reihenfolge = UI-Reihe.
+MOTION_SCHEMA = {
+    'templates': ['pills', 'widgets', 'appstore'],
+    'styles': ['studio', 'dark', 'bold', 'mono'],
+    'formats': {'9:16': (1080, 1920), '1:1': (1080, 1080), '16:9': (1920, 1080)},
+    'fields': [
+        {'key': 'template', 'type': 'choice', 'options': 'templates',
+         'default': 'pills', 'label': 'Vorlage'},
+        {'key': 'style', 'type': 'choice', 'options': 'styles',
+         'default': 'studio', 'label': 'Stil'},
+        {'key': 'format', 'type': 'choice', 'options': 'formats',
+         'default': '9:16', 'label': 'Format'},
+        {'key': 'pills', 'type': 'text_list', 'max': 3, 'default': [],
+         'label': 'Woerter / Titel'},
+        {'key': 'accent', 'type': 'color', 'default_from': 'style',
+         'label': 'Akzentfarbe'},
+        {'key': 'font', 'type': 'font', 'default_from': 'style', 'label': 'Schrift'},
+        {'key': 'motion', 'type': 'range', 'min': 0.4, 'max': 1.6, 'step': 0.05,
+         'default_from': 'style', 'label': 'Bewegungsstaerke'},
+        {'key': 'grain', 'type': 'range', 'min': 0.0, 'max': 10.0, 'step': 0.5,
+         'default_from': 'style', 'label': 'Koernung'},
+        {'key': 'vignette', 'type': 'range', 'min': 0.0, 'max': 0.5, 'step': 0.02,
+         'default_from': 'style', 'label': 'Vignette'},
+        {'key': 'lift', 'type': 'range', 'min': 0.6, 'max': 1.6, 'step': 0.05,
+         'default_from': 'style', 'label': 'Schwebe-Hoehe'},
+        {'key': 'image', 'type': 'image', 'default': None,
+         'label': 'Einblendung (Bild)'},
+        {'key': 'logo', 'type': 'image', 'default': None, 'label': 'Logo'},
+        {'key': 'sfx', 'type': 'bool', 'default': True, 'label': 'Sound'},
+    ],
+}
+
+
+def motion_schema():
+    """Gibt das UI-Feld-Schema + die Style-Defaults zurueck (JSON-serialisierbar)
+    - das Frontend rendert daraus die 'full customizable'-Regler, das Backend
+    validiert Requests dagegen."""
+    def _clean(st):
+        return {k: (list(v) if isinstance(v, tuple) else v)
+                for k, v in st.items()}
+    return {'schema': MOTION_SCHEMA,
+            'style_defaults': {k: _clean(v) for k, v in UI_STYLES.items()}}
+
+
 UI_STYLES = {
     # Jeder Stil treibt ALLES: Hintergrund, Karten-Material, Akzent, Font,
     # Bewegungsstaerke, Korn. Voll ueberschreibbar (cfg -> merge auf Default).
@@ -1007,7 +1054,7 @@ UI_STYLES = {
 
 
 def render_ui_motion(out_video, style='studio', cfg=None, image=None,
-                     pills=None, template='pills', progress=print):
+                     pills=None, template='pills', preview=None, progress=print):
     """UI-Motion-Engine (Stil @dav6cious/refined.motion/mcvisuals):
     Apple-Style UI-Motion-Graphics, STYLE-getrieben und voll einstellbar.
     - style: Name aus UI_STYLES ('studio'/'dark'/'bold'/'mono')
@@ -1457,7 +1504,9 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     events.append((T_WM + 0.28, 'whoosh_soft', 0.60))
     events.append((T_WM + 0.36, 'impact', 0.32))
     tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
-    vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
+    vw = None if preview is not None else \
+        cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
+    frames = [int(preview * FPS)] if preview is not None else range(N)
     prev_e = {}
     def vel(key, e):
         v = abs(e - prev_e.get(key, e)) * FPS
@@ -1471,7 +1520,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         fr_ = 0.9 * amp * math.sin(t * 1.05 + phase * 1.7)
         return fy, fr_
 
-    for i in range(N):
+    for i in frames:
         t = i / FPS
         fr = BG.copy()
         # Kamera: kraeftigerer, organischer Glide + langsamer Push-in-Zyklus.
@@ -1637,6 +1686,10 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         gr = np.roll(GRAIN, (i * 7) % H, axis=0)
         gr = np.roll(gr, (i * 13) % W, axis=1)
         arr = np.clip(arr + gr[..., None], 0, 255).astype(np.uint8)
+        if preview is not None:                   # Web-Live-Vorschau: 1 Standbild
+            Image.fromarray(arr).save(out_video)
+            progress('preview-frame fertig')
+            return True
         vw.write(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
         if i % 120 == 0:
             progress(f'  Frame {i}/{N}')
@@ -1706,7 +1759,25 @@ if __name__ == '__main__':
                     help='Komma-getrennte Kapsel-Woerter')
     ap.add_argument('--template', default='pills',
                     choices=['pills', 'widgets', 'appstore'])
+    ap.add_argument('--motion-cfg', default=None,
+                    help='JSON-Datei mit {style,template,pills,image,cfg,preview} '
+                         '- der Einstieg fuer den Web-Job-Worker')
+    ap.add_argument('--schema', action='store_true',
+                    help='motion_schema() als JSON ausgeben (fuer das Frontend)')
     a = ap.parse_args()
+    if a.schema:
+        print(json.dumps(motion_schema()))
+        raise SystemExit(0)
+    if a.motion_cfg:
+        # Web-Einstieg: eine JSON treibt alles. preview=<sekunde> -> 1 Standbild
+        # (PNG) fuer die Live-Vorschau; sonst volles Video.
+        with open(a.motion_cfg, encoding='utf-8') as _f:
+            mc = json.load(_f)
+        raise SystemExit(0 if render_ui_motion(
+            a.output, style=mc.get('style', 'studio'),
+            template=mc.get('template', 'pills'), cfg=mc.get('cfg'),
+            image=mc.get('image'), pills=mc.get('pills'),
+            preview=mc.get('preview')) else 1)
     if a.demo == 'ui':
         _pl = a.pills.split(',') if a.pills else None
         raise SystemExit(0 if render_ui_motion(

@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **UI-Motion: Web-Vertrag (Schema + JSON-Einstieg + Live-Preview).**
+  Vorbereitung fuer die "full customizable" Web-UI, OHNE die Produktion
+  anzufassen: (1) MOTION_SCHEMA + motion_schema() - Feld-Liste (Template/Stil/
+  Format/Woerter/Akzent/Font/Bewegung/Korn/Vignette/Lift/Bild/Logo/SFX) mit Typ
+  + Default-Quelle; das Frontend baut daraus automatisch die Regler, das Backend
+  validiert dagegen. CLI --schema gibt es als JSON. (2) --motion-cfg <json>:
+  EIN JSON {style,template,pills,image,cfg,preview} treibt den Render - der
+  Einstieg fuer den Web-Job-Worker (analog render.py als Subprocess). (3)
+  preview=<sekunde> rendert nur 1 Standbild (PNG) in ~2s -> Live-Vorschau bei
+  jeder Regler-Aenderung; cfg-Override treibt nachweislich alles (Custom-Akzent
+  faerbt Blitz/Balken/Zeiger/Fuellung). Fehlt noch: Format-Override (Engine
+  aktuell fest 9:16), Frontend-Seite + Backend-Endpoint/Queue-Anbindung
+  (naechster Schritt, Ismets Go).
 - **UI-Motion: Micro-Life + Template 'appstore' (Prototyp).**
   Ismet: "1, 2, in der Web ui Full Customisible." (1) Micro-Life: Widgets
   leben - Basis (Material+feste Labels) wird EINMAL gebaut, w_paint malt pro
