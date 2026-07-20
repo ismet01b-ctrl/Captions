@@ -1054,7 +1054,8 @@ UI_STYLES = {
 
 
 def render_ui_motion(out_video, style='studio', cfg=None, image=None,
-                     pills=None, template='pills', preview=None, progress=print):
+                     pills=None, template='pills', preview=None,
+                     watermark=False, progress=print):
     """UI-Motion-Engine (Stil @dav6cious/refined.motion/mcvisuals):
     Apple-Style UI-Motion-Graphics, STYLE-getrieben und voll einstellbar.
     - style: Name aus UI_STYLES ('studio'/'dark'/'bold'/'mono')
@@ -1361,9 +1362,16 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         return im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
 
     # ---------- App-Store-Journey (Template 'appstore', Referenz-Video 2) ------
-    def txt_spr(s, px, col, font=None):
-        f = F(font or PFONT, px * 2)
+    def txt_spr(s, px, col, font=None, max_w=None):
+        # max_w (in Ziel-Px): Schrift wird runterskaliert, wenn der Text sonst
+        # breiter waere -> kein Ueberlauf ueber Nachbar-Elemente (z.B. Open-Button).
         d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        if max_w:
+            f0 = F(font or PFONT, px)
+            wpx = d0.textlength(s, font=f0)
+            if wpx > max_w:
+                px = max(int(px * max_w / max(wpx, 1)), 10)
+        f = F(font or PFONT, px * 2)
         w = int(d0.textlength(s, font=f)) + 8
         asc, desc = f.getmetrics()
         im = Image.new('RGBA', (w, asc + desc), (0, 0, 0, 0))
@@ -1454,16 +1462,18 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     #      (Scale-Pop / Slide-L / Slide-R / Drop), Stagger, Parallax-Tiefe. ----
     WIDGETS = []
     if template == 'widgets':
+        # Positionen kollisionsfrei ausgelegt (2-Spalten-Masonry mit Luecken,
+        # bei 9:16 verifiziert - kein Widget beruehrt ein anderes im Ruhezustand).
         _defs = [
-            # (kind, w, h, params, cx, cy, t_in, enter, depth)  cx/cy normiert
-            ('stat', .40, .40, {'target': 57, 'label': '~ 2 hours'},
-             0.30, 0.30, 0.55, 'pop', 1.20),
-            ('clock', .34, .34, {}, 0.72, 0.26, 0.95, 'slideR', 1.05),
-            ('cal', .46, .30, {}, 0.35, 0.53, 1.45, 'slideL', 1.28),
-            ('progress', .40, .34, {'target': 22, 'label': 'Battery'},
-             0.71, 0.55, 1.95, 'drop', 1.12),
-            ('stat', .44, .42, {'target': 100, 'label': 'Fully charged'},
-             0.50, 0.79, 2.55, 'pop', 1.35),
+            # (kind, wf, hf, params, cx, cy, t_in, enter, depth)  wf/hf~BASE, cx/cy~W/H
+            ('stat', .398, .333, {'target': 57, 'label': '~ 2 hours'},
+             0.264, 0.203, 0.55, 'pop', 1.20),
+            ('clock', .370, .370, {}, 0.704, 0.224, 0.95, 'slideR', 1.05),
+            ('cal', .444, .296, {}, 0.287, 0.417, 1.45, 'slideL', 1.28),
+            ('progress', .380, .315, {'target': 22, 'label': 'Battery'},
+             0.745, 0.448, 1.95, 'drop', 1.12),
+            ('stat', .519, .398, {'target': 100, 'label': 'Fully charged'},
+             0.491, 0.674, 2.55, 'pop', 1.35),
         ]
         for kind, wf, hf, p, cxn, cyn, tin, ent, dep in _defs:
             ww, hh = int(BASE * wf), int(BASE * hf)
@@ -1478,15 +1488,20 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     if template == 'appstore':
         CW, CH = int(BASE * 0.80), int(BASE * 0.52)
         card = card_material(CW, CH, 56)
-        # Kinder relativ zur Karten-Mitte (CW/2, CH/2), (sprite, ccx, ccy, t, ent)
+        # Kinder relativ zur Karten-Mitte (CW/2, CH/2), (sprite, ccx, ccy, t, ent).
+        # Titel wird auf die freie Breite ZWISCHEN Icon und Open-Button skaliert
+        # -> laeuft NIE unter den Button (frueher wurde 'DouchkoVE' beschnitten).
         _title = (pills or ['DouchkoVE'])[0]
+        _tx0 = 250                                 # linke Kante Titel/Untertitel
+        _open_w, _open_cx = 190, CW - 150
+        _avail = (_open_cx - _open_w / 2) - _tx0 - 24
+        _tspr = txt_spr(_title, 56, TXT, max_w=_avail)
+        _sspr = txt_spr('Productivity', 30, MUTE, max_w=_avail)
         kids = [
             (logo_sprite(150), 150, 150, 0.85, 'pop'),
-            (txt_spr(_title, 62, TXT), 300 + txt_spr(_title, 62, TXT).width // 2,
-             120, 1.15, 'slideR'),
-            (txt_spr('Productivity', 30, MUTE),
-             300 + txt_spr('Productivity', 30, MUTE).width // 2, 190, 1.35, 'fade'),
-            (button_spr('Open', 190, 74), CW - 150, 130, 1.65, 'pop'),
+            (_tspr, _tx0 + _tspr.width // 2, 118, 1.15, 'slideR'),
+            (_sspr, _tx0 + _sspr.width // 2, 188, 1.35, 'fade'),
+            (button_spr('Open', _open_w, 74), _open_cx, 130, 1.65, 'pop'),
             (rating_spr(CW - 120, 150), CW / 2, 420, 2.10, 'up'),
         ]
         APP = {'card': card, 'cw': CW, 'ch': CH, 'kids': kids, 't': 0.55}
@@ -1506,6 +1521,24 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     events.append((T_EXIT + 0.12, 'vanish', 0.50))
     events.append((T_WM + 0.28, 'whoosh_soft', 0.60))
     events.append((T_WM + 0.36, 'impact', 0.32))
+
+    # Wasserzeichen fuer Nicht-Kaeufer (konsistent mit der Caption-Pipeline):
+    # dezenter Schriftzug unten mittig, Farbe nach Hintergrund-Helligkeit.
+    wm_spr = wm_xy = None
+    if watermark:
+        S2 = 2
+        wf_ = F('poppins_b.ttf', int(H * 0.028) * S2)
+        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        wtxt = 'DouchkoVE'
+        tw = int(d0.textlength(wtxt, font=wf_))
+        asc_, desc_ = wf_.getmetrics()
+        wm = Image.new('RGBA', (tw + 8, asc_ + desc_), (0, 0, 0, 0))
+        dark_bg = (sum(ST['bg_bot']) / 3) < 128
+        wcol = (255, 255, 255) if dark_bg else (20, 20, 24)
+        ImageDraw.Draw(wm).text((4, 0), wtxt, font=wf_, fill=wcol + (110,))
+        wm_spr = wm.resize((wm.width // S2, wm.height // S2), Image.LANCZOS)
+        wm_xy = (int(W / 2 - wm_spr.width / 2), int(H * 0.945 - wm_spr.height / 2))
+
     tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
     vw = None if preview is not None else \
         cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
@@ -1685,6 +1718,8 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             if n_ch > 0:
                 put(fr, wm, W / 2 + 110 + pdx, H * 0.48 + pdy + fy * 0.6, gs,
                     min((t - T_WM - 0.1) / 0.15, 1), lift=1.0)
+        if wm_spr is not None:
+            fr.alpha_composite(wm_spr, wm_xy)
         arr = np.array(fr.convert('RGB')).astype(np.float32)
         gr = np.roll(GRAIN, (i * 7) % H, axis=0)
         gr = np.roll(gr, (i * 13) % W, axis=1)
@@ -1780,7 +1815,8 @@ if __name__ == '__main__':
             a.output, style=mc.get('style', 'studio'),
             template=mc.get('template', 'pills'), cfg=mc.get('cfg'),
             image=mc.get('image'), pills=mc.get('pills'),
-            preview=mc.get('preview')) else 1)
+            preview=mc.get('preview'),
+            watermark=bool(mc.get('watermark'))) else 1)
     if a.demo == 'ui':
         _pl = a.pills.split(',') if a.pills else None
         raise SystemExit(0 if render_ui_motion(

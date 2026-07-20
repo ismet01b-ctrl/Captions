@@ -1545,6 +1545,10 @@ def _run_motion(jid):
         p = os.path.join(d, f'{key}.png')
         if os.path.exists(p):
             mc[key] = p
+    # Wasserzeichen fuer Nicht-Kaeufer (wie bei den Captions).
+    _uid = j.get('user_id')
+    if _uid and not _has_purchased(_uid):
+        mc['watermark'] = True
     cfg_path = os.path.join(d, 'motion.json')
     json.dump(mc, open(cfg_path, 'w', encoding='utf-8'))
     set_state(jid, status='laeuft', phase='Rendering motion …',
@@ -1745,6 +1749,25 @@ def _restore_jobs():
         try:
             st = json.load(open(sp, encoding='utf-8'))
         except Exception:
+            continue
+        # Motion-Jobs haben kein Quellvideo - eigener Pfad (motion.json liegt im
+        # Job-Ordner). Sonst braucht ein Job ein 'quelle.*' zum Wieder-Rendern.
+        if st.get('kind') == 'motion':
+            mp = os.path.join(d, 'motion.json')
+            if os.path.exists(mp):
+                try:
+                    st['motion'] = json.load(open(mp, encoding='utf-8'))
+                except Exception:
+                    st.setdefault('motion', {})
+            st.setdefault('id', jid)
+            JOBS[jid] = st
+            restored += 1
+            if st.get('status') in ('wartet', 'laeuft'):
+                st['status'] = 'wartet'
+                st['progress'] = 0.0
+                st['phase'] = 'Queued (restored after restart) …'
+                QUEUE.put(jid)
+                requeued += 1
             continue
         src = None
         for f in os.listdir(d):
