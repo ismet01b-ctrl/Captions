@@ -1799,10 +1799,13 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                     continue
                 side = 1 if b['right'] else -1
                 cx3 = W / 2 + side * (W * 0.5 - b['spr'].width / 2 - W * 0.08)
+                # Eigener Key 'cby' fuer die Y-EMA - 'cb{k}' gehoert vel()
+                # (Blur) und wird dort jeden Frame ueberschrieben. Gleicher
+                # Key = Position kollabierte auf ~20% des Ziels + Dauer-Blur.
                 y_target = base_cy - (n_vis - 1 - shown) * step
-                yp = prev_e.get(f'cb{k}', y_target)
+                yp = prev_e.get(f'cby{k}', y_target)
                 yp += 0.20 * (y_target - yp)
-                prev_e[f'cb{k}'] = yp
+                prev_e[f'cby{k}'] = yp
                 put(fr, b['spr'],
                     cx3 + pdx + (1 - e_b) * side * W * 0.25
                     + (1 - ex) * side * W * 0.4,
@@ -1832,10 +1835,13 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                 if ex <= 0:
                     continue
                 # neuester Banner oben, aeltere rutschen elastisch nach unten
+                # Eigener Key 'nty' (vel() nutzt 'nt{k}' fuer den Blur und
+                # ueberschreibt ihn jeden Frame -> Position kollabierte auf
+                # ~20% des Ziels: DAS war "fast am selben Ort").
                 y_target = top_y + (n_vis - 1 - shown) * step
-                yp = prev_e.get(f'nt{k}', y_target)
+                yp = prev_e.get(f'nty{k}', y_target)
                 yp += 0.20 * (y_target - yp)
-                prev_e[f'nt{k}'] = yp
+                prev_e[f'nty{k}'] = yp
                 put(fr, c['spr'], W / 2 + pdx,
                     yp + pdy + fy + (1 - e_n) * -H * 0.10
                     + (1 - ex) * -H * 0.25,
