@@ -1049,27 +1049,32 @@ def render_ui_motion(out_video, progress=print):
             x += d0.textlength(ch, font=f)
         return im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
 
-    def put(canvas, spr, cx, cy, scale=1.0, op=1.0, vblur=0.0):
-        """Sprite mit weichem Schatten, Scale, Opacity, Geschwindigkeits-Blur."""
+    def put(canvas, spr, cx, cy, scale=1.0, op=1.0, vblur=0.0, rot=0.0,
+            lift=1.0):
+        """Sprite mit Studio-Schatten, Scale, Opacity, Geschw.-Blur, Rotation.
+        lift = Hoehe ueber Grund (1=aufliegend): je hoeher, desto weiter/weicher
+        faellt der Ambient-Schatten (die Referenz-Karten 'schweben')."""
         if op <= 0.01 or scale <= 0.01:
             return
         w = max(int(spr.width * scale), 1)
         h = max(int(spr.height * scale), 1)
         s = spr.resize((w, h), Image.LANCZOS)
+        if abs(rot) > 0.15:
+            s = s.rotate(rot, resample=Image.BICUBIC, expand=True)
         if vblur > 0.3:
             s = s.filter(ImageFilter.GaussianBlur(min(vblur, 6.0)))
         if op < 1.0:
             a = s.getchannel('A').point(lambda v: int(v * op))
             s = s.copy(); s.putalpha(a)
-        # Referenz-Schatten, zweischichtig: grosser diffuser Ambient-Schatten
-        # + enger Kontakt-Schatten. Beide mit Padding (kein Kanten-Clipping).
-        amb = _studio_shadow(s, blur=34, alpha=int(38 * op), shrink=0.98)
-        canvas.alpha_composite(amb, (int(cx - amb.width / 2),
-                                     int(cy - amb.height / 2 + 30 * scale)))
-        con = _studio_shadow(s, blur=10, alpha=int(46 * op), shrink=0.965)
-        canvas.alpha_composite(con, (int(cx - con.width / 2),
-                                     int(cy - con.height / 2 + 10 * scale)))
-        canvas.alpha_composite(s, (int(cx - w / 2), int(cy - h / 2)))
+        # Zweischichtiger Schatten, Offset nach Lichtrichtung (oben-links).
+        amb = _studio_shadow(s, blur=int(30 * lift), alpha=int(40 * op),
+                             shrink=0.99)
+        canvas.alpha_composite(amb, (int(cx - amb.width / 2 + 6 * lift),
+                                     int(cy - amb.height / 2 + 26 * lift)))
+        con = _studio_shadow(s, blur=9, alpha=int(50 * op), shrink=0.97)
+        canvas.alpha_composite(con, (int(cx - con.width / 2 + 2),
+                                     int(cy - con.height / 2 + 9 * lift)))
+        canvas.alpha_composite(s, (int(cx - s.width / 2), int(cy - s.height / 2)))
 
     PILLS = [('Write', 2.30), ('Create', 4.10), ('Solve', 5.90)]
     T_LOGO, T_UP, T_EXIT, T_WM = 0.45, 1.70, 7.60, 8.30
@@ -1094,65 +1099,93 @@ def render_ui_motion(out_video, progress=print):
     tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
     vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
     prev_e = {}
+    def vel(key, e):
+        v = abs(e - prev_e.get(key, e)) * FPS
+        prev_e[key] = e
+        return v
+
+    def idle(phase, amp=1.0):
+        """Ruhende Karten schweben permanent (nie ganz still) - langsames Bob
+        + Mikro-Neigung, pro Element phasenversetzt."""
+        fy = 7.0 * amp * math.sin(t * 1.35 + phase)
+        fr_ = 0.9 * amp * math.sin(t * 1.05 + phase * 1.7)
+        return fy, fr_
+
     for i in range(N):
         t = i / FPS
         fr = BG.copy()
-        # Kamera-Glide: nie statisch (Referenz), sehr langsam + klein
-        gdx = 10 * math.sin(t * 0.45) + 4 * math.sin(t * 1.1)
-        gdy = 7 * math.cos(t * 0.33)
-        gs = 1.0 + 0.012 * math.sin(t * 0.25)
+        # Kamera: kraeftigerer, organischer Glide + langsamer Push-in-Zyklus.
+        # cshift wird pro Ebene mit einem Tiefen-Faktor multipliziert (Parallax):
+        # ferne Ebenen bewegen sich weniger, nahe mehr.
+        cx0 = 26 * math.sin(t * 0.55) + 10 * math.sin(t * 1.3 + 1.0)
+        cy0 = 18 * math.cos(t * 0.4) + 7 * math.sin(t * 0.9)
+        gs = 1.0 + 0.05 * _smoothstep((math.sin(t * 0.5 - 1.2) + 1) / 2) + 0.02
 
-        def vel(key, e):
-            v = abs(e - prev_e.get(key, e)) * FPS
-            prev_e[key] = e
-            return v
+        def cam(depth):
+            """depth 0=fern (Hintergrund) .. 1.4=nah (Vordergrund)."""
+            return cx0 * depth, cy0 * depth
 
-        # --- Logo: elastisch rein, dann hoch-morphen, am Ende zurueck ---
+        # --- Logo: elastisch rein mit Rotations-Overshoot, dann hoch-morphen ---
         if t < T_EXIT:
             e_in = _elastic(t - T_LOGO)
             e_up = _elastic(t - T_UP)
-            lx = W / 2 + gdx
-            ly = H * 0.42 - e_up * H * 0.22 + gdy
-            lsc = (0.2 + 0.8 * e_in) * (1.0 - 0.5 * e_up) * gs
+            pdx, pdy = cam(0.7)
+            lx = W / 2 + pdx
+            ly = H * 0.40 - e_up * H * 0.20 + pdy
+            lsc = (0.15 + 0.85 * e_in) * (1.0 - 0.5 * e_up) * gs
+            lrot = (1 - e_in) * -22 + (1 - e_up) * 10       # dreht sich ein
+            fy, fr_ = idle(0.0, 0.7)
             lop = min(max((t - T_LOGO) / 0.12, 0), 1)
             if t > T_EXIT - 0.3:
                 lop *= max(0.0, (T_EXIT - t) / 0.3)
-            put(fr, logo_big, lx, ly, lsc, lop, vblur=vel('lg', e_in + e_up) * 4)
-        # --- Pills: Stack mit Push ---
+            put(fr, logo_big, lx, ly + fy * (e_up < 0.1), lsc, lop,
+                vblur=vel('lg', e_in + e_up) * 5, rot=lrot + fr_ * (e_in > 0.9),
+                lift=1.15)
+        # --- Pills: fliegen ABWECHSELND von den Seiten rein (Rotations-
+        #     Overshoot), stapeln sich, schweben danach ---
         if t < T_EXIT + 0.4:
-            base_y = H * 0.56
+            base_y = H * 0.58
             for k, (txt, ts) in enumerate(PILLS):
                 if t < ts:
                     continue
                 e_in = _elastic(t - ts)
-                # Stack-Push: Position = Basis - (Anzahl juengerer Pills) * Schritt,
-                # per EMA-Feder angefahren (die Referenz schiebt weich nach oben)
+                side = -1 if k % 2 == 0 else 1
                 pushes = sum(1 for _, t2 in PILLS[k + 1:] if t >= t2)
                 y_target = base_y - pushes * (PH + GAP)
                 yp = prev_e.get(f'y{k}', y_target)
-                yp += min(1.0, 14 / FPS * 60 * 0.22) * (y_target - yp)  # EMA-Feder
+                yp += 0.20 * (y_target - yp)                 # EMA-Feder
                 prev_e[f'y{k}'] = yp
-                n_ch = (t - ts) / 0.055                   # Typewriter ~18 Z/s
+                n_ch = (t - ts) / 0.05
                 spr = pill_sprite(txt, n_ch)
-                ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT - k * 0.07) / 0.30)
+                ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT - k * 0.07) / 0.28)
                 if ex <= 0:
                     continue
-                py = yp + (1 - e_in) * H * 0.06
-                put(fr, spr, W / 2 + gdx, py + gdy,
-                    (0.7 + 0.3 * e_in) * gs * (0.9 + 0.1 * ex),
-                    min((t - ts) / 0.10, 1) * ex,
-                    vblur=vel(f'p{k}', e_in) * 3.5)
+                pdx, pdy = cam(1.15 - 0.12 * pushes)         # Parallax pro Tiefe
+                fy, fr_ = idle(k * 2.1, 1.0 if pushes > 0 else 0.6)
+                slide = (1 - e_in) * side * W * 0.55         # Einflug von der Seite
+                enter_rot = (1 - e_in) * side * 9            # kippt beim Reinfliegen
+                settle = (1 - e_in) * H * 0.03
+                exit_off = (1 - ex) * -side * W * 0.4        # fliegt seitlich raus
+                put(fr, spr, W / 2 + pdx + slide + exit_off,
+                    yp + pdy + settle + fy,
+                    (0.82 + 0.18 * e_in) * gs,
+                    min((t - ts) / 0.09, 1) * ex,
+                    vblur=vel(f'p{k}', e_in) * 4.5,
+                    rot=enter_rot + fr_ + (1 - ex) * side * 12, lift=1.2)
         # --- Finale: Logo + Wortmarke settlen ---
         if t >= T_WM:
             e_f = _elastic(t - T_WM)
-            n_ch = (t - T_WM - 0.15) / 0.05
+            n_ch = (t - T_WM - 0.15) / 0.045
             wm = wordmark_sprite(n_ch)
-            put(fr, logo_small, W / 2 - wm.width / 2 - 120 + gdx,
-                H * 0.48 + gdy, (0.3 + 0.7 * e_f) * gs,
-                min((t - T_WM) / 0.10, 1), vblur=vel('lf', e_f) * 4)
+            pdx, pdy = cam(0.9)
+            fy, fr_ = idle(0.0, 0.6)
+            put(fr, logo_small, W / 2 - wm.width / 2 - 120 + pdx,
+                H * 0.48 + pdy + fy, (0.2 + 0.8 * e_f) * gs,
+                min((t - T_WM) / 0.10, 1), vblur=vel('lf', e_f) * 5,
+                rot=(1 - e_f) * -18 + fr_, lift=1.15)
             if n_ch > 0:
-                put(fr, wm, W / 2 + 110 + gdx, H * 0.48 + gdy, gs,
-                    min((t - T_WM - 0.1) / 0.15, 1))
+                put(fr, wm, W / 2 + 110 + pdx, H * 0.48 + pdy + fy * 0.6, gs,
+                    min((t - T_WM - 0.1) / 0.15, 1), lift=1.0)
         vw.write(cv2.cvtColor(np.array(fr.convert('RGB')), cv2.COLOR_RGB2BGR))
         if i % 120 == 0:
             progress(f'  Frame {i}/{N}')
