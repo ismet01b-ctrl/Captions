@@ -151,6 +151,25 @@ def _soft_shadow(img, blur=7, alpha=110):
     return sh.filter(ImageFilter.GaussianBlur(blur))
 
 
+def _studio_shadow(img, blur, alpha, shrink=1.0):
+    """Studio-Schatten MIT Padding: der Blur laeuft vollstaendig aus, nichts
+    wird an der Sprite-Kante abgeschnitten (_soft_shadow clippt - sah 'abgehakt'
+    aus). In halber Aufloesung gerechnet (Schatten hat keine Details)."""
+    from PIL import ImageFilter
+    pad = int(blur * 3)
+    w = max(int(img.width * shrink), 2)
+    h = max(int(img.height * shrink), 2)
+    a = img.resize((w // 2, h // 2), Image.BILINEAR).getchannel('A')
+    a = a.point(lambda v: int(v * alpha / 255))
+    p2 = pad // 2
+    m = Image.new('L', (w // 2 + 2 * p2, h // 2 + 2 * p2), 0)
+    m.paste(a, (p2, p2))
+    m = m.filter(ImageFilter.GaussianBlur(blur / 2))
+    sh = Image.new('RGBA', m.size, (10, 11, 15, 0))
+    sh.putalpha(m)
+    return sh.resize((m.width * 2, m.height * 2), Image.BILINEAR)
+
+
 # ---------------------------------------------------------------- Demo v2 (AE)
 def render_demo2(input_video, out_video, progress=print):
     """AE-Look statt Sticker-Pack: (1) Kinetic-Type (Buchstaben-Stagger mit
@@ -1042,8 +1061,14 @@ def render_ui_motion(out_video, progress=print):
         if op < 1.0:
             a = s.getchannel('A').point(lambda v: int(v * op))
             s = s.copy(); s.putalpha(a)
-        sh = _soft_shadow(s, blur=14, alpha=int(70 * op))
-        canvas.alpha_composite(sh, (int(cx - w / 2), int(cy - h / 2 + 14)))
+        # Referenz-Schatten, zweischichtig: grosser diffuser Ambient-Schatten
+        # + enger Kontakt-Schatten. Beide mit Padding (kein Kanten-Clipping).
+        amb = _studio_shadow(s, blur=34, alpha=int(38 * op), shrink=0.98)
+        canvas.alpha_composite(amb, (int(cx - amb.width / 2),
+                                     int(cy - amb.height / 2 + 30 * scale)))
+        con = _studio_shadow(s, blur=10, alpha=int(46 * op), shrink=0.965)
+        canvas.alpha_composite(con, (int(cx - con.width / 2),
+                                     int(cy - con.height / 2 + 10 * scale)))
         canvas.alpha_composite(s, (int(cx - w / 2), int(cy - h / 2)))
 
     PILLS = [('Write', 2.30), ('Create', 4.10), ('Solve', 5.90)]
