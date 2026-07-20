@@ -1074,6 +1074,13 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     W, H = MOTION_SCHEMA['formats'].get(FMT, (1080, 1920))
     FPS = 60
     BASE = min(W, H)          # Referenz fuer Elementgroessen (format-unabhaengig)
+    # Vertikale Anker fuer pills/appstore: bei kurzem Bild (1:1/16:9) wird die
+    # Gruppe kompakter+zentrierter gesetzt, sonst sitzt sie zu weit oben.
+    _TALL = H >= 1600
+    LOGO_TOP = 0.20 if _TALL else 0.12
+    PBASE = 0.58 if _TALL else 0.84
+    PBASE_IMG = 0.72 if _TALL else 0.86
+    APP_CY = 0.40 if _TALL else 0.46
     DUR = 10.5
     N = int(DUR * FPS)
     MO = float(ST['motion'])                        # Bewegungs-Multiplikator
@@ -1462,21 +1469,31 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     #      (Scale-Pop / Slide-L / Slide-R / Drop), Stagger, Parallax-Tiefe. ----
     WIDGETS = []
     if template == 'widgets':
-        # Positionen kollisionsfrei ausgelegt (2-Spalten-Masonry mit Luecken,
-        # bei 9:16 verifiziert - kein Widget beruehrt ein anderes im Ruhezustand).
-        _defs = [
-            # (kind, wf, hf, params, cx, cy, t_in, enter, depth)  wf/hf~BASE, cx/cy~W/H
-            ('stat', .398, .333, {'target': 57, 'label': '~ 2 hours'},
-             0.264, 0.203, 0.55, 'pop', 1.20),
-            ('clock', .370, .370, {}, 0.704, 0.224, 0.95, 'slideR', 1.05),
-            ('cal', .444, .296, {}, 0.287, 0.417, 1.45, 'slideL', 1.28),
-            ('progress', .380, .315, {'target': 22, 'label': 'Battery'},
-             0.745, 0.448, 1.95, 'drop', 1.12),
-            ('stat', .519, .398, {'target': 100, 'label': 'Fully charged'},
-             0.491, 0.674, 2.55, 'pop', 1.35),
+        # Widget-Definition OHNE Position; Groesse/Lage kommen aus dem Format-
+        # Layout unten (pro Format eigene, kollisionsfrei ausgelegte Anordnung).
+        _wdefs = [
+            # (kind, wf, hf, params, t_in, enter, depth)   wf/hf ~ BASE
+            ('stat', .398, .333, {'target': 57, 'label': '~ 2 hours'}, 0.55, 'pop', 1.20),
+            ('clock', .370, .370, {}, 0.95, 'slideR', 1.05),
+            ('cal', .444, .296, {}, 1.45, 'slideL', 1.28),
+            ('progress', .380, .315, {'target': 22, 'label': 'Battery'}, 1.95, 'drop', 1.12),
+            ('stat', .519, .398, {'target': 100, 'label': 'Fully charged'}, 2.55, 'pop', 1.35),
         ]
-        for kind, wf, hf, p, cxn, cyn, tin, ent, dep in _defs:
-            ww, hh = int(BASE * wf), int(BASE * hf)
+        # (scale, [(cx,cy) je Widget ~W/H]) - fuer jedes Format verifiziert
+        # (0 Box-Overlaps, alles in-canvas). BASE=min(W,H) ist in allen 3
+        # Formaten 1080, daher wirkt 'scale' direkt auf die Pixelgroesse.
+        _WLAYOUT = {
+            '9:16': (1.00, [(.264, .203), (.704, .224), (.287, .417),
+                            (.745, .448), (.491, .674)]),
+            '1:1':  (0.74, [(.213, .194), (.741, .194), (.231, .472),
+                            (.741, .472), (.500, .787)]),
+            '16:9': (0.80, [(.177, .315), (.500, .315), (.813, .315),
+                            (.323, .685), (.651, .685)]),
+        }
+        _wscale, _wpos = _WLAYOUT.get(FMT, _WLAYOUT['9:16'])
+        for i, (kind, wf, hf, p, tin, ent, dep) in enumerate(_wdefs):
+            ww, hh = int(BASE * wf * _wscale), int(BASE * hf * _wscale)
+            cxn, cyn = _wpos[i]
             WIDGETS.append({'kind': kind, 'w': ww, 'h': hh, 'p': p,
                             'base': w_base(kind, ww, hh, p),
                             'cx': cxn * W, 'cy': cyn * H,
@@ -1617,7 +1634,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             fy, fr_ = idle(0.3, 0.6)
             ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT) / 0.30)
             gcx = W / 2 + pdx
-            gcy = H * 0.40 + pdy + fy
+            gcy = H * APP_CY + pdy + fy
             csc = (0.5 + 0.5 * ec) * gs * (0.92 + 0.08 * ex)
             crot = (1 - ec) * -5 + fr_ + (1 - ex) * 8
             put(fr, APP['card'], gcx, gcy, csc, min((t - APP['t']) / 0.10, 1) * ex,
@@ -1650,7 +1667,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             e_up = _elastic(t - T_UP)
             pdx, pdy = cam(0.7)
             lx = W / 2 + pdx
-            ly = H * 0.40 - e_up * H * 0.20 + pdy
+            ly = H * (LOGO_TOP + 0.20) - e_up * H * 0.20 + pdy
             lsc = (0.15 + 0.85 * e_in) * (1.0 - 0.5 * e_up) * gs
             lrot = (1 - e_in) * -22 + (1 - e_up) * 10       # dreht sich ein
             fy, fr_ = idle(0.0, 0.7)
@@ -1676,7 +1693,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         # --- Pills: fliegen ABWECHSELND von den Seiten rein (Rotations-
         #     Overshoot), stapeln sich, schweben danach ---
         if template == 'pills' and t < T_EXIT + 0.4:
-            base_y = H * 0.72 if img_spr is not None else H * 0.58
+            base_y = H * (PBASE_IMG if img_spr is not None else PBASE)
             for k, (txt, ts) in enumerate(PILLS):
                 if t < ts:
                     continue
