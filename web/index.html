@@ -515,6 +515,37 @@ body {
   box-shadow: 0 2px 8px -2px rgba(0,0,0,.4);
 }
 
+/* Motion editor */
+.mo-wrap { display: grid; grid-template-columns: 380px 1fr; gap: 24px;
+  align-items: start; }
+.mo-controls .panel { display: flex; flex-direction: column; }
+.mo-lab { font-size: 12px; font-weight: 700; color: var(--mut);
+  text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 8px; }
+.mo-lab:first-child { margin-top: 0; }
+.mo-hint { text-transform: none; font-weight: 500; color: var(--mut2, #888);
+  letter-spacing: 0; }
+.mo-in, .mo-file { width: 100%; background: var(--surf2); border: 1px solid
+  rgba(255,255,255,.07); border-radius: 10px; padding: 12px 14px; color: var(--fg);
+  font-family: inherit; font-size: 14px; }
+.mo-color { width: 100%; height: 44px; background: var(--surf2); border: 1px solid
+  rgba(255,255,255,.07); border-radius: 10px; cursor: pointer; padding: 4px; }
+.mo-preview { position: sticky; top: 90px; }
+.mo-frame { position: relative; background: #0c0d10; border-radius: 18px;
+  overflow: hidden; aspect-ratio: 9/16; max-height: 70vh; margin: 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 20px 60px -20px rgba(0,0,0,.7); }
+.mo-frame img { width: 100%; height: 100%; object-fit: contain; }
+.mo-spin { position: absolute; width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.2); border-top-color: var(--acc2, #ff7a1a);
+  animation: mospin .8s linear infinite; display: none; }
+.mo-spin.on { display: block; }
+@keyframes mospin { to { transform: rotate(360deg); } }
+.mo-note { color: var(--mut); font-size: 12px; text-align: center; margin-top: 12px; }
+.mo-status { margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+  background: var(--surf2); font-size: 13px; color: var(--fg); }
+@media (max-width: 860px) { .mo-wrap { grid-template-columns: 1fr; }
+  .mo-preview { position: static; } .mo-frame { max-height: 60vh; } }
+
 /* Chips */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -1181,6 +1212,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="brand"><img class="brand-logo" src="/logo_white.png" alt="">DouchkoVE<sup class="brand-beta">Beta</sup></div>
     <nav class="topnav" id="topnav" aria-label="Sections">
       <a data-nav="create" class="on">Create</a>
+      <a data-nav="motion">Motion</a>
       <a data-nav="library">Library</a>
       <a data-nav="billing">Billing</a>
       <a data-nav="account">Account</a>
@@ -1195,6 +1227,51 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="whoami" id="topName">–</div>
     <button class="btn secondary" id="btnLogout" style="padding:10px 16px;">Sign out</button>
   </header>
+
+  <!-- ===== PAGE: MOTION ===== -->
+  <section class="page" id="page-motion">
+    <div class="page-head">
+      <h1>Motion graphics</h1>
+      <p>Premium Apple-style UI motion — pick a template and a style, fine-tune,
+         and render. Live preview updates as you tweak. 1 credit per clip.</p>
+    </div>
+    <div class="page-body">
+      <div class="mo-wrap">
+        <div class="mo-controls">
+          <div class="panel">
+            <label class="mo-lab">Template</label>
+            <div class="seg" id="moTemplate"></div>
+            <label class="mo-lab">Style</label>
+            <div class="seg" id="moStyle"></div>
+            <label class="mo-lab">Format</label>
+            <div class="seg" id="moFormat"></div>
+            <label class="mo-lab">Words / title <span class="mo-hint">(up to 3)</span></label>
+            <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
+            <label class="mo-lab">Accent color</label>
+            <input type="color" class="mo-color" id="moAccent" value="#ff7a1a">
+            <label class="mo-lab">Motion strength <span id="moMotionV" class="mo-hint"></span></label>
+            <div class="slider"><input type="range" id="moMotion" min="0.4" max="1.6" step="0.05" value="1"></div>
+            <label class="mo-lab">Grain <span id="moGrainV" class="mo-hint"></span></label>
+            <div class="slider"><input type="range" id="moGrain" min="0" max="10" step="0.5" value="6"></div>
+            <label class="mo-lab">Image insert <span class="mo-hint">(optional)</span></label>
+            <input type="file" class="mo-file" id="moImage" accept="image/*">
+            <label class="mo-lab">Logo <span class="mo-hint">(optional)</span></label>
+            <input type="file" class="mo-file" id="moLogo" accept="image/*">
+            <button class="btn" id="moRender" style="width:100%;margin-top:18px;">Render clip · 1 credit</button>
+            <div id="moStatus" class="mo-status" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="mo-preview">
+          <div class="mo-frame" id="moFrame">
+            <img id="moImg" alt="preview">
+            <div class="mo-spin" id="moSpin"></div>
+          </div>
+          <p class="mo-note">Live preview — a still from the clip. The rendered
+             video adds motion + sound.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ===== PAGE: LIBRARY ===== -->
   <section class="page" id="page-library">
@@ -2198,7 +2275,7 @@ function updateCreditHeader(sec) {
 }
 
 /* v84: Client-Router - eine echte Seite pro Bereich statt Popups. */
-const PAGES = ['create', 'library', 'billing', 'account'];
+const PAGES = ['create', 'motion', 'library', 'billing', 'account'];
 function showSection(name) {
   if (!PAGES.includes(name)) name = 'create';
   PAGES.forEach(p => {
@@ -2211,6 +2288,7 @@ function showSection(name) {
     try { history.replaceState(null, '', '#/' + name); } catch (e) {}
   }
   window.scrollTo(0, 0);
+  if (name === 'motion') initMotion();
   if (name === 'library') renderLibrary();
   if (name === 'billing') renderBilling();
   if (name === 'account') renderAccount();
@@ -2220,6 +2298,100 @@ function routeFromHash() {
   showSection(m ? m[1] : 'create');
 }
 window.addEventListener('hashchange', routeFromHash);
+
+/* ===== Motion-Graphics-Editor (v-motion) ===== */
+const Motion = { ready:false, schema:null, sel:{template:'pills', style:'studio',
+  format:'9:16', accent:'#ff7a1a', motion:1.0, grain:6.0}, t:null };
+function hexToRgb(h){ const m=/^#?([0-9a-f]{6})$/i.exec(h); if(!m) return [255,122,26];
+  const n=parseInt(m[1],16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function moSeg(id, opts, key){
+  const el=$('#'+id); if(!el) return;
+  el.innerHTML='';
+  opts.forEach(([label,val])=>{
+    const b=document.createElement('button');
+    b.textContent=label; b.classList.toggle('on', Motion.sel[key]===val);
+    b.onclick=()=>{ Motion.sel[key]=val;
+      el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on'); motionPreview(); };
+    el.appendChild(b);
+  });
+}
+async function initMotion(){
+  if(Motion.ready){ motionPreview(); return; }
+  Motion.ready=true;
+  try{ const r=await fetch('/api/motion/schema'); Motion.schema=await r.json(); }catch(e){}
+  moSeg('moTemplate',[['Pills','pills'],['Widgets','widgets'],['App Store','appstore']],'template');
+  moSeg('moStyle',[['Studio','studio'],['Dark','dark'],['Bold','bold'],['Mono','mono']],'style');
+  moSeg('moFormat',[['9:16','9:16'],['1:1','1:1'],['16:9','16:9']],'format');
+  const bind=(id,key,fmt)=>{ const el=$('#'+id); if(!el) return;
+    const lab=$('#'+id+'V'); const upd=()=>{ Motion.sel[key]=parseFloat(el.value);
+      if(lab) lab.textContent=fmt?fmt(el.value):el.value; };
+    el.oninput=()=>{ upd(); motionPreviewDebounced(); }; upd(); };
+  bind('moMotion','motion',v=>Number(v).toFixed(2)+'×');
+  bind('moGrain','grain',v=>Number(v).toFixed(1));
+  $('#moWords').oninput=motionPreviewDebounced;
+  $('#moAccent').oninput=()=>{ Motion.sel.accent=$('#moAccent').value; motionPreviewDebounced(); };
+  $('#moImage').onchange=()=>{}; $('#moLogo').onchange=()=>{};
+  $('#moRender').onclick=motionRender;
+  motionPreview();
+}
+function motionSpec(){
+  const words=($('#moWords').value||'').split(',').map(s=>s.trim()).filter(Boolean).slice(0,3);
+  return { template:Motion.sel.template, style:Motion.sel.style,
+    pills:words.length?words:undefined,
+    cfg:{ format:Motion.sel.format, accent:hexToRgb(Motion.sel.accent),
+      motion:Motion.sel.motion, grain:Motion.sel.grain } };
+}
+function motionPreviewDebounced(){ clearTimeout(Motion.t);
+  Motion.t=setTimeout(motionPreview, 350); }
+async function motionPreview(){
+  const spin=$('#moSpin'); if(spin) spin.classList.add('on');
+  try{
+    const r=await fetch('/api/motion/preview',{method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(motionSpec())});
+    if(!r.ok) throw 0;
+    const blob=await r.blob(); const img=$('#moImg');
+    if(img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.src=URL.createObjectURL(blob);
+    const fr=$('#moFrame'); if(fr){ const f=Motion.sel.format;
+      fr.style.aspectRatio = f==='1:1'?'1/1' : f==='16:9'?'16/9' : '9/16'; }
+  }catch(e){}
+  finally{ if(spin) spin.classList.remove('on'); }
+}
+async function motionRender(){
+  const btn=$('#moRender'); const st=$('#moStatus');
+  btn.disabled=true; const orig=btn.textContent; btn.textContent='Sending …';
+  const fd=new FormData();
+  fd.append('spec', JSON.stringify(motionSpec()));
+  const img=$('#moImage').files[0]; if(img) fd.append('image', img);
+  const logo=$('#moLogo').files[0]; if(logo) fd.append('logo', logo);
+  try{
+    const r=await fetch('/api/motion/render',{method:'POST', body:fd});
+    if(r.status===402){ st.style.display='block';
+      st.textContent='Not enough credits — top up in Billing.';
+      btn.disabled=false; btn.textContent=orig; return; }
+    if(!r.ok) throw 0;
+    const j=await r.json();
+    st.style.display='block'; st.textContent='Rendering …';
+    motionPoll(j.jid, st, btn, orig);
+  }catch(e){ st.style.display='block'; st.textContent='Could not start render.';
+    btn.disabled=false; btn.textContent=orig; }
+}
+async function motionPoll(jid, st, btn, orig){
+  try{
+    const r=await fetch('/api/status/'+jid); const s=await r.json();
+    if(s.status==='fertig'){ st.innerHTML='Done — saved to your '+
+      '<a data-nav="library" style="color:var(--acc2);cursor:pointer;">Library</a>.';
+      btn.disabled=false; btn.textContent=orig;
+      fetch('/api/me').then(x=>x.json()).then(d=>updateCreditHeader(d.balance_sec)).catch(()=>{});
+      return; }
+    if(s.status==='fehler'){ st.textContent='Render failed: '+(s.msg||'');
+      btn.disabled=false; btn.textContent=orig; return; }
+    st.textContent='Rendering … '+Math.round((s.progress||0)*100)+'%';
+  }catch(e){}
+  setTimeout(()=>motionPoll(jid, st, btn, orig), 1500);
+}
+
 document.addEventListener('click', (e) => {
   const nav = e.target.closest('[data-nav]');
   if (nav && $('#appView').classList.contains('show')) {

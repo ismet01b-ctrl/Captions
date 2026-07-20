@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion-Graphics IN DER WEB-UI (Editor + Backend + Format).**
+  Ismet: "Mach alle 3" (Presets+Feintuning, Standbild-Preview). Komplett
+  verdrahtet - eigener Job-Typ, beruehrt die Caption-Pipeline nicht:
+  (3) Format-Override (9:16/1:1/16:9) in gfx_engine (BASE=min(W,H)).
+  (2) Backend server.py: GET /api/motion/schema, POST /api/motion/preview
+  (1 Standbild ~2s, eingeloggt), POST /api/motion/render (Credits reservieren
+  -> Job kind='motion' -> Queue). run_job-Branch + _run_motion() ruft
+  gfx_engine als Subprocess (analog render.py), Fortschritt aus 'Frame x/y'.
+  Kosten 1 Credit/Clip; Refund bei Fehler passt (cost_seconds(11)=60).
+  (1) Frontend index.html: neue 'Motion'-Seite - Template/Stil/Format-Segmente,
+  Woerter/Akzent/Motion/Grain-Regler, Bild+Logo-Upload, LIVE-Preview (<img>
+  aus /preview, debounced), Render+Poll -> Library.
+  VERIFIZIERT: TestClient (preview 200 PNG 2.4s, render 200, 60 Credits
+  abgezogen, Job enqueued) + echter Headless-Browser (Motion-Seite rendert,
+  0 JS-Fehler, Live-Preview-Bild geladen). EHRLICH: Motion-Job noch nicht in
+  _restore_jobs (Neustart-Resume) beruecksichtigt; 1:1/16:9-Layout braucht
+  Positions-Feinpolish; echter Server-Lasttest auf Windows/Prod steht aus.
 - **UI-Motion: Web-Vertrag (Schema + JSON-Einstieg + Live-Preview).**
   Vorbereitung fuer die "full customizable" Web-UI, OHNE die Produktion
   anzufassen: (1) MOTION_SCHEMA + motion_schema() - Feld-Liste (Template/Stil/

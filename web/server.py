@@ -17,8 +17,10 @@ Was NEU vs. v59:
 import copy
 import glob
 import hmac
+import io
 import json
 import os
+import tempfile
 import re
 import secrets
 import shutil
@@ -1531,10 +1533,52 @@ def worker():
             QUEUE.task_done()
 
 
+def _run_motion(jid):
+    """Motion-Graphics-Render (UI-Motion-Engine) statt Caption-Pipeline.
+    Eine JSON treibt alles; gfx_engine wird als Subprocess aufgerufen."""
+    j = JOBS[jid]
+    d = job_dir(jid)
+    out = os.path.join(d, 'fertig.mp4')
+    mc = dict(j.get('motion') or {})
+    # Logo/Bild-Upload liegen (falls vorhanden) im Job-Ordner
+    for key in ('image', 'logo'):
+        p = os.path.join(d, f'{key}.png')
+        if os.path.exists(p):
+            mc[key] = p
+    cfg_path = os.path.join(d, 'motion.json')
+    json.dump(mc, open(cfg_path, 'w', encoding='utf-8'))
+    set_state(jid, status='laeuft', phase='Rendering motion …',
+              progress=0.1, log_tail=[])
+    cmd = [sys.executable, os.path.join(ROOT, 'gfx_engine.py'),
+           '--motion-cfg', cfg_path, out]
+    p = subprocess.Popen(cmd, cwd=ROOT, env=dict(os.environ),
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, bufsize=1)
+    log = []
+    for line in p.stdout:
+        log.append(line.rstrip())
+        m = re.search(r'Frame (\d+)/(\d+)', line)
+        if m:
+            fr, tot = int(m.group(1)), max(int(m.group(2)), 1)
+            set_state(jid, progress=0.1 + 0.85 * fr / tot,
+                      phase='Rendering motion …')
+    p.wait()
+    if p.returncode == 0 and os.path.exists(out):
+        set_state(jid, status='fertig', progress=1.0, phase='Done',
+                  video_url=f'/api/video/{jid}')
+    else:
+        set_state(jid, status='fehler', progress=0, msg='Motion render failed.',
+                  detail='\n'.join([x for x in log[-15:] if x.strip()]))
+        _maybe_refund(jid)
+
+
 def run_job(jid):
     """Voller Render: Analyse -> Momente -> Video-Bau."""
     j = JOBS[jid]
     d = job_dir(jid)
+    if j.get('kind') == 'motion':
+        _run_motion(jid)
+        return
     mode = j.get('mode', 'full')
     if mode == 'pre':
         # v83: Sofort-Transkription. Laeuft im Hintergrund waehrend der User
@@ -2103,6 +2147,98 @@ def _demo_ok(ip, limit=2, window=86400):
     hits.append(now)
     _DEMO_IPS[ip] = hits
     return True
+
+
+# ================================================================
+# Motion-Graphics (UI-Motion-Engine) - eigener Job-Typ, eigene Endpoints.
+# Presets + Feintuning (Ismet), Live-Vorschau als Standbild.
+# ================================================================
+MOTION_COST_SEC = 60           # 1 Credit pro Motion-Clip (~10s)
+
+
+@app.get('/api/motion/schema')
+def motion_schema_ep():
+    """Feld-Schema + Style-Defaults - das Frontend baut daraus die Regler."""
+    try:
+        r = subprocess.run([sys.executable, os.path.join(ROOT, 'gfx_engine.py'),
+                            '--schema', '_'], cwd=ROOT, capture_output=True,
+                           text=True, timeout=30)
+        return JSONResponse(json.loads(r.stdout))
+    except Exception as e:
+        raise HTTPException(500, f'schema unavailable: {e}')
+
+
+def _motion_sanitize(body):
+    """Nur erlaubte Felder ins cfg lassen (Frontend-Eingaben sind untrusted)."""
+    allow_cfg = {'accent', 'font', 'motion', 'grain', 'vignette', 'lift',
+                 'format', 'card_top', 'card_bot', 'text'}
+    out = {'style': str(body.get('style', 'studio'))[:20],
+           'template': str(body.get('template', 'pills'))[:20]}
+    pl = body.get('pills')
+    if isinstance(pl, list):
+        out['pills'] = [str(x)[:40] for x in pl[:3]]
+    cfg = body.get('cfg') or {}
+    if isinstance(cfg, dict):
+        out['cfg'] = {k: cfg[k] for k in cfg if k in allow_cfg}
+    return out
+
+
+@app.post('/api/motion/preview')
+async def motion_preview(request: Request):
+    """Live-Vorschau: EIN Standbild (~2s). Nur eingeloggt (guenstig, aber
+    nicht anonym missbrauchbar)."""
+    _require_user(request)
+    body = await request.json()
+    mc = _motion_sanitize(body)
+    mc['preview'] = 6.8                       # Moment, in dem die Szene steht
+    d = tempfile.mkdtemp(prefix='mprev_')
+    try:
+        cfgp = os.path.join(d, 'mc.json')
+        out = os.path.join(d, 'p.png')
+        json.dump(mc, open(cfgp, 'w', encoding='utf-8'))
+        r = subprocess.run([sys.executable, os.path.join(ROOT, 'gfx_engine.py'),
+                            '--motion-cfg', cfgp, out], cwd=ROOT,
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode != 0 or not os.path.exists(out):
+            raise HTTPException(500, 'preview failed')
+        data = open(out, 'rb').read()
+        return Response(content=data, media_type='image/png')
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+@app.post('/api/motion/render')
+async def motion_render(request: Request,
+                        spec: str = Form(...),
+                        image: UploadFile = File(None),
+                        logo: UploadFile = File(None)):
+    """Vollen Motion-Clip in die Job-Queue stellen (Credits reservieren)."""
+    u = _require_user(request)
+    try:
+        mc = _motion_sanitize(json.loads(spec))
+    except Exception:
+        raise HTTPException(400, 'bad spec')
+    jid = uuid.uuid4().hex[:12]
+    d = job_dir(jid)
+    os.makedirs(d, exist_ok=True)
+    for up, name in ((image, 'image'), (logo, 'logo')):
+        if up is not None and up.filename:
+            try:
+                from PIL import Image as _PImg
+                raw = await up.read()
+                _PImg.open(io.BytesIO(raw)).convert('RGBA').save(
+                    os.path.join(d, f'{name}.png'))
+            except Exception:
+                pass
+    if not _reserve_credits(u['id'], MOTION_COST_SEC, jid):
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(402, 'Not enough credits (motion clip costs 1).')
+    JOBS[jid] = {'kind': 'motion', 'motion': mc, 'user_id': u['id'],
+                 'dauer': 11, 'status': 'wartet'}
+    set_state(jid, status='wartet', progress=0.0, phase='Queued …',
+              kind='motion')
+    QUEUE.put(jid)
+    return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 
 
 @app.post('/api/upload')
