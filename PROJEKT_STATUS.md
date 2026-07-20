@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion: 3 neue Overlay-Templates + MOV-Alpha-Export (Premiere).**
+  Ismet: "Viel mehr motion graphics. Als mov anwaehlbar fuer Premiere. Alles
+  nur high end." (1) Neue Templates (Overlay-Klasse, KEIN DouchkoVE-Finale -
+  gehoeren aufs Kunden-Footage): 'lowerthird' (Chip Name+Rolle slidet von
+  links, Akzent-Balken), 'chat' (Bubbles abwechselnd links/rechts, Akzent-
+  Bubble, Stack-Push), 'notify' (Banner droppen von oben, stapeln). Jetzt
+  6 Templates x 4 Stile x 3 Formate. (2) MOV-Export: export='mov' rendert
+  ProRes 4444 MIT Alpha (yuva444p12le, PCM-Audio, 60fps) via rawvideo-Pipe -
+  ohne Hintergrund/Korn, Schatten halbtransparent; daneben IMMER fertig.mp4
+  als Browser-Vorschau. VERIFIZIERT: ffprobe prores/yuva444p12le, Alpha-Frame
+  87% transparent / 7% opak, Schachbrett-Composite sauber. (3) Web: Export-
+  Segment (MP4 / MOV-Alpha), 6 Template-Buttons, /api/mov/{jid} Download,
+  Library zeigt 'MOV - Alpha'-Button (has_mov). Browser-Smoke: 0 JS-Fehler,
+  Spec korrekt. EHRLICH: MOV ~90MB/10s (ProRes-normal); Overlay-Templates
+  auf 9:16 komponiert, 1:1/16:9 nutzen dieselben relativen Anker (geprueft
+  als Standbild nur 9:16) - bei Bedarf Feinpolish.
+
 - **Motion: Kundenfitness + Overlap-QA.**
   Ismet: "Mach alles fit fuer Kunden. Kontrolliere alles ob da was nicht
   ueberlappt." Overlap-QA ueber 4 Stile x 3 Templates (Standbilder):

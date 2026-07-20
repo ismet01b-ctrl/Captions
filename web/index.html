@@ -1245,6 +1245,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="seg" id="moStyle"></div>
             <label class="mo-lab">Format</label>
             <div class="seg" id="moFormat"></div>
+            <label class="mo-lab">Export <span class="mo-hint">(MOV = ProRes 4444 with alpha, for Premiere)</span></label>
+            <div class="seg" id="moExport"></div>
             <label class="mo-lab">Words / title <span class="mo-hint">(up to 3)</span></label>
             <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
             <label class="mo-lab">Accent color</label>
@@ -2301,7 +2303,7 @@ window.addEventListener('hashchange', routeFromHash);
 
 /* ===== Motion-Graphics-Editor (v-motion) ===== */
 const Motion = { ready:false, schema:null, sel:{template:'pills', style:'studio',
-  format:'9:16', accent:'#ff7a1a', motion:1.0, grain:6.0}, t:null };
+  format:'9:16', accent:'#ff7a1a', motion:1.0, grain:6.0, exportFmt:'mp4'}, t:null };
 function hexToRgb(h){ const m=/^#?([0-9a-f]{6})$/i.exec(h); if(!m) return [255,122,26];
   const n=parseInt(m[1],16); return [(n>>16)&255,(n>>8)&255,n&255]; }
 function moSeg(id, opts, key){
@@ -2320,9 +2322,11 @@ async function initMotion(){
   if(Motion.ready){ motionPreview(); return; }
   Motion.ready=true;
   try{ const r=await fetch('/api/motion/schema'); Motion.schema=await r.json(); }catch(e){}
-  moSeg('moTemplate',[['Pills','pills'],['Widgets','widgets'],['App Store','appstore']],'template');
+  moSeg('moTemplate',[['Pills','pills'],['Widgets','widgets'],['App Store','appstore'],
+    ['Lower Third','lowerthird'],['Chat','chat'],['Notify','notify']],'template');
   moSeg('moStyle',[['Studio','studio'],['Dark','dark'],['Bold','bold'],['Mono','mono']],'style');
   moSeg('moFormat',[['9:16','9:16'],['1:1','1:1'],['16:9','16:9']],'format');
+  moSeg('moExport',[['MP4','mp4'],['MOV · Alpha (Premiere)','mov']],'exportFmt');
   const bind=(id,key,fmt)=>{ const el=$('#'+id); if(!el) return;
     const lab=$('#'+id+'V'); const upd=()=>{ Motion.sel[key]=parseFloat(el.value);
       if(lab) lab.textContent=fmt?fmt(el.value):el.value; };
@@ -2338,6 +2342,7 @@ async function initMotion(){
 function motionSpec(){
   const words=($('#moWords').value||'').split(',').map(s=>s.trim()).filter(Boolean).slice(0,3);
   return { template:Motion.sel.template, style:Motion.sel.style,
+    export:Motion.sel.exportFmt,
     pills:words.length?words:undefined,
     cfg:{ format:Motion.sel.format, accent:hexToRgb(Motion.sel.accent),
       motion:Motion.sel.motion, grain:Motion.sel.grain } };
@@ -2793,6 +2798,7 @@ async function renderLibrary() {
         </div>
         <div class="lib-actions">
           <a class="btn secondary" href="/api/video/${it.jid}?download=1">Download</a>
+          ${it.has_mov ? `<a class="btn secondary" href="/api/mov/${it.jid}" title="ProRes 4444 with alpha — drop straight into Premiere">MOV&nbsp;·&nbsp;Alpha</a>` : ''}
         </div>
       </div>`;
     // Klick auf Thumbnail -> inline Player

@@ -1538,8 +1538,11 @@ def _run_motion(jid):
     Eine JSON treibt alles; gfx_engine wird als Subprocess aufgerufen."""
     j = JOBS[jid]
     d = job_dir(jid)
-    out = os.path.join(d, 'fertig.mp4')
     mc = dict(j.get('motion') or {})
+    # MOV-Export: die Engine schreibt fertig.mov (ProRes 4444 Alpha) UND
+    # daneben immer fertig.mp4 als Browser-Vorschau.
+    _mov = (mc.get('export') == 'mov')
+    out = os.path.join(d, 'fertig.mov' if _mov else 'fertig.mp4')
     # Logo/Bild-Upload liegen (falls vorhanden) im Job-Ordner
     for key in ('image', 'logo'):
         p = os.path.join(d, f'{key}.png')
@@ -1567,9 +1570,13 @@ def _run_motion(jid):
             set_state(jid, progress=0.1 + 0.85 * fr / tot,
                       phase='Rendering motion …')
     p.wait()
-    if p.returncode == 0 and os.path.exists(out):
-        set_state(jid, status='fertig', progress=1.0, phase='Done',
-                  video_url=f'/api/video/{jid}')
+    _mp4 = os.path.join(d, 'fertig.mp4')
+    if p.returncode == 0 and os.path.exists(_mp4):
+        st = {'status': 'fertig', 'progress': 1.0, 'phase': 'Done',
+              'video_url': f'/api/video/{jid}'}
+        if _mov and os.path.exists(out):
+            st['mov_url'] = f'/api/mov/{jid}'
+        set_state(jid, **st)
     else:
         set_state(jid, status='fehler', progress=0, msg='Motion render failed.',
                   detail='\n'.join([x for x in log[-15:] if x.strip()]))
@@ -2191,12 +2198,20 @@ def motion_schema_ep():
         raise HTTPException(500, f'schema unavailable: {e}')
 
 
+_MOTION_TPLS = ('pills', 'widgets', 'appstore', 'lowerthird', 'chat', 'notify')
+_MOTION_STYLES = ('studio', 'dark', 'bold', 'mono')
+
+
 def _motion_sanitize(body):
     """Nur erlaubte Felder ins cfg lassen (Frontend-Eingaben sind untrusted)."""
     allow_cfg = {'accent', 'font', 'motion', 'grain', 'vignette', 'lift',
                  'format', 'card_top', 'card_bot', 'text'}
-    out = {'style': str(body.get('style', 'studio'))[:20],
-           'template': str(body.get('template', 'pills'))[:20]}
+    st = str(body.get('style', 'studio'))
+    tpl = str(body.get('template', 'pills'))
+    out = {'style': st if st in _MOTION_STYLES else 'studio',
+           'template': tpl if tpl in _MOTION_TPLS else 'pills'}
+    if str(body.get('export', 'mp4')) == 'mov':
+        out['export'] = 'mov'
     pl = body.get('pills')
     if isinstance(pl, list):
         out['pills'] = [str(x)[:40] for x in pl[:3]]
@@ -2504,6 +2519,18 @@ def poster(jid: str, request: Request):
     return FileResponse(poster_path, media_type='image/jpeg')
 
 
+@app.get('/api/mov/{jid}')
+def motion_mov(jid: str, request: Request):
+    """ProRes-4444-Alpha-MOV (Premiere-Deliverable) als Download."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
+    p = os.path.join(job_dir(jid), 'fertig.mov')
+    if not os.path.exists(p):
+        raise HTTPException(404, 'No MOV for this job.')
+    return FileResponse(p, media_type='video/quicktime',
+                        filename=f'douchkove_motion_{jid}.mov')
+
+
 @app.get('/api/library')
 def api_library(request: Request):
     """v84: Private Bibliothek. Alle fertigen Renders des eingeloggten
@@ -2531,6 +2558,7 @@ def api_library(request: Request):
             'dauer': j.get('dauer', 0),
             'created': int(finished),
             'expires_at': int(expires),
+            'has_mov': os.path.exists(os.path.join(d, 'fertig.mov')),
         })
     items.sort(key=lambda x: x['created'], reverse=True)
     return {'items': items, 'retention_days': RETENTION_DAYS}

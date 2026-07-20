@@ -972,9 +972,11 @@ def _elastic(t):
 # Default-Quelle und Grenzen. Das Frontend baut daraus automatisch die Regler
 # ("full customizable"); das Backend validiert dagegen. Reihenfolge = UI-Reihe.
 MOTION_SCHEMA = {
-    'templates': ['pills', 'widgets', 'appstore'],
+    'templates': ['pills', 'widgets', 'appstore', 'lowerthird', 'chat', 'notify'],
+    'overlay_templates': ['lowerthird', 'chat', 'notify'],
     'styles': ['studio', 'dark', 'bold', 'mono'],
     'formats': {'9:16': (1080, 1920), '1:1': (1080, 1080), '16:9': (1920, 1080)},
+    'exports': ['mp4', 'mov'],
     'fields': [
         {'key': 'template', 'type': 'choice', 'options': 'templates',
          'default': 'pills', 'label': 'Vorlage'},
@@ -1055,7 +1057,7 @@ UI_STYLES = {
 
 def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                      pills=None, template='pills', preview=None,
-                     watermark=False, progress=print):
+                     watermark=False, export='mp4', progress=print):
     """UI-Motion-Engine (Stil @dav6cious/refined.motion/mcvisuals):
     Apple-Style UI-Motion-Graphics, STYLE-getrieben und voll einstellbar.
     - style: Name aus UI_STYLES ('studio'/'dark'/'bold'/'mono')
@@ -1081,6 +1083,17 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     PBASE = 0.58 if _TALL else 0.84
     PBASE_IMG = 0.72 if _TALL else 0.86
     APP_CY = 0.40 if _TALL else 0.46
+    # MOV-Export (Premiere): ProRes 4444 MIT Alpha - kein Hintergrund, die
+    # Graphics liegen frei und werden im Schnitt uebers Footage gelegt.
+    # Daneben entsteht IMMER eine MP4-Vorschau (Browser kann kein ProRes).
+    ALPHA = (export == 'mov')
+    if ALPHA:
+        mov_out = out_video if out_video.lower().endswith('.mov') \
+            else os.path.splitext(out_video)[0] + '.mov'
+        prev_out = os.path.splitext(mov_out)[0] + '.mp4'
+    # Overlay-Templates (fuer den Schnitt): KEIN DouchkoVE-Finale - der Clip
+    # gehoert inhaltlich dem Kunden-Footage.
+    OVERLAY = template in ('lowerthird', 'chat', 'notify')
     DUR = 10.5
     N = int(DUR * FPS)
     MO = float(ST['motion'])                        # Bewegungs-Multiplikator
@@ -1525,7 +1538,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         for tk in (0.55, 0.85, 1.15, 1.35, 1.65, 2.10):
             events.append((tk + 0.28, 'whoosh_soft', 0.45))
             events.append((tk + 0.36, 'press', 0.24))
-    elif template != 'widgets':
+    elif template == 'pills':
         events.append((T_LOGO + 0.28, 'whoosh_soft', 0.60))
         events.append((T_LOGO + 0.36, 'press', 0.30))
         events.append((T_UP + 0.25, 'whoosh_soft', 0.35))
@@ -1535,9 +1548,90 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         if img_spr is not None:
             events.append((T_IMG + 0.28, 'whoosh_soft', 0.55))
             events.append((T_IMG + 0.36, 'press', 0.28))
+
+    # ---- Lower Third (Overlay, Premiere-Klassiker): Chip mit Name + Rolle
+    #      slidet elastisch von links, Akzent-Balken setzt sich davor. ----
+    LT = None
+    if template == 'lowerthird':
+        _name = (pills[0] if pills else 'Your Name')
+        _role = (pills[1] if pills and len(pills) > 1 else 'Title / Role')
+        S2 = 2
+        fN = F(PFONT, 74 * S2)
+        fR = F(PFONT, 40 * S2)
+        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        tw = int(max(d0.textlength(_name, font=fN),
+                     d0.textlength(_role, font=fR)))
+        cw, ch = tw + 170 * S2, 230 * S2
+        chip = card_material(cw, ch, 44 * S2)
+        dch = ImageDraw.Draw(chip)
+        dch.text((110 * S2, 34 * S2), _name, font=fN, fill=TXT + (255,))
+        dch.text((112 * S2, 138 * S2), _role, font=fR, fill=MUTE + (255,))
+        chip = chip.resize((cw // S2, ch // S2), Image.LANCZOS)
+        bar = card_material(26, 190, 13, fill_top=ACC, fill_bot=ACC)
+        LT = {'chip': chip, 'bar': bar, 't': 0.55}
+        events.append((0.83, 'whoosh_soft', 0.60))
+        events.append((0.91, 'press', 0.28))
+        events.append((1.18, 'press', 0.22))
+
+    # ---- Chat (Overlay): Nachrichten-Bubbles poppen abwechselnd links/rechts ----
+    CHAT = None
+    if template == 'chat':
+        _msgs = pills or ['Hey!', 'New drop is live', 'Check it now']
+        S2 = 2
+        fC = F(PFONT, 52 * S2)
+        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        bubbles = []
+        for k, m in enumerate(_msgs[:3]):
+            tw = int(d0.textlength(m, font=fC))
+            bw, bh = tw + 120 * S2, 150 * S2
+            right = (k % 2 == 1)
+            if right:                              # Akzent-Bubble, weisser Text
+                lo = (max(ACC[0] - 30, 0), max(ACC[1] - 30, 0), max(ACC[2] - 18, 0))
+                b = card_material(bw, bh, bh // 2, fill_top=ACC, fill_bot=lo)
+                tcol = (255, 255, 255)
+            else:
+                b = card_material(bw, bh, bh // 2)
+                tcol = TXT
+            ImageDraw.Draw(b).text((60 * S2, (bh - sum(fC.getmetrics())) // 2),
+                                   m, font=fC, fill=tcol + (255,))
+            b = b.resize((bw // S2, bh // S2), Image.LANCZOS)
+            ts = 0.70 + k * 1.25
+            bubbles.append({'spr': b, 'right': right, 't': ts})
+            events.append((ts + 0.28, 'whoosh_soft', 0.45))
+            events.append((ts + 0.36, 'press', 0.30))
+        CHAT = bubbles
+
+    # ---- Notification (Overlay): Banner droppen von oben und stapeln sich ----
+    NOTI = None
+    if template == 'notify':
+        _n1 = (pills[0] if pills else 'Render finished')
+        _n2 = (pills[1] if pills and len(pills) > 1 else 'Your clip is ready')
+        S2 = 2
+        fT = F(PFONT, 46 * S2)
+        fB = F(PFONT, 40 * S2)
+        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        cards = []
+        for k, txt in enumerate((_n1, _n2)):
+            bw = int(min(W * 0.86, max(d0.textlength(txt, font=fB) / S2
+                                       + 260, 520))) * S2
+            bh = 170 * S2
+            c = card_material(bw, bh, 40 * S2)
+            dc = ImageDraw.Draw(c)
+            c.alpha_composite(logo_sprite(96).resize((96 * S2, 96 * S2),
+                                                     Image.LANCZOS),
+                              (36 * S2, (bh - 96 * S2) // 2))
+            dc.text((160 * S2, 26 * S2), 'DouchkoVE', font=fT, fill=TXT + (255,))
+            dc.text((160 * S2, 90 * S2), txt, font=fB, fill=MUTE + (255,))
+            c = c.resize((bw // S2, bh // S2), Image.LANCZOS)
+            ts = 0.60 + k * 1.60
+            cards.append({'spr': c, 't': ts})
+            events.append((ts + 0.28, 'whoosh_soft', 0.50))
+            events.append((ts + 0.36, 'press', 0.30))
+        NOTI = cards
     events.append((T_EXIT + 0.12, 'vanish', 0.50))
-    events.append((T_WM + 0.28, 'whoosh_soft', 0.60))
-    events.append((T_WM + 0.36, 'impact', 0.32))
+    if not OVERLAY:
+        events.append((T_WM + 0.28, 'whoosh_soft', 0.60))
+        events.append((T_WM + 0.36, 'impact', 0.32))
 
     # Wasserzeichen fuer Nicht-Kaeufer (konsistent mit der Caption-Pipeline):
     # dezenter Schriftzug unten mittig, Farbe nach Hintergrund-Helligkeit.
@@ -1560,6 +1654,16 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     vw = None if preview is not None else \
         cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
     frames = [int(preview * FPS)] if preview is not None else range(N)
+    # ProRes-4444-Pipe fuer den Alpha-MOV (rawvideo rgba -> yuva444p10le)
+    ffp = tmp_mov = None
+    if ALPHA and preview is None:
+        tmp_mov = tempfile.NamedTemporaryFile(suffix='.mov', delete=False).name
+        ffp = subprocess.Popen(
+            ['ffmpeg', '-y', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgba',
+             '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
+             '-c:v', 'prores_ks', '-profile:v', '4444',
+             '-pix_fmt', 'yuva444p10le', tmp_mov],
+            stdin=subprocess.PIPE)
     prev_e = {}
     def vel(key, e):
         v = abs(e - prev_e.get(key, e)) * FPS
@@ -1575,7 +1679,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
 
     for i in frames:
         t = i / FPS
-        fr = BG.copy()
+        fr = Image.new('RGBA', (W, H), (0, 0, 0, 0)) if ALPHA else BG.copy()
         # Kamera: kraeftigerer, organischer Glide + langsamer Push-in-Zyklus.
         # cshift wird pro Ebene mit einem Tiefen-Faktor multipliziert (Parallax):
         # ferne Ebenen bewegen sich weniger, nahe mehr.
@@ -1659,6 +1763,83 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                         kop *= _smoothstep(min((t - tk) / 0.25, 1)) * ex
                     put(fr, ks, gcx + ox + kdx, gcy + oy + kdy, ksc, kop,
                         rot=crot)
+        # === Template 'lowerthird' (Overlay): Chip von links, Akzent-Balken ===
+        if LT is not None and LT['t'] <= t < T_EXIT + 0.4:
+            e_c = _elastic(t - LT['t'])
+            e_b = _elastic(t - LT['t'] - 0.30)
+            pdx, pdy = cam(0.5)                    # Overlay: Kamera nur subtil
+            fy, fr_ = idle(0.4, 0.5)
+            ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT) / 0.30)
+            base_x = W * 0.075 + LT['chip'].width / 2
+            ly3 = H * (0.80 if _TALL else 0.78)
+            slide = (1 - e_c) * -(LT['chip'].width + W * 0.12)
+            exit_off = (1 - ex) * -(LT['chip'].width + W * 0.15)
+            put(fr, LT['chip'], base_x + slide + exit_off + pdx, ly3 + pdy + fy,
+                gs, min((t - LT['t']) / 0.10, 1),
+                vblur=vel('lt', e_c) * 4, rot=(1 - e_c) * -2 + fr_ * 0.5, lift=1.1)
+            if t >= LT['t'] + 0.30:
+                bx = base_x - LT['chip'].width / 2 - 26
+                put(fr, LT['bar'], bx + (1 - e_b) * -60 + exit_off + pdx,
+                    ly3 + pdy + fy, gs, min((t - LT['t'] - 0.30) / 0.10, 1) * ex,
+                    lift=1.0)
+        # === Template 'chat' (Overlay): Bubbles abwechselnd links/rechts ===
+        if CHAT is not None and t < T_EXIT + 0.4:
+            n_vis = sum(1 for b in CHAT if t >= b['t'])
+            step = 190
+            base_cy = H * (0.52 if _TALL else 0.50) + (n_vis - 1) * step / 2
+            shown = 0
+            for k, b in enumerate(CHAT):
+                if t < b['t']:
+                    continue
+                e_b = _elastic(t - b['t'])
+                pdx, pdy = cam(0.6)
+                fy, fr_ = idle(k * 2.3, 0.7)
+                ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT - k * 0.06) / 0.28)
+                if ex <= 0:
+                    continue
+                side = 1 if b['right'] else -1
+                cx3 = W / 2 + side * (W * 0.5 - b['spr'].width / 2 - W * 0.08)
+                y_target = base_cy - (n_vis - 1 - shown) * step
+                yp = prev_e.get(f'cb{k}', y_target)
+                yp += 0.20 * (y_target - yp)
+                prev_e[f'cb{k}'] = yp
+                put(fr, b['spr'],
+                    cx3 + pdx + (1 - e_b) * side * W * 0.25
+                    + (1 - ex) * side * W * 0.4,
+                    yp + pdy + fy + (1 - e_b) * H * 0.03,
+                    (0.75 + 0.25 * e_b) * gs,
+                    min((t - b['t']) / 0.09, 1) * ex,
+                    vblur=vel(f'cb{k}', e_b) * 4,
+                    rot=(1 - e_b) * side * 6 + fr_, lift=1.15)
+                shown += 1
+        # === Template 'notify' (Overlay): Banner droppen von oben, stapeln ===
+        if NOTI is not None and t < T_EXIT + 0.4:
+            n_vis = sum(1 for c in NOTI if t >= c['t'])
+            step = 205
+            top_y = H * (0.14 if _TALL else 0.18)
+            shown = 0
+            for k, c in enumerate(NOTI):
+                if t < c['t']:
+                    continue
+                e_n = _elastic(t - c['t'])
+                pdx, pdy = cam(0.55)
+                fy, fr_ = idle(k * 1.9, 0.55)
+                ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT - k * 0.06) / 0.28)
+                if ex <= 0:
+                    continue
+                # neuester Banner oben, aeltere rutschen elastisch nach unten
+                y_target = top_y + (n_vis - 1 - shown) * step
+                yp = prev_e.get(f'nt{k}', y_target)
+                yp += 0.20 * (y_target - yp)
+                prev_e[f'nt{k}'] = yp
+                put(fr, c['spr'], W / 2 + pdx,
+                    yp + pdy + fy + (1 - e_n) * -H * 0.16
+                    + (1 - ex) * -H * 0.25,
+                    (0.9 + 0.1 * e_n) * gs,
+                    min((t - c['t']) / 0.09, 1) * ex,
+                    vblur=vel(f'nt{k}', e_n) * 4,
+                    rot=(1 - e_n) * -3 + fr_, lift=1.2)
+                shown += 1
         # --- Logo: elastisch rein mit Rotations-Overshoot, dann hoch-morphen.
         #     Mit Einblendung: das Logo raeumt fuer das Hero-Bild (blendet aus). ---
         _logo_end = (T_IMG if img_spr is not None else T_EXIT)
@@ -1721,8 +1902,8 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                     min((t - ts) / 0.09, 1) * ex,
                     vblur=vel(f'p{k}', e_in) * 4.5,
                     rot=enter_rot + fr_ + (1 - ex) * side * 12, lift=1.2)
-        # --- Finale: Logo + Wortmarke settlen ---
-        if t >= T_WM:
+        # --- Finale: Logo + Wortmarke settlen (nicht bei Overlay-Templates) ---
+        if not OVERLAY and t >= T_WM:
             e_f = _elastic(t - T_WM)
             n_ch = (t - T_WM - 0.15) / 0.045
             wm = wordmark_sprite(n_ch)
@@ -1737,6 +1918,14 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                     min((t - T_WM - 0.1) / 0.15, 1), lift=1.0)
         if wm_spr is not None:
             fr.alpha_composite(wm_spr, wm_xy)
+        if ALPHA:
+            # MOV bekommt die freien RGBA-Frames (ohne Korn - sauber fuers
+            # Compositing); die MP4-Vorschau wird ueber den Stil-BG gelegt.
+            if ffp is not None:
+                ffp.stdin.write(np.array(fr).tobytes())
+            comp = BG.copy()
+            comp.alpha_composite(fr)
+            fr = comp
         arr = np.array(fr.convert('RGB')).astype(np.float32)
         gr = np.roll(GRAIN, (i * 7) % H, axis=0)
         gr = np.roll(gr, (i * 13) % W, axis=1)
@@ -1749,6 +1938,9 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         if i % 120 == 0:
             progress(f'  Frame {i}/{N}')
     vw.release()
+    if ffp is not None:
+        ffp.stdin.close()
+        ffp.wait()
 
     # --- Sound: NUR echte Pack-Sounds, exakt auf die Events gelegt ---
     audio = None
@@ -1782,15 +1974,24 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             SE._save(audio, total)
     except Exception as e:
         progress(f'  SFX uebersprungen: {e}')
+    _mp4_target = prev_out if ALPHA else out_video
     cmd = ['ffmpeg', '-y', '-v', 'error', '-i', tmp]
     if audio:
         cmd += ['-i', audio, '-map', '0:v:0', '-map', '1:a:0', '-c:a', 'aac']
     cmd += ['-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p',
-            '-shortest', out_video]
+            '-shortest', _mp4_target]
     try:
         subprocess.run(cmd, check=True, timeout=300)
+        if ALPHA and tmp_mov:
+            # MOV: ProRes-Stream kopieren, Audio als PCM (Premiere-Standard)
+            cmd2 = ['ffmpeg', '-y', '-v', 'error', '-i', tmp_mov]
+            if audio:
+                cmd2 += ['-i', audio, '-map', '0:v:0', '-map', '1:a:0',
+                         '-c:a', 'pcm_s16le']
+            cmd2 += ['-c:v', 'copy', '-shortest', mov_out]
+            subprocess.run(cmd2, check=True, timeout=300)
     finally:
-        for p in (tmp, audio):
+        for p in (tmp, audio, tmp_mov):
             if p:
                 try:
                     os.remove(p)
@@ -1833,7 +2034,8 @@ if __name__ == '__main__':
             template=mc.get('template', 'pills'), cfg=mc.get('cfg'),
             image=mc.get('image'), pills=mc.get('pills'),
             preview=mc.get('preview'),
-            watermark=bool(mc.get('watermark'))) else 1)
+            watermark=bool(mc.get('watermark')),
+            export=mc.get('export', 'mp4')) else 1)
     if a.demo == 'ui':
         _pl = a.pills.split(',') if a.pills else None
         raise SystemExit(0 if render_ui_motion(
