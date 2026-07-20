@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion: Zeitverlaufs-QA aller 6 Templates + 3 Bugfixes.**
+  Ismet: "Bei Notification kommt das fast am selben Ort. Ueberpruefe alle."
+  QA: alle 6 Templates voll gerendert, Frames alle 0.35s als Kontaktblatt
+  geprueft + analytischer Transienten-Sweep (Elastic-Overshoot vs. Nachbar-
+  Luft). 3 Funde, alle gefixt: (1) HAUPTBUG State-Key-Kollision chat/notify:
+  Y-Stack-EMA und vel() (Blur) nutzten dieselben prev_e-Keys -> Position
+  kollabierte auf ~20% des Ziels, Banner klebten verblurrt uebereinander
+  ("fast am selben Ort"). Fix: eigene Keys nty/cby; Audit aller Keys, Rest
+  sauber. (2) Notify-Transienten: Overshoot 55px > 35px Luft -> step 250,
+  Drop 0.10H (jetzt 35px bei 80px Luft). (3) CLI --template kannte die 3
+  Overlay-Templates nicht (argparse; Web-Pfad war ok) -> Choices aus
+  MOTION_SCHEMA. NACHWEIS: Vorher/Nachher-Sheets; alle 6 Templates ueber die
+  volle Timeline sauber (pills/widgets/appstore/lowerthird/chat/notify).
+
 - **Motion: UI-Kontext-Sync + ProRes-Preis (2 Credits).**
   Ismet: "Passe das UI an, damit alles passt. ProRes mit extra credits."
   (1) UI: moSync() - Felder passen sich dem Template an: Woerter-Feld mit
