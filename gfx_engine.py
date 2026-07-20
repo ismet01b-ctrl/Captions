@@ -967,17 +967,65 @@ def _elastic(t):
                                        + (5.0 / 9.2) * math.sin(9.2 * t))
 
 
-def render_ui_motion(out_video, progress=print):
-    """PROTOTYP 'UI-Motion' (Stil @dav6cious/refined.motion/mcvisuals):
-    Apple-Style UI-Motion-Graphics - Pill-Stack mit Typewriter auf weichem
-    Studio-Verlauf, Elastic-Overshoot (gemessene Kurve), permanenter
-    Kamera-Glide, Stagger-Push, Geschwindigkeits-Blur. Sound: NUR echte
-    Pack-Sounds - whoosh_soft ~60ms VOR dem Motion-Peak, press auf der
-    Landung, sparsam (~1 SFX / 1.2s). 60fps."""
+UI_STYLES = {
+    # Jeder Stil treibt ALLES: Hintergrund, Karten-Material, Akzent, Font,
+    # Bewegungsstaerke, Korn. Voll ueberschreibbar (cfg -> merge auf Default).
+    'studio': {                                     # hell, Apple-Keynote
+        'bg_top': (249, 250, 253), 'bg_bot': (223, 229, 239),
+        'blooms': [(0.32, 0.20, 0.55, (255, 252, 244), 26),
+                   (0.78, 0.42, 0.45, (238, 244, 255), 18),
+                   (0.50, 1.02, 0.60, (255, 249, 240), 14)],
+        'vignette': 0.13, 'grain': 6.0,
+        'card_top': (255, 255, 255), 'card_bot': (232, 236, 243),
+        'rim': 'light', 'text': (26, 28, 34), 'accent': (255, 122, 26),
+        'font': 'poppins_b.ttf', 'motion': 1.0, 'lift': 1.2},
+    'dark': {                                       # Frosted-Dark, Neon
+        'bg_top': (18, 19, 26), 'bg_bot': (8, 9, 14),
+        'blooms': [(0.30, 0.18, 0.60, (90, 120, 220), 55),
+                   (0.82, 0.52, 0.50, (150, 70, 200), 42),
+                   (0.50, 1.05, 0.65, (40, 90, 150), 30)],
+        'vignette': 0.42, 'grain': 5.0,
+        'card_top': (46, 49, 60), 'card_bot': (28, 30, 40),
+        'rim': 'dark', 'text': (238, 240, 248), 'accent': (120, 210, 255),
+        'font': 'poppins_b.ttf', 'motion': 1.15, 'lift': 1.35},
+    'bold': {                                       # kraeftige Farbe, Solid
+        'bg_top': (255, 138, 45), 'bg_bot': (243, 92, 20),
+        'blooms': [(0.30, 0.16, 0.6, (255, 220, 170), 40),
+                   (0.75, 0.75, 0.5, (255, 130, 50), 26)],
+        'vignette': 0.30, 'grain': 4.0,
+        'card_top': (255, 255, 255), 'card_bot': (247, 247, 250),
+        'rim': 'light', 'text': (24, 24, 28), 'accent': (243, 92, 20),
+        'font': 'poppins_b.ttf', 'motion': 1.3, 'lift': 1.25},
+    'mono': {                                       # flach, editorial, kein Korn
+        'bg_top': (243, 243, 241), 'bg_bot': (233, 233, 230),
+        'blooms': [(0.5, 0.15, 0.7, (255, 255, 255), 6)],
+        'vignette': 0.10, 'grain': 0.0,
+        'card_top': (250, 250, 249), 'card_bot': (242, 242, 240),
+        'rim': 'flat', 'text': (20, 20, 22), 'accent': (20, 20, 22),
+        'font': 'poppins_b.ttf', 'motion': 0.7, 'lift': 0.9},
+}
+
+
+def render_ui_motion(out_video, style='studio', cfg=None, image=None,
+                     pills=None, progress=print):
+    """UI-Motion-Engine (Stil @dav6cious/refined.motion/mcvisuals):
+    Apple-Style UI-Motion-Graphics, STYLE-getrieben und voll einstellbar.
+    - style: Name aus UI_STYLES ('studio'/'dark'/'bold'/'mono')
+    - cfg:   dict, ueberschreibt einzelne Style-Felder (accent, font, motion,
+             grain, card_*, bg_*, lift ...)
+    - image: optionaler Pfad - wird als EINBLENDUNG im GLEICHEN Karten-Material
+             (Radius, Rim, Schatten, Korn) montiert, also 'passend' zum Stil
+    - pills: Liste der Kapsel-Woerter (Default Write/Create/Solve)
+    Elastic-Overshoot (gemessene Kurve), Parallax-Kamera, Idle-Float, echte
+    Pack-Sounds peak-aligned. 60fps."""
     from PIL import ImageFilter
+    ST = dict(UI_STYLES.get(style, UI_STYLES['studio']))
+    if cfg:
+        ST.update({k: v for k, v in cfg.items() if v is not None})
     W, H, FPS = 1080, 1920, 60
     DUR = 10.5
     N = int(DUR * FPS)
+    MO = float(ST['motion'])                        # Bewegungs-Multiplikator
     fdir = os.path.join(HERE, 'fonts')
 
     def F(name, px):
@@ -987,74 +1035,132 @@ def render_ui_motion(out_video, progress=print):
             return _font(int(px))
 
     from PIL import ImageFilter, ImageChops
-    # --- Studio-Hintergrund 2026: kuehler Grundverlauf + weiche Licht-Blooms
-    #     (Mesh) + warmer Akzent-Schimmer + Vignette. Kein flacher Grauverlauf. ---
-    top = np.array([249, 250, 253], np.float32)
-    bot = np.array([223, 229, 239], np.float32)
+    # --- Hintergrund 2026: Grundverlauf + weiche Licht-Blooms (Mesh) +
+    #     Vignette, alles aus dem Stil. Kein flacher Verlauf. ---
+    top = np.array(ST['bg_top'], np.float32)
+    bot = np.array(ST['bg_bot'], np.float32)
     gy = np.linspace(0, 1, H)[:, None, None]
     bg = np.broadcast_to(top[None, None, :] * (1 - gy) + bot[None, None, :] * gy,
                          (H, W, 3)).astype(np.float32).copy()
     XX, YY = np.meshgrid(np.linspace(0, 1, W), np.linspace(0, 1, H))
 
     def bloom(cx, cy, rad, col, amt):
+        # amt = Spitzen-Helligkeit (0..255), col = nur die Farbrichtung. So
+        # bleibt der Bloom auf dunklem Grund ein zarter Farb-Schimmer statt
+        # weiss zu clippen (frueher: col*amt -> auf Dunkel sofort ausgebrannt).
+        c = np.array(col, np.float32)
+        c = c / max(c.max(), 1.0)
         d2 = ((XX - cx) ** 2 + ((YY - cy) * (H / W)) ** 2) / (rad ** 2)
-        return (np.array(col, np.float32)[None, None, :]
-                * (amt * np.exp(-d2))[..., None])
-    bg += bloom(0.32, 0.20, 0.55, (255, 252, 244), 10)     # warmes Oberlicht
-    bg += bloom(0.78, 0.42, 0.45, (238, 244, 255), 8)      # kuehler Reflex
-    bg += bloom(0.5, 1.02, 0.6, (255, 249, 240), 6)        # warmer Boden
+        return c[None, None, :] * (amt * np.exp(-d2))[..., None]
+    for (bx, by, br, bcol, bamt) in ST['blooms']:
+        bg += bloom(bx, by, br, bcol, bamt)
     xx, yy = np.meshgrid(np.linspace(-1, 1, W), np.linspace(-1, 1, H))
-    vig = 1.0 - 0.13 * np.clip(xx ** 2 + yy ** 2 * 0.6, 0, 1)[..., None]
+    vig = 1.0 - float(ST['vignette']) * np.clip(xx ** 2 + yy ** 2 * 0.6, 0, 1)[..., None]
     BG = Image.fromarray(np.clip(bg * vig, 0, 255).astype(np.uint8)).convert('RGBA')
     # Feinkorn: EIN Rauschfeld, pro Frame verschoben (premium, killt Flachheit)
-    GRAIN = (np.random.default_rng(7).standard_normal((H, W)) * 6.0).astype(np.float32)
+    GRAIN = (np.random.default_rng(7).standard_normal((H, W))
+             * float(ST['grain'])).astype(np.float32)
 
-    ACC = (255, 122, 26)                     # Akzent (DouchkoVE-Orange)
+    ACC = tuple(ST['accent'])
+    TXT = tuple(ST['text'])
+    RIMMODE = ST['rim']                              # 'light' | 'dark' | 'flat'
+    PFONT = ST['font']
 
-    def card_material(w, h, r):
-        """Glas-Chip statt flacher Flaeche: vertikaler Hell-Verlauf (oben-lit),
-        weicher Top-Rim-Glanz, feiner Boden-Innenschatten. Alles in der
-        Aufloesung des Aufrufers (bereits supersampled)."""
+    def card_material(w, h, r, fill_top=None, fill_bot=None):
+        """Chip-Material aus dem Stil: vertikaler Verlauf, Rim-Glanz (hell bei
+        'light', dunkel-anthrazit-Rand + Top-Glow bei 'dark', dezent bei
+        'flat'), Boden-Innenschatten. Aufloesung = Aufrufer (supersampled)."""
+        tc = np.array(fill_top if fill_top else ST['card_top'], np.float32)
+        bc = np.array(fill_bot if fill_bot else ST['card_bot'], np.float32)
         mask = Image.new('L', (w, h), 0)
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, h - 1], r, fill=255)
         g = np.linspace(0, 1, h)[:, None, None]
-        tc = np.array([255, 255, 255], np.float32)
-        bc = np.array([232, 236, 243], np.float32)
         grad = np.broadcast_to(tc * (1 - g) + bc * g, (h, w, 3)).astype(np.uint8)
         card = Image.fromarray(grad, 'RGB').convert('RGBA')
         card.putalpha(mask)
-        # Top-Rim-Glanz: heller Innenstrich entlang der oberen Kante, geblurrt
-        hl = Image.new('L', (w, h), 0)
-        dh = ImageDraw.Draw(hl)
         inset = max(int(h * 0.03), 2)
-        dh.rounded_rectangle([inset, inset, w - inset, h - inset],
-                             max(r - inset, 1), outline=255,
-                             width=max(int(h * 0.02), 2))
-        hl = hl.filter(ImageFilter.GaussianBlur(max(h * 0.012, 2)))
-        ha = np.array(hl, np.float32)
-        ha[int(h * 0.5):] *= 0.25                     # unten kaum Glanz
-        rim = Image.new('RGBA', (w, h), (255, 255, 255, 0))
-        rim.putalpha(Image.fromarray((ha * 0.7).astype(np.uint8)))
-        rim.putalpha(ImageChops.multiply(rim.getchannel('A'), mask))
-        card.alpha_composite(rim)
-        # Boden-Innenschatten fuer Tiefe
+        if RIMMODE != 'flat':
+            hl = Image.new('L', (w, h), 0)
+            ImageDraw.Draw(hl).rounded_rectangle(
+                [inset, inset, w - inset, h - inset], max(r - inset, 1),
+                outline=255, width=max(int(h * 0.02), 2))
+            hl = hl.filter(ImageFilter.GaussianBlur(max(h * 0.012, 2)))
+            ha = np.array(hl, np.float32)
+            ha[int(h * 0.5):] *= 0.25
+            # heller Glanz (light) bzw. kuehler Neon-Schimmer (dark)
+            rc = (255, 255, 255) if RIMMODE == 'light' else \
+                (min(ACC[0] + 60, 255), min(ACC[1] + 60, 255), min(ACC[2] + 60, 255))
+            strength = 0.7 if RIMMODE == 'light' else 0.5
+            rim = Image.new('RGBA', (w, h), rc + (0,))
+            rim.putalpha(Image.fromarray((ha * strength).astype(np.uint8)))
+            rim.putalpha(ImageChops.multiply(rim.getchannel('A'), mask))
+            card.alpha_composite(rim)
+        # Boden-Innenschatten fuer Tiefe (dunkler bei dark)
         sh = Image.new('L', (w, h), 0)
-        ds = ImageDraw.Draw(sh)
-        ds.rounded_rectangle([inset, int(h * 0.62), w - inset, h - inset],
-                             max(r - inset, 1), outline=255, width=max(int(h * 0.03), 2))
+        ImageDraw.Draw(sh).rounded_rectangle(
+            [inset, int(h * 0.62), w - inset, h - inset], max(r - inset, 1),
+            outline=255, width=max(int(h * 0.03), 2))
         sh = sh.filter(ImageFilter.GaussianBlur(max(h * 0.02, 3)))
         sa = np.array(sh, np.float32)
         sa[:int(h * 0.6)] = 0
-        dark = Image.new('RGBA', (w, h), (200, 205, 214, 0))
-        dark.putalpha(Image.fromarray((sa * 0.30).astype(np.uint8)))
+        dcol = (200, 205, 214) if RIMMODE == 'light' else (0, 0, 0)
+        dalpha = 0.30 if RIMMODE == 'light' else 0.45
+        dark = Image.new('RGBA', (w, h), dcol + (0,))
+        dark.putalpha(Image.fromarray((sa * dalpha).astype(np.uint8)))
         dark.putalpha(ImageChops.multiply(dark.getchannel('A'), mask))
         card.alpha_composite(dark)
         return card
 
+    def image_card(src, w, h, r):
+        """EINBLENDUNG passend zum Stil: das Nutzerbild wird cover-gefittet in
+        eine Karte mit EXAKT demselben Material (Radius, Rim, Boden-Schatten,
+        Vignette-Grade Richtung Palette). So sitzt jedes eingefuegte Bild im
+        Look statt als Fremdkoerper. src = Pfad oder PIL.Image."""
+        base = card_material(w, h, r)                # Material = Rahmen + Rim
+        try:
+            im = (src if isinstance(src, Image.Image)
+                  else Image.open(src)).convert('RGB')
+        except Exception:
+            return base
+        # cover-fit auf ein leicht eingeruecktes Innenfeld
+        pad = max(int(min(w, h) * 0.05), 4)
+        iw, ih = w - 2 * pad, h - 2 * pad
+        s = max(iw / im.width, ih / im.height)
+        im = im.resize((max(int(im.width * s), 1), max(int(im.height * s), 1)),
+                       Image.LANCZOS)
+        im = im.crop(((im.width - iw) // 2, (im.height - ih) // 2,
+                      (im.width - iw) // 2 + iw, (im.height - ih) // 2 + ih))
+        # leichte Grade Richtung Palette (multiplikativ) -> gehoert zum Bild
+        gr = np.array(im, np.float32)
+        tint = np.array(ACC, np.float32) / 255.0 * 0.12 + 0.88
+        gr = np.clip(gr * tint[None, None, :], 0, 255).astype(np.uint8)
+        im = Image.fromarray(gr)
+        inner = Image.new('L', (w, h), 0)
+        ImageDraw.Draw(inner).rounded_rectangle(
+            [pad, pad, w - pad, h - pad], max(r - pad, 1), fill=255)
+        photo = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        photo.paste(im, (pad, pad))
+        photo.putalpha(inner)
+        out = base.copy()
+        out.alpha_composite(photo)
+        # Rim erneut ganz oben, damit die Kante glaenzt wie bei den Karten
+        if RIMMODE != 'flat':
+            glint = Image.new('L', (w, h), 0)
+            ImageDraw.Draw(glint).rounded_rectangle(
+                [pad, pad, w - pad, int(h * 0.5)], max(r - pad, 1),
+                outline=255, width=max(int(h * 0.015), 2))
+            glint = glint.filter(ImageFilter.GaussianBlur(max(h * 0.01, 2)))
+            gl = Image.new('RGBA', (w, h), (255, 255, 255, 0))
+            gl.putalpha(Image.fromarray((np.array(glint, np.float32)
+                                         * 0.35).astype(np.uint8)))
+            gl.putalpha(ImageChops.multiply(gl.getchannel('A'), inner))
+            out.alpha_composite(gl)
+        return out
+
     def pill_sprite(txt, n_chars, acc_last=3):
         """Glas-Kapsel mit Typewriter-Stand, letzte Buchstaben in Akzentfarbe."""
         S2 = 2
-        f = F('poppins_b.ttf', 96 * S2)
+        f = F(PFONT, 96 * S2)
         d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
         full_w = d0.textlength(txt, font=f)
         pw = int(full_w + 200 * S2)
@@ -1065,7 +1171,7 @@ def render_ui_motion(out_video, progress=print):
         asc, desc = f.getmetrics()
         y = (ph - asc - desc) // 2
         for k, ch in enumerate(txt[:max(int(n_chars), 0)]):
-            col = ACC if k >= len(txt) - acc_last else (26, 28, 34)
+            col = ACC if k >= len(txt) - acc_last else TXT
             d.text((x, y), ch, font=f, fill=col + (255,))
             x += d0.textlength(ch, font=f)
         return im.resize((pw // S2, ph // S2), Image.LANCZOS)
@@ -1095,7 +1201,7 @@ def render_ui_motion(out_video, progress=print):
         d = ImageDraw.Draw(im)
         x = 0
         for k, ch in enumerate(txt[:max(int(n_chars), 0)]):
-            col = ACC if k >= 7 else (26, 28, 34)     # 'VE' in Akzent
+            col = ACC if k >= 7 else TXT              # 'VE' in Akzent
             d.text((x, 0), ch, font=f, fill=col + (255,))
             x += d0.textlength(ch, font=f)
         return im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
@@ -1127,8 +1233,11 @@ def render_ui_motion(out_video, progress=print):
                                      int(cy - con.height / 2 + 9 * lift)))
         canvas.alpha_composite(s, (int(cx - s.width / 2), int(cy - s.height / 2)))
 
-    PILLS = [('Write', 2.30), ('Create', 4.10), ('Solve', 5.90)]
+    _words = pills or ['Write', 'Create', 'Solve']
+    _maxp = 2 if image else 3                  # Platz fuer die Einblendung
+    PILLS = [(w, 2.30 + k * 1.80) for k, w in enumerate(_words[:_maxp])]
     T_LOGO, T_UP, T_EXIT, T_WM = 0.45, 1.70, 7.60, 8.30
+    T_IMG = 4.65                              # Einblendung fliegt rein
     PH = 230                                  # Pill-Hoehe (Sprite nach /2)
     GAP = 26
     # (Akzent-Zeit, Slot, Gain): Akzent = wo der SOUND-PEAK sitzen soll.
@@ -1147,6 +1256,10 @@ def render_ui_motion(out_video, progress=print):
 
     logo_big = logo_sprite(360)
     logo_small = logo_sprite(180)
+    img_spr = image_card(image, 620, 780, 64) if image else None
+    if img_spr is not None:
+        events.append((T_IMG + 0.28, 'whoosh_soft', 0.55))
+        events.append((T_IMG + 0.36, 'press', 0.28))
     tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
     vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
     prev_e = {}
@@ -1176,8 +1289,10 @@ def render_ui_motion(out_video, progress=print):
             """depth 0=fern (Hintergrund) .. 1.4=nah (Vordergrund)."""
             return cx0 * depth, cy0 * depth
 
-        # --- Logo: elastisch rein mit Rotations-Overshoot, dann hoch-morphen ---
-        if t < T_EXIT:
+        # --- Logo: elastisch rein mit Rotations-Overshoot, dann hoch-morphen.
+        #     Mit Einblendung: das Logo raeumt fuer das Hero-Bild (blendet aus). ---
+        _logo_end = (T_IMG if img_spr is not None else T_EXIT)
+        if t < _logo_end:
             e_in = _elastic(t - T_LOGO)
             e_up = _elastic(t - T_UP)
             pdx, pdy = cam(0.7)
@@ -1187,15 +1302,28 @@ def render_ui_motion(out_video, progress=print):
             lrot = (1 - e_in) * -22 + (1 - e_up) * 10       # dreht sich ein
             fy, fr_ = idle(0.0, 0.7)
             lop = min(max((t - T_LOGO) / 0.12, 0), 1)
-            if t > T_EXIT - 0.3:
-                lop *= max(0.0, (T_EXIT - t) / 0.3)
+            if t > _logo_end - 0.3:
+                lop *= max(0.0, (_logo_end - t) / 0.3)
             put(fr, logo_big, lx, ly + fy * (e_up < 0.1), lsc, lop,
                 vblur=vel('lg', e_in + e_up) * 5, rot=lrot + fr_ * (e_in > 0.9),
                 lift=1.15)
+        # --- Einblendung: Hero-Bild fliegt rein (gleiches Material -> passend),
+        #     schwebt, geht am Ende raus ---
+        if img_spr is not None and T_IMG <= t < T_EXIT + 0.4:
+            e_i = _elastic(t - T_IMG)
+            pdx, pdy = cam(0.85)
+            fy, fr_ = idle(0.5, 0.8)
+            ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT) / 0.30)
+            slide = (1 - e_i) * H * 0.16 * MO
+            put(fr, img_spr, W / 2 + pdx, H * 0.29 + pdy - slide + fy,
+                (0.55 + 0.06 * e_i) * gs * (0.9 + 0.1 * ex),
+                min((t - T_IMG) / 0.10, 1) * ex,
+                vblur=vel('img', e_i) * 4,
+                rot=(1 - e_i) * -6 + fr_ + (1 - ex) * 10, lift=1.3)
         # --- Pills: fliegen ABWECHSELND von den Seiten rein (Rotations-
         #     Overshoot), stapeln sich, schweben danach ---
         if t < T_EXIT + 0.4:
-            base_y = H * 0.58
+            base_y = H * 0.72 if img_spr is not None else H * 0.58
             for k, (txt, ts) in enumerate(PILLS):
                 if t < ts:
                     continue
@@ -1303,9 +1431,16 @@ if __name__ == '__main__':
     ap.add_argument('output')
     ap.add_argument('--demo', default='ed',
                     choices=['1', '2', '3', 'ed', 'sb', 'ui'])
+    ap.add_argument('--style', default='studio',
+                    choices=list(UI_STYLES.keys()))
+    ap.add_argument('--image', default=None)
+    ap.add_argument('--pills', default=None,
+                    help='Komma-getrennte Kapsel-Woerter')
     a = ap.parse_args()
     if a.demo == 'ui':
-        raise SystemExit(0 if render_ui_motion(a.output) else 1)
+        _pl = a.pills.split(',') if a.pills else None
+        raise SystemExit(0 if render_ui_motion(
+            a.output, style=a.style, image=a.image, pills=_pl) else 1)
     fn = {'1': render_demo, '2': render_demo2, '3': render_demo3,
           'ed': render_editorial, 'sb': render_stackbuild}[a.demo]
     raise SystemExit(0 if fn(a.input, a.output) else 1)

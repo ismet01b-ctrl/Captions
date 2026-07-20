@@ -3,6 +3,17 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **UI-Motion: Style-System + Einblendungen (Prototyp).**
+  Ismet: "Ich braeuchte verschiedene Stile. Voll einstellbar. Eingefuegte
+  Bilder sollten passend sein." -> render_ui_motion ist jetzt STYLE-getrieben:
+  UI_STYLES (studio/dark/bold/mono) treibt Hintergrund (Mesh-Blooms), Karten-
+  Material, Akzent, Font, Bewegungsstaerke, Korn, Vignette; cfg-dict
+  ueberschreibt jedes Feld. image_card() montiert ein Nutzerbild ins GLEICHE
+  Material (Radius, Rim-Glint, Boden-Schatten, Palette-Grade) -> "passend"
+  statt Fremdkoerper; das Hero-Bild fliegt als Einblendung mit rein. CLI:
+  --style/--image/--pills. Bloom-Fix: amt ist jetzt Spitzen-Helligkeit (col
+  nur Farbrichtung) - vorher clippte der Bloom auf Dunkel zu Weiss. Prototyp
+  in gfx_engine (--demo ui), noch nicht in der Web-Pipeline.
 - **v97f: KI-Flow - GPT waehlt Anker-/Akzent-Wort der Flow-Captions.**
   Ismet: "Ich dachte die ki entscheidet fast alles." Bisher war das Flow-
   Keyword die Laengen-Heuristik (laengstes Inhaltswort) - wirkte zufaellig.
