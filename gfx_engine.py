@@ -1069,7 +1069,10 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     ST = dict(UI_STYLES.get(style, UI_STYLES['studio']))
     if cfg:
         ST.update({k: v for k, v in cfg.items() if v is not None})
-    W, H, FPS = 1080, 1920, 60
+    FMT = (cfg or {}).get('format', ST.get('format', '9:16'))
+    W, H = MOTION_SCHEMA['formats'].get(FMT, (1080, 1920))
+    FPS = 60
+    BASE = min(W, H)          # Referenz fuer Elementgroessen (format-unabhaengig)
     DUR = 10.5
     N = int(DUR * FPS)
     MO = float(ST['motion'])                        # Bewegungs-Multiplikator
@@ -1463,7 +1466,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
              0.50, 0.79, 2.55, 'pop', 1.35),
         ]
         for kind, wf, hf, p, cxn, cyn, tin, ent, dep in _defs:
-            ww, hh = int(W * wf), int(W * hf)
+            ww, hh = int(BASE * wf), int(BASE * hf)
             WIDGETS.append({'kind': kind, 'w': ww, 'h': hh, 'p': p,
                             'base': w_base(kind, ww, hh, p),
                             'cx': cxn * W, 'cy': cyn * H,
@@ -1473,7 +1476,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     # ---- App-Store-Journey: eine Hero-Karte baut sich Element fuer Element auf
     APP = None
     if template == 'appstore':
-        CW, CH = 860, 560
+        CW, CH = int(BASE * 0.80), int(BASE * 0.52)
         card = card_material(CW, CH, 56)
         # Kinder relativ zur Karten-Mitte (CW/2, CH/2), (sprite, ccx, ccy, t, ent)
         _title = (pills or ['DouchkoVE'])[0]
