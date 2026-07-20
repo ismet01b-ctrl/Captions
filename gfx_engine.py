@@ -986,32 +986,80 @@ def render_ui_motion(out_video, progress=print):
         except Exception:
             return _font(int(px))
 
-    # --- Studio-Hintergrund: sehr heller Vertikal-Verlauf + Vignette ---
-    top = np.array([246, 247, 250], np.float32)
-    bot = np.array([225, 231, 240], np.float32)
+    from PIL import ImageFilter, ImageChops
+    # --- Studio-Hintergrund 2026: kuehler Grundverlauf + weiche Licht-Blooms
+    #     (Mesh) + warmer Akzent-Schimmer + Vignette. Kein flacher Grauverlauf. ---
+    top = np.array([249, 250, 253], np.float32)
+    bot = np.array([223, 229, 239], np.float32)
     gy = np.linspace(0, 1, H)[:, None, None]
-    bg = (top[None, None, :] * (1 - gy) + bot[None, None, :] * gy)
+    bg = np.broadcast_to(top[None, None, :] * (1 - gy) + bot[None, None, :] * gy,
+                         (H, W, 3)).astype(np.float32).copy()
+    XX, YY = np.meshgrid(np.linspace(0, 1, W), np.linspace(0, 1, H))
+
+    def bloom(cx, cy, rad, col, amt):
+        d2 = ((XX - cx) ** 2 + ((YY - cy) * (H / W)) ** 2) / (rad ** 2)
+        return (np.array(col, np.float32)[None, None, :]
+                * (amt * np.exp(-d2))[..., None])
+    bg += bloom(0.32, 0.20, 0.55, (255, 252, 244), 10)     # warmes Oberlicht
+    bg += bloom(0.78, 0.42, 0.45, (238, 244, 255), 8)      # kuehler Reflex
+    bg += bloom(0.5, 1.02, 0.6, (255, 249, 240), 6)        # warmer Boden
     xx, yy = np.meshgrid(np.linspace(-1, 1, W), np.linspace(-1, 1, H))
-    vig = 1.0 - 0.10 * np.clip(xx ** 2 + yy ** 2 * 0.6, 0, 1)[..., None]
+    vig = 1.0 - 0.13 * np.clip(xx ** 2 + yy ** 2 * 0.6, 0, 1)[..., None]
     BG = Image.fromarray(np.clip(bg * vig, 0, 255).astype(np.uint8)).convert('RGBA')
+    # Feinkorn: EIN Rauschfeld, pro Frame verschoben (premium, killt Flachheit)
+    GRAIN = (np.random.default_rng(7).standard_normal((H, W)) * 6.0).astype(np.float32)
 
     ACC = (255, 122, 26)                     # Akzent (DouchkoVE-Orange)
 
-    def rounded_card(w, h, r, fill=(255, 255, 255, 255)):
-        im = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-        ImageDraw.Draw(im).rounded_rectangle([0, 0, w - 1, h - 1], r, fill=fill)
-        return im
+    def card_material(w, h, r):
+        """Glas-Chip statt flacher Flaeche: vertikaler Hell-Verlauf (oben-lit),
+        weicher Top-Rim-Glanz, feiner Boden-Innenschatten. Alles in der
+        Aufloesung des Aufrufers (bereits supersampled)."""
+        mask = Image.new('L', (w, h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, h - 1], r, fill=255)
+        g = np.linspace(0, 1, h)[:, None, None]
+        tc = np.array([255, 255, 255], np.float32)
+        bc = np.array([232, 236, 243], np.float32)
+        grad = np.broadcast_to(tc * (1 - g) + bc * g, (h, w, 3)).astype(np.uint8)
+        card = Image.fromarray(grad, 'RGB').convert('RGBA')
+        card.putalpha(mask)
+        # Top-Rim-Glanz: heller Innenstrich entlang der oberen Kante, geblurrt
+        hl = Image.new('L', (w, h), 0)
+        dh = ImageDraw.Draw(hl)
+        inset = max(int(h * 0.03), 2)
+        dh.rounded_rectangle([inset, inset, w - inset, h - inset],
+                             max(r - inset, 1), outline=255,
+                             width=max(int(h * 0.02), 2))
+        hl = hl.filter(ImageFilter.GaussianBlur(max(h * 0.012, 2)))
+        ha = np.array(hl, np.float32)
+        ha[int(h * 0.5):] *= 0.25                     # unten kaum Glanz
+        rim = Image.new('RGBA', (w, h), (255, 255, 255, 0))
+        rim.putalpha(Image.fromarray((ha * 0.7).astype(np.uint8)))
+        rim.putalpha(ImageChops.multiply(rim.getchannel('A'), mask))
+        card.alpha_composite(rim)
+        # Boden-Innenschatten fuer Tiefe
+        sh = Image.new('L', (w, h), 0)
+        ds = ImageDraw.Draw(sh)
+        ds.rounded_rectangle([inset, int(h * 0.62), w - inset, h - inset],
+                             max(r - inset, 1), outline=255, width=max(int(h * 0.03), 2))
+        sh = sh.filter(ImageFilter.GaussianBlur(max(h * 0.02, 3)))
+        sa = np.array(sh, np.float32)
+        sa[:int(h * 0.6)] = 0
+        dark = Image.new('RGBA', (w, h), (200, 205, 214, 0))
+        dark.putalpha(Image.fromarray((sa * 0.30).astype(np.uint8)))
+        dark.putalpha(ImageChops.multiply(dark.getchannel('A'), mask))
+        card.alpha_composite(dark)
+        return card
 
     def pill_sprite(txt, n_chars, acc_last=3):
-        """Kapsel mit Typewriter-Stand (n_chars sichtbar), letzte Buchstaben
-        in Akzentfarbe (wie 'Write'/'Solve' in der Referenz). 2x gerendert."""
+        """Glas-Kapsel mit Typewriter-Stand, letzte Buchstaben in Akzentfarbe."""
         S2 = 2
         f = F('poppins_b.ttf', 96 * S2)
         d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
         full_w = d0.textlength(txt, font=f)
         pw = int(full_w + 200 * S2)
         ph = int(230 * S2)
-        im = rounded_card(pw, ph, ph // 2)
+        im = card_material(pw, ph, ph // 2)
         d = ImageDraw.Draw(im)
         x = 100 * S2
         asc, desc = f.getmetrics()
@@ -1023,14 +1071,17 @@ def render_ui_motion(out_video, progress=print):
         return im.resize((pw // S2, ph // S2), Image.LANCZOS)
 
     def logo_sprite(sz):
-        """Logo-Karte: weisses Rounded-Square, orangenes Play-Dreieck."""
+        """Glas-Logo-Karte mit Akzent-Play-Dreieck + weichem Farb-Glow."""
         S2 = 2
         s = sz * S2
-        im = rounded_card(s, s, int(s * 0.24))
-        d = ImageDraw.Draw(im)
+        im = card_material(s, s, int(s * 0.24))
         c, r = s / 2, s * 0.20
-        d.polygon([(c - r * 0.7, c - r), (c - r * 0.7, c + r), (c + r * 1.1, c)],
-                  fill=ACC + (255,))
+        tri = [(c - r * 0.7, c - r), (c - r * 0.7, c + r), (c + r * 1.1, c)]
+        glow = Image.new('RGBA', (s, s), (0, 0, 0, 0))
+        ImageDraw.Draw(glow).polygon(tri, fill=ACC + (180,))
+        glow = glow.filter(ImageFilter.GaussianBlur(s * 0.06))
+        im.alpha_composite(glow)
+        ImageDraw.Draw(im).polygon(tri, fill=ACC + (255,))
         return im.resize((sz, sz), Image.LANCZOS)
 
     def wordmark_sprite(n_chars):
@@ -1186,7 +1237,11 @@ def render_ui_motion(out_video, progress=print):
             if n_ch > 0:
                 put(fr, wm, W / 2 + 110 + pdx, H * 0.48 + pdy + fy * 0.6, gs,
                     min((t - T_WM - 0.1) / 0.15, 1), lift=1.0)
-        vw.write(cv2.cvtColor(np.array(fr.convert('RGB')), cv2.COLOR_RGB2BGR))
+        arr = np.array(fr.convert('RGB')).astype(np.float32)
+        gr = np.roll(GRAIN, (i * 7) % H, axis=0)
+        gr = np.roll(gr, (i * 13) % W, axis=1)
+        arr = np.clip(arr + gr[..., None], 0, 255).astype(np.uint8)
+        vw.write(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
         if i % 120 == 0:
             progress(f'  Frame {i}/{N}')
     vw.release()
