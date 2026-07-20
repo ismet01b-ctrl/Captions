@@ -425,6 +425,25 @@ def _scenario_logic(clip, transcript, tmp):
     _flowp = next((p for p in pf_on if p['tpl'] == 'flow' and p.get('flow')), None)
     check('Flow-Plan traegt flow_anchor fuer SFX-Tick',
           _flowp is not None and 'flow_anchor' in _flowp)
+    # v97e: bei aktivem Flow wird KEINE Hook-Karte fest oben geparkt (sonst
+    # kollidiert sie mit dem Flow-Text, der drueber laeuft).
+    whk = [{'word': x, 'start': 0.5 + j * .35, 'end': 0.7 + j * .35}
+           for j, x in enumerate(['this', 'video', 'totally', 'EXPLODES', 'in', 'seconds'])]
+    fxh = {3: {'fx': 'behind', 'power': 3, 'n': 1}}
+    cfg_hf = dict(cfg); cfg_hf['effects'] = dict(cfg['effects'], caption_flow=True,
+                                                 instant_hook=True, intro_hook=True, hook_seconds=15)
+    cfg_hs = dict(cfg); cfg_hs['effects'] = dict(cfg['effects'], caption_flow=False,
+                                                 instant_hook=True, intro_hook=True, hook_seconds=15)
+    ph_flow = R.build_plans(whk, {3}, cfg_hf, S, W_, H_, lambda s, e: True, fxh,
+                            face_pos=lambda s, e: (540., 600., 200.))
+    ph_stk = R.build_plans(whk, {3}, cfg_hs, S, W_, H_, lambda s, e: True, fxh,
+                           face_pos=lambda s, e: (540., 600., 200.))
+    kf = next((p for p in ph_flow if p.get('kw_i') == 3), None)
+    ks = next((p for p in ph_stk if p.get('kw_i') == 3), None)
+    check('Flow an -> kein geparktes Hook (Keyword spielt zur Sprechzeit)',
+          kf is not None and kf['start'] > 0.3, str(kf['start']) if kf else 'None')
+    check('Flow aus -> Sofort-Hook parkt weiterhin ab Frame 1',
+          ks is not None and ks['start'] == 0.0, str(ks['start']) if ks else 'None')
 
     # Editorial-Collage: Rollen Auftakt/Kern/Script
     wc = [{'word': w, 'start': 1 + j * .4, 'end': 1.3 + j * .4}
@@ -1468,7 +1487,10 @@ def _scenario_logic(clip, transcript, tmp):
 
     def _hooks(**eff):
         c2 = copy.deepcopy(cfg)
-        c2['effects'].update(retention_gap=0, pattern_interrupt=0, **eff)
+        # v97e: Sofort-Hook-Parken gilt nur ohne Flow (mit Flow gibt es keinen
+        # leeren Anfang, den man ueberbruecken muesste) - hier gezielt testen.
+        c2['effects'].update(retention_gap=0, pattern_interrupt=0,
+                             caption_flow=False, **eff)
         with _cl.redirect_stdout(_io.StringIO()):
             return R.build_plans(_hw, {4, 70}, c2, S, W_, H_, lambda a, b: True,
                                  copy.deepcopy(_hfx),

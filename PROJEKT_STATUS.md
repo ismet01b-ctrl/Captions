@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v97e: Keine geparkte Hook-Karte bei aktivem Flow.**
+  Ismet (Screenshot IMG_6578): "Es wird ein 'Titel generiert mit einem random
+  Word' das bleibt die ganze Zeit oben (unpassend) und die captions kommen
+  darauf. Ich dachte die ki entscheidet fast alles." Das oben stehende Wort
+  war die Sofort-Hook-Karte (v48): das staerkste fruehe Keyword wird ab Frame 1
+  fest oben geparkt, bis es gesprochen ist. Mit Flow ist das doppelt falsch:
+  Flow baut ab dem ersten Wort durchgehend Captions auf (kein leerer Anfang,
+  den man ueberbruecken muesste), und die geparkte Karte sitzt oben genau dort,
+  wo der Flow-Text drueber laeuft -> Kollision + wirkt wie ein zufaelliger Titel.
+  Fix: bei `caption_flow` wird NICHT mehr geparkt - das Keyword spielt normal
+  zu seiner Sprechzeit (dramatischer Moment bleibt, nur eben nicht ab Frame 1
+  oben festgenagelt). Ohne Flow bleibt der Sofort-Hook wie gehabt. Verifiziert:
+  Flow an -> Keyword-Start = Sprechzeit; Flow aus -> Start 0. Selftest 497/497.
 - **v97d: Flow-"Zoom ins Leere" behoben.**
   Ismet: "Der Zoom. Wohin zoomt der? Einfach so in die leere. Die captions
   wurden nicht verfolgt." Ursache (von v97 eingeschleppt): der else-Zweig

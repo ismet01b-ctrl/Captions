@@ -4642,9 +4642,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     # HOOK v48: Sofort-Hook. 65-71% entscheiden in den ersten 3 Sekunden, ob sie
     # bleiben. Das staerkste fruehe Statement wird zur Hook-Karte: sie steht ab
     # Frame 1 und bleibt, bis das Statement gesprochen ist - kein leerer Anfang.
+    # v97e: NICHT bei aktivem Flow. Flow baut ab dem ersten Wort durchgehend
+    # Captions auf (kein leerer Anfang mehr) - eine zusaetzlich fest oben
+    # geparkte Keyword-Karte wirkt wie ein zufaelliger Titel und kollidiert mit
+    # dem Flow-Text, der drueber laeuft. Das Keyword spielt normal zur Sprechzeit.
     hook_len = float(cfg['effects'].get('hook_seconds', 15))
     hook_on = (cfg['effects'].get('intro_hook', True) and hook_len > 0)
-    if hook_on and cfg['effects'].get('instant_hook', True):
+    _flow_on = cfg['effects'].get('caption_flow', True)
+    if hook_on and cfg['effects'].get('instant_hook', True) and not _flow_on:
         early = min(hook_len, 8.0)
         cands = [p for p in plans if 'kw_i' in p and not p.get('broll')
                  and not p.get('tokens')          # Kompositionen takten wortweise
