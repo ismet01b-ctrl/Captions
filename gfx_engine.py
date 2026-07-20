@@ -1815,8 +1815,12 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         # === Template 'notify' (Overlay): Banner droppen von oben, stapeln ===
         if NOTI is not None and t < T_EXIT + 0.4:
             n_vis = sum(1 for c in NOTI if t >= c['t'])
-            step = 205
-            top_y = H * (0.14 if _TALL else 0.18)
+            # step > Banner(170) + Elastic-Overshoot der Fallhoehe (~35px bei
+            # 0.10H) + Luft. Vorher: step 205 + Fallhoehe 0.16H -> der neue
+            # Banner schoss ~55px ueber sein Ziel und tauchte in den alten ein
+            # ("fast am selben Ort").
+            step = 250
+            top_y = H * (0.12 if _TALL else 0.16)
             shown = 0
             for k, c in enumerate(NOTI):
                 if t < c['t']:
@@ -1833,7 +1837,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                 yp += 0.20 * (y_target - yp)
                 prev_e[f'nt{k}'] = yp
                 put(fr, c['spr'], W / 2 + pdx,
-                    yp + pdy + fy + (1 - e_n) * -H * 0.16
+                    yp + pdy + fy + (1 - e_n) * -H * 0.10
                     + (1 - ex) * -H * 0.25,
                     (0.9 + 0.1 * e_n) * gs,
                     min((t - c['t']) / 0.09, 1) * ex,
