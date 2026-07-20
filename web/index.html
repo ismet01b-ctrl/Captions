@@ -1247,25 +1247,27 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="seg" id="moFormat"></div>
             <label class="mo-lab">Export <span class="mo-hint">(MOV = ProRes 4444 with alpha, for Premiere)</span></label>
             <div class="seg" id="moExport"></div>
-            <label class="mo-lab">Words / title <span class="mo-hint">(up to 3)</span></label>
-            <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
+            <div id="moWordsWrap">
+              <label class="mo-lab" id="moWordsLab">Words / title <span class="mo-hint">(up to 3)</span></label>
+              <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
+            </div>
             <label class="mo-lab">Accent color</label>
             <input type="color" class="mo-color" id="moAccent" value="#ff7a1a">
             <label class="mo-lab">Motion strength <span id="moMotionV" class="mo-hint"></span></label>
             <div class="slider"><input type="range" id="moMotion" min="0.4" max="1.6" step="0.05" value="1"></div>
             <label class="mo-lab">Grain <span id="moGrainV" class="mo-hint"></span></label>
             <div class="slider"><input type="range" id="moGrain" min="0" max="10" step="0.5" value="6"></div>
-            <label class="mo-lab">Image insert <span class="mo-hint">(optional)</span></label>
-            <input type="file" class="mo-file" id="moImage" accept="image/*">
-            <label class="mo-lab">Logo <span class="mo-hint">(optional)</span></label>
-            <input type="file" class="mo-file" id="moLogo" accept="image/*">
+            <div id="moImageWrap">
+              <label class="mo-lab">Image insert <span class="mo-hint">(optional)</span></label>
+              <input type="file" class="mo-file" id="moImage" accept="image/*">
+            </div>
             <button class="btn" id="moRender" style="width:100%;margin-top:18px;">Render clip · 1 credit</button>
             <div id="moStatus" class="mo-status" style="display:none;"></div>
           </div>
         </div>
         <div class="mo-preview">
           <div class="mo-frame" id="moFrame">
-            <img id="moImg" alt="preview">
+            <img id="moImg" alt="">
             <div class="mo-spin" id="moSpin"></div>
           </div>
           <p class="mo-note">Live preview — a still from the clip. The rendered
@@ -2314,7 +2316,7 @@ function moSeg(id, opts, key){
     b.textContent=label; b.classList.toggle('on', Motion.sel[key]===val);
     b.onclick=()=>{ Motion.sel[key]=val;
       el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
-      b.classList.add('on'); motionPreview(); };
+      b.classList.add('on'); moSync(); motionPreview(); };
     el.appendChild(b);
   });
 }
@@ -2326,7 +2328,7 @@ async function initMotion(){
     ['Lower Third','lowerthird'],['Chat','chat'],['Notify','notify']],'template');
   moSeg('moStyle',[['Studio','studio'],['Dark','dark'],['Bold','bold'],['Mono','mono']],'style');
   moSeg('moFormat',[['9:16','9:16'],['1:1','1:1'],['16:9','16:9']],'format');
-  moSeg('moExport',[['MP4','mp4'],['MOV · Alpha (Premiere)','mov']],'exportFmt');
+  moSeg('moExport',[['MP4 · 1 credit','mp4'],['MOV · Alpha · 2 credits','mov']],'exportFmt');
   const bind=(id,key,fmt)=>{ const el=$('#'+id); if(!el) return;
     const lab=$('#'+id+'V'); const upd=()=>{ Motion.sel[key]=parseFloat(el.value);
       if(lab) lab.textContent=fmt?fmt(el.value):el.value; };
@@ -2335,9 +2337,29 @@ async function initMotion(){
   bind('moGrain','grain',v=>Number(v).toFixed(1));
   $('#moWords').oninput=motionPreviewDebounced;
   $('#moAccent').oninput=()=>{ Motion.sel.accent=$('#moAccent').value; motionPreviewDebounced(); };
-  $('#moImage').onchange=()=>{}; $('#moLogo').onchange=()=>{};
   $('#moRender').onclick=motionRender;
-  motionPreview();
+  moSync(); motionPreview();
+}
+/* Kontext-Sync: Felder/Hinweise/Preis passen sich Template + Export an. */
+const MO_WORDS={
+  pills:      ['Words / title <span class="mo-hint">(up to 3)</span>','Write, Create, Solve',1],
+  widgets:    ['','',0],
+  appstore:   ['App / brand name','DouchkoVE',1],
+  lowerthird: ['Name, role <span class="mo-hint">(2 lines)</span>','Ismet B., Founder',1],
+  chat:       ['Messages <span class="mo-hint">(up to 3)</span>','Hey!, New drop is live, Check it now',1],
+  notify:     ['Notification lines <span class="mo-hint">(up to 2)</span>','Render finished, Your clip is ready',1],
+};
+function moSync(){
+  const tpl=Motion.sel.template;
+  const [lab,ph,show]=MO_WORDS[tpl]||MO_WORDS.pills;
+  const ww=$('#moWordsWrap'); if(ww) ww.style.display=show?'':'none';
+  const wl=$('#moWordsLab'); if(wl&&lab) wl.innerHTML=lab;
+  const wi=$('#moWords'); if(wi&&ph) wi.placeholder=ph;
+  const iw=$('#moImageWrap'); if(iw) iw.style.display=(tpl==='pills')?'':'none';
+  const btn=$('#moRender');
+  if(btn&&!btn.disabled) btn.textContent = Motion.sel.exportFmt==='mov'
+    ? 'Render clip · 2 credits · ProRes 4444 Alpha'
+    : 'Render clip · 1 credit';
 }
 function motionSpec(){
   const words=($('#moWords').value||'').split(',').map(s=>s.trim()).filter(Boolean).slice(0,3);
@@ -2369,7 +2391,6 @@ async function motionRender(){
   const fd=new FormData();
   fd.append('spec', JSON.stringify(motionSpec()));
   const img=$('#moImage').files[0]; if(img) fd.append('image', img);
-  const logo=$('#moLogo').files[0]; if(logo) fd.append('logo', logo);
   try{
     const r=await fetch('/api/motion/render',{method:'POST', body:fd});
     if(r.status===402){ st.style.display='block';
@@ -2385,9 +2406,11 @@ async function motionRender(){
 async function motionPoll(jid, st, btn, orig){
   try{
     const r=await fetch('/api/status/'+jid); const s=await r.json();
-    if(s.status==='fertig'){ st.innerHTML='Done — saved to your '+
-      '<a data-nav="library" style="color:var(--acc2);cursor:pointer;">Library</a>.';
-      btn.disabled=false; btn.textContent=orig;
+    if(s.status==='fertig'){
+      st.innerHTML='Done — saved to your '+
+        '<a data-nav="library" style="color:var(--acc2);cursor:pointer;">Library</a>.'+
+        (s.mov_url?` &nbsp;<a href="${s.mov_url}" style="color:var(--acc2);">Download MOV · Alpha</a>`:'');
+      btn.disabled=false; btn.textContent=orig; moSync();
       fetch('/api/me').then(x=>x.json()).then(d=>updateCreditHeader(d.balance_sec)).catch(()=>{});
       return; }
     if(s.status==='fehler'){ st.textContent='Render failed: '+(s.msg||'');

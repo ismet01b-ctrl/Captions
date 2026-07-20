@@ -660,7 +660,9 @@ def _maybe_refund(jid):
         return
     if os.path.exists(os.path.join(job_dir(jid), 'fertig.mp4')):
         return
-    _refund_credits(uid, jid, cost_seconds(j.get('dauer', 0)))
+    # Motion-Jobs tragen ihre Kosten explizit (MOV kostet mehr als die Dauer
+    # hergibt); sonst wie gehabt aus der Videodauer.
+    _refund_credits(uid, jid, j.get('cost_sec') or cost_seconds(j.get('dauer', 0)))
 
 
 def _pack_processed(user_id, session_id):
@@ -2183,7 +2185,8 @@ def _demo_ok(ip, limit=2, window=86400):
 # Motion-Graphics (UI-Motion-Engine) - eigener Job-Typ, eigene Endpoints.
 # Presets + Feintuning (Ismet), Live-Vorschau als Standbild.
 # ================================================================
-MOTION_COST_SEC = 60           # 1 Credit pro Motion-Clip (~10s)
+MOTION_COST_SEC = 60           # 1 Credit pro Motion-Clip (~10s, MP4)
+MOTION_COST_MOV = 120          # 2 Credits fuer ProRes-4444-Alpha (Premiere)
 
 
 @app.get('/api/motion/schema')
@@ -2268,11 +2271,13 @@ async def motion_render(request: Request,
                     os.path.join(d, f'{name}.png'))
             except Exception:
                 pass
-    if not _reserve_credits(u['id'], MOTION_COST_SEC, jid):
+    _need = MOTION_COST_MOV if mc.get('export') == 'mov' else MOTION_COST_SEC
+    if not _reserve_credits(u['id'], _need, jid):
         shutil.rmtree(d, ignore_errors=True)
-        raise HTTPException(402, 'Not enough credits (motion clip costs 1).')
+        raise HTTPException(402, f'Not enough credits (this clip costs '
+                                 f'{_need // 60}).')
     JOBS[jid] = {'kind': 'motion', 'motion': mc, 'user_id': u['id'],
-                 'dauer': 11, 'status': 'wartet'}
+                 'dauer': 11, 'cost_sec': _need, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …',
               kind='motion')
     QUEUE.put(jid)

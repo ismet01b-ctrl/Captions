@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion: UI-Kontext-Sync + ProRes-Preis (2 Credits).**
+  Ismet: "Passe das UI an, damit alles passt. ProRes mit extra credits."
+  (1) UI: moSync() - Felder passen sich dem Template an: Woerter-Feld mit
+  Template-spezifischem Label/Placeholder (pills: 3 Woerter, appstore: Brand,
+  lowerthird: Name+Rolle, chat: 3 Messages, notify: 2 Zeilen), bei widgets
+  ausgeblendet (nutzt keine Texte); Bild-Upload nur bei pills; totes Logo-Feld
+  entfernt (war in der Engine nie verdrahtet). Render-Button zeigt den Preis
+  dynamisch ("1 credit" / "2 credits - ProRes 4444 Alpha"), Export-Segment
+  mit Preisen, nach MOV-Render direkter Download-Link im Status.
+  (2) Preis: MOV = 2 Credits (MOTION_COST_MOV=120), MP4 = 1; Job traegt
+  cost_sec, _maybe_refund nutzt ihn (Refund exakt). VERIFIZIERT: TestClient
+  mov -120/refund +120/mp4 -60; Browser: Felder togglen korrekt pro Template,
+  Button-Preis wechselt, 0 JS-Fehler.
+
 - **Motion: 3 neue Overlay-Templates + MOV-Alpha-Export (Premiere).**
   Ismet: "Viel mehr motion graphics. Als mov anwaehlbar fuer Premiere. Alles
   nur high end." (1) Neue Templates (Overlay-Klasse, KEIN DouchkoVE-Finale -
