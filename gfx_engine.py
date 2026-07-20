@@ -1007,7 +1007,7 @@ UI_STYLES = {
 
 
 def render_ui_motion(out_video, style='studio', cfg=None, image=None,
-                     pills=None, progress=print):
+                     pills=None, template='pills', progress=print):
     """UI-Motion-Engine (Stil @dav6cious/refined.motion/mcvisuals):
     Apple-Style UI-Motion-Graphics, STYLE-getrieben und voll einstellbar.
     - style: Name aus UI_STYLES ('studio'/'dark'/'bold'/'mono')
@@ -1095,20 +1095,21 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             rim.putalpha(Image.fromarray((ha * strength).astype(np.uint8)))
             rim.putalpha(ImageChops.multiply(rim.getchannel('A'), mask))
             card.alpha_composite(rim)
-        # Boden-Innenschatten fuer Tiefe (dunkler bei dark)
-        sh = Image.new('L', (w, h), 0)
-        ImageDraw.Draw(sh).rounded_rectangle(
-            [inset, int(h * 0.62), w - inset, h - inset], max(r - inset, 1),
-            outline=255, width=max(int(h * 0.03), 2))
-        sh = sh.filter(ImageFilter.GaussianBlur(max(h * 0.02, 3)))
-        sa = np.array(sh, np.float32)
-        sa[:int(h * 0.6)] = 0
-        dcol = (200, 205, 214) if RIMMODE == 'light' else (0, 0, 0)
-        dalpha = 0.30 if RIMMODE == 'light' else 0.45
-        dark = Image.new('RGBA', (w, h), dcol + (0,))
-        dark.putalpha(Image.fromarray((sa * dalpha).astype(np.uint8)))
-        dark.putalpha(ImageChops.multiply(dark.getchannel('A'), mask))
-        card.alpha_composite(dark)
+        # Boden-Innenschatten fuer Tiefe: WEICHER Vertikal-Verlauf von unten
+        # (kein Rounded-Rect-Umriss mehr - dessen Oberkante war die stoerende
+        # Linie quer durch die Karte). Bei 'flat' (mono) ganz aus.
+        if RIMMODE != 'flat':
+            yr = np.linspace(0, 1, h)[:, None]
+            ramp = (np.clip((yr - 0.70) / 0.30, 0, 1) ** 1.7)
+            sa = np.broadcast_to(ramp, (h, w)).astype(np.float32) * 255
+            sa = np.array(Image.fromarray(sa.astype(np.uint8)).filter(
+                ImageFilter.GaussianBlur(max(h * 0.02, 3))), np.float32)
+            dcol = (196, 201, 210) if RIMMODE == 'light' else (0, 0, 0)
+            dalpha = 0.22 if RIMMODE == 'light' else 0.42
+            dark = Image.new('RGBA', (w, h), dcol + (0,))
+            dark.putalpha(Image.fromarray((sa * dalpha).astype(np.uint8)))
+            dark.putalpha(ImageChops.multiply(dark.getchannel('A'), mask))
+            card.alpha_composite(dark)
         return card
 
     def image_card(src, w, h, r):
@@ -1190,6 +1191,92 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         ImageDraw.Draw(im).polygon(tri, fill=ACC + (255,))
         return im.resize((sz, sz), Image.LANCZOS)
 
+    # ---------- Widget-Sprites (Template 'widgets', Referenz-Video 1) ----------
+    SUB = (TXT[0], TXT[1], TXT[2])                    # gedaempfte Textfarbe
+    MUTE = (150, 156, 168) if RIMMODE != 'dark' else (120, 128, 145)
+
+    def _wcard(w, h):
+        return card_material(w, h, int(min(w, h) * 0.16))
+
+    def w_stat(w, h, pct, bars, label):
+        im = _wcard(w, h)
+        d = ImageDraw.Draw(im)
+        # Akzent-Blitz + Prozent
+        bx, by = int(w * 0.10), int(h * 0.16)
+        d.polygon([(bx + 14, by), (bx - 6, by + 34), (bx + 10, by + 34),
+                   (bx - 4, by + 66), (bx + 30, by + 24), (bx + 12, by + 24)],
+                  fill=ACC + (255,))
+        d.text((w * 0.20, h * 0.10), f'{pct}%', font=F(PFONT, int(h * 0.24)),
+               fill=TXT + (255,))
+        # Mini-Balken
+        n = 5
+        bw = w * 0.115
+        gap = (w * 0.80 - n * bw) / (n - 1)
+        x = w * 0.10
+        y1, hmax = h * 0.86, h * 0.34
+        for k in range(n):
+            hh = hmax * (0.35 + 0.16 * k)
+            col = ACC if k < bars else MUTE
+            d.rounded_rectangle([x, y1 - hh, x + bw, y1], int(bw * 0.32),
+                                fill=col + (255,))
+            x += bw + gap
+        d.text((w * 0.10, h * 0.60), label, font=F(PFONT, int(h * 0.075)),
+               fill=MUTE + (255,))
+        return im
+
+    def w_clock(w, h):
+        im = _wcard(w, h)
+        d = ImageDraw.Draw(im)
+        cx, cy, r = w / 2, h * 0.52, min(w, h) * 0.30
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=MUTE + (255,),
+                  width=max(int(r * 0.03), 2))
+        for a in range(12):
+            an = a * math.pi / 6
+            x0 = cx + math.sin(an) * r * 0.86
+            y0 = cy - math.cos(an) * r * 0.86
+            d.ellipse([x0 - 3, y0 - 3, x0 + 3, y0 + 3], fill=MUTE + (255,))
+        for an, ln, wd, col in ((1.1, 0.5, 6, TXT), (2.4, 0.72, 5, TXT),
+                                (4.0, 0.8, 3, ACC)):
+            d.line([cx, cy, cx + math.sin(an) * r * ln,
+                    cy - math.cos(an) * r * ln], fill=col + (255,), width=wd)
+        d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=ACC + (255,))
+        d.text((w * 0.5, h * 0.90), 'Daily', font=F(PFONT, int(h * 0.08)),
+               fill=MUTE + (255,), anchor='mm')
+        return im
+
+    def w_cal(w, h):
+        im = _wcard(w, h)
+        d = ImageDraw.Draw(im)
+        d.text((w * 0.09, h * 0.10), 'Daily Activity',
+               font=F(PFONT, int(h * 0.11)), fill=TXT + (255,))
+        cols, rows = 7, 3
+        gx = w * 0.82 / cols
+        r = gx * 0.30
+        for ry in range(rows):
+            for cxx in range(cols):
+                x = w * 0.11 + cxx * gx
+                y = h * 0.40 + ry * gx * 0.95
+                v = (cxx + ry * 3) % 5
+                col = ACC if v == 0 else (MUTE if v > 2 else
+                                          (min(ACC[0], 255), 200, 90))
+                d.ellipse([x - r, y - r, x + r, y + r], fill=col + (255,))
+        return im
+
+    def w_progress(w, h, pct, label):
+        im = _wcard(w, h)
+        d = ImageDraw.Draw(im)
+        d.text((w * 0.09, h * 0.16), label, font=F(PFONT, int(h * 0.12)),
+               fill=MUTE + (255,))
+        d.text((w * 0.09, h * 0.34), f'{pct}%', font=F(PFONT, int(h * 0.30)),
+               fill=TXT + (255,))
+        bx0, bx1, by = w * 0.09, w * 0.91, h * 0.82
+        bh = h * 0.09
+        d.rounded_rectangle([bx0, by, bx1, by + bh], int(bh / 2),
+                            fill=MUTE + (110,))
+        d.rounded_rectangle([bx0, by, bx0 + (bx1 - bx0) * pct / 100.0, by + bh],
+                            int(bh / 2), fill=ACC + (255,))
+        return im
+
     def wordmark_sprite(n_chars):
         S2 = 2
         f = F('inter_black.ttf', 120 * S2)
@@ -1240,26 +1327,46 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     T_IMG = 4.65                              # Einblendung fliegt rein
     PH = 230                                  # Pill-Hoehe (Sprite nach /2)
     GAP = 26
-    # (Akzent-Zeit, Slot, Gain): Akzent = wo der SOUND-PEAK sitzen soll.
-    # Gemessen an der Referenz: Sound-Peak ~40ms vor dem Motion-Peak; der
-    # Motion-Peak der Elastic-Kurve liegt ~340ms nach Start (erster Overshoot).
     events = []
-    events.append((T_LOGO + 0.28, 'whoosh_soft', 0.60))
-    events.append((T_LOGO + 0.36, 'press', 0.30))
-    events.append((T_UP + 0.25, 'whoosh_soft', 0.35))
-    for _, ts in PILLS:
-        events.append((ts + 0.28, 'whoosh_soft', 0.55))
-        events.append((ts + 0.36, 'press', 0.26))
-    events.append((T_EXIT + 0.12, 'vanish', 0.50))
-    events.append((T_WM + 0.28, 'whoosh_soft', 0.60))
-    events.append((T_WM + 0.36, 'impact', 0.32))
-
     logo_big = logo_sprite(360)
     logo_small = logo_sprite(180)
     img_spr = image_card(image, 620, 780, 64) if image else None
-    if img_spr is not None:
-        events.append((T_IMG + 0.28, 'whoosh_soft', 0.55))
-        events.append((T_IMG + 0.36, 'press', 0.28))
+
+    # ---- Widget-Grid (Template 'widgets'): diverse Karten, variierte Einfluege
+    #      (Scale-Pop / Slide-L / Slide-R / Drop), Stagger, Parallax-Tiefe. ----
+    WIDGETS = []
+    if template == 'widgets':
+        _defs = [
+            # (sprite, cx, cy, t_in, enter, depth)   cx/cy normiert
+            (w_stat(int(W * .40), int(W * .40), 57, 3, '~ 2 hours'),
+             0.30, 0.30, 0.55, 'pop', 1.20),
+            (w_clock(int(W * .34), int(W * .34)),
+             0.72, 0.26, 0.95, 'slideR', 1.05),
+            (w_cal(int(W * .46), int(W * .30)),
+             0.35, 0.53, 1.45, 'slideL', 1.28),
+            (w_progress(int(W * .40), int(W * .34), 22, 'Battery'),
+             0.71, 0.55, 1.95, 'drop', 1.12),
+            (w_stat(int(W * .44), int(W * .42), 100, 5, 'Fully charged'),
+             0.50, 0.79, 2.55, 'pop', 1.35),
+        ]
+        for spr, cxn, cyn, tin, ent, dep in _defs:
+            WIDGETS.append({'spr': spr, 'cx': cxn * W, 'cy': cyn * H,
+                            't': tin, 'ent': ent, 'dep': dep})
+            events.append((tin + 0.28, 'whoosh_soft', 0.5))
+            events.append((tin + 0.36, 'press', 0.26))
+    else:
+        events.append((T_LOGO + 0.28, 'whoosh_soft', 0.60))
+        events.append((T_LOGO + 0.36, 'press', 0.30))
+        events.append((T_UP + 0.25, 'whoosh_soft', 0.35))
+        for _, ts in PILLS:
+            events.append((ts + 0.28, 'whoosh_soft', 0.55))
+            events.append((ts + 0.36, 'press', 0.26))
+        if img_spr is not None:
+            events.append((T_IMG + 0.28, 'whoosh_soft', 0.55))
+            events.append((T_IMG + 0.36, 'press', 0.28))
+    events.append((T_EXIT + 0.12, 'vanish', 0.50))
+    events.append((T_WM + 0.28, 'whoosh_soft', 0.60))
+    events.append((T_WM + 0.36, 'impact', 0.32))
     tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
     vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
     prev_e = {}
@@ -1289,10 +1396,44 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             """depth 0=fern (Hintergrund) .. 1.4=nah (Vordergrund)."""
             return cx0 * depth, cy0 * depth
 
+        # === Template 'widgets': Grid diverser Karten mit variierten Einfluegen
+        if template == 'widgets':
+            for wi, wd in enumerate(WIDGETS):
+                if t < wd['t']:
+                    continue
+                e = _elastic(t - wd['t'])
+                pdx, pdy = cam(wd['dep'])
+                fy, fr_ = idle(wi * 1.7, 0.85)
+                ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT - wi * 0.05) / 0.28)
+                if ex <= 0:
+                    continue
+                # variierte Einflug-Arten (Bewegungs-Variation)
+                dx = dy = 0.0
+                rot = fr_
+                sc = gs
+                if wd['ent'] == 'pop':
+                    sc = (0.4 + 0.6 * e) * gs
+                    rot += (1 - e) * (8 if wi % 2 else -8)
+                elif wd['ent'] == 'slideR':
+                    dx = (1 - e) * W * 0.6
+                    rot += (1 - e) * 7
+                elif wd['ent'] == 'slideL':
+                    dx = (1 - e) * -W * 0.6
+                    rot += (1 - e) * -7
+                elif wd['ent'] == 'drop':
+                    dy = (1 - e) * -H * 0.35
+                    rot += (1 - e) * 5
+                dx += (1 - ex) * (W * 0.4 if wi % 2 else -W * 0.4)
+                put(fr, wd['spr'], wd['cx'] + pdx + dx,
+                    wd['cy'] + pdy + dy + fy,
+                    sc * (0.92 + 0.08 * ex),
+                    min((t - wd['t']) / 0.09, 1) * ex,
+                    vblur=vel(f'w{wi}', e) * 4, rot=rot, lift=1.25)
+            # Finale (Logo + Wortmarke) kommt gemeinsam unten
         # --- Logo: elastisch rein mit Rotations-Overshoot, dann hoch-morphen.
         #     Mit Einblendung: das Logo raeumt fuer das Hero-Bild (blendet aus). ---
         _logo_end = (T_IMG if img_spr is not None else T_EXIT)
-        if t < _logo_end:
+        if template != 'widgets' and t < _logo_end:
             e_in = _elastic(t - T_LOGO)
             e_up = _elastic(t - T_UP)
             pdx, pdy = cam(0.7)
@@ -1309,7 +1450,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                 lift=1.15)
         # --- Einblendung: Hero-Bild fliegt rein (gleiches Material -> passend),
         #     schwebt, geht am Ende raus ---
-        if img_spr is not None and T_IMG <= t < T_EXIT + 0.4:
+        if template != 'widgets' and img_spr is not None and T_IMG <= t < T_EXIT + 0.4:
             e_i = _elastic(t - T_IMG)
             pdx, pdy = cam(0.85)
             fy, fr_ = idle(0.5, 0.8)
@@ -1322,7 +1463,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                 rot=(1 - e_i) * -6 + fr_ + (1 - ex) * 10, lift=1.3)
         # --- Pills: fliegen ABWECHSELND von den Seiten rein (Rotations-
         #     Overshoot), stapeln sich, schweben danach ---
-        if t < T_EXIT + 0.4:
+        if template != 'widgets' and t < T_EXIT + 0.4:
             base_y = H * 0.72 if img_spr is not None else H * 0.58
             for k, (txt, ts) in enumerate(PILLS):
                 if t < ts:
@@ -1436,11 +1577,14 @@ if __name__ == '__main__':
     ap.add_argument('--image', default=None)
     ap.add_argument('--pills', default=None,
                     help='Komma-getrennte Kapsel-Woerter')
+    ap.add_argument('--template', default='pills',
+                    choices=['pills', 'widgets'])
     a = ap.parse_args()
     if a.demo == 'ui':
         _pl = a.pills.split(',') if a.pills else None
         raise SystemExit(0 if render_ui_motion(
-            a.output, style=a.style, image=a.image, pills=_pl) else 1)
+            a.output, style=a.style, image=a.image, pills=_pl,
+            template=a.template) else 1)
     fn = {'1': render_demo, '2': render_demo2, '3': render_demo3,
           'ed': render_editorial, 'sb': render_stackbuild}[a.demo]
     raise SystemExit(0 if fn(a.input, a.output) else 1)
