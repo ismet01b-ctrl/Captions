@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion: Kundenfitness + Overlap-QA.**
+  Ismet: "Mach alles fit fuer Kunden. Kontrolliere alles ob da was nicht
+  ueberlappt." Overlap-QA ueber 4 Stile x 3 Templates (Standbilder):
+  widgets-Karten ueberlappten (Battery/100% auf Kalender) -> neu als
+  2-Spalten-Masonry mit Luecken, rechnerisch 0 Box-Overlaps. appstore-Titel
+  lief unter den Open-Button -> txt_spr(max_w) skaliert den Titel auf die
+  freie Breite (mit 'MySuperLongBrandName' verifiziert). Kundenfitness:
+  _restore_jobs kennt jetzt Motion-Jobs (ueberleben Neustart - vorher Credit
+  weg; live bestaetigt); Wasserzeichen fuer Nicht-Kaeufer (konsistent mit
+  Captions). Voller Render rc=0 mit Audio; Web mobil ohne Overlap (0 JS-Fehler).
 - **Motion-Graphics IN DER WEB-UI (Editor + Backend + Format).**
   Ismet: "Mach alle 3" (Presets+Feintuning, Standbild-Preview). Komplett
   verdrahtet - eigener Job-Typ, beruehrt die Caption-Pipeline nicht:
