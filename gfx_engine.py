@@ -936,14 +936,263 @@ def render_stackbuild(input_video, out_video, progress=print):
     return True
 
 
+def _elastic(t):
+    """Elastic-Ease nach der Referenz-Kurve (@dav6cious-Kommentar): schneller
+    Anstieg, ~18% Overshoot bei ~340ms, weiches Zurueckfedern, Settle ~1s.
+    Gedaempfte Feder: f(t) = 1 - e^(-5t)(cos(9.2t) + (5/9.2)sin(9.2t))."""
+    if t <= 0:
+        return 0.0
+    if t >= 1.6:
+        return 1.0
+    return 1.0 - math.exp(-5.0 * t) * (math.cos(9.2 * t)
+                                       + (5.0 / 9.2) * math.sin(9.2 * t))
+
+
+def render_ui_motion(out_video, progress=print):
+    """PROTOTYP 'UI-Motion' (Stil @dav6cious/refined.motion/mcvisuals):
+    Apple-Style UI-Motion-Graphics - Pill-Stack mit Typewriter auf weichem
+    Studio-Verlauf, Elastic-Overshoot (gemessene Kurve), permanenter
+    Kamera-Glide, Stagger-Push, Geschwindigkeits-Blur. Sound: NUR echte
+    Pack-Sounds - whoosh_soft ~60ms VOR dem Motion-Peak, press auf der
+    Landung, sparsam (~1 SFX / 1.2s). 60fps."""
+    from PIL import ImageFilter
+    W, H, FPS = 1080, 1920, 60
+    DUR = 10.5
+    N = int(DUR * FPS)
+    fdir = os.path.join(HERE, 'fonts')
+
+    def F(name, px):
+        try:
+            return ImageFont.truetype(os.path.join(fdir, name), int(px))
+        except Exception:
+            return _font(int(px))
+
+    # --- Studio-Hintergrund: sehr heller Vertikal-Verlauf + Vignette ---
+    top = np.array([246, 247, 250], np.float32)
+    bot = np.array([225, 231, 240], np.float32)
+    gy = np.linspace(0, 1, H)[:, None, None]
+    bg = (top[None, None, :] * (1 - gy) + bot[None, None, :] * gy)
+    xx, yy = np.meshgrid(np.linspace(-1, 1, W), np.linspace(-1, 1, H))
+    vig = 1.0 - 0.10 * np.clip(xx ** 2 + yy ** 2 * 0.6, 0, 1)[..., None]
+    BG = Image.fromarray(np.clip(bg * vig, 0, 255).astype(np.uint8)).convert('RGBA')
+
+    ACC = (255, 122, 26)                     # Akzent (DouchkoVE-Orange)
+
+    def rounded_card(w, h, r, fill=(255, 255, 255, 255)):
+        im = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        ImageDraw.Draw(im).rounded_rectangle([0, 0, w - 1, h - 1], r, fill=fill)
+        return im
+
+    def pill_sprite(txt, n_chars, acc_last=3):
+        """Kapsel mit Typewriter-Stand (n_chars sichtbar), letzte Buchstaben
+        in Akzentfarbe (wie 'Write'/'Solve' in der Referenz). 2x gerendert."""
+        S2 = 2
+        f = F('poppins_b.ttf', 96 * S2)
+        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        full_w = d0.textlength(txt, font=f)
+        pw = int(full_w + 200 * S2)
+        ph = int(230 * S2)
+        im = rounded_card(pw, ph, ph // 2)
+        d = ImageDraw.Draw(im)
+        x = 100 * S2
+        asc, desc = f.getmetrics()
+        y = (ph - asc - desc) // 2
+        for k, ch in enumerate(txt[:max(int(n_chars), 0)]):
+            col = ACC if k >= len(txt) - acc_last else (26, 28, 34)
+            d.text((x, y), ch, font=f, fill=col + (255,))
+            x += d0.textlength(ch, font=f)
+        return im.resize((pw // S2, ph // S2), Image.LANCZOS)
+
+    def logo_sprite(sz):
+        """Logo-Karte: weisses Rounded-Square, orangenes Play-Dreieck."""
+        S2 = 2
+        s = sz * S2
+        im = rounded_card(s, s, int(s * 0.24))
+        d = ImageDraw.Draw(im)
+        c, r = s / 2, s * 0.20
+        d.polygon([(c - r * 0.7, c - r), (c - r * 0.7, c + r), (c + r * 1.1, c)],
+                  fill=ACC + (255,))
+        return im.resize((sz, sz), Image.LANCZOS)
+
+    def wordmark_sprite(n_chars):
+        S2 = 2
+        f = F('inter_black.ttf', 120 * S2)
+        txt = 'DouchkoVE'
+        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        w = int(d0.textlength(txt, font=f)) + 20
+        asc, desc = f.getmetrics()
+        im = Image.new('RGBA', (w, asc + desc), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        x = 0
+        for k, ch in enumerate(txt[:max(int(n_chars), 0)]):
+            col = ACC if k >= 7 else (26, 28, 34)     # 'VE' in Akzent
+            d.text((x, 0), ch, font=f, fill=col + (255,))
+            x += d0.textlength(ch, font=f)
+        return im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
+
+    def put(canvas, spr, cx, cy, scale=1.0, op=1.0, vblur=0.0):
+        """Sprite mit weichem Schatten, Scale, Opacity, Geschwindigkeits-Blur."""
+        if op <= 0.01 or scale <= 0.01:
+            return
+        w = max(int(spr.width * scale), 1)
+        h = max(int(spr.height * scale), 1)
+        s = spr.resize((w, h), Image.LANCZOS)
+        if vblur > 0.3:
+            s = s.filter(ImageFilter.GaussianBlur(min(vblur, 6.0)))
+        if op < 1.0:
+            a = s.getchannel('A').point(lambda v: int(v * op))
+            s = s.copy(); s.putalpha(a)
+        sh = _soft_shadow(s, blur=14, alpha=int(70 * op))
+        canvas.alpha_composite(sh, (int(cx - w / 2), int(cy - h / 2 + 14)))
+        canvas.alpha_composite(s, (int(cx - w / 2), int(cy - h / 2)))
+
+    PILLS = [('Write', 2.30), ('Create', 4.10), ('Solve', 5.90)]
+    T_LOGO, T_UP, T_EXIT, T_WM = 0.45, 1.70, 7.60, 8.30
+    PH = 230                                  # Pill-Hoehe (Sprite nach /2)
+    GAP = 26
+    # (Akzent-Zeit, Slot, Gain): Akzent = wo der SOUND-PEAK sitzen soll.
+    # Gemessen an der Referenz: Sound-Peak ~40ms vor dem Motion-Peak; der
+    # Motion-Peak der Elastic-Kurve liegt ~340ms nach Start (erster Overshoot).
+    events = []
+    events.append((T_LOGO + 0.28, 'whoosh_soft', 0.60))
+    events.append((T_LOGO + 0.36, 'press', 0.30))
+    events.append((T_UP + 0.25, 'whoosh_soft', 0.35))
+    for _, ts in PILLS:
+        events.append((ts + 0.28, 'whoosh_soft', 0.55))
+        events.append((ts + 0.36, 'press', 0.26))
+    events.append((T_EXIT + 0.12, 'vanish', 0.50))
+    events.append((T_WM + 0.28, 'whoosh_soft', 0.60))
+    events.append((T_WM + 0.36, 'impact', 0.32))
+
+    logo_big = logo_sprite(360)
+    logo_small = logo_sprite(180)
+    tmp = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    vw = cv2.VideoWriter(tmp, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
+    prev_e = {}
+    for i in range(N):
+        t = i / FPS
+        fr = BG.copy()
+        # Kamera-Glide: nie statisch (Referenz), sehr langsam + klein
+        gdx = 10 * math.sin(t * 0.45) + 4 * math.sin(t * 1.1)
+        gdy = 7 * math.cos(t * 0.33)
+        gs = 1.0 + 0.012 * math.sin(t * 0.25)
+
+        def vel(key, e):
+            v = abs(e - prev_e.get(key, e)) * FPS
+            prev_e[key] = e
+            return v
+
+        # --- Logo: elastisch rein, dann hoch-morphen, am Ende zurueck ---
+        if t < T_EXIT:
+            e_in = _elastic(t - T_LOGO)
+            e_up = _elastic(t - T_UP)
+            lx = W / 2 + gdx
+            ly = H * 0.42 - e_up * H * 0.22 + gdy
+            lsc = (0.2 + 0.8 * e_in) * (1.0 - 0.5 * e_up) * gs
+            lop = min(max((t - T_LOGO) / 0.12, 0), 1)
+            if t > T_EXIT - 0.3:
+                lop *= max(0.0, (T_EXIT - t) / 0.3)
+            put(fr, logo_big, lx, ly, lsc, lop, vblur=vel('lg', e_in + e_up) * 4)
+        # --- Pills: Stack mit Push ---
+        if t < T_EXIT + 0.4:
+            base_y = H * 0.56
+            for k, (txt, ts) in enumerate(PILLS):
+                if t < ts:
+                    continue
+                e_in = _elastic(t - ts)
+                # Stack-Push: Position = Basis - (Anzahl juengerer Pills) * Schritt,
+                # per EMA-Feder angefahren (die Referenz schiebt weich nach oben)
+                pushes = sum(1 for _, t2 in PILLS[k + 1:] if t >= t2)
+                y_target = base_y - pushes * (PH + GAP)
+                yp = prev_e.get(f'y{k}', y_target)
+                yp += min(1.0, 14 / FPS * 60 * 0.22) * (y_target - yp)  # EMA-Feder
+                prev_e[f'y{k}'] = yp
+                n_ch = (t - ts) / 0.055                   # Typewriter ~18 Z/s
+                spr = pill_sprite(txt, n_ch)
+                ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT - k * 0.07) / 0.30)
+                if ex <= 0:
+                    continue
+                py = yp + (1 - e_in) * H * 0.06
+                put(fr, spr, W / 2 + gdx, py + gdy,
+                    (0.7 + 0.3 * e_in) * gs * (0.9 + 0.1 * ex),
+                    min((t - ts) / 0.10, 1) * ex,
+                    vblur=vel(f'p{k}', e_in) * 3.5)
+        # --- Finale: Logo + Wortmarke settlen ---
+        if t >= T_WM:
+            e_f = _elastic(t - T_WM)
+            n_ch = (t - T_WM - 0.15) / 0.05
+            wm = wordmark_sprite(n_ch)
+            put(fr, logo_small, W / 2 - wm.width / 2 - 120 + gdx,
+                H * 0.48 + gdy, (0.3 + 0.7 * e_f) * gs,
+                min((t - T_WM) / 0.10, 1), vblur=vel('lf', e_f) * 4)
+            if n_ch > 0:
+                put(fr, wm, W / 2 + 110 + gdx, H * 0.48 + gdy, gs,
+                    min((t - T_WM - 0.1) / 0.15, 1))
+        vw.write(cv2.cvtColor(np.array(fr.convert('RGB')), cv2.COLOR_RGB2BGR))
+        if i % 120 == 0:
+            progress(f'  Frame {i}/{N}')
+    vw.release()
+
+    # --- Sound: NUR echte Pack-Sounds, exakt auf die Events gelegt ---
+    audio = None
+    try:
+        import sfx_engine as SE
+        bank = SE.load_bank(os.path.join(HERE, 'sfx', 'pack'))
+        if bank:
+            total = np.zeros(int((DUR + 1.0) * SE.SR), np.float32)
+            for (te, slot, gain) in events:
+                sig = bank.get(slot)
+                if sig is None:
+                    continue
+                # Peak-Ausrichtung: der lauteste Punkt des Samples landet 40ms
+                # vor der Akzent-Zeit; Vorlauf auf max. 0.25s getrimmt (press
+                # z.B. hat 1s Anlauf - unbeschnitten kaeme der Hit 1s zu spaet).
+                pk = int(np.argmax(np.abs(sig)))
+                cut = max(pk - int(0.25 * SE.SR), 0)
+                sig = sig[cut:]
+                pk -= cut
+                a = int((te - 0.04) * SE.SR) - pk
+                if a < 0:
+                    sig = sig[-a:]
+                    a = 0
+                b = min(a + len(sig), len(total))
+                if b > a:
+                    total[a:b] += sig[:b - a] * gain
+            peak = float(np.abs(total).max() or 1.0)
+            if peak > 0.9:
+                total *= 0.9 / peak
+            audio = tempfile.NamedTemporaryFile(suffix='.wav', delete=False).name
+            SE._save(audio, total)
+    except Exception as e:
+        progress(f'  SFX uebersprungen: {e}')
+    cmd = ['ffmpeg', '-y', '-v', 'error', '-i', tmp]
+    if audio:
+        cmd += ['-i', audio, '-map', '0:v:0', '-map', '1:a:0', '-c:a', 'aac']
+    cmd += ['-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p',
+            '-shortest', out_video]
+    try:
+        subprocess.run(cmd, check=True, timeout=300)
+    finally:
+        for p in (tmp, audio):
+            if p:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+    progress('UI-Motion-Prototyp fertig')
+    return True
+
+
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('input')
+    ap.add_argument('input', nargs='?', default=None)
     ap.add_argument('output')
     ap.add_argument('--demo', default='ed',
-                    choices=['1', '2', '3', 'ed', 'sb'])
+                    choices=['1', '2', '3', 'ed', 'sb', 'ui'])
     a = ap.parse_args()
+    if a.demo == 'ui':
+        raise SystemExit(0 if render_ui_motion(a.output) else 1)
     fn = {'1': render_demo, '2': render_demo2, '3': render_demo3,
           'ed': render_editorial, 'sb': render_stackbuild}[a.demo]
     raise SystemExit(0 if fn(a.input, a.output) else 1)
