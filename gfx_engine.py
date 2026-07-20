@@ -2018,7 +2018,7 @@ if __name__ == '__main__':
     ap.add_argument('--pills', default=None,
                     help='Komma-getrennte Kapsel-Woerter')
     ap.add_argument('--template', default='pills',
-                    choices=['pills', 'widgets', 'appstore'])
+                    choices=MOTION_SCHEMA['templates'])
     ap.add_argument('--motion-cfg', default=None,
                     help='JSON-Datei mit {style,template,pills,image,cfg,preview} '
                          '- der Einstieg fuer den Web-Job-Worker')
