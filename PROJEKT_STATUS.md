@@ -3,6 +3,17 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **UI-Motion: Micro-Life + Template 'appstore' (Prototyp).**
+  Ismet: "1, 2, in der Web ui Full Customisible." (1) Micro-Life: Widgets
+  leben - Basis (Material+feste Labels) wird EINMAL gebaut, w_paint malt pro
+  Frame die dynamischen Teile: Prozent-Zahl + Balken rollen hoch (1->57%,
+  ->100%), Uhrzeiger ticken, Progress-Balken fuellt, Kalender-Dots erscheinen
+  nacheinander. (2) Template 'appstore' (Referenz-Video 2): Hero-Karte baut
+  sich Element fuer Element auf - Icon/Titel/Untertitel/Open-Button/Rating-
+  Zeile (4.8* gezeichneter Stern / 4+ / #1), gestaffelte Elastic-Einfluege.
+  Jetzt 4 Stile x 3 Templates (pills/widgets/appstore). CLI --template.
+  Web-UI-Full-Customize = naechster grosser Schritt (Plan an Ismet, Bestaetigung
+  vor dem Bau der Web-Integration).
 - **UI-Motion: Style-System + Einblendungen (Prototyp).**
   Ismet: "Ich braeuchte verschiedene Stile. Voll einstellbar. Eingefuegte
   Bilder sollten passend sein." -> render_ui_motion ist jetzt STYLE-getrieben:

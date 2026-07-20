@@ -1198,83 +1198,100 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     def _wcard(w, h):
         return card_material(w, h, int(min(w, h) * 0.16))
 
-    def w_stat(w, h, pct, bars, label):
+    # Micro-Life: die STATISCHE Basis (Material + feste Beschriftung) wird EINMAL
+    # gebaut; die dynamischen Teile (rollende Zahl, tickender Zeiger, fuellender
+    # Balken) malt w_paint pro Frame auf eine Kopie (billig, kein Blur). So
+    # lebt das Widget wie in der Referenz, ohne jede Frame das Material neu zu
+    # rechnen.
+    def w_base(kind, w, h, p):
         im = _wcard(w, h)
         d = ImageDraw.Draw(im)
-        # Akzent-Blitz + Prozent
-        bx, by = int(w * 0.10), int(h * 0.16)
-        d.polygon([(bx + 14, by), (bx - 6, by + 34), (bx + 10, by + 34),
-                   (bx - 4, by + 66), (bx + 30, by + 24), (bx + 12, by + 24)],
-                  fill=ACC + (255,))
-        d.text((w * 0.20, h * 0.10), f'{pct}%', font=F(PFONT, int(h * 0.24)),
-               fill=TXT + (255,))
-        # Mini-Balken
-        n = 5
-        bw = w * 0.115
-        gap = (w * 0.80 - n * bw) / (n - 1)
-        x = w * 0.10
-        y1, hmax = h * 0.86, h * 0.34
-        for k in range(n):
-            hh = hmax * (0.35 + 0.16 * k)
-            col = ACC if k < bars else MUTE
-            d.rounded_rectangle([x, y1 - hh, x + bw, y1], int(bw * 0.32),
-                                fill=col + (255,))
-            x += bw + gap
-        d.text((w * 0.10, h * 0.60), label, font=F(PFONT, int(h * 0.075)),
-               fill=MUTE + (255,))
+        if kind == 'stat':
+            d.text((w * 0.10, h * 0.60), p['label'], font=F(PFONT, int(h * 0.075)),
+                   fill=MUTE + (255,))
+        elif kind == 'clock':
+            cx, cy, r = w / 2, h * 0.50, min(w, h) * 0.30
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=MUTE + (255,),
+                      width=max(int(r * 0.03), 2))
+            for a in range(12):
+                an = a * math.pi / 6
+                x0 = cx + math.sin(an) * r * 0.86
+                y0 = cy - math.cos(an) * r * 0.86
+                d.ellipse([x0 - 3, y0 - 3, x0 + 3, y0 + 3], fill=MUTE + (255,))
+            d.text((w * 0.5, h * 0.90), 'Daily', font=F(PFONT, int(h * 0.08)),
+                   fill=MUTE + (255,), anchor='mm')
+        elif kind == 'cal':
+            d.text((w * 0.09, h * 0.12), 'Daily Activity',
+                   font=F(PFONT, int(h * 0.11)), fill=TXT + (255,))
+        elif kind == 'progress':
+            d.text((w * 0.09, h * 0.16), p['label'], font=F(PFONT, int(h * 0.12)),
+                   fill=MUTE + (255,))
+            bx0, bx1, by = w * 0.09, w * 0.91, h * 0.82
+            bh = h * 0.09
+            d.rounded_rectangle([bx0, by, bx1, by + bh], int(bh / 2),
+                                fill=MUTE + (110,))
         return im
 
-    def w_clock(w, h):
-        im = _wcard(w, h)
+    def w_paint(kind, base, w, h, p, v, tt, lit):
+        """lit = Anzahl 'aktiver' Kalender-Dots (fuer den fuellenden Verlauf)."""
+        im = base.copy()
         d = ImageDraw.Draw(im)
-        cx, cy, r = w / 2, h * 0.52, min(w, h) * 0.30
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=MUTE + (255,),
-                  width=max(int(r * 0.03), 2))
-        for a in range(12):
-            an = a * math.pi / 6
-            x0 = cx + math.sin(an) * r * 0.86
-            y0 = cy - math.cos(an) * r * 0.86
-            d.ellipse([x0 - 3, y0 - 3, x0 + 3, y0 + 3], fill=MUTE + (255,))
-        for an, ln, wd, col in ((1.1, 0.5, 6, TXT), (2.4, 0.72, 5, TXT),
-                                (4.0, 0.8, 3, ACC)):
-            d.line([cx, cy, cx + math.sin(an) * r * ln,
-                    cy - math.cos(an) * r * ln], fill=col + (255,), width=wd)
-        d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=ACC + (255,))
-        d.text((w * 0.5, h * 0.90), 'Daily', font=F(PFONT, int(h * 0.08)),
-               fill=MUTE + (255,), anchor='mm')
-        return im
-
-    def w_cal(w, h):
-        im = _wcard(w, h)
-        d = ImageDraw.Draw(im)
-        d.text((w * 0.09, h * 0.10), 'Daily Activity',
-               font=F(PFONT, int(h * 0.11)), fill=TXT + (255,))
-        cols, rows = 7, 3
-        gx = w * 0.82 / cols
-        r = gx * 0.30
-        for ry in range(rows):
-            for cxx in range(cols):
-                x = w * 0.11 + cxx * gx
-                y = h * 0.40 + ry * gx * 0.95
-                v = (cxx + ry * 3) % 5
-                col = ACC if v == 0 else (MUTE if v > 2 else
-                                          (min(ACC[0], 255), 200, 90))
-                d.ellipse([x - r, y - r, x + r, y + r], fill=col + (255,))
-        return im
-
-    def w_progress(w, h, pct, label):
-        im = _wcard(w, h)
-        d = ImageDraw.Draw(im)
-        d.text((w * 0.09, h * 0.16), label, font=F(PFONT, int(h * 0.12)),
-               fill=MUTE + (255,))
-        d.text((w * 0.09, h * 0.34), f'{pct}%', font=F(PFONT, int(h * 0.30)),
-               fill=TXT + (255,))
-        bx0, bx1, by = w * 0.09, w * 0.91, h * 0.82
-        bh = h * 0.09
-        d.rounded_rectangle([bx0, by, bx1, by + bh], int(bh / 2),
-                            fill=MUTE + (110,))
-        d.rounded_rectangle([bx0, by, bx0 + (bx1 - bx0) * pct / 100.0, by + bh],
-                            int(bh / 2), fill=ACC + (255,))
+        if kind == 'stat':
+            bx, by = int(w * 0.10), int(h * 0.16)
+            d.polygon([(bx + 14, by), (bx - 6, by + 34), (bx + 10, by + 34),
+                       (bx - 4, by + 66), (bx + 30, by + 24), (bx + 12, by + 24)],
+                      fill=ACC + (255,))
+            d.text((w * 0.20, h * 0.10), f'{int(round(v))}%',
+                   font=F(PFONT, int(h * 0.24)), fill=TXT + (255,))
+            n = 5
+            active = v / 100.0 * n                      # Balken fuellen mit v
+            bw = w * 0.115
+            gap = (w * 0.80 - n * bw) / (n - 1)
+            x = w * 0.10
+            y1, hmax = h * 0.86, h * 0.34
+            for k in range(n):
+                hh = hmax * (0.35 + 0.16 * k)
+                col = ACC if k < active else MUTE
+                d.rounded_rectangle([x, y1 - hh, x + bw, y1], int(bw * 0.32),
+                                    fill=col + (255,))
+                x += bw + gap
+        elif kind == 'clock':
+            cx, cy, r = w / 2, h * 0.50, min(w, h) * 0.30
+            # Zeiger ticken: Sekundenzeiger sweept, Minute/Stunde langsam
+            for base_an, spd, ln, wd, col in (
+                    (0.6, 0.09, 0.5, 6, TXT), (2.1, 1.1, 0.72, 5, TXT),
+                    (0.0, 6.3, 0.82, 3, ACC)):
+                an = base_an + tt * spd
+                d.line([cx, cy, cx + math.sin(an) * r * ln,
+                        cy - math.cos(an) * r * ln], fill=col + (255,), width=wd)
+            d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=ACC + (255,))
+        elif kind == 'cal':
+            cols, rows = 7, 3
+            gx = w * 0.82 / cols
+            r = gx * 0.30
+            idx = 0
+            for ry in range(rows):
+                for cxx in range(cols):
+                    x = w * 0.11 + cxx * gx
+                    y = h * 0.42 + ry * gx * 0.95
+                    on = idx < lit
+                    vv = (cxx + ry * 3) % 5
+                    if not on:
+                        col = MUTE
+                    else:
+                        col = ACC if vv == 0 else (MUTE if vv > 2 else
+                                                   (min(ACC[0], 255), 200, 90))
+                    d.ellipse([x - r, y - r, x + r, y + r], fill=col + (255,))
+                    idx += 1
+        elif kind == 'progress':
+            d.text((w * 0.09, h * 0.34), f'{int(round(v))}%',
+                   font=F(PFONT, int(h * 0.30)), fill=TXT + (255,))
+            bx0, bx1, by = w * 0.09, w * 0.91, h * 0.82
+            bh = h * 0.09
+            fillw = (bx1 - bx0) * v / 100.0
+            if fillw > bh:
+                d.rounded_rectangle([bx0, by, bx0 + fillw, by + bh],
+                                    int(bh / 2), fill=ACC + (255,))
         return im
 
     def wordmark_sprite(n_chars):
@@ -1292,6 +1309,57 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             d.text((x, 0), ch, font=f, fill=col + (255,))
             x += d0.textlength(ch, font=f)
         return im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
+
+    # ---------- App-Store-Journey (Template 'appstore', Referenz-Video 2) ------
+    def txt_spr(s, px, col, font=None):
+        f = F(font or PFONT, px * 2)
+        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        w = int(d0.textlength(s, font=f)) + 8
+        asc, desc = f.getmetrics()
+        im = Image.new('RGBA', (w, asc + desc), (0, 0, 0, 0))
+        ImageDraw.Draw(im).text((4, 0), s, font=f, fill=tuple(col) + (255,))
+        return im.resize((max(w // 2, 1), max((asc + desc) // 2, 1)), Image.LANCZOS)
+
+    def button_spr(s, w, h):
+        lo = (max(ACC[0] - 34, 0), max(ACC[1] - 34, 0), max(ACC[2] - 20, 0))
+        im = card_material(w, h, h // 2, fill_top=ACC, fill_bot=lo)
+        f = F(PFONT, int(h * 0.44))
+        d = ImageDraw.Draw(im)
+        tw = d.textlength(s, font=f)
+        asc, desc = f.getmetrics()
+        d.text(((w - tw) / 2, (h - asc - desc) / 2), s, font=f,
+               fill=(255, 255, 255, 255))
+        return im
+
+    def _star(d, cx, cy, r, col):
+        pts = []
+        for k in range(10):
+            an = -math.pi / 2 + k * math.pi / 5
+            rr = r if k % 2 == 0 else r * 0.42
+            pts.append((cx + math.cos(an) * rr, cy + math.sin(an) * rr))
+        d.polygon(pts, fill=col + (255,))
+
+    def rating_spr(w, h):
+        im = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        cw = w / 3
+        for i, (big, small) in enumerate(
+                (('4.8', 'RATINGS'), ('4+', 'AGE'), ('#1', 'CHART'))):
+            cx = i * cw + cw / 2
+            f = F(PFONT, int(h * 0.30))
+            if i == 0:                            # gezeichneter Stern statt Glyph
+                tw = d.textlength(big, font=f)
+                d.text((cx - h * 0.10, h * 0.32), big, font=f,
+                       fill=TXT + (255,), anchor='mm')
+                _star(d, cx + tw / 2 + h * 0.02, h * 0.32, h * 0.12, ACC)
+            else:
+                d.text((cx, h * 0.32), big, font=f, fill=TXT + (255,), anchor='mm')
+            d.text((cx, h * 0.74), small, font=F(PFONT, int(h * 0.15)),
+                   fill=MUTE + (255,), anchor='mm')
+            if i < 2:
+                d.line([(i + 1) * cw, h * 0.18, (i + 1) * cw, h * 0.82],
+                       fill=MUTE + (120,), width=2)
+        return im
 
     def put(canvas, spr, cx, cy, scale=1.0, op=1.0, vblur=0.0, rot=0.0,
             lift=1.0):
@@ -1337,24 +1405,45 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     WIDGETS = []
     if template == 'widgets':
         _defs = [
-            # (sprite, cx, cy, t_in, enter, depth)   cx/cy normiert
-            (w_stat(int(W * .40), int(W * .40), 57, 3, '~ 2 hours'),
+            # (kind, w, h, params, cx, cy, t_in, enter, depth)  cx/cy normiert
+            ('stat', .40, .40, {'target': 57, 'label': '~ 2 hours'},
              0.30, 0.30, 0.55, 'pop', 1.20),
-            (w_clock(int(W * .34), int(W * .34)),
-             0.72, 0.26, 0.95, 'slideR', 1.05),
-            (w_cal(int(W * .46), int(W * .30)),
-             0.35, 0.53, 1.45, 'slideL', 1.28),
-            (w_progress(int(W * .40), int(W * .34), 22, 'Battery'),
+            ('clock', .34, .34, {}, 0.72, 0.26, 0.95, 'slideR', 1.05),
+            ('cal', .46, .30, {}, 0.35, 0.53, 1.45, 'slideL', 1.28),
+            ('progress', .40, .34, {'target': 22, 'label': 'Battery'},
              0.71, 0.55, 1.95, 'drop', 1.12),
-            (w_stat(int(W * .44), int(W * .42), 100, 5, 'Fully charged'),
+            ('stat', .44, .42, {'target': 100, 'label': 'Fully charged'},
              0.50, 0.79, 2.55, 'pop', 1.35),
         ]
-        for spr, cxn, cyn, tin, ent, dep in _defs:
-            WIDGETS.append({'spr': spr, 'cx': cxn * W, 'cy': cyn * H,
+        for kind, wf, hf, p, cxn, cyn, tin, ent, dep in _defs:
+            ww, hh = int(W * wf), int(W * hf)
+            WIDGETS.append({'kind': kind, 'w': ww, 'h': hh, 'p': p,
+                            'base': w_base(kind, ww, hh, p),
+                            'cx': cxn * W, 'cy': cyn * H,
                             't': tin, 'ent': ent, 'dep': dep})
             events.append((tin + 0.28, 'whoosh_soft', 0.5))
             events.append((tin + 0.36, 'press', 0.26))
-    else:
+    # ---- App-Store-Journey: eine Hero-Karte baut sich Element fuer Element auf
+    APP = None
+    if template == 'appstore':
+        CW, CH = 860, 560
+        card = card_material(CW, CH, 56)
+        # Kinder relativ zur Karten-Mitte (CW/2, CH/2), (sprite, ccx, ccy, t, ent)
+        _title = (pills or ['DouchkoVE'])[0]
+        kids = [
+            (logo_sprite(150), 150, 150, 0.85, 'pop'),
+            (txt_spr(_title, 62, TXT), 300 + txt_spr(_title, 62, TXT).width // 2,
+             120, 1.15, 'slideR'),
+            (txt_spr('Productivity', 30, MUTE),
+             300 + txt_spr('Productivity', 30, MUTE).width // 2, 190, 1.35, 'fade'),
+            (button_spr('Open', 190, 74), CW - 150, 130, 1.65, 'pop'),
+            (rating_spr(CW - 120, 150), CW / 2, 420, 2.10, 'up'),
+        ]
+        APP = {'card': card, 'cw': CW, 'ch': CH, 'kids': kids, 't': 0.55}
+        for tk in (0.55, 0.85, 1.15, 1.35, 1.65, 2.10):
+            events.append((tk + 0.28, 'whoosh_soft', 0.45))
+            events.append((tk + 0.36, 'press', 0.24))
+    elif template != 'widgets':
         events.append((T_LOGO + 0.28, 'whoosh_soft', 0.60))
         events.append((T_LOGO + 0.36, 'press', 0.30))
         events.append((T_UP + 0.25, 'whoosh_soft', 0.35))
@@ -1407,6 +1496,13 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                 ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT - wi * 0.05) / 0.28)
                 if ex <= 0:
                     continue
+                # Micro-Life: Zahl/Balken zaehlen ~0.9s nach Landung hoch, Uhr
+                # tickt fortlaufend, Kalender-Dots fuellen sich nacheinander.
+                cu = _smoothstep(min(max((t - wd['t'] - 0.30) / 0.90, 0), 1))
+                val = wd['p'].get('target', 0) * cu
+                lit = int(21 * _smoothstep(min(max((t - wd['t'] - 0.20) / 1.1, 0), 1)))
+                spr = w_paint(wd['kind'], wd['base'], wd['w'], wd['h'],
+                              wd['p'], val, t - wd['t'], lit)
                 # variierte Einflug-Arten (Bewegungs-Variation)
                 dx = dy = 0.0
                 rot = fr_
@@ -1424,16 +1520,47 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                     dy = (1 - e) * -H * 0.35
                     rot += (1 - e) * 5
                 dx += (1 - ex) * (W * 0.4 if wi % 2 else -W * 0.4)
-                put(fr, wd['spr'], wd['cx'] + pdx + dx,
+                put(fr, spr, wd['cx'] + pdx + dx,
                     wd['cy'] + pdy + dy + fy,
                     sc * (0.92 + 0.08 * ex),
                     min((t - wd['t']) / 0.09, 1) * ex,
                     vblur=vel(f'w{wi}', e) * 4, rot=rot, lift=1.25)
-            # Finale (Logo + Wortmarke) kommt gemeinsam unten
+        # === Template 'appstore': Hero-Karte baut sich Element fuer Element auf
+        if template == 'appstore' and APP and APP['t'] <= t < T_EXIT + 0.4:
+            ec = _elastic(t - APP['t'])
+            pdx, pdy = cam(0.9)
+            fy, fr_ = idle(0.3, 0.6)
+            ex = 1.0 if t < T_EXIT else max(0.0, 1.0 - (t - T_EXIT) / 0.30)
+            gcx = W / 2 + pdx
+            gcy = H * 0.40 + pdy + fy
+            csc = (0.5 + 0.5 * ec) * gs * (0.92 + 0.08 * ex)
+            crot = (1 - ec) * -5 + fr_ + (1 - ex) * 8
+            put(fr, APP['card'], gcx, gcy, csc, min((t - APP['t']) / 0.10, 1) * ex,
+                vblur=vel('appc', ec) * 4, rot=crot, lift=1.3)
+            if ex > 0.05:                         # Kinder erst nach der Karte
+                for ci, (ks, ccx, ccy, tk, ent) in enumerate(APP['kids']):
+                    if t < tk:
+                        continue
+                    ek = _elastic(t - tk)
+                    ox = (ccx - APP['cw'] / 2) * csc
+                    oy = (ccy - APP['ch'] / 2) * csc
+                    kdx = kdy = 0.0
+                    kop = min((t - tk) / 0.10, 1) * ex
+                    ksc = csc
+                    if ent == 'pop':
+                        ksc = csc * (0.5 + 0.5 * ek)
+                    elif ent == 'slideR':
+                        kdx = (1 - ek) * 120
+                    elif ent == 'up':
+                        kdy = (1 - ek) * 90
+                    elif ent == 'fade':
+                        kop *= _smoothstep(min((t - tk) / 0.25, 1)) * ex
+                    put(fr, ks, gcx + ox + kdx, gcy + oy + kdy, ksc, kop,
+                        rot=crot)
         # --- Logo: elastisch rein mit Rotations-Overshoot, dann hoch-morphen.
         #     Mit Einblendung: das Logo raeumt fuer das Hero-Bild (blendet aus). ---
         _logo_end = (T_IMG if img_spr is not None else T_EXIT)
-        if template != 'widgets' and t < _logo_end:
+        if template == 'pills' and t < _logo_end:
             e_in = _elastic(t - T_LOGO)
             e_up = _elastic(t - T_UP)
             pdx, pdy = cam(0.7)
@@ -1450,7 +1577,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                 lift=1.15)
         # --- Einblendung: Hero-Bild fliegt rein (gleiches Material -> passend),
         #     schwebt, geht am Ende raus ---
-        if template != 'widgets' and img_spr is not None and T_IMG <= t < T_EXIT + 0.4:
+        if template == 'pills' and img_spr is not None and T_IMG <= t < T_EXIT + 0.4:
             e_i = _elastic(t - T_IMG)
             pdx, pdy = cam(0.85)
             fy, fr_ = idle(0.5, 0.8)
@@ -1463,7 +1590,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                 rot=(1 - e_i) * -6 + fr_ + (1 - ex) * 10, lift=1.3)
         # --- Pills: fliegen ABWECHSELND von den Seiten rein (Rotations-
         #     Overshoot), stapeln sich, schweben danach ---
-        if template != 'widgets' and t < T_EXIT + 0.4:
+        if template == 'pills' and t < T_EXIT + 0.4:
             base_y = H * 0.72 if img_spr is not None else H * 0.58
             for k, (txt, ts) in enumerate(PILLS):
                 if t < ts:
@@ -1578,7 +1705,7 @@ if __name__ == '__main__':
     ap.add_argument('--pills', default=None,
                     help='Komma-getrennte Kapsel-Woerter')
     ap.add_argument('--template', default='pills',
-                    choices=['pills', 'widgets'])
+                    choices=['pills', 'widgets', 'appstore'])
     a = ap.parse_args()
     if a.demo == 'ui':
         _pl = a.pills.split(',') if a.pills else None
