@@ -1189,6 +1189,52 @@ def _scenario_logic(clip, transcript, tmp):
     check('Stehend trotz Power 3', bool(kps) and not kps[0].get('scene_blend')
           and kps[0].get('refl') is not None)
 
+    # v99 Selbstbezug: "The captions are behind me" besteht komplett aus
+    # Sperrlisten-Woertern - die KI kann dort kein Keyword waehlen. Der
+    # deterministische Backstop erzeugt den Moment selbst.
+    def _wsr(text):
+        return [{'word': ' ' + w, 'start': i * .35, 'end': i * .35 + .3}
+                for i, w in enumerate(text.split())]
+    _sr = R._self_ref_intent({}, _wsr('The captions are behind me. More talk follows now.'))
+    check('Selbstbezug: "behind me" erzeugt behind-Moment',
+          bool(_sr) and _sr.get(3, {}).get('fx') == 'behind'
+          and _sr[3].get('n') == 2, str(_sr))
+    _sr2 = R._self_ref_intent({}, _wsr('My captions explode right now. Unrelated sentence here.'))
+    check('Selbstbezug: "captions explode" -> explosion, sichtbar vorn',
+          bool(_sr2) and _sr2.get(2, {}).get('anim') == 'explosion'
+          and _sr2[2].get('fx') != 'behind', str(_sr2))
+    _sr3 = R._self_ref_intent({}, _wsr('Diese Wörter liegen auf dem Boden. Danach normal weiter.'))
+    check('Selbstbezug DE: "auf dem Boden" -> ground/boden/liegend',
+          bool(_sr3) and _sr3.get(3, {}).get('fx') == 'ground'
+          and _sr3[3].get('szene') == 'boden'
+          and _sr3[3].get('lage') == 'liegend', str(_sr3))
+    check('Selbstbezug: kein Treffer ohne Caption-Bezug',
+          R._self_ref_intent({}, _wsr('The prices explode this year.')) == {}
+          and R._self_ref_intent({}, _wsr('I give you my word about it.')) == {})
+    _sr5 = R._self_ref_intent({2: {'fx': 'behind', 'power': 2, 'n': 1}},
+                              _wsr('Watch this word fly across the screen.'))
+    check('Selbstbezug: bestehender Moment bekommt Handlung + wird sichtbar',
+          _sr5[2].get('anim') == 'spur' and _sr5[2].get('fx') == 'outline',
+          str(_sr5))
+    _wsr1 = _wsr('The captions are behind me. More talk follows now.')
+    _plsr = R.build_plans(_wsr1, set(_sr), cfg, S, W_, H_,
+                          lambda s, e: True, _sr)
+    _kpsr = [p for p in _plsr if p.get('kw_i') == 3]
+    check('Selbstbezug: "BEHIND ME" landet als behind-Plan',
+          bool(_kpsr) and _kpsr[0]['tpl'] == 'behind'
+          and 'BEHIND' in _kpsr[0].get('kw_txt', ''),
+          str(_kpsr[0].get('kw_txt') if _kpsr else None))
+    check('Prompt: Sperrliste im Selbstbezug ausgesetzt',
+          'Sperrliste AUSGESETZT' in R.REGIE_PROMPT
+          and 'NIE ohne Moment' in R.REGIE_PROMPT)
+    check('Selbstbezug-Backstop im Main verdrahtet',
+          '_self_ref_intent(fx_map, words)' in
+          open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+    check('anim_for kennt englische Aktions-Woerter (explode/fly/vanish)',
+          any(R._anim_hit('explodes', k) for k in dict(R.ANIM_HINTS)['explosion'])
+          and any(R._anim_hit('flies', k) for k in dict(R.ANIM_HINTS)['spur'])
+          and any(R._anim_hit('vanishes', k) for k in dict(R.ANIM_HINTS)['schwund']))
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

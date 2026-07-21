@@ -3,6 +3,43 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v99 Selbstbezug-Regie (Ismet: "Wenn jemand sagt 'The captions are
+  behind me', soll der Satz sich hinter der Person bilden. 'The captions
+  explode' -> explodieren.").** Kern-Erkenntnis: Das Verstaendnis existierte
+  in der KI-Regie schon teilweise (SELBSTBEZUG-/AKTION-WORT-Regeln,
+  _speech_intent, ORT-Tabelle, echte RVM-Occlusion bei fx 'behind') - aber
+  genau die Beispiel-Saetze SCHEITERTEN: "The captions are behind me"
+  besteht komplett aus Sperrlisten-Woertern (the/captions/are/behind/me),
+  die KI durfte dort kein Keyword waehlen, und _speech_intent kann nur
+  EXISTIERENDE Momente umlenken. Drei Bausteine:
+  (1) _self_ref_intent(): deterministischer Backstop, der Selbstbezug
+  erkennt (caption/captions/untertitel/subtitle immer; wort/text nur mit
+  Artikel - "ich gebe dir mein Wort" bleibt ein Versprechen) und den Moment
+  notfalls ERZEUGT: Orts-Ansage -> gleiche Tabelle wie _speech_intent
+  ("behind me" -> fx behind, Phrase "BEHIND ME" hinter der Person; "auf dem
+  Boden" -> ground/boden/liegend), Handlung -> gleiche Vokabeln wie anim_for
+  ("explode" -> anim explosion, sichtbar vorn als outline, NIE behind).
+  Existiert im Satz schon ein Moment, wird nur die Handlung ergaenzt
+  (behind wird dabei sichtbar). Laeuft in ALLEN Pfaden (KI, Regie-Cache,
+  Heuristik ohne Key) im Main; Heuristik-Keywords bleiben dabei erhalten
+  (_had_regie-Weiche).
+  (2) REGIE_PROMPT verschaerft: In Selbstbezug-Saetzen ist die Sperrliste
+  AUSGESETZT - die KI darf/soll die angesagte Handlung oder den Ort selbst
+  als Keyword waehlen ("Ein Selbstbezug-Satz darf NIE ohne Moment bleiben").
+  (3) ANIM_HINTS um englische Aktions-Vokabeln erweitert (explod/burst,
+  fall/drop/crash, rise/grow/soar, disappear/vanish/gone, fly/shoot/race,
+  rain/pour, shake/tremble, flip/tilt/fold) - staerkt auch anim_for und
+  _regie_sanity fuer englische Videos.
+  BEWEIS: E2E-Render ohne API-Key mit "The captions are behind me. And my
+  captions explode right now." -> Log "Selbstbezug: 2 Caption(s) tun, was
+  der Sprecher ansagt", Frame bei 2.4s zeigt "BEHIND ME" von der Person
+  verdeckt (echte Matting-Occlusion), Frame bei 5.0s zeigt "EXPLODE" vorn
+  mit Explosions-Anim. 10 neue Tests (Ort EN, Tat EN, DE Boden, 2x Negativ,
+  Ergaenzen-statt-Doppeln, build_plans-Durchstich "BEHIND ME" als
+  behind-Plan, Prompt-Garantie, Main-Verdrahtung, EN-Vokabeln).
+  Regression 541/541 + GUI_OK. Ehrlich: Optik der Occlusion auf echtem
+  Material (echte RVM-Matte statt Synthetik-Kreis) prueft Ismet auf Windows.
+
 - **v98 Audit-Batch (Ismet: "Mach alles, was Sinn macht" - nach der
   Konkurrenz-/Produkt-Analyse mit 9 Agenten).** 20 Punkte:
   QUICK-WINS/BUGS: (1) "Fix transcript"-Crash: JS schrieb auf #analyzeStatus/

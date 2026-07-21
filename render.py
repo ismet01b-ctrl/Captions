@@ -2239,6 +2239,14 @@ merken musst: Deutschland nimmt 14 Milliarden ein" ist "14 Milliarden" richtig, 
   "bruch", verschwinden -> "schwund") - sofern es zum Moment passt. Das ist der
   staerkste Beweis, dass das Video lebt: der Zuschauer sieht sofort, die
   Captions HOEREN zu.
+  In diesen Selbstbezug-Saetzen ist die Sperrliste AUSGESETZT: waehle die
+  angesagte Handlung oder den angesagten Ort SELBST als Keyword ("behind me",
+  "explode"), auch wenn es Verb, Praeposition oder Pronomen ist - der Satz
+  handelt von der Caption, also zeigt die Caption genau das. Orts-Ansagen
+  ("the captions are behind me" -> Keyword "behind me" mit fx "behind";
+  "die Untertitel liegen auf dem Boden" -> fx "ground", szene "boden",
+  lage "liegend") bekommen fx/szene/lage nach der ORT-Tabelle oben.
+  Ein Selbstbezug-Satz darf NIE ohne Moment bleiben.
 - SICHTBARKEIT VOR VERSTECKEN: Ein Wort, dessen ANIMATION der Punkt ist (es
   soll explodieren, zerbrechen, fliegen, stuerzen), darf NICHT fx "behind" sein
   - hinter der Person und gedimmt sieht man den Effekt nicht. Waehle dann eine
@@ -3048,6 +3056,116 @@ def _speech_intent(fx_map, words):
     return fx_map
 
 
+# v99 Selbstbezug: Woran wir erkennen, dass ueber die CAPTIONS SELBST
+# gesprochen wird. Eindeutige Woerter zaehlen immer; mehrdeutige (Wort/Text)
+# nur mit Artikel davor ('this word', 'der Text') - 'ich gebe dir mein Wort'
+# ist ein Versprechen, kein Selbstbezug.
+_SELF_NOUN_ONE = {'caption', 'captions', 'untertitel', 'subtitle', 'subtitles'}
+_SELF_NOUN_PAIR = {'wort', 'worte', 'woerter', 'wörter', 'word', 'words',
+                   'text', 'texte'}
+_SELF_DET = {'the', 'this', 'these', 'der', 'die', 'das', 'den',
+             'dieses', 'diese', 'dieser'}
+# Animationen, die eine angesagte HANDLUNG sichtbar ausfuehren koennen
+_SELF_ACTION_ANIMS = ('explosion', 'bruch', 'spur', 'schwund', 'sturz',
+                      'anstieg', 'regen', 'magnet', 'zittern', 'kippen',
+                      'rutsche')
+
+
+def _self_ref_intent(fx_map, words):
+    """v99: 'The captions are behind me' / 'meine Untertitel explodieren' -
+    spricht der Sprecher ueber die Captions SELBST und sagt, wo sie sind oder
+    was sie tun, bekommt GENAU dieser Satz seinen Moment. Die KI-Sperrliste
+    laesst in solchen Saetzen oft kein Keyword zu (behind/me/are sind alle
+    verboten), und ohne API-Key gibt es gar keine KI-Wahl - darum erzeugt
+    dieser deterministische Backstop den Moment notfalls selbst. Orts-Ansagen
+    nutzen dieselbe Tabelle wie _speech_intent, Handlungen dieselben Vokabeln
+    wie anim_for. Laeuft in ALLEN Pfaden (KI, Regie-Cache, Heuristik)."""
+    if not words:
+        return fx_map
+    out = dict(fx_map) if fx_map else {}
+    n_w = len(words)
+
+    def _tok(j):
+        return clean(words[j].get('word', '')).lower()
+
+    def _ende(j):
+        return str(words[j].get('word', '')).rstrip().endswith(('.', '!', '?'))
+
+    saetze, a = [], 0
+    for j in range(n_w):
+        if _ende(j) or j == n_w - 1:
+            saetze.append((a, j))
+            a = j + 1
+    hints = dict(ANIM_HINTS)
+    neu = 0
+    for (a, b) in saetze:
+        toks = [_tok(j) for j in range(a, b + 1)]
+        ref_at = None
+        for k, t in enumerate(toks):
+            if t in _SELF_NOUN_ONE or (t in _SELF_NOUN_PAIR and k > 0
+                                       and toks[k - 1] in _SELF_DET):
+                ref_at = k
+                break
+        if ref_at is None:
+            continue
+        # 1) Orts-Ansage im Satz (nahe am Selbstbezug)?
+        tgt = None
+        for fx, szene, lage, triggers in _INTENT_SPATIAL:
+            for trig in triggers:
+                tt = trig.split()
+                L = len(tt)
+                for k in range(0, len(toks) - L + 1):
+                    if toks[k:k + L] == tt and abs(k - ref_at) <= 8:
+                        tgt = ('ort', k, L, fx, szene, lage)
+                        break
+                if tgt:
+                    break
+            if tgt:
+                break
+        # 2) sonst: angesagte Handlung (gleiches Vokabular wie anim_for)
+        if tgt is None:
+            for k, t in enumerate(toks):
+                if not t or abs(k - ref_at) > 8:
+                    continue
+                for anim in _SELF_ACTION_ANIMS:
+                    if any(_anim_hit(t, key) for key in hints.get(anim, ())):
+                        tgt = ('tat', k, 1, anim, '', '')
+                        break
+                if tgt:
+                    break
+        if tgt is None:
+            continue
+        kind, k, L, val, szene, lage = tgt
+        vorhandene = [i for i in out if a <= i <= b]
+        if vorhandene:
+            # Es gibt schon einen Moment im Satz: nur die Handlung ergaenzen
+            # (Orts-Ansagen hat _speech_intent dort bereits umgesetzt).
+            i0 = min(vorhandene, key=lambda i: abs(i - (a + k)))
+            if kind == 'tat' and not out[i0].get('anim'):
+                out[i0]['anim'] = val
+                if out[i0].get('fx') == 'behind' and val in _VISIBLE_ANIM:
+                    out[i0]['fx'] = 'outline'   # Bewegung muss man SEHEN
+                neu += 1
+            continue
+        i = a + k
+        if kind == 'ort':
+            ent = {'fx': 'behind' if szene == 'himmel' else val,
+                   'power': 2, 'n': max(1, min(L, 4))}
+            if szene:
+                ent['szene'] = szene
+            if lage:
+                ent['lage'] = lage
+        else:
+            # Sichtbar vorn (nie behind) - die Bewegung IST der Punkt.
+            ent = {'fx': 'outline', 'power': 2, 'n': 1, 'anim': val}
+        out[i] = ent
+        neu += 1
+    if neu:
+        print(f"  Selbstbezug: {neu} Caption(s) tun, was der Sprecher ansagt")
+        return out
+    return fx_map
+
+
 def _corrections_path():
     return os.path.join(os.environ.get('DVE_DATA') or os.path.join(HERE, 'data'),
                         'corrections.json')
@@ -3780,6 +3898,7 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                          'stroemung', 'strömung', 'see', 'ufer', 'kueste',
                          'küste', 'nass', 'flut', 'ebbe', 'sturm', 'brandung')),
               ('zittern', ('angst', 'panik', 'nervoes', 'beben', 'stress', 'chaos',
+                           'shake', 'shakes', 'shaking', 'tremble',
                            'furcht', 'schreck', 'terror', 'zittert', 'schaudert',
                            'unruhe', 'aufregung', 'hektik', 'druck', 'krise')),
               ('neon', ('neon', 'nacht', 'club', 'leucht', 'glow', 'licht', 'city',
@@ -3798,11 +3917,13 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
               ('sturz', ('stuerz', 'stürz', 'sturz', 'absturz', 'faellt', 'fällt',
                          'fallen', 'sinkt', 'sinken', 'einbruch', 'rezession',
                          'pleite', 'verlust', 'abwaerts', 'abwärts',
-                         'minus', 'talfahrt', 'billiger', 'weniger')),
+                         'minus', 'talfahrt', 'billiger', 'weniger',
+                         'fall', 'drop', 'crash', 'plunge', 'sink')),
               ('anstieg', ('steigt', 'steigen', 'anstieg', 'rekord', 'gewinn',
                            'zuwachs', 'kletter', 'teurer', 'hoeher', 'höher',
                            'verdoppelt', 'verdreifacht', 'aufwaerts', 'aufwärts',
-                           'zunahme')),
+                           'zunahme', 'rise', 'rises', 'rising', 'grow', 'soar',
+                           'climb', 'skyrocket')),
               ('wende', ('kippt', 'wende', 'umkehr', 'gegenteil', 'ploetzlich',
                          'plötzlich', 'umgekehrt', 'kehrtwende', 'umschwung',
                          'dreht', 'wendepunkt', 'stattdessen')),
@@ -3812,7 +3933,7 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
               ('schwund', ('verschwindet', 'verschwunden', 'verloren',
                            'geloescht', 'gelöscht', 'vorbei', 'verpuff', 'nichts',
                            'aufgeloest', 'aufgelöst', 'schwindet', 'futsch',
-                           'dahin')),
+                           'dahin', 'disappear', 'vanish', 'gone')),
               ('knall', ('punkt', 'fakt', 'fakten', 'schluss',
                          'basta', 'beweis', 'bewiesen', 'definitiv',
                          'garantiert')),
@@ -3832,13 +3953,15 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                         'jagt', 'speed', 'eilt', 'sekunden', 'fliegt', 'fliegen',
                         'sausen', 'saust', 'huscht', 'schiesst', 'schießt',
                         'flitz', 'zischt', 'segelt', 'schwebt vorbei',
-                        'dash', 'sprint', 'rennen', 'rennt', 'laeuft', 'läuft')),
+                        'dash', 'sprint', 'rennen', 'rennt', 'laeuft', 'läuft',
+                        'fly', 'flies', 'flying', 'shoot', 'race', 'rush')),
               # ---- v71
               ('kippen', ('kippt', 'kippen', 'klappt', 'aufklappt', 'oeffnet',
-                          'öffnet', 'aufgeschlagen', 'kapitel')),
+                          'öffnet', 'aufgeschlagen', 'kapitel', 'flip', 'tilt',
+                          'fold')),
               ('explosion', ('explodiert', 'explosion', 'sprengt', 'gesprengt',
                              'zerstoert', 'zerreist', 'zerreißt', 'detoniert',
-                             'blast')),
+                             'blast', 'explod', 'burst', 'detonat')),
               ('magnet', ('zieht', 'anziehung', 'magnet', 'sog', 'sammelt',
                           'buendel', 'bündel', 'fokussiert', 'zieht an',
                           'ballt', 'rein', 'reinkommt', 'reinfliegt',
@@ -3847,7 +3970,8 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
               ('wackel', ('lustig', 'quatsch', 'unsinn', 'witz', 'komisch',
                           'cartoon', 'kindisch', 'quirlig', 'bounce')),
               ('regen', ('regen', 'faellt', 'tropfen', 'rieselt', 'schuettet',
-                         'schüttet', 'niederschlag', 'sturm')),
+                         'schüttet', 'niederschlag', 'sturm', 'rain', 'pour',
+                         'drip')),
               ('zoom_punch', ('achtung', 'punchline', 'boom', 'wumms', 'plopp',
                               'hier', 'schau', 'guck', 'siehst', 'sehen')),
               ('rutsche', ('rutscht', 'schlittert', 'gleitet', 'slide', 'slidet',
@@ -6316,11 +6440,23 @@ def main():
                                          **({'lage': v['lage']} if v.get('lage') else {})}
                                         for i, v in sorted(fx_map.items())]},
                           open(regie_path, 'w', encoding='utf-8'))
+    # v99 Selbstbezug-Backstop: "The captions are behind me" besteht komplett
+    # aus Sperrlisten-Woertern - die KI kann dort oft kein Keyword setzen, und
+    # ohne API-Key gibt es gar keine Regie. Der deterministische Backstop
+    # erzeugt den Moment dann selbst (gleiches Verhalten in KI-, Cache- und
+    # Heuristik-Pfad). _had_regie merkt sich, ob die KEYWORD-Wahl von der KI
+    # kam - nur dann bleibt die Auto-Heuristik aus.
+    _had_regie = bool(fx_map)
+    fx_map = _self_ref_intent(fx_map, words)
     if fx_map:
         kw = set(fx_map)
-        manual = detect_keywords(words, {**cfg, 'keywords': {**cfg['keywords'], 'auto': False}},
-                                 args.keywords)
-        kw |= manual
+        if _had_regie:
+            manual = detect_keywords(words, {**cfg, 'keywords': {**cfg['keywords'], 'auto': False}},
+                                     args.keywords)
+            kw |= manual
+        else:
+            # Nur Selbstbezug-Momente, keine KI-Wahl: volle Heuristik bleibt an.
+            kw |= detect_keywords(words, cfg, args.keywords)
         exclude = {k.lower() for k in (cfg['keywords'].get('exclude') or [])}
         kw = {i for i in kw if clean(words[i]['word']).lower() not in exclude}
         print(f"KI-Regie: {len(kw)} Keywords gewaehlt")
