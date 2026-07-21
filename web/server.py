@@ -1888,6 +1888,8 @@ def run_job(jid):
                             f'Render {jid} ({verbrauch}s)')
         if os.path.exists(os.path.join(job_dir(jid), 'master_clean.mp4')):
             set_state(jid, wm=True)          # v101: freischaltbar nach Kauf
+        if os.path.exists(os.path.join(job_dir(jid), 'fertig_kontakt.jpg')):
+            set_state(jid, kontakt=True)     # v101g: Momente-Beweisbogen da
         # v101 Silent-Score: render.py legt <input>_silent.json ab, wenn die
         # Stumm-Bewertung lief - in den Job-State fuer die UI uebernehmen.
         try:
@@ -2963,6 +2965,19 @@ def video(jid: str, request: Request, download: int = 0):
     return FileResponse(p, media_type='video/mp4')
 
 
+@app.get('/api/contact/{jid}')
+def contact_sheet_file(jid: str, request: Request):
+    """v101g: Regie-Kontaktbogen - alle Momente des Renders als ein Grid-JPG
+    (echte komponierte Frames). Liegt neben fertig.mp4."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This video belongs to another account.')
+    p = os.path.join(job_dir(jid), 'fertig_kontakt.jpg')
+    if not os.path.exists(p):
+        raise HTTPException(404, 'No contact sheet for this job.')
+    return FileResponse(p, media_type='image/jpeg',
+                        filename='DouchkoVE_Moments.jpg')
+
+
 @app.get('/api/poster/{jid}')
 def poster(jid: str, request: Request):
     """v84: Standbild fuer die Library-Kachel. Beim ersten Abruf aus dem
@@ -3029,6 +3044,8 @@ def api_library(request: Request):
             'has_srt': bool(j.get('input')) and os.path.exists(
                 os.path.splitext(j['input'])[0] + '_transcript2.json'),
             'wm': bool(j.get('wm')),
+            # v101g: Regie-Kontaktbogen (Grid aller Momente) vorhanden?
+            'kontakt': os.path.exists(os.path.join(d, 'fertig_kontakt.jpg')),
         })
     items.sort(key=lambda x: x['created'], reverse=True)
     return {'items': items, 'retention_days': RETENTION_DAYS}

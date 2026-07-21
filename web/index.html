@@ -1773,6 +1773,9 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           </button>
           <a class="btn secondary" id="dlSrt" download style="flex:1; min-width:140px;"
              title="Subtitle file for YouTube or your editing software">SRT subtitles</a>
+          <a class="btn secondary hidden" id="dlKontakt" target="_blank" rel="noopener"
+             style="flex:1; min-width:140px;"
+             title="One image with every rendered caption moment">Moment sheet</a>
           <button class="btn secondary" id="btnAgain" style="flex:1; min-width:180px;">New video</button>
         </div>
         <!-- v98: Status der Re-Analyse nach Transkript-Korrektur. Vorher
@@ -2959,6 +2962,7 @@ async function renderLibrary() {
           <a class="btn secondary" href="/api/video/${it.jid}?download=1">Download</a>
           ${it.has_mov ? `<a class="btn secondary" href="/api/mov/${it.jid}" title="ProRes 4444 with alpha — drop straight into Premiere">MOV&nbsp;·&nbsp;Alpha</a>` : ''}
           ${it.has_srt ? `<a class="btn secondary" href="/api/subtitles/${it.jid}" title="Subtitle file for YouTube or your editing software">SRT</a>` : ''}
+          ${it.kontakt ? `<a class="btn secondary" href="/api/contact/${it.jid}" target="_blank" rel="noopener" title="One image with every rendered caption moment">Moments</a>` : ''}
           ${it.wm ? `<button class="btn" data-unlock="${it.jid}" title="Your first purchase removes the watermark from this exact video - no re-render">Unlock&nbsp;HD</button>` : ''}
         </div>
       </div>`;
@@ -3615,6 +3619,7 @@ async function pollRender() {
       State.progTarget = 1;
       State.silentScore = (typeof st.silent_score === 'number') ? st.silent_score : null;
       State.silentHints = st.silent_hints || [];
+      State.kontakt = !!st.kontakt;   // v101g: Moment sheet vorhanden?
       if (State.progRAF) cancelAnimationFrame(State.progRAF);
       State.progRAF = null; State.progShown = 0;
       $('#progressCard').classList.add('hidden');
@@ -3705,6 +3710,15 @@ function renderSuccess() {
   $('#dlLink').href = '/api/video/' + State.jid + '?download=1';
   const srt = $('#dlSrt');
   if (srt) srt.href = '/api/subtitles/' + State.jid;
+  // v101g: Moment sheet (Kontaktbogen) - nur zeigen, wenn der Render einen hat
+  const kb = $('#dlKontakt');
+  if (kb) {
+    kb.classList.add('hidden');
+    if (State.kontakt) {
+      kb.href = '/api/contact/' + State.jid;
+      kb.classList.remove('hidden');
+    }
+  }
   // v98: Wasserzeichen-Upsell nur fuer Nicht-Kaeufer einblenden
   const ups = $('#wmUpsell');
   if (ups) {

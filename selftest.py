@@ -142,6 +142,13 @@ def _scenario_1(clip, transcript, tmp):
     check('Wort-Timing nachjustiert', 'nachjustiert' in log)
     check('SFX intelligent gesetzt', 'Onset' in log)
     check('Sound-Pack wird im Render benutzt', 'Sound-Pack:' in log)
+    # v101g: Kontaktbogen entsteht beim Voll-Render (echte Moment-Frames)
+    _kbp = os.path.splitext(out)[0] + '_kontakt.jpg'
+    _kbi = cv2.imread(_kbp) if os.path.exists(_kbp) else None
+    check('v101g: Kontaktbogen liegt neben dem Video (gueltiges Bild)',
+          _kbi is not None and _kbi.shape[0] > 50 and _kbi.shape[1] >= 360
+          and 'Kontaktbogen:' in log,
+          str(_kbi.shape if _kbi is not None else 'fehlt'))
 
 
 def _scenario_2a(clip, transcript, tmp, mixed):
@@ -1518,6 +1525,29 @@ def _scenario_logic(clip, transcript, tmp):
           'estimate_light_dir(_lf)' in _src99
           and _src99.count('light_dir=_light') >= 2
           and "cfg['effects'].get('light_shadow'" in _src99)
+
+    # v101g Regie-Kontaktbogen: Grid aus echten Moment-Frames.
+    _kt1 = np.full((1920, 1080, 3), 60, np.uint8)
+    _kb5 = R.contact_sheet([_kt1] * 5, [f'W{i} @ {i}.0s' for i in range(5)])
+    check('v101g: Kontaktbogen-Grid (5 Tiles -> 3 Spalten, 2 Reihen)',
+          _kb5 is not None and _kb5.shape[1] == 3 * 360
+          and _kb5.shape[0] > 2 * (int(1920 * 360 / 1080)),
+          str(_kb5.shape if _kb5 is not None else None))
+    check('v101g: leere Liste -> None, 1 Tile -> 1 Spalte',
+          R.contact_sheet([], []) is None
+          and R.contact_sheet([_kt1], ['X @ 0.0s']).shape[1] == 360)
+    check('v101g: Kontaktbogen im Render verdrahtet (Peak-Frames + Save + Gate)',
+          '_kb_frames' in _src99 and '_kontakt.jpg' in _src99
+          and "cfg['effects'].get('contact_sheet'" in _src99)
+    _srv_g = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _ui_g = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v101g: Server-Endpoint + Job-Flag + Library-Feld',
+          "'/api/contact/{jid}'" in _srv_g
+          and 'fertig_kontakt.jpg' in _srv_g
+          and "kontakt=True" in _srv_g)
+    check('v101g: UI zeigt Moment sheet (Success + Library)',
+          'dlKontakt' in _ui_g and '/api/contact/' in _ui_g
+          and 'State.kontakt' in _ui_g)
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.

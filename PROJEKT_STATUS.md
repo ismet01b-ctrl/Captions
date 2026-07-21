@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101g Regie-Kontaktbogen (Innovations-Batch 7).** Beim Voll-Render wird
+  pro Keyword-Moment der Frame auf dem Hoehepunkt (Start + 40% der Dauer)
+  eingesammelt und als EIN Grid-JPG neben das Video gelegt
+  (fertig_kontakt.jpg, contact_sheet(): 3 Spalten, Label 'WORT @ 12.3s' pro
+  Tile). Echtes Compositing - exakt die Pixel, die auch im Video stehen
+  (inkl. Wasserzeichen im Free-Tier, kein Leak sauberer Frames).
+  BEWUSSTE ABWEICHUNG vom urspruenglichen "vor dem Credit-Render"-Plan:
+  eine Pre-Render-Vorschau waere nur ein Fake-Composite (Editor zeigt
+  Thumbs+Cutouts bereits) - der Bogen ist stattdessen der BEWEIS aus dem
+  echten Render. Web: GET /api/contact/{jid} (Owner-Check), Job-Flag
+  kontakt=True, 'Moment sheet'-Button im Success-Screen + 'Moments' in der
+  Library. Abschaltbar: effects.contact_sheet. 6 neue Tests (Grid-Geometrie,
+  Leer/Einzel-Fall, Render-/Server-/UI-Verdrahtung, echter Bogen im
+  render1-Voll-Render). Regression 589/589 + 7/1/1/2 Renders + GUI_OK.
+
 - **v101f Licht-Wahrheit Stufe 1 (Innovations-Batch 6).** Der Kontakt-Schatten
   unter dem stehenden Text war bisher ein symmetrischer Blob direkt darunter.
   Neu: estimate_light_dir() schaetzt die dominante Lichtrichtung aus einem

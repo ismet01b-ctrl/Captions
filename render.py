@@ -4563,6 +4563,33 @@ def platform_safe_zones(platform, W, H):
     }
 
 
+def contact_sheet(tiles, labels, cols=3, tile_w=360):
+    """v101g REGIE-KONTAKTBOGEN: baut aus den echten Moment-Frames ein Grid-Bild
+    (BGR). tiles = Liste BGR-Frames (beliebige Groessen, werden auf tile_w
+    skaliert), labels = Text pro Tile ('WORT @ 12.3s'). Unter jedem Tile eine
+    Beschriftungszeile. Rueckgabe None bei leerer Liste."""
+    if not tiles:
+        return None
+    cols = max(1, min(cols, len(tiles)))
+    cap_h = 26
+    cells = []
+    for img in tiles:
+        h, w = img.shape[:2]
+        th = max(int(h * tile_w / max(w, 1)), 8)
+        cells.append(cv2.resize(np.asarray(img, np.uint8), (tile_w, th)))
+    cell_h = max(c.shape[0] for c in cells) + cap_h
+    rows = (len(cells) + cols - 1) // cols
+    sheet = np.full((rows * cell_h, cols * tile_w, 3), 16, np.uint8)
+    for i, c in enumerate(cells):
+        r, k = divmod(i, cols)
+        y0, x0 = r * cell_h, k * tile_w
+        sheet[y0:y0 + c.shape[0], x0:x0 + tile_w] = c
+        lab = str(labels[i] if i < len(labels) else '')[:36]
+        cv2.putText(sheet, lab, (x0 + 6, y0 + cell_h - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (235, 235, 235), 1, cv2.LINE_AA)
+    return sheet
+
+
 def safe_zone_report(plans, pz, W, H):
     """v101d: prueft die fertig platzierten Momente gegen die Plattform-Maske
     und meldet, welche in die Button-Spalte oder Caption-Zeile ragen. Nur
@@ -7488,6 +7515,18 @@ def main():
             need_alpha[a:b] = True
     print(f"Matting-Fenster: {int(need_alpha.sum())} von ~{total_est} Frames")
 
+    # v101g Kontaktbogen: pro Keyword-Moment den Frame auf dem Hoehepunkt
+    # einsammeln (echtes Compositing, kein Editor-Fake). Nur Voll-Render.
+    _kb_frames = {}
+    if not args.window and cfg['effects'].get('contact_sheet', True):
+        for p in plans:
+            if 'kw_i' not in p:
+                continue
+            _pk = p['start'] + min(0.45, 0.4 * max(p['end'] - p['start'], 0.1))
+            _fi = int(_pk * fps)
+            _kb_frames.setdefault(_fi, (str(p.get('kw_txt', '?')), p['start']))
+    _kb_tiles, _kb_labels = [], []
+
     # Tiefen-Fenster: Okklusion nur, wo Szenen-Texte (B-Roll ground) aktiv sind
     need_depth = np.zeros(total_est, dtype=bool)
     dsess = None
@@ -7714,6 +7753,10 @@ def main():
                 _roi = comp[_y:_y + _h, _x:_x + _w]
                 _al = (_a[:, :, 3:4].astype(np.float32) / 255.0)
                 _roi[:] = _roi * (1 - _al) + _a[:, :, 2::-1].astype(np.float32) * _al
+            if fi in _kb_frames:                      # v101g: Moment-Beweisbild
+                _kt, _ks = _kb_frames.pop(fi)
+                _kb_tiles.append(np.clip(comp, 0, 255).astype(np.uint8).copy())
+                _kb_labels.append(f"{_kt} @ {_ks:.1f}s")
             try:
                 enc.stdin.write(np.clip(comp, 0, 255).astype(np.uint8).tobytes())
             except BrokenPipeError:
@@ -7813,6 +7856,17 @@ def main():
                       "Wasserzeichen ausgeliefert")
         except Exception as _we:
             print(f"WARNUNG: Watermark-Split uebersprungen ({type(_we).__name__})")
+
+    # v101g Kontaktbogen speichern: ein Blick = alle Momente, echtes Compositing.
+    if _kb_tiles:
+        try:
+            _kb = contact_sheet(_kb_tiles, _kb_labels)
+            if _kb is not None:
+                _kb_path = os.path.splitext(out_path)[0] + '_kontakt.jpg'
+                cv2.imwrite(_kb_path, _kb, [cv2.IMWRITE_JPEG_QUALITY, 88])
+                print(f"Kontaktbogen: {len(_kb_tiles)} Moment(e) -> {_kb_path}")
+        except Exception as _ke:
+            print(f"WARNUNG: Kontaktbogen uebersprungen ({type(_ke).__name__})")
 
     print(f"Fertig: {out_path}")
 
