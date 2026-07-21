@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Markt-/Sicherheits-/Bug-Review (Ismets Drei-Fragen-Check).**
+  (1) PREISE: Konkurrenz recherchiert (Submagic $20/mo/30 Videos, Captions.ai
+  $9.99-24.99/mo Abo, Opus $15/mo/150min, Zeemo ~$6.67/mo). Unsere 9/19/39 Euro
+  einmalig (20/60/150 Cr, 0.45->0.26 Euro/min) liegen im Markt; Alleinstellung:
+  KEIN Abo + 6 Monate gueltig; Free 3/Monat + Wasserzeichen = exakt das
+  Submagic-Muster. Keine Preisaenderung noetig.
+  (2) SICHERHEIT: Audit -> 3 Funde, alle gefixt (Commit 'Security-Haertung'):
+  jid-Path-Traversal zentral in job_dir() dichtgemacht, 8-MB-Cap auf
+  Motion-Uploads, Schema-Endpoint gecacht. Auth-Gates verifiziert. OFFEN
+  (bewusst, niedrig): kein Rate-Limit auf /api/motion/preview (eingeloggt,
+  ~2s CPU/Call) und kein CSRF-Token (Cookie samesite=lax mildert) - beides
+  fuer spaeter notiert.
+  (3) BUGS: volle Regression gruen - 502/502 logic + render1 6 + render2a 1 +
+  render2b 1 + render2c 2 = 512/512 + GUI_OK; Backend-Suite (Auth, Credits,
+  Refunds, Motion-Flows, Traversal) gruen. Bekannte Nicht-Bugs/Offen:
+  Windows-/Prod-Test (Ismet), Stripe-Live (bewusst zum Schluss).
+
 - **Motion: ProRes-Vorschau zeigt echte Transparenz.**
   Ismet: "Wenn ich ProRes auswaehle, soll der Hintergrund verschwinden."
   Engine: Preview mit export='mov' rendert jetzt ein ECHTES Alpha-PNG ohne
