@@ -545,6 +545,15 @@ body {
 .mo-note { color: var(--mut); font-size: 12px; text-align: center; margin-top: 12px; }
 .mo-status { margin-top: 14px; padding: 12px 14px; border-radius: 10px;
   background: var(--surf2); font-size: 13px; color: var(--fg); }
+#moImg { transition: opacity .25s ease; }
+.mo-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08);
+  overflow: hidden; margin-bottom: 9px; }
+.mo-bar i { display: block; height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--acc2, #ff7a1a), #ffb15e);
+  transition: width .9s cubic-bezier(.22,.8,.3,1); }
+.mo-phase::after { content: ''; animation: modots 1.4s steps(4) infinite; }
+@keyframes modots { 0%{content:'';} 25%{content:' .';} 50%{content:' ..';}
+  75%{content:' ...';} }
 @media (max-width: 860px) { .mo-wrap { grid-template-columns: 1fr; }
   .mo-preview { position: static; } .mo-frame { max-height: 60vh; } }
 
@@ -1243,7 +1252,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <div class="panel">
             <label class="mo-lab">Template</label>
             <div class="seg" id="moTemplate"></div>
-            <label class="mo-lab">Style</label>
+            <label class="mo-lab" id="moStyleLab">Style</label>
             <div class="seg" id="moStyle"></div>
             <label class="mo-lab">Format</label>
             <div class="seg" id="moFormat"></div>
@@ -1257,8 +1266,10 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <input type="color" class="mo-color" id="moAccent" value="#ff7a1a">
             <label class="mo-lab">Motion strength <span id="moMotionV" class="mo-hint"></span></label>
             <div class="slider"><input type="range" id="moMotion" min="0.4" max="1.6" step="0.05" value="1"></div>
-            <label class="mo-lab">Grain <span id="moGrainV" class="mo-hint"></span></label>
-            <div class="slider"><input type="range" id="moGrain" min="0" max="10" step="0.5" value="6"></div>
+            <div id="moGrainWrap">
+              <label class="mo-lab">Grain <span id="moGrainV" class="mo-hint"></span></label>
+              <div class="slider"><input type="range" id="moGrain" min="0" max="10" step="0.5" value="6"></div>
+            </div>
             <div id="moImageWrap">
               <label class="mo-lab">Image insert <span class="mo-hint">(optional)</span></label>
               <input type="file" class="mo-file" id="moImage" accept="image/*">
@@ -2358,7 +2369,15 @@ function moSync(){
   const wl=$('#moWordsLab'); if(wl&&lab) wl.innerHTML=lab;
   const wi=$('#moWords'); if(wi&&ph) wi.placeholder=ph;
   const iw=$('#moImageWrap'); if(iw) iw.style.display=(tpl==='pills')?'':'none';
-  const frm=$('#moFrame'); if(frm) frm.classList.toggle('alpha', Motion.sel.exportFmt==='mov');
+  const mov=Motion.sel.exportFmt==='mov';
+  const frm=$('#moFrame'); if(frm) frm.classList.toggle('alpha', mov);
+  // MOV = transparent: Hintergrund-Regler verschwinden. Grain liegt nur auf
+  // dem Hintergrund-Composite (im MOV nicht enthalten); Style wirkt weiter
+  // auf die Karten -> Hinweis statt verstecken.
+  const gw=$('#moGrainWrap'); if(gw) gw.style.display=mov?'none':'';
+  const sl=$('#moStyleLab'); if(sl) sl.innerHTML=mov
+    ? 'Style <span class="mo-hint">(cards only — background is transparent)</span>'
+    : 'Style';
   const btn=$('#moRender');
   if(btn&&!btn.disabled) btn.textContent = Motion.sel.exportFmt==='mov'
     ? 'Render clip · 2 credits · ProRes 4444 Alpha'
@@ -2376,6 +2395,7 @@ function motionPreviewDebounced(){ clearTimeout(Motion.t);
   Motion.t=setTimeout(motionPreview, 350); }
 async function motionPreview(){
   const spin=$('#moSpin'); if(spin) spin.classList.add('on');
+  const _im=$('#moImg'); if(_im&&_im.src) _im.style.opacity='.45';
   // Sequenz-Token: bei schnellen Klicks darf eine ALTE Antwort die neue
   // nicht ueberschreiben (Race: Vorschau ohne Alpha ueberdeckte die mit)
   Motion.seq=(Motion.seq||0)+1; const _my=Motion.seq;
@@ -2387,6 +2407,7 @@ async function motionPreview(){
     if(_my!==Motion.seq) return;               // veraltete Antwort verwerfen
     const img=$('#moImg');
     if(img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.onload=()=>{ img.style.opacity='1'; };
     img.src=URL.createObjectURL(blob);
     const fr=$('#moFrame'); if(fr){ const f=Motion.sel.format;
       fr.style.aspectRatio = f==='1:1'?'1/1' : f==='16:9'?'16/9' : '9/16'; }
@@ -2423,7 +2444,15 @@ async function motionPoll(jid, st, btn, orig){
       return; }
     if(s.status==='fehler'){ st.textContent='Render failed: '+(s.msg||'');
       btn.disabled=false; btn.textContent=orig; return; }
-    st.textContent='Rendering … '+Math.round((s.progress||0)*100)+'%';
+    // Psychologie: nie 0%, klare Etappen-Texte, weich animierter Balken
+    const pr=Math.max(s.progress||0, 0.06);
+    const phase = pr<0.22 ? 'Building the scene'
+                : pr<0.45 ? 'Light & materials'
+                : pr<0.70 ? 'Motion polish'
+                : pr<0.92 ? 'Laying the sound'
+                : 'Finishing up';
+    st.innerHTML=`<div class="mo-bar"><i style="width:${Math.round(pr*100)}%"></i></div>`+
+      `<span class="mo-phase">${phase}</span> · ${Math.round(pr*100)}%`;
   }catch(e){}
   setTimeout(()=>motionPoll(jid, st, btn, orig), 1500);
 }
