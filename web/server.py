@@ -1531,6 +1531,41 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
     return p.returncode, log, out
 
 
+# ---------------------------------------------------------- Admin-Alarm
+ADMIN_MAIL = os.environ.get('DVE_ADMIN_MAIL', 'ismet.01.b@gmail.com')
+_ADMIN_NOTIFIED = {}
+
+
+def _notify_admin(key, subject, body):
+    """Stoerungs-Mail an Ismet ueber den vorhandenen SMTP-Weg. Pro
+    Stoerungs-Schluessel max. 1 Mail/Stunde (kein Postfach-Spam, wenn
+    z.B. die Platte voll bleibt). Scheitert leise - ein kaputter
+    Mail-Weg darf nie den Betrieb reissen."""
+    now = time.time()
+    if now - _ADMIN_NOTIFIED.get(key, 0) < 3600:
+        return False
+    _ADMIN_NOTIFIED[key] = now
+    try:
+        _send_mail(ADMIN_MAIL, f'[DouchkoVE] {subject}', body)
+        return True
+    except Exception as e:
+        print(f'Admin-Mail fehlgeschlagen: {e}')
+        return False
+
+
+def _notify_job_fail(jid):
+    """Nach jedem Job pruefen: fehlgeschlagen -> Mail an Ismet (gedrosselt
+    ueber die Fehlermeldung, damit ein Serienfehler nur 1 Mail/h schickt)."""
+    j = JOBS.get(jid) or {}
+    if j.get('status') != 'fehler':
+        return
+    msg = str(j.get('msg', ''))[:300]
+    _notify_admin(f'jobfail:{msg[:60]}', 'Render fehlgeschlagen',
+                  f'Job {jid} ({j.get("kind", "caption")})\n'
+                  f'User-ID: {j.get("user_id", "?")}\nMeldung: {msg}\n\n'
+                  f'Credits wurden automatisch erstattet (falls reserviert).')
+
+
 def worker():
     while True:
         jid = QUEUE.get()
@@ -1540,6 +1575,7 @@ def worker():
             set_state(jid, status='fehler',
                       msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
         finally:
+            _notify_job_fail(jid)
             QUEUE.task_done()
 
 
@@ -1554,6 +1590,7 @@ def motion_worker():
             set_state(jid, status='fehler',
                       msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
         finally:
+            _notify_job_fail(jid)
             MQUEUE.task_done()
 
 
@@ -1843,8 +1880,39 @@ def _restore_jobs():
         print(f"Job-Restore: {restored} Jobs geladen, {requeued} neu eingereiht")
 
 
+def _watchdog_worker():
+    """Betriebs-Wachhund, alle 10 Minuten: (a) Platte knapp -> Mail,
+    (b) Job haengt seit >45 Min im Status 'laeuft' -> Mail. Merkt sich
+    selbst, seit wann ein Job laeuft - unabhaengig von Job-Feldern."""
+    running_since = {}
+    while True:
+        time.sleep(600)
+        try:
+            free_gb = shutil.disk_usage(DATA).free / 1e9
+            if free_gb < 2.0:
+                _notify_admin('disk', 'Speicher knapp auf douchko.eu',
+                              f'Nur noch {free_gb:.1f} GB frei unter {DATA}.\n'
+                              f'Cleanup laeuft, reicht aber offenbar nicht.')
+            now = time.time()
+            with LOCK:
+                items = [(jid, j.get('status')) for jid, j in JOBS.items()]
+            for jid, stt in items:
+                if stt == 'laeuft':
+                    t0 = running_since.setdefault(jid, now)
+                    if now - t0 > 45 * 60:
+                        _notify_admin(f'stuck:{jid}', 'Job haengt',
+                                      f'Job {jid} laeuft seit '
+                                      f'{(now - t0) / 60:.0f} Minuten - '
+                                      f'vermutlich haengt ffmpeg/der Worker.')
+                else:
+                    running_since.pop(jid, None)
+        except Exception as e:
+            print(f'Watchdog-Fehler: {e}')
+
+
 _restore_jobs()
 threading.Thread(target=_cleanup_worker, daemon=True).start()
+threading.Thread(target=_watchdog_worker, daemon=True).start()
 
 for _ in range(int(os.environ.get('DVE_WORKERS', '1'))):
     threading.Thread(target=worker, daemon=True).start()
@@ -2134,6 +2202,20 @@ def logo_dark():
     return _asset('logo_dark.png', 'image/png')
 
 
+@app.get('/api/health')
+def health():
+    """Fuer externe Uptime-Ueberwachung (z.B. UptimeRobot, kostenlos, alle
+    5 Min anpingen): 200 = Server + Datenbank leben, alles andere loest
+    dort den Alarm aus. Bewusst ohne Login und ohne interne Details."""
+    try:
+        con = _db()
+        con.execute('SELECT 1').fetchone()
+        con.close()
+    except Exception:
+        raise HTTPException(503, 'db unavailable')
+    return {'ok': True}
+
+
 @app.get('/', response_class=HTMLResponse)
 def landing():
     return _page('landing.html')
@@ -2280,9 +2362,60 @@ def _motion_sanitize(body):
 _PREVIEW_GATE = {}
 
 
+class _PreviewDaemon:
+    """Warm gehaltener gfx_engine-Prozess fuer die Live-Vorschau. Spart pro
+    Preview den Python-Start + alle Imports UND haelt die Engine-Caches
+    (BG/Blooms, Fonts, Emoji) zwischen den Aufrufen warm: ~2s -> ~0.5s.
+    Ein Prozess, ein Lock - Previews sind kurz und pro User eh auf
+    1 Call/1.2s gebremst. Crash/Timeout -> Prozess kalt neu starten."""
+
+    def __init__(self):
+        self.p = None
+        self.lock = threading.Lock()
+        self.n = 0
+
+    def _start(self):
+        self.p = subprocess.Popen(
+            [sys.executable, os.path.join(ROOT, 'gfx_engine.py'),
+             '--preview-server', '_'], cwd=ROOT,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            text=True, bufsize=1)
+        self.n = 0
+
+    def _kill(self):
+        try:
+            self.p.kill()
+        except Exception:
+            pass
+        self.p = None
+
+    def render(self, mc, out, timeout=60):
+        import select
+        with self.lock:
+            if self.p is None or self.p.poll() is not None:
+                self._start()
+            try:
+                self.p.stdin.write(json.dumps({'mc': mc, 'out': out}) + '\n')
+                self.p.stdin.flush()
+                rl, _, _ = select.select([self.p.stdout], [], [], timeout)
+                if not rl:
+                    raise TimeoutError('preview timeout')
+                res = json.loads(self.p.stdout.readline())
+            except Exception:
+                self._kill()
+                raise
+            self.n += 1
+            if self.n >= 500:              # Speicher-Hygiene: frisch starten
+                self._kill()
+            return bool(res.get('ok'))
+
+
+_PREVIEW_DAEMON = _PreviewDaemon()
+
+
 @app.post('/api/motion/preview')
 async def motion_preview(request: Request):
-    """Live-Vorschau: EIN Standbild (~2s). Nur eingeloggt + Rate-Limit
+    """Live-Vorschau: EIN Standbild (~0.5s warm). Nur eingeloggt + Rate-Limit
     (1 Preview / 1.2s pro User) - jeder Aufruf kostet echte Render-CPU."""
     u = _require_user(request)
     _now = time.time()
@@ -2294,13 +2427,22 @@ async def motion_preview(request: Request):
     mc['preview'] = 6.8                       # Moment, in dem die Szene steht
     d = tempfile.mkdtemp(prefix='mprev_')
     try:
-        cfgp = os.path.join(d, 'mc.json')
         out = os.path.join(d, 'p.png')
-        json.dump(mc, open(cfgp, 'w', encoding='utf-8'))
-        r = subprocess.run([sys.executable, os.path.join(ROOT, 'gfx_engine.py'),
-                            '--motion-cfg', cfgp, out], cwd=ROOT,
-                           capture_output=True, text=True, timeout=60)
-        if r.returncode != 0 or not os.path.exists(out):
+        import asyncio
+        try:
+            # to_thread: der Render blockiert sonst den Event-Loop (~0.5s)
+            ok = await asyncio.to_thread(_PREVIEW_DAEMON.render, mc, out)
+        except Exception:
+            # Notnagel: Daemon kaputt -> einmaliger Kaltstart-Subprocess
+            cfgp = os.path.join(d, 'mc.json')
+            json.dump(mc, open(cfgp, 'w', encoding='utf-8'))
+            r = await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, os.path.join(ROOT, 'gfx_engine.py'),
+                 '--motion-cfg', cfgp, out],
+                cwd=ROOT, capture_output=True, text=True, timeout=60)
+            ok = (r.returncode == 0)
+        if not ok or not os.path.exists(out):
             raise HTTPException(500, 'preview failed')
         data = open(out, 'rb').read()
         return Response(content=data, media_type='image/png')

@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Warm-Preview + Monitoring (Ismet: "Mach 1 und 3").**
+  (1) PREVIEW-TEMPO: /api/motion/preview lief pro Aufruf als frischer
+  Python-Subprocess (~2s). Jetzt haelt _PreviewDaemon EINEN warmen
+  gfx_engine-Prozess (--preview-server: JSON-Zeile rein, Standbild raus);
+  dazu in der Engine ein BG/GRAIN-Cache pro (Stil, Format) - identische
+  Arrays, pixelgleich (Diff warm vs. kalt = 0 verifiziert) - und PNG-Encode
+  auf compress_level=1 (PNG bleibt verlustfrei; das Korn macht die Datei eh
+  inkompressibel: 0.15s statt 0.58s bei +1% Groesse). Ergebnis Ende-zu-Ende:
+  0.4-0.65s statt ~2s. Crash-Recovery verifiziert (Daemon gekillt ->
+  naechste Preview startet ihn neu, 1.2s; Notnagel-Kaltstart bleibt als
+  Fallback). Endpoint rendert jetzt via asyncio.to_thread (blockierte
+  vorher den Event-Loop). Nach 500 Previews wird der Prozess praeventiv
+  frisch gestartet (Speicher-Hygiene).
+  (2) MONITORING: /api/health (ohne Login: prueft DB, 200/503 - gedacht
+  fuer externen Gratis-Pinger wie UptimeRobot alle 5 Min, muss Ismet einmal
+  einrichten); _notify_admin() mailt Stoerungen ueber den vorhandenen
+  SMTP-Weg an DVE_ADMIN_MAIL (Default ismet.01.b@gmail.com), gedrosselt auf
+  1 Mail/Stunde pro Stoerungs-Schluessel; beide Worker melden fehlgeschlagene
+  Jobs; Watchdog-Thread alle 10 Min: Platte <2 GB frei -> Mail, Job >45 Min
+  im Status 'laeuft' -> Mail. Neue Selftest-Szene 'Betrieb / Monitoring'
+  (Health, Drossel, Fehl-Job-Alarm, Daemon rendert/ueberlebt kaputte
+  Eingaben/bleibt warm). Regression gruen.
+
 - **Optimierungs-Batch (Ismet: "Mach schonmal alles, was du machen kannst.
   Es soll an Qualitaet nicht verlieren.").** 8 Punkte umgesetzt:
   (1) PERFORMANCE Engine: Sprite-Memoization (_pill_memo/_wm_memo - Pillen/

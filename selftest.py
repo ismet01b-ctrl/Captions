@@ -93,6 +93,7 @@ def main():
         _scenario_kamera(tmp)
         _scenario_transkription(tmp)
         _scenario_security(tmp)
+        _scenario_betrieb(tmp)
         _scenario_trail(tmp)
         _scenario_lang(tmp)
         _scenario_multiperson(tmp)
@@ -2259,6 +2260,59 @@ def _scenario_security(tmp):
           and 'elif not _reserve_credits(uid, need, jid):' in _src)
     check('render_start reserviert atomar + idempotent (kein Doppel-Abzug)',
           'if not _render_charged(uid, jid) and not _reserve_credits(uid, need, jid):' in _src)
+    shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
+
+
+def _scenario_betrieb(tmp):
+    """v97: Betrieb - Warm-Preview-Daemon, Health-Endpoint, Admin-Alarm."""
+    print('\n--- Betrieb / Monitoring ---')
+    import time as _t
+    os.environ['DVE_DATA'] = tempfile.mkdtemp(prefix='dve_ops_')
+    if 'server' in sys.modules:
+        del sys.modules['server']
+    sys.path.insert(0, os.path.join(HERE, 'web'))
+    import server as SV
+    # 1) Health-Endpoint (fuer externe Uptime-Ueberwachung)
+    check('Health-Endpoint meldet ok (Server+DB)', SV.health() == {'ok': True})
+    # 2) Admin-Alarm: pro Schluessel max. 1 Mail/Stunde, Mail-Fehler leise
+    sent = []
+    SV._send_mail = lambda to, s, b: sent.append((to, s))
+    SV._ADMIN_NOTIFIED.clear()
+    a = SV._notify_admin('k1', 'T', 'x')
+    b = SV._notify_admin('k1', 'T', 'x')
+    c = SV._notify_admin('k2', 'T', 'x')
+    check('Admin-Alarm gedrosselt (1 Mail/h pro Schluessel)',
+          a and not b and c and len(sent) == 2
+          and all(to == SV.ADMIN_MAIL for to, _ in sent))
+    # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
+    SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
+    SV.JOBS['t_ok'] = {'status': 'fertig'}
+    n0 = len(sent)
+    SV._notify_job_fail('t_fail')
+    SV._notify_job_fail('t_ok')
+    check('Job-Fehler -> genau 1 Admin-Mail', len(sent) == n0 + 1)
+    check('Worker melden Fehl-Jobs an den Alarm',
+          open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8')
+          .read().count('_notify_job_fail(jid)') >= 2)
+    # 4) Warm-Preview-Daemon: rendert, ueberlebt kaputte Eingaben, bleibt warm
+    dm = SV._PreviewDaemon()
+    pd = tempfile.mkdtemp(prefix='dve_pv_')
+    out1 = os.path.join(pd, 'p1.png')
+    ok1 = dm.render({'style': 'studio', 'template': 'pills',
+                     'preview': 6.8}, out1)
+    check('Preview-Daemon rendert Standbild', ok1 and os.path.exists(out1))
+    ok2 = dm.render({'style': 'studio', 'template': 'pills',
+                     'preview': 'kaputt'}, os.path.join(pd, 'p2.png'))
+    check('Preview-Daemon meldet Fehler statt zu sterben',
+          ok2 is False and dm.p is not None and dm.p.poll() is None)
+    t0 = _t.time()
+    ok3 = dm.render({'style': 'dark', 'template': 'chat',
+                     'preview': 3.8}, os.path.join(pd, 'p3.png'))
+    dt = _t.time() - t0
+    check('Preview-Daemon warm deutlich unter Kaltstart (<2.5s)',
+          ok3 and dt < 2.5, f'{dt:.2f}s')
+    dm._kill()
+    shutil.rmtree(pd, ignore_errors=True)
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

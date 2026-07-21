@@ -957,6 +957,7 @@ def render_stackbuild(input_video, out_video, progress=print):
 
 
 _EMOJI_IMG_CACHE = {}
+_BG_CACHE = {}                 # (Stil, Groesse) -> (BG-Bild, Korn-Feld)
 
 
 def _emoji_img(seq, h):
@@ -1156,29 +1157,46 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     from PIL import ImageFilter, ImageChops
     # --- Hintergrund 2026: Grundverlauf + weiche Licht-Blooms (Mesh) +
     #     Vignette, alles aus dem Stil. Kein flacher Verlauf. ---
-    top = np.array(ST['bg_top'], np.float32)
-    bot = np.array(ST['bg_bot'], np.float32)
-    gy = np.linspace(0, 1, H)[:, None, None]
-    bg = np.broadcast_to(top[None, None, :] * (1 - gy) + bot[None, None, :] * gy,
-                         (H, W, 3)).astype(np.float32).copy()
-    XX, YY = np.meshgrid(np.linspace(0, 1, W), np.linspace(0, 1, H))
+    # BG + GRAIN haengen nur von Stil-Werten und Groesse ab - im warmen
+    # Preview-Prozess werden sie pro (Stil, Format) exakt einmal gebaut
+    # (identische Arrays, kein Pixel anders; BG wird ueberall nur .copy()t,
+    # GRAIN nur via np.roll gelesen).
+    _bgk = (W, H, tuple(ST['bg_top']), tuple(ST['bg_bot']),
+            json.dumps(ST['blooms']), float(ST['vignette']),
+            float(ST['grain']))
+    if _bgk in _BG_CACHE:
+        BG, GRAIN = _BG_CACHE[_bgk]
+    else:
+        top = np.array(ST['bg_top'], np.float32)
+        bot = np.array(ST['bg_bot'], np.float32)
+        gy = np.linspace(0, 1, H)[:, None, None]
+        bg = np.broadcast_to(top[None, None, :] * (1 - gy)
+                             + bot[None, None, :] * gy,
+                             (H, W, 3)).astype(np.float32).copy()
+        XX, YY = np.meshgrid(np.linspace(0, 1, W), np.linspace(0, 1, H))
 
-    def bloom(cx, cy, rad, col, amt):
-        # amt = Spitzen-Helligkeit (0..255), col = nur die Farbrichtung. So
-        # bleibt der Bloom auf dunklem Grund ein zarter Farb-Schimmer statt
-        # weiss zu clippen (frueher: col*amt -> auf Dunkel sofort ausgebrannt).
-        c = np.array(col, np.float32)
-        c = c / max(c.max(), 1.0)
-        d2 = ((XX - cx) ** 2 + ((YY - cy) * (H / W)) ** 2) / (rad ** 2)
-        return c[None, None, :] * (amt * np.exp(-d2))[..., None]
-    for (bx, by, br, bcol, bamt) in ST['blooms']:
-        bg += bloom(bx, by, br, bcol, bamt)
-    xx, yy = np.meshgrid(np.linspace(-1, 1, W), np.linspace(-1, 1, H))
-    vig = 1.0 - float(ST['vignette']) * np.clip(xx ** 2 + yy ** 2 * 0.6, 0, 1)[..., None]
-    BG = Image.fromarray(np.clip(bg * vig, 0, 255).astype(np.uint8)).convert('RGBA')
-    # Feinkorn: EIN Rauschfeld, pro Frame verschoben (premium, killt Flachheit)
-    GRAIN = (np.random.default_rng(7).standard_normal((H, W))
-             * float(ST['grain'])).astype(np.float32)
+        def bloom(cx, cy, rad, col, amt):
+            # amt = Spitzen-Helligkeit (0..255), col = nur die Farbrichtung. So
+            # bleibt der Bloom auf dunklem Grund ein zarter Farb-Schimmer statt
+            # weiss zu clippen (frueher: col*amt -> auf Dunkel sofort ausgebrannt).
+            c = np.array(col, np.float32)
+            c = c / max(c.max(), 1.0)
+            d2 = ((XX - cx) ** 2 + ((YY - cy) * (H / W)) ** 2) / (rad ** 2)
+            return c[None, None, :] * (amt * np.exp(-d2))[..., None]
+        for (bx, by, br, bcol, bamt) in ST['blooms']:
+            bg += bloom(bx, by, br, bcol, bamt)
+        xx, yy = np.meshgrid(np.linspace(-1, 1, W), np.linspace(-1, 1, H))
+        vig = 1.0 - float(ST['vignette']) * np.clip(
+            xx ** 2 + yy ** 2 * 0.6, 0, 1)[..., None]
+        BG = Image.fromarray(
+            np.clip(bg * vig, 0, 255).astype(np.uint8)).convert('RGBA')
+        # Feinkorn: EIN Rauschfeld, pro Frame verschoben (premium, killt
+        # Flachheit)
+        GRAIN = (np.random.default_rng(7).standard_normal((H, W))
+                 * float(ST['grain'])).astype(np.float32)
+        if len(_BG_CACHE) > 8:
+            _BG_CACHE.clear()
+        _BG_CACHE[_bgk] = (BG, GRAIN)
 
     ACC = tuple(ST['accent'])
     TXT = tuple(ST['text'])
@@ -2115,7 +2133,10 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         if ALPHA and preview is not None:
             # ProRes-Live-Vorschau: ECHTES Alpha-PNG ohne Hintergrund - das
             # Frontend legt ein Schachbrett dahinter (wie im Schnittprogramm).
-            fr.save(out_video)
+            # PNG ist immer verlustfrei; Level 1 statt 6 spart ~0.4s Encode
+            # bei ~1% Groesse (das Korn macht PNG ohnehin inkompressibel)
+            fr.save(out_video, **({'compress_level': 1}
+                                  if out_video.lower().endswith('.png') else {}))
             progress('preview-frame fertig')
             return True
         if ALPHA:
@@ -2131,7 +2152,9 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         gr = np.roll(gr, (i * 13) % W, axis=1)
         arr = np.clip(arr + gr[..., None], 0, 255).astype(np.uint8)
         if preview is not None:                   # Web-Live-Vorschau: 1 Standbild
-            Image.fromarray(arr).save(out_video)
+            Image.fromarray(arr).save(
+                out_video, **({'compress_level': 1}
+                              if out_video.lower().endswith('.png') else {}))
             progress('preview-frame fertig')
             return True
         vw.write(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
@@ -2203,6 +2226,7 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
 
 if __name__ == '__main__':
     import argparse
+    import sys
     ap = argparse.ArgumentParser()
     ap.add_argument('input', nargs='?', default=None)
     ap.add_argument('output')
@@ -2220,9 +2244,40 @@ if __name__ == '__main__':
                          '- der Einstieg fuer den Web-Job-Worker')
     ap.add_argument('--schema', action='store_true',
                     help='motion_schema() als JSON ausgeben (fuer das Frontend)')
+    ap.add_argument('--preview-server', action='store_true',
+                    help='Warm bleiben: JSON-Zeilen auf stdin rendern Previews '
+                         '(spart ~1s Prozessstart pro Vorschau)')
     a = ap.parse_args()
     if a.schema:
         print(json.dumps(motion_schema()))
+        raise SystemExit(0)
+    if a.preview_server:
+        # Warmer Preview-Prozess: pro stdin-Zeile {'mc': {...}, 'out': pfad}
+        # -> ein Standbild, Antwort {'ok': ...} auf stdout. Imports/Fonts/
+        # Caches bleiben zwischen den Aufrufen warm. stdout gehoert dem
+        # Protokoll, deshalb progress=no-op (Render-Meldungen wuerden es
+        # korrumpieren; ffmpeg schreibt eh nur auf stderr).
+        for _line in sys.stdin:
+            _line = _line.strip()
+            if not _line:
+                continue
+            try:
+                _req = json.loads(_line)
+                _mc = _req['mc']
+                _ok = render_ui_motion(
+                    _req['out'], style=_mc.get('style', 'studio'),
+                    template=_mc.get('template', 'pills'),
+                    cfg=_mc.get('cfg'), image=_mc.get('image'),
+                    pills=_mc.get('pills'),
+                    preview=float(_mc.get('preview', 6.8)),
+                    watermark=bool(_mc.get('watermark')),
+                    export=_mc.get('export', 'mp4'),
+                    progress=lambda *_a, **_k: None)
+                print(json.dumps({'ok': bool(_ok)}), flush=True)
+            except Exception as _e:
+                print(json.dumps({'ok': False,
+                                  'err': f'{type(_e).__name__}: {_e}'}),
+                      flush=True)
         raise SystemExit(0)
     if a.motion_cfg:
         # Web-Einstieg: eine JSON treibt alles. preview=<sekunde> -> 1 Standbild
