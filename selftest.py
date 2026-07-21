@@ -1607,6 +1607,41 @@ def _scenario_logic(clip, transcript, tmp):
           'grain_seed=_gs' in _src99
           and 'default_rng(grain_seed)' in _src99)
 
+    # v101i World-Lock Wand: eigener Track auf der Wand-Ebene.
+    _wrng = np.random.default_rng(42)
+    _wbase = cv2.GaussianBlur((_wrng.random((270, 480)) * 255)
+                              .astype(np.uint8), (0, 0), 1.0)
+    _wim2 = _wbase.copy()
+    _wim2[:135] = np.roll(_wbase[:135], -6, axis=1)   # Wand zieht -6px
+    _wim2[135:] = np.roll(_wbase[135:], -2, axis=1)   # Boden nur -2px
+    _Hb, _okb = R.update_homography(_wbase, _wim2, np.eye(3))
+    _Hw, _okw = R.update_homography(_wbase, _wim2, np.eye(3), region='wand')
+    check('v101i: Wand-Track folgt der Wand-Ebene, nicht dem Boden',
+          _okb and _okw and abs(_Hw[0, 2] - (-6)) < 1.5
+          and _Hb[0, 2] > _Hw[0, 2] + 1.5,
+          f'wand={_Hw[0, 2]:.1f} boden={_Hb[0, 2]:.1f}')
+    _wim3 = _wim2.copy()
+    _wim3[30:130, 200:300] = np.roll(_wbase[30:130, 200:300], +8, axis=1)
+    _wpm = np.zeros((270, 480), np.float32); _wpm[20:140, 190:310] = 1.0
+    _Hw3, _ok3 = R.update_homography(_wbase, _wim3, np.eye(3), region='wand',
+                                     exclude=_wpm)
+    check('v101i: Personen-Maske haelt bewegte Person aus dem Wand-Track',
+          _ok3 and abs(_Hw3[0, 2] - (-6)) < 1.5, f'{_Hw3[0, 2]:.1f}')
+    # build_plans: stehender Wand-Text bekommt Kontakt-Schatten
+    _wfx = {0: {'fx': 'ground', 'power': 2, 'n': 1, 'szene': 'wand',
+                'lage': 'stehend', 'intent': True}}
+    _wpl = R.build_plans([{'word': 'Beton', 'start': 1.0, 'end': 1.8}], {0},
+                         cfg, S, W_, H_, lambda s, e: True, _wfx,
+                         face_pos=lambda s, e: (W_ * 0.5, H_ * 0.3, 60))
+    _wp0 = next((p for p in _wpl if p.get('kw_i') == 0), None)
+    check('v101i: stehender Wand-Text traegt Kontakt-Schatten',
+          _wp0 is not None and _wp0.get('cshadow') is not None)
+    check('v101i: Wand-Track im Loop + Compositor verdrahtet',
+          'need_track_wall' in _src99
+          and "region='wand'" in _src99
+          and 'H_cum_wall' in _src99
+          and "_is_wall = (p.get('szene') == 'wand'" in _src99)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

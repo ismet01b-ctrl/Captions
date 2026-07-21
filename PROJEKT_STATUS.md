@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101i World-Lock Wand (Innovations-Batch 9).** Wand-Texte ("an der
+  Wand", szene 'wand', stehend) hingen bisher am BODEN-Track
+  (update_homography maskiert unteres Bilddrittel aufwaerts) - Boden und
+  Wand haben bei Kamerabewegung verschiedene Parallaxe, der Wand-Text
+  rutschte. Neu: (1) update_homography(region='wand') trackt die OBERE
+  Bildhaelfte (die Wand-Ebene); (2) exclude=Personen-Maske haelt bewegte
+  Personen-Pixel aus den Features (sonst zieht die Schulter den
+  "Welt-Anker" mit); (3) der Loop fuehrt einen ZWEITEN Akkumulator
+  H_cum_wall (+wall_gen) nur in Wand-Fenstern (need_track_wall), Schnitt
+  resettet beide; composite_frame waehlt pro Plan die richtige Ebene
+  (_is_wall -> H_cum_wall). (4) Stehender Wand-Text bekommt einen dezenten,
+  licht-wahren Kontakt-Schatten auf der Wand (strength 0.30, nutzt v101f
+  light_dir) - vorher schwebte er schattenlos. Synthetischer Beweis:
+  Wand zieht -6px/Boden -2px -> Wand-Track -6.9, Boden-Track -3.7
+  (Mischung, wie designt); bewegte "Person" verfaelscht den Wand-Track
+  ohne exclude, mit exclude wieder -7.3~-6. 4 neue Tests. Regression
+  602/602 + 7/1/5/2 Renders + GUI_OK. EHRLICH: echte Wand-Szenen mit
+  Kamerabewegung gibt es nur live - hier synthetisch bewiesen.
+
 - **v101h Caption-Alpha-Export (Innovations-Batch 8).** Transparente
   Caption-Ebene (ProRes 4444, yuva444) fuer Premiere/Resolve - passt exakt
   zur Finishing-Tool-Positionierung. TECHNIK: Difference-Matting-Doppelpass -

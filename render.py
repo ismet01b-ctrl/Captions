@@ -2135,14 +2135,30 @@ def paste_scene(canvas, rgba, cx, cy, W, H, scale=1.0, opacity=0.74, ripple=0.10
                   refract=refract, blur=blur, occ=occ, grain=grain,
                   grain_seed=grain_seed)
 
-def update_homography(prev_gray, gray, H_cum, mask_lower=0.30):
+def update_homography(prev_gray, gray, H_cum, mask_lower=0.30, region='boden',
+                      exclude=None):
     """Ein Schritt planares Kamera-Tracking: verfolgt Features der Bodenebene
     (unteres Bilddrittel aufwaerts) und akkumuliert die Homographie.
     Gibt (H_cum_neu, ok) zurueck - genau die Transformation, die ein
-    After-Effects-Plane-Track liefert."""
+    After-Effects-Plane-Track liefert.
+
+    v101i: region='wand' trackt stattdessen die obere Bildhaelfte (die
+    Wand-Ebene hat eine andere Parallaxe als der Boden); exclude = optionale
+    Personen-Maske (H,W float 0..1), deren Pixel nie Features liefern."""
     h, w = gray.shape[:2]
     mask = np.zeros((h, w), np.uint8)
-    mask[int(h * mask_lower):, :] = 255
+    if region == 'wand':
+        # v101i WORLD-LOCK WAND: die Wand-Ebene lebt in der OBEREN Bildhaelfte
+        # (+Mitte). Boden-Features haben bei Kamerabewegung eine andere
+        # Parallaxe - ein Wand-Text, der am Boden-Track haengt, rutscht.
+        mask[:int(h * 0.62), :] = 255
+    else:
+        mask[int(h * mask_lower):, :] = 255
+    if exclude is not None:
+        # v101i: Personen-Pixel raus - eine bewegte Person zieht sonst die
+        # Homographie mit (der "Welt-Anker" klebte an der Schulter).
+        _ex = cv2.resize(exclude.astype(np.float32), (w, h))
+        mask[_ex > 0.35] = 0
     p0 = cv2.goodFeaturesToTrack(prev_gray, maxCorners=260, qualityLevel=0.01,
                                  minDistance=8, mask=mask)
     if p0 is None or len(p0) < 24:
@@ -5272,6 +5288,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     sh, sdy_, sdx_ = make_contact_shadow(p['arr'], light=light_dir)
                     if sh is not None:
                         p['cshadow'], p['csh_dy'], p['csh_dx'] = sh, sdy_, sdx_
+                elif on_wall and not broll:
+                    # v101i: STEHENDER Wand-Text ist ein Objekt VOR der Wand -
+                    # der wirft einen weichen Kontakt-Schatten auf sie (sonst
+                    # schwebt er). Dezenter als am Boden, licht-wahr versetzt.
+                    sh, sdy_, sdx_ = make_contact_shadow(p['arr'], strength=0.30,
+                                                         light=light_dir)
+                    if sh is not None:
+                        p['cshadow'], p['csh_dy'], p['csh_dx'] = sh, sdy_, sdx_
                 if p.get('count'):
                     p['builder'] = (lambda s, _sz=sz, _y=g_yaw, _pt=g_pitch, _ex=g_ex:
                                     persp_warp(S.text(s, _sz, S.white, extrude=_ex)[0],
@@ -6035,7 +6059,8 @@ def alpha_from_pair(comp_black, comp_white):
 
 def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_state=None,
                     scene_off=(0.0, 0.0), aud=(0.0, 0.0, 0.0), depth_n=None,
-                    scene_vel=0.0, H_cum=None, track_gen=0):
+                    scene_vel=0.0, H_cum=None, track_gen=0,
+                    H_cum_wall=None, wall_gen=0):
     a_rms, a_bass, a_onset = aud
     # v101h: Grain-Seed pro Frame (aus t) - der Alpha-Export-Doppelpass braucht
     # bitidentisches Grain in beiden Paessen, sonst rauscht das Alpha.
@@ -6618,15 +6643,20 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             g_grain = 1.5 if p.get('glass') else (1.6 if gp else 2.2)
             g_opac = (0.90 if gp else 0.74 if p.get('scene_blend')
                       else (1.0 if p.get('glass') else 0.97))
-            tracked = (g_broll and p.get('track3d') and H_cum is not None)
+            # v101i: Wand-Texte haengen am WAND-Track (obere Bildhaelfte,
+            # Person ausgeschlossen) - der Boden-Track hat andere Parallaxe.
+            _is_wall = (p.get('szene') == 'wand' and not p.get('lying'))
+            _hc = H_cum_wall if (_is_wall and H_cum_wall is not None) else H_cum
+            _tg = wall_gen if (_is_wall and H_cum_wall is not None) else track_gen
+            tracked = (g_broll and p.get('track3d') and _hc is not None)
             if tracked:
                 # Planares Kamera-Tracking: Referenz beim ersten aktiven Frame,
                 # danach bewegt die akkumulierte Homographie den Text wie ein
                 # Objekt in der Welt (waechst, kippt, zieht vorbei).
-                if 'H_ref' not in p or p.get('H_gen') != track_gen:
-                    p['H_ref'] = np.linalg.inv(H_cum)
-                    p['H_gen'] = track_gen
-                H_rel = H_cum @ p['H_ref']
+                if 'H_ref' not in p or p.get('H_gen') != _tg:
+                    p['H_ref'] = np.linalg.inv(_hc)
+                    p['H_gen'] = _tg
+                H_rel = _hc @ p['H_ref']
                 if p.get('glass_frames'):
                     gf = p['glass_frames']
                     p['arr'] = gf[blender_engine.anim_loop_idx(dt, len(gf))]
@@ -7637,14 +7667,22 @@ def main():
                 print("Tiefen-Okklusion uebersprungen (models/depth.onnx fehlt - setup.bat laedt es)")
     # Tracking-Fenster (planarer Kamera-Track) = Szenen-Text-Fenster
     need_track = np.zeros(total_est, dtype=bool)
+    # v101i: Wand-Momente bekommen einen EIGENEN Track auf der Wand-Ebene
+    # (obere Bildhaelfte, Person ausgeschlossen) - der Boden-Track hat eine
+    # andere Parallaxe, ein daran haengender Wand-Text rutscht.
+    need_track_wall = np.zeros(total_est, dtype=bool)
     if cfg['effects'].get('track3d', True):
         for p in plans:
             if p['tpl'] == 'ground' and (p.get('scene_ground') or p.get('broll')):
                 a = max(int((p['start'] - 0.35) * fps), 0)
                 b = min(int((p['end'] + 0.6) * fps) + 1, total_est)
                 need_track[a:b] = True
+                if p.get('szene') == 'wand' and not p.get('lying'):
+                    need_track_wall[a:b] = True
         if need_track.any():
-            print(f"Kamera-Track (planar): {int(need_track.sum())} Frames")
+            print(f"Kamera-Track (planar): {int(need_track.sum())} Frames"
+                  + (f", davon Wand-Ebene: {int(need_track_wall.sum())}"
+                     if need_track_wall.any() else ""))
     if W >= H:
         d_w = 252; d_h = max(int(round(H / W * 252 / 14)) * 14, 56)
     else:
@@ -7666,6 +7704,9 @@ def main():
     H_cum = np.eye(3)
     track_gen = 0
     trk_fail = 0
+    H_cum_wall = np.eye(3)     # v101i: eigener Track fuer die Wand-Ebene
+    wall_gen = 0
+    trk_fail_w = 0
     sx_up, sy_up = W / 480.0, H / float(int(H * 480 / W))
     S_up = np.diag([sx_up, sy_up, 1.0])
     S_dn = np.linalg.inv(S_up)
@@ -7790,6 +7831,7 @@ def main():
                                      - trk_prev.astype(np.float32)).mean()) > 42
                 if _hard and (coh_resp is None or coh_resp < 0.25):
                     H_cum = np.eye(3); track_gen += 1; trk_fail = 0
+                    H_cum_wall = np.eye(3); wall_gen += 1; trk_fail_w = 0
                 else:
                     Hs_small, ok_t = update_homography(trk_prev, tg, np.eye(3))
                     if ok_t:
@@ -7801,11 +7843,30 @@ def main():
                         trk_fail += 1
                         if trk_fail > 12:
                             H_cum = np.eye(3); track_gen += 1; trk_fail = 0
+                    # v101i: Wand-Ebene separat tracken (obere Haelfte,
+                    # Person raus) - nur in Fenstern mit aktivem Wand-Text.
+                    if fa < len(need_track_wall) and need_track_wall[fa]:
+                        _pm_w = person_mask(alpha) if alpha is not None else None
+                        Hw_small, ok_w = update_homography(
+                            trk_prev, tg, np.eye(3), region='wand',
+                            exclude=_pm_w)
+                        if ok_w:
+                            Hw_step = S_up @ Hw_small @ S_dn
+                            H_cum_wall = Hw_step @ H_cum_wall
+                            H_cum_wall /= H_cum_wall[2, 2]
+                            trk_fail_w = 0
+                        else:
+                            trk_fail_w += 1
+                            if trk_fail_w > 12:
+                                H_cum_wall = np.eye(3); wall_gen += 1
+                                trk_fail_w = 0
             trk_prev = tg
         else:
             trk_prev = None
             H_cum = np.eye(3)
             track_gen += 1
+            H_cum_wall = np.eye(3)
+            wall_gen += 1
 
         # --- Tiefe fuer Okklusion (nur in Szenen-Text-Fenstern)
         depth_n = None
@@ -7826,7 +7887,11 @@ def main():
                       depth_n=depth_n, scene_vel=scene_vel,
                       H_cum=(H_cum if (fa < len(need_track) and need_track[fa])
                              else None),
-                      track_gen=track_gen)
+                      track_gen=track_gen,
+                      H_cum_wall=(H_cum_wall
+                                  if (fa < len(need_track_wall)
+                                      and need_track_wall[fa]) else None),
+                      wall_gen=wall_gen)
         if args.alpha_export:
             # v101h Doppelpass: identische Geometrie ueber Schwarz und Weiss,
             # dazwischen den Anim-/Kamera-State zuruecksetzen.
