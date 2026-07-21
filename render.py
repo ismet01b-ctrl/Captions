@@ -4430,6 +4430,66 @@ def build_watermark(W, H):
     return (_wm_arr, _wx, _wy)
 
 
+# v101d SAFE-ZONE-REGIE: Jede Plattform legt ihre Bedienelemente woanders hin.
+# Text, der unter der Like/Share-Leiste oder hinter der Untertitel-/Ton-Zeile
+# verschwindet, ist verlorener Platz - der teuerste Fehler im Hochformat. Statt
+# eines pauschalen "Safe-Zone an/aus" kennen wir die echten UI-Rechtecke der
+# drei grossen Feeds (Stand 2026) und leiten daraus die nutzbare Text-Flaeche
+# ab. Werte sind Anteile 0..1, konservativ (lieber 2% Reserve zu viel).
+PLATFORM_UI = {
+    # right = Button-Spalte rechts (Like/Kommentar/Teilen/Profil)
+    # bottom = Caption-/Ton-/Beschreibungs-Zeile unten
+    # top = Reiter/Progress oben
+    'tiktok':  {'right': 0.155, 'bottom': 0.20, 'top': 0.09, 'label': 'TikTok'},
+    'reels':   {'right': 0.150, 'bottom': 0.24, 'top': 0.10, 'label': 'Instagram Reels'},
+    'shorts':  {'right': 0.150, 'bottom': 0.20, 'top': 0.12, 'label': 'YouTube Shorts'},
+    # generic = alle Plattformen gleichzeitig sicher (Schnittmenge der Zonen)
+    'generic': {'right': 0.160, 'bottom': 0.24, 'top': 0.12, 'label': 'alle Feeds'},
+}
+
+
+def platform_safe_zones(platform, W, H):
+    """Nutzbare Text-Flaeche fuer eine Plattform. Rueckgabe: dict mit
+    Pixel-Grenzen left/right/top/bottom (das Rechteck, IN dem Text sicher liegt)
+    plus der Button-Spalten-Grenze right_rail und dem Label. Unbekannte
+    Plattform -> 'generic' (Schnittmenge, nirgends verdeckt)."""
+    z = PLATFORM_UI.get(str(platform or 'generic').lower(), PLATFORM_UI['generic'])
+    return {
+        'left':   int(W * 0.05),
+        'right':  int(W * (1.0 - z['right'])),   # Button-Spalte bleibt frei
+        'right_rail': int(W * (1.0 - z['right'])),
+        'top':    int(H * z['top']),
+        'bottom': int(H * (1.0 - z['bottom'])),  # Caption-Zeile bleibt frei
+        'label':  z['label'],
+    }
+
+
+def safe_zone_report(plans, pz, W, H):
+    """v101d: prueft die fertig platzierten Momente gegen die Plattform-Maske
+    und meldet, welche in die Button-Spalte oder Caption-Zeile ragen. Nur
+    Momente mit bekanntem Sprite ('arr') und Zentrum ('cx') werden geprueft -
+    der Rest ist ohnehin mittig und durch die Constraints gedeckt.
+    Rueckgabe: Liste (kw_txt, grund). Rein beratend, aendert nichts."""
+    if not pz:
+        return []
+    warn = []
+    for p in plans:
+        arr = p.get('arr')
+        cx = p.get('cx')
+        if arr is None or cx is None:
+            continue
+        cy = p.get('cy', p.get('by'))
+        w = arr.shape[1]
+        h = arr.shape[0]
+        if cx + w / 2 > pz['right_rail'] + 2:
+            warn.append((p.get('kw_txt', '?'), 'Button-Spalte rechts'))
+        elif cy is not None and cy + h / 2 > pz['bottom'] + 2:
+            warn.append((p.get('kw_txt', '?'), 'Caption-Zeile unten'))
+        elif cy is not None and cy - h / 2 < pz['top'] - 2:
+            warn.append((p.get('kw_txt', '?'), 'Reiter oben'))
+    return warn
+
+
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None, faces_at=None, flow_map=None,
                 loud=None, beat_times=None):
@@ -4478,8 +4538,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     Z_MAIN = H * 0.40         # gemeinsamer Anker: cascade / outline / stack
     Z_BEHIND = H * 0.34       # Text hinter der Person, sitzt hoeher
     safe_z = portrait and cfg['effects'].get('safe_zone', True)
+    # v101d: plattform-genaue UI-Maske. Jeder Feed legt Button-Spalte und
+    # Caption-Zeile woanders hin; die Zonen speisen die vertikalen Text-Grenzen
+    # (v_zone) und den rechten Rand (clamp_cx), statt einer pauschalen Reserve.
+    _plat = str(cfg.get('output', {}).get('platform', 'generic')).lower()
+    _pz = platform_safe_zones(_plat, W, H) if safe_z else None
     if safe_z:
-        print("Safe-Zone 9:16 aktiv: Buttons rechts und Beschreibung unten bleiben frei")
+        print(f"Safe-Zone 9:16 aktiv ({_pz['label']}): Button-Spalte rechts "
+              f"und Caption-Zeile unten bleiben frei")
 
     # v86: Baseline-Grid. Aufeinanderfolgende Captions sollen auf EINER Linie
     # sitzen statt bei jedem Moment ein paar Prozent zu huepfen. Zwei Massnahmen:
@@ -4498,8 +4564,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             return H * 0.70
         _, fy, fw = face_pos(start, end)
         head_top = fy - fw * 1.15
-        floor_top = H * (0.12 if safe_z else 0.10)
-        cap_bot = H * (0.64 if safe_z else 0.74)
+        if _pz is not None:
+            # v101d: Grenzen aus der Plattform-Maske. cap_bot laesst H*0.10
+            # Text-Hoehe unter dem Anker frei, damit nichts in die Caption-Zeile
+            # ragt; Reels (mehr Chrome unten) sitzt so hoeher als TikTok.
+            floor_top = _pz['top']
+            cap_bot = _pz['bottom'] - H * 0.10
+        else:
+            floor_top = H * 0.10
+            cap_bot = H * 0.74
         # Band mit Hysterese: rein in 'oben' erst ab 0.39, rein in 'unten' erst
         # ab 0.29; dazwischen bleibt das zuletzt gewaehlte Band stehen.
         prev = vz_state['band']
@@ -4517,9 +4590,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     def clamp_cx(cx, sprite_w):
         m = W * 0.045 + 30            # Rand + Reserve fuer Kamera und Tracking
         half = sprite_w / 2
-        if half + m >= W - half - m:  # Sprite breiter als der sichere Bereich: zentrieren
-            return W / 2
-        return min(max(cx, half + m), W - half - m)
+        lo, hi = half + m, W - half - m
+        if _pz is not None:
+            # v101d: rechter Rand endet an der Button-Spalte, nicht am Bildrand.
+            hi = min(hi, _pz['right_rail'] - half)
+            lo = max(lo, _pz['left'] + half)
+        if lo >= hi:                  # Sprite breiter als der sichere Bereich: zentrieren
+            return W / 2 if _pz is None else (lo + hi) / 2
+        return min(max(cx, lo), hi)
 
     side_state = {'seen': 0, 'rot': 0}
     def next_side_cam():
@@ -5367,6 +5445,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 n_snap += 1
         if n_snap:
             print(f"  Beat-Grid: {n_snap} Moment(e) rasten auf den Takt")
+
+    # v101d: Safe-Zone-Kontrolle. Die Constraints (v_zone/clamp_cx) halten Text
+    # schon in der Flaeche; hier melden wir nur die Faelle, wo ein Sprite dafuer
+    # zu gross ist und trotzdem ins Chrome ragt - damit der Kunde es sieht.
+    _sz_warn = safe_zone_report(plans, _pz, W, H)
+    if _sz_warn:
+        _lst = ', '.join(f"'{t}' ({g})" for t, g in _sz_warn[:3])
+        print(f"  Safe-Zone-Warnung ({_pz['label']}): {len(_sz_warn)} Moment(e) "
+              f"ragen ins UI - {_lst}")
 
     plans.sort(key=lambda p: p['start'])
     return plans

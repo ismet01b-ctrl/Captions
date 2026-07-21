@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101d Safe-Zone-Regie (Innovations-Batch 4).** Statt eines pauschalen
+  "Safe-Zone an/aus" kennt die Pipeline jetzt die echten UI-Rechtecke der
+  drei grossen Feeds (Stand 2026): PLATFORM_UI + platform_safe_zones()
+  liefern pro Plattform (tiktok/reels/shorts/generic) das nutzbare Text-
+  Rechteck (Button-Spalte rechts, Caption-Zeile unten, Reiter oben bleiben
+  frei). Diese Zonen speisen als ECHTE Constraints die Platzierung:
+  v_zone() zieht floor_top/cap_bot aus der Maske (Reels sitzt hoeher als
+  TikTok, weil unten mehr Chrome liegt), clamp_cx() endet am rechten Rand
+  an der Button-Spalte statt am Bildrand. Zusaetzlich safe_zone_report():
+  meldet Momente, deren Sprite trotz Constraint ins UI ragt (zu breit/tief)
+  - beratend, aendert nichts. Plattform aus output.platform (config-Default
+  generic = Schnittmenge, nirgends verdeckt); TikTok-Preset opted in; Client-
+  Override auf {generic,tiktok,reels,shorts} whitelisted (kein Pfad-Risiko).
+  9 neue Tests (Zonen-Geometrie, Reels<TikTok, generic-Fallback, Report-
+  Treffsicherheit, clamp-Constraint im Voll-build_plans, Main+Config-
+  Verdrahtung, Sanitizer-Whitelist). Regression 574/574 + 6/1/1/2 Renders +
+  GUI_OK. EHRLICH: die UI-Rechteck-Werte sind aus den 2026er-Layouts
+  abgeleitet, hier synthetisch getestet - final prueft Ismet an echten
+  Screenshots der drei Apps.
+  BETRIEB: Sandbox-Session erneut auf v100 zurueckgesetzt (v101a-c lokal
+  weg, Remote hatte alles) - Recovery per git reset --hard auf
+  origin/branch, Safe-Zone-Arbeit war noch uncommitted und wurde neu
+  aufgetragen. Bestaetigt die Lehre: nach jeder gruenen Einheit sofort
+  pushen (jetzt geschehen).
+
 - **v101c Beat-Grid (Innovations-Batch 3).** Liegt Musik mit klarem Takt
   unter dem Clip, rasten Keyword-Momente auf den naechsten Beat ein
   ("cut on the beat", Editor-Handwerk). beat_grid_times() zieht die

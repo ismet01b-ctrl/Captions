@@ -1166,6 +1166,10 @@ def _sanitize_overrides(ov):
             except Exception:
                 o.pop('height', None)
         o.pop('master', None)          # ProRes-Master nie per Override (Riesen-Files)
+        # v101d: Safe-Zone-Plattform - nur bekannte Masken zulassen.
+        if 'platform' in o and str(o.get('platform')).lower() not in \
+                ('generic', 'tiktok', 'reels', 'shorts'):
+            o.pop('platform', None)
     e = out.get('effects')
     if isinstance(e, dict):
         for k, cap in (('blender_samples', 256), ('blender_anim_frames', 24),
@@ -1219,6 +1223,7 @@ def build_config(look, overrides=None):
                 'italic': 'fonts/tiktok_bold.ttf',
                 'script': 'fonts/tiktok_bold.ttf',
             },
+            'output': {'platform': 'tiktok'},   # v101d: engere TikTok-UI-Maske
             'matting_quality': 'hoch',
         },
         'creator': {

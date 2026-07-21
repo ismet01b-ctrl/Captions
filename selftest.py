@@ -1430,6 +1430,49 @@ def _scenario_logic(clip, transcript, tmp):
           and _src99.count('beat_times=_beat_ts') >= 2
           and '_beat_ts = None' in _src99)
 
+    # v101d Safe-Zone-Regie: plattform-genaue UI-Masken als Constraints.
+    _tkz = R.platform_safe_zones('tiktok', 1080, 1920)
+    _rlz = R.platform_safe_zones('reels', 1080, 1920)
+    _gnz = R.platform_safe_zones('unbekannt', 1080, 1920)
+    check('v101d: Plattform-Zone liefert Text-Rechteck',
+          _tkz['right_rail'] < 1080 and _tkz['bottom'] < 1920
+          and _tkz['top'] > 0 and _tkz['left'] > 0,
+          f"rail={_tkz['right_rail']} bot={_tkz['bottom']}")
+    check('v101d: Reels sitzt hoeher als TikTok (mehr Chrome unten)',
+          _rlz['bottom'] < _tkz['bottom'], f"{_rlz['bottom']} < {_tkz['bottom']}")
+    check('v101d: unbekannte Plattform faellt auf generic (nirgends verdeckt)',
+          _gnz['label'] == 'alle Feeds')
+    # Report meldet nur echte Ueberlappungen, ignoriert Momente ohne Sprite
+    _szp = [
+        {'kw_txt': 'MITTE', 'cx': 540, 'cy': 960, 'arr': np.zeros((80, 400, 4), np.uint8)},
+        {'kw_txt': 'RECHTS', 'cx': 860, 'cy': 960, 'arr': np.zeros((80, 500, 4), np.uint8)},
+        {'kw_txt': 'UNTEN', 'cx': 540, 'cy': 1830, 'arr': np.zeros((80, 200, 4), np.uint8)},
+        {'kw_txt': 'OHNE'},
+    ]
+    _szw = R.safe_zone_report(_szp, _tkz, 1080, 1920)
+    _szt = {t for t, g in _szw}
+    check('v101d: Report flaggt UI-Ueberlappung, nicht mittigen/spritelosen Text',
+          'RECHTS' in _szt and 'UNTEN' in _szt
+          and 'MITTE' not in _szt and 'OHNE' not in _szt, str(_szw))
+    check('v101d: ohne Plattform (Landscape) kein Report', R.safe_zone_report(_szp, None, 1080, 1920) == [])
+    # build_plans: clamp haelt Text links der Button-Spalte (Constraint greift)
+    _cfg_tk = copy.deepcopy(cfg)
+    _cfg_tk['effects']['safe_zone'] = True
+    _cfg_tk.setdefault('output', {})['platform'] = 'tiktok'
+    _szfp = lambda s, e: (900, 300, 60)     # Gesicht weit rechts -> Text will nach rechts
+    _szpl = R.build_plans([{'word': 'Weltrekord', 'start': 1.0, 'end': 1.8}], {0},
+                          _cfg_tk, S, 1080, 1920, lambda s, e: True,
+                          {0: {'fx': 'outline', 'power': 2}}, face_pos=_szfp)
+    _rail = R.platform_safe_zones('tiktok', 1080, 1920)['right_rail']
+    _okx = all(p['cx'] + p['arr'].shape[1] / 2 <= _rail + 2
+               for p in _szpl if p.get('arr') is not None and 'cx' in p)
+    check('v101d: clamp_cx haelt Text links der TikTok-Button-Spalte', _okx)
+    check('v101d: Plattform-Maske im Main verdrahtet + config-Default',
+          "platform_safe_zones(_plat" in _src99
+          and "cfg.get('output', {}).get('platform'" in _src99
+          and 'platform: generic' in open(os.path.join(HERE, 'config.yaml'),
+                                           encoding='utf-8').read())
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
@@ -2365,6 +2408,12 @@ def _scenario_security(tmp):
           and 'master' not in ov.get('output', {})
           and ov['effects']['blender_samples'] == 256
           and ov['effects']['bg_blur'] == 0.5 and 'boeses' not in ov)
+    # v101d: Safe-Zone-Plattform - nur bekannte Masken durch, Rest raus.
+    ovp_ok = SV._sanitize_overrides({'output': {'platform': 'reels'}})
+    ovp_bad = SV._sanitize_overrides({'output': {'platform': '../evil'}})
+    check('v101d: output.platform Whitelist (bekannt bleibt, unbekannt raus)',
+          ovp_ok.get('output', {}).get('platform') == 'reels'
+          and 'platform' not in ovp_bad.get('output', {}))
     # v96x: KI-Regie NIE per Override/Template abschaltbar; Nicht-Dict-Sektionen
     # (keywords: null) crashen build_config nicht mehr.
     ovk = SV._sanitize_overrides({'keywords': {'ai': False, 'ai_model': 'gpt-4o',

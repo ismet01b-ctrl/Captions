@@ -5,6 +5,10 @@ output:
   preset: medium
   master: false
   speed: standard
+  # v101d Safe-Zone-Regie: Ziel-Plattform fuer die UI-Maske im Hochformat.
+  # generic = fuer alle Feeds sicher (Schnittmenge). tiktok/reels/shorts =
+  # engere, plattform-genaue Maske. Nur bei 9:16 aktiv (effects.safe_zone).
+  platform: generic
 matting_downsample: auto
 fonts:
   display: fonts/archivo.ttf
