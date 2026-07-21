@@ -225,7 +225,6 @@ footer .links a:hover { color: var(--fg); }
   padding: 24px 28px; font-size: 16px; line-height: 1.6;
 }
 .pay-once strong { color: var(--gold); }
-.pay-once .compare { display: block; margin-top: 10px; color: var(--mut); font-size: 14px; }
 .plans {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 24px; align-items: stretch; margin-top: 12px;
@@ -262,18 +261,9 @@ footer .links a:hover { color: var(--fg); }
 }
 .plan .buy:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4); }
 .pricing-foot { text-align: center; color: var(--mut); font-size: 14px; margin-top: 28px; }
-.gdpr {
-  max-width: 680px; margin: 56px auto 0; text-align: center;
-  background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
-  padding: 28px 32px;
-}
-.gdpr h3 { font-size: 18px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.3px; }
-.gdpr p { color: var(--mut); font-size: 14px; line-height: 1.6; }
-.gdpr a { color: var(--acc2); font-weight: 600; }
 @media (max-width: 640px) {
   .pay-once { padding: 20px; font-size: 15px; }
   .plan { padding: 36px 22px 26px; }
-  .gdpr { padding: 24px 20px; }
 }
 </style>
 </head>
@@ -469,8 +459,6 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   <div class="pay-once">
     <strong>Einmalkauf.</strong> Kein Abo, keine automatische Verlängerung, keine versteckte
     Abbuchung. Deine Credits sind <strong>6 Monate gültig</strong>.
-    <span class="compare">Zum Vergleich: Submagic kostet 19&nbsp;$ pro Monat für 15 Videos —
-      und bucht jeden Monat wieder ab.</span>
   </div>
 
   <div class="plans">
@@ -505,13 +493,6 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   <p class="pricing-foot">Du kaufst einmal und renderst, wann du willst.
     Kein Countdown, kein „Plan pausieren", kein Kündigen-Labyrinth.</p>
 
-  <div class="gdpr">
-    <h3>Datenschutz, ehrlich</h3>
-    <p>DouchkoVE ist ein EU-Anbieter. Fertige Videos werden nach 7 Tagen automatisch vom
-      Server gelöscht, dein Konto kannst du jederzeit komplett löschen. Transkription und
-      KI-Regie laufen über die OpenAI-API — das steht klar in der
-      <a href="/privacy">Datenschutzerklärung</a>, ohne Sternchen im Kleingedruckten.</p>
-  </div>
 </section>
 
 <div class="bottom-cta wrap">
