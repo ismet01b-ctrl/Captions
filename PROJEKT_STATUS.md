@@ -3,6 +3,52 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v100 Animations-Pass (Ismet: "Fixe alle Animationen. Dynamisch, high
+  end, Stand 2026, wie von einem Senior-VFX-Spezialisten").** Methodik:
+  alle 26 Animationen als Filmstreifen-Proben gerendert (animprobe-Harness,
+  10 Frames ueber 1.3s, stateful mit Audio) und wie ein Motion-Designer
+  beurteilt. 13 waren unter Standard und wurden neu gebaut - Prinzipien:
+  Envelope-Follower statt Roh-Audio, Federn mit Overshoot statt ease_out,
+  Anticipation/Impact/Settle statt Endlos-Drift, deterministisch
+  verwuerfelte Staffelung statt linearer Muster, Tremor statt Weissrauschen:
+  * sturz: 3 Akte (Luft holen -> Gravitations-Fall mit Rotation ->
+    AUFPRALL mit Squash + Nachfedern, steht voll sichtbar). Vorher fiel es
+    ins Nichts und hing 70% transparent in der Luft.
+  * anstieg: Feder mit Overshoot + vertikalem Stretch waehrend der
+    Bewegung (Squash & Stretch), steht exakt.
+  * wende: asymmetrisch - quint-schnell raus, federt mit ~8 Grad
+    Overshoot zurueck, dimmt am Steilpunkt (Tiefe). Vorher symmetrischer
+    Sinus = Fahne im Wind.
+  * druck: Last KOMMT AN (ease-in), staucht ueber das Ziel, federt
+    gedaempft. Vorher linearer Dauer-Squash.
+  * explosion: Streu-Richtung deterministisch verwuerfelt - das
+    Parity-Zickzack (Spalte auf/ab im Takt) war als Muster lesbar.
+  * regen: Gravitation (x^2) + Bounce beim Aufschlag + verwuerfelte
+    Staffelung. Vorher weiche ease_out-Landung im Gleichschritt.
+  * rutsche: Feder-Overshoot pro Streifen + verwuerfelte Staffelung.
+  * zittern: Tremor aus zwei ueberlagerten Frequenzen mit Wort-Phase +
+    abklingendem Onset-Kick + 0.8 Grad Mikro-Rotation. Vorher
+    Weissrauschen (jeder Frame neuer Zufall = Renderfehler-Optik).
+  * glitch: klingt ueber 2-4 Frames ab + RGB-Split (Chromatic).
+    Vorher 1-Frame-Zufallsversatz.
+  * neon: ZUENDET (3 deterministische Stotter, dann an), flackert danach
+    selten und nur auf 0.78; Glow atmet mit Stimme und Zuendzustand.
+    Vorher 5%-Zufalls-Vollbild-Strobo.
+  * puls/schub: Envelope-Follower (schneller Attack, traeger Release)
+    statt rohem Bass-Wert bzw. festem 0.66s-Metronom.
+  * welle: Energie klingt ab (voll -> 36% Restschwingen) + Oberwelle
+    gegen die Sinus-Signatur.
+  Die 13 bereits guten (knall, stempel, fokus, gewicht, schweben, kippen,
+  spur, enthuellen, bruch, magnet, zoom_punch, schwund, cascade-Path)
+  blieben unangetastet. API/Namen/Dauern unveraendert, SFX-Timing
+  kompatibel (Sounds sitzen auf Wort-Onsets, nicht auf Anim-Phasen).
+  Beweis: Vorher/Nachher-Filmstreifen + Showcase-MP4 (13 Anims a 1.5s),
+  Verhaltens-Invarianten im Selftest (sturz landet bei dy~0.30h voll
+  sichtbar, wende endet lesbar, neon 0.27->0.96, alle 26 crashfrei ueber
+  40 Frames mit Zustand). Regression 556/556 + GUI_OK. Ehrlich: Wirkung
+  im echten Video (mit Motion-Blur + Beat-Sync obendrauf) prueft Ismet
+  auf douchko.eu/Windows.
+
 - **v99a Ansage ist Gesetz (Ismet testete mit ECHTEM Selfie-Video auf
   douchko.eu: "der macht nicht das, was er sagt").** Diagnose am
   hochgeladenen Video (15s Selfie, Strasse): die v99-Momente ENTSTANDEN

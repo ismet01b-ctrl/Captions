@@ -454,17 +454,49 @@ def _anim_core(p, base, aud, dt):
     rng = p.setdefault('_arng', np.random.default_rng(int(p['start'] * 977) & 0xffff))
 
     if a == 'glitch':                       # digitaler Riss auf harten Beats
-        if a_onset > 0.5:
-            arr = glitch_arr(base, rng, a_onset)
-            dx = (float(rng.random()) - 0.5) * 10 * a_onset
+        # v100: Ein Glitch dauert 2-4 Frames und klingt AB, dazu RGB-Split -
+        # der 1-Frame-Zufallsversatz wirkte wie ein Bug, nicht wie Absicht.
+        g = p.setdefault('_gl', 0.0)
+        _pt = p.get('_gl_t', dt)
+        _st = dt - _pt if 0.0 < dt - _pt < 0.2 else (1.0 / 30.0)
+        p['_gl_t'] = dt
+        g = max(a_onset if a_onset > 0.5 else 0.0, g * (0.55 ** (_st * 30.0)))
+        p['_gl'] = g
+        if g > 0.08:
+            arr = glitch_arr(base, rng, g)
+            off = max(int(round(3 * g)), 1)
+            spl = arr.copy()
+            spl[..., 0] = np.roll(arr[..., 0], off, axis=1)
+            spl[..., 2] = np.roll(arr[..., 2], -off, axis=1)
+            arr = spl
+            dx = (float(rng.random()) - 0.5) * 8 * g
     elif a == 'puls':                       # atmet auf dem Bass
-        sc = 1.0 + 0.055 * a_bass
+        # v100: Envelope-Follower (schneller Attack, traeger Release) statt
+        # rohem Bass-Wert - das rohe Mapping zappelte mit jedem Frame.
+        # Ein Puls ATMET: zieht schnell an, laesst weich los.
+        env = p.setdefault('_puls', 0.0)
+        _pt = p.get('_puls_t', dt)
+        _st = dt - _pt if 0.0 < dt - _pt < 0.2 else (1.0 / 30.0)
+        p['_puls_t'] = dt
+        if a_bass > env:
+            env = min(env + (a_bass - env) * min(_st * 18.0, 1.0), 1.0)
+        else:
+            env *= 0.82 ** (_st * 30.0)
+        p['_puls'] = env
+        e = env * env * (3 - 2 * env)
+        sc = 1.0 + 0.065 * e
+        dy = -base.shape[0] * 0.012 * e     # hebt minimal mit: atmen, nicht springen
     elif a == 'welle':                      # Woge laeuft durch die Buchstaben
+        # v100: Die Woge SETZT sich (volle Amplitude nur ~1.2s, dann 36%
+        # Restschwingen) und traegt eine Oberwelle (2.7x, 30%) - der nackte
+        # Endlos-Sinus war als Loop erkennbar.
         h, w = base.shape[:2]
-        ph = (dt * 2.4) % (2 * math.pi)
-        amp = h * 0.05 * (0.45 + 0.55 * a_rms)
+        ph = dt * 2.6
+        settle = 0.36 + 0.64 * math.exp(-max(dt - 0.15, 0.0) * 1.6)
+        amp = h * 0.055 * (0.45 + 0.55 * a_rms) * settle
         ys = np.arange(h, dtype=np.float32)
-        shift = amp * np.sin(ys / max(h, 1) * 6.0 + ph)
+        shift = (amp * np.sin(ys / max(h, 1) * 5.0 + ph)
+                 + amp * 0.30 * np.sin(ys / max(h, 1) * 13.5 - ph * 1.7))
         xs = np.arange(w, dtype=np.float32)
         M = np.zeros((h, w, 2), np.float32)
         M[..., 0] = xs[None, :] + shift[:, None]
@@ -472,23 +504,56 @@ def _anim_core(p, base, aud, dt):
         arr = cv2.remap(base, M, None, cv2.INTER_LINEAR,
                         borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
     elif a == 'zittern':                    # nervoese Energie, Shake auf Onsets
-        k = 0.35 + 0.65 * a_onset
-        dx = (float(rng.random()) - 0.5) * 9 * k
-        dy = (float(rng.random()) - 0.5) * 7 * k
+        # v100: Tremor statt Weissrauschen. Jeder Frame neuer Zufall liest
+        # sich als Renderfehler; echtes Zittern sind zwei ueberlagerte
+        # Frequenzen mit Wort-eigener Phase, ein Onset-Kick der AUSKLINGT
+        # und 0.8 Grad Mikro-Rotation.
+        ph = hand_jitter(p.get('kw_i', 0)) * 10.0
+        kick = p.setdefault('_zit', 0.0)
+        _pt = p.get('_zit_t', dt)
+        _st = dt - _pt if 0.0 < dt - _pt < 0.2 else (1.0 / 30.0)
+        p['_zit_t'] = dt
+        kick = max(a_onset, kick * (0.78 ** (_st * 30.0)))
+        p['_zit'] = kick
+        k = 0.45 + 0.9 * kick
+        dx = (math.sin(dt * 39.0 + ph) + 0.5 * math.sin(dt * 61.0 + ph * 1.7)) * 3.2 * k
+        dy = (math.cos(dt * 47.0 + ph * 0.6) + 0.5 * math.sin(dt * 71.0 + ph)) * 2.6 * k
+        arr = rot_img(base, 0.8 * math.sin(dt * 33.0 + ph) * k)
     elif a == 'neon':                       # Leuchtreklame: glimmt und flackert
+        # v100: Echte Roehre - sie ZUENDET (drei kurze Stotter, dann an),
+        # flackert danach selten und nur auf 0.78 (kein Vollbild-Strobo mit
+        # Zufalls-Tiefe), und der Glow atmet mit der Stimme und dem Zuend-
+        # Zustand mit.
+        ph = hand_jitter(p.get('kw_i', 0))
         f = 1.0
-        if float(rng.random()) < 0.05:
-            f = 0.4 + 0.4 * float(rng.random())
-        op = f * (0.88 + 0.12 * a_rms)
+        if dt < 0.34:
+            f = 0.28
+            for i0, z in enumerate((0.05, 0.16, 0.26)):
+                if z <= dt < z + 0.045 + 0.02 * i0:
+                    f = 0.85 + 0.15 * (i0 / 2.0)
+            if dt >= 0.30:
+                f = 1.0
+        elif math.sin(dt * 7.3 + ph * 9.0) > 0.997:
+            f = 0.78
+        op = f * (0.90 + 0.10 * a_rms)
         arr = base.copy()
-        glow = cv2.GaussianBlur(base[..., :3].astype(np.float32), (0, 0), 6) \
-            * (0.5 + 0.45 * a_rms)
+        glow = cv2.GaussianBlur(base[..., :3].astype(np.float32), (0, 0), 7) \
+            * (0.42 + 0.5 * a_rms) * (0.55 + 0.45 * f)
         arr[..., :3] = np.clip(base[..., :3].astype(np.float32) * 0.85 + glow,
                                0, 255).astype(base.dtype)
     elif a == 'schub':                      # Druck nach vorn auf jedem Beat
-        push = math.exp(-((dt * 6.0) % 4.0) * 1.6) * max(a_bass, 0.25)
-        sc = 1.0 + 0.10 * push
-        dy = -push * 12
+        # v100: sitzt auf ECHTEN Akzenten (Onset/Bass-Follower) statt auf
+        # einem festen 0.66s-Metronom - mechanische Perioden ohne Bezug zur
+        # Stimme sind sofort als billig erkennbar.
+        env = p.setdefault('_schub', 0.0)
+        _pt = p.get('_schub_t', dt)
+        _st = dt - _pt if 0.0 < dt - _pt < 0.2 else (1.0 / 30.0)
+        p['_schub_t'] = dt
+        env = max(max(a_onset, a_bass * 0.55), env * (0.80 ** (_st * 30.0)))
+        p['_schub'] = env
+        e = env * env
+        sc = 1.0 + 0.085 * e
+        dy = -base.shape[0] * 0.05 * e
     elif a == 'bruch':                      # das Wort zerbricht: Scherben kippen weg
         # Erst steht das Wort ganz (0.30 s), dann reisst es auf und die Scherben
         # driften minimal auseinander - lesbar bleibt es die ganze Zeit.
@@ -516,27 +581,78 @@ def _anim_core(p, base, aud, dt):
                 np.maximum(out, warped, out=out)
             arr = out
     elif a == 'sturz':                      # faellt: Preise, Aktien, Umsatz, Absturz
-        e = min(max(dt / 0.55, 0.0), 1.0) ** 2      # Schwerkraft: wird schneller
+        # v100: Physik in drei Akten - Anticipation (kurz Luft holen), dann
+        # beschleunigter Fall mit Rotation, dann AUFPRALL: Squash, kurzes
+        # Nachfedern, steht. Vorher fiel das Wort ins Nichts und blieb 70%
+        # transparent in der Luft haengen - kein Ende, kein Gewicht.
         h = base.shape[0]
-        dy = h * 0.32 * e
-        dx = -h * 0.05 * e
-        arr = rot_img(base, -4.5 * e)
-        op = 1.0 - 0.30 * e                 # sackt weg, bleibt aber lesbar
+        drop = h * 0.30
+        rot = 0.0
+        if dt < 0.10:
+            dy = -h * 0.035 * smoothstep(dt / 0.10)
+        elif dt < 0.42:
+            f = (dt - 0.10) / 0.32
+            dy = -h * 0.035 + (drop + h * 0.035) * f * f
+            dx = -h * 0.04 * f
+            rot = -5.0 * f
+        else:
+            k = min((dt - 0.42) / 0.30, 1.0)
+            rb = math.exp(-k * 6.0) * math.cos(k * 18.0)
+            dy = drop - h * 0.04 * max(rb, 0.0)
+            dx = -h * 0.04
+            rot = -5.0 * math.exp(-k * 5.0)
+            sq = math.exp(-k * 9.0) * 0.10
+            if sq > 0.01:
+                arr = cv2.resize(base, (int(base.shape[1] * (1 + sq * 0.5)),
+                                        max(int(h * (1.0 - sq)), 2)),
+                                 interpolation=cv2.INTER_LINEAR)
+        if abs(rot) > 0.05:
+            arr = rot_img(arr if arr is not base else base, rot)
     elif a == 'anstieg':                    # steigt: Rekord, Gewinn, Zuwachs, Hoch
-        e = ease_out(min(dt / 0.70, 1.0))
-        dy = -base.shape[0] * 0.20 * e
-        sc = 1.0 + 0.06 * e
+        # v100: Feder statt ease_out - steigt zuegig, schiesst ueber und
+        # setzt sich; waehrend der Bewegung leicht vertikal gestreckt
+        # (Squash & Stretch), im Stand exakt 1.0. Das flache Gleiten ohne
+        # Overshoot war leblos.
+        e = spring(min(dt / 0.55, 1.6), freq=2.3, damp=5.6)
+        dy = -base.shape[0] * 0.24 * e
+        vel = abs(e - p.get('_anst', e))
+        p['_anst'] = e
+        stretch = min(vel * 6.0, 0.10)
+        if stretch > 0.01:
+            h, w = base.shape[:2]
+            arr = cv2.resize(base, (max(int(w * (1 - stretch * 0.4)), 2),
+                                    max(int(h * (1 + stretch)), 2)),
+                             interpolation=cv2.INTER_LINEAR)
+        sc = 1.0 + 0.05 * min(e, 1.0)
     elif a == 'wende':                      # kippt um: Wende, Umkehr, Gegenteil
-        # Echte 3D-Drehung um die Hochachse mit Fluchtpunkt: die nahe Kante wird
-        # groesser, die ferne kleiner. Kommt lesbar zurueck - kein Spiegeltext.
-        ang = math.sin(min(dt / 0.75, 1.0) * math.pi) * 1.05     # max ~60 Grad
+        # v100: Asymmetrisch wie eine Entscheidung - reisst schnell auf
+        # (quint), federt mit ~8 Grad Overshoot zurueck; am Steilpunkt dimmt
+        # das Licht und das Wort weicht minimal zurueck (Tiefe). Der
+        # symmetrische Sinus war eine Fahne im Wind.
+        if dt < 0.22:
+            ang = 1.05 * (1.0 - (1.0 - dt / 0.22) ** 5)
+        else:
+            ang = 1.05 * (1.0 - spring(min((dt - 0.22) / 0.55, 1.4),
+                                       freq=2.4, damp=5.2))
         arr, _px, _py = _persp3d(base, 0.0, ang, 0.18)
+        k_edge = min(abs(ang) / 1.05, 1.0)
+        op = 1.0 - 0.10 * k_edge
+        sc = 1.0 - 0.05 * k_edge
     elif a == 'druck':                       # wird erdrueckt: Last, Zwang, Belastung
-        sq = 0.10 * (0.55 + 0.45 * a_rms) * min(dt / 0.40, 1.0)
+        # v100: Last hat GEWICHT - sie faellt drauf (ease-in), staucht ueber
+        # das Ziel hinaus und federt gedaempft zurueck. Der lineare
+        # Dauer-Squash sah aus wie ein Skalierungs-Regler, nicht wie Druck.
+        target = 0.16 * (0.6 + 0.4 * a_rms)
+        if dt < 0.22:
+            sq = target * (dt / 0.22) ** 3
+        else:
+            k = min((dt - 0.22) / 0.45, 1.0)
+            sq = target * (1.0 + 0.35 * math.exp(-k * 5.0) * math.cos(k * 14.0))
+        sq = max(sq, 0.0)
         h, w = base.shape[:2]
-        arr = cv2.resize(base, (int(w * (1 + sq * 0.35)), max(int(h * (1 - sq)), 2)),
+        arr = cv2.resize(base, (int(w * (1 + sq * 0.45)), max(int(h * (1 - sq)), 2)),
                          interpolation=cv2.INTER_LINEAR)
-        dy = h * sq * 0.5                    # sinkt unter der Last nach unten
+        dy = h * sq * 0.55
     elif a == 'schwund':                     # loest sich auf: weg, verloren, vorbei
         e = min(max((dt - 0.35) / 0.75, 0.0), 1.0)
         if e > 0.001:
@@ -670,10 +786,14 @@ def _anim_core(p, base, aud, dt):
                     continue
                 seg = base[:, x0:x1]
                 cx = (x0 + x1) / 2 - w / 2
-                dx_s = int(cx / (w / 2) * (w * 0.48) * spread)
-                # aeussere Streifen fliegen auch nach oben/unten weg
-                dy_s = int((abs(cx) / (w / 2)) * (h * 0.22) * spread
-                           * (1 if i % 2 else -1))
+                # v100: Streu-Richtung deterministisch verwuerfelt statt
+                # strengem Auf/Ab im Spalten-Takt (das Parity-Zickzack war
+                # als Muster lesbar - Explosionen sind Chaos).
+                jit = ((((i + 1) * 2654435761) >> 3) & 1023) / 1023.0 - 0.5
+                dx_s = int(cx / (w / 2) * (w * 0.48) * spread
+                           * (1.0 + 0.25 * jit))
+                dy_s = int((abs(cx) / (w / 2)) * (h * 0.26) * spread
+                           * (jit * 2.0))
                 dst_x = padx + x0 + dx_s
                 dst_y = pady + dy_s
                 if 0 <= dst_x <= w + 2 * padx - (x1 - x0) and 0 <= dst_y <= h + 2 * pady - h:
@@ -733,16 +853,23 @@ def _anim_core(p, base, aud, dt):
         for i in range(n_col):
             x0 = i * cw
             x1 = min(x0 + cw, w)
-            # gestaffelt: linke Streifen zuerst fertig
-            offset = 0.05 * i
-            e = ease_out(min(max((dt - offset) / 0.55, 0.0), 1.0))
-            y_off = int((1.0 - e) * pad_y)
-            if e <= 0.001:
+            # v100: Staffelung deterministisch VERWUERFELT (lineares
+            # links-nach-rechts war ein sichtbares Muster), Fall mit echter
+            # Gravitation (x^2 statt ease_out = weiche Landung) und einem
+            # kleinen Bounce beim Aufschlag - Regen SCHLAEGT auf.
+            jit = ((i * 2654435761) & 1023) / 1023.0
+            offset = 0.17 * (i / max(n_col - 1, 1)) + 0.13 * jit
+            x = min(max((dt - offset) / 0.5, 0.0), 1.5)
+            if x <= 0.0:
                 continue
+            fall = min(x, 1.0) ** 2
+            bounce = 0.0
+            if x > 1.0:
+                bounce = math.exp(-(x - 1.0) * 6.0) * math.sin((x - 1.0) * 22.0) * 0.05
+            y_off = int(max((1.0 - fall) * pad_y - bounce * h, 0))
             seg = base[:, x0:x1]
-            alpha_mul = e
             gh = seg.copy()
-            gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * alpha_mul,
+            gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * min(x * 2.2, 1.0),
                                  0, 255).astype(base.dtype)
             np.maximum(out[y_off:y_off + h, x0:x1], gh,
                        out=out[y_off:y_off + h, x0:x1])
@@ -768,17 +895,22 @@ def _anim_core(p, base, aud, dt):
         for i in range(n_col):
             x0 = i * cw
             x1 = min(x0 + cw, w)
-            # gestaffelt: linke zuerst
-            offset = 0.06 * i
-            e = ease_out(min(max((dt - offset) / 0.45, 0.0), 1.0))
-            x_off = int((1.0 - e) * pad_x)
-            if e <= 0.001:
+            # v100: Staffelung verwuerfelt + Feder mit kleinem Overshoot -
+            # jeder Streifen rutscht 2-3% ueber sein Ziel hinaus und setzt
+            # sich. Lineares ease_out im Gleichschritt war Praesentations-
+            # Software, kein Motion Design.
+            jit = (((i + 3) * 2654435761) & 1023) / 1023.0
+            offset = 0.14 * (i / max(n_col - 1, 1)) + 0.10 * jit
+            x = min(max((dt - offset) / 0.42, 0.0), 1.5)
+            if x <= 0.0:
                 continue
+            e = spring(min(x, 1.4), freq=2.5, damp=5.6)
+            x_off = int((1.0 - e) * pad_x)
             seg = base[:, x0:x1]
             gh = seg.copy()
-            gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * e,
+            gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * min(x * 2.5, 1.0),
                                  0, 255).astype(base.dtype)
-            dst_x = x0 + x_off
+            dst_x = max(0, min(x0 + x_off, out.shape[1] - (x1 - x0)))
             np.maximum(out[:, dst_x:dst_x + (x1 - x0)], gh,
                        out=out[:, dst_x:dst_x + (x1 - x0)])
         arr = out

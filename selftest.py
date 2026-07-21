@@ -1291,6 +1291,47 @@ def _scenario_logic(clip, transcript, tmp):
           "fx_map[i]['intent'] = True" in _src99
           and _src99.count('anim_ctx(words, i') >= 2)
 
+    # v100 Animations-Pass: jede der 26 Animationen laeuft crashfrei ueber
+    # ihren ganzen Verlauf (stateful, mit Audio) und liefert brauchbare
+    # Frames. Dazu Verhaltens-Invarianten der neuen Physik.
+    _ab, _ = S.text('TEST', 90, (255, 255, 255))
+    _fails = []
+    for _an in R.ANIM_LIST:
+        try:
+            _pp = {'anim': _an, 'start': 1.0, 'kw_i': 2, 'arr': _ab}
+            for _k in range(0, 40):
+                _t = _k * 0.035
+                _aud = (0.6, 0.5, 1.0 if _t < 0.07 else 0.2)
+                _r = R.anim_apply(_pp, _ab, _aud, _t)
+                if _r[0] is None or _r[0].size == 0 or not (0.0 <= _r[4] <= 1.5):
+                    _fails.append(_an)
+                    break
+        except Exception as _e:
+            _fails.append(f'{_an}:{type(_e).__name__}')
+    check('v100: alle 26 Animationen crashfrei ueber vollen Verlauf',
+          not _fails, str(_fails))
+    # sturz LANDET (steht am Ende voll sichtbar, nicht 70% in der Luft)
+    _ps = {'anim': 'sturz', 'start': 1.0, 'kw_i': 2, 'arr': _ab}
+    for _k in range(0, 34):
+        _rs = R.anim_apply(_ps, _ab, (0.6, 0.5, 0.2), _k * 0.035)
+    check('v100: sturz landet (Aufprall statt Verblassen)',
+          abs(_rs[2] - _ab.shape[0] * 0.30) < _ab.shape[0] * 0.06
+          and _rs[4] >= 0.99, f'dy={_rs[2]:.1f} op={_rs[4]:.2f}')
+    # wende kommt lesbar zurueck (Winkel ~0, volle Deckkraft)
+    _pw = {'anim': 'wende', 'start': 1.0, 'kw_i': 2, 'arr': _ab}
+    _rw = R.anim_apply(_pw, _ab, (0.6, 0.5, 0.0), 1.25)
+    check('v100: wende endet lesbar (Overshoot ausgependelt)',
+          _rw[4] > 0.93 and _rw[3] > 0.97, f'op={_rw[4]:.2f} sc={_rw[3]:.3f}')
+    # neon ZUENDET: dunkel am Start, an nach der Zuendsequenz
+    _pn = {'anim': 'neon', 'start': 1.0, 'kw_i': 2, 'arr': _ab}
+    _op0 = R.anim_apply(dict(_pn), _ab, (0.6, 0.5, 0.0), 0.02)[4]
+    _op1 = R.anim_apply(dict(_pn), _ab, (0.6, 0.5, 0.0), 0.60)[4]
+    check('v100: neon zuendet (dunkel -> an)', _op0 < 0.5 < _op1,
+          f'{_op0:.2f} -> {_op1:.2f}')
+    check('v100: kein Weissrauschen-Shake mehr (zittern deterministisch)',
+          "rng.random()) - 0.5) * 9" not in _src99
+          and 'hand_jitter' in _src99)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
