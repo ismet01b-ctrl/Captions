@@ -3297,7 +3297,7 @@ def get_subtitles(jid: str, request: Request, fmt: str = 'srt'):
 @app.post('/api/transcript/{jid}')
 async def save_transcript(request: Request, jid: str,
                           edits: str = Form(...), code: str = Form(''),
-                          reanalyze: str = Form('1')):
+                          reanalyze: str = Form('1'), kwmarks: str = Form('')):
     """v80y: Wort-Korrekturen speichern (nur Text, Timings bleiben),
     Regie-/Momente-Cache invalidieren, Analyse neu starten.
     v101l: reanalyze=0 (Wizard-Schritt VOR dem Render) speichert nur - kein
@@ -3332,6 +3332,21 @@ async def save_transcript(request: Request, jid: str,
             n += 1
     json.dump(words, open(tp, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
+    # v101m: Keyword-Markierungen (Text-Editor) als Sidecar neben dem Input.
+    # {index: 1|-1} - erzwingen/entfernen. Nur gueltige Indizes/Werte, gedeckelt.
+    kmp = base + '_kwmarks.json'
+    if kwmarks:
+        try:
+            _km = json.loads(kwmarks)
+            _clean = {str(int(k)): int(v) for k, v in dict(_km).items()
+                      if int(v) in (1, -1) and 0 <= int(k) < len(words)}
+            if _clean:
+                json.dump(dict(list(_clean.items())[:400]),
+                          open(kmp, 'w', encoding='utf-8'))
+            elif os.path.exists(kmp):
+                os.remove(kmp)                # alle Marken entfernt
+        except Exception:
+            pass
     # Caches weg - Regie + Momente basieren auf altem Text
     for suffix in ('_regie3.json', '_momente.json'):
         try:

@@ -3737,6 +3737,42 @@ def correction_profile(corrections, min_count=2, max_rules=6):
             "generalisiere sie auf neue, aehnliche Stellen):\n" + lines + "\n\n")
 
 
+def apply_keyword_marks(kw, fx_map, words, marks, cfg):
+    """v101m: Keyword-Markierungen aus dem Text-Editor uebersteuern die KI-Wahl.
+    marks[i] = 1 (Wort ERZWINGEN als Highlight) / -1 (Wort NIE highlighten).
+    Die KI-Regie laeuft normal - hier wird danach nachjustiert. Erzwungene
+    Momente tragen user_pick=True und ueberleben so Dichte- und B-Roll-Gate
+    (wie intent, aber ohne dessen semantische Platzierung).
+    Rueckgabe: (kw, fx_map)."""
+    if not marks:
+        return kw, fx_map
+    kw = set(kw)
+    fx_map = dict(fx_map or {})
+    rot = [m for m in (cfg.get('effects', {}).get('keyword_rotation')
+                       or ['behind', 'outline', 'cascade', 'ground'])
+           if m and m != 'none'] or ['outline']
+    added = removed = 0
+    on = sorted(i for i, v in marks.items() if v == 1 and 0 <= i < len(words))
+    for pos, i in enumerate(on):
+        if i not in kw:
+            kw.add(i)
+            added += 1
+        info = dict(fx_map.get(i)) if isinstance(fx_map.get(i), dict) else {}
+        info.setdefault('fx', rot[pos % len(rot)])
+        info.setdefault('power', 2)
+        info.setdefault('n', 1)
+        info['user_pick'] = True
+        fx_map[i] = info
+    for i, v in marks.items():
+        if v == -1 and i in kw:
+            kw.discard(i)
+            fx_map.pop(i, None)
+            removed += 1
+    if added or removed:
+        print(f"Text-Markierungen: {added} erzwungen, {removed} entfernt")
+    return kw, fx_map
+
+
 def _looks_german(words):
     """v94: Rate die Sprache aus dem Transkript. Bei language='auto' wurde alles
     als Deutsch behandelt (non_de=False) - dann verwarf der Phrasen-Filter
@@ -5024,7 +5060,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # dort gehoert der Text hin. Der Szenen-Text braucht die Person
             # nicht (ground/liegend ist fuer B-Roll gebaut).
             if not any(isinstance((fx_map or {}).get(i), dict)
-                       and fx_map[i].get('intent') for i in g):
+                       and (fx_map[i].get('intent') or fx_map[i].get('user_pick'))
+                       for i in g):
                 prev_was_keyword = False
                 continue                   # Szenen ohne Sprecher bleiben textfrei
         # Hook: Laenge frei einstellbar (0 = aus), Staerke steuert die Dichte.
@@ -5055,9 +5092,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # Sprecher hat sie woertlich bestellt; faellt der Moment weg, "macht
         # das Video nicht, was er sagt". Intent gewinnt auch die Wort-Wahl
         # innerhalb der Gruppe.
+        # v101m: Nutzer-Markierungen (user_pick) sind wie intent gegen die
+        # Dichte-Regel geschuetzt - der Nutzer hat das Wort bewusst bestellt.
+        # (Die SEMANTISCHE Platzierung bleibt intent-only, siehe unten.)
         _g_int = [i for i in g_kw
                   if isinstance((fx_map or {}).get(i), dict)
-                  and fx_map[i].get('intent')]
+                  and (fx_map[i].get('intent') or fx_map[i].get('user_pick'))]
         if _g_int:
             g_kw = _g_int + [i for i in g_kw if i not in _g_int]
         gap_eff = min_gap * ((1.0 - 0.66 * hook_pow) if in_intro else 1.0)
@@ -7438,6 +7478,17 @@ def main():
                 break
         if n_chap:
             print(f"Kapitel-Struktur: {n_chap} Themenwechsel markiert")
+
+    # v101m: Keyword-Markierungen aus dem Text-Editor (Sidecar neben dem Input).
+    # Laeuft NACH KI-Regie + Heuristik + Kapiteln -> ist die letzte Instanz.
+    _km_path = os.path.splitext(args.input)[0] + '_kwmarks.json'
+    if os.path.exists(_km_path):
+        try:
+            _kmr = json.load(open(_km_path, encoding='utf-8'))
+            _kmr = {int(k): int(v) for k, v in _kmr.items() if int(v) in (1, -1)}
+            kw, fx_map = apply_keyword_marks(kw, fx_map, words, _kmr, cfg)
+        except Exception as _kme:
+            print(f"Text-Markierungen ignoriert ({type(_kme).__name__})")
 
     print("Keywords:", [clean(words[i]['word']) for i in sorted(kw)])
 

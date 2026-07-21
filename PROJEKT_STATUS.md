@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101m Keyword-Markierung im Text-Schritt (Nutzer uebersteuert die KI).**
+  Im Text-Schritt gibt es jetzt einen zweiten Modus "Pick highlights":
+  Wort antippen zyklisch neutral -> ERZWINGEN (lila + ✨) -> BLOCKIEREN
+  (durchgestrichen) -> neutral. QUALITAETS-ENTSCHEIDUNG (Ismet wollte es im
+  Text-Editor, NICHT den empfohlenen Vorschau-Schritt): die Markierungen
+  ERSETZEN die KI-Regie nicht, sie UEBERSTEUERN sie danach. render.py:
+  apply_keyword_marks() laeuft NACH KI-Regie + Heuristik + Kapiteln (letzte
+  Instanz), liest ein Sidecar <input>_kwmarks.json ({index: 1|-1}); erzwungene
+  Momente tragen user_pick=True und ueberleben - wie intent, aber OHNE dessen
+  semantische Platzierung - das Dichte-Gate UND das B-Roll-Gate (Gegenprobe im
+  Test: 2 dichte erzwungene Woerter -> beide bleiben; ohne Schutz nur 1).
+  Vorhandene KI-Momente werden nur erzwungen, nicht ueberschrieben (Effekt/
+  Wucht bleiben). Server schreibt das Sidecar ueber den bestehenden
+  Transkript-Save (neues Feld kwmarks, gedeckelt/validiert). Der Render zieht
+  es automatisch. 6 neue Tests. Regression 622/622 + 7/1/5/2 Renders + GUI_OK.
+  Browser-Smoke ohne JS-Fehler (Screenshot an Ismet). HINWEIS/EHRLICH: das ist
+  bewusst "blind" (vor der KI-Analyse, ohne Vorschaubild) - die reichere
+  Auswahl mit KI-Vorschlag + Frames bleibt der Momente-Editor nach dem Render.
+
 - **v101l Transkript-Schritt im Wizard (Text vor Render).** Der Transkript-
   Editor war bisher NUR im Momente-Editor versteckt (Button "Fix transcript"
   ganz unten) - auf dem Hauptweg Upload->Look->Fine-tune->Render kam man gar

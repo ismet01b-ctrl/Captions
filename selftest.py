@@ -1719,6 +1719,46 @@ def _scenario_logic(clip, transcript, tmp):
           and "cfg['effects'].get('bullet_time', True) and not args.alpha_export"
               in _src99)
 
+    # v101m Keyword-Markierungen aus dem Text-Editor (user_pick uebersteuert KI).
+    _kmw = [{'word': w} for w in ['So', 'viel', 'Geld', 'heute', 'wichtig']]
+    _kmcfg = {'effects': {'keyword_rotation': ['behind', 'outline', 'cascade']}}
+    _kw2, _fx2 = R.apply_keyword_marks({4}, {4: {'fx': 'behind', 'power': 3, 'n': 1}},
+                                       _kmw, {2: 1, 4: -1}, _kmcfg)
+    check('v101m: erzwungenes Wort rein (user_pick), geblocktes raus',
+          2 in _kw2 and 4 not in _kw2 and _fx2[2].get('user_pick') is True
+          and 4 not in _fx2)
+    _kw3, _fx3 = R.apply_keyword_marks({2}, {2: {'fx': 'ground', 'power': 1, 'n': 2}},
+                                       _kmw, {2: 1}, _kmcfg)
+    check('v101m: vorhandener KI-Moment wird erzwungen, aber nicht ueberschrieben',
+          _fx3[2]['fx'] == 'ground' and _fx3[2]['power'] == 1
+          and _fx3[2]['n'] == 2 and _fx3[2]['user_pick'] is True)
+    check('v101m: leere Marken -> unveraendert',
+          R.apply_keyword_marks({1}, None, _kmw, {}, _kmcfg) == ({1}, None))
+    # user_pick ueberlebt das Dichte-Gate wie intent: zwei getrennte Gruppen
+    # innerhalb von min_gap - ohne Schutz faellt die zweite weg, mit bleibt sie.
+    _kmwl = [{'word': 'Zins', 'start': 1.0, 'end': 1.3},
+             {'word': 'Rendite', 'start': 3.2, 'end': 3.7}]
+    _kmf_on = {0: {'fx': 'outline', 'power': 2, 'n': 1, 'user_pick': True},
+               1: {'fx': 'outline', 'power': 2, 'n': 1, 'user_pick': True}}
+    _kmf_off = {0: {'fx': 'outline', 'power': 2, 'n': 1},
+                1: {'fx': 'outline', 'power': 2, 'n': 1}}
+    _kmn_on = len([p for p in R.build_plans(_kmwl, {0, 1}, cfg, S, W_, H_,
+                   lambda s, e: True, _kmf_on) if p.get('kw_i') in (0, 1)])
+    _kmn_off = len([p for p in R.build_plans(_kmwl, {0, 1}, cfg, S, W_, H_,
+                    lambda s, e: True, _kmf_off) if p.get('kw_i') in (0, 1)])
+    check('v101m: erzwungene Woerter ueberleben das Dichte-Gate (Gegenprobe)',
+          _kmn_on == 2 and _kmn_off == 1, f'user_pick={_kmn_on} plain={_kmn_off}')
+    check('v101m: Marken-Anwendung im Main + Sidecar verdrahtet',
+          '_kwmarks.json' in _src99
+          and 'apply_keyword_marks(kw, fx_map, words' in _src99
+          and "fx_map[i].get('intent') or fx_map[i].get('user_pick')" in _src99)
+    _srv_m = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _ui_m = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v101m: Server schreibt Sidecar, UI hat Highlight-Modus',
+          "kwmarks: str = Form('')" in _srv_m and '_kwmarks.json' in _srv_m
+          and 'tx-mode' in _ui_m and "txMode === 'kw'" in _ui_m
+          and "fd.append('kwmarks'" in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

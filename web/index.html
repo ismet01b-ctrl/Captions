@@ -894,6 +894,38 @@ body {
 }
 .tx-words.loading { color: var(--mut); font-size: 14px; line-height: 1.6; }
 .tx-hint { color: var(--mut); font-size: 12.5px; margin-top: 10px; }
+/* v101m: Modus-Umschalter Text <-> Highlights */
+.tx-modes {
+  display: inline-flex; gap: 4px; background: var(--bg2);
+  border: 1px solid var(--line); border-radius: 12px; padding: 4px;
+  margin-bottom: 14px;
+}
+.tx-mode {
+  border: none; background: transparent; color: var(--mut);
+  font-size: 13.5px; font-weight: 700; padding: 7px 14px; border-radius: 9px;
+  cursor: pointer; transition: background var(--t-fast), color var(--t-fast);
+}
+.tx-mode:hover { color: var(--fg); }
+.tx-mode.active { background: var(--acc); color: #fff; }
+#txCard[data-mode="text"] .tx-only-kw,
+#txCard[data-mode="kw"] .tx-only-text { display: none; }
+#txCard[data-mode="kw"] .tx-words .tw { cursor: pointer; }
+/* markierte Wort-Chips */
+.tw.kw-on {
+  background: rgba(124,92,255,0.22); border-color: var(--acc);
+  color: var(--fg); font-weight: 700;
+}
+.tw.kw-on::after { content: ' ✨'; font-size: 11px; }
+.tw.kw-off {
+  opacity: .45; text-decoration: line-through;
+  text-decoration-color: var(--mut);
+}
+.tw-lgd {
+  display: inline-block; padding: 1px 7px; border-radius: 6px;
+  font-weight: 700; font-size: 11.5px; margin: 0 2px;
+}
+.tw-lgd.on { background: rgba(124,92,255,0.22); color: var(--acc2); }
+.tw-lgd.off { background: var(--surf2); color: var(--mut); }
 .tx-dot {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   background: var(--acc); margin-right: 8px;
@@ -1727,8 +1759,14 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <p class="step-sub">Fix names, brands or technical terms before we render.
         Timings stay exactly as spoken.</p>
 
-      <div class="card">
-        <div class="tx-bar">
+      <div class="card" id="txCard" data-mode="text">
+        <div class="tx-modes" role="tablist">
+          <button class="tx-mode active" data-mode="text" type="button" role="tab">
+            ✏️ Fix text</button>
+          <button class="tx-mode" data-mode="kw" type="button" role="tab">
+            ✨ Pick highlights</button>
+        </div>
+        <div class="tx-bar tx-only-text">
           <div class="tx-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1742,7 +1780,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <span id="txCount" class="tx-count"></span>
         </div>
         <div id="txWords" class="tx-words" aria-live="polite"></div>
-        <p id="txHint" class="tx-hint">Tap any word to edit it. Press Enter to confirm.</p>
+        <p id="txHint" class="tx-hint tx-only-text">Tap any word to edit it. Press Enter to confirm.</p>
+        <p class="tx-hint tx-only-kw">Tap a word to force it as a highlight
+          <span class="tw-lgd on">✨ always</span>, tap again to block it
+          <span class="tw-lgd off">✕ never</span>, once more clears it. The AI
+          picks the rest.</p>
       </div>
 
       <div class="wiz-nav">
@@ -3149,7 +3191,7 @@ async function renderAccount() {
 let transOrig = [];
 /* v101l: Transkript-Schritt im Wizard (VOR dem Render). Nutzt den Pre-Upload-
    Job (State.preJid) - die Transkription laeuft seit der Datei-Auswahl. */
-let txWords = [], txOrig = [], txPollT = null;
+let txWords = [], txOrig = [], txPollT = null, txMarks = {}, txMode = 'text';
 
 async function loadTranscriptStep() {
   const box = $('#txWords');
@@ -3177,6 +3219,7 @@ async function loadTranscriptStep() {
         box.textContent = d.detail || 'Transcript not ready.'; return; }
       txWords = d.words.map(w => (w.word || ''));
       txOrig = txWords.slice();
+      txMarks = {};
       renderTxChips();
     } catch (e) {
       box.className = 'tx-words loading';
@@ -3188,24 +3231,41 @@ async function loadTranscriptStep() {
   tryLoad();
 }
 
+function txChipClass(i) {
+  let c = 'tw';
+  if (txWords[i].trim() !== txOrig[i].trim()) c += ' edited';
+  if (txMarks[i] === 1) c += ' kw-on';
+  else if (txMarks[i] === -1) c += ' kw-off';
+  return c;
+}
+
 function renderTxChips() {
   const box = $('#txWords');
   box.className = 'tx-words';
   box.innerHTML = '';
   txWords.forEach((w, i) => {
     const el = document.createElement('span');
-    el.className = 'tw' + (txWords[i].trim() !== txOrig[i].trim() ? ' edited' : '');
+    el.className = txChipClass(i);
     el.textContent = w.trim();
     el.dataset.i = i;
     el.addEventListener('click', () => {
+      if (txMode === 'kw') {                 // Highlight-Modus: an -> aus -> neutral
+        const cur = txMarks[i] || 0;
+        const nxt = cur === 0 ? 1 : (cur === 1 ? -1 : 0);
+        if (nxt === 0) delete txMarks[i]; else txMarks[i] = nxt;
+        el.className = txChipClass(i);
+        updateTxCount();
+        return;
+      }
       if (el.contentEditable === 'true') return;
       el.contentEditable = 'true'; el.focus();
       document.execCommand && document.execCommand('selectAll', false, null);
     });
     el.addEventListener('blur', () => {
+      if (txMode === 'kw') return;
       el.contentEditable = 'false';
       txWords[i] = el.textContent.trim();
-      el.classList.toggle('edited', txWords[i].trim() !== txOrig[i].trim());
+      el.className = txChipClass(i);
       updateTxCount();
     });
     el.addEventListener('keydown', (e) => {
@@ -3217,9 +3277,21 @@ function renderTxChips() {
   updateTxCount();
 }
 
+$$('.tx-mode').forEach(btn => btn.addEventListener('click', () => {
+  txMode = btn.dataset.mode;
+  $$('.tx-mode').forEach(b => b.classList.toggle('active', b === btn));
+  const card = $('#txCard'); if (card) card.dataset.mode = txMode;
+}));
+
 function updateTxCount() {
   const n = txWords.reduce((a, w, i) => a + (w.trim() !== txOrig[i].trim() ? 1 : 0), 0);
-  $('#txCount').textContent = n ? `${n} word${n > 1 ? 's' : ''} changed` : '';
+  const on = Object.values(txMarks).filter(v => v === 1).length;
+  const off = Object.values(txMarks).filter(v => v === -1).length;
+  const bits = [];
+  if (n) bits.push(`${n} word${n > 1 ? 's' : ''} changed`);
+  if (on) bits.push(`${on} forced ✨`);
+  if (off) bits.push(`${off} blocked ✕`);
+  $('#txCount').textContent = bits.join(' · ');
 }
 
 function txReplaceAll() {
@@ -3254,16 +3326,21 @@ async function saveTranscriptStep() {
   txWords.forEach((w, i) => {
     if (w.trim() && w.trim() !== txOrig[i].trim()) edits.push({ i, word: w.trim() });
   });
-  if (!edits.length) return;
+  const nMark = Object.keys(txMarks).length;
+  if (!edits.length && !nMark) return;
   const fd = new FormData();
   fd.append('edits', JSON.stringify(edits));
+  fd.append('kwmarks', JSON.stringify(txMarks));   // v101m: Highlight-Markierungen
   fd.append('code', State.code || '');
   fd.append('reanalyze', '0');               // nur speichern, kein Analyse-Umweg
   try {
     const r = await fetch('/api/transcript/' + jid, { method: 'POST', body: fd });
     if (r.ok) {
       txOrig = txWords.slice();
-      toast(`${edits.length} word${edits.length > 1 ? 's' : ''} corrected.`, 'ok');
+      const parts = [];
+      if (edits.length) parts.push(`${edits.length} word${edits.length > 1 ? 's' : ''} corrected`);
+      if (nMark) parts.push('highlights set');
+      if (parts.length) toast(parts.join(', ') + '.', 'ok');
     }
   } catch (e) { /* Render laeuft auch ohne - nicht blockieren */ }
 }
