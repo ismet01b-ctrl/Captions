@@ -7,7 +7,20 @@ Automatische Premium-Untertitel im Editorial-Stil + Apple-Style Motion-Graphics.
 2. **Web-Produkt douchko.eu** (`web/server.py`, FastAPI) — das ist inzwischen der
    Hauptweg: echte Kunden, Credits, Stripe. **Beta.**
 
-**Jede Entscheidung dient der Qualität.** Stand: v100 (Juli 2026).
+**Jede Entscheidung dient der Qualität.** Stand: v101k (Juli 2026) —
+Innovations-Batch komplett: Betonungs-Typografie (Variable-Font nach
+Sprech-Pegel), Choreographie-Regie, Silent-Score, Watermark-Unlock
+(Kauf schaltet gecachte Videos ohne Neu-Render frei), Beat-Grid,
+Safe-Zone-Regie (Plattform-UI-Masken tiktok/reels/shorts,
+`output.platform`), Korrektur-Gedächtnis (Vorlieben-Profil in die
+KI-Regie), Licht-Wahrheit (gerichteter Kontakt-Schatten),
+Regie-Kontaktbogen (`/api/contact/{jid}`), Caption-Alpha-Export
+(ProRes-4444-Ebene via Difference-Matting-Doppelpass, `--alpha-export`,
+`/api/alpha/{jid}` für Käufer), World-Lock Wand (eigener Wand-Track),
+Hand-Kontakt (MediaPipe `models/hand.task`, Feder-Impuls + Occlusion),
+Depth-Bullet-Time (2.5D-Dolly in der Pause vor power-3). NICHT gebaut
+(bewusst): Tiefen-Fokuszug, persistente Welt-Anker (SLAM),
+Hook-A/B-Varianten.
 
 ## Oberste Regeln (nicht verhandelbar)
 1. **Qualität über alles.** Niemals ein Feature vereinfachen, degradieren oder
@@ -132,7 +145,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **556/556 grün (Stand v100)**. Läuft nur unter Linux/CPU mit
+Gesamt **612/612 grün (Stand v101k)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
