@@ -535,6 +535,8 @@ body {
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 20px 60px -20px rgba(0,0,0,.7); }
 .mo-frame img { width: 100%; height: 100%; object-fit: contain; }
+.mo-frame.alpha { background:
+  repeating-conic-gradient(#2b2d33 0% 25%, #191b1f 0% 50%) 0 0 / 28px 28px; }
 .mo-spin { position: absolute; width: 34px; height: 34px; border-radius: 50%;
   border: 3px solid rgba(255,255,255,.2); border-top-color: var(--acc2, #ff7a1a);
   animation: mospin .8s linear infinite; display: none; }
@@ -2356,6 +2358,7 @@ function moSync(){
   const wl=$('#moWordsLab'); if(wl&&lab) wl.innerHTML=lab;
   const wi=$('#moWords'); if(wi&&ph) wi.placeholder=ph;
   const iw=$('#moImageWrap'); if(iw) iw.style.display=(tpl==='pills')?'':'none';
+  const frm=$('#moFrame'); if(frm) frm.classList.toggle('alpha', Motion.sel.exportFmt==='mov');
   const btn=$('#moRender');
   if(btn&&!btn.disabled) btn.textContent = Motion.sel.exportFmt==='mov'
     ? 'Render clip · 2 credits · ProRes 4444 Alpha'
@@ -2373,11 +2376,16 @@ function motionPreviewDebounced(){ clearTimeout(Motion.t);
   Motion.t=setTimeout(motionPreview, 350); }
 async function motionPreview(){
   const spin=$('#moSpin'); if(spin) spin.classList.add('on');
+  // Sequenz-Token: bei schnellen Klicks darf eine ALTE Antwort die neue
+  // nicht ueberschreiben (Race: Vorschau ohne Alpha ueberdeckte die mit)
+  Motion.seq=(Motion.seq||0)+1; const _my=Motion.seq;
   try{
     const r=await fetch('/api/motion/preview',{method:'POST',
       headers:{'Content-Type':'application/json'}, body:JSON.stringify(motionSpec())});
     if(!r.ok) throw 0;
-    const blob=await r.blob(); const img=$('#moImg');
+    const blob=await r.blob();
+    if(_my!==Motion.seq) return;               // veraltete Antwort verwerfen
+    const img=$('#moImg');
     if(img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     img.src=URL.createObjectURL(blob);
     const fr=$('#moFrame'); if(fr){ const f=Motion.sel.format;

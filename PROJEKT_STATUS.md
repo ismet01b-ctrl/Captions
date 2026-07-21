@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion: ProRes-Vorschau zeigt echte Transparenz.**
+  Ismet: "Wenn ich ProRes auswaehle, soll der Hintergrund verschwinden."
+  Engine: Preview mit export='mov' rendert jetzt ein ECHTES Alpha-PNG ohne
+  Hintergrund (81.5% transparent verifiziert); Frontend legt ein Schachbrett
+  dahinter (.mo-frame.alpha, wie im Schnittprogramm), moSync toggelt es mit
+  der Export-Wahl. Dabei Race-Condition gefixt: bei schnellen Klicks konnte
+  eine ALTE Preview-Antwort die neue ueberschreiben -> Sequenz-Token, ver-
+  altete Antworten werden verworfen. Browser-verifiziert (Screenshot:
+  WhatsApp-Bubbles frei auf Schachbrett, 0 JS-Fehler).
+
 - **Motion: Notify auf iOS Stand 2026 (Liquid Glass) + Bewegungs-QA.**
   Ismet: "Die Mitteilung kann bitte auf Stand 2026 gebracht werden."
   ios_banner v2: transluzenter Glas-Chip (Alpha 205 - im Alpha-MOV scheint

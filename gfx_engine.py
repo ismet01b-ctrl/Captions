@@ -2002,6 +2002,12 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                     min((t - T_WM - 0.1) / 0.15, 1), lift=1.0)
         if wm_spr is not None:
             fr.alpha_composite(wm_spr, wm_xy)
+        if ALPHA and preview is not None:
+            # ProRes-Live-Vorschau: ECHTES Alpha-PNG ohne Hintergrund - das
+            # Frontend legt ein Schachbrett dahinter (wie im Schnittprogramm).
+            fr.save(out_video)
+            progress('preview-frame fertig')
+            return True
         if ALPHA:
             # MOV bekommt die freien RGBA-Frames (ohne Korn - sauber fuers
             # Compositing); die MP4-Vorschau wird ueber den Stil-BG gelegt.
