@@ -2208,6 +2208,63 @@ def paste_tracked(canvas, rgba, cx, cy, H_rel, W, H, dy_extra=0.0, **blend_kwarg
     _blend_region(canvas, sub, x1, y1, W, H, **blend_kwargs)
 
 
+# v101k DEPTH-BULLET-TIME: die Sprech-Pause VOR der Punchline (>=0.8s vor
+# einem power-3-Moment) wird zum Bullet-Time-Moment - das Bild friert ein und
+# eine virtuelle Kamera faehrt per 2.5D-Tiefen-Reprojektion seitlich hinein
+# und wieder zurueck (sin-Bogen: endet exakt auf 0, der Schnitt zurueck ins
+# Live-Bild ist nahtlos). Dauer bleibt UNVERAENDERT (die Pause war eh still).
+# Maximal 1x pro Video, Quality-Gate auf der Tiefenkarte.
+def bullet_window(words, plans, min_gap=0.8):
+    """Findet DIE Bullet-Time-Stelle: laengste Sprech-Pause >= min_gap direkt
+    vor einem power-3-Moment. Rueckgabe (t0, t1, kw_i) oder None."""
+    best = None
+    for p in plans:
+        if p.get('power', 2) < 3 or 'kw_i' not in p or p.get('broll'):
+            continue
+        i = p['kw_i']
+        if i <= 0 or i >= len(words):
+            continue
+        gap = float(words[i].get('start', 0)) - float(words[i - 1].get('end', 0))
+        if gap < min_gap:
+            continue
+        t0 = float(words[i - 1].get('end', 0)) + 0.06
+        t1 = float(words[i].get('start', 0)) - 0.02
+        if t1 - t0 < min_gap * 0.6:
+            continue
+        if best is None or (t1 - t0) > (best[1] - best[0]):
+            best = (t0, t1, i)
+    return best
+
+
+def depth_quality_ok(depth_n, min_spread=0.25):
+    """v101k Quality-Gate: eine flache Tiefenkarte (kaum Vorder-/Hintergrund-
+    Trennung) ergibt keinen 3D-Eindruck, nur Wobbeln -> dann lieber gar kein
+    Effekt als ein billiger."""
+    if depth_n is None:
+        return False
+    d = np.asarray(depth_n, np.float32)
+    return float(np.percentile(d, 90) - np.percentile(d, 10)) >= min_spread
+
+
+def depth_dolly(freeze, depth_n, u, W, H, strength=1.0):
+    """v101k: reprojiziert das eingefrorene Frame fuer Fortschritt u (0..1).
+    Naehere Pixel verschieben sich staerker (Parallaxe), dazu ein leichter
+    Push-in. s(u)=sin(pi*u): faehrt hinein und exakt auf 0 zurueck."""
+    s = math.sin(math.pi * float(u))
+    if s < 1e-4:
+        return freeze
+    d = cv2.GaussianBlur(np.asarray(depth_n, np.float32), (0, 0), 9.0)
+    d = d - float(np.median(d))
+    lat = W * 0.030 * s * strength           # seitlicher Dolly
+    zoom = 1.0 + 0.028 * s * strength        # leichter Push-in
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    cx_, cy_ = W / 2.0, H / 2.0
+    map_x = (xx - cx_) / zoom + cx_ - d * lat
+    map_y = (yy - cy_) / zoom + cy_ - d * lat * 0.22
+    return cv2.remap(freeze, map_x, map_y, cv2.INTER_LINEAR,
+                     borderMode=cv2.BORDER_REPLICATE)
+
+
 # v101j HAND-KONTAKT: beruehrt eine Fingerspitze den Text, reagiert er
 # physisch (Feder-Impuls in Bewegungsrichtung) und die Hand verdeckt ihn
 # lokal. Detection nur in Moment-Fenstern (gated), alle 2 Frames.
@@ -7824,6 +7881,27 @@ def main():
                       f"({dsess.get_providers()[0] if dsess else 'kein Modell'})")
             else:
                 print("Tiefen-Okklusion uebersprungen (models/depth.onnx fehlt - setup.bat laedt es)")
+    # v101k Bullet-Time: Kandidat suchen (laengste Sprech-Pause >=0.8s vor
+    # einem power-3-Moment). Braucht das Tiefen-Modell - notfalls hier laden.
+    bt_win = None
+    bt_freeze = bt_depth = None
+    if cfg['effects'].get('bullet_time', True) and not args.alpha_export:
+        bt_win = bullet_window(words, plans)
+        if bt_win is not None and dsess is None:
+            _bt_dp = os.path.join(HERE, 'models/depth.onnx')
+            if os.path.exists(_bt_dp):
+                for prov in chain + ['CPUExecutionProvider']:
+                    try:
+                        dsess = ort.InferenceSession(_bt_dp, providers=[prov])
+                        break
+                    except Exception:
+                        continue
+            if dsess is None:
+                print("Bullet-Time uebersprungen (kein Tiefen-Modell)")
+                bt_win = None
+        if bt_win is not None:
+            print(f"Bullet-Time-Kandidat: Pause {bt_win[0]:.2f}s-{bt_win[1]:.2f}s "
+                  f"vor Moment '{clean(words[bt_win[2]].get('word', '?'))}'")
     # Tracking-Fenster (planarer Kamera-Track) = Szenen-Text-Fenster
     need_track = np.zeros(total_est, dtype=bool)
     # v101i: Wand-Momente bekommen einen EIGENEN Track auf der Wand-Ebene
@@ -7934,6 +8012,33 @@ def main():
                 break
             elif t >= fz_e:
                 frozen_frame = None
+
+        # v101k Bullet-Time: in der Pause vor der Punchline friert das Bild
+        # ein und die virtuelle Kamera faehrt per Tiefen-Reprojektion hinein
+        # und zurueck (endet auf 0 - nahtloser Wiedereinstieg ins Live-Bild).
+        if bt_win is not None and dsess is not None \
+                and bt_win[0] <= t < bt_win[1]:
+            if bt_freeze is None:
+                bt_freeze = frame.copy()
+                _bs = cv2.resize(bt_freeze.astype(np.uint8), (d_w, d_h))
+                _bn = (_bs[..., ::-1].astype(np.float32) / 255.0 - D_MEAN) / D_STD
+                _bp = dsess.run(None, {d_in_name: _bn.transpose(2, 0, 1)[None]})[0][0]
+                _b5, _b95 = np.percentile(_bp, 5), np.percentile(_bp, 95)
+                _bd = np.clip((_bp - _b5) / max(_b95 - _b5, 1e-4), 0, 1)
+                bt_depth = cv2.resize(_bd.astype(np.float32), (W, H))
+                if depth_quality_ok(bt_depth):
+                    print(f"Bullet-Time: aktiv {bt_win[0]:.2f}s-{bt_win[1]:.2f}s "
+                          f"(2.5D-Dolly, Dauer unveraendert)")
+                else:
+                    print("Bullet-Time uebersprungen (Tiefenkarte zu flach - "
+                          "lieber kein Effekt als ein billiger)")
+                    bt_win = None
+                    bt_freeze = bt_depth = None
+            if bt_win is not None:
+                _bu = (t - bt_win[0]) / max(bt_win[1] - bt_win[0], 1e-6)
+                frame = depth_dolly(bt_freeze, bt_depth, _bu, W, H)
+        elif bt_freeze is not None:
+            bt_freeze = bt_depth = None
 
         # --- Freistellen nur in den benoetigten Fenstern
         fa = fi + off_frames

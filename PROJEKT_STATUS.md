@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101k Depth-Bullet-Time (Innovations-Batch 11 - BATCH KOMPLETT).** Die
+  laengste Sprech-Pause >= 0.8s DIREKT vor einem power-3-Moment wird zum
+  Bullet-Time-Moment: das Bild friert ein und eine virtuelle Kamera faehrt
+  per 2.5D-Tiefen-Reprojektion (depth.onnx) seitlich hinein und wieder
+  zurueck. s(u)=sin(pi*u): Start UND Ende exakt auf 0 - der Schnitt zurueck
+  ins Live-Bild ist nahtlos, die DAUER bleibt unveraendert (die Pause war eh
+  still, Audio unangetastet). Parallaxe um die Median-Tiefenebene (nah/fern
+  gegenlaeufig, Beweis: Punkt nah +4.9px / fern -4.4px bei u=0.5), dazu
+  leichter Push-in. Genau 1x pro Video (bullet_window waehlt die laengste
+  Pause), Quality-Gate depth_quality_ok (flache Tiefenkarte -> kein Effekt,
+  "lieber kein Effekt als ein billiger"), laedt das Tiefen-Modell notfalls
+  selbst, im Alpha-Export aus (Hintergrund-Effekt). Abschaltbar:
+  effects.bullet_time. Matting/Faces laufen auf dem Dolly-Frame weiter -
+  behind-Occlusion bleibt konsistent. 5 neue Tests (Kandidaten-Wahl,
+  Ausschluesse, Gate, Parallaxe+Nahtlosigkeit, Verdrahtung). Regression
+  612/612 + 7/1/5/2 Renders + GUI_OK. EHRLICH: der Test-Clip hat keine
+  0.8s-Pause vor power-3 - der Effekt selbst laeuft hier nur ueber die
+  synthetischen Helper-Tests; echte Wirkung erst live.
+
 - **v101j Hand-Kontakt (Innovations-Batch 10).** Beruehrt der Sprecher eine
   Caption mit der Hand, reagiert sie PHYSISCH: MediaPipe-HandLandmarker
   (models/hand.task, neu in MODEL_URLS) sucht in Moment-Fenstern (need_hands,

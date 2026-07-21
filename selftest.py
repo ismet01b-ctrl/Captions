@@ -1671,6 +1671,54 @@ def _scenario_logic(clip, transcript, tmp):
           and 'hand_tips=_hand_tips' in _src99
           and "cfg['effects'].get('hand_contact'" in _src99)
 
+    # v101k Depth-Bullet-Time: Pause vor der Punchline wird zum 2.5D-Dolly.
+    _btw = [{'word': 'so', 'start': 0.0, 'end': 1.0},
+            {'word': 'BOOM', 'start': 2.0, 'end': 2.4},
+            {'word': 'weiter', 'start': 2.5, 'end': 3.0},
+            {'word': 'MEGA', 'start': 4.5, 'end': 5.0}]
+    _btp = [{'kw_i': 1, 'power': 3, 'start': 2.0, 'end': 3.0},
+            {'kw_i': 3, 'power': 3, 'start': 4.5, 'end': 5.5}]
+    _btb = R.bullet_window(_btw, _btp)
+    check('v101k: laengste Pause >=0.8s vor power-3 gewinnt (1x pro Video)',
+          _btb is not None and _btb[2] == 3
+          and abs(_btb[0] - 3.06) < 1e-6 and abs(_btb[1] - 4.48) < 1e-6)
+    check('v101k: power<3 / kurze Pause / B-Roll -> kein Bullet',
+          R.bullet_window(_btw, [{'kw_i': 1, 'power': 2,
+                                  'start': 2, 'end': 3}]) is None
+          and R.bullet_window([{'word': 'a', 'start': 0, 'end': 1},
+                               {'word': 'b', 'start': 1.2, 'end': 2}],
+                              [{'kw_i': 1, 'power': 3,
+                                'start': 1.2, 'end': 2}]) is None
+          and R.bullet_window(_btw, [{'kw_i': 3, 'power': 3, 'start': 4.5,
+                                      'end': 5.5, 'broll': True}]) is None)
+    check('v101k: Quality-Gate - flache Tiefenkarte faellt durch',
+          not R.depth_quality_ok(np.full((80, 80), 0.5, np.float32))
+          and R.depth_quality_ok(np.concatenate(
+              [np.zeros((40, 80), np.float32),
+               np.full((40, 80), 0.9, np.float32)])))
+    _bfr = np.zeros((200, 300, 3), np.float32)
+    _bfr[30, 160] = 255; _bfr[170, 160] = 255
+    _bdp = np.zeros((200, 300), np.float32); _bdp[:100] = 1.0
+    _bd0 = R.depth_dolly(_bfr, _bdp, 0.0, 300, 200)
+    _bd5 = R.depth_dolly(_bfr, _bdp, 0.5, 300, 200)
+    _bd1 = R.depth_dolly(_bfr, _bdp, 1.0, 300, 200)
+    def _btx(img, y):
+        row = img[max(y - 4, 0):y + 5, :, 0].max(axis=0)
+        return float((row * np.arange(300)).sum() / max(row.sum(), 1e-6))
+    _bdn = _btx(_bd5, 30) - 160
+    _bdf = _btx(_bd5, 170) - 160
+    check('v101k: Dolly = echte Parallaxe (nah/fern gegenlaeufig), '
+          'Start/Ende exakt auf 0 (nahtloser Wiedereinstieg)',
+          np.abs(_bd0 - _bfr).mean() < 1e-3 and np.abs(_bd1 - _bfr).mean() < 1e-3
+          and abs(_bdn) > 1.5 and abs(_bdf) > 1.5 and (_bdn > 0) != (_bdf > 0),
+          f'nah={_bdn:+.1f}px fern={_bdf:+.1f}px')
+    check('v101k: Bullet-Time im Loop verdrahtet (Gate, Alpha-Ausschluss)',
+          'bt_win = bullet_window(words, plans)' in _src99
+          and 'depth_quality_ok(bt_depth)' in _src99
+          and 'depth_dolly(bt_freeze, bt_depth, _bu, W, H)' in _src99
+          and "cfg['effects'].get('bullet_time', True) and not args.alpha_export"
+              in _src99)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
