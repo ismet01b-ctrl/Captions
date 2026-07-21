@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101f Licht-Wahrheit Stufe 1 (Innovations-Batch 6).** Der Kontakt-Schatten
+  unter dem stehenden Text war bisher ein symmetrischer Blob direkt darunter.
+  Neu: estimate_light_dir() schaetzt die dominante Lichtrichtung aus einem
+  Mittel-Frame (Luminanz links vs rechts + Haerte aus dem Gefaelle), und
+  make_contact_shadow(light=(lx,hard)) laesst den Schatten LICHT-WAHR zur Seite
+  fallen - weg vom Licht (Licht rechts -> Schatten nach links versetzt und in
+  diese Richtung gestreckt), hartes Licht macht ihn kraeftiger, flaches Licht
+  bleibt weich/rund. Ein Schaetzung pro Clip (Licht ist meist konstant),
+  abschaltbar via effects.light_shadow. Ohne light-Argument bleibt exakt der
+  alte symmetrische Schatten (Rueckwaerts-Kompatibilitaet, alle Alt-Tests
+  gruen). BEWUSSTE GRENZE: gilt nur fuer den stehenden Billboard-Text - flach
+  auf die Flaeche gemalter (liegender) Text bekommt weiterhin KEINEN Schatten
+  ("Farbe hat keine Hoehe", bestehende Design-Entscheidung nicht ueberfahren).
+  6 neue Tests. Regression 584/584 + Renders + GUI_OK. EHRLICH: die
+  Schatzung/Wirkung ist nur auf ECHTEM Material sichtbar - hier mit
+  synthetischen Helligkeits-Frames getestet (Richtung + Versatz stimmen).
+
 - **v101e Korrektur-Gedaechtnis (Innovations-Batch 5).** Bisher zog nur
   _apply_corrections EXAKT dieselbe Phrase nach (deterministisch, kein
   Transfer auf neue Stellen). Neu: correction_profile() verdichtet alle

@@ -1354,9 +1354,37 @@ def persp_warp(arr, yaw=0.0, pitch=0.0):
     return cv2.warpPerspective(big, M, (W2, H2), flags=cv2.INTER_LINEAR,
                                borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
 
-def make_contact_shadow(arr, strength=0.42):
+def estimate_light_dir(frame_bgr):
+    """v101f LICHT-WAHRHEIT: schaetzt die dominante Lichtrichtung aus einem
+    Frame. Rueckgabe: (lx, hard) - lx in [-1,1] (positiv = heller rechts, Licht
+    kommt von rechts), hard in [0,1] (starkes Helligkeitsgefaelle = hartes,
+    gerichtetes Licht -> langer klarer Schatten; flach = weiches Umgebungslicht
+    -> runder, kurzer Schatten). Rein aus der Luminanz, kein ML noetig."""
+    try:
+        f = np.asarray(frame_bgr, np.float32)
+        if f.ndim == 3:
+            lum = 0.114 * f[..., 0] + 0.587 * f[..., 1] + 0.299 * f[..., 2]
+        else:
+            lum = f
+        h, w = lum.shape[:2]
+        left = float(lum[:, :w // 2].mean())
+        right = float(lum[:, w // 2:].mean())
+        span = max(float(lum.mean()), 1.0)
+        lx = max(-1.0, min(1.0, (right - left) / span))
+        hard = max(0.0, min(1.0, abs(right - left) / (span * 0.6)))
+        return (lx, hard)
+    except Exception:
+        return (0.0, 0.0)
+
+
+def make_contact_shadow(arr, strength=0.42, light=None):
     """Weicher Kontakt-Schatten unter dem Text: verkauft, dass der Text WIRKLICH
-    auf dem Untergrund steht. Breite folgt der Alpha-Verteilung der Unterkante."""
+    auf dem Untergrund steht. Breite folgt der Alpha-Verteilung der Unterkante.
+
+    v101f: mit light=(lx, hard) faellt der Schatten licht-wahr zur Seite - weg
+    vom Licht (Licht rechts -> Schatten nach links versetzt und in diese
+    Richtung gestreckt), und hartes Licht macht ihn kraeftiger. Ohne light
+    bleibt es der symmetrische Blob wie bisher (Rueckwaerts-Kompatibilitaet)."""
     a = arr[..., 3]
     ys, xs = np.where(a > 8)
     if len(ys) < 10:
@@ -1364,8 +1392,14 @@ def make_contact_shadow(arr, strength=0.42):
     y1 = int(ys.max())
     x0, x1 = int(xs.min()), int(xs.max()) + 1
     w = max(x1 - x0, 8)
+    lx = hard = 0.0
+    if light is not None:
+        lx, hard = float(light[0]), float(light[1])
+    strength = strength * (1.0 + 0.35 * hard)          # hartes Licht: kraeftiger
     sh_h = max(int(w * 0.055), 10)
-    sh = np.zeros((sh_h, int(w * 1.10), 4), dtype=np.float32)
+    # Schatten faellt weg vom Licht: Breite waechst zur Schattenseite.
+    grow = 1.10 + 0.35 * abs(lx) * hard
+    sh = np.zeros((sh_h, int(w * grow), 4), dtype=np.float32)
     yy, xx = np.mgrid[0:sh.shape[0], 0:sh.shape[1]]
     cx_, cy_ = sh.shape[1] / 2.0, sh.shape[0] / 2.0
     d2 = ((xx - cx_) / (sh.shape[1] * 0.46)) ** 2 + ((yy - cy_) / (sh.shape[0] * 0.55)) ** 2
@@ -1373,6 +1407,8 @@ def make_contact_shadow(arr, strength=0.42):
     sh = cv2.GaussianBlur(sh, (0, 0), sh_h * 0.28)
     dy = float(y1 - arr.shape[0] / 2.0)
     dx = float((x0 + x1) / 2.0 - arr.shape[1] / 2.0)
+    # Versatz gegen das Licht (Licht rechts, lx>0 -> Schatten nach links).
+    dx -= lx * hard * w * 0.16
     return sh, dy, dx
 
 def make_reflection(arr, squash=0.55, strength=0.35):
@@ -4555,7 +4591,7 @@ def safe_zone_report(plans, pz, W, H):
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None, faces_at=None, flow_map=None,
-                loud=None, beat_times=None):
+                loud=None, beat_times=None, light_dir=None):
     KW_FX = cfg['effects']['keyword_rotation']
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
@@ -5203,7 +5239,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # Head. Auf die Flaeche GEMALTER Text (liegend) wirft keinen
                 # Schatten - Farbe hat keine Hoehe.
                 if not broll and not scene_ground:
-                    sh, sdy_, sdx_ = make_contact_shadow(p['arr'])
+                    sh, sdy_, sdx_ = make_contact_shadow(p['arr'], light=light_dir)
                     if sh is not None:
                         p['cshadow'], p['csh_dy'], p['csh_dx'] = sh, sdy_, sdx_
                 if p.get('count'):
@@ -7213,6 +7249,28 @@ def main():
         if flow_map:
             print(f"KI-Flow: {len(flow_map)} Anker gewaehlt")
 
+    # v101f LICHT-WAHRHEIT: dominante Lichtrichtung einmal aus einem Mittel-Frame
+    # schaetzen, damit der Kontakt-Schatten des stehenden Textes licht-wahr zur
+    # Seite faellt (weg vom Licht), statt symmetrisch. Gilt pro Clip (Licht ist
+    # meist konstant); abschaltbar via effects.light_shadow.
+    _light = None
+    if cfg['effects'].get('light_shadow', True):
+        try:
+            _lt = (words[-1].get('end', 0.0) + words[0].get('start', 0.0)) / 2.0 \
+                if words else 0.0
+            _lr = subprocess.run(
+                ['ffmpeg', '-v', 'error', '-ss', str(max(_lt, 0.0)), '-i', args.input,
+                 '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'bgr24',
+                 '-s', '96x96', '-'], capture_output=True, timeout=20)
+            if len(_lr.stdout) >= 96 * 96 * 3:
+                _lf = np.frombuffer(_lr.stdout[:96 * 96 * 3],
+                                    dtype=np.uint8).reshape(96, 96, 3)
+                _light = estimate_light_dir(_lf)
+                print(f"Licht-Wahrheit: Lichtrichtung lx={_light[0]:+.2f} "
+                      f"Haerte={_light[1]:.2f} (Schatten faellt licht-wahr)")
+        except Exception as _e:
+            print(f"Licht-Wahrheit: Schaetzung uebersprungen ({type(_e).__name__})")
+
     if video_mode == 'narrator':
         if fx_map:
             for _v in fx_map.values():
@@ -7222,12 +7280,12 @@ def main():
                             face_pos=None, palette_at=palette_at,
                             cut_times=cut_times, faces_at=None,
                             flow_map=flow_map, loud=loud_map,
-                            beat_times=_beat_ts)
+                            beat_times=_beat_ts, light_dir=_light)
     else:
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
                             palette_at, cut_times=cut_times, faces_at=faces_at,
                             flow_map=flow_map, loud=loud_map,
-                            beat_times=_beat_ts)
+                            beat_times=_beat_ts, light_dir=_light)
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.

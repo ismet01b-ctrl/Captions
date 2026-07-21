@@ -1498,6 +1498,27 @@ def _scenario_logic(clip, transcript, tmp):
           "rec['orig_fx']" in _srv_src
           and "rec['orig_power'], rec['user_power']" in _srv_src)
 
+    # v101f Licht-Wahrheit: Kontakt-Schatten faellt licht-wahr zur Seite.
+    _lf_r = np.zeros((96, 96, 3), np.uint8); _lf_r[:, 48:] = 200
+    _lx, _hard = R.estimate_light_dir(_lf_r)
+    check('v101f: Lichtrichtung erkannt (hell rechts -> lx>0, hart)',
+          _lx > 0.3 and _hard > 0.2, f'lx={_lx:.2f} hard={_hard:.2f}')
+    _lx0, _h0 = R.estimate_light_dir(np.full((96, 96, 3), 120, np.uint8))
+    check('v101f: flaches Licht -> keine Richtung (weicher Schatten)',
+          abs(_lx0) < 0.05 and _h0 < 0.1)
+    _sarr = np.zeros((60, 300, 4), np.uint8); _sarr[40:55, 20:280, 3] = 255
+    _s0 = R.make_contact_shadow(_sarr)
+    _s1 = R.make_contact_shadow(_sarr, light=(0.8, 0.9))
+    check('v101f: Licht rechts -> Schatten versetzt nach links + gestreckt',
+          _s1[2] < _s0[2] and _s1[0].shape[1] >= _s0[0].shape[1],
+          f'dx {_s0[2]:.0f}->{_s1[2]:.0f}')
+    check('v101f: ohne Licht identisch zu vorher (Rueckwaerts-Kompatibel)',
+          R.make_contact_shadow(_sarr, light=None)[2] == _s0[2])
+    check('v101f: Licht im Main geschaetzt + an build_plans verdrahtet',
+          'estimate_light_dir(_lf)' in _src99
+          and _src99.count('light_dir=_light') >= 2
+          and "cfg['effects'].get('light_shadow'" in _src99)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
