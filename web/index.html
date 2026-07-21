@@ -2541,7 +2541,20 @@ async function motionPoll(jid, st, btn, orig){
   setTimeout(()=>motionPoll(jid, st, btn, orig), 1500);
 }
 
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
+  const ul = e.target.closest('[data-unlock]');
+  if (ul) {
+    e.preventDefault();
+    ul.disabled = true; ul.textContent = 'Unlocking …';
+    try {
+      const r = await fetch('/api/unlock/' + ul.dataset.unlock, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 402) { toast('Your first purchase removes the watermark.', 'err'); showPricing(); }
+      else if (r.ok && d.unlocked) { toast('Watermark removed!', 'ok'); renderLibrary(); }
+      else { toast('Nothing to unlock.', 'err'); renderLibrary(); }
+    } catch (err) { toast('Connection error.', 'err'); ul.disabled = false; ul.textContent = 'Unlock HD'; }
+    return;
+  }
   const nav = e.target.closest('[data-nav]');
   if (nav && $('#appView').classList.contains('show')) {
     e.preventDefault();
@@ -2946,6 +2959,7 @@ async function renderLibrary() {
           <a class="btn secondary" href="/api/video/${it.jid}?download=1">Download</a>
           ${it.has_mov ? `<a class="btn secondary" href="/api/mov/${it.jid}" title="ProRes 4444 with alpha — drop straight into Premiere">MOV&nbsp;·&nbsp;Alpha</a>` : ''}
           ${it.has_srt ? `<a class="btn secondary" href="/api/subtitles/${it.jid}" title="Subtitle file for YouTube or your editing software">SRT</a>` : ''}
+          ${it.wm ? `<button class="btn" data-unlock="${it.jid}" title="Your first purchase removes the watermark from this exact video - no re-render">Unlock&nbsp;HD</button>` : ''}
         </div>
       </div>`;
     // Klick auf Thumbnail -> inline Player

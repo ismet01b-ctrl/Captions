@@ -1374,6 +1374,15 @@ def _scenario_logic(clip, transcript, tmp):
                                      encoding='utf-8').read()
           and 'Silent view' in open(os.path.join(HERE, 'web', 'index.html'),
                                     encoding='utf-8').read())
+    # v101.3 Watermark-Unlock: Sprite-Funktion + Split-Verdrahtung
+    _wmarr, _wmx, _wmy = R.build_watermark(1080, 1920)
+    check('v101: Wasserzeichen-Sprite ausgelagert (Split nutzt dasselbe Bild)',
+          _wmarr.shape[2] == 4 and _wmarr.shape[0] > 20
+          and 0 < _wmx < 1080 and 0 < _wmy < 1920,
+          f'{_wmarr.shape} @ {_wmx},{_wmy}')
+    check('v101: Watermark-Split im Render verdrahtet',
+          'watermark_split' in _src99 and 'master_clean.mp4' in _src99
+          and "overlay={_wwx}:{_wwy}" in _src99)
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
@@ -2602,6 +2611,34 @@ def _scenario_v98(tmp):
     check('Frontend: Billing-Historie eigene Funktion + SRT-Buttons',
           'renderBillingHistory' in _idx and '/api/subtitles/' in _idx
           and 'wmUpsell' in _idx)
+    # v101.3 Watermark-Unlock serverseitig: Swap, Idempotenz, Auto-Unlock
+    _ujid = 'ffeeddccbb99'
+    _ud = SV.job_dir(_ujid)
+    os.makedirs(_ud, exist_ok=True)
+    open(os.path.join(_ud, 'fertig.mp4'), 'wb').write(b'WM')
+    open(os.path.join(_ud, 'master_clean.mp4'), 'wb').write(b'CLEAN')
+    SV.JOBS[_ujid] = {'user_id': uid_free, 'wm': True, 'status': 'fertig'}
+    _u1 = SV._unlock_job(_ujid)
+    check('v101: Unlock ersetzt fertig.mp4 durch sauberen Master',
+          _u1 and open(os.path.join(_ud, 'fertig.mp4'), 'rb').read() == b'CLEAN'
+          and SV.JOBS[_ujid].get('wm') is False
+          and SV._unlock_job(_ujid) is False)
+    _ujid2 = 'ffeeddccbb88'
+    _ud2 = SV.job_dir(_ujid2)
+    os.makedirs(_ud2, exist_ok=True)
+    open(os.path.join(_ud2, 'fertig.mp4'), 'wb').write(b'WM2')
+    open(os.path.join(_ud2, 'master_clean.mp4'), 'wb').write(b'CLEAN2')
+    SV.JOBS[_ujid2] = {'user_id': uid_free, 'wm': True, 'status': 'fertig'}
+    SV._credit_purchase(uid_free, 600, 'sess_unlock_t')
+    check('v101: Kauf schaltet gecachte Videos automatisch frei',
+          open(os.path.join(_ud2, 'fertig.mp4'), 'rb').read() == b'CLEAN2'
+          and SV.JOBS[_ujid2].get('wm') is False)
+    check('v101: Free-Tier rendert mit --watermark-split + Library-wm-Flag',
+          "'--watermark-split'" in open(os.path.join(HERE, 'web', 'server.py'),
+                                        encoding='utf-8').read()
+          and 'data-unlock' in open(os.path.join(HERE, 'web', 'index.html'),
+                                    encoding='utf-8').read())
+
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

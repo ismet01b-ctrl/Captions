@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101b Watermark-Unlock (Innovations-Batch 2/4).** Free-Tier-Renders
+  laufen jetzt als SPLIT: sauber rendern, Master als master_clean.mp4 im
+  Job-Ordner cachen, Auslieferung per ffmpeg-Overlay mit EXAKT demselben
+  Sprite wassermarkieren (build_watermark() ausgelagert - eingebrannter
+  Pfad und Overlay nutzen dasselbe Bild; Pixel-Beweis: Diff nur unten
+  rechts, Rest mean 0.31). Der erste Kauf schaltet frei: _credit_purchase
+  ruft _unlock_all_jobs (alle gecachten Videos des Kunden, atomarer
+  os.replace), zusaetzlich POST /api/unlock/{jid} + "Unlock HD"-Button in
+  der Library (402 -> Pricing). Kein Neu-Render, kein Ergebnis-Risiko -
+  Kauf im Moment der hoechsten Zahlungsbereitschaft. Demo bleibt beim
+  eingebrannten Wasserzeichen (kein Master noetig). Cleanup raeumt den
+  Master mit dem Job-Ordner ab (7 Tage). 5 neue Tests (Sprite, Split-
+  Verdrahtung, Swap+Idempotenz, Auto-Unlock beim Kauf, UI-Flag).
+  Regression 558/558 + Renders + GUI_OK.
+  HINWEIS Betrieb: Die Sandbox-Session wurde zwischendurch auf einen
+  aelteren Stand zurueckgesetzt (v101a-Commit war lokal weg, Remote hatte
+  ihn) - Arbeit war dank Push gesichert; Lehre: nach jeder gruenen Einheit
+  sofort pushen.
+
 - **v101a Innovations-Batch Teil 1/4 (Ismet: "Mach alles" aus der
   Innovations-Liste).** Drei von 13 Features:
   (1) BETONUNGS-TYPOGRAFIE: _word_loudness() (Sprech-Pegel pro Wort, 50ms-

@@ -717,6 +717,40 @@ def _pack_processed(user_id, session_id):
     return row is not None
 
 
+def _unlock_job(jid):
+    """v101 Watermark-Unlock: gecachten sauberen Master aktivieren. Ersetzt
+    fertig.mp4 durch master_clean.mp4 (atomar), raeumt auf, loescht das
+    wm-Flag. True wenn wirklich freigeschaltet wurde (idempotent)."""
+    d = job_dir(jid)
+    mc = os.path.join(d, 'master_clean.mp4')
+    if not os.path.exists(mc):
+        return False
+    try:
+        os.replace(mc, os.path.join(d, 'fertig.mp4'))
+        try:
+            os.remove(os.path.join(d, 'wm.png'))
+        except OSError:
+            pass
+        set_state(jid, wm=False)
+        return True
+    except OSError:
+        return False
+
+
+def _unlock_all_jobs(uid):
+    """Beim ersten Kauf: ALLE gecachten Free-Renders des Kunden auf einmal
+    freischalten - 'dein Kauf entfernt das Wasserzeichen' gilt sofort auch
+    rueckwirkend fuer alles, was noch auf dem Server liegt."""
+    n = 0
+    for jid, j in list(JOBS.items()):
+        if j.get('user_id') == uid and j.get('wm'):
+            if _unlock_job(jid):
+                n += 1
+    if n:
+        print(f"Watermark-Unlock: {n} Video(s) fuer User {uid} freigeschaltet")
+    return n
+
+
 def _credit_purchase(uid, sec, session_id):
     """v92-sec: Kauf ATOMAR + idempotent gutschreiben. Der 'INSERT OR IGNORE'
     prallt am partiellen UNIQUE-Index (user_id, 'Kauf {id}') ab, wenn dieselbe
@@ -735,6 +769,10 @@ def _credit_purchase(uid, sec, session_id):
         con.execute("UPDATE users SET balance_sec = MAX(0, balance_sec + ?) "
                     "WHERE id = ?", (sec, uid))
         con.commit()
+        try:
+            _unlock_all_jobs(uid)            # v101: Kauf entfernt Wasserzeichen
+        except Exception as e:               # Unlock darf den Kauf nie reissen
+            print(f'Auto-Unlock fehlgeschlagen: {e}')
         return True
     finally:
         con.close()
@@ -1810,7 +1848,9 @@ def run_job(jid):
         # v89: anonyme Kostprobe - immer Wasserzeichen, nur die ersten 10s.
         _extra = ['--watermark', '--duration', '10']
     elif _uid and not _has_purchased(_uid):
-        _extra = ['--watermark']
+        # v101 Watermark-Unlock: sauber rendern + identisch wassermarkieren -
+        # der erste Kauf schaltet GENAU dieses Video ohne Neu-Render frei.
+        _extra = ['--watermark-split']
     rc, log, out = _run_render(jid, extra_args=_extra)
     log_txt = '\n'.join(log)
     # v80g: Menschliche Fehlermeldungen aus dem Render-Log herausklauben
@@ -1841,6 +1881,8 @@ def run_job(jid):
             verbrauch = cost_seconds(j.get('dauer', 0))
             _adjust_balance(uid, -verbrauch,
                             f'Render {jid} ({verbrauch}s)')
+        if os.path.exists(os.path.join(job_dir(jid), 'master_clean.mp4')):
+            set_state(jid, wm=True)          # v101: freischaltbar nach Kauf
         # v101 Silent-Score: render.py legt <input>_silent.json ab, wenn die
         # Stumm-Bewertung lief - in den Job-State fuer die UI uebernehmen.
         try:
@@ -2637,6 +2679,21 @@ async def motion_preview(request: Request):
         shutil.rmtree(d, ignore_errors=True)
 
 
+@app.post('/api/unlock/{jid}')
+def api_unlock(jid: str, request: Request):
+    """v101 Watermark-Unlock: nach dem ersten Kauf laesst sich ein gecachtes
+    Free-Video ohne Neu-Render sauber freischalten (Button in der Library).
+    Idempotent; der Kauf selbst schaltet auch automatisch alles frei."""
+    u = _require_user(request)
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
+    if not _has_purchased(u['id']):
+        raise HTTPException(402, 'Your first purchase removes the watermark.')
+    ok = _unlock_job(jid)
+    j = JOBS.get(jid) or {}
+    return {'ok': True, 'unlocked': ok, 'wm': bool(j.get('wm'))}
+
+
 @app.post('/api/motion/render')
 async def motion_render(request: Request,
                         spec: str = Form(...),
@@ -2966,6 +3023,7 @@ def api_library(request: Request):
             # v98: SRT-Button nur zeigen, wenn ein Transkript existiert
             'has_srt': bool(j.get('input')) and os.path.exists(
                 os.path.splitext(j['input'])[0] + '_transcript2.json'),
+            'wm': bool(j.get('wm')),
         })
     items.sort(key=lambda x: x['created'], reverse=True)
     return {'items': items, 'retention_days': RETENTION_DAYS}

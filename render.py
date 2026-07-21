@@ -7,7 +7,7 @@ Nutzung:
     python render.py video.mp4 --out fertig.mp4 --keywords "Schufa,Score"
     python render.py video.mp4 --transcript video_transcript.json   (API-Aufruf ueberspringen)
 """
-import argparse, json, math, os, re, subprocess, sys, tempfile, time
+import argparse, json, math, os, re, shutil, subprocess, sys, tempfile, time
 import numpy as np
 import blender_engine
 import cv2
@@ -4370,6 +4370,47 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
     return n
 
 
+def build_watermark(W, H):
+    """v101: Free-Tier-Wasserzeichen als Sprite (Text + Logo, ~38%
+    Deckkraft, unten rechts). Ausgelagert, damit der Watermark-Split
+    (sauberer Master + identisch gewassermarkte Kopie) EXAKT dasselbe
+    Bild nutzt wie der eingebrannte Pfad. Rueckgabe: (arr, x, y)."""
+    _wm_f = ImageFont.truetype(os.path.join(HERE, 'fonts', 'poppins_b.ttf'),
+                               max(int(H * 0.030), 22))
+    _d = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
+    _bb = _d.textbbox((0, 0), 'DouchkoVE', font=_wm_f)
+    _tw, _th = _bb[2], _bb[3]
+    # v88b: Logo-Monogramm links neben den Schriftzug. Weiss, gleiche
+    # dezente Deckkraft wie der Text (~38%).
+    _logo_arr = None
+    _lp = os.path.join(HERE, 'web', 'logo_white.png')
+    if os.path.exists(_lp):
+        try:
+            _lh = int(_th * 1.15)
+            _lg = Image.open(_lp).convert('RGBA')
+            _lg = _lg.resize((max(int(_lg.width * _lh / _lg.height), 1), _lh),
+                             Image.LANCZOS)
+            _la = np.array(_lg).astype(np.float32)
+            _la[..., 3] *= 97 / 255.0            # gleiche Transluzenz wie Text
+            _logo_arr = _la.astype(np.uint8)
+        except Exception:
+            _logo_arr = None
+    _lw = (_logo_arr.shape[1] + int(H * 0.010)) if _logo_arr is not None else 0
+    _wm_img = Image.new('RGBA', (_lw + _tw + 12, max(_th, _logo_arr.shape[0]
+                        if _logo_arr is not None else _th) + 14), (0, 0, 0, 0))
+    _cy = _wm_img.height // 2
+    if _logo_arr is not None:
+        _li = Image.fromarray(_logo_arr)
+        _wm_img.alpha_composite(_li, (6, _cy - _li.height // 2))
+    ImageDraw.Draw(_wm_img).text((_lw + 6, _cy - _th // 2 - _bb[1]), 'DouchkoVE',
+                                 font=_wm_f, fill=(255, 255, 255, 97),
+                                 stroke_width=2, stroke_fill=(0, 0, 0, 60))
+    _wm_arr = np.array(_wm_img)
+    _wx = W - _wm_arr.shape[1] - int(W * 0.03)
+    _wy = H - _wm_arr.shape[0] - int(H * 0.025)
+    return (_wm_arr, _wx, _wy)
+
+
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None, faces_at=None, flow_map=None,
                 loud=None):
@@ -6534,6 +6575,10 @@ def main():
                     help='Nur transkribieren und speichern, dann beenden')
     ap.add_argument('--plan-only', action='store_true',
                     help='Nur analysieren: Momente als JSON schreiben, nicht rendern')
+    ap.add_argument('--watermark-split', action='store_true',
+                    help='Free-Tier: sauber rendern, Master behalten und die '
+                         'Ausgabe per identischem Overlay wassermarkieren '
+                         '(Kauf schaltet ohne Neu-Render frei)')
     ap.add_argument('--watermark', action='store_true',
                     help='Dezentes DouchkoVE-Wasserzeichen einblenden (Free-Tier)')
     args = ap.parse_args()
@@ -7131,40 +7176,7 @@ def main():
     # alpha-geblendet. Dezent: 38% Deckkraft, unten rechts.
     wm = None
     if args.watermark:
-        _wm_f = ImageFont.truetype(os.path.join(HERE, 'fonts', 'poppins_b.ttf'),
-                                   max(int(H * 0.030), 22))
-        _d = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
-        _bb = _d.textbbox((0, 0), 'DouchkoVE', font=_wm_f)
-        _tw, _th = _bb[2], _bb[3]
-        # v88b: Logo-Monogramm links neben den Schriftzug. Weiss, gleiche
-        # dezente Deckkraft wie der Text (~38%).
-        _logo_arr = None
-        _lp = os.path.join(HERE, 'web', 'logo_white.png')
-        if os.path.exists(_lp):
-            try:
-                _lh = int(_th * 1.15)
-                _lg = Image.open(_lp).convert('RGBA')
-                _lg = _lg.resize((max(int(_lg.width * _lh / _lg.height), 1), _lh),
-                                 Image.LANCZOS)
-                _la = np.array(_lg).astype(np.float32)
-                _la[..., 3] *= 97 / 255.0            # gleiche Transluzenz wie Text
-                _logo_arr = _la.astype(np.uint8)
-            except Exception:
-                _logo_arr = None
-        _lw = (_logo_arr.shape[1] + int(H * 0.010)) if _logo_arr is not None else 0
-        _wm_img = Image.new('RGBA', (_lw + _tw + 12, max(_th, _logo_arr.shape[0]
-                            if _logo_arr is not None else _th) + 14), (0, 0, 0, 0))
-        _cy = _wm_img.height // 2
-        if _logo_arr is not None:
-            _li = Image.fromarray(_logo_arr)
-            _wm_img.alpha_composite(_li, (6, _cy - _li.height // 2))
-        ImageDraw.Draw(_wm_img).text((_lw + 6, _cy - _th // 2 - _bb[1]), 'DouchkoVE',
-                                     font=_wm_f, fill=(255, 255, 255, 97),
-                                     stroke_width=2, stroke_fill=(0, 0, 0, 60))
-        _wm_arr = np.array(_wm_img)
-        _wx = W - _wm_arr.shape[1] - int(W * 0.03)
-        _wy = H - _wm_arr.shape[0] - int(H * 0.025)
-        wm = (_wm_arr, _wx, _wy)
+        wm = build_watermark(W, H)
         print("Wasserzeichen: aktiv (Free-Tier, mit Logo)")
 
     # --- Encoder (v80p): ZWEI Stufen statt einer Pipe-Mux-Kombi.
@@ -7518,6 +7530,37 @@ def main():
             os.remove(video_tmp)
         except OSError:
             pass
+    # v101 Watermark-Split (Free-Tier): sauberen Master behalten und die
+    # ausgelieferte Datei mit EXAKT demselben Sprite wassermarkieren wie der
+    # eingebrannte Pfad - der erste Kauf schaltet genau dieses Video ohne
+    # Neu-Render frei (kein Ergebnis-Risiko, keine Renderkosten).
+    if getattr(args, 'watermark_split', False) and out_path.lower().endswith('.mp4'):
+        try:
+            _mc = os.path.join(os.path.dirname(os.path.abspath(out_path)),
+                               'master_clean.mp4')
+            shutil.copyfile(out_path, _mc)
+            _warr, _wwx, _wwy = build_watermark(W, H)
+            _wpng = os.path.join(os.path.dirname(_mc), 'wm.png')
+            Image.fromarray(_warr).save(_wpng)
+            _wtmp = out_path + '.wm.mp4'
+            _wr = subprocess.run(
+                ['ffmpeg', '-y', '-v', 'error', '-i', _mc, '-i', _wpng,
+                 '-filter_complex', f'[0:v][1:v]overlay={_wwx}:{_wwy}',
+                 '-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p',
+                 '-c:a', 'copy', _wtmp], capture_output=True, text=True)
+            if _wr.returncode == 0 and os.path.exists(_wtmp):
+                os.replace(_wtmp, out_path)
+                print("Wasserzeichen: Split aktiv (sauberer Master gecacht)")
+            else:
+                try:
+                    os.remove(_mc)
+                except OSError:
+                    pass
+                print("WARNUNG: Watermark-Split fehlgeschlagen - Ausgabe ohne "
+                      "Wasserzeichen ausgeliefert")
+        except Exception as _we:
+            print(f"WARNUNG: Watermark-Split uebersprungen ({type(_we).__name__})")
+
     print(f"Fertig: {out_path}")
 
     # v101 Silent-Score: das fertige Video stumm bewerten (74% der Views
