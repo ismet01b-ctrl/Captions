@@ -3773,6 +3773,33 @@ def apply_keyword_marks(kw, fx_map, words, marks, cfg):
     return kw, fx_map
 
 
+def split_forced_groups(groups, fx_map):
+    """v101n: Liegen MEHRERE erzwungene Woerter (user_pick) in derselben
+    Phrasen-Gruppe, wuerde nur EINES ein Highlight - eine Phrase = ein Moment.
+    Deshalb die Gruppe an den erzwungenen Woertern auftrennen: jedes markierte
+    Wort beginnt eine eigene Untergruppe (=eigenes Highlight). Betrifft NUR
+    Gruppen mit >=2 Marken; alles andere bleibt exakt wie es war."""
+    if not fx_map:
+        return groups
+    def _forced(j):
+        info = fx_map.get(j)
+        return isinstance(info, dict) and info.get('user_pick')
+    out = []
+    for g in groups:
+        pos = [k for k, j in enumerate(g) if _forced(j)]
+        if len(pos) < 2:
+            out.append(g)
+            continue
+        start = 0
+        for k in pos:
+            if k == 0:
+                continue                  # erstes Wort beginnt ohnehin die Gruppe
+            out.append(g[start:k])
+            start = k
+        out.append(g[start:])
+    return [s for s in out if s]
+
+
 def _looks_german(words):
     """v94: Rate die Sprache aus dem Transkript. Bei language='auto' wurde alles
     als Deutsch behandelt (non_de=False) - dann verwarf der Phrasen-Filter
@@ -5035,6 +5062,9 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     groups = list(build_groups(words, cfg['effects'].get('words_per_group', 3),
                                min_hold=float(cfg['effects'].get('chunk_hold_min', 0.65)),
                                hard_max=int(cfg['effects'].get('words_per_group_max', 5))))
+    # v101n: mehrere erzwungene Woerter in EINER Phrase -> Phrase auftrennen,
+    # damit jedes markierte Wort ein eigenes Highlight bekommt.
+    groups = split_forced_groups(groups, fx_map)
     g_starts = [words[g[0]]['start'] for g in groups]
     # Randfall: nirgends ein Sprecher-Gesicht (Voiceover, Screen-Recording).
     # Dann duerfen die Captions nicht komplett wegfallen -> szenen-verankert zeigen.

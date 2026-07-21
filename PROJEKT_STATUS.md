@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101n Fix: mehrere erzwungene Woerter pro Phrase kommen jetzt ALLE durch.**
+  Ismet: "nicht alle Woerter die ich will kommen". Ursache (per echtem Render
+  reproduziert, KEIN Bug): Woerter werden zu Phrasen-Gruppen gebuendelt, eine
+  Phrase = EIN Highlight. Zwei Marken in derselben Gruppe ("neues Level" in
+  Gruppe [9,10,11]) -> nur eine wurde ein Moment, "Level" fiel weg. Fix:
+  split_forced_groups() trennt eine Phrase an den erzwungenen Woertern auf,
+  sobald >=2 Marken drin liegen - jedes markierte Wort beginnt eine eigene
+  Untergruppe und wird ein eigenes Highlight. Betrifft NUR Gruppen mit >=2
+  user_pick-Marken; alle anderen Phrasen bleiben exakt wie sie waren. BEWEIS:
+  6 erzwungene Woerter (inkl. Nachbarpaar) -> vorher FEHLEN [Level], jetzt
+  FEHLEN []. 3 neue Tests (Split-Logik, Nachbar-Paar wird zu 2 Highlights,
+  Gegenprobe unveraendert). Regression 624/624 + render1 7/7 + GUI_OK.
+
 - **v101m Keyword-Markierung im Text-Schritt (Nutzer uebersteuert die KI).**
   Im Text-Schritt gibt es jetzt einen zweiten Modus "Pick highlights":
   Wort antippen zyklisch neutral -> ERZWINGEN (lila + ✨) -> BLOCKIEREN

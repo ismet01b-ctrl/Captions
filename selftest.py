@@ -1759,6 +1759,23 @@ def _scenario_logic(clip, transcript, tmp):
           and 'tx-mode' in _ui_m and "txMode === 'kw'" in _ui_m
           and "fd.append('kwmarks'" in _ui_m)
 
+    # v101n: mehrere erzwungene Woerter in EINER Phrase -> Phrase auftrennen,
+    # damit jedes markierte Wort ein eigenes Highlight wird (sonst faellt eins weg).
+    check('v101n: split_forced_groups trennt an den Marken, sonst unveraendert',
+          R.split_forced_groups([[9, 10, 11]],
+              {9: {'user_pick': True}, 10: {'user_pick': True}}) == [[9], [10, 11]]
+          and R.split_forced_groups([[0, 1, 2], [3, 4]], {}) == [[0, 1, 2], [3, 4]]
+          and R.split_forced_groups([[0, 1, 2]],
+              {1: {'user_pick': True}}) == [[0, 1, 2]])   # nur 1 Marke -> kein Split
+    _nfw = [{'word': w, 'start': i * 0.3, 'end': i * 0.3 + 0.25}
+            for i, w in enumerate(['a', 'neues', 'Level', 'bringen', 'c'])]
+    _nffx = {1: {'fx': 'outline', 'power': 2, 'n': 1, 'user_pick': True},
+             2: {'fx': 'outline', 'power': 2, 'n': 1, 'user_pick': True}}
+    _nfpl = R.build_plans(_nfw, {1, 2}, cfg, S, W_, H_, lambda s, e: True, _nffx)
+    _nfgot = sorted(p['kw_i'] for p in _nfpl if 'kw_i' in p)
+    check('v101n: zwei benachbarte erzwungene Woerter -> BEIDE werden Highlights',
+          1 in _nfgot and 2 in _nfgot, str(_nfgot))
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
