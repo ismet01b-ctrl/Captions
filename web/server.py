@@ -885,8 +885,13 @@ def api_history(request: Request):
 _fonts_dir = os.path.join(ROOT, 'fonts')
 if os.path.isdir(_fonts_dir):
     app.mount('/fonts', StaticFiles(directory=_fonts_dir), name='fonts')
+_mprev_dir = os.path.join(HERE, 'motion_previews')
+if os.path.isdir(_mprev_dir):
+    app.mount('/motion_previews', StaticFiles(directory=_mprev_dir),
+              name='motion_previews')
 JOBS = {}
 QUEUE = Queue()
+MQUEUE = Queue()          # Fast-Lane nur fuer Motion-Clips
 LOCK = threading.Lock()
 
 # Presets als Startpunkt. Der Nutzer kann alles individuell nachjustieren.
@@ -1538,6 +1543,20 @@ def worker():
             QUEUE.task_done()
 
 
+def motion_worker():
+    """Fast-Lane: Motion-Clips (~10s Render) laufen an der Caption-Queue
+    vorbei - ein 3-Minuten-Caption-Job blockiert sie nicht mehr."""
+    while True:
+        jid = MQUEUE.get()
+        try:
+            run_job(jid)
+        except Exception as e:
+            set_state(jid, status='fehler',
+                      msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
+        finally:
+            MQUEUE.task_done()
+
+
 def _run_motion(jid):
     """Motion-Graphics-Render (UI-Motion-Engine) statt Caption-Pipeline.
     Eine JSON treibt alles; gfx_engine wird als Subprocess aufgerufen."""
@@ -1577,6 +1596,15 @@ def _run_motion(jid):
     p.wait()
     _mp4 = os.path.join(d, 'fertig.mp4')
     if p.returncode == 0 and os.path.exists(_mp4):
+        # Library-Poster bei 6.8s ziehen (dort steht die Szene; beim
+        # Standard-Zeitpunkt 0.8s waere die Kachel fast leer)
+        try:
+            subprocess.run(['ffmpeg', '-y', '-v', 'error', '-ss', '6.8',
+                            '-i', _mp4, '-frames:v', '1', '-vf',
+                            'scale=360:-2', os.path.join(d, 'poster.jpg')],
+                           check=True, timeout=30)
+        except Exception:
+            pass
         st = {'status': 'fertig', 'progress': 1.0, 'phase': 'Done',
               'video_url': f'/api/video/{jid}'}
         if _mov and os.path.exists(out):
@@ -1729,6 +1757,18 @@ def _cleanup_worker():
                         shutil.rmtree(d, ignore_errors=True)
                         JOBS.pop(jid, None)
                         print(f"Cleanup: Job {jid} nach {retention:.0f}d entfernt")
+                        continue
+                    # ProRes-MOVs sind ~90MB - frueher raus als die MP4s
+                    # (Standard 48h, DVE_MOV_HOURS). Die MP4-Vorschau bleibt.
+                    mov = os.path.join(d, 'fertig.mov')
+                    mov_h = float(os.environ.get('DVE_MOV_HOURS', '48'))
+                    if os.path.isfile(mov) and \
+                            os.path.getmtime(mov) < _t.time() - mov_h * 3600:
+                        try:
+                            os.remove(mov)
+                            print(f"Cleanup: MOV {jid} nach {mov_h:.0f}h entfernt")
+                        except OSError:
+                            pass
             # v88b: Transkript-Cache aufraeumen (Dateien > 30 Tage). Winzig,
             # aber soll nicht ewig wachsen.
             tcut = _t.time() - 30 * 86400
@@ -1778,7 +1818,7 @@ def _restore_jobs():
                 st['status'] = 'wartet'
                 st['progress'] = 0.0
                 st['phase'] = 'Queued (restored after restart) …'
-                QUEUE.put(jid)
+                MQUEUE.put(jid)
                 requeued += 1
             continue
         src = None
@@ -1808,6 +1848,7 @@ threading.Thread(target=_cleanup_worker, daemon=True).start()
 
 for _ in range(int(os.environ.get('DVE_WORKERS', '1'))):
     threading.Thread(target=worker, daemon=True).start()
+threading.Thread(target=motion_worker, daemon=True).start()
 
 
 # ---------------------------------------------------------------- Endpunkte
@@ -2236,11 +2277,18 @@ def _motion_sanitize(body):
     return out
 
 
+_PREVIEW_GATE = {}
+
+
 @app.post('/api/motion/preview')
 async def motion_preview(request: Request):
-    """Live-Vorschau: EIN Standbild (~2s). Nur eingeloggt (guenstig, aber
-    nicht anonym missbrauchbar)."""
-    _require_user(request)
+    """Live-Vorschau: EIN Standbild (~2s). Nur eingeloggt + Rate-Limit
+    (1 Preview / 1.2s pro User) - jeder Aufruf kostet echte Render-CPU."""
+    u = _require_user(request)
+    _now = time.time()
+    if _now - _PREVIEW_GATE.get(u['id'], 0) < 1.2:
+        raise HTTPException(429, 'Too many previews - one moment.')
+    _PREVIEW_GATE[u['id']] = _now
     body = await request.json()
     mc = _motion_sanitize(body)
     mc['preview'] = 6.8                       # Moment, in dem die Szene steht
@@ -2295,7 +2343,7 @@ async def motion_render(request: Request,
                  'dauer': 11, 'cost_sec': _need, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …',
               kind='motion')
-    QUEUE.put(jid)
+    MQUEUE.put(jid)
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 
 
@@ -2480,7 +2528,8 @@ def status(jid: str, request: Request):
         raise HTTPException(404, 'Unknown job.')
     out = {k: v for k, v in j.items() if k not in ('input', 'code')}
     if j.get('status') == 'wartet':
-        out['phase'] = f'Queued (position {QUEUE.qsize()}) …'
+        _q = MQUEUE if j.get('kind') == 'motion' else QUEUE
+        out['phase'] = f'Queued (position {_q.qsize()}) …'
     return out
 
 

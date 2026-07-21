@@ -956,6 +956,54 @@ def render_stackbuild(input_video, out_video, progress=print):
     return True
 
 
+_EMOJI_IMG_CACHE = {}
+
+
+def _emoji_img(seq, h):
+    """Farb-Emoji (Noto) als PIL-RGBA in Zielhoehe, None wenn kein Font/Glyph.
+    'seq' darf eine ZWJ-Sequenz sein (z.B. Herz + Variation Selector)."""
+    key = (seq, int(h))
+    if key in _EMOJI_IMG_CACHE:
+        return _EMOJI_IMG_CACHE[key]
+    import glob as _g
+    c = (_g.glob('/usr/share/fonts/**/NotoColorEmoji*.ttf', recursive=True)
+         or _g.glob('/usr/share/fonts/**/*Emoji*.ttf', recursive=True))
+    out = None
+    if c:
+        try:
+            f = ImageFont.truetype(c[0], 109)     # Noto: fixe Bitmap-Groesse
+            img = Image.new('RGBA', (256, 140), (0, 0, 0, 0))
+            ImageDraw.Draw(img).text((128, 70), seq, font=f,
+                                     embedded_color=True, anchor='mm')
+            a = np.array(img)
+            ys, xs = np.where(a[..., 3] > 8)
+            if len(ys):
+                a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+                im = Image.fromarray(a)
+                w = max(int(im.width * h / im.height), 4)
+                out = im.resize((w, int(h)), Image.LANCZOS)
+        except Exception:
+            out = None
+    _EMOJI_IMG_CACHE[key] = out
+    return out
+
+
+def _emoji_split(text):
+    """Zerlegt Text in ('t', str)- und ('e', emoji-run)-Segmente."""
+    def is_e(ch):
+        o = ord(ch)
+        return (o >= 0x1F000 or 0x2600 <= o <= 0x27BF
+                or o in (0x2764, 0xFE0F, 0x200D, 0x2B50))
+    segs = []
+    for ch in text:
+        kind = 'e' if is_e(ch) else 't'
+        if segs and segs[-1][0] == kind:
+            segs[-1][1] += ch
+        else:
+            segs.append([kind, ch])
+    return segs
+
+
 def _elastic(t):
     """Elastic-Ease nach der Referenz-Kurve (@dav6cious-Kommentar): schneller
     Anstieg, ~18% Overshoot bei ~340ms, weiches Zurueckfedern, Settle ~1s.
@@ -1229,8 +1277,15 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             out.alpha_composite(gl)
         return out
 
+    _pill_memo = {}
+
     def pill_sprite(txt, n_chars, acc_last=3):
-        """Glas-Kapsel mit Typewriter-Stand, letzte Buchstaben in Akzentfarbe."""
+        """Glas-Kapsel mit Typewriter-Stand, letzte Buchstaben in Akzentfarbe.
+        Memoisiert pro sichtbarer Zeichenzahl (nur int(n_chars) wird gemalt) -
+        pixelgleich, aber die fertige Pill wird nicht 60x/s neu gebaut."""
+        _mk = (txt, min(int(max(n_chars, 0)), len(txt)), acc_last)
+        if _mk in _pill_memo:
+            return _pill_memo[_mk]
         S2 = 2
         f = F(PFONT, 96 * S2)
         d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
@@ -1246,7 +1301,9 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             col = ACC if k >= len(txt) - acc_last else TXT
             d.text((x, y), ch, font=f, fill=col + (255,))
             x += d0.textlength(ch, font=f)
-        return im.resize((pw // S2, ph // S2), Image.LANCZOS)
+        _res = im.resize((pw // S2, ph // S2), Image.LANCZOS)
+        _pill_memo[_mk] = _res
+        return _res
 
     def logo_sprite(sz):
         """Glas-Logo-Karte mit Akzent-Play-Dreieck + weichem Farb-Glow."""
@@ -1365,21 +1422,28 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                                     int(bh / 2), fill=ACC + (255,))
         return im
 
+    _wm_memo = {}
+
     def wordmark_sprite(n_chars):
+        txt = 'DouchkoVE'
+        _mk = min(int(max(n_chars, 0)), len(txt))
+        if _mk in _wm_memo:
+            return _wm_memo[_mk]
         S2 = 2
         f = F('inter_black.ttf', 120 * S2)
-        txt = 'DouchkoVE'
         d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
         w = int(d0.textlength(txt, font=f)) + 20
         asc, desc = f.getmetrics()
         im = Image.new('RGBA', (w, asc + desc), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
         x = 0
-        for k, ch in enumerate(txt[:max(int(n_chars), 0)]):
+        for k, ch in enumerate(txt[:_mk]):
             col = ACC if k >= 7 else TXT              # 'VE' in Akzent
             d.text((x, 0), ch, font=f, fill=col + (255,))
             x += d0.textlength(ch, font=f)
-        return im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
+        _res = im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
+        _wm_memo[_mk] = _res
+        return _res
 
     # ---------- App-Store-Journey (Template 'appstore', Referenz-Video 2) ------
     def txt_spr(s, px, col, font=None, max_w=None):
@@ -1439,6 +1503,8 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                        fill=MUTE + (120,), width=2)
         return im
 
+    _shc = {}                                 # Schatten-Cache (Ruhezustand)
+
     def put(canvas, spr, cx, cy, scale=1.0, op=1.0, vblur=0.0, rot=0.0,
             lift=1.0):
         """Sprite mit Studio-Schatten, Scale, Opacity, Geschw.-Blur, Rotation.
@@ -1460,12 +1526,31 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         if op < 1.0:
             a = s.getchannel('A').point(lambda v: int(v * op))
             s = s.copy(); s.putalpha(a)
-        # Zweischichtiger Schatten, Offset nach Lichtrichtung (oben-links).
-        amb = _studio_shadow(s, blur=int(30 * lift), alpha=int(40 * op),
-                             shrink=0.99)
+        # Zweischichtiger Schatten - die teuerste Operation pro Frame (2x
+        # Gaussian). Im RUHEZUSTAND (voll deckend, kein Blur, Idle-Rotation
+        # <3 Grad) wird er gecacht: Key = Sprite-Identitaet + Groesse +
+        # Rotation auf 0.1 Grad gerundet. Cache haelt die Sprite-Referenz
+        # fest, damit eine wiederverwendete id() nie falsch trifft.
+        _cachable = (op >= 0.999 and vblur <= 0.3 and abs(rot) < 3.0)
+        amb = con = None
+        if _cachable:
+            # 0.1-Grad-Quantisierung: <=0.05 Grad Abweichung = sub-pixel im
+            # halbaufgeloesten Blur (0.5 Grad liess den Schatten sichtbar
+            # 'steppen' - gemessen, verworfen)
+            _key = (id(spr), w, h, round(rot * 10) / 10, round(lift, 2))
+            _ent = _shc.get(_key)
+            if _ent is not None and _ent[0] is spr:
+                amb, con = _ent[1], _ent[2]
+        if amb is None:
+            amb = _studio_shadow(s, blur=int(30 * lift), alpha=int(40 * op),
+                                 shrink=0.99)
+            con = _studio_shadow(s, blur=9, alpha=int(50 * op), shrink=0.97)
+            if _cachable:
+                if len(_shc) > 1024:
+                    _shc.clear()
+                _shc[_key] = (spr, amb, con)
         canvas.alpha_composite(amb, (int(cx - amb.width / 2 + 6 * lift),
                                      int(cy - amb.height / 2 + 26 * lift)))
-        con = _studio_shadow(s, blur=9, alpha=int(50 * op), shrink=0.97)
         canvas.alpha_composite(con, (int(cx - con.width / 2 + 2),
                                      int(cy - con.height / 2 + 9 * lift)))
         canvas.alpha_composite(s, (int(cx - s.width / 2), int(cy - s.height / 2)))
@@ -1599,7 +1684,20 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             fT_ = F('inter_var.ttf', 44 * S2)
             fS_ = F('inter_var.ttf', 26 * S2)
             d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
-            tw = int(d0.textlength(text, font=fT_))
+            # Emoji-Segmente: Text-Runs misst der Font, Emoji-Runs werden als
+            # Noto-Farbbilder eingebettet (wie in Ismets echtem Screenshot)
+            _eh = 48 * S2
+            segs = []
+            for kind, run in _emoji_split(text):
+                if kind == 't':
+                    segs.append(('t', run, int(d0.textlength(run, font=fT_))))
+                else:
+                    ei = _emoji_img(run, _eh)
+                    if ei is not None:
+                        segs.append(('e', ei, ei.width + 6 * S2))
+                    else:                       # kein Emoji-Font: still weg
+                        pass
+            tw = sum(s_[2] for s_ in segs)
             sw = int(d0.textlength(tstamp, font=fS_))
             ck_w = 40 * S2 if outgoing else 0
             tail = 18 * S2
@@ -1622,7 +1720,15 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
                            (x0 - tail + 2, bh - 4 * S2),
                            (x0 + 30 * S2, bh - 4)], fill=bg + (255,))
             ty = (bh - sum(fT_.getmetrics())) // 2 - 6 * S2
-            d.text((x0 + 30 * S2, ty), text, font=fT_, fill=TX_WA + (255,))
+            _tx = x0 + 30 * S2
+            for kind, val, wpx in segs:
+                if kind == 't':
+                    d.text((_tx, ty), val, font=fT_, fill=TX_WA + (255,))
+                else:
+                    im.alpha_composite(val, (_tx + 3 * S2,
+                                             ty + (sum(fT_.getmetrics())
+                                                   - _eh) // 2 + 2 * S2))
+                _tx += wpx
             # Uhrzeit + (outgoing) blaue Doppelhaken unten rechts im Bubble
             sx = x0 + 30 * S2 + tw + 18 * S2
             sy = bh - 44 * S2

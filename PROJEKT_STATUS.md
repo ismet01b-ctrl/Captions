@@ -3,6 +3,40 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Optimierungs-Batch (Ismet: "Mach schonmal alles, was du machen kannst.
+  Es soll an Qualitaet nicht verlieren.").** 8 Punkte umgesetzt:
+  (1) PERFORMANCE Engine: Sprite-Memoization (_pill_memo/_wm_memo - Pillen/
+  Wordmark werden pro sichtbarer Zeichenzahl nur 1x gemalt) + Schatten-Cache
+  in put() (_shc; nur op>=0.999, vblur<=0.3, |rot|<3 Grad; Key pinnt Sprite-
+  Referenz via 'is'). Benchmark pills-Demo: 178s -> 131s (26% schneller).
+  QUALITAETS-NACHWEIS: Rotations-Quantisierung erst 0.5 Grad (28% schneller,
+  aber Pixel-Diff zeigte sichtbares Schatten-Stepping -> VERWORFEN), final
+  0.1 Grad (<=0.05 Grad Fehler = Subpixel im Half-Res-Blur). Verifiziert:
+  x264 ist deterministisch (md5-gleich bei Doppel-Encode) -> Rest-Diff
+  zwischen Vorher/Nachher-Video ist Rate-Control-Verstaerkung, und die
+  Frame-zu-Frame-Bewegungsprofile sind identisch (z.B. 6.58<->6.60 mean),
+  kein Stepping, keine Spruenge.
+  (2) EMOJI in WhatsApp-Bubbles: _emoji_img() (NotoColorEmoji, embedded_color)
+  + _emoji_split() zerlegt Text in Text-/Emoji-Runs; Herz/Flamme/Augen im
+  Render verifiziert.
+  (3) TEMPLATE-GALERIE statt Text-Segmente: 6 echte Vorschau-Thumbnails
+  (web/motion_previews/*.jpg, 270x480, aus den Templates selbst gerendert,
+  je 10-20 KB), 3-Spalten-Grid, Akzent-Rahmen auf Auswahl. Browser-Smoke:
+  6 Tiles geladen, Klick wechselt Auswahl, 0 JS-Fehler.
+  (4) MOTION-FAST-LANE: eigene MQUEUE + motion_worker - ein 10s-Motion-Clip
+  wartet nicht mehr hinter langen Caption-Renders; Status zeigt die richtige
+  Queue-Position. Verifiziert (Job landet in MQUEUE, Position korrekt).
+  (5) PREVIEW-RATE-LIMIT: /api/motion/preview max. 1 Call/1.2s pro User ->
+  429; Frontend faengt 429 ab und wiederholt still nach 1.3s (Preview-
+  Opacity wird immer restauriert). Mechanik direkt verifiziert.
+  (6) MOV-CLEANUP: fertig.mov aelter als DVE_MOV_HOURS (48h) wird geloescht,
+  fertig.mp4-Vorschau bleibt - ProRes-Dateien sind gross.
+  (7) MOTION-POSTER: _run_motion schreibt poster.jpg (Frame bei 6.8s) fuer
+  die Library-Ansicht.
+  (8) AUFGERAEUMT: 4 Sandbox-Testjobs entfernt; data/ bleibt via .gitignore
+  draussen. Volle Regression gruen: 512/512 + GUI_OK (nach den Aenderungen
+  erneut gelaufen).
+
 - **Markt-/Sicherheits-/Bug-Review (Ismets Drei-Fragen-Check).**
   (1) PREISE: Konkurrenz recherchiert (Submagic $20/mo/30 Videos, Captions.ai
   $9.99-24.99/mo Abo, Opus $15/mo/150min, Zeemo ~$6.67/mo). Unsere 9/19/39 Euro

@@ -518,6 +518,16 @@ body {
 /* Motion editor */
 .mo-wrap { display: grid; grid-template-columns: 380px 1fr; gap: 24px;
   align-items: start; }
+.mo-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mo-tile { position: relative; border-radius: 12px; overflow: hidden;
+  cursor: pointer; border: 2px solid transparent; aspect-ratio: 9/16;
+  transition: border-color .15s, transform .15s; }
+.mo-tile:hover { transform: translateY(-2px); }
+.mo-tile.on { border-color: var(--acc2, #ff7a1a); }
+.mo-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mo-tile span { position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 14px 8px 6px; font-size: 11px; font-weight: 700; color: #fff;
+  text-align: center; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
 .mo-controls .panel { display: flex; flex-direction: column; }
 .mo-lab { font-size: 12px; font-weight: 700; color: var(--mut);
   text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 8px; }
@@ -1263,7 +1273,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div class="mo-controls">
           <div class="panel">
             <label class="mo-lab">Template</label>
-            <div class="seg" id="moTemplate"></div>
+            <div class="mo-gallery" id="moTemplate"></div>
             <label class="mo-lab" id="moStyleLab">Style</label>
             <div class="seg" id="moStyle"></div>
             <label class="mo-lab">Format</label>
@@ -2350,12 +2360,29 @@ function moSeg(id, opts, key){
     el.appendChild(b);
   });
 }
+/* Template-Galerie: Bild-Kacheln statt nackter Buttons - man waehlt ein
+   Beispiel, keinen Fachbegriff. */
+function moGallery(){
+  const el=$('#moTemplate'); if(!el) return;
+  const TPLS=[['pills','Pills'],['widgets','Widgets'],['appstore','App Store'],
+    ['lowerthird','Lower Third'],['chat','Chat'],['notify','Notify']];
+  el.innerHTML='';
+  TPLS.forEach(([val,label])=>{
+    const c=document.createElement('div');
+    c.className='mo-tile'+(Motion.sel.template===val?' on':'');
+    c.innerHTML=`<img src="/motion_previews/${val}.jpg" alt="" loading="lazy"><span>${label}</span>`;
+    c.onclick=()=>{ Motion.sel.template=val;
+      el.querySelectorAll('.mo-tile').forEach(x=>x.classList.remove('on'));
+      c.classList.add('on'); moSync(); motionPreview(); };
+    el.appendChild(c);
+  });
+}
+
 async function initMotion(){
   if(Motion.ready){ motionPreview(); return; }
   Motion.ready=true;
   try{ const r=await fetch('/api/motion/schema'); Motion.schema=await r.json(); }catch(e){}
-  moSeg('moTemplate',[['Pills','pills'],['Widgets','widgets'],['App Store','appstore'],
-    ['Lower Third','lowerthird'],['Chat','chat'],['Notify','notify']],'template');
+  moGallery();
   moSeg('moStyle',[['Studio','studio'],['Dark','dark'],['Bold','bold'],['Mono','mono']],'style');
   moSeg('moFormat',[['9:16','9:16'],['1:1','1:1'],['16:9','16:9']],'format');
   moSeg('moExport',[['MP4 · 1 credit','mp4'],['MOV · Alpha · 2 credits','mov']],'exportFmt');
@@ -2419,6 +2446,11 @@ async function motionPreview(){
   try{
     const r=await fetch('/api/motion/preview',{method:'POST',
       headers:{'Content-Type':'application/json'}, body:JSON.stringify(motionSpec())});
+    if(r.status===429){                        // Rate-Limit: kurz warten, retry
+      if(_my===Motion.seq) setTimeout(motionPreview, 1300);
+      if(_im) _im.style.opacity='1';
+      return;
+    }
     if(!r.ok) throw 0;
     const blob=await r.blob();
     if(_my!==Motion.seq) return;               // veraltete Antwort verwerfen
@@ -2428,7 +2460,7 @@ async function motionPreview(){
     img.src=URL.createObjectURL(blob);
     const fr=$('#moFrame'); if(fr){ const f=Motion.sel.format;
       fr.style.aspectRatio = f==='1:1'?'1/1' : f==='16:9'?'16/9' : '9/16'; }
-  }catch(e){}
+  }catch(e){ if(_im) _im.style.opacity='1'; }
   finally{ if(spin) spin.classList.remove('on'); }
 }
 async function motionRender(){
