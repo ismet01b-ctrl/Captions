@@ -1642,6 +1642,35 @@ def _scenario_logic(clip, transcript, tmp):
           and 'H_cum_wall' in _src99
           and "_is_wall = (p.get('szene') == 'wand'" in _src99)
 
+    # v101j Hand-Kontakt: Impuls-Feder + Kontakt-Gate + Verdrahtung.
+    _hjp = {'kw_i': 0, 'arr': np.zeros((100, 400, 4), np.uint8),
+            'cx': 540, 'cy': 900, 'start': 1.0, 'end': 2.0}
+    _hn1 = R.hand_contacts([_hjp], [(540, 900, 300.0, 0.0)], 1.2, 1080, 1920)
+    _hn2 = R.hand_contacts([_hjp], [(540, 900, 300.0, 0.0)], 1.25, 1080, 1920)
+    check('v101j: bewegte Fingerspitze in der Box -> genau EIN Impuls (Cooldown)',
+          _hn1 == 1 and '_hand_hit' in _hjp and _hn2 == 0)
+    _hjq = {'kw_i': 0, 'arr': np.zeros((100, 400, 4), np.uint8),
+            'cx': 540, 'cy': 900, 'start': 1.0, 'end': 2.0}
+    check('v101j: langsamer Finger / daneben -> kein Impuls',
+          R.hand_contacts([_hjq], [(540, 900, 5.0, 0.0)], 1.2, 1080, 1920) == 0
+          and R.hand_contacts([_hjq], [(100, 100, 300.0, 0.0)], 1.2, 1080, 1920) == 0)
+    _hjs = {'_hand_hit': (800.0, 0.0)}
+    _hxs = [R.hand_spring(_hjs, 1.0 + i / 30.0)[0] for i in range(60)]
+    _hpk = max(_hxs)
+    check('v101j: Feder mit Overshoot, klingt aus (kein linearer Rutsch)',
+          _hpk > 15 and min(_hxs) < -0.1 * _hpk and abs(_hxs[-1]) < 0.2 * _hpk,
+          f'peak={_hpk:.1f} over={min(_hxs):.1f} end={_hxs[-1]:.2f}')
+    _hm = os.path.join(HERE, 'models', 'hand.task')
+    _htr = R.HandTracker(1080, 1920)
+    check('v101j: HandTracker laedt Modell (bzw. still aus ohne Modell)',
+          _htr.ok if os.path.exists(_hm) else _htr.ok is False)
+    check('v101j: Hand-Kontakt im Loop + Compositor verdrahtet + Modell-URL',
+          'need_hands' in _src99 and 'hand_contacts(plans' in _src99
+          and 'hand_spring(_hp, t)' in _src99
+          and "models/hand.task" in _src99
+          and 'hand_tips=_hand_tips' in _src99
+          and "cfg['effects'].get('hand_contact'" in _src99)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

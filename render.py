@@ -20,12 +20,15 @@ MODEL_URLS = {
     'models/rvm.onnx': 'https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx',
     'models/face.tflite': 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
     'models/depth.onnx': 'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx',
+    # v101j Hand-Kontakt: Fingerspitzen-Erkennung (Impulse + Occlusion)
+    'models/hand.task': 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
 }
 
 # ---------------------------------------------------------------- helpers
 MODEL_MIN_BYTES = {'models/rvm.onnx': 10_000_000,
                    'models/face.tflite': 100_000,
-                   'models/depth.onnx': 80_000_000}
+                   'models/depth.onnx': 80_000_000,
+                   'models/hand.task': 5_000_000}
 
 
 def ensure_models():
@@ -2203,6 +2206,131 @@ def paste_tracked(canvas, rgba, cx, cy, H_rel, W, H, dy_extra=0.0, **blend_kwarg
     x1, x2 = int(xs.min()), int(xs.max()) + 1
     sub = np.ascontiguousarray(layer[y1:y2, x1:x2]).astype(np.float32)
     _blend_region(canvas, sub, x1, y1, W, H, **blend_kwargs)
+
+
+# v101j HAND-KONTAKT: beruehrt eine Fingerspitze den Text, reagiert er
+# physisch (Feder-Impuls in Bewegungsrichtung) und die Hand verdeckt ihn
+# lokal. Detection nur in Moment-Fenstern (gated), alle 2 Frames.
+HAND_TIPS = (4, 8, 12, 16, 20)      # Daumen-, Zeige-, Mittel-, Ring-, kleine Spitze
+
+
+class HandTracker:
+    """MediaPipe-HandLandmarker, lazy + fehlertolerant. detect() liefert
+    Fingerspitzen [(x, y, vx, vy)] in Voll-Pixeln; v in px/s aus dem letzten
+    Aufruf (Nearest-Match). Ohne Modell/mediapipe bleibt ok=False - das
+    Feature ist dann still aus (kein Crash, kein Fallback-Fake)."""
+
+    def __init__(self, W, H):
+        self.W, self.H = W, H
+        self.ok = False
+        self.prev = []
+        self.prev_t = None
+        try:
+            import mediapipe as mp
+            from mediapipe.tasks import python as mp_python
+            from mediapipe.tasks.python import vision as mp_vision
+            mpath = os.path.join(HERE, 'models/hand.task')
+            if not os.path.exists(mpath):
+                return
+            self.mp = mp
+            self.lm = mp_vision.HandLandmarker.create_from_options(
+                mp_vision.HandLandmarkerOptions(
+                    base_options=mp_python.BaseOptions(model_asset_path=mpath),
+                    num_hands=2, min_hand_detection_confidence=0.4))
+            self.ok = True
+        except Exception:
+            self.ok = False
+
+    def detect(self, frame_u8, t):
+        if not self.ok:
+            return []
+        try:
+            sw = 320
+            sh = max(int(self.H * sw / self.W), 32)
+            small = cv2.resize(frame_u8, (sw, sh))
+            img = self.mp.Image(image_format=self.mp.ImageFormat.SRGB,
+                                data=np.ascontiguousarray(small[..., ::-1]))
+            res = self.lm.detect(img)
+        except Exception:
+            return []
+        tips = []
+        for hand in (res.hand_landmarks or []):
+            for i in HAND_TIPS:
+                tips.append([hand[i].x * self.W, hand[i].y * self.H, 0.0, 0.0])
+        # Geschwindigkeit: Nearest-Match gegen den letzten Aufruf
+        if self.prev and self.prev_t is not None and t > self.prev_t:
+            dt = t - self.prev_t
+            r_max = self.W * 0.12
+            for tp in tips:
+                best = min(self.prev,
+                           key=lambda q: (q[0] - tp[0]) ** 2 + (q[1] - tp[1]) ** 2)
+                d = math.hypot(best[0] - tp[0], best[1] - tp[1])
+                if d < r_max:
+                    tp[2] = (tp[0] - best[0]) / dt
+                    tp[3] = (tp[1] - best[1]) / dt
+        self.prev = [list(tp) for tp in tips]
+        self.prev_t = t
+        return [tuple(tp) for tp in tips]
+
+
+def hand_contacts(plans, tips, t, W, H):
+    """v101j: prueft aktive Momente gegen die Fingerspitzen. Trifft eine
+    bewegte Spitze die Text-Box, bekommt der Plan EINEN Impuls (_hand_hit,
+    px/s) - mit Cooldown, damit ein liegender Finger nicht dauerfeuert.
+    Rueckgabe: Anzahl neuer Kontakte."""
+    n = 0
+    for p in plans:
+        if 'kw_i' not in p or p.get('arr') is None:
+            continue
+        cx = p.get('cx')
+        cy = p.get('cy', p.get('by'))
+        if cx is None or cy is None:
+            continue
+        if not (p['start'] - 0.05 <= t <= p['end'] + 0.3):
+            continue
+        w = p['arr'].shape[1] * 0.55 + 20
+        h = p['arr'].shape[0] * 0.55 + 20
+        for (x, y, vx, vy) in tips:
+            if abs(x - cx) < w and abs(y - cy) < h:
+                speed = math.hypot(vx, vy)
+                if speed > W * 0.10 and t - p.get('_hand_cool', -9.0) > 0.35:
+                    # Impuls gedeckelt: auch ein Wisch bleibt ein Stups
+                    _s = min(speed, W * 1.2) / max(speed, 1e-6)
+                    p['_hand_hit'] = (vx * _s, vy * _s)
+                    p['_hand_cool'] = t
+                    p['_hand_touch_t'] = t
+                    n += 1
+                break
+    return n
+
+
+def hand_spring(p, t):
+    """v101j: unterdaempfte Feder fuer den Beruehrungs-Impuls (Overshoot +
+    Ausschwingen statt linearem Zurueckrutschen, v100-Massstab). Zustand in
+    '_'-Keys (Alpha-Export-Snapshot-kompatibel). Rueckgabe (dx, dy)."""
+    hit = p.pop('_hand_hit', None)
+    hx = p.get('_hand_dx', 0.0)
+    hy = p.get('_hand_dy', 0.0)
+    hvx = p.get('_hand_vx', 0.0)
+    hvy = p.get('_hand_vy', 0.0)
+    if hit is not None:
+        hvx += hit[0] * 0.9
+        hvy += hit[1] * 0.9
+    if not (hx or hy or hvx or hvy):
+        p['_hand_t'] = t
+        return 0.0, 0.0
+    dt = min(max(t - p.get('_hand_t', t), 0.0), 0.08)
+    K, C = 120.0, 9.0                        # unterdaempft -> sichtbarer Overshoot
+    hvx += (-K * hx - C * hvx) * dt
+    hvy += (-K * hy - C * hvy) * dt
+    hx += hvx * dt
+    hy += hvy * dt
+    if abs(hx) < 0.15 and abs(hy) < 0.15 and abs(hvx) < 2 and abs(hvy) < 2:
+        hx = hy = hvx = hvy = 0.0
+    p['_hand_dx'], p['_hand_dy'] = hx, hy
+    p['_hand_vx'], p['_hand_vy'] = hvx, hvy
+    p['_hand_t'] = t
+    return hx, hy
 
 
 def person_mask(alpha):
@@ -6060,7 +6188,7 @@ def alpha_from_pair(comp_black, comp_white):
 def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_state=None,
                     scene_off=(0.0, 0.0), aud=(0.0, 0.0, 0.0), depth_n=None,
                     scene_vel=0.0, H_cum=None, track_gen=0,
-                    H_cum_wall=None, wall_gen=0):
+                    H_cum_wall=None, wall_gen=0, hand_tips=None):
     a_rms, a_bass, a_onset = aud
     # v101h: Grain-Seed pro Frame (aus t) - der Alpha-Export-Doppelpass braucht
     # bitidentisches Grain in beiden Paessen, sonst rauscht das Alpha.
@@ -6116,6 +6244,11 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         else:
             obj['arr'] = res
     active = [p for p in plans if p['start'] <= t < p['end'] + 0.40]   # v82: Exit-Fenster
+    # v101j: Beruehrungs-Feder pro aktivem Moment einmal pro Frame ticken.
+    for _hp in active:
+        if '_hand_hit' in _hp or _hp.get('_hand_dx') or _hp.get('_hand_vx') \
+                or _hp.get('_hand_dy') or _hp.get('_hand_vy'):
+            hand_spring(_hp, t)
 
     # Hintergrund-Blur (v69): waehrend eines aktiven Moments den Hintergrund
     # weichzeichnen. Staerke folgt der max. Moment-Fade-Kurve, damit der
@@ -6156,15 +6289,19 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
 
     def scene_shift(p):
         """Verankert Hintergrund-Texte in der Szene: sie wandern mit Kameraschwenks mit.
-        Auf B-Roll (Drohne, FPV) darf der Text weiter wandern - er gehoert zur Welt."""
+        Auf B-Roll (Drohne, FPV) darf der Text weiter wandern - er gehoert zur Welt.
+        v101j: der Beruehrungs-Impuls (Hand-Kontakt) federt oben drauf."""
+        _hx = p.get('_hand_dx', 0.0)
+        _hy = p.get('_hand_dy', 0.0)
         if not lock:
-            return 0.0, 0.0
+            return _hx, _hy
         if 's0' not in p:
             p['s0'] = scene_off
         dx = scene_off[0] - p['s0'][0]
         dy = scene_off[1] - p['s0'][1]
         lim = W * (0.30 if p.get('broll') else 0.12)
-        return max(-lim, min(dx, lim)), max(-lim * 0.6, min(dy, lim * 0.6))
+        return (max(-lim, min(dx, lim)) + _hx,
+                max(-lim * 0.6, min(dy, lim * 0.6)) + _hy)
     behind_str = 0.0          # staerkster aktiver Hintergrund-Text (fuer Kontaktschatten)
 
     for p in active:
@@ -6423,6 +6560,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         g_out = exit_env(over, x_dur)
         x_sc, x_dv = exit_pose(over, x_dur)
         tdx, tdy = track_offset(p, face_xy, cfg)
+        # v101j: Beruehrungs-Impuls verschiebt den Text federnd
+        tdx += p.get('_hand_dx', 0.0)
+        tdy += p.get('_hand_dy', 0.0)
         if p.get('front_layer') and p['tpl'] == 'ground':
             # Boden-Text VOR der Person (kein freier Boden im Bild): liegt
             # perspektivisch flach ueber allem - lesbar statt unsichtbar.
@@ -6889,6 +7029,25 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
     _split = float(cfg['effects'].get('split_screen', 0.0) or 0.0)
     if _split > 0.02:
         comp = apply_split_screen(comp, frame, active, t, W, H, _split)
+    # v101j HAND-OCCLUSION: bei frischem Kontakt (letzte 0.5s) liegt die Hand
+    # VOR dem Text - lokal um die Fingerspitzen wird die Person (Matte) wieder
+    # ueber den Text gelegt. Der Impuls + die verdeckende Hand zusammen
+    # verkaufen die Beruehrung als echt.
+    if hand_tips and alpha is not None \
+            and any(t - p.get('_hand_touch_t', -9.0) < 0.5 for p in active):
+        _pm_h = person_mask(alpha)
+        for (_hx0, _hy0, _, _) in hand_tips:
+            _r = int(H * 0.085)
+            _x1 = max(int(_hx0) - _r, 0); _x2 = min(int(_hx0) + _r, W)
+            _y1 = max(int(_hy0) - _r, 0); _y2 = min(int(_hy0) + _r, H)
+            if _x2 <= _x1 or _y2 <= _y1:
+                continue
+            _m = _pm_h[_y1:_y2, _x1:_x2].astype(np.float32)
+            if _m.max() < 0.2:
+                continue
+            _m = cv2.GaussianBlur(_m, (0, 0), 2.0)[..., None]
+            comp[_y1:_y2, _x1:_x2] = (frame[_y1:_y2, _x1:_x2] * _m
+                                      + comp[_y1:_y2, _x1:_x2] * (1 - _m))
     return comp
 
 # ---------------------------------------------------------------- main
@@ -7683,6 +7842,24 @@ def main():
             print(f"Kamera-Track (planar): {int(need_track.sum())} Frames"
                   + (f", davon Wand-Ebene: {int(need_track_wall.sum())}"
                      if need_track_wall.any() else ""))
+    # v101j Hand-Kontakt: Fingerspitzen nur in Moment-Fenstern suchen (gated).
+    need_hands = np.zeros(total_est, dtype=bool)
+    hand_tracker = None
+    if cfg['effects'].get('hand_contact', True):
+        for p in plans:
+            if 'kw_i' in p:
+                a = max(int((p['start'] - 0.2) * fps), 0)
+                b = min(int((p['end'] + 0.4) * fps) + 1, total_est)
+                need_hands[a:b] = True
+        if need_hands.any():
+            hand_tracker = HandTracker(W, H)
+            if hand_tracker.ok:
+                print(f"Hand-Kontakt: {int(need_hands.sum())} Frames werden "
+                      f"auf Beruehrung geprueft")
+            else:
+                hand_tracker = None
+                print("Hand-Kontakt uebersprungen (models/hand.task fehlt "
+                      "oder mediapipe ohne HandLandmarker)")
     if W >= H:
         d_w = 252; d_h = max(int(round(H / W * 252 / 14)) * 14, 56)
     else:
@@ -7707,6 +7884,7 @@ def main():
     H_cum_wall = np.eye(3)     # v101i: eigener Track fuer die Wand-Ebene
     wall_gen = 0
     trk_fail_w = 0
+    _hand_tips = []            # v101j: letzte Fingerspitzen-Erkennung
     sx_up, sy_up = W / 480.0, H / float(int(H * 480 / W))
     S_up = np.diag([sx_up, sy_up, 1.0])
     S_dn = np.linalg.inv(S_up)
@@ -7882,6 +8060,15 @@ def main():
         prev_scene = list(scene_smooth)
         fidx = min(fi, len(face_stable) - 1)
         ai = min(fi, len(aud_rms) - 1)
+        # v101j: Fingerspitzen in Moment-Fenstern (jedes 2. Frame, Rest haelt
+        # die letzte Erkennung) -> Kontakt-Impulse auf beruehrte Momente.
+        if hand_tracker is not None and fa < len(need_hands) and need_hands[fa]:
+            if fi % 2 == 0:
+                _hand_tips = hand_tracker.detect(frame.astype(np.uint8), t)
+            if _hand_tips:
+                hand_contacts(plans, _hand_tips, t, W, H)
+        else:
+            _hand_tips = []
         _cf_kw = dict(aud=(float(aud_rms[ai]), float(aud_bass[ai]),
                            float(aud_onset[ai])),
                       depth_n=depth_n, scene_vel=scene_vel,
@@ -7891,7 +8078,8 @@ def main():
                       H_cum_wall=(H_cum_wall
                                   if (fa < len(need_track_wall)
                                       and need_track_wall[fa]) else None),
-                      wall_gen=wall_gen)
+                      wall_gen=wall_gen,
+                      hand_tips=_hand_tips)
         if args.alpha_export:
             # v101h Doppelpass: identische Geometrie ueber Schwarz und Weiss,
             # dazwischen den Anim-/Kamera-State zuruecksetzen.

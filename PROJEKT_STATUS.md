@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101j Hand-Kontakt (Innovations-Batch 10).** Beruehrt der Sprecher eine
+  Caption mit der Hand, reagiert sie PHYSISCH: MediaPipe-HandLandmarker
+  (models/hand.task, neu in MODEL_URLS) sucht in Moment-Fenstern (need_hands,
+  jedes 2. Frame, gated) die 10 Fingerspitzen; hand_contacts() gibt einem
+  beruehrten Moment EINEN Impuls in Fingerrichtung (Mindest-Tempo W*0.10/s
+  gegen ruhende Finger, 0.35s-Cooldown, Impuls gedeckelt); hand_spring()
+  federt ihn unterdaempft aus (K=120/C=9: schneller Wisch ~30px Auslenkung,
+  -6px Overshoot, klingt aus - kein linearer Rutsch). Offsets fliessen
+  zentral ueber track_offset (Billboard) + scene_shift (behind/ground).
+  Dazu HAND-OCCLUSION: bei frischem Kontakt (<0.5s) wird die Person-Matte
+  lokal um die Fingerspitzen (r=8.5%H, weich) wieder UEBER den Text gelegt -
+  die Hand liegt sichtbar vor dem Wort. Alpha-Export-kompatibel ('_'-Keys im
+  Snapshot; Occlusion malt frame-Pixel -> im Doppelpass korrekt ein Loch).
+  Ohne Modell/mediapipe: still aus, klar geloggt, kein Fake. Abschaltbar:
+  effects.hand_contact. 5 neue Tests (Kontakt-Gate/Cooldown, Feder-
+  Physik, Tracker-Load, Verdrahtung). Regression 607/607 + 7/1/5/2 Renders
+  + GUI_OK. EHRLICH: echte Beruehrungs-Wirkung (Erkennungsquote, Timing)
+  ist nur mit echtem Material auf douchko.eu/Windows beurteilbar - hier
+  Physik + Gating + Modell-Load verifiziert, synthetische Bilder enthalten
+  keine erkennbaren Haende.
+
 - **v101i World-Lock Wand (Innovations-Batch 9).** Wand-Texte ("an der
   Wand", szene 'wand', stehend) hingen bisher am BODEN-Track
   (update_homography maskiert unteres Bilddrittel aufwaerts) - Boden und
