@@ -1369,6 +1369,9 @@ def build_config(look, overrides=None):
 
 # ---------------------------------------------------------------- Render-Worker
 def job_dir(jid):
+    # Sicherheit: jid kommt teils aus der URL - hart auf Hex sanitisieren,
+    # damit '../'-Traversal unmoeglich ist (uuid4.hex-Jobs bleiben identisch).
+    jid = re.sub(r'[^0-9a-fA-F]', '', str(jid or ''))[:32] or '_'
     return os.path.join(JOBS_DIR, jid)
 
 
@@ -2189,14 +2192,23 @@ MOTION_COST_SEC = 60           # 1 Credit pro Motion-Clip (~10s, MP4)
 MOTION_COST_MOV = 120          # 2 Credits fuer ProRes-4444-Alpha (Premiere)
 
 
+_MOTION_SCHEMA_CACHE = None
+
+
 @app.get('/api/motion/schema')
 def motion_schema_ep():
-    """Feld-Schema + Style-Defaults - das Frontend baut daraus die Regler."""
+    """Feld-Schema + Style-Defaults - das Frontend baut daraus die Regler.
+    Gecacht (aendert sich nur mit dem Deploy) - sonst waere der Subprocess
+    pro Aufruf ein gratis DoS-Hebel."""
+    global _MOTION_SCHEMA_CACHE
+    if _MOTION_SCHEMA_CACHE is not None:
+        return JSONResponse(_MOTION_SCHEMA_CACHE)
     try:
         r = subprocess.run([sys.executable, os.path.join(ROOT, 'gfx_engine.py'),
                             '--schema', '_'], cwd=ROOT, capture_output=True,
                            text=True, timeout=30)
-        return JSONResponse(json.loads(r.stdout))
+        _MOTION_SCHEMA_CACHE = json.loads(r.stdout)
+        return JSONResponse(_MOTION_SCHEMA_CACHE)
     except Exception as e:
         raise HTTPException(500, f'schema unavailable: {e}')
 
@@ -2262,11 +2274,14 @@ async def motion_render(request: Request,
     jid = uuid.uuid4().hex[:12]
     d = job_dir(jid)
     os.makedirs(d, exist_ok=True)
+    _IMG_CAP = 8 * 1024 * 1024                # 8 MB reichen fuer jedes Logo/Bild
     for up, name in ((image, 'image'), (logo, 'logo')):
         if up is not None and up.filename:
             try:
                 from PIL import Image as _PImg
-                raw = await up.read()
+                raw = await up.read(_IMG_CAP + 1)
+                if len(raw) > _IMG_CAP:       # Speicher-Schutz: hart deckeln
+                    continue
                 _PImg.open(io.BytesIO(raw)).convert('RGBA').save(
                     os.path.join(d, f'{name}.png'))
             except Exception:
