@@ -28,6 +28,12 @@ services:
       - dve-data:/data
     expose:
       - "8000"
+    # v98: ohne Rotation frisst das Container-Log irgendwann die Platte
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   caddy:
     image: caddy:2
@@ -44,6 +50,11 @@ services:
       - caddy-config:/config
     depends_on:
       - app
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   dve-data:

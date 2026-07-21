@@ -3,6 +3,64 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v98 Audit-Batch (Ismet: "Mach alles, was Sinn macht" - nach der
+  Konkurrenz-/Produkt-Analyse mit 9 Agenten).** 20 Punkte:
+  QUICK-WINS/BUGS: (1) "Fix transcript"-Crash: JS schrieb auf #analyzeStatus/
+  #btnAnalyze, die es im DOM nicht gab -> TypeError, Momente-Editor oeffnete
+  nach "Save & re-analyze" nie wieder. Jetzt aStat()/aBtn()-Helfer +
+  echtes Status-Element in der doneCard, gesperrt wird der echte
+  "Edit moments"-Button. (2) "Priority queue" stand in den Paketen, war aber
+  FIFO -> jetzt ECHT: PriorityQueue, Kaeufer-Jobs (Kauf im Ledger) vor
+  Free-Tier, innerhalb der Stufe FIFO (q_put()). (3) SQLite WAL +
+  busy_timeout=10s + synchronous=NORMAL - keine 'database is locked'-500er
+  auf Geld-Endpunkten. (4) uvicorn --proxy-headers + forwarded-allow-ips
+  (Dockerfile): vorher sah der Server fuer JEDEN Request die Caddy-IP,
+  alle IP-Rate-Limits waren faktisch global. Dazu HEALTHCHECK im Container
+  + Log-Rotation (compose, 10m/3). (5) Willkommens-Guthaben (120s) erst
+  NACH E-Mail-Bestaetigung (_grant_welcome, idempotent) - vorher war
+  Ismets OpenAI-Key per Massen-Registrierung farmbar. (6) 4K-Kachel raus
+  (Server cappt eh auf 1080p - stumme Luege). (7) Billing-Transaktionsliste
+  repariert (doppelter Funktionsname renderTransactions - die zweite
+  Definition ueberschrieb die erste, #historyBody blieb leer). (8) Kosten
+  am Render-Button ("Build video now · N credits") sobald die Dauer bekannt
+  ist. (9) Polling gibt nach ~30s ohne Server ehrlich auf (Render/Motion/
+  Analyze) statt endlos einzufrieren.
+  WACHSTUM: (10) LANDING KOMPLETT DEUTSCH (lang=de, du-Form, SEO-Titel) mit
+  Fakten-Fixes (3 Min statt "5 minutes", 8 Looks statt "four presets",
+  falsches "100% EU-hosted" entfernt). (11) Pricing-Sektion auf der Landing:
+  9/19/39 EUR, Preis pro Credit, "6 Monate gueltig" als Badge in jeder
+  Karte, Einmalkauf-Banner mit Submagic-Vergleich, ehrlicher
+  Datenschutz-Block (OpenAI benannt). (12) SRT/VTT-Export
+  (/api/subtitles/{jid}, _srt_cues: 42 Zeichen/Satzende/0.8s-Pause/5s) +
+  Buttons in doneCard und Library - Standard bei jeder Konkurrenz, war
+  unsere groesste Feature-Luecke. (13) Wasserzeichen-Upsell in der doneCard
+  (nur Nicht-Kaeufer, /api/me.purchased). (14) Demo-CTA: nach der
+  10s-Demo jetzt ein klickbarer "Create free account"-Button (springt zum
+  Register-Formular). (15) "Dein Video ist fertig"-Mail (mode full/motion,
+  verifizierte Accounts, 1x pro Job, mit 7-Tage-Loeschhinweis).
+  TECHNIK: (16) Watchdog KILLT haengende Renders nach 45 Min (PID-Tracking
+  in _run_render/_run_motion, SIGKILL, normaler Fehlerpfad erstattet) -
+  vorher nur Mail, bei 1 Worker stand sonst alles. (17) state.json atomar
+  (tmp + os.replace). (18) Upload: ffprobe + Video-Hash via
+  asyncio.to_thread (blockierte den Event-Loop inkl. /api/health).
+  (19) Offsite-Backup: taegliche users.db als gzip-Mail an ADMIN_MAIL
+  (Postfach = Offsite; Snapshot lag bisher auf derselben Platte).
+  RECHT: (20) Konto-Loeschung archiviert Kaufbuchungen in ledger_archive
+  (GoBD/§147 AO 10 Jahre; DSGVO Art. 17(3)(b) erlaubt das) statt sie zu
+  loeschen - Rest (Renders/Refunds/Gutschriften) wird weiter echt geloescht
+  (_purge_user_db).
+  BEWUSST NICHT gemacht (Fokus, aus der Analyse): kein Abo, kein AI-B-Roll,
+  kein Clipping/Avatare, kein Sprachen-Wettlauf, kein Feature-Stacking.
+  VERSCHOBEN (brauchen eigenes Go + echtes Material): Mehrsprachen-Render
+  (Wort-Timings brechen bei Uebersetzung - Timing-Redistribution noetig),
+  Brand-Kit, Stil-Referenz als Kundenfeature, Beispielvideo im Hero.
+  OFFEN FUER ISMET: UptimeRobot auf /api/health zeigen lassen; Kontakt-
+  Adresse vereinheitlichen (mailto auf der Landing zeigt Ismet@douchkove.com,
+  Impressum/Privacy pruefen). Tests: neue Szene 'v98 Audit-Batch'
+  (WAL, Welcome-nach-Verify, Prio-Queue-Reihenfolge, SRT-Cues/Timestamps,
+  Ledger-Archiv, Fertig-Mail, Quelltext-Garantien, Frontend-DOM).
+  Browser-Smoke: Landing deutsch + Pricing rendert, App-DOM ok, 0 JS-Fehler.
+
 - **Warm-Preview + Monitoring (Ismet: "Mach 1 und 3").**
   (1) PREVIEW-TEMPO: /api/motion/preview lief pro Aufruf als frischer
   Python-Subprocess (~2s). Jetzt haelt _PreviewDaemon EINEN warmen

@@ -1166,7 +1166,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="hero-brand">DouchkoVE</div>
     <div class="hero-tag">CAPTIONS</div>
     <h1 class="hero-title" id="authTitle">Premium captions.<br>In <span class="glow">minutes.</span></h1>
-    <p class="hero-sub" id="authSub">Sign up and get 2 free credits to try it out.</p>
+    <p class="hero-sub" id="authSub">Sign up, confirm your email, and get 2 free credits to try it out.</p>
 
     <div id="authTabs" style="display:flex; gap:6px; margin: 0 auto 14px; max-width:340px;
                               background:rgba(0,0,0,0.3); border-radius:10px; padding:4px;">
@@ -1227,8 +1227,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
                style="width:100%; border-radius:12px; background:#000;"></video>
         <p style="color:var(--mut); font-size:13px; margin-top:10px;">
           That's 10 seconds with a watermark.
-          <b style="color:var(--fg);">Create your free account</b> for the full
-          video and 2 free credits.</p>
+          After confirming your email you get 2 free credits for full videos.</p>
+        <!-- v98: heissester Funnel-Moment - klickbarer CTA statt nur Text -->
+        <button type="button" class="btn wide" id="demoCta" style="margin-top:12px;">
+          Create free account - render the full video
+        </button>
       </div>
       <div id="demoErr" class="err hidden" role="alert" style="margin-top:12px;"></div>
     </div>
@@ -1650,10 +1653,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               100 = maximum dynamics. Crash zooms and whip pans come with the look.</div>
             <div class="slider" data-cfg="camera.strength" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
+          <!-- v98: 4K-Kachel entfernt - der Server rendert max. 1080p
+               (Ressourcen-Deckel); eine Option anbieten, die stumm auf
+               1080p gekappt wird, waere gelogen. -->
           <div class="setting"><div class="setting-label">Resolution of the finished video</div>
-            <div class="setting-desc">1080p = standard. 4K = future-proof (larger, slower).
-              720p = mobile-optimized.</div>
-            <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K:2160"></div>
+            <div class="setting-desc">1080p = standard (recommended).
+              720p = mobile-optimized, smaller file.</div>
+            <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080"></div>
           </div>
         </div>
       </div>
@@ -1686,7 +1692,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       </div>
 
       <button class="btn big wide" id="btnRender" style="margin-top:14px;">
-        Build video now
+        Build video now<span id="btnRenderCost"></span>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polygon points="5 3 19 12 5 21 5 3"/>
@@ -1765,7 +1771,27 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             </svg>
             Edit moments
           </button>
+          <a class="btn secondary" id="dlSrt" download style="flex:1; min-width:140px;"
+             title="Subtitle file for YouTube or your editing software">SRT subtitles</a>
           <button class="btn secondary" id="btnAgain" style="flex:1; min-width:180px;">New video</button>
+        </div>
+        <!-- v98: Status der Re-Analyse nach Transkript-Korrektur. Vorher
+             zeigte auf ein Element, das es nicht gab -> TypeError, der
+             Momente-Editor oeffnete nach "Save & re-analyze" nie wieder. -->
+        <p id="analyzeStatus" class="hidden" role="status" style="margin-top:12px;
+           color:var(--acc2); font-size:13.5px; font-weight:600;"></p>
+        <!-- v98: Wasserzeichen-Upsell - der staerkste Kaufmoment ist das
+             fertige (gewasserzeichnete) Video. Nur fuer Nicht-Kaeufer. -->
+        <div id="wmUpsell" class="hidden" style="margin-top:14px; background:var(--surf);
+             border:1px solid var(--line); border-radius:14px; padding:14px 18px;
+             display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+          <div style="flex:1; min-width:220px;">
+            <b style="font-size:14px;">Remove the watermark</b>
+            <p style="color:var(--mut); font-size:13px; margin-top:2px;">
+              Your first purchase removes it from every future render - from €9,
+              one-time, no subscription.</p>
+          </div>
+          <button class="btn" id="wmUpsellBtn" style="min-width:150px;">See packs</button>
         </div>
         <p style="color:var(--mut); font-size:13px; margin-top:12px; line-height:1.5;">
           Saved to your <a data-nav="library" style="color:var(--acc2); cursor:pointer;">Library</a>.
@@ -2502,7 +2528,16 @@ async function motionPoll(jid, st, btn, orig){
                 : 'Finishing up';
     st.innerHTML=`<div class="mo-bar"><i style="width:${Math.round(pr*100)}%"></i></div>`+
       `<span class="mo-phase">${phase}</span> · ${Math.round(pr*100)}%`;
-  }catch(e){}
+    Motion.pollErrs=0;
+  }catch(e){
+    // v98: nach ~30s ohne Server-Antwort aufgeben statt endlos zu pollen
+    Motion.pollErrs=(Motion.pollErrs||0)+1;
+    if(Motion.pollErrs>=20){
+      Motion.pollErrs=0;
+      st.textContent='Connection lost - the clip keeps rendering, check your Library in a minute.';
+      btn.disabled=false; btn.textContent=orig; return;
+    }
+  }
   setTimeout(()=>motionPoll(jid, st, btn, orig), 1500);
 }
 
@@ -2780,7 +2815,7 @@ async function renderBilling() {
   const c = Math.floor((State.balanceSec || 0) / 60);
   const bc = $('#billCredits'); if (bc) bc.textContent = String(c);
   await renderPricingGrid();
-  await renderTransactions();
+  await renderBillingHistory();
 }
 
 async function startCheckout(btn) {
@@ -2821,7 +2856,9 @@ function fmtCredits(sec) {
   return `${c} credit${c !== 1 ? 's' : ''}`;
 }
 
-async function renderTransactions() {
+/* v98: hiess auch renderTransactions - die zweite Definition (Account,
+   #accTx) ueberschrieb diese hier, die Billing-Liste blieb dauerhaft leer. */
+async function renderBillingHistory() {
   const body = $('#historyBody'); if (!body) return;
   let d;
   try { d = await (await fetch('/api/history')).json(); }
@@ -2908,6 +2945,7 @@ async function renderLibrary() {
         <div class="lib-actions">
           <a class="btn secondary" href="/api/video/${it.jid}?download=1">Download</a>
           ${it.has_mov ? `<a class="btn secondary" href="/api/mov/${it.jid}" title="ProRes 4444 with alpha — drop straight into Premiere">MOV&nbsp;·&nbsp;Alpha</a>` : ''}
+          ${it.has_srt ? `<a class="btn secondary" href="/api/subtitles/${it.jid}" title="Subtitle file for YouTube or your editing software">SRT</a>` : ''}
         </div>
       </div>`;
     // Klick auf Thumbnail -> inline Player
@@ -3045,8 +3083,8 @@ if ($('#transSave')) $('#transSave').addEventListener('click', async () => {
     $('#transModal').classList.add('hidden');
     $('#momEditor').classList.add('hidden');
     toast(`${d.changed} words corrected. Re-analyzing …`, 'ok', 4000);
-    $('#analyzeStatus').textContent = 'Re-analyzing with corrected transcript …';
-    $('#btnAnalyze').disabled = true;
+    aStat('Re-analyzing with corrected transcript …');
+    aBtn(true);
     pollAnalyze();
   } catch (e) { toast('Connection error.', 'err'); }
   finally { btn.disabled = false; }
@@ -3257,6 +3295,12 @@ function setFile(f) {
       const dstr = `${Math.floor(dur/60)}:${String(dur%60).padStart(2,'0')}`;
       const meta = $('#fileInfo').querySelector('.fi-meta');
       if (meta) meta.textContent = `${(f.size / 1048576).toFixed(1)} MB · ${dstr} · ready`;
+      // v98: Kosten VOR dem Klick zeigen - keine Abbuchungs-Ueberraschung
+      const bc = $('#btnRenderCost');
+      if (bc) {
+        const cr = Math.max(1, Math.ceil(dur / 60));
+        bc.textContent = ` · ${cr} credit${cr !== 1 ? 's' : ''}`;
+      }
       // Warnung wenn Guthaben nicht reicht
       if (State.balanceSec != null && dur > State.balanceSec) {
         const shortMin = Math.ceil((dur - State.balanceSec) / 60);
@@ -3285,6 +3329,12 @@ function setFile(f) {
 /* --------- Analyze / Render --------- */
 $('#btnRender').addEventListener('click', () => startUpload('full'));
 $('#btnEditMoments').addEventListener('click', openMomentsEditor);
+if ($('#wmUpsellBtn')) $('#wmUpsellBtn').addEventListener('click', showPricing);
+if ($('#demoCta')) $('#demoCta').addEventListener('click', () => {
+  setAuthMode('register');
+  try { $('#authForm').scrollIntoView({behavior: 'smooth', block: 'center'}); } catch (e) {}
+  setTimeout(() => $('#authName').focus(), 400);
+});
 
 async function startUpload(mode) {
   if (!State.file) { toast('Please upload a video first.', 'err'); return; }
@@ -3379,7 +3429,7 @@ async function startUpload(mode) {
         const pct = Math.round(e.loaded / e.total * 100);
         const el = $('#progressPhase');
         if (el && mode === 'full') el.textContent = `Uploading … ${pct}%`;
-        if (mode === 'analyze') $('#analyzeStatus').textContent = `Uploading … ${pct}%`;
+        if (mode === 'analyze') aStat(`Uploading … ${pct}%`);
       };
       xhr.onload = () => {
         let body = {};
@@ -3419,8 +3469,8 @@ function jobStarted(jid, mode) {
     }));
   } catch (e) {}
   if (mode === 'analyze') {
-    $('#analyzeStatus').textContent = 'Analysis running … (30-90 s)';
-    $('#btnAnalyze').disabled = true;
+    aStat('Analysis running … (30-90 s)');
+    aBtn(true);
     pollAnalyze();
   } else {
     if (State.progRAF) cancelAnimationFrame(State.progRAF);
@@ -3488,19 +3538,29 @@ async function pollAnalyze() {
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     if (st.status === 'analysiert') {
-      $('#analyzeStatus').textContent = 'Analyse fertig. Editor oeffnet …';
+      aStat('');
+      aBtn(false);
       toast('Analysis done!', 'ok');
       openMomentsEditor();
       return;
     }
     if (st.status === 'fehler') {
-      $('#analyzeStatus').textContent = 'Analysis failed: ' + (st.msg || '?');
-      $('#btnAnalyze').disabled = false;
+      aStat('Analysis failed: ' + (st.msg || '?'));
+      aBtn(false);
       toast('Analysis failed', 'err');
       return;
     }
-    $('#analyzeStatus').textContent = st.phase || 'Laeuft …';
-  } catch (e) {}
+    aStat(st.phase || 'Running …');
+    State.aPollErrs = 0;
+  } catch (e) {
+    State.aPollErrs = (State.aPollErrs || 0) + 1;
+    if (State.aPollErrs >= 10) {          // v98: nicht endlos gegen die Wand
+      State.aPollErrs = 0;
+      aStat('Connection lost - reload the page and try "Edit moments" again.');
+      aBtn(false);
+      return;
+    }
+  }
   setTimeout(pollAnalyze, 2000);
 }
 
@@ -3553,7 +3613,22 @@ async function pollRender() {
       showError(st.msg || 'Render failed', st.detail || '');
       return;
     }
-  } catch (e) {}
+    State.pollErrs = 0;
+  } catch (e) {
+    // v98: Endlos-Poll gegen einen toten Server fror die UI ein. Nach
+    // ~30s ohne Antwort ehrlich aufgeben - der Job selbst laeuft serverseitig
+    // weiter und liegt danach in der Library.
+    State.pollErrs = (State.pollErrs || 0) + 1;
+    if (State.pollErrs >= 10) {
+      State.pollErrs = 0;
+      if (State.progRAF) cancelAnimationFrame(State.progRAF);
+      State.progRAF = null; State.progShown = 0;
+      showError('Connection lost.',
+                'The render keeps running on the server - check your Library '
+                + 'in a few minutes, or reload this page.');
+      return;
+    }
+  }
   setTimeout(pollRender, 1200);   // schneller pollen -> feinere Spruenge
 }
 
@@ -3597,10 +3672,31 @@ async function loadDirectorReport() {
   } catch (e) {}
 }
 
+/* v98: Re-Analyse-Status. Schreibt in #analyzeStatus (doneCard) und
+   sperrt waehrenddessen den "Edit moments"-Button. */
+function aStat(txt) {
+  const el = $('#analyzeStatus');
+  if (el) { el.textContent = txt || ''; el.classList.toggle('hidden', !txt); }
+}
+function aBtn(disabled) {
+  const b = $('#btnEditMoments');
+  if (b) b.disabled = !!disabled;
+}
+
 function renderSuccess() {
   $('#doneCard').classList.remove('hidden');
   $('#resultVid').src = '/api/video/' + State.jid;
   $('#dlLink').href = '/api/video/' + State.jid + '?download=1';
+  const srt = $('#dlSrt');
+  if (srt) srt.href = '/api/subtitles/' + State.jid;
+  // v98: Wasserzeichen-Upsell nur fuer Nicht-Kaeufer einblenden
+  const ups = $('#wmUpsell');
+  if (ups) {
+    ups.classList.add('hidden');
+    fetch('/api/me').then(r => r.json()).then(u => {
+      if (u && u.ok !== false && u.purchased === false) ups.classList.remove('hidden');
+    }).catch(() => {});
+  }
   loadDirectorReport();
   // Peak-End: Stats + Confetti
   const dur = ((Date.now() - State.renderStart) / 1000);
@@ -3827,8 +3923,8 @@ async function openMomentsEditor() {
   renderTimeline();
   showHookScore();
   $('#momEditor').classList.remove('hidden');
-  $('#btnAnalyze').disabled = false;
-  $('#analyzeStatus').textContent = '';
+  aBtn(false);
+  aStat('');
 }
 
 /* v80y: Hook-Score - Heuristik aus den Momente-Daten, 0 API-Kosten */

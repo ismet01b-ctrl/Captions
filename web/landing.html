@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/favicon.png">
-<title>DouchkoVE | Premium Captions for Talking-Head Videos</title>
-<meta name="description" content="Editorial subtitles with AI direction, vision analysis, and 26 text animations. For creators who want to look like they have a team.">
+<title>DouchkoVE | Automatische Untertitel für TikTok &amp; Reels — deutsch, ohne Abo</title>
+<meta name="description" content="Premium-Untertitel mit KI-Regie für deutsche Creator: GPT-4o wählt Keywords, Effekte und Kamera. 8 Looks, 26 Text-Animationen, Credits statt Abo. Videos nach 7 Tagen automatisch gelöscht.">
 <style>
 :root {
   --bg: #0b0812; --surf: #14101c; --surf2: #1a1428; --line: #2a2438;
@@ -216,6 +216,65 @@ footer .links a:hover { color: var(--fg); }
   footer .inner { flex-direction: column; text-align: center; }
   footer .links a { margin: 0 10px; }
 }
+
+/* Pricing (ergänzt) */
+.pay-once {
+  max-width: 760px; margin: 0 auto 48px; text-align: center;
+  background: linear-gradient(135deg, rgba(245, 196, 81, 0.1), rgba(124, 92, 255, 0.08));
+  border: 1px solid rgba(245, 196, 81, 0.35); border-radius: 16px;
+  padding: 24px 28px; font-size: 16px; line-height: 1.6;
+}
+.pay-once strong { color: var(--gold); }
+.pay-once .compare { display: block; margin-top: 10px; color: var(--mut); font-size: 14px; }
+.plans {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px; align-items: stretch; margin-top: 12px;
+}
+.plan {
+  background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
+  padding: 40px 28px 32px; text-align: center; position: relative;
+  display: flex; flex-direction: column;
+  transition: transform .15s, border-color .15s;
+}
+.plan:hover { transform: translateY(-4px); border-color: rgba(124, 92, 255, 0.4); }
+.plan.hot { border-color: var(--acc); box-shadow: 0 8px 32px rgba(124, 92, 255, 0.25); }
+.plan.best { border-color: rgba(245, 196, 81, 0.5); }
+.plan .tag {
+  position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+  background: var(--acc); color: #fff; font-size: 11px; font-weight: 800;
+  letter-spacing: 1px; text-transform: uppercase; padding: 4px 14px;
+  border-radius: 999px; white-space: nowrap;
+}
+.plan.best .tag { background: var(--gold); color: var(--bg); }
+.plan h3 { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 12px; }
+.plan .price { font-size: 44px; font-weight: 900; letter-spacing: -1px; line-height: 1; }
+.plan .credits { color: var(--fg); font-weight: 700; font-size: 16px; margin-top: 10px; }
+.plan .per { color: var(--mut); font-size: 13px; margin-top: 4px; }
+.plan .valid {
+  margin-top: 14px; font-size: 14px; font-weight: 700; color: var(--gold);
+  background: rgba(245, 196, 81, 0.1); border-radius: 8px; padding: 6px 10px;
+}
+.plan .buy {
+  margin-top: 24px; display: block; background: var(--acc); color: #fff;
+  text-decoration: none; font-weight: 800; font-size: 15px;
+  padding: 13px 20px; border-radius: 10px;
+  transition: transform .12s, box-shadow .15s;
+}
+.plan .buy:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4); }
+.pricing-foot { text-align: center; color: var(--mut); font-size: 14px; margin-top: 28px; }
+.gdpr {
+  max-width: 680px; margin: 56px auto 0; text-align: center;
+  background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
+  padding: 28px 32px;
+}
+.gdpr h3 { font-size: 18px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.3px; }
+.gdpr p { color: var(--mut); font-size: 14px; line-height: 1.6; }
+.gdpr a { color: var(--acc2); font-weight: 600; }
+@media (max-width: 640px) {
+  .pay-once { padding: 20px; font-size: 15px; }
+  .plan { padding: 36px 22px 26px; }
+  .gdpr { padding: 24px 20px; }
+}
 </style>
 </head>
 <body>
@@ -225,20 +284,20 @@ footer .links a:hover { color: var(--fg); }
     <div class="logo"><img src="/logo_white.png" alt="">Douchko<span class="dot">·</span>VE<span class="beta">Beta</span></div>
     <div>
       <a href="#features">Features</a>
-      <a href="#how">How it works</a>
-      <a href="/app" class="cta">Get started</a>
+      <a href="#how">So funktioniert's</a>
+      <a href="/app" class="cta">Jetzt starten</a>
     </div>
   </div>
 </nav>
 
 <section class="hero">
   <span class="badge">Private Beta · v0.1</span>
-  <h1>Captions like an<br><span class="accent">editorial team</span></h1>
-  <p class="sub">Upload your talking-head video. Our AI direction picks the important words,
-    applies animations from 26 classes, understands the scene, and composes captions that would
-    normally take a 50-hour editor.</p>
+  <h1>Untertitel, als hättest du<br><span class="accent">ein ganzes Team</span></h1>
+  <p class="sub">Lade dein Talking-Head-Video hoch. Die KI-Regie findet Hook und Kernaussagen,
+    wählt aus 26 Text-Animationen, versteht jede Szene im Bild — und setzt deine Worte so,
+    wie es sonst nur ein Editor nach 50 Stunden Schnitt tut.</p>
   <a href="/app" class="hero-cta">
-    Upload video now
+    Video jetzt hochladen
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -246,9 +305,9 @@ footer .links a:hover { color: var(--fg); }
   </a>
   <div class="small" style="margin-top:10px;">
     <a href="/app" style="color:var(--acc); font-weight:700; text-decoration:none;">
-      Or try it on your own video first · free, no account →</a>
+      Oder erst mit deinem eigenen Video testen · 10-Sekunden-Demo, ohne Account →</a>
   </div>
-  <div class="small">Free: 3 credits every month · No card required · No subscription, ever · Videos auto-deleted after 7 days</div>
+  <div class="small">3 Gratis-Minuten pro Monat · Keine Karte nötig · Kein Abo, niemals · Videos nach 7 Tagen automatisch gelöscht</div>
   <div class="small" id="liveStats" style="display:none; margin-top:8px; color:var(--gold);
        font-weight:700;"></div>
 </section>
@@ -264,19 +323,19 @@ fetch('/api/stats').then(r => r.json()).then(d => {
 </script>
 
 <div class="preview-strip wrap">
-  <span class="chip a">AI direction</span>
-  <span class="chip g">Vision analysis per moment</span>
-  <span class="chip p">26 text animations</span>
-  <span class="chip">Music-beat sync</span>
-  <span class="chip">Adaptive colors</span>
-  <span class="chip">Cut-out matting</span>
-  <span class="chip">Portrait/Landscape/Square</span>
+  <span class="chip a">KI-Regie (GPT-4o)</span>
+  <span class="chip g">Szenen-Analyse pro Moment</span>
+  <span class="chip p">26 Text-Animationen</span>
+  <span class="chip">Beat-Sync zur Musik</span>
+  <span class="chip">Adaptive Farben</span>
+  <span class="chip">Cut-out-Matting</span>
+  <span class="chip">Hochkant/Quer/Quadrat</span>
 </div>
 
 <section id="features" class="wrap">
-  <h2>Why this is different</h2>
-  <p class="section-sub">Other tools drop a big word every 3 seconds. We work like an editor:
-    we know when silence works and when a word explodes.</p>
+  <h2>Warum das anders ist</h2>
+  <p class="section-sub">Andere Tools klatschen alle 3 Sekunden ein großes Wort ins Bild.
+    DouchkoVE arbeitet wie ein Editor: Es weiß, wann Stille wirkt — und wann ein Wort explodiert.</p>
 
   <div class="features">
     <div class="feat">
@@ -285,9 +344,9 @@ fetch('/api/stats').then(r => r.json()).then(d => {
           <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
         </svg>
       </div>
-      <h3>AI direction that understands you</h3>
-      <p>Our AI reads your transcript like an editor: what's the hook, what's the core,
-        what's filler. No more random words getting a spotlight.</p>
+      <h3>KI-Regie statt Template-Raten</h3>
+      <p>GPT-4o liest dein Transkript wie ein Editor und entscheidet Keywords, Effekte
+        und Kamera-Moves. Kein Zufall, keine Schablone — jede Entscheidung passt zu dem, was du sagst.</p>
     </div>
 
     <div class="feat gold">
@@ -296,9 +355,9 @@ fetch('/api/stats').then(r => r.json()).then(d => {
           <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
         </svg>
       </div>
-      <h3>Vision analysis per moment</h3>
-      <p>The AI looks at every highlight frame and decides: is the word better
-        placed on water, on the ground, behind the person? Looks like magic.</p>
+      <h3>Transkript vor dem Render korrigierbar</h3>
+      <p>Namen, Fachbegriffe, Marken: Du siehst das komplette Transkript vor dem Render
+        und korrigierst jedes Wort. Erst wenn es stimmt, wird gerendert.</p>
     </div>
 
     <div class="feat pink">
@@ -307,9 +366,9 @@ fetch('/api/stats').then(r => r.json()).then(d => {
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
         </svg>
       </div>
-      <h3>26 text animations</h3>
-      <p>"flies" gets a speed-trail. "explodes" gets radial impact.
-        "broken" shatters. The AI auto-picks what fits the word.</p>
+      <h3>Motion-Graphics, die kein Web-Tool hat</h3>
+      <p>6 Apple-Style-Templates — auf Wunsch als ProRes-4444-Alpha für Premiere
+        (2 Credits). Das bietet dir kein anderer Web-Anbieter.</p>
     </div>
 
     <div class="feat">
@@ -318,9 +377,9 @@ fetch('/api/stats').then(r => r.json()).then(d => {
           <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
         </svg>
       </div>
-      <h3>Music &amp; speech beat</h3>
-      <p>Text pumps on the beat when music plays. On speech onset when it doesn't.
-        Nothing looks random, everything locks in.</p>
+      <h3>Sound, Emojis, Hook-Score</h3>
+      <p>Echte CC0-Sounds statt Synthetik-Piepser, passende Emojis, ein Hook-Score
+        für deinen Einstieg — und Untertitel in 17 Sprachen.</p>
     </div>
 
     <div class="feat gold">
@@ -329,9 +388,9 @@ fetch('/api/stats').then(r => r.json()).then(d => {
           <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
         </svg>
       </div>
-      <h3>Moments editor</h3>
-      <p>See every planned moment with a video-frame preview. Change the effect,
-        animation, or scene. Timeline view shows the structure at a glance.</p>
+      <h3>Deutsch im Kern</h3>
+      <p>Whisper versteht Deutsch wirklich — auch Dialekt und Fachsprache.
+        Die Looks sind für deutschen Content gebaut, nicht aus dem US-Markt übersetzt.</p>
     </div>
 
     <div class="feat pink">
@@ -340,32 +399,35 @@ fetch('/api/stats').then(r => r.json()).then(d => {
           <path d="M20 6L9 17l-5-5"/>
         </svg>
       </div>
-      <h3>Two-pass validator</h3>
-      <p>The AI checks its own suggestions. Auxiliary verbs, filler words, they don't make it into the video. Only real core statements.</p>
+      <h3>Kostenlos testen, ohne Risiko</h3>
+      <p>10-Sekunden-Demo ohne Account (mit Wasserzeichen). Nach E-Mail-Bestätigung: 2 Minuten
+        Startguthaben + 3 Gratis-Minuten pro Monat — Wasserzeichen nur bis zum ersten Kauf.</p>
     </div>
   </div>
 </section>
 
 <section id="how" class="how">
   <div class="wrap">
-    <h2>Three steps to done</h2>
-    <p class="section-sub">From upload to finished video in under 30 minutes, depending on length.</p>
+    <h2>Drei Schritte, fertig</h2>
+    <p class="section-sub">Vom Upload zum fertigen Video in unter 30 Minuten, je nach Länge.</p>
 
     <div class="steps">
       <div class="step">
         <div class="num">1</div>
-        <h4>Upload video</h4>
-        <p>Portrait, landscape, or square. Up to 5 minutes. Any format.</p>
+        <h4>Video hochladen</h4>
+        <p>Hochkant, quer oder quadratisch. Bis 3 Minuten. Jedes Format.</p>
       </div>
       <div class="step">
         <div class="num">2</div>
-        <h4>Choose look</h4>
-        <p>Four presets from TikTok-wild to cinematic-elegant. Or fine-tune everything.</p>
+        <h4>Look wählen</h4>
+        <p>8 Looks: TikTok, Creator, Editorial, Poster, Retro, Elegant, Cinematic, Clean.
+          Oder du stellst alles selbst fein ein.</p>
       </div>
       <div class="step">
         <div class="num">3</div>
-        <h4>Let it build</h4>
-        <p>Review the moments editor, then render. Download the finished MP4.</p>
+        <h4>Rendern lassen</h4>
+        <p>Transkript prüfen, Momente-Editor checken, rendern. Fertiges MP4 herunterladen —
+          nach 7 Tagen löschen wir es automatisch vom Server.</p>
       </div>
     </div>
   </div>
@@ -373,37 +435,90 @@ fetch('/api/stats').then(r => r.json()).then(d => {
 
 <section class="wrap">
   <div class="value">
-    <h2>For creators who mean it</h2>
-    <p class="quote">"I didn't want a tool that pastes subtitles. I wanted an editor
-      that understands what I say, and turns it into something that looks
-      like an editorial piece."</p>
+    <h2>Für Creator, die es ernst meinen</h2>
+    <p class="quote">„Ich wollte kein Tool, das Untertitel draufklebt. Ich wollte einen Editor,
+      der versteht, was ich sage — und daraus etwas macht, das aussieht wie ein
+      Editorial-Piece."</p>
 
     <div class="stats">
       <div class="stat">
         <div class="n">26</div>
-        <div class="l">Animations</div>
+        <div class="l">Text-Animationen</div>
       </div>
       <div class="stat">
-        <div class="n">5</div>
-        <div class="l">Effect classes</div>
+        <div class="n">8</div>
+        <div class="l">Looks</div>
       </div>
       <div class="stat">
-        <div class="n">2×</div>
-        <div class="l">AI-pass quality</div>
+        <div class="n">17</div>
+        <div class="l">Sprachen</div>
       </div>
       <div class="stat">
-        <div class="n">100%</div>
-        <div class="l">EU-hosted</div>
+        <div class="n">0</div>
+        <div class="l">Abo-Fallen</div>
       </div>
     </div>
   </div>
 </section>
 
+<section id="pricing" class="wrap">
+  <h2>Preise</h2>
+  <p class="section-sub">Credits kaufen, Videos rendern, fertig.
+    1 Credit = 1 Minute fertiges Video (pro angefangener Minute).</p>
+
+  <div class="pay-once">
+    <strong>Einmalkauf.</strong> Kein Abo, keine automatische Verlängerung, keine versteckte
+    Abbuchung. Deine Credits sind <strong>6 Monate gültig</strong>.
+    <span class="compare">Zum Vergleich: Submagic kostet 19&nbsp;$ pro Monat für 15 Videos —
+      und bucht jeden Monat wieder ab.</span>
+  </div>
+
+  <div class="plans">
+    <div class="plan">
+      <h3>Starter</h3>
+      <div class="price">9&nbsp;€</div>
+      <div class="credits">20 Credits</div>
+      <div class="per">0,45&nbsp;€ pro Credit</div>
+      <div class="valid">6 Monate gültig</div>
+      <a href="/app" class="buy">Credits holen</a>
+    </div>
+    <div class="plan hot">
+      <span class="tag">Beliebt</span>
+      <h3>Creator</h3>
+      <div class="price">19&nbsp;€</div>
+      <div class="credits">60 Credits</div>
+      <div class="per">0,32&nbsp;€ pro Credit</div>
+      <div class="valid">6 Monate gültig</div>
+      <a href="/app" class="buy">Credits holen</a>
+    </div>
+    <div class="plan best">
+      <span class="tag">Bester Preis</span>
+      <h3>Pro</h3>
+      <div class="price">39&nbsp;€</div>
+      <div class="credits">150 Credits</div>
+      <div class="per">0,26&nbsp;€ pro Credit</div>
+      <div class="valid">6 Monate gültig</div>
+      <a href="/app" class="buy">Credits holen</a>
+    </div>
+  </div>
+
+  <p class="pricing-foot">Du kaufst einmal und renderst, wann du willst.
+    Kein Countdown, kein „Plan pausieren", kein Kündigen-Labyrinth.</p>
+
+  <div class="gdpr">
+    <h3>Datenschutz, ehrlich</h3>
+    <p>DouchkoVE ist ein EU-Anbieter. Fertige Videos werden nach 7 Tagen automatisch vom
+      Server gelöscht, dein Konto kannst du jederzeit komplett löschen. Transkription und
+      KI-Regie laufen über die OpenAI-API — das steht klar in der
+      <a href="/privacy">Datenschutzerklärung</a>, ohne Sternchen im Kleingedruckten.</p>
+  </div>
+</section>
+
 <div class="bottom-cta wrap">
-  <h2>Try it</h2>
-  <p>3 free minutes every month. No card, no commitment.</p>
+  <h2>Probier's aus</h2>
+  <p>3 Gratis-Minuten pro Monat. Keine Karte, kein Abo, keine Bindung.</p>
   <a href="/app" class="hero-cta">
-    Open the app
+    App öffnen
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -415,10 +530,10 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   <div class="inner">
     <div class="copy">© 2026 DouchkoVE · v0.1 Early Access</div>
     <div class="links">
-      <a href="/imprint">Imprint</a>
-      <a href="/terms">Terms</a>
-      <a href="/privacy">Privacy</a>
-      <a href="mailto:Ismet@douchkove.com">Contact</a>
+      <a href="/imprint">Impressum</a>
+      <a href="/terms">AGB</a>
+      <a href="/privacy">Datenschutz</a>
+      <a href="mailto:Ismet@douchkove.com">Kontakt</a>
     </div>
   </div>
 </footer>

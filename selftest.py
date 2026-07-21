@@ -94,6 +94,7 @@ def main():
         _scenario_transkription(tmp)
         _scenario_security(tmp)
         _scenario_betrieb(tmp)
+        _scenario_v98(tmp)
         _scenario_trail(tmp)
         _scenario_lang(tmp)
         _scenario_multiperson(tmp)
@@ -2313,6 +2314,108 @@ def _scenario_betrieb(tmp):
           ok3 and dt < 2.5, f'{dt:.2f}s')
     dm._kill()
     shutil.rmtree(pd, ignore_errors=True)
+    shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
+
+
+def _scenario_v98(tmp):
+    """v98: Audit-Batch - WAL, Welcome-nach-Verify, Priority-Queue,
+    SRT-Export, Ledger-Archiv, Fertig-Mail, Watchdog-Kill, Frontend-DOM."""
+    print('\n--- v98 Audit-Batch ---')
+    import time as _t
+    os.environ['DVE_DATA'] = tempfile.mkdtemp(prefix='dve_v98_')
+    if 'server' in sys.modules:
+        del sys.modules['server']
+    sys.path.insert(0, os.path.join(HERE, 'web'))
+    import server as SV
+    # 1) SQLite im WAL-Modus mit busy_timeout
+    con = SV._db()
+    wal = con.execute('PRAGMA journal_mode').fetchone()[0]
+    bt = con.execute('PRAGMA busy_timeout').fetchone()[0]
+    con.close()
+    check('SQLite: WAL + busy_timeout aktiv', wal == 'wal' and bt >= 5000,
+          f'{wal}/{bt}')
+    # 2) Willkommens-Guthaben erst nach Verify, idempotent
+    uid, err = SV._create_user('v98@test', 'x' * 8, 'VachtV98')
+    b0 = SV._find_user_by_id(uid)['balance_sec']
+    g1 = SV._grant_welcome(uid)
+    b1 = SV._find_user_by_id(uid)['balance_sec']
+    g2 = SV._grant_welcome(uid)
+    b2 = SV._find_user_by_id(uid)['balance_sec']
+    check('Welcome-Guthaben: 0 bei Registrierung, kommt mit Verify, 1x',
+          b0 == 0 and g1 and b1 == SV.TRIAL_SECONDS
+          and not g2 and b2 == SV.TRIAL_SECONDS, f'{b0}/{b1}/{b2}')
+    # 3) Priority-Queue: Kaeufer-Job ueberholt Free-Job (FIFO pro Stufe)
+    con = SV._db()
+    con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                "VALUES (?, ?, ?, ?)", (uid, 1200, 'Kauf test', int(_t.time())))
+    con.commit(); con.close()
+    uid_free, _ = SV._create_user('v98free@test', 'x' * 8, 'FreeV98')
+    SV.JOBS['jfree'] = {'user_id': uid_free}
+    SV.JOBS['jpaid'] = {'user_id': uid}
+    SV.JOBS['jfree2'] = {'user_id': uid_free}
+    from queue import PriorityQueue as _PQ
+    _q = _PQ()
+    SV.q_put('jfree', _q); SV.q_put('jpaid', _q); SV.q_put('jfree2', _q)
+    order = [_q.get()[2] for _ in range(3)]
+    check('Priority-Queue: Kaeufer zuerst, Rest FIFO',
+          order == ['jpaid', 'jfree', 'jfree2'], str(order))
+    # 4) SRT/VTT-Cues: Satzende bricht, Timings korrekt formatiert
+    words = [{'word': ' Hallo', 'start': 0.0, 'end': 0.4},
+             {'word': ' Welt.', 'start': 0.45, 'end': 0.9},
+             {'word': ' Neuer', 'start': 2.5, 'end': 2.9},
+             {'word': ' Satz', 'start': 2.95, 'end': 3.3}]
+    cues = SV._srt_cues(words)
+    check('SRT: Satzende + Pause trennen Cues',
+          len(cues) == 2 and cues[0][2] == 'Hallo Welt.'
+          and cues[1][2] == 'Neuer Satz', str(cues))
+    check('SRT/VTT-Timestamps korrekt',
+          SV._srt_ts(3661.25) == '01:01:01,250'
+          and SV._srt_ts(0.5, vtt=True) == '00:00:00.500')
+    # 5) Konto-Loeschung: Kaeufe ins Archiv, Rest weg (GoBD + DSGVO)
+    SV._purge_user_db(uid)
+    con = SV._db()
+    arch = con.execute("SELECT * FROM ledger_archive WHERE "
+                       "user_email='v98@test'").fetchall()
+    led = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id=?",
+                      (uid,)).fetchone()['c']
+    usr = con.execute("SELECT COUNT(*) c FROM users WHERE id=?",
+                      (uid,)).fetchone()['c']
+    con.close()
+    check('Loeschung: Kauf archiviert (GoBD), Ledger+User weg',
+          len(arch) == 1 and arch[0]['grund'] == 'Kauf test'
+          and led == 0 and usr == 0, f'{len(arch)}/{led}/{usr}')
+    # 6) Fertig-Mail: 1x pro Job, nur mode full/motion + verifiziert
+    sent = []
+    SV._send_mail = lambda to, s, b: sent.append(to)
+    con = SV._db()
+    con.execute("UPDATE users SET verified=1 WHERE id=?", (uid_free,))
+    con.commit(); con.close()
+    SV.JOBS['jd1'] = {'status': 'fertig', 'mode': 'full', 'user_id': uid_free}
+    SV._notify_job_done('jd1'); SV._notify_job_done('jd1')
+    SV.JOBS['jd2'] = {'status': 'fertig', 'mode': 'demo'}
+    SV._notify_job_done('jd2')
+    check('Fertig-Mail: genau 1x, nie fuer Demo', sent == ['v98free@test'],
+          str(sent))
+    # 7) Quelltext-Garantien: Watchdog killt, atomare Writes, Proxy-Header
+    _src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('Watchdog killt haengende Renders (nicht nur Mail)',
+          'os.kill(int(pid), signal.SIGKILL)' in _src
+          and _src.count("j['pid'] = p.pid") + _src.count("JOBS[jid]['pid'] = p.pid") >= 2)
+    check('state.json atomar (tmp + os.replace)',
+          'os.replace(tmp, sp)' in _src)
+    _dock = open(os.path.join(HERE, 'Dockerfile'), encoding='utf-8').read()
+    check('uvicorn hinter Proxy korrekt (--proxy-headers)',
+          '--proxy-headers' in _dock and 'HEALTHCHECK' in _dock)
+    # 8) Frontend-DOM: Analyze-Status existiert jetzt wirklich, 4K-Kachel weg,
+    #    Billing-Historie hat eigene Funktion, SRT-Downloads verdrahtet
+    _idx = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('Frontend: #analyzeStatus existiert im DOM (Fix-transcript-Crash)',
+          'id="analyzeStatus"' in _idx and "$('#btnAnalyze')" not in _idx)
+    check('Frontend: keine 4K-Kachel mehr (Server cappt 1080p)',
+          '2160' not in _idx)
+    check('Frontend: Billing-Historie eigene Funktion + SRT-Buttons',
+          'renderBillingHistory' in _idx and '/api/subtitles/' in _idx
+          and 'wmUpsell' in _idx)
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

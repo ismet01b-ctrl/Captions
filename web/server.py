@@ -24,6 +24,7 @@ import tempfile
 import re
 import secrets
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -133,8 +134,15 @@ def _safe_name(name):
 # v80h: User-Accounts (Email + Passwort, bcrypt-Hashing, SQLite)
 # ================================================================
 def _db():
-    con = sqlite3.connect(USERS_DB)
+    # WAL + busy_timeout: Leser blockieren Schreiber nicht mehr und ein kurz
+    # gesperrter Write wartet statt sofort mit 'database is locked' auf einem
+    # Geld-Endpoint zu scheitern. synchronous=NORMAL ist das Standard-Pairing
+    # zu WAL (taegliche Backups existieren).
+    con = sqlite3.connect(USERS_DB, timeout=10)
     con.row_factory = sqlite3.Row
+    con.execute('PRAGMA journal_mode=WAL')
+    con.execute('PRAGMA busy_timeout=10000')
+    con.execute('PRAGMA synchronous=NORMAL')
     return con
 
 
@@ -176,6 +184,18 @@ def _init_users_db():
       delta_sec     INTEGER NOT NULL,
       grund         TEXT NOT NULL,
       created_at    INTEGER NOT NULL
+    );
+    -- v98: GoBD/§147 AO - Kaufbuchungen muessen 10 Jahre aufbewahrt werden,
+    -- auch nach Konto-Loeschung (DSGVO Art. 17(3)(b) erlaubt das explizit).
+    -- Beim Loeschen wandern nur die 'Kauf %'-Zeilen hierher, alles andere
+    -- (Renders, Refunds, Gratis-Gutschriften) wird wirklich geloescht.
+    CREATE TABLE IF NOT EXISTS ledger_archive (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_email    TEXT NOT NULL,
+      delta_sec     INTEGER NOT NULL,
+      grund         TEXT NOT NULL,
+      created_at    INTEGER NOT NULL,
+      archived_at   INTEGER NOT NULL
     );
     """)
     con.commit()
@@ -266,23 +286,45 @@ def _valid_username(s):
 
 
 def _create_user(email, pw, name=''):
+    # v98: Startguthaben erst NACH E-Mail-Bestaetigung (_grant_welcome) -
+    # vorher liess sich Ismets OpenAI-Key per Massen-Registrierung farmen
+    # (Wegwerf-Adressen, nie bestaetigt, sofort 120s Renderzeit).
     con = _db()
     try:
         cur = con.execute(
             "INSERT INTO users (email, pw_hash, name, balance_sec, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
             (email.strip().lower(), _hash_pw(pw), name.strip()[:60],
-             TRIAL_SECONDS, int(time.time())))
+             0, int(time.time())))
         uid = cur.lastrowid
-        if TRIAL_SECONDS > 0:
-            con.execute(
-                "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
-                "VALUES (?, ?, ?, ?)",
-                (uid, TRIAL_SECONDS, 'Welcome credit', int(time.time())))
         con.commit()
         return uid, None
     except sqlite3.IntegrityError:
         return None, 'This email is already registered.'
+    finally:
+        con.close()
+
+
+def _grant_welcome(uid):
+    """Willkommens-Guthaben bei der E-Mail-Bestaetigung, idempotent ueber
+    den Ledger-Eintrag (Verify-Link doppelt geklickt = kein Doppel-Grant)."""
+    if TRIAL_SECONDS <= 0:
+        return False
+    con = _db()
+    try:
+        row = con.execute(
+            "SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
+            (uid, 'Welcome credit')).fetchone()
+        if row:
+            return False
+        con.execute("UPDATE users SET balance_sec = balance_sec + ? "
+                    "WHERE id = ?", (TRIAL_SECONDS, uid))
+        con.execute(
+            "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (uid, TRIAL_SECONDS, 'Welcome credit', int(time.time())))
+        con.commit()
+        return True
     finally:
         con.close()
 
@@ -890,7 +932,29 @@ if os.path.isdir(_mprev_dir):
     app.mount('/motion_previews', StaticFiles(directory=_mprev_dir),
               name='motion_previews')
 JOBS = {}
-QUEUE = Queue()
+# v98: Echte Priority-Queue - die Pakete bewerben 'Priority queue', jetzt
+# stimmt es auch: Jobs zahlender Kunden (je ein Kauf im Ledger) laufen vor
+# Free-Tier-Jobs. Innerhalb einer Stufe bleibt es strikt FIFO (Sequenz-Nr).
+from queue import PriorityQueue
+import itertools as _it
+QUEUE = PriorityQueue()
+_QSEQ = _it.count()
+
+
+def q_put(jid, q=None):
+    """Job einreihen: Prio 0 = Kunde hat gekauft, 1 = Free-Tier/Demo.
+    q-Parameter nur fuer den Selftest (die echte QUEUE haben laufende
+    Worker-Threads im Griff)."""
+    uid = (JOBS.get(jid) or {}).get('user_id')
+    prio = 1
+    try:
+        if uid and _has_purchased(uid):
+            prio = 0
+    except Exception:
+        pass
+    (q if q is not None else QUEUE).put((prio, next(_QSEQ), jid))
+
+
 MQUEUE = Queue()          # Fast-Lane nur fuer Motion-Clips
 LOCK = threading.Lock()
 
@@ -1384,9 +1448,15 @@ def set_state(jid, **kw):
     j = JOBS.setdefault(jid, {})
     j.update(kw)
     try:
-        json.dump({k: v for k, v in j.items() if k not in ('input', 'code')},
-                  open(os.path.join(job_dir(jid), 'state.json'), 'w',
-                       encoding='utf-8'), ensure_ascii=False)
+        # v98: atomar via tmp + os.replace - ein Crash mitten im Schreiben
+        # hinterliess sonst eine halbe state.json und der (bezahlte) Job war
+        # nach dem Neustart nicht mehr restaurierbar.
+        sp = os.path.join(job_dir(jid), 'state.json')
+        tmp = sp + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump({k: v for k, v in j.items()
+                       if k not in ('input', 'code')}, f, ensure_ascii=False)
+        os.replace(tmp, sp)
     except Exception:
         pass
 
@@ -1423,6 +1493,7 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
               progress=progress_start, log_tail=[], eta_sec=None)
     p = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, text=True, bufsize=1)
+    j['pid'] = p.pid                  # v98: Watchdog kann haengende Renders killen
     log = []
     t0_render = time.time()
     frame_start_t = None
@@ -1566,9 +1637,41 @@ def _notify_job_fail(jid):
                   f'Credits wurden automatisch erstattet (falls reserviert).')
 
 
+def _notify_job_done(jid):
+    """v98: 'Dein Video ist fertig'-Mail. Renders dauern Minuten - viele
+    Nutzer machen den Tab zu und vergessen das Video (7-Tage-Loeschung!).
+    Nur echte Renders (mode 'full' / Motion), nur verifizierte Accounts,
+    genau 1 Mail pro Job."""
+    j = JOBS.get(jid) or {}
+    if j.get('status') != 'fertig' or j.get('done_mail'):
+        return
+    if j.get('kind') != 'motion' and j.get('mode') != 'full':
+        return
+    uid = j.get('user_id')
+    if not uid:
+        return
+    u = _find_user_by_id(uid)
+    if not u or not u['verified']:
+        return
+    j['done_mail'] = True
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu')
+    art = 'Motion-Clip' if j.get('kind') == 'motion' else 'Video'
+    try:
+        _send_mail(
+            u['email'], f'Dein {art} ist fertig',
+            f"Hey {u['name'] or ''},\n\n"
+            f"dein {art} ist fertig gerendert.\n"
+            f"Anschauen & herunterladen: {base}/app#/library\n\n"
+            f"Wichtig: Fertige Videos werden nach {RETENTION_DAYS:.0f} Tagen "
+            f"automatisch vom Server geloescht - lad es dir rechtzeitig "
+            f"herunter.\n\n- DouchkoVE")
+    except Exception as e:
+        print(f'Fertig-Mail fehlgeschlagen: {e}')
+
+
 def worker():
     while True:
-        jid = QUEUE.get()
+        _, _, jid = QUEUE.get()
         try:
             run_job(jid)
         except Exception as e:
@@ -1576,6 +1679,7 @@ def worker():
                       msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
         finally:
             _notify_job_fail(jid)
+            _notify_job_done(jid)
             QUEUE.task_done()
 
 
@@ -1591,6 +1695,7 @@ def motion_worker():
                       msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
         finally:
             _notify_job_fail(jid)
+            _notify_job_done(jid)
             MQUEUE.task_done()
 
 
@@ -1622,6 +1727,7 @@ def _run_motion(jid):
     p = subprocess.Popen(cmd, cwd=ROOT, env=dict(os.environ),
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          text=True, bufsize=1)
+    JOBS[jid]['pid'] = p.pid          # v98: Watchdog kann haengende Renders killen
     log = []
     for line in p.stdout:
         log.append(line.rstrip())
@@ -1678,7 +1784,7 @@ def run_job(jid):
         if nxt:
             JOBS[jid]['mode'] = nxt
             set_state(jid, status='wartet', progress=0.0, phase='Queued …')
-            QUEUE.put(jid)
+            q_put(jid)
         return
     if mode == 'analyze':
         rc, log, out = _run_render(jid, extra_args=['--plan-only'],
@@ -1767,8 +1873,46 @@ def _backup_users_db():
         for old in snaps[:-14]:
             os.remove(os.path.join(bdir, old))
         print(f"DB-Backup: {dest}")
+        _mail_backup_offsite(dest)
     except Exception as e:
         print(f"DB-Backup fehlgeschlagen: {type(e).__name__}: {e}")
+
+
+def _mail_backup_offsite(dest):
+    """v98: Der Snapshot lag bisher auf DERSELBEN Platte wie die DB -
+    stirbt der Server, ist das Credit-Ledger zahlender Kunden weg. Taeglich
+    geht das gzip-te Backup per Mail an ADMIN_MAIL (Postfach = Offsite).
+    Nur bis 8 MB (Gmail-Limit 25 MB, die DB ist winzig); scheitert leise."""
+    try:
+        import gzip
+        raw = open(dest, 'rb').read()
+        gz = gzip.compress(raw)
+        if len(gz) > 8 * 1024 * 1024:
+            print(f'Backup-Mail uebersprungen: {len(gz)/1e6:.1f} MB zu gross')
+            return
+        import smtplib
+        from email.message import EmailMessage
+        user = os.environ.get('SMTP_USER', '').strip()
+        pw = os.environ.get('SMTP_PASS', '').replace(' ', '').strip()
+        if not user or not pw:
+            return                    # kein SMTP konfiguriert -> kein Offsite
+        msg = EmailMessage()
+        msg['From'] = os.environ.get('MAIL_FROM', user)
+        msg['To'] = ADMIN_MAIL
+        msg['Subject'] = f'[DouchkoVE] DB-Backup {os.path.basename(dest)}'
+        msg.set_content('Taegliches Offsite-Backup der users.db (gzip). '
+                        'Entpacken: gunzip <datei>.')
+        msg.add_attachment(gz, maintype='application', subtype='gzip',
+                           filename=os.path.basename(dest) + '.gz')
+        host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+        port = int(os.environ.get('SMTP_PORT', '587'))
+        with smtplib.SMTP(host, port, timeout=30) as s:
+            s.starttls()
+            s.login(user, pw)
+            s.send_message(msg)
+        print('Backup-Mail an', ADMIN_MAIL, 'geschickt')
+    except Exception as e:
+        print(f'Backup-Mail fehlgeschlagen: {type(e).__name__}: {e}')
 
 
 def _cleanup_worker():
@@ -1874,7 +2018,7 @@ def _restore_jobs():
             st['status'] = 'wartet'
             st['progress'] = 0.0
             st['phase'] = 'Queued (restored after restart) …'
-            QUEUE.put(jid)
+            q_put(jid)
             requeued += 1
     if restored:
         print(f"Job-Restore: {restored} Jobs geladen, {requeued} neu eingereiht")
@@ -1882,8 +2026,11 @@ def _restore_jobs():
 
 def _watchdog_worker():
     """Betriebs-Wachhund, alle 10 Minuten: (a) Platte knapp -> Mail,
-    (b) Job haengt seit >45 Min im Status 'laeuft' -> Mail. Merkt sich
-    selbst, seit wann ein Job laeuft - unabhaengig von Job-Feldern."""
+    (b) Job haengt seit >45 Min im Status 'laeuft' -> Render-Prozess KILLEN
+    (v98). Nur mailen reichte nicht: bei DVE_WORKERS=1 blockiert ein
+    haengender ffmpeg sonst ALLE weiteren Renders dauerhaft. Nach dem Kill
+    laeuft der normale Fehlerpfad (Status 'fehler' + automatische
+    Erstattung via _maybe_refund), der Worker lebt weiter."""
     running_since = {}
     while True:
         time.sleep(600)
@@ -1895,15 +2042,27 @@ def _watchdog_worker():
                               f'Cleanup laeuft, reicht aber offenbar nicht.')
             now = time.time()
             with LOCK:
-                items = [(jid, j.get('status')) for jid, j in JOBS.items()]
-            for jid, stt in items:
+                items = [(jid, j.get('status'), j.get('pid'))
+                         for jid, j in JOBS.items()]
+            for jid, stt, pid in items:
                 if stt == 'laeuft':
                     t0 = running_since.setdefault(jid, now)
                     if now - t0 > 45 * 60:
-                        _notify_admin(f'stuck:{jid}', 'Job haengt',
-                                      f'Job {jid} laeuft seit '
-                                      f'{(now - t0) / 60:.0f} Minuten - '
-                                      f'vermutlich haengt ffmpeg/der Worker.')
+                        killed = False
+                        if pid:
+                            try:
+                                os.kill(int(pid), signal.SIGKILL)
+                                killed = True
+                            except (OSError, ValueError):
+                                pass
+                        running_since.pop(jid, None)
+                        _notify_admin(
+                            f'stuck:{jid}', 'Haengender Job gekillt',
+                            f'Job {jid} lief {(now - t0) / 60:.0f} Minuten - '
+                            f'Render-Prozess (PID {pid}) '
+                            f'{"gekillt" if killed else "nicht auffindbar"}. '
+                            f'Der Job endet als Fehler, Credits werden '
+                            f'automatisch erstattet, die Queue laeuft weiter.')
                 else:
                     running_since.pop(jid, None)
         except Exception as e:
@@ -1952,7 +2111,8 @@ def _rate_limit_ok(ip, window_sec=3600, max_attempts=5, bucket='reg'):
 def api_register(request: Request, response: Response,
                  email: str = Form(...), password: str = Form(...),
                  name: str = Form('')):
-    """v80h: Neuer Account, 2 Min Willkommens-Guthaben."""
+    """v80h: Neuer Account. v98: Willkommens-Guthaben kommt erst mit der
+    E-Mail-Bestaetigung (_grant_welcome) - nicht mehr hier."""
     # Rate-Limit gegen Spam
     ip = request.client.host if request.client else 'unknown'
     if not _rate_limit_ok(ip):
@@ -2097,7 +2257,8 @@ def api_verify_email(token: str = Form(...)):
     if not uid:
         raise HTTPException(400, 'This verification link is invalid or has '
                                  'expired. Request a new one in Account settings.')
-    return {'ok': True}
+    granted = _grant_welcome(uid)
+    return {'ok': True, 'welcome_granted': granted}
 
 
 @app.post('/api/resend_verification')
@@ -2126,6 +2287,29 @@ def api_change_password(request: Request, old: str = Form(...),
     con.commit()
     con.close()
     return {'ok': True}
+
+
+def _purge_user_db(uid):
+    """v98: DB-Teil der Konto-Loeschung. Kaufbuchungen wandern VOR dem
+    Loeschen ins ledger_archive (GoBD/§147 AO: 10 Jahre Aufbewahrung fuer
+    Buchungsbelege; DSGVO Art. 17(3)(b) erlaubt diese Ausnahme explizit) -
+    alles andere (Renders, Refunds, Gratis-Gutschriften) wird geloescht."""
+    con = _db()
+    _mail = con.execute("SELECT email FROM users WHERE id = ?",
+                        (uid,)).fetchone()
+    con.execute(
+        "INSERT INTO ledger_archive (user_email, delta_sec, grund, "
+        "created_at, archived_at) "
+        "SELECT ?, delta_sec, grund, created_at, ? FROM ledger "
+        "WHERE user_id = ? AND grund LIKE 'Kauf %'",
+        (_mail['email'] if _mail else f'user#{uid}', int(time.time()), uid))
+    con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM ledger WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM resets WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM verify_tokens WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM users WHERE id = ?", (uid,))
+    con.commit()
+    con.close()
 
 
 @app.post('/api/delete_account')
@@ -2157,14 +2341,7 @@ def api_delete_account(request: Request, response: Response,
                     pass
     except OSError:
         pass
-    con = _db()
-    con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
-    con.execute("DELETE FROM ledger WHERE user_id = ?", (uid,))
-    con.execute("DELETE FROM resets WHERE user_id = ?", (uid,))
-    con.execute("DELETE FROM verify_tokens WHERE user_id = ?", (uid,))
-    con.execute("DELETE FROM users WHERE id = ?", (uid,))
-    con.commit()
-    con.close()
+    _purge_user_db(uid)
     # Templates fuer diesen User loeschen
     try:
         all_tpl = _load_templates()
@@ -2530,10 +2707,15 @@ async def upload(request: Request, datei: UploadFile = File(...),
             f.write(chunk)
 
     try:
-        dur = float(subprocess.run(
+        # v98: to_thread - der sync ffprobe blockierte sonst den Event-Loop
+        # (bei parallelen Uploads hing die GANZE API inkl. /api/health)
+        import asyncio as _aio
+        _r = await _aio.to_thread(
+            subprocess.run,
             ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
              '-of', 'default=nw=1:nk=1', src],
-            capture_output=True, text=True).stdout.strip() or 0)
+            capture_output=True, text=True)
+        dur = float(_r.stdout.strip() or 0)
     except Exception:
         dur = 0
     if dur > MAX_SECONDS:
@@ -2577,15 +2759,16 @@ async def upload(request: Request, datei: UploadFile = File(...),
                 f"credit{'s' if credits_of(need) != 1 else ''}, you have "
                 f"{have}). Missing {max(1, fehlt)} - please top up.")
 
+    _vh = await _aio.to_thread(_video_hash, src)  # v98: 2 MB lesen, nie im Loop
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
-                 'user_id': uid, 'vhash': _video_hash(src),   # v88b: Transkript-Cache
+                 'user_id': uid, 'vhash': _vh,     # v88b: Transkript-Cache
                  'mode': mode, 'cfg_overrides': overrides,
                  'status': 'wartet', 'progress': 0.0,
                  'phase': 'Queued …',
                  'dauer': round(dur, 1), 'name': _safe_name(datei.filename)}
     set_state(jid, **{k: v for k, v in JOBS[jid].items()
                       if k not in ('input', 'code')})
-    QUEUE.put(jid)
+    q_put(jid)
     return {'job': jid, 'position': QUEUE.qsize()}
 
 
@@ -2649,11 +2832,11 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
         if j.get('status') == 'vorbereitet' and j.pop('next_mode', None):
             j['mode'] = mode
             set_state(jid, status='wartet', progress=0.0, phase='Queued …')
-            QUEUE.put(jid)
+            q_put(jid)
         return {'job': jid, 'chained': True}
     j['mode'] = mode
     set_state(jid, status='wartet', progress=0.0, phase='Queued …')
-    QUEUE.put(jid)
+    q_put(jid)
     return {'job': jid, 'position': QUEUE.qsize()}
 
 
@@ -2770,6 +2953,9 @@ def api_library(request: Request):
             'created': int(finished),
             'expires_at': int(expires),
             'has_mov': os.path.exists(os.path.join(d, 'fertig.mov')),
+            # v98: SRT-Button nur zeigen, wenn ein Transkript existiert
+            'has_srt': bool(j.get('input')) and os.path.exists(
+                os.path.splitext(j['input'])[0] + '_transcript2.json'),
         })
     items.sort(key=lambda x: x['created'], reverse=True)
     return {'items': items, 'retention_days': RETENTION_DAYS}
@@ -2876,6 +3062,71 @@ def get_transcript(jid: str, request: Request):
     return {'words': json.load(open(tp, encoding='utf-8'))}
 
 
+def _srt_cues(words, max_chars=42, max_dur=5.0, gap_break=0.8):
+    """v98: Wort-Timings -> Untertitel-Cues. Neue Zeile bei Satzende,
+    Sprechpause >0.8s, 42 Zeichen (Netflix-Richtwert) oder 5s Standzeit."""
+    cues, cur, t0, t1 = [], [], None, None
+    for w in words:
+        txt = str(w.get('word', '')).strip()
+        if not txt:
+            continue
+        ws, we = float(w.get('start', 0.0)), float(w.get('end', 0.0))
+        if cur and (len(' '.join(cur + [txt])) > max_chars
+                    or ws - t1 > gap_break or we - t0 > max_dur):
+            cues.append((t0, t1, ' '.join(cur)))
+            cur, t0 = [], None
+        if t0 is None:
+            t0 = ws
+        cur.append(txt)
+        t1 = we
+        if txt[-1:] in '.!?':
+            cues.append((t0, t1, ' '.join(cur)))
+            cur, t0 = [], None
+    if cur:
+        cues.append((t0, t1, ' '.join(cur)))
+    return cues
+
+
+def _srt_ts(t, vtt=False):
+    ms = int(round(max(0.0, float(t)) * 1000))
+    h, ms = divmod(ms, 3600000)
+    m, ms = divmod(ms, 60000)
+    s, ms = divmod(ms, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d}{'.' if vtt else ','}{ms:03d}"
+
+
+@app.get('/api/subtitles/{jid}')
+def get_subtitles(jid: str, request: Request, fmt: str = 'srt'):
+    """v98: SRT/VTT-Export des Transkripts - Standard bei jeder Konkurrenz,
+    Creator brauchen die Datei fuer YouTube/Schnittprogramme. Kostenlos
+    (Transkript ist beim Render eh bezahlt worden)."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    tp = os.path.splitext(j['input'])[0] + '_transcript2.json'
+    if not os.path.exists(tp):
+        raise HTTPException(404, 'Transcript not ready yet.')
+    vtt = (fmt == 'vtt')
+    cues = _srt_cues(json.load(open(tp, encoding='utf-8')))
+    if not cues:
+        raise HTTPException(404, 'Transcript is empty.')
+    out = ['WEBVTT', ''] if vtt else []
+    for i, (a, b, txt) in enumerate(cues, 1):
+        if not vtt:
+            out.append(str(i))
+        out.append(f'{_srt_ts(a, vtt)} --> {_srt_ts(b, vtt)}')
+        out.append(txt)
+        out.append('')
+    ext = 'vtt' if vtt else 'srt'
+    return Response(
+        content='\n'.join(out),
+        media_type='text/vtt' if vtt else 'application/x-subrip',
+        headers={'Content-Disposition':
+                 f'attachment; filename="captions.{ext}"'})
+
+
 @app.post('/api/transcript/{jid}')
 async def save_transcript(request: Request, jid: str,
                           edits: str = Form(...), code: str = Form('')):
@@ -2921,7 +3172,7 @@ async def save_transcript(request: Request, jid: str,
     j['progress'] = 0.0
     j['phase'] = 'Queued (re-analyzing with corrected transcript) …'
     set_state(jid, **{k: v for k, v in j.items() if k not in ('input', 'code')})
-    QUEUE.put(jid)
+    q_put(jid)
     return {'ok': True, 'changed': n}
 
 
@@ -3029,7 +3280,7 @@ async def save_and_render(request: Request, jid: str,
     j['phase'] = 'Queued (re-render) …'
     set_state(jid, **{k: v for k, v in j.items()
                       if k not in ('input', 'code')})
-    QUEUE.put(jid)
+    q_put(jid)
     return {'ok': True, 'job': jid, 'position': QUEUE.qsize()}
 
 
