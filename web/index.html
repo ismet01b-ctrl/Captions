@@ -544,7 +544,9 @@ body {
   overflow: hidden; aspect-ratio: 9/16; max-height: 70vh; margin: 0 auto;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 20px 60px -20px rgba(0,0,0,.7); }
-.mo-frame img { width: 100%; height: 100%; object-fit: contain; }
+.mo-frame img, .mo-frame video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mo-result { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.mo-result .btn { flex: 1; min-width: 120px; }
 .mo-frame.alpha { background:
   repeating-conic-gradient(#2b2d33 0% 25%, #191b1f 0% 50%) 0 0 / 28px 28px; }
 .mo-spin { position: absolute; width: 34px; height: 34px; border-radius: 50%;
@@ -926,6 +928,12 @@ body {
 }
 .tw-lgd.on { background: rgba(124,92,255,0.22); color: var(--acc2); }
 .tw-lgd.off { background: var(--surf2); color: var(--mut); }
+.tx-note {
+  display: flex; gap: 9px; align-items: flex-start; margin-top: 12px;
+  padding: 11px 13px; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 11px; color: var(--mut); font-size: 12.5px; line-height: 1.5;
+}
+.tx-note svg { color: var(--acc2); flex-shrink: 0; margin-top: 1px; }
 .tx-dot {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   background: var(--acc); margin-right: 8px;
@@ -1381,10 +1389,17 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div class="mo-preview">
           <div class="mo-frame" id="moFrame">
             <img id="moImg" alt="">
+            <video id="moVid" class="hidden" controls playsinline
+                   preload="metadata" loop></video>
             <div class="mo-spin" id="moSpin"></div>
           </div>
-          <p class="mo-note">Live preview — a still from the clip. The rendered
-             video adds motion + sound.</p>
+          <p class="mo-note" id="moNote">Live preview — a still from the clip.
+             The rendered video adds motion + sound.</p>
+          <div id="moResultBar" class="mo-result hidden">
+            <a class="btn secondary" id="moDl" download>Download MP4</a>
+            <a class="btn secondary hidden" id="moDlMov" target="_blank" rel="noopener">MOV · Alpha</a>
+            <button class="btn secondary" id="moBackToEdit" type="button">Adjust &amp; re-render</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1785,6 +1800,17 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <span class="tw-lgd on">✨ always</span>, tap again to block it
           <span class="tw-lgd off">✕ never</span>, once more clears it. The AI
           picks the rest.</p>
+        <div class="tx-note tx-only-kw">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+          </svg>
+          <span>Captions are grouped into short phrases, and each phrase shows
+            one highlight. If you force several words that land very close
+            together, they may be shortened or share a beat so they don't
+            overlap on screen — spacing your picks out gives each one its full
+            moment.</span>
+        </div>
       </div>
 
       <div class="wiz-nav">
@@ -1872,7 +1898,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <!-- v89: Director's cut - warum die KI diese Momente gewaehlt hat -->
         <div id="dirReport" class="hidden" style="margin:16px 0 4px; background:var(--surf);
              border:1px solid var(--line); border-radius:14px; padding:16px 18px;"></div>
-        <video id="resultVid" controls playsinline
+        <video id="resultVid" controls playsinline preload="metadata"
                style="width:100%; border-radius:16px; margin:16px 0;
                background:#000; max-height: 480px;"></video>
         <div style="display:flex; gap:10px; flex-wrap: wrap;">
@@ -2543,6 +2569,10 @@ async function initMotion(){
   $('#moWords').oninput=motionPreviewDebounced;
   $('#moAccent').oninput=()=>{ Motion.sel.accent=$('#moAccent').value; motionPreviewDebounced(); };
   $('#moRender').onclick=motionRender;
+  const _mbe=$('#moBackToEdit');
+  if(_mbe) _mbe.onclick=()=>{ moShowPreview();
+    const c=document.querySelector('#page-motion .mo-controls');
+    if(c) c.scrollIntoView({behavior:'smooth', block:'start'}); };
   moSync(); motionPreview();
 }
 /* Kontext-Sync: Felder/Hinweise/Preis passen sich Template + Export an. */
@@ -2585,7 +2615,19 @@ function motionSpec(){
 }
 function motionPreviewDebounced(){ clearTimeout(Motion.t);
   Motion.t=setTimeout(motionPreview, 350); }
+function moShowPreview(){
+  // v101o: zurueck von Ergebnis-Video auf die Still-Vorschau
+  const vid=$('#moVid'), img=$('#moImg'), bar=$('#moResultBar'), note=$('#moNote');
+  if(vid){ try{ vid.pause(); }catch(e){} vid.classList.add('hidden');
+    vid.removeAttribute('src'); vid.load(); }
+  if(img) img.classList.remove('hidden');
+  if(bar) bar.classList.add('hidden');
+  if(note) note.textContent='Live preview — a still from the clip. '+
+    'The rendered video adds motion + sound.';
+}
+
 async function motionPreview(){
+  moShowPreview();
   const spin=$('#moSpin'); if(spin) spin.classList.add('on');
   const _im=$('#moImg'); if(_im&&_im.src) _im.style.opacity='.45';
   // Sequenz-Token: bei schnellen Klicks darf eine ALTE Antwort die neue
@@ -2613,6 +2655,8 @@ async function motionPreview(){
 }
 async function motionRender(){
   const btn=$('#moRender'); const st=$('#moStatus');
+  moShowPreview();                          // v101o: altes Ergebnis raus
+  const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
   btn.disabled=true; const orig=btn.textContent; btn.textContent='Sending …';
   const fd=new FormData();
   fd.append('spec', JSON.stringify(motionSpec()));
@@ -2633,13 +2677,33 @@ async function motionPoll(jid, st, btn, orig){
   try{
     const r=await fetch('/api/status/'+jid); const s=await r.json();
     if(s.status==='fertig'){
-      st.innerHTML='Done — saved to your '+
-        '<a data-nav="library" style="color:var(--acc2);cursor:pointer;">Library</a>.'+
-        (s.mov_url?` &nbsp;<a href="${s.mov_url}" style="color:var(--acc2);">Download MOV · Alpha</a>`:'');
-      btn.disabled=false; btn.textContent=orig; moSync();
+      const _sp=$('#moSpin'); if(_sp) _sp.classList.remove('on');
+      // v101o: fertigen Clip INLINE zeigen (nicht nur auf die Library verweisen)
+      const vid=$('#moVid'), img=$('#moImg');
+      if(vid){
+        vid.poster='/api/poster/'+jid;
+        vid.src='/api/video/'+jid+'?t='+Date.now();
+        vid.classList.remove('hidden'); if(img) img.classList.add('hidden');
+        try{ vid.play().catch(()=>{}); }catch(e){}
+      }
+      const bar=$('#moResultBar');
+      if(bar){
+        bar.classList.remove('hidden');
+        $('#moDl').href='/api/video/'+jid+'?download=1';
+        const mv=$('#moDlMov');
+        if(s.mov_url){ mv.href=s.mov_url; mv.classList.remove('hidden'); }
+        else mv.classList.add('hidden');
+      }
+      const note=$('#moNote');
+      if(note) note.innerHTML='Saved to your <a data-nav="library" '+
+        'style="color:var(--acc2);cursor:pointer;">Library</a>. '+
+        'Tweak anything on the left and render again.';
+      st.style.display='none'; st.textContent='';
+      btn.disabled=false; btn.textContent=orig;
       fetch('/api/me').then(x=>x.json()).then(d=>updateCreditHeader(d.balance_sec)).catch(()=>{});
       return; }
-    if(s.status==='fehler'){ st.textContent='Render failed: '+(s.msg||'');
+    if(s.status==='fehler'){ const _sp=$('#moSpin'); if(_sp) _sp.classList.remove('on');
+      st.style.display='block'; st.textContent='Render failed: '+(s.msg||'');
       btn.disabled=false; btn.textContent=orig; return; }
     // Psychologie: nie 0%, klare Etappen-Texte, weich animierter Balken
     const pr=Math.max(s.progress||0, 0.06);
@@ -4018,7 +4082,9 @@ function aBtn(disabled) {
 
 function renderSuccess() {
   $('#doneCard').classList.remove('hidden');
-  $('#resultVid').src = '/api/video/' + State.jid;
+  const rv = $('#resultVid');
+  rv.poster = '/api/poster/' + State.jid;   // v101o: Standbild sofort, Video on demand
+  rv.src = '/api/video/' + State.jid;
   $('#dlLink').href = '/api/video/' + State.jid + '?download=1';
   const srt = $('#dlSrt');
   if (srt) srt.href = '/api/subtitles/' + State.jid;

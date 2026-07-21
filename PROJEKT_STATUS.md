@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101o Motion inline + Player sparsamer + Highlight-Notiz (Ismet-Wunsch).**
+  (1) MOTION-VIDEO INLINE: nach dem Render erscheint der fertige Clip jetzt
+  direkt in der Vorschau-Flaeche der Motion-Seite (moVid-Player), statt nur
+  "saved to Library" zu verlinken - darunter Download MP4 / MOV·Alpha /
+  "Adjust & re-render". moShowPreview() schaltet bei Regler-Aenderung oder neuem
+  Render zurueck auf die Still-Vorschau; alle Regler bleiben, alles weiter
+  einstellbar. MOV-Export spielt inline die daneben liegende fertig.mp4-
+  Vorschau. (2) PLAYER GEGEN DAS RUCKELN: resultVid + moVid mit
+  preload="metadata" (laedt nicht mehr die ganze Datei eifrig) + poster
+  (/api/poster) - Standbild sofort, Video on demand. (3) NOTIZ im Highlight-
+  Modus: erklaert, dass Captions in kurze Phrasen gruppiert sind und jede
+  Phrase EIN Highlight zeigt - erzwingt man mehrere sehr dicht, koennen sie
+  gekuerzt werden; Picks verteilen gibt jedem seinen vollen Moment. 3 neue
+  Tests (DOM). Regression 627/627 + GUI_OK, Browser-Smoke ohne JS-Fehler.
+
 - **v101n Fix: mehrere erzwungene Woerter pro Phrase kommen jetzt ALLE durch.**
   Ismet: "nicht alle Woerter die ich will kommen". Ursache (per echtem Render
   reproduziert, KEIN Bug): Woerter werden zu Phrasen-Gruppen gebuendelt, eine

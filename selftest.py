@@ -3009,6 +3009,18 @@ def _scenario_v98(tmp):
     check('Frontend: Billing-Historie eigene Funktion + SRT-Buttons',
           'renderBillingHistory' in _idx and '/api/subtitles/' in _idx
           and 'wmUpsell' in _idx)
+    # v101o: Motion-Video inline + Player-Poster/preload + Transkript-Notiz
+    check('v101o: Motion zeigt fertigen Clip inline (nicht nur Library-Link)',
+          'id="moVid"' in _idx and 'moResultBar' in _idx
+          and 'function moShowPreview' in _idx
+          and "vid.src='/api/video/'+jid" in _idx)
+    check('v101o: Player laedt sparsam (preload=metadata + Poster)',
+          'id="resultVid" controls playsinline preload="metadata"' in _idx
+          and "rv.poster = '/api/poster/' + State.jid" in _idx
+          and 'preload="metadata"' in _idx)
+    check('v101o: Highlight-Notiz erklaert die Phrasen-Gruppierung',
+          'tx-note' in _idx and 'one highlight' in _idx
+          and 'spacing your picks out' in _idx)
     # v101.3 Watermark-Unlock serverseitig: Swap, Idempotenz, Auto-Unlock
     _ujid = 'ffeeddccbb99'
     _ud = SV.job_dir(_ujid)
