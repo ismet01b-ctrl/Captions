@@ -3,6 +3,44 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v99a Ansage ist Gesetz (Ismet testete mit ECHTEM Selfie-Video auf
+  douchko.eu: "der macht nicht das, was er sagt").** Diagnose am
+  hochgeladenen Video (15s Selfie, Strasse): die v99-Momente ENTSTANDEN
+  korrekt, wurden aber von VIER nachgelagerten Systemen wieder degradiert
+  oder verfaelscht - jedes fuer sich sinnvoll, aber keines wusste, dass der
+  Sprecher die Platzierung WOERTLICH bestellt hat:
+  (1) Nahaufnahme-Backstop (_behind_cover_backstop): Gesicht >=52%
+  Bildbreite schaltete angesagtes 'behind' auf outline. Jetzt: intent-
+  Momente bleiben behind und bekommen szene 'himmel' - das Wort steigt
+  HINTER dem Kopf hervor und endet lesbar UEBER ihm ('hinter mir' UND
+  sichtbar). Vision-fx-Override respektiert intent ebenfalls.
+  (2) Dichte-Limit in build_plans degradierte den Moment zum normalen
+  Caption-Text, wenn er <min_gap nach dem vorigen kam. Jetzt: intent
+  erzwingt is_kw_group und gewinnt die Wort-Wahl der Gruppe.
+  (3) Mehrwort-Regel: Phrasen >=2 Woerter wurden IMMER zur Editorial-
+  Komposition (tpl 'behind') - 'ON THE GROUND' lag nie auf dem Boden.
+  Jetzt: Platzierungs-Ansagen (ground, behind+himmel) rendern als
+  Szenen-Sprite. Dazu B-Roll-Gate: Kamera schwenkt auf den Boden ->
+  kein Gesicht -> Gruppe wurde uebersprungen; intent-Momente ueberleben.
+  (4) Momente-Editor-Roundtrip verlor das intent-Flag (Export/Merge-
+  Whitelist) -> direkt nach dem Export griff Regel 2 wieder. Jetzt wird
+  intent exportiert-unabhaengig im Merge erhalten; aendert der Nutzer den
+  Effekt im Editor bewusst, erlischt die Ansage (User gewinnt zuletzt).
+  DAZU: Auto-Anim-Kontext endete nicht an Satzgrenzen - 'explode' aus dem
+  FOLGESATZ faerbte 'ON THE GROUND' mit einer Explosions-Anim (anim_ctx()
+  kappt jetzt beide anim_for-Aufrufe am Satzende). intent ueberlebt
+  zusaetzlich den Regie-Cache (parse_regie-Passthrough); Cache wird nur
+  noch bei echter KI-Wahl geschrieben (_regie_wahl), sonst bliebe die
+  Auto-Heuristik nach einem Selbstbezug-only-Lauf faelschlich aus.
+  BEWEIS auf Ismets echtem Video (nachgestelltes Transkript, ohne Key):
+  vorher 2 von 3 angesagten Momenten im Plan, nachher 3 von 3 - Frames:
+  'BEHIND' steigt golden hinter dem Kopf hervor, 'ON THE GROUND' liegt
+  perspektivisch auf dem Gehweg (vom Koerper korrekt verdeckt), 'EXPLODE'
+  vorn mit Explosion, keine Fehl-Anim mehr. 10 neue Tests (Backstop/
+  Vision/Dichte/B-Roll/Komposition/anim_ctx/Cache/Editor-Quelltext).
+  Ehrlich: Ismets Original-Test lief evtl. auch vor dem v99-Deploy -
+  auf douchko.eu nach dem naechsten Deploy neu testen.
+
 - **v99 Selbstbezug-Regie (Ismet: "Wenn jemand sagt 'The captions are
   behind me', soll der Satz sich hinter der Person bilden. 'The captions
   explode' -> explodieren.").** Kern-Erkenntnis: Das Verstaendnis existierte

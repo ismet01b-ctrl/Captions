@@ -1077,6 +1077,12 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2,
             i = int(m.get('i', -1))
             if i not in fx_map:
                 continue
+            # v99a: Ansage des Sprechers ist Gesetz. Hat _speech_intent/
+            # _self_ref_intent den Moment explizit platziert ("the captions
+            # are behind me"), darf die Vision-Regie ihn NICHT umziehen -
+            # sonst macht das Video nicht, was der Sprecher sagt.
+            if fx_map[i].get('intent'):
+                continue
             sz = str(m.get('szene', '')).strip().lower()
             lg = str(m.get('lage', '')).strip().lower()
             if sz in ('wasser', 'boden', 'wand', 'himmel', 'person', 'unklar'):
@@ -1105,6 +1111,14 @@ def _behind_cover_backstop(fx_map, face_cover, thresh=0.52):
     moved = 0
     for i, v in fx_map.items():
         if v.get('fx') != 'behind':
+            continue
+        # v99a: explizite Sprecher-Ansage ("behind me") bleibt 'behind' - aber
+        # bei bildfuellender Nahaufnahme (Selfie) waere der Text komplett
+        # verdeckt. Loesung: szene 'himmel' - das Wort steigt HINTER dem Kopf
+        # hervor und endet lesbar UEBER ihm. Bleibt 'hinter mir' UND sichtbar.
+        if v.get('intent'):
+            if face_cover.get(i, 0.0) >= thresh and not v.get('szene'):
+                v['szene'] = 'himmel'
             continue
         if face_cover.get(i, 0.0) >= thresh:
             # Grosses Statement -> ground, sonst klar sichtbares outline.
@@ -2746,6 +2760,8 @@ def parse_regie(text, words, language='de'):
                             0x1F000 <= ord(c) <= 0x1FFFF or 0x2600 <= ord(c) <= 0x27BF
                             for c in emo):
                         entry['emoji'] = emo
+                    if item.get('intent'):
+                        entry['intent'] = True   # v99a: Ansage ueberlebt den Cache
                     out[i] = entry
         return out or None
     except Exception:
@@ -3049,6 +3065,7 @@ def _speech_intent(fx_map, words):
             fx_map[i]['szene'] = szene
         if lage:
             fx_map[i]['lage'] = lage
+        fx_map[i]['intent'] = True   # v99a: Ansage ist Gesetz (Vision/Backstop tabu)
         hits += 1
     if hits:
         print(f"  Sprach-Intent: {hits} Caption(s) folgen der Ansage "
@@ -3150,14 +3167,15 @@ def _self_ref_intent(fx_map, words):
         i = a + k
         if kind == 'ort':
             ent = {'fx': 'behind' if szene == 'himmel' else val,
-                   'power': 2, 'n': max(1, min(L, 4))}
+                   'power': 2, 'n': max(1, min(L, 4)), 'intent': True}
             if szene:
                 ent['szene'] = szene
             if lage:
                 ent['lage'] = lage
         else:
             # Sichtbar vorn (nie behind) - die Bewegung IST der Punkt.
-            ent = {'fx': 'outline', 'power': 2, 'n': 1, 'anim': val}
+            ent = {'fx': 'outline', 'power': 2, 'n': 1, 'anim': val,
+                   'intent': True}
         out[i] = ent
         neu += 1
     if neu:
@@ -3996,6 +4014,23 @@ def _anim_hit(text, key):
     return False
 
 
+def anim_ctx(words, i, n=1):
+    """v99a: Kontextfenster fuer die Auto-Animation, an SATZGRENZEN gekappt.
+    Vorher lief das Fenster i-4..i+8 ueber den Punkt hinaus - ein 'explode'
+    aus dem NAECHSTEN Satz faerbte die Animation dieses Moments (gemessen:
+    'ON THE GROUND' explodierte, weil der Folgesatz von Explosionen sprach)."""
+    a0, b0 = max(i - 4, 0), min(i + max(n, 1) + 5, len(words))
+    for j in range(i, b0):
+        if str(words[j].get('word', '')).rstrip().endswith(('.', '!', '?')):
+            b0 = j + 1
+            break
+    for j in range(i - 1, a0 - 1, -1):
+        if str(words[j].get('word', '')).rstrip().endswith(('.', '!', '?')):
+            a0 = j + 1
+            break
+    return ' '.join(clean(words[j].get('word', '')) for j in range(a0, b0))
+
+
 def anim_for(txt, context=None):
     """Waehlt die Animation. Das Keyword allein reicht nicht: bei
     'Deutschland bricht seine Versprechen' steht das Keyword DEUTSCHLAND, aber
@@ -4267,8 +4302,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # Adaptive Farben: Caption-Toene greifen die Szene dieses Moments auf
         S.set_palette(palette_at(start + 0.2) if palette_at else None)
         if broll and not voiceover and not cfg['effects'].get('broll_captions', False):
-            prev_was_keyword = False
-            continue                       # Szenen ohne Sprecher bleiben textfrei
+            # v99a: explizit angesagte Momente (intent) ueberleben auch das
+            # B-Roll-Gate. "The captions are on the ground", waehrend die
+            # Kamera auf den Boden schwenkt: kein Gesicht im Bild, aber GENAU
+            # dort gehoert der Text hin. Der Szenen-Text braucht die Person
+            # nicht (ground/liegend ist fuer B-Roll gebaut).
+            if not any(isinstance((fx_map or {}).get(i), dict)
+                       and fx_map[i].get('intent') for i in g):
+                prev_was_keyword = False
+                continue                   # Szenen ohne Sprecher bleiben textfrei
         # Hook: Laenge frei einstellbar (0 = aus), Staerke steuert die Dichte.
         # In den ersten Sekunden entscheidet sich, ob jemand dranbleibt.
         hook_len = float(cfg['effects'].get('hook_seconds', 15))
@@ -4292,8 +4334,19 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # Dichte-Limit: zu dichte Keyword-Momente werden zu normalen Gruppen
         # Im Hook duerfen Momente enger stehen - hook_strength regelt wie eng
         # (0 = wie normal, 1 = dreifache Dichte)
+        # v99a: EXPLIZIT ANGESAGTE Momente (intent - "the captions are on the
+        # ground") duerfen von der Dichte-Regel NICHT degradiert werden. Der
+        # Sprecher hat sie woertlich bestellt; faellt der Moment weg, "macht
+        # das Video nicht, was er sagt". Intent gewinnt auch die Wort-Wahl
+        # innerhalb der Gruppe.
+        _g_int = [i for i in g_kw
+                  if isinstance((fx_map or {}).get(i), dict)
+                  and fx_map[i].get('intent')]
+        if _g_int:
+            g_kw = _g_int + [i for i in g_kw if i not in _g_int]
         gap_eff = min_gap * ((1.0 - 0.66 * hook_pow) if in_intro else 1.0)
-        is_kw_group = bool(g_kw) and (start - last_kw_end >= gap_eff)
+        is_kw_group = bool(g_kw) and (bool(_g_int)
+                                      or start - last_kw_end >= gap_eff)
         prev_budget = last_kw_end
         if is_kw_group:
             last_kw_end = end
@@ -4464,10 +4517,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if cfg['effects'].get('anim', True):
                 _auto_anim = (info.get('anim') if isinstance(info, dict) else None)
                 if not _auto_anim:
-                    _auto_anim = anim_for(txt, ' '.join(
-                        clean(words[j]['word'])
-                        for j in range(max(i - 4, 0),
-                                       min(i + 8, len(words)))))
+                    _auto_anim = anim_for(txt, anim_ctx(words, i, len(phrase)))
                 p['anim'] = _auto_anim
                 # Auto-Wahl zurueck in fx_map schreiben, damit der Momente-Editor
                 # sie anzeigt (sonst steht dort "keine", obwohl das Video animiert).
@@ -4491,7 +4541,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     p['cam'] = rot_cam.next(); camc += 1
             else:
                 p['ccam'] = next_side_cam()
-            if len(phrase) >= 2:
+            # v99a: Eine PLATZIERUNGS-Ansage schlaegt die Komposition. "ON THE
+            # GROUND" (Mehrwort, fx ground) muss auf dem Boden liegen - die
+            # Editorial-Komposition wuerde es als 'behind' hinter die Person
+            # legen. Ebenso 'himmel' (steigt ueber den Kopf): einzelner Sprite.
+            _platzierung = (fx == 'ground'
+                            or (fx == 'behind' and isinstance(info, dict)
+                                and info.get('szene') == 'himmel'))
+            if len(phrase) >= 2 and not _platzierung:
                 p['tokens'] = compose_phrase(phrase, words_c, S, W, H, portrait, safe_z)
                 print(f"  Editorial-Komposition: {txt}")
                 core_tok = next((tk for tk in p['tokens'] if tk.get('role') == 'core'), None)
@@ -6391,6 +6448,7 @@ def main():
     else:
         aud_rms = aud_bass = aud_onset = np.zeros(n_est, np.float32)
     fx_map = None
+    _regie_wahl = False        # v99a: kam die Keyword-WAHL wirklich von der KI?
     if cfg['keywords'].get('ai', True):
         regie_path = os.path.splitext(args.input)[0] + '_regie3.json'
         if os.path.exists(regie_path):
@@ -6406,6 +6464,7 @@ def main():
                 _rfp = None
             if _rfp == _ref_fingerprint():
                 fx_map = parse_regie(_rtxt, words, cfg.get('language', 'de'))
+                _regie_wahl = bool(fx_map)
             else:
                 print("Stil-Referenzen geaendert - alte Regie verworfen, KI plant neu")
         if fx_map is None:
@@ -6414,6 +6473,12 @@ def main():
                                cfg['keywords'].get('ai_model', 'gpt-4o'),
                                voice_wav=voice_wav,
                                validate=cfg['keywords'].get('ai_validate', True))
+            _regie_wahl = bool(fx_map)
+            # v99a: Selbstbezug VOR face_cover/Vision einhaengen, damit
+            # erzeugte Momente den Nahaufnahme-Check (behind unsichtbar?)
+            # mitbekommen. Der Aufruf weiter unten bleibt (Cache/Heuristik)
+            # und ist idempotent.
+            fx_map = _self_ref_intent(fx_map, words)
             if fx_map:
                 # v95c: Gesichts-Breitenanteil pro Moment (0..1) - wie sehr
                 # fuellt die Person das Bild. Speist die 'behind'-Entscheidung
@@ -6431,13 +6496,14 @@ def main():
             elif fx_map:
                 # Vision aus, aber der Backstop soll trotzdem greifen.
                 fx_map = _behind_cover_backstop(fx_map, face_cover)
-            if fx_map:
+            if fx_map and _regie_wahl:    # v99a: Cache nur fuer echte KI-Wahl
                 json.dump({'ref_fp': _ref_fingerprint(),   # v96x: Cache-Gueltigkeit
                            'keywords': [{'i': i, 'fx': v['fx'], 'power': v['power'],
                                          'n': v.get('n', 1),
                                          **({'anim': v['anim']} if v.get('anim') else {}),
                                          **({'szene': v['szene']} if v.get('szene') else {}),
-                                         **({'lage': v['lage']} if v.get('lage') else {})}
+                                         **({'lage': v['lage']} if v.get('lage') else {}),
+                                         **({'intent': True} if v.get('intent') else {})}
                                         for i, v in sorted(fx_map.items())]},
                           open(regie_path, 'w', encoding='utf-8'))
     # v99 Selbstbezug-Backstop: "The captions are behind me" besteht komplett
@@ -6446,7 +6512,9 @@ def main():
     # erzeugt den Moment dann selbst (gleiches Verhalten in KI-, Cache- und
     # Heuristik-Pfad). _had_regie merkt sich, ob die KEYWORD-Wahl von der KI
     # kam - nur dann bleibt die Auto-Heuristik aus.
-    _had_regie = bool(fx_map)
+    # v99a: _regie_wahl statt bool(fx_map) - besteht fx_map NUR aus
+    # Selbstbezug-Momenten (KI aus/leer), muss die Auto-Heuristik anbleiben.
+    _had_regie = _regie_wahl
     fx_map = _self_ref_intent(fx_map, words)
     if fx_map:
         kw = set(fx_map)
@@ -6524,10 +6592,7 @@ def main():
         # "keine", obwohl das Video mit Animation gerendert wird.
         _anim = info.get('anim') or ''
         if not _anim and cfg.get('effects', {}).get('anim', True):
-            _anim = anim_for(txt, ' '.join(
-                clean(words[j]['word'])
-                for j in range(max(i - 4, 0),
-                               min(i + 8, len(words))))) or ''
+            _anim = anim_for(txt, anim_ctx(words, i, n)) or ''
         thumb_rel = ''
         if thumb_dir:
             thumb_rel = f'{i:06d}.jpg'
@@ -6582,6 +6647,14 @@ def main():
                     for k_v in ('szene', 'lage'):
                         if isinstance(e, dict) and e.get(k_v):
                             fx_map[i][k_v] = e[k_v]     # Vision-Regie ueberlebt Edits
+                    # v99a: Sprecher-Ansage ueberlebt den Editor-Roundtrip -
+                    # OHNE das Flag degradierte die Dichte-Regel den Moment
+                    # direkt nach dem Export wieder. Aendert der Nutzer den
+                    # Effekt im Editor bewusst, erlischt die Ansage (User
+                    # gewinnt zuletzt).
+                    if (isinstance(e, dict) and e.get('intent')
+                            and m.get('fx', e.get('fx')) == e.get('fx')):
+                        fx_map[i]['intent'] = True
                     if str(m.get('szene', '')).lower() in ('wasser', 'boden', 'wand',
                                                            'himmel', 'person', 'unklar'):
                         fx_map[i]['szene'] = str(m['szene']).lower()

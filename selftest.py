@@ -1235,6 +1235,62 @@ def _scenario_logic(clip, transcript, tmp):
           and any(R._anim_hit('flies', k) for k in dict(R.ANIM_HINTS)['spur'])
           and any(R._anim_hit('vanishes', k) for k in dict(R.ANIM_HINTS)['schwund']))
 
+    # v99a: Die Ansage des Sprechers ist GESETZ. Bei Selfie-Nahaufnahmen
+    # (Gesicht >= 52% Bildbreite) schaltete der Sichtbarkeits-Backstop
+    # explizit angesagte behind-Momente wieder nach vorn - genau daran
+    # scheiterte Ismets Test auf douchko.eu. intent-Momente sind jetzt tabu
+    # (fuer Cover-Backstop UND Vision-fx-Override).
+    _bcb = R._behind_cover_backstop(
+        {0: {'fx': 'behind', 'power': 2, 'intent': True},
+         5: {'fx': 'behind', 'power': 2}}, {0: 0.60, 5: 0.60})
+    check('Ansage schlaegt Nahaufnahme-Backstop (behind bleibt, wird himmel)',
+          _bcb[0]['fx'] == 'behind' and _bcb[0].get('szene') == 'himmel'
+          and _bcb[5]['fx'] != 'behind', str(_bcb))
+    _si = R._speech_intent({4: {'fx': 'outline', 'power': 2, 'n': 1}},
+                           _wsr('The word stays right behind me. Okay then.'))
+    check('_speech_intent markiert Ansagen als intent',
+          _si[4].get('fx') == 'behind' and _si[4].get('intent') is True,
+          str(_si))
+    check('_self_ref_intent markiert Orts-Momente als intent',
+          _sr[3].get('intent') is True)
+    _pri = R.parse_regie('{"keywords": [{"i": 1, "n": 1, "fx": "behind",'
+                         ' "power": 2, "intent": true}]}', wg, 'de')
+    check('intent ueberlebt den Regie-Cache', bool(_pri)
+          and _pri[1].get('intent') is True, str(_pri))
+    check('Vision-Regie respektiert intent (Quelltext)',
+          "if fx_map[i].get('intent'):" in
+          open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
+    # v99a: Befunde aus Ismets echtem Selfie-Test ("macht nicht, was er
+    # sagt") - vier Regeln degradierten angesagte Momente wieder:
+    # Dichte-Limit, B-Roll-Gate, Mehrwort-Komposition, Editor-Roundtrip.
+    _wv = _wsr('First moment sits here early. '
+               'The captions are on the ground. And more talking after that.')
+    _fxv = {1: {'fx': 'outline', 'power': 2, 'n': 1},
+            8: {'fx': 'ground', 'power': 2, 'n': 3, 'szene': 'boden',
+                'lage': 'liegend', 'intent': True}}
+    import copy as _cp
+    _plv = R.build_plans(_wv, set(_fxv), cfg, S, W_, H_, lambda s, e: True,
+                         _cp.deepcopy(_fxv))
+    _kwv = {p.get('kw_i'): p for p in _plv if 'kw_i' in p}
+    check('Dichte-Limit degradiert intent-Momente nicht',
+          8 in _kwv, str(sorted(_kwv)))
+    check('Mehrwort-Platzierung bleibt ground (keine behind-Komposition)',
+          8 in _kwv and _kwv[8]['tpl'] == 'ground'
+          and _kwv[8].get('lying') is True,
+          str(_kwv.get(8, {}).get('tpl')))
+    _plb = R.build_plans(_wv, {8}, cfg, S, W_, H_, lambda s, e: False,
+                         _cp.deepcopy({8: _fxv[8]}))
+    check('B-Roll-Gate laesst intent-Momente durch',
+          any(p.get('kw_i') == 8 for p in _plb))
+    check('Auto-Anim-Kontext endet an der Satzgrenze',
+          'talking' not in R.anim_ctx(_wv, 8, 3).lower()
+          and 'ground' in R.anim_ctx(_wv, 8, 3).lower())
+    _src99 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('intent ueberlebt Momente-Editor-Roundtrip (Quelltext)',
+          "fx_map[i]['intent'] = True" in _src99
+          and _src99.count('anim_ctx(words, i') >= 2)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
