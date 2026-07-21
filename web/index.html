@@ -545,6 +545,18 @@ body {
 .mo-note { color: var(--mut); font-size: 12px; text-align: center; margin-top: 12px; }
 .mo-status { margin-top: 14px; padding: 12px 14px; border-radius: 10px;
   background: var(--surf2); font-size: 13px; color: var(--fg); }
+
+/* Account: Transactions */
+.tx-list { max-height: 340px; overflow-y: auto; }
+.tx-row { display: flex; align-items: center; gap: 12px;
+  padding: 10px 2px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.tx-row:last-child { border-bottom: 0; }
+.tx-what { flex: 1; min-width: 0; }
+.tx-what b { font-size: 13.5px; font-weight: 600; display: block; }
+.tx-what span { font-size: 11.5px; color: var(--mut); }
+.tx-amt { font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+.tx-amt.plus { color: #4fd07e; }
+.tx-amt.minus { color: #ff7a70; }
 #moImg { transition: opacity .25s ease; }
 .mo-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08);
   overflow: hidden; margin-bottom: 9px; }
@@ -1364,6 +1376,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div style="margin-top:16px;">
           <button class="btn" id="accGoBilling" data-nav="billing" style="padding:9px 16px;">Go to billing</button>
         </div>
+      </div>
+
+      <div class="panel">
+        <h3>Transactions</h3>
+        <div id="accTx" class="tx-list"><p class="hint">Loading …</p></div>
       </div>
 
       <div class="panel">
@@ -2877,6 +2894,35 @@ async function renderLibrary() {
 
 /* v84: Account-Seite fuellen. Frische Daten holen (created_at/purchased
    fehlen in der schlanken Login-Antwort). */
+/* Account: Kauf-/Verbrauchs-Historie aus dem Credit-Ledger. */
+async function renderTransactions() {
+  const box = $('#accTx'); if (!box) return;
+  let d;
+  try { d = await (await fetch('/api/history')).json(); }
+  catch (e) { box.innerHTML = '<p class="hint">Could not load transactions.</p>'; return; }
+  if (!d.items || !d.items.length) {
+    box.innerHTML = '<p class="hint">No transactions yet.</p>'; return;
+  }
+  const label = (g) => {
+    g = g || '';
+    if (g.startsWith('Render ')) return 'Video render';
+    if (g.startsWith('Refund')) return 'Refund (failed render)';
+    if (g.startsWith('Welcome')) return 'Welcome credits';
+    if (/pack|stripe|kauf|purchase/i.test(g)) return 'Credit purchase';
+    if (/gratis|free/i.test(g)) return 'Free monthly credits';
+    return escHtml(g);
+  };
+  box.innerHTML = d.items.map(it => {
+    const c = it.delta_sec / 60;
+    const amt = (c > 0 ? '+' : '') + (Math.round(c * 10) / 10) + ' credits';
+    const when = new Date(it.zeit * 1000).toLocaleString();
+    return `<div class="tx-row">
+      <div class="tx-what"><b>${label(it.grund)}</b><span>${when}</span></div>
+      <div class="tx-amt ${c >= 0 ? 'plus' : 'minus'}">${amt}</div>
+    </div>`;
+  }).join('');
+}
+
 async function renderAccount() {
   try {
     const d = await (await fetch('/api/me')).json();
@@ -2901,6 +2947,7 @@ async function renderAccount() {
   const rv = $('#btnResendVerify');
   if (rv) rv.style.display = verified ? 'none' : 'inline-block';
   set('accWatermark', u.purchased ? 'No watermark' : 'Watermark on exports');
+  renderTransactions();
   const freeRow = $('#accFreeRow');
   if (freeRow) {
     if (u.purchased === false && typeof u.free_reset_days === 'number') {
