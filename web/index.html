@@ -858,6 +858,49 @@ body {
 .tw.edited { background: rgba(245,196,81,0.15); border-color: rgba(245,196,81,0.5); }
 .tw[contenteditable="true"] { outline: 2px solid var(--acc); background: var(--surf2); }
 
+/* v101l: Transkript-Wizard-Schritt (Wort-Chips + Suchen/Ersetzen) */
+.tx-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.tx-search {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 240px;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 7px 10px;
+}
+.tx-search svg { color: var(--mut); flex-shrink: 0; }
+.tx-search input {
+  background: transparent; border: none; color: var(--fg); outline: none;
+  font-size: 14px; min-width: 60px; flex: 1;
+}
+.tx-search input::placeholder { color: var(--mut); }
+.tx-search .tx-arrow { color: var(--mut); font-size: 14px; }
+.tx-search .btn { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+.tx-count { color: var(--mut); font-size: 13px; font-weight: 600; }
+.tx-words {
+  line-height: 2.4; font-size: 16px; max-height: 46vh; overflow-y: auto;
+  padding: 4px 2px;
+}
+.tx-words .tw {
+  transition: background .12s, border-color .12s, transform .12s;
+}
+.tx-words .tw:hover { transform: translateY(-1px); }
+.tx-words .tw.flash {
+  animation: twflash .6s ease;
+}
+@keyframes twflash {
+  0% { background: rgba(124,92,255,0.45); }
+  100% { background: rgba(245,196,81,0.15); }
+}
+.tx-words.loading { color: var(--mut); font-size: 14px; line-height: 1.6; }
+.tx-hint { color: var(--mut); font-size: 12.5px; margin-top: 10px; }
+.tx-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--acc); margin-right: 8px;
+  animation: txpulse 1s infinite;
+}
+@keyframes txpulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
 /* v80i: Pricing-Cards */
 .pricing-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -1491,7 +1534,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
     <div class="step-line"></div>
     <div class="step" data-step="4" role="tab">
-      <div class="step-num">4</div><div class="step-lbl">Render</div>
+      <div class="step-num">4</div><div class="step-lbl">Text</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step" data-step="5" role="tab">
+      <div class="step-num">5</div><div class="step-lbl">Render</div>
     </div>
   </div>
 
@@ -1675,7 +1722,37 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
 
     <!-- STEP 4: RENDER -->
-    <div class="step-view" data-step="4" role="tabpanel" aria-label="Render">
+    <div class="step-view" data-step="4" role="tabpanel" aria-label="Review text">
+      <h1 class="step-title">Review your words</h1>
+      <p class="step-sub">Fix names, brands or technical terms before we render.
+        Timings stay exactly as spoken.</p>
+
+      <div class="card">
+        <div class="tx-bar">
+          <div class="tx-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+            </svg>
+            <input id="txFind" type="text" placeholder="Find a word" autocomplete="off">
+            <span class="tx-arrow">→</span>
+            <input id="txRepl" type="text" placeholder="Replace with" autocomplete="off">
+            <button class="btn secondary" id="txReplaceAll" type="button">Replace all</button>
+          </div>
+          <span id="txCount" class="tx-count"></span>
+        </div>
+        <div id="txWords" class="tx-words" aria-live="polite"></div>
+        <p id="txHint" class="tx-hint">Tap any word to edit it. Press Enter to confirm.</p>
+      </div>
+
+      <div class="wiz-nav">
+        <button class="btn secondary" data-back="3">Back</button>
+        <div class="grow"></div>
+        <button class="btn" id="wiz4Next">Looks good →</button>
+      </div>
+    </div>
+
+    <div class="step-view" data-step="5" role="tabpanel" aria-label="Render">
       <h1 class="step-title">Ready?</h1>
       <p class="step-sub">One click, we build your video with all your settings.</p>
 
@@ -1700,7 +1777,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       </button>
 
       <div class="wiz-nav">
-        <button class="btn secondary" data-back="3">Back</button>
+        <button class="btn secondary" data-back="4">Back</button>
         <div class="grow"></div>
       </div>
 
@@ -2601,12 +2678,12 @@ async function resumeActiveJob() {
     if (!st || st.status === 'fertig' || st.status === 'fehler' || !st.status) {
       localStorage.removeItem('dve_active_job'); return;
     }
-    // Es laeuft noch. Sprung in Step 4 und Polling wieder aufnehmen.
+    // Es laeuft noch. Sprung in den Render-Schritt und Polling wieder aufnehmen.
     State.jid = saved.jid;
     // v96j: Elapsed-Zeit weiterlaufen lassen statt bei 0 neu zu starten -
     // renderStart aus dem gespeicherten Job-Start wiederherstellen.
     State.renderStart = saved.ts || Date.now();
-    goStep(4);
+    goStep(5);
     $('#progressCard').classList.remove('hidden');
     $('#btnRender').disabled = true;
     toast('Your last render is still running. Reconnected.', 'ok', 4000);
@@ -3070,6 +3147,132 @@ async function renderAccount() {
 }
 /* v80y: Transkript-Editor */
 let transOrig = [];
+/* v101l: Transkript-Schritt im Wizard (VOR dem Render). Nutzt den Pre-Upload-
+   Job (State.preJid) - die Transkription laeuft seit der Datei-Auswahl. */
+let txWords = [], txOrig = [], txPollT = null;
+
+async function loadTranscriptStep() {
+  const box = $('#txWords');
+  if (txPollT) { clearTimeout(txPollT); txPollT = null; }
+  const jid = State.preJid;
+  if (!jid) {
+    box.className = 'tx-words loading';
+    box.textContent = 'Your transcript will be generated during render — '
+      + 'you can still fine-tune wording afterwards in the moments editor.';
+    $('#txCount').textContent = '';
+    return;
+  }
+  const tryLoad = async () => {
+    try {
+      const r = await fetch('/api/transcript/' + jid);
+      if (r.status === 404) {                 // noch am Transkribieren
+        box.className = 'tx-words loading';
+        box.innerHTML = '<span class="tx-dot"></span>Listening to your video '
+          + 'and writing down every word …';
+        txPollT = setTimeout(tryLoad, 2500);
+        return;
+      }
+      const d = await r.json();
+      if (!r.ok) { box.className = 'tx-words loading';
+        box.textContent = d.detail || 'Transcript not ready.'; return; }
+      txWords = d.words.map(w => (w.word || ''));
+      txOrig = txWords.slice();
+      renderTxChips();
+    } catch (e) {
+      box.className = 'tx-words loading';
+      box.textContent = 'Connection error — you can still render.';
+    }
+  };
+  box.className = 'tx-words loading';
+  box.innerHTML = '<span class="tx-dot"></span>Loading your transcript …';
+  tryLoad();
+}
+
+function renderTxChips() {
+  const box = $('#txWords');
+  box.className = 'tx-words';
+  box.innerHTML = '';
+  txWords.forEach((w, i) => {
+    const el = document.createElement('span');
+    el.className = 'tw' + (txWords[i].trim() !== txOrig[i].trim() ? ' edited' : '');
+    el.textContent = w.trim();
+    el.dataset.i = i;
+    el.addEventListener('click', () => {
+      if (el.contentEditable === 'true') return;
+      el.contentEditable = 'true'; el.focus();
+      document.execCommand && document.execCommand('selectAll', false, null);
+    });
+    el.addEventListener('blur', () => {
+      el.contentEditable = 'false';
+      txWords[i] = el.textContent.trim();
+      el.classList.toggle('edited', txWords[i].trim() !== txOrig[i].trim());
+      updateTxCount();
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+    });
+    box.appendChild(el);
+    box.appendChild(document.createTextNode(' '));
+  });
+  updateTxCount();
+}
+
+function updateTxCount() {
+  const n = txWords.reduce((a, w, i) => a + (w.trim() !== txOrig[i].trim() ? 1 : 0), 0);
+  $('#txCount').textContent = n ? `${n} word${n > 1 ? 's' : ''} changed` : '';
+}
+
+function txReplaceAll() {
+  const find = $('#txFind').value.trim();
+  if (!find) return;
+  const repl = $('#txRepl').value.trim();
+  const lc = find.toLowerCase();
+  let hits = 0;
+  const box = $('#txWords');
+  txWords.forEach((w, i) => {
+    if (w.trim().toLowerCase() === lc) {
+      txWords[i] = repl;
+      hits++;
+      const chip = box.querySelector(`.tw[data-i="${i}"]`);
+      if (chip) {
+        chip.textContent = repl;
+        chip.classList.toggle('edited', repl.trim() !== txOrig[i].trim());
+        chip.classList.add('flash');
+        setTimeout(() => chip.classList.remove('flash'), 600);
+      }
+    }
+  });
+  updateTxCount();
+  toast(hits ? `Replaced ${hits} occurrence${hits > 1 ? 's' : ''}.`
+             : `"${find}" not found.`, hits ? 'ok' : 'err');
+}
+
+async function saveTranscriptStep() {
+  const jid = State.preJid;
+  if (!jid || !txOrig.length) return;
+  const edits = [];
+  txWords.forEach((w, i) => {
+    if (w.trim() && w.trim() !== txOrig[i].trim()) edits.push({ i, word: w.trim() });
+  });
+  if (!edits.length) return;
+  const fd = new FormData();
+  fd.append('edits', JSON.stringify(edits));
+  fd.append('code', State.code || '');
+  fd.append('reanalyze', '0');               // nur speichern, kein Analyse-Umweg
+  try {
+    const r = await fetch('/api/transcript/' + jid, { method: 'POST', body: fd });
+    if (r.ok) {
+      txOrig = txWords.slice();
+      toast(`${edits.length} word${edits.length > 1 ? 's' : ''} corrected.`, 'ok');
+    }
+  } catch (e) { /* Render laeuft auch ohne - nicht blockieren */ }
+}
+
+if ($('#txReplaceAll')) $('#txReplaceAll').addEventListener('click', txReplaceAll);
+if ($('#txRepl')) $('#txRepl').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); txReplaceAll(); }
+});
+
 async function openTranscriptEditor() {
   try {
     const r = await fetch('/api/transcript/' + State.jid);
@@ -3284,7 +3487,8 @@ function goStep(n) {
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (n === 2) loadTemplates();               // v94: eigene Presets auch hier
-  if (n === 4) { buildSummary(); loadTemplates(); }
+  if (n === 4) loadTranscriptStep();          // v101l: Text pruefen vor Render
+  if (n === 5) { buildSummary(); loadTemplates(); }
 }
 
 $$('.step').forEach(s => s.addEventListener('click', () => {
@@ -3303,6 +3507,10 @@ $$('[data-back]').forEach(b => b.addEventListener('click', () => {
 $('#wiz1Next').addEventListener('click', () => goStep(2));
 $('#wiz2Next').addEventListener('click', () => goStep(3));
 $('#wiz3Next').addEventListener('click', () => goStep(4));
+if ($('#wiz4Next')) $('#wiz4Next').addEventListener('click', async () => {
+  await saveTranscriptStep();
+  goStep(5);
+});
 
 /* Accordions */
 $$('.acc-head').forEach(h => h.addEventListener('click', () => {
@@ -3401,6 +3609,9 @@ async function startUpload(mode) {
       if (el) el.textContent = 'Starting …';
     }
     try { await State.preUpload; } catch (e) {}
+    // v101l: offene Transkript-Korrekturen sichern, falls der Nutzer den
+    // "Looks good"-Schritt uebersprungen und direkt gerendert hat.
+    if (mode === 'full') { try { await saveTranscriptStep(); } catch (e) {} }
     if (State.preJid) {
       try {
         const fd0 = new FormData();
@@ -4218,7 +4429,7 @@ $('#momSave').addEventListener('click', async () => {
     const d = await r.json();
     if (!r.ok || !d.ok) { toast('Error: ' + (d.detail || d.msg || 'unknown'), 'err'); return; }
     $('#momEditor').classList.add('hidden');
-    goStep(4);
+    goStep(5);
     $('#progressCard').classList.remove('hidden');
     $('#doneCard').classList.add('hidden');
     $('#errCard').classList.add('hidden');

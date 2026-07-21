@@ -3296,9 +3296,13 @@ def get_subtitles(jid: str, request: Request, fmt: str = 'srt'):
 
 @app.post('/api/transcript/{jid}')
 async def save_transcript(request: Request, jid: str,
-                          edits: str = Form(...), code: str = Form('')):
+                          edits: str = Form(...), code: str = Form(''),
+                          reanalyze: str = Form('1')):
     """v80y: Wort-Korrekturen speichern (nur Text, Timings bleiben),
-    Regie-/Momente-Cache invalidieren, Analyse neu starten."""
+    Regie-/Momente-Cache invalidieren, Analyse neu starten.
+    v101l: reanalyze=0 (Wizard-Schritt VOR dem Render) speichert nur - kein
+    Re-Analyse-Umweg; der folgende Voll-Render zieht den korrigierten Text
+    automatisch aus dem Cache."""
     ok, msg = check_auth(code, request)
     if not ok:
         raise HTTPException(403, msg)
@@ -3334,12 +3338,13 @@ async def save_transcript(request: Request, jid: str,
             os.remove(base + suffix)
         except OSError:
             pass
-    j['mode'] = 'analyze'
-    j['status'] = 'wartet'
-    j['progress'] = 0.0
-    j['phase'] = 'Queued (re-analyzing with corrected transcript) …'
-    set_state(jid, **{k: v for k, v in j.items() if k not in ('input', 'code')})
-    q_put(jid)
+    if str(reanalyze) not in ('0', 'false', 'False', ''):
+        j['mode'] = 'analyze'
+        j['status'] = 'wartet'
+        j['progress'] = 0.0
+        j['phase'] = 'Queued (re-analyzing with corrected transcript) …'
+        set_state(jid, **{k: v for k, v in j.items() if k not in ('input', 'code')})
+        q_put(jid)
     return {'ok': True, 'changed': n}
 
 

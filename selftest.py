@@ -3010,6 +3010,24 @@ def _scenario_v98(tmp):
           _rok and _led_a is not None
           and SV._find_user_by_id(uid_free)['balance_sec'] == _bal_a0 - 60)
 
+    # v101l Transkript-Wizard-Schritt: eigener Schritt 'Text' (4), Render (5),
+    # Wort-Chips + Suchen/Ersetzen, Save-only ohne Re-Analyse.
+    check('v101l: Wizard hat 5 Schritte inkl. Text vor Render',
+          'data-step="5"' in _ui_h and '>Text</div>' in _ui_h
+          and _ui_h.count('step-view') >= 5
+          and 'data-step="5" role="tabpanel" aria-label="Render"' in _ui_h)
+    check('v101l: Transkript-Schritt-UI (Chips, Suchen/Ersetzen, Loader)',
+          'id="txWords"' in _ui_h and 'id="txFind"' in _ui_h
+          and 'id="txReplaceAll"' in _ui_h
+          and 'loadTranscriptStep' in _ui_h and 'saveTranscriptStep' in _ui_h
+          and "goStep(5)" in _ui_h)
+    check('v101l: Schritt speichert ohne Re-Analyse (reanalyze=0) auf preJid',
+          "fd.append('reanalyze', '0')" in _ui_h
+          and "fetch('/api/transcript/' + jid" in _ui_h)
+    check('v101l: Backend - reanalyze=0 speichert nur, kein Queue/mode-Wechsel',
+          "reanalyze: str = Form('1')" in _srv_h
+          and "if str(reanalyze) not in ('0', 'false', 'False', '')" in _srv_h)
+
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

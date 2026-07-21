@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101l Transkript-Schritt im Wizard (Text vor Render).** Der Transkript-
+  Editor war bisher NUR im Momente-Editor versteckt (Button "Fix transcript"
+  ganz unten) - auf dem Hauptweg Upload->Look->Fine-tune->Render kam man gar
+  nicht dran. Neu: eigener Wizard-Schritt **4 "Text"** zwischen Fine-tune und
+  Render (Render ist jetzt 5). Nutzt den Pre-Upload-Job (State.preJid) - die
+  Transkription laeuft seit der Datei-Auswahl, ist beim Ankommen meist fertig;
+  sonst dynamischer "am Transkribieren"-Loader mit Poll. Wort-Chips zum
+  Antippen+Tippen (Enter bestaetigt), geaenderte Woerter markiert, Live-Zaehler,
+  **Suchen & Ersetzen** fuer wiederkehrende Namen/Marken (mit Flash-Animation
+  auf den Treffern). Speichern ohne Analyse-Umweg: POST /api/transcript mit
+  neuem `reanalyze=0` (nur Text sichern + Regie/Momente-Cache invalidieren,
+  KEIN Re-Queue) - der folgende Voll-Render zieht den korrigierten Text aus
+  dem Cache. Doppelt gesichert: auch startUpload('full') speichert offene
+  Korrekturen vor dem Render (falls der Nutzer den Schritt ueberspringt).
+  Der alte Momente-Editor-Button bleibt heil (reanalyze default 1). Browser-
+  Smoke: SPA laedt ohne JS-Fehler, Schritt rendert im App-Design (Screenshot
+  an Ismet). 4 neue Tests (5 Schritte im DOM, Chip/Suchen-UI, reanalyze=0
+  Frontend+Backend). Regression 616/616 + Renders + GUI_OK.
+
 - **v101k Depth-Bullet-Time (Innovations-Batch 11 - BATCH KOMPLETT).** Die
   laengste Sprech-Pause >= 0.8s DIREKT vor einem power-3-Moment wird zum
   Bullet-Time-Moment: das Bild friert ein und eine virtuelle Kamera faehrt
