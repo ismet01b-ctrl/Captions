@@ -1636,39 +1636,55 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             events.append((ts + 0.36, 'press', 0.30))
         CHAT = bubbles
 
-    # ---- Notification (Overlay): ECHTER iOS-Push-Banner - Icon, App-Name in
-    #      CAPS + 'now' rechts, fetter Titel, Body. Hell/Dunkel je Stil. ----
+    # ---- Notification (Overlay): iOS-Push STAND 2026 (Liquid Glass) -
+    #      transluzenter Glas-Chip mit heller Kante, grosser Radius; Icon
+    #      links, fetter Titel + Body, 'now' oben rechts. KEINE CAPS-App-
+    #      Zeile mehr (das war iOS-10-Aera). Transluzenz ist echt: im
+    #      Alpha-MOV scheint das Footage durch den Banner. ----
     NOTI = None
     if template == 'notify':
         _n1 = (pills[0] if pills else 'Render finished')
         _n2 = (pills[1] if pills and len(pills) > 1 else 'Your clip is ready')
         S2 = 2
         _ios_dark = (RIMMODE == 'dark')
-        N_BG = (28, 28, 30) if _ios_dark else (245, 245, 247)
-        N_TX = (255, 255, 255) if _ios_dark else (10, 10, 12)
-        N_MU = (152, 152, 159) if _ios_dark else (108, 108, 115)
+        N_BG = (30, 30, 34) if _ios_dark else (250, 250, 253)
+        N_TX = (255, 255, 255) if _ios_dark else (12, 12, 14)
+        N_MU = (168, 168, 178) if _ios_dark else (100, 100, 110)
+        N_A = 205                                   # Glas-Transluzenz
 
         def ios_banner(title, body):
-            fA = F(PFONT, 26 * S2)                  # App-Name CAPS
-            fT_ = F(PFONT, 40 * S2)                 # Titel fett
+            fS_ = F(PFONT, 26 * S2)                 # 'now'
+            fT_ = F(PFONT, 42 * S2)                 # Titel fett
             fB_ = F(PFONT, 36 * S2)                 # Body
             d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+            # +330: Icon-Spalte links + 'now'-Spalte rechts, damit der Titel
+            # nie ans 'now' stoesst
             need = max(d0.textlength(title, font=fT_),
-                       d0.textlength(body, font=fB_)) / S2 + 200
-            bw = int(min(W * 0.88, max(need, 560))) * S2
-            bh = 188 * S2
+                       d0.textlength(body, font=fB_)) / S2 + 330
+            bw = int(min(W * 0.90, max(need, 620))) * S2
+            bh = 176 * S2
+            rad = 62 * S2                           # Liquid-Glass-Radius
             im = Image.new('RGBA', (bw, bh), (0, 0, 0, 0))
             d = ImageDraw.Draw(im)
-            d.rounded_rectangle([0, 0, bw - 1, bh - 1], 44 * S2,
-                                fill=N_BG + (252,))
-            icon = logo_sprite(64)
-            im.alpha_composite(icon.resize((64 * S2, 64 * S2), Image.LANCZOS),
-                               (34 * S2, 30 * S2))
-            d.text((120 * S2, 34 * S2), 'DOUCHKOVE', font=fA, fill=N_MU + (255,))
-            nw = d0.textlength('now', font=fA)
-            d.text((bw - nw - 34 * S2, 34 * S2), 'now', font=fA, fill=N_MU + (255,))
-            d.text((120 * S2, 74 * S2), title, font=fT_, fill=N_TX + (255,))
-            d.text((120 * S2, 128 * S2), body, font=fB_, fill=N_MU + (255,))
+            d.rounded_rectangle([0, 0, bw - 1, bh - 1], rad, fill=N_BG + (N_A,))
+            # Glas-Kante: heller Innenstrich, oben betont
+            edge = Image.new('L', (bw, bh), 0)
+            ImageDraw.Draw(edge).rounded_rectangle(
+                [2, 2, bw - 3, bh - 3], rad - 2, outline=255, width=3)
+            ea = np.array(edge, np.float32)
+            ea[int(bh * 0.45):] *= 0.35
+            ecol = (255, 255, 255) if not _ios_dark else (200, 210, 230)
+            rim = Image.new('RGBA', (bw, bh), ecol + (0,))
+            rim.putalpha(Image.fromarray((ea * 0.55).astype(np.uint8)))
+            im.alpha_composite(rim)
+            icon = logo_sprite(80)
+            im.alpha_composite(icon.resize((80 * S2, 80 * S2), Image.LANCZOS),
+                               (34 * S2, (bh - 80 * S2) // 2))
+            nw = d0.textlength('now', font=fS_)
+            d.text((bw - nw - 40 * S2, 30 * S2), 'now', font=fS_,
+                   fill=N_MU + (255,))
+            d.text((144 * S2, 34 * S2), title, font=fT_, fill=N_TX + (255,))
+            d.text((144 * S2, 96 * S2), body, font=fB_, fill=N_MU + (255,))
             return im.resize((bw // S2, bh // S2), Image.LANCZOS)
 
         cards = []
