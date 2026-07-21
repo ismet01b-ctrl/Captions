@@ -1581,16 +1581,19 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
     if template == 'chat':
         _msgs = pills or ['Hey!', 'New drop is live', 'Check it now']
         S2 = 2
+        # Farben aus Ismets echtem Screenshot gesampelt (iOS Dark Mode)
         _wa_dark = (RIMMODE == 'dark')
-        BG_IN = (32, 44, 51) if _wa_dark else (255, 255, 255)
-        BG_OUT = (0, 92, 75) if _wa_dark else (216, 248, 198)
-        TX_WA = (233, 237, 239) if _wa_dark else (17, 27, 33)
-        TIME_C = (134, 150, 160) if _wa_dark else (105, 117, 105)
-        CHECK_C = (83, 189, 235)                    # WhatsApp-Blau
+        BG_IN = (36, 38, 38) if _wa_dark else (255, 255, 255)
+        BG_OUT = (20, 77, 55) if _wa_dark else (216, 248, 198)
+        TX_WA = (235, 238, 240) if _wa_dark else (17, 27, 33)
+        TIME_C = (152, 160, 164) if _wa_dark else (110, 122, 112)
+        CHECK_C = (205, 212, 218) if _wa_dark else (120, 134, 127)
 
         def wa_bubble(text, outgoing, tstamp):
-            fT_ = F(PFONT, 44 * S2)
-            fS_ = F(PFONT, 26 * S2)
+            # Inter Regular statt Poppins Bold - WhatsApp setzt SF Pro in
+            # normaler Staerke, fett wirkt sofort "nachgebaut"
+            fT_ = F('inter_var.ttf', 44 * S2)
+            fS_ = F('inter_var.ttf', 26 * S2)
             d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
             tw = int(d0.textlength(text, font=fT_))
             sw = int(d0.textlength(tstamp, font=fS_))
@@ -1602,15 +1605,18 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
             d = ImageDraw.Draw(im)
             x0 = 0 if outgoing else tail
             bg = BG_OUT if outgoing else BG_IN
-            d.rounded_rectangle([x0, 0, x0 + bw - 1, bh - 1], 26 * S2,
+            d.rounded_rectangle([x0, 0, x0 + bw - 1, bh - 1], 30 * S2,
                                 fill=bg + (255,))
-            # Schwaenzchen oben-aussen (WhatsApp: erster Bubble einer Gruppe)
+            # Schwaenzchen UNTEN-aussen, kleiner Zipfel (wie im echten
+            # iOS-WhatsApp am letzten Bubble einer Gruppe)
             if outgoing:
-                d.polygon([(x0 + bw - 2, 6 * S2), (x0 + bw + tail - 2, 2 * S2),
-                           (x0 + bw - 2, 30 * S2)], fill=bg + (255,))
+                d.polygon([(x0 + bw - 4, bh - 40 * S2),
+                           (x0 + bw + tail - 2, bh - 4 * S2),
+                           (x0 + bw - 30 * S2, bh - 4)], fill=bg + (255,))
             else:
-                d.polygon([(x0 + 2, 6 * S2), (x0 - tail + 2, 2 * S2),
-                           (x0 + 2, 30 * S2)], fill=bg + (255,))
+                d.polygon([(x0 + 4, bh - 40 * S2),
+                           (x0 - tail + 2, bh - 4 * S2),
+                           (x0 + 30 * S2, bh - 4)], fill=bg + (255,))
             ty = (bh - sum(fT_.getmetrics())) // 2 - 6 * S2
             d.text((x0 + 30 * S2, ty), text, font=fT_, fill=TX_WA + (255,))
             # Uhrzeit + (outgoing) blaue Doppelhaken unten rechts im Bubble
