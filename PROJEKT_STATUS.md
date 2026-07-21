@@ -3,6 +3,15 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion: Notify auf iOS Stand 2026 (Liquid Glass) + Bewegungs-QA.**
+  Ismet: "Die Mitteilung kann bitte auf Stand 2026 gebracht werden."
+  ios_banner v2: transluzenter Glas-Chip (Alpha 205 - im Alpha-MOV scheint
+  das Footage durch), Liquid-Glass-Radius, helle Glas-Kante oben, Icon +
+  fetter Titel + Body + 'now'; CAPS-App-Zeile raus (iOS-10-Aera). Padding-
+  Fix: Titel stoesst nie ans 'now'. Bewegungs-QA per Zeitverlaufs-Sheet:
+  WhatsApp-Chat und Liquid-Glass-Notify ueber die volle Timeline sauber
+  (Drop, Push mit Abstand, scharf, Exit).
+
 - **Motion: Realitaets-Look - Chat=WhatsApp, Notify=iOS-Push.**
   Ismet: "Chat sollte mehr nach WhatsApp aussehen. Alle Motion Graphics
   sollten Bezug auf die Realitaet haben." Chat: echte WhatsApp-Bubbles -
