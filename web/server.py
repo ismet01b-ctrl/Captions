@@ -3303,10 +3303,17 @@ def _capture_corrections(old_mom_path, edited):
         rec = {}
         if m.get('fx') and str(m.get('fx')) != str(o.get('fx', '')):
             rec['user_fx'] = str(m['fx'])
+            rec['orig_fx'] = str(o.get('fx', ''))   # v101e: From->To fuers Profil
         if str(m.get('anim', '')) != str(o.get('anim', '')):
             rec['user_anim'] = str(m.get('anim', ''))
         if bool(m.get('aktiv', True)) != bool(o.get('aktiv', True)):
             rec['user_aktiv'] = bool(m.get('aktiv', True))
+        try:                                         # v101e: Wucht-Delta fuers Profil
+            _op, _up = int(o.get('power')), int(m.get('power'))
+            if _op != _up:
+                rec['orig_power'], rec['user_power'] = _op, _up
+        except (TypeError, ValueError):
+            pass
         if rec:
             rec['phrase'] = phrase
             corr.append(rec)

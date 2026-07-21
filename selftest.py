@@ -1473,6 +1473,31 @@ def _scenario_logic(clip, transcript, tmp):
           and 'platform: generic' in open(os.path.join(HERE, 'config.yaml'),
                                            encoding='utf-8').read())
 
+    # v101e Korrektur-Gedaechtnis: aggregierte Vorlieben generalisieren.
+    _ce = [{'orig_fx': 'behind', 'user_fx': 'ground'},
+           {'orig_fx': 'behind', 'user_fx': 'ground'},
+           {'orig_fx': 'outline', 'user_fx': 'cascade'},        # 1x -> Rauschen
+           {'user_anim': ''}, {'user_anim': ''},
+           {'user_aktiv': False}, {'user_aktiv': False}, {'user_aktiv': False},
+           {'orig_power': 3, 'user_power': 1},
+           {'orig_power': 3, 'user_power': 2}]
+    _prof = R.correction_profile(_ce)
+    check('v101e: Profil generalisiert haeufige Tendenzen (>=2x)',
+          "'behind'" in _prof and "'ground'" in _prof
+          and 'entfernt' in _prof and 'deaktiviert' in _prof and 'gesenkt' in _prof)
+    check('v101e: Einzelfaelle bleiben draussen (kein Stil aus 1x)',
+          'cascade' not in _prof)
+    check('v101e: kein Profil ohne Daten / unter Schwelle',
+          R.correction_profile([]) == ''
+          and R.correction_profile([{'orig_fx': 'a', 'user_fx': 'b'}]) == '')
+    check('v101e: Gedaechtnis fliesst in den KI-Prompt (Kontext, nicht nur exakt)',
+          'prof_block = correction_profile(_corr)' in _src99
+          and 'prof_block + ref_block' in _src99)
+    _srv_src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v101e: Capture speichert orig_fx + Wucht-Delta (Server)',
+          "rec['orig_fx']" in _srv_src
+          and "rec['orig_power'], rec['user_power']" in _srv_src)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

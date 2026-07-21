@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101e Korrektur-Gedaechtnis (Innovations-Batch 5).** Bisher zog nur
+  _apply_corrections EXAKT dieselbe Phrase nach (deterministisch, kein
+  Transfer auf neue Stellen). Neu: correction_profile() verdichtet alle
+  frueheren Editor-Korrekturen des Kontos zu einem kurzen Vorlieben-Profil
+  (welcher Effekt wird bevorzugt getauscht: 'behind'->'ground', wird Anim
+  entfernt, Wucht gesenkt, Momente deaktiviert) und speist es als KONTEXT in
+  den KI-Regie-Prompt (prof_block vor ref_block) - so generalisiert die KI
+  aus alten Korrekturen auf NEUE, aehnliche Phrasen. Nur Muster ab 2
+  Vorkommen (Einzelfaelle = Rauschen, kein Stil). Capture-Seite (Server)
+  erweitert: speichert jetzt orig_fx (From->To) und Wucht-Delta
+  (orig_power/user_power), damit das Profil Richtung und Dosis kennt; alte
+  Records ohne diese Felder bleiben kompatibel. Der deterministische
+  Per-Phrase-Pfad bleibt als letzte Instanz (Nutzer gewinnt exakt). 5 neue
+  Tests. Regression 579/579 + Renders + GUI_OK. EHRLICH: ohne OPENAI_API_KEY
+  laeuft nur der Heuristik-Pfad; die Prompt-Injektion wirkt erst live mit
+  Key auf douchko.eu (hier nur Profil-Logik + Verdrahtung getestet).
+
 - **v101d Safe-Zone-Regie (Innovations-Batch 4).** Statt eines pauschalen
   "Safe-Zone an/aus" kennt die Pipeline jetzt die echten UI-Rechtecke der
   drei grossen Feeds (Stand 2026): PLATFORM_UI + platform_safe_zones()

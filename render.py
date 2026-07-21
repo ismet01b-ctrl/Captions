@@ -3441,6 +3441,62 @@ def _apply_corrections(fx_map, words, corrections):
         print(f"  Gelernt: {applied} Korrektur(en) aus frueheren Edits angewandt")
     return fx_map
 
+
+def correction_profile(corrections, min_count=2, max_rules=6):
+    """v101e KORREKTUR-GEDAECHTNIS: verdichtet die frueheren Editor-Korrekturen
+    dieses Kontos zu einem kurzen Vorlieben-Profil. Waehrend _apply_corrections
+    nur EXAKT dieselbe Phrase nachzieht, generalisiert das Profil die TENDENZ
+    (welcher Effekt wird bevorzugt getauscht, wird Wucht gesenkt, Anim entfernt)
+    und fliesst als Kontext in den KI-Regie-Prompt - so lernt die KI auch fuer
+    NEUE Phrasen aus alten Korrekturen. Rueckgabe: Prompt-Textblock oder ''.
+    Nur Muster ab min_count Vorkommen (Einzelfaelle sind Rauschen, kein Stil)."""
+    if not corrections:
+        return ''
+    swaps = {}          # (orig_fx -> user_fx): Anzahl
+    anim_off = anim_on = deact = 0
+    pow_lower = pow_raise = 0
+    for c in corrections:
+        of, uf = str(c.get('orig_fx', '')), str(c.get('user_fx', ''))
+        if uf and of and of != uf:
+            swaps[(of, uf)] = swaps.get((of, uf), 0) + 1
+        if 'user_anim' in c:
+            if str(c.get('user_anim', '')):
+                anim_on += 1
+            else:
+                anim_off += 1
+        if c.get('user_aktiv') is False:
+            deact += 1
+        op, up = c.get('orig_power'), c.get('user_power')
+        if isinstance(op, (int, float)) and isinstance(up, (int, float)):
+            if up < op:
+                pow_lower += 1
+            elif up > op:
+                pow_raise += 1
+    rules = []
+    for (of, uf), n in sorted(swaps.items(), key=lambda kv: -kv[1]):
+        if n >= min_count:
+            rules.append((n, f"Effekt '{of}' wird bevorzugt zu '{uf}' geaendert "
+                             f"({n}x) - waehle hier eher '{uf}'."))
+    if anim_off >= min_count and anim_off > anim_on:
+        rules.append((anim_off, f"Animationen werden oft entfernt ({anim_off}x) - "
+                                f"setze Animationen sparsamer."))
+    if deact >= min_count:
+        rules.append((deact, f"Momente werden gelegentlich ganz deaktiviert "
+                             f"({deact}x) - waehle zurueckhaltender, nur klare Hoehepunkte."))
+    if pow_lower >= min_count and pow_lower > pow_raise:
+        rules.append((pow_lower, f"Wucht wird oft gesenkt ({pow_lower}x) - "
+                                 f"dosiere power zurueckhaltender."))
+    elif pow_raise >= min_count and pow_raise > pow_lower:
+        rules.append((pow_raise, f"Wucht wird oft erhoeht ({pow_raise}x) - "
+                                 f"traue dich zu mehr power bei klaren Spitzen."))
+    if not rules:
+        return ''
+    rules.sort(key=lambda r: -r[0])
+    lines = '\n'.join('- ' + t for _, t in rules[:max_rules])
+    return ("GELERNTE VORLIEBEN (aus frueheren Korrekturen dieses Kontos - "
+            "generalisiere sie auf neue, aehnliche Stellen):\n" + lines + "\n\n")
+
+
 def _looks_german(words):
     """v94: Rate die Sprache aus dem Transkript. Bei language='auto' wurde alles
     als Deutsch behandelt (non_de=False) - dann verwarf der Phrasen-Filter
@@ -3479,6 +3535,13 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
     # Sound koppelt (! = laut/betont, ~ = leise). Fehlt die wav, bleibt es leer.
     loud = _word_loudness(words, voice_wav) if voice_wav else {}
     ref_block = _load_regie_reference()      # v96m: Stil-Referenzen (Trend-Bezug)
+    # v101e: Korrektur-Gedaechtnis - Vorlieben aus frueheren Edits verdichten
+    # und der KI als Kontext geben (generalisiert ueber exakte Phrasen hinaus).
+    _corr = _load_corrections()
+    prof_block = correction_profile(_corr)
+    if prof_block:
+        _n_rules = sum(1 for l in prof_block.splitlines() if l.startswith('- '))
+        print(f"Korrektur-Gedaechtnis: {_n_rules} Vorlieben fliessen in die Regie ein")
     # v96x: BEWEIS im Job-Log, ob Referenzen wirklich in den Prompt fliessen -
     # vorher war ein leerer/verlorener Block unsichtbar ("KI wendet nichts an").
     if ref_block:
@@ -3508,7 +3571,7 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
                       '(Stimmspitze), "~" = leise/zurueckgenommen. Koppel '
                       'Effekt und Wucht daran (siehe AUDIO-DYNAMIK).'
                       if loud else '')
-        listing = ref_block + lang_hint + part_hint + 'TRANSKRIPT:\n' + prose + \
+        listing = prof_block + ref_block + lang_hint + part_hint + 'TRANSKRIPT:\n' + prose + \
                   '\n\nWORTLISTE (nur waehlbare Substanz-Woerter, ' \
                   'Fuellwoerter wurden entfernt):\n' + ' '.join(wl_toks) + pegel_hint
         try:
@@ -3543,7 +3606,7 @@ def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
         merged = _audio_boost(merged, words, voice_wav)
     merged = _regie_sanity(merged, words)
     merged = _speech_intent(merged, words)          # Text folgt der Ansage
-    merged = _apply_corrections(merged, words, _load_corrections())  # Nutzer gewinnt zuletzt
+    merged = _apply_corrections(merged, words, _corr)  # Nutzer gewinnt zuletzt (exakte Phrase)
     return _cap_power3(merged) if merged else None
 
 # ---- Zahlen: nicht jede Zahl ist eine Aussage.
