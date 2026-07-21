@@ -1,0 +1,92 @@
+{
+  "spec": {
+    "version": 1,
+    "seed": 7,
+    "canvas": { "format": "9:16", "w": 1080, "h": 1920 },
+    "fps": 30,
+    "duration": 8.4,
+    "grain": 6,
+    "palette": { "bg": "#0b0b0e", "fg": "#f4f2ee", "accent": "#ff7a1a", "muted": "#9a9aa6" },
+    "beat": { "bpm": 120, "offset": 0, "snapTol": 0.09 },
+    "scenes": [
+      {
+        "id": "s1",
+        "tStart": 0.0,
+        "tLen": 2.0,
+        "in": { "kind": "rise", "dur": 0.45 },
+        "out": { "kind": "whip", "dur": 0.5 },
+        "blocks": [
+          {
+            "id": "s1-h",
+            "kind": "kineticHeadline",
+            "slot": 0,
+            "spring": { "stiffness": 180, "damping": 0.62, "delay": 0 },
+            "weight": [500, 900],
+            "beatSync": true,
+            "words": [
+              { "text": "UNLIMITED", "start": 0.25, "end": 0.7 },
+              { "text": "MOTION", "start": 0.6, "end": 1.1 }
+            ]
+          },
+          {
+            "id": "s1-u",
+            "kind": "accentUnderline",
+            "slot": 1,
+            "spring": { "stiffness": 150, "damping": 0.7, "delay": 0.25 },
+            "follows": "s1-h",
+            "widthPct": 0.5
+          }
+        ]
+      },
+      {
+        "id": "s2",
+        "tStart": 2.6,
+        "tLen": 2.2,
+        "in": { "kind": "whip", "dur": 0.45 },
+        "out": { "kind": "fade", "dur": 0.5 },
+        "blocks": [
+          {
+            "id": "s2-stat",
+            "kind": "statCard",
+            "slot": 0,
+            "spring": { "stiffness": 120, "damping": 0.66, "delay": 0 },
+            "value": 3400000,
+            "suffix": "",
+            "label": "views · first 24h",
+            "countUp": true
+          }
+        ]
+      },
+      {
+        "id": "s3",
+        "tStart": 5.2,
+        "tLen": 2.2,
+        "in": { "kind": "rise", "dur": 0.45 },
+        "out": { "kind": "fade", "dur": 0.5 },
+        "blocks": [
+          {
+            "id": "s3-h",
+            "kind": "kineticHeadline",
+            "slot": 0,
+            "spring": { "stiffness": 180, "damping": 0.6, "delay": 0 },
+            "weight": [400, 860],
+            "beatSync": true,
+            "words": [
+              { "text": "MADE", "start": 5.35, "end": 5.6 },
+              { "text": "FOR", "start": 5.6, "end": 5.8 },
+              { "text": "YOU", "start": 5.85, "end": 6.2 }
+            ]
+          },
+          {
+            "id": "s3-u",
+            "kind": "accentUnderline",
+            "slot": 1,
+            "spring": { "stiffness": 150, "damping": 0.7, "delay": 0.3 },
+            "follows": "s3-h",
+            "widthPct": 0.42
+          }
+        ]
+      }
+    ]
+  }
+}

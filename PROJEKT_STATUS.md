@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **motion/ — Remotion-PoC (TS/Canvas, NEUER separater Stack, Ismet-Entscheidung).**
+  Eigenständiger TypeScript/Remotion-Ordner NUR fuer Motion-Graphics. Die
+  Caption-Engine (render.py/gfx_engine.py) + FastAPI bleiben Python,
+  UNANGETASTET. Verbindung nur ueber einen flachen, deterministischen
+  JSON-Vertrag (SceneSpec). Enthaelt: closed-form Damped-Spring +
+  Whisper->Beat-Bindung (lib/spring.ts), Continuous-Flow Overlap-Manager
+  (lib/overlap.ts: Szene A klingt aus / B fliegt ein), Safe-Zone-Lane-Solver,
+  Blocks (KineticHeadline mit Variable-Font, StatCard-Count-up,
+  AccentUnderline, DeviceFrame, Grain), eine data-driven Composition
+  (Root/MotionVideo), Demo-Spec. GEPRUEFT: tsc --noEmit clean UND echter
+  Headless-Render in der Sandbox (252 Frames -> 1080x1920 h264 MP4,
+  deterministisch, Inter Variable offline gebundelt). Warum ueberhaupt:
+  Live-60fps-Preview + GPU-Compositing + Variable-Weight-Kinetik, das PIL/
+  numpy nicht kann. Naechste Schichten (NICHT gebaut): AI-Director
+  (Brief -> validierte SceneSpec, wie ai_direct), kuratiertes
+  Block-Vokabular, Einbindung in die Motion-Seite. EHRLICH: die echte
+  Optik-Qualitaet ist erst auf GPU/Studio beurteilbar; der CPU-Sandbox-Render
+  beweist die Pipeline, nicht den Geschmack. Setup: `cd motion && npm install
+  && npm run dev|render`. Python-Selftest davon unberuehrt (627/627).
+
 - **v101o Motion inline + Player sparsamer + Highlight-Notiz (Ismet-Wunsch).**
   (1) MOTION-VIDEO INLINE: nach dem Render erscheint der fertige Clip jetzt
   direkt in der Vorschau-Flaeche der Motion-Seite (moVid-Player), statt nur
