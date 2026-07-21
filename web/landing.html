@@ -6,7 +6,7 @@
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/favicon.png">
 <title>DouchkoVE | Auto captions for TikTok &amp; Reels. No subscription.</title>
-<meta name="description" content="Premium captions with an AI director: GPT-4o picks keywords, effects and camera moves for your video. 8 looks, 26 text animations, one-time credits instead of a subscription.">
+<meta name="description" content="Premium captions with an AI director that picks keywords, effects and camera moves for your video. 8 looks, 26 text animations, one-time credits instead of a subscription.">
 <style>
 :root {
   --bg: #0b0812; --surf: #14101c; --surf2: #1a1428; --line: #2a2438;
@@ -247,12 +247,7 @@ footer .links a:hover { color: var(--fg); }
 .plan.best .tag { background: var(--gold); color: var(--bg); }
 .plan h3 { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 12px; }
 .plan .price { font-size: 44px; font-weight: 900; letter-spacing: -1px; line-height: 1; }
-.plan .credits { color: var(--fg); font-weight: 700; font-size: 16px; margin-top: 10px; }
 .plan .per { color: var(--mut); font-size: 13px; margin-top: 4px; }
-.plan .valid {
-  margin-top: 14px; font-size: 14px; font-weight: 700; color: var(--gold);
-  background: rgba(245, 196, 81, 0.1); border-radius: 8px; padding: 6px 10px;
-}
 .plan .buy {
   margin-top: 24px; display: block; background: var(--acc); color: #fff;
   text-decoration: none; font-weight: 800; font-size: 15px;
@@ -261,6 +256,17 @@ footer .links a:hover { color: var(--fg); }
 }
 .plan .buy:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4); }
 .pricing-foot { text-align: center; color: var(--mut); font-size: 14px; margin-top: 28px; }
+.plan .aud { color: var(--mut); font-size: 13px; margin: -6px 0 14px; }
+.plan .feats { list-style: none; margin-top: 22px; text-align: left; }
+.plan .feats li { color: var(--mut); font-size: 14px; padding: 5px 0 5px 24px; position: relative; }
+.plan .feats li::before { content: '✓'; position: absolute; left: 2px; color: var(--acc2); font-weight: 800; }
+.faq { max-width: 680px; margin: 64px auto 0; }
+.faq h3 { text-align: center; font-size: 22px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 20px; }
+.faq details { background: var(--surf); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; padding: 0 18px; }
+.faq summary { cursor: pointer; font-weight: 700; font-size: 15px; padding: 15px 0; list-style: none; position: relative; }
+.faq summary::after { content: '+'; position: absolute; right: 2px; color: var(--acc2); font-weight: 800; font-size: 18px; }
+.faq details[open] summary::after { content: '–'; }
+.faq details p { color: var(--mut); font-size: 14px; line-height: 1.6; padding: 0 0 16px; }
 @media (max-width: 640px) {
   .pay-once { padding: 20px; font-size: 15px; }
   .plan { padding: 36px 22px 26px; }
@@ -297,7 +303,7 @@ footer .links a:hover { color: var(--fg); }
     <a href="/app" style="color:var(--acc); font-weight:700; text-decoration:none;">
       Or test it on your own clip first · 10 second demo, no account →</a>
   </div>
-  <div class="small">3 free minutes every month · No card needed · No subscription, ever · Videos auto-deleted after 7 days</div>
+  <div class="small">3 free minutes every month · No credit card required · No subscription, ever</div>
   <div class="small" id="liveStats" style="display:none; margin-top:8px; color:var(--gold);
        font-weight:700;"></div>
 </section>
@@ -313,7 +319,7 @@ fetch('/api/stats').then(r => r.json()).then(d => {
 </script>
 
 <div class="preview-strip wrap">
-  <span class="chip a">AI director (GPT-4o)</span>
+  <span class="chip a">AI director</span>
   <span class="chip g">Scene analysis per moment</span>
   <span class="chip p">26 text animations</span>
   <span class="chip">Beat-synced to music</span>
@@ -335,7 +341,7 @@ fetch('/api/stats').then(r => r.json()).then(d => {
         </svg>
       </div>
       <h3>An AI director, not a template</h3>
-      <p>GPT-4o reads your transcript like an editor and decides keywords, effects
+      <p>The AI reads your transcript like an editor and decides keywords, effects
         and camera moves. Nothing is random. Every choice fits what you actually say.</p>
     </div>
 
@@ -356,9 +362,9 @@ fetch('/api/stats').then(r => r.json()).then(d => {
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
         </svg>
       </div>
-      <h3>Motion graphics no web tool has</h3>
-      <p>6 Apple-style templates, available as ProRes 4444 with alpha for Premiere
-        (2 credits). Drop them straight onto your own footage.</p>
+      <h3>Motion graphics without a motion designer</h3>
+      <p>6 clean, animated templates. Export as MP4 or as ProRes 4444 with alpha
+        and drop them straight onto your footage in Premiere.</p>
     </div>
 
     <div class="feat">
@@ -465,34 +471,78 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   <div class="plans">
     <div class="plan">
       <h3>Starter</h3>
+      <p class="aud">For trying it on your first real videos</p>
       <div class="price">€9</div>
-      <div class="credits">20 Credits</div>
-      <div class="per">€0.45 per credit</div>
-      <div class="valid">Valid for 6 months</div>
-      <a href="/app" class="buy">Get credits</a>
+      <div class="per">one-time · 20 credits · €0.45 each</div>
+      <a href="/app" class="buy">Get 20 credits</a>
+      <ul class="feats">
+        <li>1 credit = 1 minute of finished video</li>
+        <li>All looks, effects and animations</li>
+        <li>No watermark</li>
+        <li>Credits valid for 6 months</li>
+      </ul>
     </div>
     <div class="plan hot">
-      <span class="tag">Popular</span>
+      <span class="tag">Most popular</span>
       <h3>Creator</h3>
+      <p class="aud">For creators who post every week</p>
       <div class="price">€19</div>
-      <div class="credits">60 Credits</div>
-      <div class="per">€0.32 per credit</div>
-      <div class="valid">Valid for 6 months</div>
-      <a href="/app" class="buy">Get credits</a>
+      <div class="per">one-time · 60 credits · €0.32 each</div>
+      <a href="/app" class="buy">Get 60 credits</a>
+      <ul class="feats">
+        <li>1 credit = 1 minute of finished video</li>
+        <li>All looks, effects and animations</li>
+        <li>No watermark · priority queue</li>
+        <li>Credits valid for 6 months</li>
+      </ul>
     </div>
     <div class="plan best">
       <span class="tag">Best value</span>
       <h3>Pro</h3>
+      <p class="aud">For daily creators and small teams</p>
       <div class="price">€39</div>
-      <div class="credits">150 Credits</div>
-      <div class="per">€0.26 per credit</div>
-      <div class="valid">Valid for 6 months</div>
-      <a href="/app" class="buy">Get credits</a>
+      <div class="per">one-time · 150 credits · €0.26 each</div>
+      <a href="/app" class="buy">Get 150 credits</a>
+      <ul class="feats">
+        <li>1 credit = 1 minute of finished video</li>
+        <li>All looks, effects and animations</li>
+        <li>No watermark · priority queue</li>
+        <li>Credits valid for 6 months</li>
+      </ul>
     </div>
   </div>
 
   <p class="pricing-foot">You buy once and render whenever you want.
     No countdown, no "pause plan", no cancellation maze.</p>
+
+  <div class="faq">
+    <h3>Common questions</h3>
+    <details>
+      <summary>What is a credit?</summary>
+      <p>1 credit renders 1 minute of finished video, billed per started minute.
+        A 90 second clip costs 2 credits. Motion graphic clips cost 1 credit
+        (2 as ProRes with alpha).</p>
+    </details>
+    <details>
+      <summary>Do I need a subscription?</summary>
+      <p>No. You buy credits once. There is no plan, no renewal and nothing to cancel.</p>
+    </details>
+    <details>
+      <summary>Do credits expire?</summary>
+      <p>Yes, after 6 months. We say that here and before you pay, not in the fine print.</p>
+    </details>
+    <details>
+      <summary>Can I try it before paying?</summary>
+      <p>Yes. There is a 10 second demo without an account, and every confirmed
+        account gets 2 free credits plus 3 free minutes per month (watermarked
+        until your first purchase).</p>
+    </details>
+    <details>
+      <summary>What happens to my videos?</summary>
+      <p>They are private, and we delete them from the server automatically
+        after 7 days. Download your renders in time.</p>
+    </details>
+  </div>
 
 </section>
 
@@ -512,6 +562,8 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   <div class="inner">
     <div class="copy">© 2026 DouchkoVE · v0.1 Early Access</div>
     <div class="links">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
       <a href="/imprint">Imprint</a>
       <a href="/terms">Terms</a>
       <a href="/privacy">Privacy</a>
