@@ -644,13 +644,14 @@ def _render_charged(user_id, jid):
     return row is not None
 
 
-def _reserve_credits(uid, need, jid):
+def _reserve_credits(uid, need, jid, grund=None):
     """v92: Guthaben beim Upload ATOMAR reservieren (nicht erst nach dem
     Render abziehen). Ein einziges bedingtes UPDATE zieht 'need' nur ab,
     wenn wirklich genug da ist - fest gegen gleichzeitige Uploads
     (SQLite serialisiert Writes). Frueher wurde nur *geprueft*, dann spaeter
     abgezogen -> wer mit 1 Credit 10 Videos gleichzeitig hochlud, bekam 10.
-    Gibt True bei Erfolg (Guthaben abgezogen + Ledger), sonst False."""
+    Gibt True bei Erfolg (Guthaben abgezogen + Ledger), sonst False.
+    v101h: grund optional (Alpha-Ebene bucht mit eigenem Ledger-Text)."""
     if need <= 0:
         return True
     con = _db()
@@ -664,7 +665,7 @@ def _reserve_credits(uid, need, jid):
         con.execute(
             "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
             "VALUES (?, ?, ?, ?)",
-            (uid, -need, f'Render {jid} ({need}s)', int(time.time())))
+            (uid, -need, grund or f'Render {jid} ({need}s)', int(time.time())))
         con.commit()
         return True
     finally:
@@ -1829,6 +1830,28 @@ def run_job(jid):
             set_state(jid, status='wartet', progress=0.0, phase='Queued …')
             q_put(jid)
         return
+    if mode == 'alpha':
+        # v101h: Caption-Ebene (ProRes 4444 mit Alpha) fuer den Schnittplatz.
+        # Nutzt Transkript/Regie-Caches neben dem Quellvideo - kein Whisper,
+        # keine neue KI-Regie, nur der Doppelpass-Render.
+        JOBS[jid]['mode'] = 'full'          # nach dem Lauf normal weiter
+        rc, log, out = _run_render(jid, extra_args=['--alpha-export'],
+                                   out_name='fertig_captions.mov',
+                                   progress_start=0.10)
+        mov = os.path.join(d, 'fertig_captions.mov')
+        if rc == 0 and os.path.exists(mov):
+            set_state(jid, status='fertig', progress=1.0,
+                      phase='Editor layer ready', alpha=True, out='fertig.mp4')
+        else:
+            letzte = [x for x in (log or [])[-15:] if x.strip()]
+            set_state(jid, status='fertig', progress=1.0, alpha=False,
+                      msg='Editor layer failed.', detail='\n'.join(letzte),
+                      out='fertig.mp4')
+            uid = j.get('user_id')
+            if uid:
+                _refund_credits(uid, f'Alpha {jid}',
+                                cost_seconds(j.get('dauer', 0)))
+        return
     if mode == 'analyze':
         rc, log, out = _run_render(jid, extra_args=['--plan-only'],
                                    out_name='plan.mp4', progress_start=0.10)
@@ -2701,6 +2724,56 @@ def api_unlock(jid: str, request: Request):
     return {'ok': True, 'unlocked': ok, 'wm': bool(j.get('wm'))}
 
 
+@app.post('/api/alpha/{jid}')
+def api_alpha(jid: str, request: Request):
+    """v101h Caption-Alpha-Export: transparente Caption-Ebene (ProRes 4444)
+    fuer Premiere/Resolve. Nur fuer Kaeufer; kostet wie ein weiterer Render
+    (Doppelpass = doppelte Compositing-Arbeit). Idempotent pro Job."""
+    u = _require_user(request)
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
+    j = JOBS.get(jid)
+    if not j or j.get('kind') == 'motion':
+        raise HTTPException(404, 'Unknown job.')
+    d = job_dir(jid)
+    if os.path.exists(os.path.join(d, 'fertig_captions.mov')):
+        return {'ok': True, 'ready': True}
+    if not _has_purchased(u['id']):
+        raise HTTPException(402, 'The editor layer is available after your '
+                                 'first purchase.')
+    if not os.path.exists(os.path.join(d, 'fertig.mp4')):
+        raise HTTPException(409, 'Render the video first.')
+    if not j.get('input') or not os.path.exists(j['input']):
+        raise HTTPException(410, 'The source video has expired - upload it '
+                                 'again to create an editor layer.')
+    if j.get('status') in ('laeuft', 'wartet'):
+        raise HTTPException(409, 'A render for this job is already running.')
+    cost = cost_seconds(j.get('dauer', 0))
+    con = _db()
+    _done = con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
+                        (u['id'], f'Alpha {jid} ({cost}s)')).fetchone()
+    con.close()
+    if not _done and not _reserve_credits(u['id'], cost, jid,
+                                          grund=f'Alpha {jid} ({cost}s)'):
+        raise HTTPException(402, 'Not enough credits for the editor layer.')
+    j['mode'] = 'alpha'
+    set_state(jid, status='wartet', progress=0.0, phase='Queued …', alpha=None)
+    q_put(jid)
+    return {'ok': True, 'queued': True, 'cost_min': cost // 60}
+
+
+@app.get('/api/alpha_file/{jid}')
+def alpha_file(jid: str, request: Request):
+    """v101h: fertige Caption-Ebene ausliefern."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This video belongs to another account.')
+    p = os.path.join(job_dir(jid), 'fertig_captions.mov')
+    if not os.path.exists(p):
+        raise HTTPException(404, 'No editor layer for this job yet.')
+    return FileResponse(p, media_type='video/quicktime',
+                        filename='DouchkoVE_Captions_Layer.mov')
+
+
 @app.post('/api/motion/render')
 async def motion_render(request: Request,
                         spec: str = Form(...),
@@ -3046,6 +3119,10 @@ def api_library(request: Request):
             'wm': bool(j.get('wm')),
             # v101g: Regie-Kontaktbogen (Grid aller Momente) vorhanden?
             'kontakt': os.path.exists(os.path.join(d, 'fertig_kontakt.jpg')),
+            # v101h: Caption-Ebene (ProRes 4444) schon gerendert? Quelle noch da
+            # (sonst kann keine Ebene mehr gebaut werden)?
+            'has_alpha': os.path.exists(os.path.join(d, 'fertig_captions.mov')),
+            'can_alpha': bool(j.get('input')) and os.path.exists(j.get('input', '')),
         })
     items.sort(key=lambda x: x['created'], reverse=True)
     return {'items': items, 'retention_days': RETENTION_DAYS}

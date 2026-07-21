@@ -2558,6 +2558,28 @@ document.addEventListener('click', async (e) => {
     } catch (err) { toast('Connection error.', 'err'); ul.disabled = false; ul.textContent = 'Unlock HD'; }
     return;
   }
+  // v101h: Editor layer (transparente Caption-Ebene) anstossen
+  const al = e.target.closest('[data-alpha]');
+  if (al) {
+    e.preventDefault();
+    al.disabled = true; al.textContent = 'Starting …';
+    try {
+      const r = await fetch('/api/alpha/' + al.dataset.alpha, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 402) {
+        toast(d.detail || 'Available after your first purchase.', 'err');
+        showPricing(); al.disabled = false; al.textContent = 'Editor layer';
+      } else if (d.ready) { toast('Editor layer is ready!', 'ok'); renderLibrary(); }
+      else if (r.ok && d.queued) {
+        toast(`Editor layer is rendering (${d.cost_min || 1} credit/min charged). Check back here in a few minutes.`, 'ok');
+        al.textContent = 'Rendering …';
+      } else {
+        toast(d.detail || 'Could not start the editor layer.', 'err');
+        al.disabled = false; al.textContent = 'Editor layer';
+      }
+    } catch (err) { toast('Connection error.', 'err'); al.disabled = false; al.textContent = 'Editor layer'; }
+    return;
+  }
   const nav = e.target.closest('[data-nav]');
   if (nav && $('#appView').classList.contains('show')) {
     e.preventDefault();
@@ -2963,6 +2985,8 @@ async function renderLibrary() {
           ${it.has_mov ? `<a class="btn secondary" href="/api/mov/${it.jid}" title="ProRes 4444 with alpha — drop straight into Premiere">MOV&nbsp;·&nbsp;Alpha</a>` : ''}
           ${it.has_srt ? `<a class="btn secondary" href="/api/subtitles/${it.jid}" title="Subtitle file for YouTube or your editing software">SRT</a>` : ''}
           ${it.kontakt ? `<a class="btn secondary" href="/api/contact/${it.jid}" target="_blank" rel="noopener" title="One image with every rendered caption moment">Moments</a>` : ''}
+          ${it.has_alpha ? `<a class="btn secondary" href="/api/alpha_file/${it.jid}" title="Transparent caption layer (ProRes 4444) for Premiere or Resolve">Layer&nbsp;(MOV)</a>`
+                         : (it.can_alpha ? `<button class="btn secondary" data-alpha="${it.jid}" title="Render a transparent caption layer (ProRes 4444) to drop over your original in Premiere or Resolve">Editor&nbsp;layer</button>` : '')}
           ${it.wm ? `<button class="btn" data-unlock="${it.jid}" title="Your first purchase removes the watermark from this exact video - no re-render">Unlock&nbsp;HD</button>` : ''}
         </div>
       </div>`;

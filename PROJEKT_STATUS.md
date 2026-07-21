@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101h Caption-Alpha-Export (Innovations-Batch 8).** Transparente
+  Caption-Ebene (ProRes 4444, yuva444) fuer Premiere/Resolve - passt exakt
+  zur Finishing-Tool-Positionierung. TECHNIK: Difference-Matting-Doppelpass -
+  jedes Frame wird zweimal komponiert (ueber Schwarz + ueber Weiss), daraus
+  loest alpha_from_pair() das Alpha EXAKT (alpha = 1 - (weiss-schwarz)/255):
+  Person-Occlusion (behind) wird automatisch zum LOCH im Alpha, dim_behind zu
+  korrektem Halbtransparenz-Schwarz. Voraussetzung bitidentische Paesse:
+  _alpha_state_snapshot/_restore setzt Anim-Federn, RNG-States (inkl.
+  numpy-Generator-BitState) und Kamera zwischen den Paessen zurueck; das
+  Szenen-Grain ist jetzt pro Frame seedbar (grain_seed aus t). BEWUSST AUS im
+  Alpha-Modus (auf einer Overlay-Ebene physisch nicht transportierbar, klar
+  geloggt): Kamera-Moves, Freeze, Split-Screen, BG-Blur. SFX kommen als
+  eigene PCM-Tonspur mit (Kunde hat sein Original-Audio selbst). BEWEIS:
+  Ebene ueber Original vs. Normal-Render (ohne Kamera) -> mean-diff 1.0-2.3
+  (Codec-Rauschen), Bild an Ismet geschickt. WEB: POST /api/alpha/{jid}
+  (Kaeufer-Gate 402, kostet wie ein weiterer Render, atomare Buchung
+  'Alpha {jid}', Refund bei Fehlschlag), Worker-Modus 'alpha' (nutzt
+  Transkript-/Regie-Caches, kein Whisper doppelt), GET /api/alpha_file/{jid},
+  Library-Buttons 'Editor layer' -> 'Layer (MOV)'. CLI: --alpha-export.
+  13 neue Tests (Alpha-Mathe, Dim, State-Restore inkl. RNG, Verdrahtung,
+  Server-Gates/Buchung, echter 4444-Render + Sync + Alpha-Inhalt in
+  render2b). Regression 598/598 + 7/1/5/2 Renders + GUI_OK.
+
 - **v101g Regie-Kontaktbogen (Innovations-Batch 7).** Beim Voll-Render wird
   pro Keyword-Moment der Frame auf dem Hoehepunkt (Start + 40% der Dauer)
   eingesammelt und als EIN Grid-JPG neben das Video gelegt

@@ -198,6 +198,31 @@ def _scenario_2b(clip, transcript, tmp, pan):
     mov = os.path.splitext(out5)[0] + '.mov'
     check('ProRes-Master', probe_val(mov, 'stream=codec_name') == 'prores')
 
+    # v101h) Caption-Alpha-Export: ProRes 4444 mit echtem Alpha
+    out6 = os.path.join(tmp, 'st_alpha.mp4')
+    code6, log6 = render(clip, transcript, out6, extra=['--alpha-export'])
+    amov = os.path.splitext(out6)[0] + '.mov'
+    _apx = probe_val(amov, 'stream=pix_fmt') or ''
+    check('v101h: Alpha-Ebene ist ProRes 4444 (yuva)',
+          probe_val(amov, 'stream=codec_name') == 'prores'
+          and _apx.startswith('yuva444'), _apx)
+    _adur = float(probe_val(amov, 'format=duration') or 0)
+    _sdur = float(probe_val(clip, 'format=duration') or 0)
+    check('v101h: Ebene laeuft synchron zum Original',
+          abs(_adur - _sdur) < 0.25, f'{_adur:.2f}s vs {_sdur:.2f}s')
+    # Alpha-Inhalt: an einem Caption-Moment gibt es opake Text-Pixel UND
+    # transparente Flaechen (die Ebene ist keine Vollflaeche).
+    _ar = subprocess.run(['ffmpeg', '-v', 'error', '-ss', '1.2', '-i', amov,
+                          '-frames:v', '1', '-f', 'rawvideo',
+                          '-pix_fmt', 'rgba', '-'], capture_output=True)
+    _aok = False
+    if len(_ar.stdout) >= 16:
+        _aal = np.frombuffer(_ar.stdout, np.uint8).reshape(-1, 4)[:, 3]
+        _aok = (_aal > 200).any() and (_aal < 10).mean() > 0.5
+    check('v101h: Alpha-Kanal traegt Text (opak) auf Transparenz', _aok)
+    check('v101h: Kamera im Alpha-Modus deaktiviert (deckungsgleiche Ebene)',
+          'Alpha-Export: Caption-Ebene' in log6)
+
 
 def _scenario_2c(clip, transcript, tmp):
     words = json.load(open(transcript, encoding='utf-8'))
@@ -1549,6 +1574,39 @@ def _scenario_logic(clip, transcript, tmp):
           'dlKontakt' in _ui_g and '/api/contact/' in _ui_g
           and 'State.kontakt' in _ui_g)
 
+    # v101h Caption-Alpha-Export: Difference-Matting-Doppelpass.
+    _acb = np.zeros((8, 8, 3), np.float32)
+    _acw = np.full((8, 8, 3), 255, np.float32)
+    _acb[2:4, 2:4] = 250; _acw[2:4, 2:4] = 250          # opaker Text
+    _abgra = R.alpha_from_pair(_acb, _acw)
+    check('v101h: alpha_from_pair - leer transparent, Text opak, Farbe erhalten',
+          _abgra.shape == (8, 8, 4) and _abgra[0, 0, 3] == 0
+          and (_abgra[0, 0, :3] == 0).all() and _abgra[2, 2, 3] == 255
+          and abs(int(_abgra[2, 2, 0]) - 250) <= 1)
+    _ad = R.alpha_from_pair(np.zeros((4, 4, 3), np.float32),
+                            np.full((4, 4, 3), 127.5, np.float32))
+    check('v101h: dim wird zu korrektem Halbtransparenz-Schwarz (~50%)',
+          abs(int(_ad[0, 0, 3]) - 128) <= 1 and (_ad[0, 0, :3] == 0).all())
+    _apl = [{'start': 1.0, '_puls': 0.5,
+             '_arng': np.random.default_rng(7), 'cx': 100}]
+    _acam = [1.0, 2.0, 3.0, 4.0]
+    _asnap = R._alpha_state_snapshot(_apl, _acam)
+    _v1 = _apl[0]['_arng'].random(); _apl[0]['_puls'] = 9.9
+    _apl[0]['_neu'] = 1; _acam[0] = 77.0
+    R._alpha_state_restore(_apl, _acam, _asnap)
+    check('v101h: State-Snapshot stellt Anim/RNG/Kamera exakt wieder her',
+          _apl[0]['_puls'] == 0.5 and _acam[0] == 1.0
+          and '_neu' not in _apl[0] and _apl[0]['_arng'].random() == _v1)
+    check('v101h: Alpha-Export im Main verdrahtet (Flag, Clamp, Doppelpass, Mux)',
+          '--alpha-export' in _src99
+          and 'alpha_from_pair(_cb, _cw)' in _src99
+          and '_alpha_state_restore(plans, cam_state, _snap)' in _src99
+          and "'-profile:v', '4444'" in _src99
+          and 'nur SFX' in _src99)
+    check('v101h: Grain deterministisch seedbar (Doppelpass-Voraussetzung)',
+          'grain_seed=_gs' in _src99
+          and 'default_rng(grain_seed)' in _src99)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
@@ -2809,6 +2867,36 @@ def _scenario_v98(tmp):
                                         encoding='utf-8').read()
           and 'data-unlock' in open(os.path.join(HERE, 'web', 'index.html'),
                                     encoding='utf-8').read())
+
+    # v101h Caption-Alpha-Export serverseitig: Kaeufer-Gate, eigener Ledger-
+    # Text (Alpha ...), Refund-Pfad, Worker-Modus, Auslieferung, UI-Buttons.
+    _srv_h = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _ui_h = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v101h: /api/alpha Endpoint mit Kauf-Gate + eigener Buchung',
+          "'/api/alpha/{jid}'" in _srv_h
+          and "grund=f'Alpha {jid} ({cost}s)'" in _srv_h
+          and 'first purchase' in _srv_h.lower())
+    check('v101h: Worker-Modus alpha + Refund bei Fehlschlag',
+          "mode == 'alpha'" in _srv_h
+          and "'--alpha-export'" in _srv_h
+          and "'fertig_captions.mov'" in _srv_h
+          and "_refund_credits(uid, f'Alpha {jid}'" in _srv_h)
+    check('v101h: Auslieferung + Library-Flags + UI-Buttons',
+          "'/api/alpha_file/{jid}'" in _srv_h
+          and "'has_alpha'" in _srv_h and "'can_alpha'" in _srv_h
+          and 'data-alpha' in _ui_h and '/api/alpha_file/' in _ui_h)
+    # _reserve_credits mit eigenem Grund bucht atomar unter diesem Text
+    _bal_a0 = SV._find_user_by_id(uid_free)['balance_sec']
+    _rok = _bal_a0 >= 60 and SV._reserve_credits(
+        uid_free, 60, 'alphajob01', grund='Alpha alphajob01 (60s)')
+    _con_a = SV._db()
+    _led_a = _con_a.execute("SELECT id FROM ledger WHERE user_id = ? AND "
+                            "grund = ?", (uid_free, 'Alpha alphajob01 (60s)')
+                            ).fetchone()
+    _con_a.close()
+    check('v101h: Alpha-Buchung atomar mit eigenem Ledger-Text',
+          _rok and _led_a is not None
+          and SV._find_user_by_id(uid_free)['balance_sec'] == _bal_a0 - 60)
 
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 

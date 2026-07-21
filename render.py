@@ -2075,7 +2075,7 @@ def paste(canvas, rgba, cx, cy, W, H, scale=1.0, opacity=1.0, blur=0.0, crop_w=N
     canvas[y1:y2, x1:x2] = sub[..., [2, 1, 0]] * a + canvas[y1:y2, x1:x2] * (1 - a)
 
 def _blend_region(canvas, sub, x1, y1, W, H, opacity=0.74, ripple=0.10,
-                  refract=1.0, blur=0.0, occ=None, grain=2.2):
+                  refract=1.0, blur=0.0, occ=None, grain=2.2, grain_seed=None):
     """Blend-Kern der Szenen-Integration: Refraktion, Farb-Kopplung, Spitzlichter,
     Tiefen-Okklusion und Film-Grain auf einem bereits positionierten RGBA-Ausschnitt."""
     y2, x2 = y1 + sub.shape[0], x1 + sub.shape[1]
@@ -2110,12 +2110,14 @@ def _blend_region(canvas, sub, x1, y1, W, H, opacity=0.74, ripple=0.10,
     if occ is not None:
         a = a * (1.0 - occ[y1:y2, x1:x2, None])
     if grain > 0.1:
-        noise = np.random.default_rng().standard_normal(sub.shape[:2])[..., None]
+        # v101h: seedbar, damit der Alpha-Export-Doppelpass (schwarz/weiss)
+        # bitidentisches Grain sieht. None = frei (Verhalten wie bisher).
+        noise = np.random.default_rng(grain_seed).standard_normal(sub.shape[:2])[..., None]
         sub[..., :3] = np.clip(sub[..., :3] + noise * grain, 0, 255)
     canvas[y1:y2, x1:x2] = sub[..., [2, 1, 0]] * mod * a + bg * (1 - a)
 
 def paste_scene(canvas, rgba, cx, cy, W, H, scale=1.0, opacity=0.74, ripple=0.10,
-                refract=1.0, blur=0.0, occ=None, grain=2.2):
+                refract=1.0, blur=0.0, occ=None, grain=2.2, grain_seed=None):
     """Positioniert ein Sprite und blendet es als Teil der Szene ein (siehe _blend_region)."""
     if scale <= 0.02 or opacity <= 0.01:
         return
@@ -2130,7 +2132,8 @@ def paste_scene(canvas, rgba, cx, cy, W, H, scale=1.0, opacity=0.74, ripple=0.10
         return
     sub = np.ascontiguousarray(rgba[y1 - y0:y2 - y0, x1 - x0:x2 - x0]).astype(np.float32)
     _blend_region(canvas, sub, x1, y1, W, H, opacity=opacity, ripple=ripple,
-                  refract=refract, blur=blur, occ=occ, grain=grain)
+                  refract=refract, blur=blur, occ=occ, grain=grain,
+                  grain_seed=grain_seed)
 
 def update_homography(prev_gray, gray, H_cum, mask_lower=0.30):
     """Ein Schritt planares Kamera-Tracking: verfolgt Features der Bodenebene
@@ -5985,10 +5988,58 @@ def apply_bg_blur(frame, alpha, depth_n, strength, W, H):
             + blurred.astype(np.float32) * m).astype(frame.dtype)
 
 
+# v101h CAPTION-ALPHA-EXPORT: Difference-Matting-Doppelpass. Die Caption-Ebene
+# wird zweimal komponiert - einmal ueber Schwarz, einmal ueber Weiss. Aus den
+# beiden Ergebnissen laesst sich Alpha EXAKT loesen (fuer alle linearen
+# Overlay-Operationen): alpha = 1 - (comp_weiss - comp_schwarz)/255. Person-
+# Occlusion (behind) wird dabei automatisch zum LOCH im Alpha - genau das,
+# was der Schnittplatz braucht. Voraussetzung: beide Paesse bitidentische
+# Geometrie -> Anim-/Kamera-State wird zwischen den Paessen zurueckgesetzt.
+def _alpha_state_snapshot(plans, cam_state):
+    """Sichert allen veraenderlichen Zustand, den composite_frame anfasst:
+    die '_'-Statekeys der Plaene (Anim-Feder, RNGs, Anker-Flags) + cam_state."""
+    import copy as _cp
+    saved = []
+    for p in plans:
+        keys = {}
+        for k in list(p):
+            if isinstance(k, str) and k.startswith('_'):
+                keys[k] = _cp.deepcopy(p[k])
+        saved.append(keys)
+    return (saved, list(cam_state) if cam_state is not None else None)
+
+
+def _alpha_state_restore(plans, cam_state, snap):
+    saved, cam = snap
+    for p, keys in zip(plans, saved):
+        for k in [k for k in list(p) if isinstance(k, str) and k.startswith('_')]:
+            if k not in keys:
+                p.pop(k, None)
+        p.update(keys)
+    if cam is not None and cam_state is not None:
+        cam_state[:] = cam
+
+
+def alpha_from_pair(comp_black, comp_white):
+    """Loest die Caption-Ebene aus dem Doppelpass: Rueckgabe BGRA uint8
+    (straight alpha, wie prores_ks/yuva444p10le es erwartet). Wo alpha ~0 ist,
+    wird die Farbe genullt (kein Entpremultiply-Rauschen)."""
+    cb = np.asarray(comp_black, np.float32)
+    cw = np.asarray(comp_white, np.float32)
+    a = 1.0 - np.clip((cw - cb).mean(axis=2) / 255.0, 0.0, 1.0)
+    an = a[..., None]
+    straight = np.where(an > 1.0 / 255.0, cb / np.maximum(an, 1e-4), 0.0)
+    return np.dstack([np.clip(straight, 0, 255),
+                      np.clip(a * 255.0, 0, 255)]).astype(np.uint8)
+
+
 def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_state=None,
                     scene_off=(0.0, 0.0), aud=(0.0, 0.0, 0.0), depth_n=None,
                     scene_vel=0.0, H_cum=None, track_gen=0):
     a_rms, a_bass, a_onset = aud
+    # v101h: Grain-Seed pro Frame (aus t) - der Alpha-Export-Doppelpass braucht
+    # bitidentisches Grain in beiden Paessen, sonst rauscht das Alpha.
+    _gs = int(t * 1000.0) & 0x7fffffff
 
     def occ_for(p):
         """Okklusion: Maske der Bildteile, die VOR dem Text liegen.
@@ -6362,7 +6413,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                             W, H, scale=(0.97 + 0.03 * _e) * asc_fl,
                             opacity=min(_dtf / 0.4, 1) * g_out * aop_fl * 0.92,
                             refract=0.0, ripple=0.05, grain=1.6,
-                            occ=None, blur=0.0)
+                            occ=None, blur=0.0, grain_seed=_gs)
             continue
         if p['tpl'] == 'flow':
             # v97c Flow-Caption: STRUKTUR bleibt (feste Rollen-Zeilen, links).
@@ -6674,7 +6725,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                     W, H, scale=0.9 + 0.1 * e,
                                     opacity=min(dl / 0.12, 1) * g_out * g_opac,
                                     refract=g_refract, ripple=g_ripple,
-                                    occ=occ_g, blur=cam_blur)
+                                    occ=occ_g, blur=cam_blur, grain_seed=_gs)
                     else:
                         paste(comp, sl, p.get('cx', W / 2) + sdx + off,
                               p['cy'] + sdy + (1 - e) * H * 0.055 + x_dv * sl.shape[0],
@@ -6708,7 +6759,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                     W, H, scale=1.0,
                                     opacity=min(_tvs / 0.12, 1) * g_out * g_opac,
                                     refract=g_refract, ripple=g_ripple,
-                                    grain=g_grain, occ=occ_g, blur=cam_blur)
+                                    grain=g_grain, occ=occ_g, blur=cam_blur,
+                                    grain_seed=_gs)
                     else:
                         arr_s, adx_s, dy_s, asc_s, aop_s = anim_apply(p, p['arr'], aud, dt)
                         dy_s -= (arr_s.shape[0] - p['arr'].shape[0]) / 2
@@ -6717,7 +6769,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                     W, H, scale=(0.97 + 0.03 * e) * live * asc_s,
                                     opacity=min(dt / 0.4, 1) * g_out * aop_s * g_opac,
                                     refract=g_refract, ripple=g_ripple, grain=g_grain,
-                                    occ=occ_g,
+                                    occ=occ_g, grain_seed=_gs,
                                     blur=max(cam_blur, (1 - e) * 4.5 if not (p.get('scene_blend') or gp) else 0.0))
                 else:
                     paste(comp, p['arr'], p.get('cx', W / 2) + sdx,
@@ -6835,9 +6887,33 @@ def main():
                          '(Kauf schaltet ohne Neu-Render frei)')
     ap.add_argument('--watermark', action='store_true',
                     help='Dezentes DouchkoVE-Wasserzeichen einblenden (Free-Tier)')
+    ap.add_argument('--alpha-export', action='store_true',
+                    help='Nur die Caption-Ebene rendern: ProRes-4444-MOV mit '
+                         'echtem Alpha (inkl. Behind-Loechern) fuer den '
+                         'Schnittplatz. SFX kommen als eigene Tonspur mit.')
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config, encoding='utf-8'))
+    # v101h Alpha-Export: alles, was NUR auf dem Hintergrundbild funktioniert
+    # (Kamera-Moves, Freeze, Split-Screen, BG-Blur), ist auf einer Overlay-
+    # Ebene nicht transportierbar - die Ebene muss deckungsgleich ueber dem
+    # Original des Kunden liegen. Deshalb hart aus, klar geloggt. dim/Schatten/
+    # Occlusion bleiben: die werden korrekt zu (teil-)transparenten Pixeln.
+    if args.alpha_export:
+        if args.window:
+            sys.exit('FEHLER: --alpha-export ist nur fuer den Voll-Render.')
+        cfg.setdefault('camera', {})
+        cfg['camera'].update({'strength': 0.0, 'crash': 0.0, 'whip': False,
+                              'keyword_rotation': [], 'side_rotation': []})
+        cfg.setdefault('effects', {})
+        cfg['effects'].update({'freeze_frame': 0.0, 'split_screen': 0.0,
+                               'bg_blur': 0.0, 'contact_sheet': False})
+        cfg.setdefault('keywords', {})['silent_score'] = False
+        cfg.setdefault('output', {})['master'] = False
+        args.watermark = False
+        args.watermark_split = False
+        print('Alpha-Export: Caption-Ebene (ProRes 4444) - Kamera/Freeze/'
+              'Split/BG-Blur aus, Ebene bleibt deckungsgleich zum Original')
     # v96y: gelernte Stil-Referenzen wirken DETERMINISTISCH auf die Config
     # (Chunk-Laenge, Highlight-Dichte, Hook, Wucht) - zusaetzlich zum Prompt.
     # So ist der Referenz-Einfluss sichtbar, egal wie GPT den Hinweis gewichtet.
@@ -7468,7 +7544,16 @@ def main():
     #   mitten im Render. Symptom: BrokenPipeError ohne ffmpeg-Fehlertext.
     # Stufe 2 (nach dem Render): Audio/SFX per Stream-Copy dazu muxen -
     #   alle Inputs sind dann Dateien, dauert nur Sekunden, kein Pipe-Risiko.
-    if cfg['output'].get('master', False):
+    if args.alpha_export:
+        # v101h: transparente Caption-Ebene. Pipe-Format BGRA, ProRes 4444.
+        if not out_path.lower().endswith('.mov'):
+            out_path = os.path.splitext(out_path)[0] + '.mov'
+        vcodec = ['-c:v', 'prores_ks', '-profile:v', '4444',
+                  '-pix_fmt', 'yuva444p10le']
+        acodec = ['-c:a', 'pcm_s16le']
+        video_tmp = os.path.splitext(out_path)[0] + '.videoonly.mov'
+        print("Ausgabe: Caption-Ebene mit Alpha (ProRes 4444 .mov)")
+    elif cfg['output'].get('master', False):
         if not out_path.lower().endswith('.mov'):
             out_path = os.path.splitext(out_path)[0] + '.mov'
         vcodec = ['-c:v', 'prores_ks', '-profile:v', '3', '-pix_fmt', 'yuv422p10le']
@@ -7495,8 +7580,9 @@ def main():
                '-crf', str(cfg['output'].get('crf', 18)), '-pix_fmt', 'yuv420p',
                out_path]
     else:
+        _pipe_fmt = 'bgra' if args.alpha_export else 'bgr24'
         cmd = ['ffmpeg', '-y', '-v', 'error',
-               '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}',
+               '-f', 'rawvideo', '-pix_fmt', _pipe_fmt, '-s', f'{W}x{H}',
                '-r', fps_str, '-i', 'pipe:0'] + vcodec + [video_tmp]
     # stderr capturen, damit wir bei BrokenPipeError die echte Ursache sehen
     enc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -7735,30 +7821,52 @@ def main():
         prev_scene = list(scene_smooth)
         fidx = min(fi, len(face_stable) - 1)
         ai = min(fi, len(aud_rms) - 1)
-        comp = composite_frame(frame, alpha, t, plans, words, face_stable[fidx],
-                               cfg, S, W, H, cam_state, tuple(scene_smooth),
-                               aud=(float(aud_rms[ai]), float(aud_bass[ai]),
-                                    float(aud_onset[ai])),
-                               depth_n=depth_n, scene_vel=scene_vel,
-                               H_cum=(H_cum if (fa < len(need_track) and need_track[fa])
-                                      else None),
-                               track_gen=track_gen)
+        _cf_kw = dict(aud=(float(aud_rms[ai]), float(aud_bass[ai]),
+                           float(aud_onset[ai])),
+                      depth_n=depth_n, scene_vel=scene_vel,
+                      H_cum=(H_cum if (fa < len(need_track) and need_track[fa])
+                             else None),
+                      track_gen=track_gen)
+        if args.alpha_export:
+            # v101h Doppelpass: identische Geometrie ueber Schwarz und Weiss,
+            # dazwischen den Anim-/Kamera-State zuruecksetzen.
+            _snap = _alpha_state_snapshot(plans, cam_state)
+            _cb = composite_frame(np.zeros_like(frame), alpha, t, plans, words,
+                                  face_stable[fidx], cfg, S, W, H, cam_state,
+                                  tuple(scene_smooth), **_cf_kw)
+            _alpha_state_restore(plans, cam_state, _snap)
+            _cw = composite_frame(np.full_like(frame, 255), alpha, t, plans,
+                                  words, face_stable[fidx], cfg, S, W, H,
+                                  cam_state, tuple(scene_smooth), **_cf_kw)
+            comp = None
+        else:
+            comp = composite_frame(frame, alpha, t, plans, words, face_stable[fidx],
+                                   cfg, S, W, H, cam_state, tuple(scene_smooth),
+                                   **_cf_kw)
         if not win or t >= win[0] - 1e-6:
             if first_abs is None:
                 first_abs = fi + off_frames
             last_abs = fi + off_frames
-            if wm is not None:
+            if args.alpha_export:
+                try:
+                    enc.stdin.write(alpha_from_pair(_cb, _cw).tobytes())
+                except BrokenPipeError:
+                    err = enc.stderr.read().decode('utf-8', 'ignore')[-800:] \
+                        if enc.stderr else ''
+                    sys.exit(f"FEHLER: Alpha-Encoder abgebrochen. {err.strip()}")
+            if not args.alpha_export and wm is not None:
                 _a, _x, _y = wm
                 _h, _w = _a.shape[:2]
                 _roi = comp[_y:_y + _h, _x:_x + _w]
                 _al = (_a[:, :, 3:4].astype(np.float32) / 255.0)
                 _roi[:] = _roi * (1 - _al) + _a[:, :, 2::-1].astype(np.float32) * _al
-            if fi in _kb_frames:                      # v101g: Moment-Beweisbild
+            if not args.alpha_export and fi in _kb_frames:   # v101g: Beweisbild
                 _kt, _ks = _kb_frames.pop(fi)
                 _kb_tiles.append(np.clip(comp, 0, 255).astype(np.uint8).copy())
                 _kb_labels.append(f"{_kt} @ {_ks:.1f}s")
             try:
-                enc.stdin.write(np.clip(comp, 0, 255).astype(np.uint8).tobytes())
+                if not args.alpha_export:
+                    enc.stdin.write(np.clip(comp, 0, 255).astype(np.uint8).tobytes())
             except BrokenPipeError:
                 # v80n: ffmpeg ist gestorben - Ursache so genau wie moeglich melden
                 err = ''
@@ -7801,6 +7909,26 @@ def main():
                  f"{enc_err.decode('utf-8', 'ignore')[-600:].strip() or '(keine Ausgabe)'}")
 
     # --- Stufe 2 (v80p): Audio + SFX dazu muxen. Video wird nur kopiert.
+    if video_tmp and args.alpha_export:
+        # v101h: Caption-Ebene - NUR die SFX als eigene Tonspur (der Kunde hat
+        # sein Original-Audio selbst). Ohne SFX bleibt die Ebene stumm.
+        if sfx_path:
+            mux = ['ffmpeg', '-y', '-v', 'error', '-i', video_tmp,
+                   '-i', sfx_path, '-filter_complex', f'[1:a:0]volume={vol}[aout]',
+                   '-map', '0:v', '-map', '[aout]', '-c:v', 'copy'] + acodec + \
+                  ['-shortest', out_path]
+            print("Tonspur wird angelegt (nur SFX)...")
+            r_mux = subprocess.run(mux, capture_output=True, text=True)
+            if r_mux.returncode != 0 or not os.path.exists(out_path):
+                sys.exit(f"FEHLER: Ton-Muxing fehlgeschlagen: "
+                         f"{(r_mux.stderr or '')[-600:].strip() or '(keine Ausgabe)'}")
+            try:
+                os.remove(video_tmp)
+            except OSError:
+                pass
+        else:
+            os.replace(video_tmp, out_path)
+        video_tmp = None
     if video_tmp:
         # WICHTIG: nur die ERSTE Tonspur (1:a:0). iPhone-Videos tragen oft
         # zusaetzliche Metadaten-Streams, die als 'Audio mit Codec none'
