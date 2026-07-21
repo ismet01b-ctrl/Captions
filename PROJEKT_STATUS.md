@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101a Innovations-Batch Teil 1/4 (Ismet: "Mach alles" aus der
+  Innovations-Liste).** Drei von 13 Features:
+  (1) BETONUNGS-TYPOGRAFIE: _word_loudness() (Sprech-Pegel pro Wort, 50ms-
+  RMS) speist jetzt auch die Typografie - compose_phrase baut den Kern bei
+  Pegel-Marken pro Wort mit echter Variable-Font-Gewichtsachse (laut '!' =
+  wght 900 + 6% groesser, leise '~' = wght 500 + 6% kleiner, normal 760 =
+  optisch identisch zum statischen Schnitt), Grundlinie unten (CAPS), Zeile
+  passt sich in max_w ein; compose_flow skaliert/gewichtet norm-Woerter.
+  Main misst einmal (loud_map) und reicht durch build_plans. Kein API-Call.
+  Beweis: Sprite-Vergleich (ZAHL schwer neben DIESE normal), Flow-Wort
+  282->311px bei '!'.
+  (8) CHOREOGRAPHIE-REGIE: REGIE_PROMPT Punkt 4 - Buendeln statt
+  Wort-Geballer, Pausen nach power-3 halten, Pops nur auf Schluesselwoerter,
+  EIN Stil-Wechsel auf dem Wendepunkt.
+  (9) SILENT-SCORE: silent_score() bewertet das FERTIGE Video stumm (74%
+  der Views laufen ohne Ton) - 1 Vision-Call, max 6 Moment-Frames detail
+  low, JSON {score 0-100, max 3 Hinweise}; render.py schreibt
+  <input>_silent.json + Log-Zeile, server uebernimmt in den Job-State,
+  UI zeigt "Silent view"-Kachel + Muted-view-Tipps im Director's Report.
+  Ohne Key: still None, nichts passiert. Config: keywords.silent_score.
+  Tests: 7 neue (Kern reagiert auf Pegel im Rahmen, Flow-Wort waechst,
+  Verdrahtung Main/Server/UI, Prompt-Garantien, ohne Key kein Crash).
+  Regression 563/563 + GUI_OK. Ehrlich: Silent-Score-Qualitaet und
+  Betonungs-Optik auf echtem Material prueft Ismet.
+
 - **v100 Animations-Pass (Ismet: "Fixe alle Animationen. Dynamisch, high
   end, Stand 2026, wie von einem Senior-VFX-Spezialisten").** Methodik:
   alle 26 Animationen als Filmstreifen-Proben gerendert (animprobe-Harness,

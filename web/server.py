@@ -1841,6 +1841,16 @@ def run_job(jid):
             verbrauch = cost_seconds(j.get('dauer', 0))
             _adjust_balance(uid, -verbrauch,
                             f'Render {jid} ({verbrauch}s)')
+        # v101 Silent-Score: render.py legt <input>_silent.json ab, wenn die
+        # Stumm-Bewertung lief - in den Job-State fuer die UI uebernehmen.
+        try:
+            _slp = os.path.splitext(j.get('input', ''))[0] + '_silent.json'
+            if os.path.exists(_slp):
+                _sl = json.load(open(_slp, encoding='utf-8'))
+                set_state(jid, silent_score=int(_sl.get('score', 0)),
+                          silent_hints=_sl.get('hinweise', [])[:3])
+        except Exception:
+            pass
         set_state(jid, status='fertig', progress=1.0, phase='Done',
                   out='fertig.mp4')
     else:

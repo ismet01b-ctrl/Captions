@@ -3599,6 +3599,8 @@ async function pollRender() {
     $('#progressEta').textContent = st.eta_sec != null ? fmtDur(st.eta_sec) : '–';
     if (st.status === 'fertig') {
       State.progTarget = 1;
+      State.silentScore = (typeof st.silent_score === 'number') ? st.silent_score : null;
+      State.silentHints = st.silent_hints || [];
       if (State.progRAF) cancelAnimationFrame(State.progRAF);
       State.progRAF = null; State.progShown = 0;
       $('#progressCard').classList.add('hidden');
@@ -3710,6 +3712,23 @@ function renderSuccess() {
   `;
   $('#doneSub').textContent = 'Your video is ready.';
   // v80z Peak-End: Hook-Score als vierte Kachel + Lob-Zeile
+  // v101 Silent-Score: wie wirkt das Video STUMM (74% der Views ohne Ton)
+  if (State.silentScore != null) {
+    const ssc = State.silentScore;
+    const scol = ssc >= 75 ? '#6dd48a' : ssc >= 50 ? '#f5c451' : '#e0785a';
+    $('#statGrid').innerHTML += `
+      <div class="stat"><div class="n" style="color:${scol}">${ssc}</div>
+      <div class="l">Silent view</div></div>`;
+    if ((State.silentHints || []).length) {
+      const box = $('#dirReport');
+      if (box) {
+        box.classList.remove('hidden');
+        box.innerHTML += '<p style="font-size:12.5px; color:var(--mut); margin-top:10px;">' +
+          '<b style="color:var(--fg);">Muted-view tips:</b> ' +
+          State.silentHints.map(h => escHtml(h.tipp || '')).join(' · ') + '</p>';
+      }
+    }
+  }
   fetch('/api/moments/' + State.jid).then(r => r.ok ? r.json() : null).then(moms => {
     if (!moms || !moms.length) return;
     State.moments = moms;

@@ -1109,6 +1109,71 @@ def _frame_b64(video_path, t, width=480, quality=72):
         return None
     return base64.b64encode(r.stdout).decode('ascii')
 
+SILENT_PROMPT = """Du bist Retention-Analyst fuer Short-Form-Video. Du siehst Standbilder
+eines FERTIG gerenderten Videos mit eingebrannten Captions - so wie es ~74% der
+Zuschauer sehen werden: STUMM, beim Scrollen, 1-2 Sekunden Aufmerksamkeit.
+Bewerte NUR die stumme Wirkung:
+- Liest man in 1 Sekunde, worum es geht? (Lesbarkeit, Groesse, Kontrast)
+- Sitzt die Betonung auf den richtigen Woertern (Emphase erkennbar ohne Ton)?
+- Kommt der Spannungsbogen visuell an (Hook -> Eskalation -> Aufloesung)?
+- Stoert etwas (Text ueber Gesicht, unleserlich, zu voll, zu leer)?
+Antworte NUR mit JSON:
+{"score": <0-100>, "hinweise": [{"i": <Moment-Index aus dem Text>, "tipp": "<max 12 Woerter, konkret>"}]}
+Maximal 3 Hinweise, nur echte Probleme - kein Lob, keine Fuellhinweise."""
+
+
+def silent_score(out_video, words, fx_map, model='gpt-4o'):
+    """v101: Zweiter Score neben dem Hook-Score - bewertet das FERTIGE Video
+    STUMM (so laeuft die Mehrheit der Views). Ein Vision-Call, max. 6 Frames
+    (detail low). Ohne Key/Fehler: None, der Render bleibt unberuehrt."""
+    key = os.environ.get('OPENAI_API_KEY')
+    if not key or not fx_map:
+        return None
+    try:
+        mom = sorted(fx_map.items(),
+                     key=lambda kv: -int(kv[1].get('power', 2)))[:6]
+        mom = sorted(mom, key=lambda kv: kv[0])
+        content = []
+        for i, info in mom:
+            if not (0 <= i < len(words)):
+                continue
+            t = float(words[i].get('start', 0)) + 0.35
+            b64 = _frame_b64(out_video, t)
+            if not b64:
+                continue
+            n = int(info.get('n', 1))
+            txt = ' '.join(clean(words[j]['word'])
+                           for j in range(i, min(i + n, len(words))))
+            content.append({'type': 'text',
+                            'text': f'MOMENT [{i}] Caption: "{txt}"'})
+            content.append({'type': 'image_url',
+                            'image_url': {'url': f'data:image/jpeg;base64,{b64}',
+                                          'detail': 'low'}})
+        if not content:
+            return None
+        import requests as _rq
+        r = _rq.post('https://api.openai.com/v1/chat/completions',
+                     headers={'Authorization': f'Bearer {key}'},
+                     json=_oai_json(model,
+                                    [{'role': 'system', 'content': SILENT_PROMPT},
+                                     {'role': 'user', 'content': content}],
+                                    max_toks=500, temperature=0.1),
+                     timeout=90)
+        data = json.loads(r.json()['choices'][0]['message']['content'])
+        score = min(max(int(data.get('score', -1)), 0), 100)
+        hints = []
+        for h in (data.get('hinweise') or [])[:3]:
+            try:
+                hints.append({'i': int(h.get('i', -1)),
+                              'tipp': str(h.get('tipp', ''))[:120]})
+            except Exception:
+                continue
+        return {'score': score, 'hinweise': hints}
+    except Exception as e:
+        print(f"Silent-Score nicht verfuegbar ({type(e).__name__})")
+        return None
+
+
 SZENE_PROMPT = """Du bist der visuelle Regisseur fuer Premium-Captions. Du siehst pro \
 Moment einen Frame des Videos plus den Text, der dort erscheint. Entscheide fuer jeden \
 Moment, wie der Text zur UMGEBUNG gehoert:
@@ -2298,6 +2363,16 @@ Spitzen, Pointen, Kontraste.
      verschiessen, der Hoehepunkt kommt spaet.
    - MIKRO-BELOHNUNG: Zahlen, Beweise, Pointen sichtbar auszahlen (Zaehler,
      outline) - kleine Belohnungen ziehen zum Weiterschauen.
+4. CHOREOGRAPHIE (Pacing 2026 - so unterscheidet sich teuer von billig):
+   - BUENDELN statt Geballer: lieber EINE Phrase (n 2-4), die eine Aussage
+     traegt, als drei Einzelwoerter kurz hintereinander. Wort-fuer-Wort-
+     Dauerfeuer (200+ wpm Highlights) ist der Billig-Marker 2026.
+   - PAUSEN HALTEN: nach einem power-3-Moment mindestens einen Satz lang
+     NICHTS Grosses setzen - die Stille verkauft den Moment davor.
+   - POPS NUR AUF SCHLUESSELWOERTER: zoom_punch/knall/explosion maximal auf
+     die 2-3 Woerter, die das Video tragen. Alles andere ruhig oder gar nicht.
+   - EIN Farb-/Stil-Wechsel sitzt auf dem WENDEPUNKT der Geschichte (Twist/
+     Aufloesung), nicht zufaellig verteilt.
    Diese Dramaturgie bestimmt, WO deine Momente liegen und wie stark sie sind -
    in JEDEM Look, vom lauten TikTok bis zum ruhigen Clean, jeweils auf seine Art.
 
@@ -3779,18 +3854,25 @@ def glitch_arr(arr, rng, strength):
     return out
 
 
-def compose_phrase(phrase, words, S, W, H, portrait=False, safe=False):
+def compose_phrase(phrase, words, S, W, H, portrait=False, safe=False,
+                   loud=None):
     """Setzt eine Phrase wie ein Magazin-Layout, nach dem Muster hochwertiger
     Social-Edits: Bindewoerter als kleine Akzent-Zeile darueber, der Kern riesig
     in Weiss, ein kleines Abschlusswort kursiv schraeg ueberlappend.
-    Jedes Wort erscheint zu seinem eigenen Sprech-Zeitpunkt."""
+    Jedes Wort erscheint zu seinem eigenen Sprech-Zeitpunkt.
+    v101 Betonungs-Typografie: 'loud' ({wort_index: '!'|'~'} aus
+    _word_loudness) setzt laut gesprochene Woerter SCHWERER (echte
+    Variable-Font-Achse) und leise leichter - die Zeile sieht aus, wie die
+    Stimme klingt. Ohne Marken identisches Verhalten wie vorher."""
     CONNECTORS = {'im', 'in', 'am', 'an', 'auf', 'der', 'die', 'das', 'dem', 'den',
                   'des', 'mit', 'von', 'vom', 'zum', 'zur', 'zu', 'fuer', 'für',
                   'und', 'of', 'to', 'the', 'at', 'on', 'for', 'and'}
+    loud = loud or {}
     toks = []
     for j in phrase:
         raw = clean(words[j]['word'])
-        toks.append({'raw': raw, 'up': raw.upper(),
+        toks.append({'raw': raw, 'up': raw.upper(), 'j': j,
+                     'mark': loud.get(j),
                      'conn': raw.lower() in CONNECTORS, 't': words[j]['start']})
 
     # Split am letzten Bindewort: davor = Akzent-Zeile, danach = Kern-Lauf
@@ -3811,7 +3893,33 @@ def compose_phrase(phrase, words, S, W, H, portrait=False, safe=False):
     out = []
     core_txt = ' '.join(t['up'] for t in run)
     core_sz = S.fit(core_txt, base, max_w)
-    core_arr = S.text(core_txt, core_sz, S.white)[0]          # crisp: kein Glow
+    if any(t.get('mark') for t in run) and len(run) >= 2:
+        # Betonungs-Kern: pro Wort eigener Schnitt. '!' = schwer (+Groesse),
+        # '~' = leicht. Grundlinie = Unterkante (Kern ist CAPS, keine
+        # Unterlaengen). Passt die Groesse an, bis die Zeile in max_w passt.
+        def _bau(sz):
+            parts = []
+            for t in run:
+                m = t.get('mark')
+                w_sz = int(sz * (1.06 if m == '!' else (0.94 if m == '~' else 1.0)))
+                # Normalstufe 760 entspricht dem statischen Schnitt - nur die
+                # markierten Woerter weichen ab (laut 900, leise 500)
+                wg = 900 if m == '!' else (500 if m == '~' else 760)
+                parts.append(S.text(t['up'], max(w_sz, 8), S.white, wght=wg)[0])
+            gap = max(int(sz * 0.24), 4)
+            tw = sum(a.shape[1] for a in parts) + gap * (len(parts) - 1)
+            th = max(a.shape[0] for a in parts)
+            out_a = np.zeros((th, tw, 4), parts[0].dtype)
+            x = 0
+            for a in parts:
+                out_a[th - a.shape[0]:, x:x + a.shape[1]] = a
+                x += a.shape[1] + gap
+            return out_a
+        core_arr = _bau(core_sz)
+        if core_arr.shape[1] > max_w:
+            core_arr = _bau(max(int(core_sz * max_w / core_arr.shape[1]), 8))
+    else:
+        core_arr = S.text(core_txt, core_sz, S.white)[0]      # crisp: kein Glow
     core_h, core_w = core_arr.shape[0], core_arr.shape[1]
     if pre:
         line = ' '.join(t['up'] for t in pre)
@@ -3838,7 +3946,7 @@ _FLOW_CONN = {'im', 'in', 'am', 'an', 'auf', 'aus', 'bei', 'der', 'die', 'das',
               'why', 'how', 'that', 'this', 'not', 'but', 'just', 'my', 'your'}
 
 
-def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None):
+def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None):
     """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
     Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
       - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
@@ -3894,7 +4002,14 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None):
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'accent',  # den Slant
                           't': words[i]['start']})
         else:
-            arr, tw = S.text(raw, sz_n, S.white, tracking=6, font=S.f_sans)
+            # v101 Betonungs-Typografie: laute Woerter schwerer+groesser,
+            # leise leichter+kleiner (Variable-Font-Achse; ohne var-Schnitt
+            # greift nur die Groesse - immer noch stimmig).
+            _m = (loud or {}).get(i)
+            _sz = int(sz_n * (1.12 if _m == '!' else (0.92 if _m == '~' else 1.0)))
+            _wg = 800 if _m == '!' else (460 if _m == '~' else None)
+            arr, tw = S.text(raw, _sz, S.white, tracking=6, font=S.f_sans,
+                             wght=_wg)
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'norm',
                           't': words[i]['start']})
     # Inline-Fluss mit Umbruch, Zeilen unten ausgerichtet (gemeinsame Grundlinie)
@@ -4256,7 +4371,8 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
 
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
-                palette_at=None, cut_times=None, faces_at=None, flow_map=None):
+                palette_at=None, cut_times=None, faces_at=None, flow_map=None,
+                loud=None):
     KW_FX = cfg['effects']['keyword_rotation']
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
@@ -4681,7 +4797,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                             or (fx == 'behind' and isinstance(info, dict)
                                 and info.get('szene') == 'himmel'))
             if len(phrase) >= 2 and not _platzierung:
-                p['tokens'] = compose_phrase(phrase, words_c, S, W, H, portrait, safe_z)
+                p['tokens'] = compose_phrase(phrase, words_c, S, W, H, portrait, safe_z,
+                                             loud=loud)
                 print(f"  Editorial-Komposition: {txt}")
                 core_tok = next((tk for tk in p['tokens'] if tk.get('role') == 'core'), None)
                 if core_tok is not None and p.get('count'):
@@ -4974,7 +5091,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         elif cfg['effects'].get('caption_flow', True):
             # v97 Flow-Caption (Referenz-Look): Chunk baut sich INLINE auf,
             # Anker-Wort gross+getippt+Glow, Abschlusswort kursiv-Akzent.
-            items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait,
+            items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait, loud=loud,
                                                   flow_sel=(flow_map or {}).get(g[0]))
             # Referenz-Look: Block im OBEREN Drittel (nicht mittig ueber dem
             # Gesicht). Bei Hochformat oben verankert, sonst zentriert.
@@ -6513,6 +6630,13 @@ def main():
         print(f"Wort-Timing nachjustiert (mittlere Korrektur {avg_shift:.0f} ms)")
     else:
         voice_wav = None
+    # v101 Betonungs-Typografie: Sprech-Pegel pro Wort einmal messen -
+    # compose_phrase/compose_flow setzen laute Woerter typografisch schwerer.
+    loud_map = _word_loudness(words, voice_wav) if voice_wav else {}
+    if loud_map:
+        _nl = sum(1 for v in loud_map.values() if v == '!')
+        print(f"Betonung: {_nl} laute / {len(loud_map) - _nl} leise Woerter "
+              f"typografisch gesetzt")
 
     # --- Tracking + Plaene
     speed = str(cfg['output'].get('speed', 'standard')).lower()
@@ -6859,11 +6983,11 @@ def main():
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map,
                             face_pos=None, palette_at=palette_at,
                             cut_times=cut_times, faces_at=None,
-                            flow_map=flow_map)
+                            flow_map=flow_map, loud=loud_map)
     else:
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
                             palette_at, cut_times=cut_times, faces_at=faces_at,
-                            flow_map=flow_map)
+                            flow_map=flow_map, loud=loud_map)
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.
@@ -7395,6 +7519,16 @@ def main():
         except OSError:
             pass
     print(f"Fertig: {out_path}")
+
+    # v101 Silent-Score: das fertige Video stumm bewerten (74% der Views
+    # laufen ohne Ton). Ein guenstiger Vision-Call; ohne Key passiert nichts.
+    if cfg['keywords'].get('silent_score', True) and fx_map:
+        _sil = silent_score(out_path, words, fx_map,
+                            cfg['keywords'].get('ai_model', 'gpt-4o'))
+        if _sil:
+            _sp = os.path.splitext(args.input)[0] + '_silent.json'
+            json.dump(_sil, open(_sp, 'w', encoding='utf-8'), ensure_ascii=False)
+            print(f"Silent-Score: {_sil['score']}/100 (stumme Wirkung)")
 
     # --- Fenster-Segment frame-exakt ins fertige Video einsetzen
     if args.window and args.splice_into:

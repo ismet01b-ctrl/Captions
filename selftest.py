@@ -1332,6 +1332,49 @@ def _scenario_logic(clip, transcript, tmp):
           "rng.random()) - 0.5) * 9" not in _src99
           and 'hand_jitter' in _src99)
 
+    # v101.1 Betonungs-Typografie: laute Woerter schwerer, leise leichter -
+    # die Zeile sieht aus wie die Stimme klingt. Kein API-Call noetig.
+    _wb = [{'word': ' Diese', 'start': 0.0, 'end': 0.3},
+           {'word': ' Zahl', 'start': 0.35, 'end': 0.6},
+           {'word': ' veraendert', 'start': 0.65, 'end': 1.0},
+           {'word': ' alles', 'start': 1.05, 'end': 1.3}]
+    _cp0 = next(t for t in R.compose_phrase([0, 1, 2, 3], _wb, S, 1080, 1920,
+                                            portrait=True) if t['role'] == 'core')
+    _cp1 = next(t for t in R.compose_phrase([0, 1, 2, 3], _wb, S, 1080, 1920,
+                                            portrait=True, loud={2: '!', 3: '~'})
+                if t['role'] == 'core')
+    check('v101: Betonungs-Kern reagiert auf Pegel (anders, aber im Rahmen)',
+          _cp1['arr'].shape[1] != _cp0['arr'].shape[1]
+          and _cp1['arr'].shape[1] <= _cp0['arr'].shape[1] * 1.05,
+          f"{_cp0['arr'].shape[1]} -> {_cp1['arr'].shape[1]}")
+    _fl0 = R.compose_flow([0, 1, 2, 3], _wb, S, 1080, 1920, portrait=True)[0]
+    _fl1 = R.compose_flow([0, 1, 2, 3], _wb, S, 1080, 1920, portrait=True,
+                          loud={0: '!'})[0]
+    _w0 = next(i for i in _fl0 if i['role'] == 'norm' and i['i'] == 0)['w']
+    _w1 = next(i for i in _fl1 if i['role'] == 'norm' and i['i'] == 0)['w']
+    check('v101: Flow-Wort wird bei lautem Pegel groesser/schwerer', _w1 > _w0,
+          f'{_w0} -> {_w1}')
+    check('v101: Pegel-Karte im Main verdrahtet (build_plans loud=)',
+          'loud_map = _word_loudness(words, voice_wav)' in _src99
+          and _src99.count('loud=loud_map') >= 2)
+    # v101.8 Choreographie-Regie im Prompt
+    check('v101: Choreographie-Sektion im Regie-Prompt',
+          'CHOREOGRAPHIE' in R.REGIE_PROMPT
+          and 'BUENDELN statt Geballer' in R.REGIE_PROMPT
+          and 'PAUSEN HALTEN' in R.REGIE_PROMPT)
+    # v101.9 Silent-Score: ohne Key still None, Verdrahtung vorhanden
+    check('v101: Silent-Score ohne Key -> None (kein Crash)',
+          R.silent_score('/tmp/nix.mp4', _wb, {1: {'fx': 'outline', 'power': 2}})
+          is None)
+    check('v101: Silent-Score-Prompt bewertet stumme Wirkung',
+          'STUMM' in R.SILENT_PROMPT and '"score"' in R.SILENT_PROMPT)
+    check('v101: Silent-Score im Main + Server + UI verdrahtet',
+          'silent_score(out_path' in _src99
+          and '_silent.json' in open(os.path.join(HERE, 'web', 'server.py'),
+                                     encoding='utf-8').read()
+          and 'Silent view' in open(os.path.join(HERE, 'web', 'index.html'),
+                                    encoding='utf-8').read())
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
