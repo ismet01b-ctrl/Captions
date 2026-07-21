@@ -3776,6 +3776,25 @@ def music_beats(voice_wav, n_frames, fps):
         return z, 0, 0.0
 
 
+def beat_grid_times(beat_env, fps, conf, bpm, min_conf=0.30):
+    """v101c Beat-Grid: extrahiert die Beat-Zeitpunkte (Sekunden) aus der
+    Beat-Envelope. Rueckgabe: sortierte Liste oder None.
+
+    None wenn kein verlaesslicher Takt vorliegt (conf < min_conf) - dann
+    bleibt das Timing rein sprachgetrieben. Ein Beat ist ein lokales Maximum
+    der Envelope ueber 0.55; unter 4 Beats gilt der Takt als Zufall."""
+    if conf < min_conf or bpm <= 0 or beat_env is None:
+        return None
+    env = np.asarray(beat_env, np.float32)
+    times = []
+    for i in range(1, len(env) - 1):
+        if env[i] > 0.55 and env[i] >= env[i - 1] and env[i] > env[i + 1]:
+            times.append(i / float(fps))
+    if len(times) < 4:
+        return None
+    return times
+
+
 def audio_envelopes(voice_wav, n_frames, fps):
     """Lautstaerke-, Bass- und Onset-Huellkurve pro Videoframe, normalisiert 0..1.
     Damit koennen Texte auf Musik und Stimme reagieren."""
@@ -4413,7 +4432,7 @@ def build_watermark(W, H):
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None, faces_at=None, flow_map=None,
-                loud=None):
+                loud=None, beat_times=None):
     KW_FX = cfg['effects']['keyword_rotation']
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
@@ -5326,6 +5345,28 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 n_clamp += 1
         if n_clamp:
             print(f"  Schnitt-Disziplin: {n_clamp} Moment(e) enden vor dem Schnitt")
+
+    # v101c BEAT-GRID: Liegt Musik mit klarem Takt unter dem Clip, rasten
+    # Keyword-Momente auf den naechsten Beat ein (Editor-Handwerk: "cut on the
+    # beat"). Nur der EINSTIEG wird verschoben, max. 0.12s (unter der Wort-
+    # Sync-Wahrnehmungsschwelle), und nie so, dass der Moment unter 0.6s
+    # Standzeit faellt. SFX bleiben bewusst auf den Sprech-Onsets - der Ton
+    # gehoert zum Wort, das Bild darf zum Takt atmen.
+    if beat_times and cfg['effects'].get('beat_grid', True):
+        bts = sorted(float(b) for b in beat_times)
+        n_snap = 0
+        for p in plans:
+            if 'kw_i' not in p or p.get('broll'):
+                continue
+            st, en = p.get('start'), p.get('end')
+            if st is None or en is None:
+                continue
+            nb = min(bts, key=lambda b: abs(b - st))
+            if 0.005 < abs(nb - st) <= 0.12 and en - nb >= 0.6:
+                p['start'] = nb
+                n_snap += 1
+        if n_snap:
+            print(f"  Beat-Grid: {n_snap} Moment(e) rasten auf den Takt")
 
     plans.sort(key=lambda p: p['start'])
     return plans
@@ -6728,6 +6769,7 @@ def main():
         return [(fx, fw) for (fx, fy, fw) in best]
     S = Sprites(cfg, W, H)
     n_est = (max(int(args.duration * fps), 1) if args.duration else n_frames) + 8
+    _beat_ts = None            # v101c: Beat-Zeitpunkte fuers Beat-Grid
     if voice_wav and os.path.exists(voice_wav) and cfg['effects'].get('anim', True):
         aud_rms, aud_bass, aud_onset = audio_envelopes(voice_wav, n_est, fps)
         # Musik-Beat: eigener Onset aus Sub-Bass + Auto-Korrelation. Wird mit
@@ -6746,6 +6788,7 @@ def main():
             else:
                 print("Musik-Beat: kein klares Tempo (Confidence zu niedrig) - "
                       "nur Sprech-Onset")
+            _beat_ts = beat_grid_times(beat_env, fps, conf, bpm)
     else:
         aud_rms = aud_bass = aud_onset = np.zeros(n_est, np.float32)
     fx_map = None
@@ -7028,11 +7071,13 @@ def main():
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map,
                             face_pos=None, palette_at=palette_at,
                             cut_times=cut_times, faces_at=None,
-                            flow_map=flow_map, loud=loud_map)
+                            flow_map=flow_map, loud=loud_map,
+                            beat_times=_beat_ts)
     else:
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
                             palette_at, cut_times=cut_times, faces_at=faces_at,
-                            flow_map=flow_map, loud=loud_map)
+                            flow_map=flow_map, loud=loud_map,
+                            beat_times=_beat_ts)
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.

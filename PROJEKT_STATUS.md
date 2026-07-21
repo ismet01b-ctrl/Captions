@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101c Beat-Grid (Innovations-Batch 3).** Liegt Musik mit klarem Takt
+  unter dem Clip, rasten Keyword-Momente auf den naechsten Beat ein
+  ("cut on the beat", Editor-Handwerk). beat_grid_times() zieht die
+  Beat-Zeitpunkte aus der music_beats()-Envelope (lokale Maxima > 0.55;
+  Selbstschutz: conf < 0.30 oder < 4 Beats -> kein Grid, reine
+  Talking-Heads bleiben unberuehrt). build_plans verschiebt NUR den
+  Einstieg, max. 0.12s (unter der Wort-Sync-Wahrnehmungsschwelle) und nie
+  unter 0.6s Reststandzeit; laeuft NACH Schnitt-Disziplin, vor dem Sort.
+  SFX bleiben bewusst auf den Sprech-Onsets (Ton gehoert zum Wort, Bild
+  darf zum Takt atmen). Abschaltbar: effects.beat_grid=false. 8 neue
+  Tests (Beat-Extraktion, Confidence-/Mindest-Beats-Schutz, Snap <=0.12s,
+  kein Snap >0.12s, Config-Gate, Main-Verdrahtung).
+  Regression 566/566 + 6/1/1/2 Renders + GUI_OK. EHRLICH: hier nur mit
+  synthetischer Envelope getestet - Wirkung auf echtem Musik-Material
+  sieht Ismet erst live.
+
 - **v101b Watermark-Unlock (Innovations-Batch 2/4).** Free-Tier-Renders
   laufen jetzt als SPLIT: sauber rendern, Master als master_clean.mp4 im
   Job-Ordner cachen, Auslieferung per ffmpeg-Overlay mit EXAKT demselben

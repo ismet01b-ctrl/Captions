@@ -1384,6 +1384,52 @@ def _scenario_logic(clip, transcript, tmp):
           'watermark_split' in _src99 and 'master_clean.mp4' in _src99
           and "overlay={_wwx}:{_wwy}" in _src99)
 
+    # v101c Beat-Grid: Momente rasten auf den Musik-Takt.
+    _bge = np.zeros(300, np.float32)
+    for _bf in range(15, 295, 15):                      # 120 BPM bei 30 fps
+        _bge[_bf] = 1.0
+        _bge[_bf + 1] = 0.7
+    _bgt = R.beat_grid_times(_bge, 30, conf=0.8, bpm=120)
+    check('v101c: beat_grid_times findet die Beats',
+          _bgt is not None and len(_bgt) >= 4 and abs(_bgt[0] - 0.5) < 0.05,
+          str(_bgt[:3] if _bgt else None))
+    check('v101c: niedrige Confidence -> kein Grid (Talking-Head-Schutz)',
+          R.beat_grid_times(_bge, 30, conf=0.1, bpm=120) is None)
+    _bge2 = np.zeros(300, np.float32)
+    _bge2[30] = _bge2[60] = 1.0
+    check('v101c: unter 4 Beats -> kein Grid (Zufalls-Schutz)',
+          R.beat_grid_times(_bge2, 30, conf=0.8, bpm=120) is None)
+    _bgw = [{'word': 'Wir', 'start': 0.2, 'end': 0.5},
+            {'word': 'Boom', 'start': 1.03, 'end': 2.2}]
+    _bg_base = R.build_plans(_bgw, {1}, cfg, S, W_, H_, lambda s, e: True)
+    _bg_p0 = next(p for p in _bg_base if p.get('kw_i') == 1)
+    _bg_st, _bg_en = _bg_p0['start'], _bg_p0['end']
+    _bg_nb = _bg_st + 0.08
+    check('v101c: Fixture-Moment lang genug fuer Snap-Guard',
+          _bg_en - _bg_nb >= 0.6, f'{_bg_st:.2f}-{_bg_en:.2f}')
+    _bg_sn = R.build_plans(_bgw, {1}, cfg, S, W_, H_, lambda s, e: True,
+                           beat_times=[_bg_nb])
+    _bg_p1 = next(p for p in _bg_sn if p.get('kw_i') == 1)
+    check('v101c: Moment rastet auf den Beat (<=0.12s)',
+          abs(_bg_p1['start'] - _bg_nb) < 1e-6,
+          f"{_bg_st:.3f} -> {_bg_p1['start']:.3f}")
+    _bg_far = R.build_plans(_bgw, {1}, cfg, S, W_, H_, lambda s, e: True,
+                            beat_times=[_bg_st + 0.5])
+    _bg_p2 = next(p for p in _bg_far if p.get('kw_i') == 1)
+    check('v101c: Beat weiter als 0.12s -> kein Snap (Wort-Sync gewinnt)',
+          abs(_bg_p2['start'] - _bg_st) < 1e-6)
+    _cfg_bg = copy.deepcopy(cfg)
+    _cfg_bg['effects']['beat_grid'] = False
+    _bg_off = R.build_plans(_bgw, {1}, _cfg_bg, S, W_, H_, lambda s, e: True,
+                            beat_times=[_bg_nb])
+    _bg_p3 = next(p for p in _bg_off if p.get('kw_i') == 1)
+    check('v101c: effects.beat_grid=False schaltet das Grid ab',
+          abs(_bg_p3['start'] - _bg_st) < 1e-6)
+    check('v101c: Beat-Grid im Main verdrahtet',
+          '_beat_ts = beat_grid_times(beat_env, fps, conf, bpm)' in _src99
+          and _src99.count('beat_times=_beat_ts') >= 2
+          and '_beat_ts = None' in _src99)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
