@@ -1450,7 +1450,11 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         h = max(int(spr.height * scale), 1)
         s = spr.resize((w, h), Image.LANCZOS)
         if abs(rot) > 0.15:
-            s = s.rotate(rot, resample=Image.BICUBIC, expand=True)
+            # Rotation supersampled (2x -> rotieren -> runter): PIL glaettet
+            # Rotations-Kanten sonst kaum - lange Kanten bekamen Treppchen
+            s = s.resize((w * 2, h * 2), Image.LANCZOS) \
+                 .rotate(rot, resample=Image.BICUBIC, expand=True)
+            s = s.resize((s.width // 2, s.height // 2), Image.LANCZOS)
         if vblur > 0.3:
             s = s.filter(ImageFilter.GaussianBlur(min(vblur, 6.0)))
         if op < 1.0:
