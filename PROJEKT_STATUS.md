@@ -3,6 +3,17 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **Motion: Realitaets-Look - Chat=WhatsApp, Notify=iOS-Push.**
+  Ismet: "Chat sollte mehr nach WhatsApp aussehen. Alle Motion Graphics
+  sollten Bezug auf die Realitaet haben." Chat: echte WhatsApp-Bubbles -
+  Outgoing gruen (D8F8C6 hell / 005C4B dark) mit Schwaenzchen oben-aussen,
+  Uhrzeit + BLAUE Doppelhaken; Incoming weiss/202C33. Farben = WhatsApp
+  Light/Dark je nach Stil (RIMMODE). Notify: echter iOS-Push-Banner - Icon,
+  App-Name in CAPS + 'now' rechts, fetter Titel, grauer Body; hell (F5F5F7)
+  / dunkel (1C1C1E) je Stil. Die uebrigen 4 Templates sind bereits real
+  modelliert (iOS-Widgets, App-Store-Karte, Broadcast-Lower-Third,
+  Keynote-Pills). Standbilder beide Stile verifiziert.
+
 - **Motion: Zeitverlaufs-QA aller 6 Templates + 3 Bugfixes.**
   Ismet: "Bei Notification kommt das fast am selben Ort. Ueberpruefe alle."
   QA: alle 6 Templates voll gerendert, Frames alle 0.35s als Kontaktblatt

@@ -1574,55 +1574,107 @@ def render_ui_motion(out_video, style='studio', cfg=None, image=None,
         events.append((1.18, 'press', 0.22))
 
     # ---- Chat (Overlay): Nachrichten-Bubbles poppen abwechselnd links/rechts ----
+    # ---- Chat (Overlay): ECHTER WhatsApp-Look ("Bezug auf die Realitaet") -
+    #      gruene Outgoing-Bubble mit Schwaenzchen, Uhrzeit + blaue Doppelhaken;
+    #      weisse/dunkle Incoming-Bubble. Farben = WhatsApp Light/Dark. ----
     CHAT = None
     if template == 'chat':
         _msgs = pills or ['Hey!', 'New drop is live', 'Check it now']
         S2 = 2
-        fC = F(PFONT, 52 * S2)
-        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        _wa_dark = (RIMMODE == 'dark')
+        BG_IN = (32, 44, 51) if _wa_dark else (255, 255, 255)
+        BG_OUT = (0, 92, 75) if _wa_dark else (216, 248, 198)
+        TX_WA = (233, 237, 239) if _wa_dark else (17, 27, 33)
+        TIME_C = (134, 150, 160) if _wa_dark else (105, 117, 105)
+        CHECK_C = (83, 189, 235)                    # WhatsApp-Blau
+
+        def wa_bubble(text, outgoing, tstamp):
+            fT_ = F(PFONT, 44 * S2)
+            fS_ = F(PFONT, 26 * S2)
+            d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+            tw = int(d0.textlength(text, font=fT_))
+            sw = int(d0.textlength(tstamp, font=fS_))
+            ck_w = 40 * S2 if outgoing else 0
+            tail = 18 * S2
+            bw = 34 * S2 + tw + 18 * S2 + sw + ck_w + 26 * S2
+            bh = 108 * S2
+            im = Image.new('RGBA', (bw + tail, bh), (0, 0, 0, 0))
+            d = ImageDraw.Draw(im)
+            x0 = 0 if outgoing else tail
+            bg = BG_OUT if outgoing else BG_IN
+            d.rounded_rectangle([x0, 0, x0 + bw - 1, bh - 1], 26 * S2,
+                                fill=bg + (255,))
+            # Schwaenzchen oben-aussen (WhatsApp: erster Bubble einer Gruppe)
+            if outgoing:
+                d.polygon([(x0 + bw - 2, 6 * S2), (x0 + bw + tail - 2, 2 * S2),
+                           (x0 + bw - 2, 30 * S2)], fill=bg + (255,))
+            else:
+                d.polygon([(x0 + 2, 6 * S2), (x0 - tail + 2, 2 * S2),
+                           (x0 + 2, 30 * S2)], fill=bg + (255,))
+            ty = (bh - sum(fT_.getmetrics())) // 2 - 6 * S2
+            d.text((x0 + 30 * S2, ty), text, font=fT_, fill=TX_WA + (255,))
+            # Uhrzeit + (outgoing) blaue Doppelhaken unten rechts im Bubble
+            sx = x0 + 30 * S2 + tw + 18 * S2
+            sy = bh - 44 * S2
+            d.text((sx, sy), tstamp, font=fS_, fill=TIME_C + (255,))
+            if outgoing:
+                cx0 = sx + sw + 10 * S2
+                cy = sy + 14 * S2
+                for off in (0, 14 * S2):            # zwei ueberlappende Haken
+                    d.line([(cx0 + off, cy), (cx0 + 8 * S2 + off, cy + 8 * S2),
+                            (cx0 + 24 * S2 + off, cy - 8 * S2)],
+                           fill=CHECK_C + (255,), width=4 * S2 // 2 + 2)
+            return im.resize((im.width // S2, im.height // S2), Image.LANCZOS)
+
         bubbles = []
         for k, m in enumerate(_msgs[:3]):
-            tw = int(d0.textlength(m, font=fC))
-            bw, bh = tw + 120 * S2, 150 * S2
             right = (k % 2 == 1)
-            if right:                              # Akzent-Bubble, weisser Text
-                lo = (max(ACC[0] - 30, 0), max(ACC[1] - 30, 0), max(ACC[2] - 18, 0))
-                b = card_material(bw, bh, bh // 2, fill_top=ACC, fill_bot=lo)
-                tcol = (255, 255, 255)
-            else:
-                b = card_material(bw, bh, bh // 2)
-                tcol = TXT
-            ImageDraw.Draw(b).text((60 * S2, (bh - sum(fC.getmetrics())) // 2),
-                                   m, font=fC, fill=tcol + (255,))
-            b = b.resize((bw // S2, bh // S2), Image.LANCZOS)
+            b = wa_bubble(m, right, f'14:0{k + 2}')
             ts = 0.70 + k * 1.25
             bubbles.append({'spr': b, 'right': right, 't': ts})
             events.append((ts + 0.28, 'whoosh_soft', 0.45))
             events.append((ts + 0.36, 'press', 0.30))
         CHAT = bubbles
 
-    # ---- Notification (Overlay): Banner droppen von oben und stapeln sich ----
+    # ---- Notification (Overlay): ECHTER iOS-Push-Banner - Icon, App-Name in
+    #      CAPS + 'now' rechts, fetter Titel, Body. Hell/Dunkel je Stil. ----
     NOTI = None
     if template == 'notify':
         _n1 = (pills[0] if pills else 'Render finished')
         _n2 = (pills[1] if pills and len(pills) > 1 else 'Your clip is ready')
         S2 = 2
-        fT = F(PFONT, 46 * S2)
-        fB = F(PFONT, 40 * S2)
-        d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        _ios_dark = (RIMMODE == 'dark')
+        N_BG = (28, 28, 30) if _ios_dark else (245, 245, 247)
+        N_TX = (255, 255, 255) if _ios_dark else (10, 10, 12)
+        N_MU = (152, 152, 159) if _ios_dark else (108, 108, 115)
+
+        def ios_banner(title, body):
+            fA = F(PFONT, 26 * S2)                  # App-Name CAPS
+            fT_ = F(PFONT, 40 * S2)                 # Titel fett
+            fB_ = F(PFONT, 36 * S2)                 # Body
+            d0 = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+            need = max(d0.textlength(title, font=fT_),
+                       d0.textlength(body, font=fB_)) / S2 + 200
+            bw = int(min(W * 0.88, max(need, 560))) * S2
+            bh = 188 * S2
+            im = Image.new('RGBA', (bw, bh), (0, 0, 0, 0))
+            d = ImageDraw.Draw(im)
+            d.rounded_rectangle([0, 0, bw - 1, bh - 1], 44 * S2,
+                                fill=N_BG + (252,))
+            icon = logo_sprite(64)
+            im.alpha_composite(icon.resize((64 * S2, 64 * S2), Image.LANCZOS),
+                               (34 * S2, 30 * S2))
+            d.text((120 * S2, 34 * S2), 'DOUCHKOVE', font=fA, fill=N_MU + (255,))
+            nw = d0.textlength('now', font=fA)
+            d.text((bw - nw - 34 * S2, 34 * S2), 'now', font=fA, fill=N_MU + (255,))
+            d.text((120 * S2, 74 * S2), title, font=fT_, fill=N_TX + (255,))
+            d.text((120 * S2, 128 * S2), body, font=fB_, fill=N_MU + (255,))
+            return im.resize((bw // S2, bh // S2), Image.LANCZOS)
+
         cards = []
-        for k, txt in enumerate((_n1, _n2)):
-            bw = int(min(W * 0.86, max(d0.textlength(txt, font=fB) / S2
-                                       + 260, 520))) * S2
-            bh = 170 * S2
-            c = card_material(bw, bh, 40 * S2)
-            dc = ImageDraw.Draw(c)
-            c.alpha_composite(logo_sprite(96).resize((96 * S2, 96 * S2),
-                                                     Image.LANCZOS),
-                              (36 * S2, (bh - 96 * S2) // 2))
-            dc.text((160 * S2, 26 * S2), 'DouchkoVE', font=fT, fill=TXT + (255,))
-            dc.text((160 * S2, 90 * S2), txt, font=fB, fill=MUTE + (255,))
-            c = c.resize((bw // S2, bh // S2), Image.LANCZOS)
+        _defsN = [(_n1, _n2), (_n2, 'Tap to open')]
+        for k, (tt, bd) in enumerate(_defsN):
+            c = ios_banner(tt, bd)
             ts = 0.60 + k * 1.60
             cards.append({'spr': c, 't': ts})
             events.append((ts + 0.28, 'whoosh_soft', 0.50))
