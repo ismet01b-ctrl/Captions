@@ -184,6 +184,12 @@ export interface UiSpec {
   readonly accent: string;
 }
 
+/** One segment of a chained sequence: a UI mockup shown for `dur` seconds. */
+export interface SeqSegment {
+  readonly ui: UiSpec;
+  readonly dur: number; // seconds on screen (incl. its half of each transition)
+}
+
 export interface SceneSpec {
   readonly version: 1;
   readonly seed: number; // seeds all procedural jitter -> deterministic
@@ -195,6 +201,7 @@ export interface SceneSpec {
   readonly beat: BeatGrid;
   readonly scenes: readonly Scene[];
   readonly ui?: UiSpec; // set for UI-mockup templates; MotionApple renders it
+  readonly sequence?: readonly SeqSegment[]; // set for chained sequences; MotionSequence renders it
 }
 
 /** Runtime guard: the AI director's JSON is validated before it ever reaches the renderer. */

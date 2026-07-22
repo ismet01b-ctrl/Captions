@@ -1989,6 +1989,25 @@ def _scenario_logic(clip, transcript, tmp):
     else:
         check('v102e: parseTemplateText Node-Unit-Test (node fehlt -> skip)', True)
 
+    # v103: Sequencer - mehrere Mockups zu EINEM Video verkettet, seamless Transitions.
+    check('v103: MotionSequence-Composition + Blur-Cross-Transition',
+          os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionSequence.tsx'))
+          and 'id="MotionSequence"' in _mrt2
+          and "isSequence ? 'MotionSequence'" in _mrb2
+          and 'export function sequenceSpec' in _mtpl
+          and 'SEQ_TRANSITION' in _mtpl)
+    check('v103: Director + Render-Bridge reichen die Sequenz durch',
+          "argVal('sequence')" in _mrun and 'sequenceSpec(seqItems' in _mrun
+          and "a.startsWith('--sequence=')" in _mrb2)
+    check('v103: Server nimmt Sequenz an und gibt sie an den Renderer',
+          "sequence: str = Form('')" in _srv_m
+          and "cmd.append('--sequence=" in _srv_m)
+    check('v103: UI - Sequence-Typ, Build-Schritt, Sende-Logik',
+          'id="moTypeSequence"' in _ui_m and 'function motionSeqGo' in _ui_m
+          and 'function renderSeqRows' in _ui_m
+          and "sequence:['type','build','render']" in _ui_m
+          and "fd.append('sequence'" in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

@@ -3,10 +3,13 @@
 // (templateId, text, accent) -> SceneSpec carrying a `ui` payload that the MotionApple
 // composition renders. No Python, one credit.
 
-import type { SceneSpec, Format, Palette, UiTemplate } from '../spec';
+import type { SceneSpec, Format, Palette, UiTemplate, SeqSegment, UiSpec } from '../spec';
 import { CANVAS, PALETTES } from './vocabulary';
 
 export type TemplateId = UiTemplate;
+
+/** Seconds of cross-transition overlap between two chained segments. */
+export const SEQ_TRANSITION = 0.55;
 
 export const TEMPLATES: readonly { id: TemplateId; label: string; hint: string }[] = [
   { id: 'pills', label: 'Pills', hint: 'Embossed keyword pills that pop in' },
@@ -94,5 +97,31 @@ export function templateSpec(id: TemplateId, text: string, opts: TemplateOpts = 
     beat: { bpm: 120, offset: 0, snapTol: 0.09 },
     scenes: [],
     ui: { template: id, title, subtitle, lines, accent },
+  };
+}
+
+/** Build a chained-sequence spec: several UI mockups played back-to-back as ONE video. */
+export function sequenceSpec(
+  items: readonly { template: string; text: string }[],
+  opts: TemplateOpts = {},
+): SceneSpec {
+  const format = opts.format ?? '9:16';
+  const { w, h } = CANVAS[format];
+  const accent = opts.accent || '#3574ff';
+  const valid = items.filter((it) => isTemplateId(it.template));
+  const segs: SeqSegment[] = (valid.length ? valid : [{ template: 'pills', text: 'Write, Create, Solve' }]).map((it) => {
+    const id = it.template as TemplateId;
+    const { title, subtitle, lines } = parseTemplateText(id, it.text);
+    const ui: UiSpec = { template: id, title, subtitle, lines, accent };
+    return { ui, dur: DUR[id] };
+  });
+  const total = segs.reduce((a, s) => a + s.dur, 0) - SEQ_TRANSITION * (segs.length - 1);
+  const seed = strHash(segs.map((s) => s.ui.template + s.ui.title).join('|')) % 100000;
+  const base = PALETTES[Object.keys(PALETTES)[seed % Object.keys(PALETTES).length]!]!;
+  return {
+    version: 1, seed, canvas: { format, w, h }, fps: 30,
+    duration: Math.round(total * 100) / 100, grain: 0,
+    palette: { ...base, accent }, beat: { bpm: 120, offset: 0, snapTol: 0.09 },
+    scenes: [], sequence: segs,
   };
 }

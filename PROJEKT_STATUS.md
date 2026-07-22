@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v103 Sequencer + seamless Transitions (Ismet, Referenz Notion-Promo: "Die
+  Motion muessen genau so aneinander geknuepft werden koennen mit guten seamless
+  Transitions - es soll die 50 Stunden Arbeit abnehmen").** Erster von 3 Pfeilern.
+  Mehrere Mockups werden jetzt zu EINEM Video verkettet - mit weichen Blur-Zoom-
+  Crossuebergaengen statt harten Schnitten. NEU: MotionSequence-Composition
+  (motion/src/MotionSequence.tsx) nutzt Remotions <Sequence> pro Segment (lokale
+  Zeitachse), ueberblendet 0.55s Ueberlappung (SEQ_TRANSITION) via easeOutQuint-
+  Rein + easeInOutCubic-Raus, scale 1.0->1.1 + blur 16px->0, jedes Segment eigener
+  Seed. sequenceSpec() (templates.ts) baut den Ketten-Spec (dur = Summe minus
+  Uebergaenge). run.ts: --sequence=<json> -> sequenceSpec (trusted, skip strict
+  Zod). render-brief.mjs routet isSequence -> MotionSequence. Server
+  (/api/motion/brief): neues Form-Feld sequence (max 8 Segmente, je {template,
+  text}, gegen MOTION_TEMPLATES validiert, <2 -> ignoriert), gibt --sequence=
+  durch. UI: dritter Typ "Sequence" (Wizard-Fork sequence:[type,build,render]),
+  Build-Schritt mit Szenen-Zeilen (+ Add scene) + Akzentfarbe, motionSeqGo() POSTet
+  die Kette. BEWEIS: 4-Segment-Kette (pills->appcard->chat->notify, --accent=
+  #e0483d) headless gerendert -> 17.6s MP4 mit sichtbaren Blur-Cross-Uebergaengen
+  (Frame-Streifen an Ismet). tsc clean, Node-Render OK. Regression 662/662 gruen.
+  OFFEN (2 weitere Pfeiler, bewusst separat): eigene Bilder/Logos/Schriften ueberall
+  einfuegen; High-End-3D-Promo-Look. EHRLICH: nur Linux/CPU/synthetisch + software-
+  GL getestet; echte Optik sieht Ismet live.
+
 - **v102e Fix: mehrwortige Template-Eingaben (Ismet: "Search mit mehr als 1
   Wort klappt nicht - solche Logikfehler vermeiden, bei allen").** URSACHE: ein
   generischer parts()-Splitter zerlegte den Text bei fehlendem Komma per

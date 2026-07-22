@@ -749,6 +749,15 @@ body {
   font-weight: 500; color: var(--mut); line-height: 1.4; }
 .mo-tile-txt strong { font-size: 15px; font-weight: 800; color: var(--fg); }
 .mo-tile-txt span { font-size: 12px; color: var(--mut); line-height: 1.4; }
+.seq-row { display: grid; grid-template-columns: 26px 120px 1fr 30px; gap: 8px;
+  align-items: center; padding: 6px 0; }
+.seq-row .seq-n { width: 24px; height: 24px; border-radius: 50%; background: var(--surf2);
+  display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--fg); }
+.seq-row select, .seq-row input[type=text] { padding: 8px 10px; font-size: 13px;
+  background: var(--surf); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); width: 100%; }
+.seq-row .seq-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 16px; }
+.seq-row .seq-del:hover { color: #ff5a5a; }
+@media (max-width: 560px){ .seq-row { grid-template-columns: 22px 96px 1fr 26px; } }
 .mo-nav { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
 .mo-nav .btn:not(.secondary) { flex: 1; }
 @media (max-width: 640px) { .mo-type-cards { grid-template-columns: 1fr; } }
@@ -1486,6 +1495,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
                 chat, a notification. Pick one and add your text.</p>
               <span class="tc-go">Pick a template →</span>
             </button>
+            <button class="mo-type-card" type="button" id="moTypeSequence">
+              <div class="tc-ic">🎬</div>
+              <h3>Sequence</h3>
+              <p>Chain several scenes into one video with seamless transitions —
+                a full mini-promo, no editing.</p>
+              <span class="tc-go">Build a sequence →</span>
+            </button>
           </div>
         </div>
 
@@ -1540,6 +1556,22 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <input type="color" class="mo-color" id="moAccent" value="#7c5cff">
             <label class="mo-lab">Format</label>
             <div class="seg" id="moFormat"></div>
+          </div>
+          <div class="mo-nav">
+            <button class="btn secondary" data-mo-back type="button">Back</button>
+            <button class="btn" data-mo-next type="button">Continue →</button>
+          </div>
+        </div>
+
+        <!-- STEP: BUILD (sequence engine) -->
+        <div class="mo-step-view" data-key="build">
+          <h2 class="step-title">Build your sequence</h2>
+          <p class="step-sub">Add scenes in order — they flow into one video with seamless transitions.</p>
+          <div class="panel">
+            <div id="moSeqRows"></div>
+            <button class="btn secondary" id="moSeqAdd" type="button" style="margin-top:10px;">+ Add scene</button>
+            <label class="mo-lab" style="margin-top:16px;">Accent color</label>
+            <input type="color" class="mo-color" id="moAccentSeq" value="#e0483d">
           </div>
           <div class="mo-nav">
             <button class="btn secondary" data-mo-back type="button">Back</button>
@@ -2783,13 +2815,18 @@ async function initMotion(){
   const _bg=$('#moBriefGo'); if(_bg) _bg.onclick=motionBriefGo;
   // v101y: Wizard-Navigation (Schritt fuer Schritt wie Captions).
   Motion.briefOk = !!(State.user && State.user.motion_brief);
-  const tb=$('#moTypeBrief'), tt=$('#moTypeTemplate');
+  const tb=$('#moTypeBrief'), tt=$('#moTypeTemplate'), ts=$('#moTypeSequence');
   if(tb) tb.onclick=()=>setMoEngine('brief');
   if(tt) tt.onclick=()=>setMoEngine('template');
+  if(ts) ts.onclick=()=>setMoEngine('sequence');
   if(tb && !Motion.briefOk){
     tb.setAttribute('disabled','');
     const g=tb.querySelector('.tc-go'); if(g) g.textContent='Warming up — try again soon';
   }
+  if(ts && !Motion.briefOk) ts.setAttribute('disabled','');
+  const _sa=$('#moSeqAdd'); if(_sa) _sa.onclick=()=>{ (State.seqRows=State.seqRows||[]).push({template:'pills',text:''}); renderSeqRows(); };
+  const _asq=$('#moAccentSeq'); if(_asq) _asq.oninput=()=>{ Motion.seqAccent=_asq.value; };
+  Motion.seqAccent = (_asq&&_asq.value)||'#e0483d';
   document.querySelectorAll('#moWizard [data-mo-next]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx+1));
   document.querySelectorAll('#moWizard [data-mo-back]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx-1));
   Motion.engine = Motion.briefOk ? 'brief' : 'template';
@@ -2800,11 +2837,12 @@ async function initMotion(){
 }
 
 const MO_ENGINE_STEPS = { brief:['type','describe','render'],
-                          template:['type','template','style','render'] };
+                          template:['type','template','style','render'],
+                          sequence:['type','build','render'] };
 const MO_STEP_LABELS = { type:'Type', describe:'Describe', template:'Template',
-                         style:'Style', render:'Generate' };
+                         style:'Style', build:'Build', render:'Generate' };
 function setMoEngine(eng){
-  if(eng==='brief' && !Motion.briefOk){ toast('The AI director is warming up — try again shortly.','err'); return; }
+  if((eng==='brief'||eng==='sequence') && !Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
   Motion.engine=eng; Motion.stepKeys=MO_ENGINE_STEPS[eng];
   renderMoStepper(); goMoStep(1);
 }
@@ -2840,12 +2878,62 @@ function goMoStep(i){
   });
   updateMoStepper();
   window.scrollTo({top:0, behavior:'smooth'});
+  if(key==='build') renderSeqRows();
   if(key==='render'){
     const bg=$('#moBriefGo'), rn=$('#moRender');
     if(bg) bg.style.display=(Motion.engine==='brief')?'':'none';
-    if(rn) rn.style.display=(Motion.engine==='template')?'':'none';
-    if($('#moRender')) $('#moRender').textContent='Generate template · 1 credit';
+    if(rn){
+      rn.style.display=(Motion.engine==='template'||Motion.engine==='sequence')?'':'none';
+      if(Motion.engine==='sequence'){ rn.textContent='Generate sequence · 1 credit'; rn.onclick=motionSeqGo; }
+      else { rn.textContent='Generate template · 1 credit'; rn.onclick=motionTemplateGo; }
+    }
   }
+}
+/* v103: Sequenz-Bau (mehrere Szenen -> ein Video). */
+const MO_SEQ_TPLS=[['pills','Pills'],['appcard','App card'],['search','Search bar'],
+  ['homescreen','Home screen'],['chat','Chat'],['notify','Notification']];
+function renderSeqRows(){
+  const el=$('#moSeqRows'); if(!el) return;
+  if(!State.seqRows||!State.seqRows.length) State.seqRows=[
+    {template:'pills',text:'From your daily tools'},
+    {template:'appcard',text:'DouchkoVE, Productivity'},
+    {template:'notify',text:'DouchkoVE, Your clip is ready'}];
+  const opts=MO_SEQ_TPLS.map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('');
+  el.innerHTML='';
+  State.seqRows.forEach((r,i)=>{
+    const row=document.createElement('div'); row.className='seq-row';
+    row.innerHTML='<span class="seq-n">'+(i+1)+'</span>'
+      +'<select data-i="'+i+'" data-k="template">'+opts+'</select>'
+      +'<input type="text" data-i="'+i+'" data-k="text" placeholder="Text for this scene" value="'+(r.text||'').replace(/"/g,'&quot;')+'">'
+      +'<button class="seq-del" data-i="'+i+'" title="Remove" type="button">✕</button>';
+    el.appendChild(row);
+    row.querySelector('[data-k=template]').value=r.template||'pills';
+  });
+  el.querySelectorAll('select,input').forEach(x=>x.addEventListener(x.tagName==='INPUT'?'input':'change',()=>{
+    const i=parseInt(x.dataset.i); if(State.seqRows[i]) State.seqRows[i][x.dataset.k]=x.value; }));
+  el.querySelectorAll('.seq-del').forEach(b=>b.addEventListener('click',()=>{
+    if(State.seqRows.length<=2){ toast('A sequence needs at least 2 scenes.','err'); return; }
+    State.seqRows.splice(parseInt(b.dataset.i),1); renderSeqRows(); }));
+}
+async function motionSeqGo(){
+  const btn=$('#moRender'); const st=$('#moStatus');
+  const rows=(State.seqRows||[]).filter(r=>r.template);
+  if(rows.length<2){ toast('Add at least 2 scenes.','err'); return; }
+  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
+  st.style.display='block'; st.textContent='Rendering your sequence …';
+  try{
+    const fd=new FormData();
+    fd.append('brief','sequence');
+    fd.append('sequence', JSON.stringify(rows.map(r=>({template:r.template, text:r.text||''}))));
+    fd.append('accent', Motion.seqAccent||'#e0483d');
+    const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
+    if(r.status===402){ st.textContent='Not enough credits.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
+    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
+    if(!r.ok) throw 0;
+    const j=await r.json();
+    motionPoll(j.jid, st, btn, orig);
+  }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
 }
 
 async function motionBriefGo(){

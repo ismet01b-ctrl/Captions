@@ -7,7 +7,7 @@
 
 import { directBrief } from './director';
 import { parseSpec } from './schema';
-import { templateSpec, isTemplateId } from './templates';
+import { templateSpec, isTemplateId, sequenceSpec } from './templates';
 import type { Format } from '../spec';
 
 const argVal = (name: string): string | null => {
@@ -28,16 +28,27 @@ async function main(): Promise<void> {
   const sniff = /\b(no text|without text|textless|kein text|ohne text|nur grafik|graphics only|pure motion)\b/i.test(
     text,
   );
+  const seqJson = argVal('sequence');
   const isTpl = tpl && isTemplateId(tpl);
   const tplOpts: { accent?: string; format?: Format } = {};
   if (accent) tplOpts.accent = accent;
   if (format) tplOpts.format = format;
-  const spec = isTpl
-    ? templateSpec(tpl, text, tplOpts)
-    : await directBrief({ text, noText: flag || sniff });
+  let seqItems: { template: string; text: string }[] | null = null;
+  if (seqJson) {
+    try {
+      const parsed = JSON.parse(seqJson);
+      if (Array.isArray(parsed)) seqItems = parsed.map((x) => ({ template: String(x.template), text: String(x.text ?? '') }));
+    } catch { seqItems = null; }
+  }
+  const spec = seqItems && seqItems.length
+    ? sequenceSpec(seqItems, tplOpts)
+    : isTpl
+      ? templateSpec(tpl, text, tplOpts)
+      : await directBrief({ text, noText: flag || sniff });
   // AI output is untrusted -> validate. Template specs are trusted, deterministic code
   // and carry a `ui` payload (scenes:[]) the block schema doesn't cover, so skip it.
-  if (!isTpl && !parseSpec(spec)) {
+  const trusted = isTpl || (seqItems && seqItems.length > 0);
+  if (!trusted && !parseSpec(spec)) {
     process.stderr.write('FATAL: director produced a spec the schema rejects\n');
     process.exit(1);
   }

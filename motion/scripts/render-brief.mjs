@@ -48,9 +48,10 @@ try {
     `--outfile=${directorBundle}`,
     '--log-level=error',
   ]);
-  // Pass template / no-text / style flags through to the director bundle.
+  // Pass template / sequence / no-text / style flags through to the director bundle.
   const directorArgs = passthrough.filter(
-    (a) => a === '--no-text' || a.startsWith('--template=') || a.startsWith('--accent=') || a.startsWith('--format='),
+    (a) => a === '--no-text' || a.startsWith('--template=') || a.startsWith('--accent=')
+      || a.startsWith('--format=') || a.startsWith('--sequence='),
   );
   const specJson = execFileSync('node', [directorBundle, brief, ...directorArgs], {
     maxBuffer: 8 << 20,
@@ -64,11 +65,12 @@ try {
   const browser = findBrowser(passthrough);
   // --3d -> the Three.js composition, rendered with software GL (--gl=angle) so it
   // works headless on a GPU-less server. 2D stays the default MotionVideo composition.
-  // All UI-mockup templates render through the light MotionApple composition. A brief
-  // (no --template) uses MotionVideo (2D) or Motion3D (--3d).
+  // A chained sequence -> MotionSequence. A single UI template -> MotionApple. A brief
+  // (no --template) -> MotionVideo (2D) or Motion3D (--3d).
+  const isSequence = passthrough.some((a) => a.startsWith('--sequence='));
   const isTemplate = passthrough.some((a) => a.startsWith('--template='));
-  const is3d = passthrough.includes('--3d') && !isTemplate;
-  const composition = isTemplate ? 'MotionApple' : is3d ? 'Motion3D' : 'MotionVideo';
+  const is3d = passthrough.includes('--3d') && !isTemplate && !isSequence;
+  const composition = isSequence ? 'MotionSequence' : isTemplate ? 'MotionApple' : is3d ? 'Motion3D' : 'MotionVideo';
   execFileSync(
     'npx',
     [
@@ -83,7 +85,8 @@ try {
       ...(browser ? [`--browser-executable=${browser}`] : []),
       ...passthrough.filter(
         (a) => !a.startsWith('--codec=') && a !== '--no-text' && a !== '--3d'
-          && !a.startsWith('--template=') && !a.startsWith('--accent=') && !a.startsWith('--format='),
+          && !a.startsWith('--template=') && !a.startsWith('--accent=') && !a.startsWith('--format=')
+          && !a.startsWith('--sequence='),
       ),
     ],
     { stdio: 'inherit' },

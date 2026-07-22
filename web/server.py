@@ -1761,7 +1761,11 @@ def _run_motion_brief(jid):
     set_state(jid, status='laeuft', phase='Directing your motion …',
               progress=0.1, log_tail=[])
     cmd = ['node', os.path.join('scripts', 'render-brief.mjs'), brief, out]
-    if j.get('template'):                     # v101z: kuratiertes Remotion-Template
+    if j.get('sequence'):                     # v103: mehrere Szenen -> ein Video
+        cmd.append('--sequence=' + json.dumps(j['sequence']))
+        if j.get('accent'):
+            cmd.append('--accent=' + str(j['accent']))
+    elif j.get('template'):                    # v101z: kuratiertes Remotion-Template
         cmd.append('--template=' + str(j['template']))
         if j.get('accent'):
             cmd.append('--accent=' + str(j['accent']))
@@ -2877,7 +2881,8 @@ MOTION_TEMPLATES = {'pills', 'appcard', 'search', 'homescreen', 'chat', 'notify'
 @app.post('/api/motion/brief')
 async def motion_brief(request: Request, brief: str = Form(...),
                        no_text: str = Form('0'), d3: str = Form('1'),
-                       template: str = Form(''), accent: str = Form('')):
+                       template: str = Form(''), accent: str = Form(''),
+                       sequence: str = Form('')):
     """v101p: aus einem Satz eine individuelle Motion-Grafik generieren
     (Remotion-Director). Kostet wie ein Motion-Clip (1 Credit)."""
     u = _require_user(request)
@@ -2887,8 +2892,22 @@ async def motion_brief(request: Request, brief: str = Form(...),
     text = (brief or '').strip()[:400]
     _tpl = str(template).strip().lower()
     _tpl = _tpl if _tpl in MOTION_TEMPLATES else ''
-    # Briefs need a sentence; templates just need a word (search/home can be tiny).
-    if len(text) < (1 if _tpl else 4):
+    # v103: Sequenz aus mehreren Szenen (jede {template,text}), max 8.
+    _seq = []
+    if sequence:
+        try:
+            _raw = json.loads(sequence)
+            if isinstance(_raw, list):
+                for it in _raw[:8]:
+                    _st = str((it or {}).get('template', '')).strip().lower()
+                    if _st in MOTION_TEMPLATES:
+                        _seq.append({'template': _st, 'text': str((it or {}).get('text', ''))[:200]})
+        except Exception:
+            _seq = []
+    if len(_seq) < 2:
+        _seq = []                              # <2 Szenen ist keine Sequenz
+    # Briefs need a sentence; templates/sequences just need a word.
+    if not _seq and len(text) < (1 if _tpl else 4):
         raise HTTPException(400, 'Write a short brief first.' if not _tpl else 'Add your text first.')
     jid = uuid.uuid4().hex[:12]
     d = job_dir(jid)
@@ -2903,9 +2922,10 @@ async def motion_brief(request: Request, brief: str = Form(...),
     # v101z: kuratiertes Remotion-Template (ersetzt die alte Python-gfx-Engine).
     _acc = str(accent).strip()
     _acc = _acc if re.match(r'^#[0-9a-fA-F]{6}$', _acc) else ''
-    JOBS[jid] = {'kind': 'motion', 'brief': text, 'user_id': u['id'],
-                 'name': _nm + '.mp4', 'dauer': 11, 'no_text': _notext, 'd3': _d3,
-                 'template': _tpl, 'accent': _acc,
+    JOBS[jid] = {'kind': 'motion', 'brief': text or 'sequence', 'user_id': u['id'],
+                 'name': (('Sequence' if _seq else _nm) + '.mp4'), 'dauer': 11,
+                 'no_text': _notext, 'd3': _d3, 'template': _tpl, 'accent': _acc,
+                 'sequence': _seq,
                  'cost_sec': MOTION_COST_SEC, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)

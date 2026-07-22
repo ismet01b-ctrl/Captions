@@ -6,6 +6,7 @@ import { Composition, type CalculateMetadataFunction } from 'remotion';
 import { MotionVideo, type MotionProps } from './MotionVideo';
 import { Motion3D } from './Motion3D';
 import { MotionApple } from './MotionApple';
+import { MotionSequence } from './MotionSequence';
 import { demoProps } from './demo-spec';
 
 const calculateMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) => {
@@ -47,6 +48,17 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="MotionApple"
         component={MotionApple}
+        defaultProps={demoProps}
+        calculateMetadata={calculateMetadata}
+        durationInFrames={252}
+        fps={30}
+        width={1080}
+        height={1920}
+      />
+      {/* v103: mehrere Mockups zu EINEM Video verkettet (seamless Transitions). */}
+      <Composition
+        id="MotionSequence"
+        component={MotionSequence}
         defaultProps={demoProps}
         calculateMetadata={calculateMetadata}
         durationInFrames={252}
