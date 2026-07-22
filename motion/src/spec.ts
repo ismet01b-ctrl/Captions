@@ -188,7 +188,7 @@ export interface UiSpec {
  * The elaborate cross-transitions the sequencer can play at a boundary. 'auto' lets the
  * engine pick a varied, non-repeating sequence deterministically from the seed.
  */
-export type TransId = 'blurzoom' | 'push' | 'whip' | 'glass' | 'iris' | 'swoosh';
+export type TransId = 'push' | 'panv' | 'cover' | 'dolly' | 'swoosh' | 'tilt';
 
 /** One segment of a chained sequence: a UI mockup shown for `dur` seconds. */
 export interface SeqSegment {

@@ -2878,7 +2878,7 @@ async def motion_render(request: Request,
 MOTION_TEMPLATES = {'pills', 'appcard', 'search', 'homescreen', 'chat', 'notify'}
 # Elaborate sequence cross-transitions (mirror of TransId in motion/src/spec.ts). 'auto'
 # is not stored — an absent per-scene value lets the engine vary them deterministically.
-MOTION_TRANSITIONS = {'blurzoom', 'push', 'whip', 'glass', 'iris', 'swoosh'}
+MOTION_TRANSITIONS = {'push', 'panv', 'cover', 'dolly', 'swoosh', 'tilt'}
 
 
 @app.post('/api/motion/brief')

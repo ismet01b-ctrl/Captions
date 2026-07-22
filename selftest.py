@@ -2016,12 +2016,16 @@ def _scenario_logic(clip, transcript, tmp):
                  encoding='utf-8').read()
     check('v103b: Transition-Bibliothek - 6 Arten + Auto-Variety ohne Repeat',
           all(("id: '" + t + "'") in _mtr for t in
-              ('blurzoom', 'push', 'whip', 'glass', 'iris', 'swoosh'))
+              ('push', 'panv', 'cover', 'dolly', 'swoosh', 'tilt'))
           and 'export function pickTransitions' in _mtr
           and 'export const SFX_KEYS' in _mtr
           and 'pickTransitions(' in _mseq)
-    check('v103b: direktionale Motion-Blur (SVG feGaussianBlur) + 3D-Perspektive',
-          'feGaussianBlur' in _mseq and 'blurX' in _mtr and 'rotateY' in _mtr
+    # Interaktive Kamera-Transitions: beide Szenen SCHARF (kein Blur-out), 3D-Schwenk
+    # (rotateX/rotateY) + Perspektive. Ismet: "nicht out in Blur, sondern reingeschoben".
+    check('v103b: Kamera-Transitions scharf (kein Blur) + 3D-Schwenk + Perspektive',
+          'feGaussianBlur' not in _mseq and 'blur(' not in _mseq
+          and 'blurX' not in _mtr
+          and 'rotateX' in _mtr and 'rotateY' in _mtr
           and 'perspective(' in _mseq)
     check('v103b: Sound pro Transition - nur bei vorhandenem Asset, sonst stumm',
           '<Audio' in _mseq and "staticFile(`sfx/" in _mseq

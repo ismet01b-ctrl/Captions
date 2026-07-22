@@ -163,7 +163,7 @@ export const sceneSpecZ = z.object({
   sequence: z.array(z.object({
     ui: z.any(),
     dur: z.number(),
-    transition: z.enum(['blurzoom', 'push', 'whip', 'glass', 'iris', 'swoosh']).optional(),
+    transition: z.enum(['push', 'panv', 'cover', 'dolly', 'swoosh', 'tilt']).optional(),
   })).optional(),
   sfx: z.array(z.string()).optional(),
 });

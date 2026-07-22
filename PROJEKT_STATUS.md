@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v103c Transitions umgebaut: interaktiv/kamera-raeumlich statt Blur (Ismet: "Ich
+  will NICHT, dass die Transition out in Blur ist. Ich will, dass sie interaktiv ist -
+  eins wird angezeigt, dann wird das andere passend reingeschoben, Kamera schwenkt").**
+  Der komplette Defocus/Blur-Ansatz ist raus. Neue Bibliothek = 6 KAMERA-Hand-offs,
+  BEIDE Szenen bleiben rasiermesser-scharf: push (horizontaler Kamera-Pan, zwei Screens
+  Kante-an-Kante, voll deckend), panv (vertikaler Pan, naechste Szene schiebt von unten
+  hoch), cover (aktuelle Szene haelt + sinkt minimal, neue rutscht mit elastischem
+  easeOutBack drueber), dolly (Kamera-Push-Through: raus skaliert weg, rein steigt aus
+  kleinerem Frame - scharf), swoosh (horizontaler 3D-Schwenk rotateY + Perspektive,
+  wuerfelartig), tilt (vertikaler 3D-Schwenk rotateX). Erste Szene = sauberer
+  Scale+Fade-Intro, letzte = Scale+Fade-Outro (KEIN Blur). Affine: blur/blurX raus,
+  rotateX rein. Sound-Mapping neu (alle 6 Files weiter genutzt): push->whoosh,
+  panv->swish, cover->click, dolly->whoosh2, swoosh->pop, tilt->airy. Auto-Variety +
+  pro-Szene-Override unveraendert; UI-Dropdown-Labels neu (Camera pan/tilt, Slide over,
+  Dolly in, 3D swing/flip). BEWEIS: 6-Segment-Kette neu gerendert (seq_cam.mp4) -
+  Frame-Streifen zeigt scharfe raeumliche Hand-offs (zwei Screens gleichzeitig scharf
+  beim Pan, 3D-Tilt sichtbar), Ton weiter exakt an den 5 Grenzen. tsc clean, Node-Unit-
+  Test angepasst (Identity-Enden, KEIN Blur-Feld, Alpha in Range). Regression 667/667.
+
 - **v103b Mehrere verschiedene aufwaendige Transitions + Sound-Verdrahtung (Ismet:
   "mehrere passende verschiedene aufwaendige Transitions, wie von einem High-End-
   Senior-SaaS-Motion-Designer. Ausserdem den passenden Sound").** Statt EINER Blur-

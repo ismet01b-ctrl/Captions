@@ -1,18 +1,19 @@
-// MotionSequence — chains several UI-mockup segments into ONE continuous video with a set
-// of DIFFERENT, elaborate cross-transitions (see lib/transitions.ts): clean pushes, whip
-// pans with real directional motion blur, glass card slides with an elastic land, iris
-// app-opens, subtle 3D swooshes. The engine auto-varies them so no two adjacent boundaries
-// repeat; a scene can also pin its own. Each segment runs on its own local time via Remotion
-// <Sequence>, so its internal animations play from zero. Pure in t (seekable).
+// MotionSequence — chains several UI-mockup segments into ONE continuous video with a set of
+// INTERACTIVE, camera-style transitions (see lib/transitions.ts): horizontal/vertical camera
+// pans, a slide-over cover, a dolly push-through, and 3D swing/flip hand-offs. One scene is
+// fully shown, then the next is physically pushed in while a virtual camera moves between
+// them. BOTH scenes stay razor-sharp — nothing ever defocuses/blurs out. The engine
+// auto-varies the transitions so no two adjacent boundaries repeat; a scene can pin its own.
+// Each segment runs on its own local time via Remotion <Sequence>. Pure in t (seekable).
 //
-// A matching transition SFX rides on each boundary — but ONLY when its CC0 asset actually
-// exists (spec.sfx, fs-probed by the director). No asset -> silent, never a cheap synth beep.
+// A matching transition SFX rides on each boundary — but ONLY when its designed asset exists
+// (spec.sfx, fs-probed by the director). No asset -> silent.
 
 import React from 'react';
 import { AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { SceneSpec, SeqSegment, TransId } from './spec';
 import { AppleScene } from './apple/AppleScene';
-import { clamp01 } from './lib/easing';
+import { clamp01, easeOutQuint, easeInOutCubic } from './lib/easing';
 import {
   TRANSITIONS, IDENTITY, composeAffine, pickTransitions, type Affine,
 } from './lib/transitions';
@@ -21,22 +22,30 @@ const TRANSITION = 0.55; // s — must match SEQ_TRANSITION in templates.ts
 
 export type MotionSequenceProps = { readonly spec: SceneSpec };
 
-/** Build the CSS transform + filter for one segment layer from its composed affine. */
-const layerStyle = (a: Affine, filterId: string | null): React.CSSProperties => {
+// The first scene's entrance and the last scene's exit have no neighbour, so they get a clean
+// scale+fade bookend (sharp — no blur), not a camera hand-off.
+const introAff = (e: number): Affine => {
+  const o = easeOutQuint(e);
+  return { x: 0, y: 0, scale: 0.94 + 0.06 * o, rotateX: 0, rotateY: 0, alpha: clamp01(e * 1.6), persp: 0 };
+};
+const outroAff = (e: number): Affine => {
+  const o = easeInOutCubic(e);
+  return { x: 0, y: 0, scale: 1 + 0.04 * o, rotateX: 0, rotateY: 0, alpha: 1 - o, persp: 0 };
+};
+
+/** Build the CSS transform + opacity for one segment layer from its composed affine. */
+const layerStyle = (a: Affine): React.CSSProperties => {
   const parts: string[] = [];
   if (a.persp > 0) parts.push(`perspective(${a.persp}px)`);
   parts.push(`translate3d(${a.x.toFixed(2)}px, ${a.y.toFixed(2)}px, 0)`);
   parts.push(`scale(${a.scale.toFixed(4)})`);
+  if (Math.abs(a.rotateX) > 0.01) parts.push(`rotateX(${a.rotateX.toFixed(3)}deg)`);
   if (Math.abs(a.rotateY) > 0.01) parts.push(`rotateY(${a.rotateY.toFixed(3)}deg)`);
-  const filters: string[] = [];
-  if (a.blur > 0.2) filters.push(`blur(${a.blur.toFixed(2)}px)`);
-  if (filterId) filters.push(`url(#${filterId})`); // directional motion blur (feGaussianBlur)
   return {
     opacity: clamp01(a.alpha),
     transform: parts.join(' '),
     transformOrigin: '50% 50%',
-    filter: filters.length ? filters.join(' ') : undefined,
-    willChange: 'transform, opacity, filter',
+    willChange: 'transform, opacity',
     backfaceVisibility: 'hidden',
   };
 };
@@ -68,44 +77,32 @@ export const MotionSequence: React.FC<MotionSequenceProps> = ({ spec }) => {
         const durF = Math.round(seg.dur * fps);
         const local = frame - startF;
 
-        // Entrance uses the boundary BEFORE this segment; exit uses the boundary AFTER it.
-        // The first segment gets a calm intro, the last a calm outro (blurzoom bookends).
-        const enterDef = i > 0 ? TRANSITIONS[boundary[i - 1]!] : TRANSITIONS.blurzoom;
-        const exitDef = i < n - 1 ? TRANSITIONS[boundary[i]!] : TRANSITIONS.blurzoom;
-
         const tin = clamp01(local / tf);
         const tout = clamp01((local - (durF - tf)) / tf);
-        const enterAff = tin < 1 ? enterDef.enter(tin, spec.canvas.w, spec.canvas.h) : IDENTITY;
-        const exitAff = tout > 0 ? exitDef.exit(tout, spec.canvas.w, spec.canvas.h) : IDENTITY;
-        const aff = composeAffine(enterAff, exitAff);
 
-        // Directional (horizontal) motion blur — an SVG filter whose stdDeviation tracks the
-        // whip velocity. Only mounted when there's meaningful blurX, so clean cuts stay sharp.
-        const useHBlur = aff.blurX > 0.4;
-        const filterId = useHBlur ? `seqhb-${i}` : null;
+        // Entrance uses the boundary BEFORE this segment; exit uses the boundary AFTER it.
+        // First segment => clean intro; last segment => clean outro (sharp scale+fade).
+        const enterAff = tin >= 1 ? IDENTITY
+          : i > 0 ? TRANSITIONS[boundary[i - 1]!].enter(tin, spec.canvas.w, spec.canvas.h)
+            : introAff(tin);
+        const exitAff = tout <= 0 ? IDENTITY
+          : i < n - 1 ? TRANSITIONS[boundary[i]!].exit(tout, spec.canvas.w, spec.canvas.h)
+            : outroAff(tout);
+        const aff = composeAffine(enterAff, exitAff);
 
         const segSpec: SceneSpec = { ...spec, ui: seg.ui, seed: spec.seed + i * 97, sequence: undefined as never };
 
         return (
           <Sequence key={i} from={startF} durationInFrames={durF} layout="none">
-            {useHBlur && (
-              <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden>
-                <defs>
-                  <filter id={filterId!} x="-30%" y="-5%" width="160%" height="110%">
-                    <feGaussianBlur stdDeviation={`${aff.blurX.toFixed(2)} 0`} />
-                  </filter>
-                </defs>
-              </svg>
-            )}
-            <AbsoluteFill style={layerStyle(aff, filterId)}>
+            <AbsoluteFill style={layerStyle(aff)}>
               <AppleScene spec={segSpec} />
             </AbsoluteFill>
           </Sequence>
         );
       })}
 
-      {/* Transition SFX — one hit per boundary, landing just as the swipe peaks. Mounted only
-          when the CC0 asset for that transition exists; otherwise the sequence is silent. */}
+      {/* Transition SFX — one hit per boundary, landing just as the camera move peaks. Mounted
+          only when the asset for that transition exists; otherwise the sequence is silent. */}
       {boundary.map((tid, b) => {
         const key = TRANSITIONS[tid].sound;
         if (!sfxSet.has(key)) return null;

@@ -18,19 +18,20 @@ try {
 import { TRANSITIONS, TRANS_IDS, pickTransitions, isTransId, SFX_KEYS } from ${modPath};
 let fail = 0;
 const near = (a, b) => Math.abs(a - b) < 1e-6;
-const isId = (o) => near(o.x,0) && near(o.y,0) && near(o.scale,1) && near(o.rotateY,0)
-  && near(o.alpha,1) && near(o.blur,0) && near(o.blurX,0);
+const isId = (o) => near(o.x,0) && near(o.y,0) && near(o.scale,1) && near(o.rotateX,0)
+  && near(o.rotateY,0) && near(o.alpha,1);
 
-// (1) enter(1) and exit(0) MUST be identity for every transition.
+// (1) enter(1) and exit(0) MUST be identity for every transition. And NO blur anywhere:
+// the transitions are camera-style hand-offs, both scenes stay sharp (Ismet: no blur-out).
 for (const id of TRANS_IDS) {
   const d = TRANSITIONS[id];
   if (!isId(d.enter(1, 1080, 1920))) { fail++; console.error('FAIL enter(1) not identity:', id, JSON.stringify(d.enter(1,1080,1920))); }
   if (!isId(d.exit(0, 1080, 1920)))  { fail++; console.error('FAIL exit(0) not identity:', id, JSON.stringify(d.exit(0,1080,1920))); }
-  // alpha must stay within [0,1]-ish and blur non-negative across the window.
   for (let e = 0; e <= 1.0001; e += 0.1) {
     for (const a of [d.enter(e,1080,1920), d.exit(e,1080,1920)]) {
-      if (a.blur < -1e-6 || a.blurX < -1e-6) { fail++; console.error('FAIL negative blur:', id, e); }
+      if ('blur' in a || 'blurX' in a) { fail++; console.error('FAIL residual blur field:', id); }
       if (a.scale <= 0) { fail++; console.error('FAIL non-positive scale:', id, e); }
+      if (a.alpha < -1e-6 || a.alpha > 1.0001) { fail++; console.error('FAIL alpha out of range:', id, e, a.alpha); }
     }
   }
 }
@@ -46,8 +47,8 @@ for (const seed of [0, 1, 7, 42, 99999]) {
 }
 
 // (3) a valid override wins; an invalid one falls back to the auto pick.
-const ov = pickTransitions(3, 3, ['iris', 'zzz', undefined]);
-if (ov[0] !== 'iris') { fail++; console.error('FAIL override ignored', ov.join(',')); }
+const ov = pickTransitions(3, 3, ['dolly', 'zzz', undefined]);
+if (ov[0] !== 'dolly') { fail++; console.error('FAIL override ignored', ov.join(',')); }
 if (!isTransId(ov[1]) || ov[1] === 'zzz') { fail++; console.error('FAIL bad override not sanitised', ov.join(',')); }
 
 if (!SFX_KEYS.length) { fail++; console.error('FAIL no sfx keys'); }

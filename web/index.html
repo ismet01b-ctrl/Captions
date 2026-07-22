@@ -1566,7 +1566,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <!-- STEP: BUILD (sequence engine) -->
         <div class="mo-step-view" data-key="build">
           <h2 class="step-title">Build your sequence</h2>
-          <p class="step-sub">Add scenes in order — they flow into one video with seamless transitions. Leave the transition on <b>Auto</b> and the engine varies them (whip pan, glass slide, app open, push, 3D swoosh) so none repeat, or pin one per scene.</p>
+          <p class="step-sub">Add scenes in order — they flow into one video with interactive camera transitions: one scene is shown, then the next is pushed in as the camera pans, tilts or swings. Leave it on <b>Auto</b> and the engine varies them so none repeat, or pin one per scene.</p>
           <div class="panel">
             <div id="moSeqRows"></div>
             <button class="btn secondary" id="moSeqAdd" type="button" style="margin-top:10px;">+ Add scene</button>
@@ -2893,8 +2893,8 @@ function goMoStep(i){
 const MO_SEQ_TPLS=[['pills','Pills'],['appcard','App card'],['search','Search bar'],
   ['homescreen','Home screen'],['chat','Chat'],['notify','Notification']];
 // The transition PLAYED INTO a scene. '' = Auto (engine varies them so none repeat).
-const MO_SEQ_TRANS=[['','Auto'],['whip','Whip pan'],['glass','Glass slide'],
-  ['iris','App open'],['push','Push'],['swoosh','3D swoosh'],['blurzoom','Blur zoom']];
+const MO_SEQ_TRANS=[['','Auto'],['push','Camera pan'],['panv','Camera tilt'],
+  ['cover','Slide over'],['dolly','Dolly in'],['swoosh','3D swing'],['tilt','3D flip']];
 function renderSeqRows(){
   const el=$('#moSeqRows'); if(!el) return;
   if(!State.seqRows||!State.seqRows.length) State.seqRows=[
