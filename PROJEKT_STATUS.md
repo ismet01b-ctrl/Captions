@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v111d Logik-Pass: kohärentes Skript + interne Konsistenz (Ismet: "unfertiges Video, kein Senior gibt das so ab").**
+  Kritik war berechtigt — der 1:1-Nachbau hatte zusammenhanglose Fragmente (aus den Referenz-
+  Einzelframes kopiert) ohne roten Faden + interne Fehler. Behoben: (1) EIN kohärentes Skript
+  läuft in logischer Reihenfolge durch alle Shots — "Your story deserves better motion / Not
+  another template pack — real, hand-made design / [search] your transcript: every word / buttery
+  smooth, Apple-style motion / never invented / the mechanics: real UI / frame by frame / perfectly
+  timed to your voice / sixty frames a second / made with DouchkoVE". On-Screen-Text ist jeweils
+  Phrase aus der Zeile (ehrt v110). (2) Timer-Card repariert: Ring FÜLLT sich und die Prozent-
+  Anzeige zählt SYNCHRON mit hoch (eine Wahrheit statt Ring bewegt/Zahl steht) — "Well"/"Pause"-
+  Platzhalter raus. (3) Apple-Logo raus (off-brand im eigenen Promo). (4) Widget-Card-Fremdinhalt
+  ("Bart_VFX/34K views") → on-brand ("Real UI, real depth / built by hand"). (5) Pill "Never
+  invented" bekommt ein einzeichnendes Häkchen statt sinnfreiem Mini-iPhone. (6) Hell/Dunkel-
+  Strobing behoben: die zwei Dark-UI-Momente (Notes+Search) geclustert → nur noch 2 Value-Wechsel
+  statt Geflacker. EHRLICH offen: noch stumm (Sound braucht CC0-Pack) — ein Senior liefert mit
+  Sound-Design; visuell ist die Logik jetzt kohärent. Selftest 692/692, tsc clean, 60s-Video
+  gerendert. NUR Linux/CPU/720p.
 - **v111 MotionShowcase: 1:1-Nachbau des Referenz-Montage-Looks (Ismet: "Kann sowas gebaut werden?").**
   Neue self-contained Komposition `MotionShowcase.tsx` (+ in Root registriert, 16:9,
   Storyboard-Dauer ~27s) baut den kompletten Referenz-Clip (@beingmayy, 37s) Shot fuer Shot

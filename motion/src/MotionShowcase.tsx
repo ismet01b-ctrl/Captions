@@ -43,17 +43,23 @@ interface Shot {
   readonly a?: string; readonly b?: string; readonly c?: string; // per-shot payload
 }
 
+// ONE coherent script, read top to bottom, is the through-line — a senior never ships a bag of
+// disconnected frames. Each shot illustrates its own line; the on-screen text is a verbatim
+// phrase from that line (so it also honours v110: words only ever come from the transcript).
+// Reads as: "Your story deserves better motion. Not another template pack — real, hand-made
+// design. Buttery smooth, Apple-style motion. Search your transcript: every word. Never
+// invented. The mechanics: real UI. Rendered frame by frame. Perfectly timed to your voice.
+// Sixty frames a second. Made with DouchkoVE."
 const STORY: readonly Shot[] = [
-  { kind: 'ktypo',    dur: 3.0, into: 'slideL', accentText: 'possible to learn', b: 'apple' },
-  { kind: 'timer',    dur: 2.8, into: 'push',   accentText: 'Well' },
-  { kind: 'notes',    dur: 3.2, into: 'slideL', dark: true, accentText: "Most people don't realize", b: 'How simple it is' },
-  { kind: 'searchbar',dur: 2.9, into: 'slideUp',dark: true, accentText: '2 Components', b: 'Expressions' },
-  { kind: 'ktypo',    dur: 2.6, into: 'morph',  accentText: '60 Frames Per Second', c: 'warm' },
-  { kind: 'imessage', dur: 3.2, into: 'slideL', a: 'Buttery Smooth', b: 'Apple Style Animations' },
-  { kind: 'widgets',  dur: 3.6, into: 'push',   accentText: 'the mechanics' },
-  { kind: 'pill',     dur: 2.6, into: 'morph',  accentText: 'Track Order' },
-  { kind: 'pill',     dur: 2.6, into: 'slideL', dark: true, accentText: 'Smooth as it gets', c: 'warm' },
-  { kind: 'timeline', dur: 3.6, into: 'push',   accentText: 'perfectly timed' },
+  { kind: 'ktypo',    dur: 3.0, into: 'slideL', accentText: 'Your story deserves better motion' },
+  { kind: 'notes',    dur: 3.2, into: 'push',   dark: true, accentText: 'Not another template pack', b: 'Real, hand-made design' },
+  { kind: 'searchbar',dur: 2.9, into: 'slideUp',dark: true, accentText: 'your transcript', b: 'Every word' },
+  { kind: 'imessage', dur: 3.0, into: 'slideL', a: 'Buttery smooth', b: 'Apple-style motion' },
+  { kind: 'pill',     dur: 2.6, into: 'morph',  accentText: 'Never invented' },
+  { kind: 'widgets',  dur: 3.4, into: 'push',   accentText: 'the mechanics' },
+  { kind: 'timer',    dur: 2.8, into: 'slideL', accentText: 'Frame by frame' },
+  { kind: 'timeline', dur: 3.4, into: 'push',   accentText: 'Perfectly timed to your voice' },
+  { kind: 'ktypo',    dur: 2.6, into: 'morph',  accentText: 'Sixty frames a second', c: 'warm' },
   { kind: 'signoff',  dur: 3.0, into: 'morph',  accentText: 'made with DouchkoVE' },
 ];
 
@@ -248,11 +254,13 @@ const ShotKtypo: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent }) => {
   );
 };
 
-/** Shot: a floating dark timer card (progress ring + label + Pause), orange accent. */
-const ShotTimer: React.FC<ShotCtx> = ({ t, hold, W, H, S, accent, press }) => {
-  const cw = 760 * S, ch = 300 * S;
+/** Shot: a floating dark render-progress card — a ring that FILLS while the centre percentage
+ *  counts up in lockstep (internally consistent), a label from the script. "Frame by frame." */
+const ShotTimer: React.FC<ShotCtx> = ({ shot, t, hold, S, accent }) => {
+  const cw = 820 * S, ch = 300 * S;
   const app = easeOutBack(clamp01((t - 0.1) * 1.4));
-  const ringP = clamp01((t - 0.4) / Math.max(0.6, hold - 0.8)); // ring drains over the hold
+  const prog = easeInOutCubic(clamp01((t - 0.35) / Math.max(0.6, hold - 0.7))); // 0 → 1 over the hold
+  const pct = Math.round(prog * 100);
   const R = 96 * S, C = 2 * Math.PI * R;
   const cx = 150 * S, cy = ch / 2;
   return (
@@ -260,18 +268,19 @@ const ShotTimer: React.FC<ShotCtx> = ({ t, hold, W, H, S, accent, press }) => {
       <div style={{ width: cw, height: ch, borderRadius: 44 * S, background: '#0e0f12',
         boxShadow: cardShadow(S), transform: `scale(${app.toFixed(3)})`, position: 'relative' }}>
         <svg width={cw} height={ch} style={{ position: 'absolute', inset: 0 }}>
-          <circle cx={cx} cy={cy} r={R} fill="none" stroke="#26282e" strokeWidth={10 * S} />
-          <circle cx={cx} cy={cy} r={R} fill="none" stroke={accent} strokeWidth={10 * S}
-            strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * ringP}
+          <circle cx={cx} cy={cy} r={R} fill="none" stroke="#26282e" strokeWidth={12 * S} />
+          <circle cx={cx} cy={cy} r={R} fill="none" stroke={accent} strokeWidth={12 * S}
+            strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - prog)}
             transform={`rotate(-90 ${cx} ${cy})`} />
         </svg>
-        <div style={{ position: 'absolute', left: cx - R, top: cy - 26 * S, width: R * 2, textAlign: 'center',
-          color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 52 * S, letterSpacing: '-0.02em' }}>20:00</div>
-        <div style={{ position: 'absolute', left: 330 * S, top: cy - 40 * S, color: accent,
-          fontFamily: FONT, fontWeight: 800, fontSize: 78 * S, letterSpacing: '-0.02em' }}>Well</div>
-        <div style={{ position: 'absolute', right: 40 * S, top: cy - 48 * S, width: 96 * S, height: 96 * S,
-          borderRadius: '50%', background: '#3a2410', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: accent, fontFamily: FONT, fontWeight: 600, fontSize: 26 * S, transform: `scale(${1 - press * 0.12})` }}>Pause</div>
+        {/* percentage counts up EXACTLY with the ring — one truth, not two */}
+        <div style={{ position: 'absolute', left: cx - R, top: cy - 30 * S, width: R * 2, textAlign: 'center',
+          color: '#fff', fontFamily: FONT, fontWeight: 700, fontSize: 56 * S, letterSpacing: '-0.03em' }}>{pct}%</div>
+        <div style={{ position: 'absolute', left: 320 * S, top: cy - 46 * S, right: 40 * S,
+          color: '#fff', fontFamily: FONT, fontWeight: 700, fontSize: 60 * S, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
+          {shot.accentText}
+          <div style={{ color: '#8b8f98', fontWeight: 600, fontSize: 30 * S, marginTop: 8 * S }}>Rendering…</div>
+        </div>
       </div>
     </AbsoluteFill>
   );
@@ -388,10 +397,10 @@ const ShotWidgets: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent, press }) => 
             <div style={{ position: 'absolute', bottom: 0, left: 0, height: 8 * S, width: `${(30 + 55 * clamp01(t / 2)).toFixed(0)}%`, background: accent }} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: INK, fontFamily: FONT, fontWeight: 700, fontSize: 40 * S }}>So in today’s video</div>
-            <div style={{ color: '#8b8f98', fontFamily: FONT, fontSize: 28 * S, marginTop: 6 * S }}>Bart_VFX</div>
-            <div style={{ color: '#8b8f98', fontFamily: FONT, fontSize: 24 * S, marginTop: 4 * S }}>34K views · 2 days ago
-              <span style={{ marginLeft: 14 * S, background: '#e6e8ec', color: '#4a4f5a', padding: `${4 * S}px ${12 * S}px`, borderRadius: 8 * S, fontWeight: 700 }}>NEW</span></div>
+            <div style={{ color: INK, fontFamily: FONT, fontWeight: 700, fontSize: 40 * S }}>Real UI, real depth</div>
+            <div style={{ color: '#8b8f98', fontFamily: FONT, fontSize: 28 * S, marginTop: 6 * S }}>built by hand</div>
+            <div style={{ color: '#8b8f98', fontFamily: FONT, fontSize: 24 * S, marginTop: 4 * S }}>vector · light · motion
+              <span style={{ marginLeft: 14 * S, background: '#e6e8ec', color: '#4a4f5a', padding: `${4 * S}px ${12 * S}px`, borderRadius: 8 * S, fontWeight: 700 }}>LIVE</span></div>
           </div>
         </div>
         {/* section label */}
@@ -424,12 +433,15 @@ const ShotPill: React.FC<ShotCtx> = ({ shot, t, S, accent, press }) => {
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: pw, height: ph, borderRadius: ph / 2, background: bg, boxShadow: cardShadow(S),
-        display: 'flex', alignItems: 'center', paddingLeft: 30 * S, gap: 40 * S,
+        display: 'flex', alignItems: 'center', paddingLeft: 34 * S, gap: 34 * S,
         transform: `scale(${(app * (1 - press * 0.08)).toFixed(3)})` }}>
-        {/* mini device */}
-        <div style={{ width: 90 * S, height: 128 * S, borderRadius: 22 * S, background: 'linear-gradient(160deg,#f0813a,#c85a1e)',
-          position: 'relative', boxShadow: `inset 0 0 ${8 * S}px rgba(0,0,0,0.3)` }}>
-          <div style={{ position: 'absolute', top: 12 * S, left: 12 * S, width: 34 * S, height: 34 * S, borderRadius: '50%', background: '#1c1c1e' }} />
+        {/* a verified check — reads as "true / accurate", matching the claim */}
+        <div style={{ width: 104 * S, height: 104 * S, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width={56 * S} height={56 * S} viewBox="0 0 24 24" fill="none" stroke={fg} strokeWidth="3.2">
+            <path d="M4 12.5l5 5 11-12" strokeLinecap="round" strokeLinejoin="round"
+              strokeDasharray="34" strokeDashoffset={(34 * (1 - clamp01((t - 0.35) * 2.4))).toFixed(1)} />
+          </svg>
         </div>
         <div style={{ color: fg, fontFamily: FONT, fontWeight: 700, fontSize: 68 * S, letterSpacing: '-0.02em' }}>{shot.accentText}</div>
       </div>
