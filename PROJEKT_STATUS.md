@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101r Motion Graphics OHNE Text (Ismet: "Ich will Motion Graphics, kein Text").**
+  Bisher war der Brief-Output reine kinetische TYPOGRAFIE (Headline/Stat/Quote).
+  Jetzt hat die Remotion-Engine ein echtes GRAFIK-Vokabular: 5 neue Full-Bleed-
+  Blocks (`gradientMesh` lebendes Farbfeld / `glowOrb` Licht-Sphaere mit Bloom +
+  rotierendem Specular-Sweep + Beat-Puls / `orbitRings` rotierende Ringe mit
+  wanderndem Arc + Glow-Node / `shapeField` gestreute Geo-Formen mit
+  verwuerfeltem Spring-Stagger + Parallax / `waveLines` beat-reaktive
+  Soundwave). Alle deterministisch (closed-form Spring + seeded PRNG, kein
+  Math.random), Beat-gekoppelt ueber neuen `beatPulse()`. NEUER "No text"-Modus:
+  Checkbox im Brief-Panel (default AN) -> `/api/motion/brief?no_text=1` ->
+  `render-brief.mjs --no-text` -> Director/Heuristik emittiert NUR Grafik-Blocks,
+  null Wort auf dem Screen. Default-Pfad (Text) legt die Grafik jetzt HINTER die
+  Typo (mesh immer slot 0, Text via zIndex darueber) -> auch Text-Clips sehen
+  nicht mehr flach aus. GPT-5-Director-Prompt + Zod-Schema + SceneRenderer
+  (Full-Bleed-Branch) mitgezogen. GEPRUEFT in der Sandbox: tsc --noEmit clean,
+  Director erzeugt schema-valide No-Text-Spec (0 Text-Blocks) UND Default-Spec
+  (Grafik+Text gemischt), echter Headless-Render 278 Frames -> 1080x1920 h264,
+  Frame-Streifen an Ismet (Orb+Ringe / Shapes+Wave / Settle). Python-Captions +
+  Selftest voellig unberuehrt (627/627). EHRLICH: Optik-Feinschliff (Mesh-
+  Saettigung, Farbwelten) erst auf echtem GPU-Render final beurteilbar.
+
 - **v101q Hotfix Motion-Brief: "Render failed" behoben (Browser-Download).**
   BEFUND (aus Ismets Live-Screenshot reproduziert): das Brief-Panel erschien
   live (Docker-Build + Node + npm ci ok), aber jeder Render brach mit "Motion

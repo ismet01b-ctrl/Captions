@@ -22,7 +22,7 @@ const wordZ = z.object({
   end: z.number().min(0),
 });
 
-const baseFields = { id: z.string().min(1), slot: z.number().int().min(0).max(3), spring: springZ };
+const baseFields = { id: z.string().min(1), slot: z.number().int().min(0).max(15), spring: springZ };
 
 const kineticZ = z.object({
   ...baseFields,
@@ -69,6 +69,43 @@ const bigQuoteZ = z.object({
   author: z.string().max(40).optional(),
 });
 
+const gradientMeshZ = z.object({
+  ...baseFields,
+  kind: z.literal('gradientMesh'),
+  colors: z.array(z.string()).max(5),
+  speed: z.number().min(0.05).max(3),
+});
+
+const glowOrbZ = z.object({
+  ...baseFields,
+  kind: z.literal('glowOrb'),
+  radiusPct: z.number().min(0.05).max(0.7),
+  beatPulse: z.boolean(),
+  hueDrift: z.number().min(0).max(180),
+});
+
+const orbitRingsZ = z.object({
+  ...baseFields,
+  kind: z.literal('orbitRings'),
+  rings: z.number().int().min(1).max(5),
+  spin: z.number().min(-180).max(180),
+});
+
+const shapeFieldZ = z.object({
+  ...baseFields,
+  kind: z.literal('shapeField'),
+  count: z.number().int().min(1).max(60),
+  shape: z.enum(['mixed', 'dot', 'ring', 'triangle', 'plus', 'square']),
+  drift: z.number().min(0).max(1),
+});
+
+const waveLinesZ = z.object({
+  ...baseFields,
+  kind: z.literal('waveLines'),
+  lines: z.number().int().min(1).max(14),
+  amp: z.number().min(0).max(1),
+});
+
 const blockZ = z.discriminatedUnion('kind', [
   kineticZ,
   statZ,
@@ -76,6 +113,11 @@ const blockZ = z.discriminatedUnion('kind', [
   deviceZ,
   chipRowZ,
   bigQuoteZ,
+  gradientMeshZ,
+  glowOrbZ,
+  orbitRingsZ,
+  shapeFieldZ,
+  waveLinesZ,
 ]);
 
 const sceneZ = z.object({
@@ -84,7 +126,7 @@ const sceneZ = z.object({
   tLen: z.number().min(0.4).max(12),
   in: transitionZ,
   out: transitionZ,
-  blocks: z.array(blockZ).min(1).max(4),
+  blocks: z.array(blockZ).min(1).max(6),
 });
 
 export const sceneSpecZ = z.object({

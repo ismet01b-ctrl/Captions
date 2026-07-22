@@ -16,7 +16,24 @@ export type BlockKind =
   | 'accentUnderline'
   | 'deviceFrame'
   | 'chipRow'
-  | 'bigQuote';
+  | 'bigQuote'
+  // Pure-graphic blocks (no text) — the "motion graphics, no words" vocabulary.
+  // These are FULL-BLEED: they ignore the lane solver and fill the scene; `slot`
+  // becomes their z-order (0 = back). Composited back-to-front for depth.
+  | 'gradientMesh'
+  | 'glowOrb'
+  | 'orbitRings'
+  | 'shapeField'
+  | 'waveLines';
+
+/** Full-bleed graphic kinds fill the canvas instead of occupying a layout lane. */
+export const FULL_BLEED: ReadonlySet<BlockKind> = new Set<BlockKind>([
+  'gradientMesh',
+  'glowOrb',
+  'orbitRings',
+  'shapeField',
+  'waveLines',
+]);
 
 export type TransitionKind = 'rise' | 'whip' | 'fade' | 'scaleIn';
 
@@ -91,13 +108,55 @@ export interface BigQuote extends BlockBase {
   readonly author?: string;
 }
 
+/** Living mesh-gradient field — soft colour blobs drifting on Lissajous paths. */
+export interface GradientMesh extends BlockBase {
+  readonly kind: 'gradientMesh';
+  readonly colors: readonly string[]; // 2..5 hex; falls back to palette
+  readonly speed: number; // drift rate, ~0.2..1.5
+}
+
+/** Hero luminous sphere: core + bloom + rotating specular sweep, breathing on the beat. */
+export interface GlowOrb extends BlockBase {
+  readonly kind: 'glowOrb';
+  readonly radiusPct: number; // 0.1..0.6 of min(w,h)
+  readonly beatPulse: boolean; // scale spikes on each downbeat
+  readonly hueDrift: number; // deg over the scene, subtle (0..60)
+}
+
+/** Concentric thin rings with a bright travelling arc + glow node, counter-rotating. */
+export interface OrbitRings extends BlockBase {
+  readonly kind: 'orbitRings';
+  readonly rings: number; // 1..5
+  readonly spin: number; // base deg/s (sign alternates per ring)
+}
+
+/** Scattered geometric shapes that spring in on a scrambled stagger, then drift + rotate. */
+export interface ShapeField extends BlockBase {
+  readonly kind: 'shapeField';
+  readonly count: number; // 4..40
+  readonly shape: 'mixed' | 'dot' | 'ring' | 'triangle' | 'plus' | 'square';
+  readonly drift: number; // parallax drift amount, 0..1
+}
+
+/** Stacked flowing sine lines — an equaliser/soundwave whose amplitude pulses on the beat. */
+export interface WaveLines extends BlockBase {
+  readonly kind: 'waveLines';
+  readonly lines: number; // 2..12
+  readonly amp: number; // 0..1 of half-canvas
+}
+
 export type Block =
   | KineticHeadline
   | StatCard
   | AccentUnderline
   | DeviceFrame
   | ChipRow
-  | BigQuote;
+  | BigQuote
+  | GradientMesh
+  | GlowOrb
+  | OrbitRings
+  | ShapeField
+  | WaveLines;
 
 export interface Scene {
   readonly id: string;

@@ -48,7 +48,10 @@ try {
     `--outfile=${directorBundle}`,
     '--log-level=error',
   ]);
-  const specJson = execFileSync('node', [directorBundle, brief], { maxBuffer: 8 << 20 }).toString();
+  const noText = passthrough.includes('--no-text') ? ['--no-text'] : [];
+  const specJson = execFileSync('node', [directorBundle, brief, ...noText], {
+    maxBuffer: 8 << 20,
+  }).toString();
   writeFileSync(specPath, specJson);
 
   // 2) Render the spec. Remotion manages its own headless browser in production; in the
@@ -67,7 +70,7 @@ try {
       `--props=${specPath}`,
       `--codec=${codec}`,
       ...(browser ? [`--browser-executable=${browser}`] : []),
-      ...passthrough.filter((a) => !a.startsWith('--codec=')),
+      ...passthrough.filter((a) => !a.startsWith('--codec=') && a !== '--no-text'),
     ],
     { stdio: 'inherit' },
   );

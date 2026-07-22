@@ -25,6 +25,16 @@ export function springStep(elapsed: number, s: Spring): number {
   return 1 - Math.exp(-w0 * e) * (1 + w0 * e);
 }
 
+/**
+ * Decaying pulse in [0,1] that spikes to 1 on each downbeat and eases out before the
+ * next — drives beat-reactive graphics (orb breathing, wave amplitude). Pure in t.
+ */
+export function beatPulse(t: number, grid: BeatGrid): number {
+  const period = 60 / grid.bpm;
+  const phase = (((t - grid.offset) % period) + period) % period; // 0..period
+  return Math.exp((-phase / period) * 4.5); // 1 at the beat, ~0.01 just before the next
+}
+
 /** Snap an onset to the nearest beat if within tolerance; else keep it verbatim. */
 export function snapToBeat(t: number, grid: BeatGrid): number {
   const period = 60 / grid.bpm;

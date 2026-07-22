@@ -13,6 +13,7 @@ export interface Brief {
   readonly format?: Format;
   readonly bpm?: number;
   readonly palette?: Partial<Palette>;
+  readonly noText?: boolean; // pure motion graphics — suppress all kinetic type
 }
 
 /** Compose a spec from a brief. Never throws — always returns a renderable spec. */
@@ -69,6 +70,12 @@ function briefToPrompt(brief: Brief): string {
     `Brief: ${brief.text}`,
     `Format: ${fmt}`,
     brief.bpm ? `BPM: ${brief.bpm}` : '',
+    brief.noText
+      ? `NO TEXT MODE: output PURE MOTION GRAPHICS. Do NOT use kineticHeadline, statCard, ` +
+        `accentUnderline, chipRow or bigQuote. Every scene must be built ONLY from graphic ` +
+        `blocks (gradientMesh, glowOrb, orbitRings, shapeField, waveLines). Zero words on screen.`
+      : `Layer 1-2 graphic blocks (gradientMesh + one of glowOrb/orbitRings/shapeField/waveLines) ` +
+        `behind any text so it never sits on a flat field.`,
     `Canvas must match the format. Produce 2-4 scenes, 6-10s total.`,
   ]
     .filter(Boolean)

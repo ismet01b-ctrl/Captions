@@ -2,7 +2,18 @@
 // OPENAI_API_KEY is set (mirrors the Python engine's heuristic path), and it doubles as
 // the offline-testable proof that a one-line brief becomes a valid, renderable spec.
 
-import type { Block, KineticHeadline, Scene, SceneSpec } from '../spec';
+import type {
+  Block,
+  GlowOrb,
+  GradientMesh,
+  KineticHeadline,
+  OrbitRings,
+  Palette,
+  Scene,
+  SceneSpec,
+  ShapeField,
+  WaveLines,
+} from '../spec';
 import { CANVAS, DEFAULT_SPRING, PALETTES } from './vocabulary';
 import type { Brief } from './director';
 
@@ -74,6 +85,55 @@ function kinetic(id: string, words: string[], tIn: number, bpm: number, weight: 
   };
 }
 
+// ---- graphic-block factories (pure motion graphics, no text) --------------------------
+
+const mesh = (id: string, pal: Palette, speed: number): GradientMesh => ({
+  id,
+  kind: 'gradientMesh',
+  slot: 0, // back
+  spring: { stiffness: 90, damping: 0.9, delay: 0 },
+  colors: [pal.accent, pal.fg, pal.muted, pal.accent],
+  speed,
+});
+
+const orb = (id: string, slot: number, radiusPct: number, hueDrift: number): GlowOrb => ({
+  id,
+  kind: 'glowOrb',
+  slot,
+  spring: { stiffness: 130, damping: 0.62, delay: 0.05 },
+  radiusPct,
+  beatPulse: true,
+  hueDrift,
+});
+
+const rings = (id: string, slot: number, count: number, spin: number): OrbitRings => ({
+  id,
+  kind: 'orbitRings',
+  slot,
+  spring: { stiffness: 150, damping: 0.6, delay: 0.1 },
+  rings: count,
+  spin,
+});
+
+const field = (id: string, slot: number, count: number, shape: ShapeField['shape']): ShapeField => ({
+  id,
+  kind: 'shapeField',
+  slot,
+  spring: { stiffness: 170, damping: 0.55, delay: 0 },
+  count,
+  shape,
+  drift: 0.7,
+});
+
+const waves = (id: string, slot: number, lines: number, amp: number): WaveLines => ({
+  id,
+  kind: 'waveLines',
+  slot,
+  spring: { stiffness: 120, damping: 0.7, delay: 0.05 },
+  lines,
+  amp,
+});
+
 export function heuristicSpec(brief: Brief): SceneSpec {
   const format = brief.format ?? '9:16';
   const { w, h } = CANVAS[format];
@@ -101,30 +161,45 @@ export function heuristicSpec(brief: Brief): SceneSpec {
     t += inDur + len - outDur * 0.6; // slight overlap -> continuous flow
   };
 
-  // Scene 1 — hook headline + accent underline.
-  const hook = ph[0]!;
-  pushScene(
-    [
-      kinetic('s1-h', hook, 0, bpm, [500, 900]),
-      {
+  // Motion-graphics composition. Every scene is a LAYERED graphic field (mesh always at
+  // the back); when text is allowed it rides on top. Three movements: assemble -> energy
+  // -> settle. The variant picks which graphic leads each scene so no two feel alike.
+  const noText = brief.noText === true;
+  const spd = 0.7 + (seed % 5) * 0.12;
+  const dir = seed % 2 === 0 ? 1 : -1;
+  const shapeKind = (['mixed', 'ring', 'triangle', 'plus'] as const)[seed % 4]!;
+
+  // Scene 1 — assemble: rings lock in around the orb.
+  {
+    const g: Block[] = [
+      mesh('s1-bg', palette, spd),
+      rings('s1-rings', 2, 3, 26 * dir),
+      orb('s1-orb', 3, 0.16, 24),
+    ];
+    if (!noText) {
+      g.push(kinetic('s1-h', ph[0]!, 0, bpm, [500, 900]));
+      g.push({
         id: 's1-u',
         kind: 'accentUnderline',
         slot: 1,
         spring: { stiffness: 150, damping: 0.7, delay: 0.25 },
         follows: 's1-h',
         widthPct: 0.5,
-      },
-    ],
-    2.0,
-    'rise',
-    'whip',
-  );
+      });
+    }
+    pushScene(g, noText ? 2.6 : 2.2, 'rise', 'whip');
+  }
 
-  // Scene 2 — a stat if the brief carries a number, else the second phrase.
-  if (stat) {
-    pushScene(
-      [
-        {
+  // Scene 2 — energy: a shape field bursts in over pumping wave lines.
+  {
+    const g: Block[] = [
+      mesh('s2-bg', palette, spd * 1.15),
+      waves('s2-waves', 1, 7, 0.32),
+      field('s2-field', 2, 22, shapeKind),
+    ];
+    if (!noText) {
+      if (stat) {
+        g.push({
           id: 's2-stat',
           kind: 'statCard',
           slot: 0,
@@ -133,35 +208,36 @@ export function heuristicSpec(brief: Brief): SceneSpec {
           suffix: stat.suffix,
           label: stat.label,
           countUp: true,
-        },
-      ],
-      2.2,
-      'whip',
-      'fade',
-    );
-  } else if (ph[1]) {
-    pushScene([kinetic('s2-h', ph[1], scenes[scenes.length - 1]!.tStart, bpm, [420, 840])], 2.0, 'scaleIn', 'fade');
+        });
+      } else if (ph[1]) {
+        g.push(kinetic('s2-h', ph[1], scenes[scenes.length - 1]!.tStart, bpm, [420, 840]));
+      }
+    }
+    pushScene(g, noText ? 2.6 : 2.2, 'whip', 'fade');
   }
 
-  // Final scene — closing line (last phrase, or a default).
-  const closer = ph[ph.length - 1] && ph.length > 1 ? ph[ph.length - 1]! : ['MADE', 'FOR', 'YOU'];
-  const sIn = scenes.length ? scenes[scenes.length - 1]!.tStart : 0;
-  pushScene(
-    [
-      kinetic('s3-h', closer, sIn, bpm, [400, 860]),
-      {
+  // Scene 3 — settle: the orb returns, breathing, ringed once more.
+  {
+    const sIn = scenes.length ? scenes[scenes.length - 1]!.tStart : 0;
+    const g: Block[] = [
+      mesh('s3-bg', palette, spd * 0.85),
+      orb('s3-orb', 2, 0.2, 40),
+      rings('s3-rings', 3, 2, 18 * -dir),
+    ];
+    if (!noText) {
+      const closer = ph[ph.length - 1] && ph.length > 1 ? ph[ph.length - 1]! : ['MADE', 'FOR', 'YOU'];
+      g.push(kinetic('s3-h', closer, sIn, bpm, [400, 860]));
+      g.push({
         id: 's3-u',
         kind: 'accentUnderline',
         slot: 1,
         spring: { stiffness: 150, damping: 0.7, delay: 0.3 },
         follows: 's3-h',
         widthPct: 0.42,
-      },
-    ],
-    2.0,
-    'rise',
-    'fade',
-  );
+      });
+    }
+    pushScene(g, noText ? 2.8 : 2.0, 'rise', 'fade');
+  }
 
   const last = scenes[scenes.length - 1]!;
   const duration = last.tStart + last.in.dur + last.tLen + last.out.dur;

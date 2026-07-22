@@ -10,7 +10,13 @@ import { parseSpec } from './schema';
 
 async function main(): Promise<void> {
   const text = process.argv[2] ?? 'Unlimited motion for every creator';
-  const spec = await directBrief({ text });
+  // No-text (pure motion graphics) via 2nd arg (`--no-text`) or env, plus a light
+  // natural-language sniff so a brief that literally says "no text" is honoured too.
+  const flag = process.argv.includes('--no-text') || process.env['DVE_NOTEXT'] === '1';
+  const sniff = /\b(no text|without text|textless|kein text|ohne text|nur grafik|graphics only|pure motion)\b/i.test(
+    text,
+  );
+  const spec = await directBrief({ text, noText: flag || sniff });
   if (!parseSpec(spec)) {
     process.stderr.write('FATAL: director produced a spec the schema rejects\n');
     process.exit(1);
