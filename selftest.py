@@ -1957,7 +1957,7 @@ def _scenario_logic(clip, transcript, tmp):
     check('v108: Render-Bridge + Server + UI verdrahtet',
           "'MotionOverlay'" in _mrb3 and 'JSON.stringify({ plan })' in _mra
           and 'def _run_motion_auto' in _srv_m and "j.get('auto_video')" in _srv_m
-          and '_render.transcribe(' in _srv_m and 'render-auto.mjs' in _srv_m
+          and 'def _whisper_words' in _srv_m and 'render-auto.mjs' in _srv_m
           and 'id="moTypeAuto"' in _ui_m and 'function motionAutoGo' in _ui_m
           and "auto:['type','upload','render']" in _ui_m)
     _mgroot = os.path.join(HERE, 'motion')

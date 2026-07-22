@@ -1805,6 +1805,34 @@ def _run_motion_brief(jid):
         _maybe_refund(jid)
 
 
+def _whisper_words(audio_path, language='auto'):
+    """Self-contained Whisper-Transkription (whisper-1, Wort-Timings) fuer das Auto-Overlay.
+    Bewusst NICHT render.transcribe(): das nutzt sys.exit und importiert die schwere
+    render-Pipeline. Hier nur ein schlanker HTTP-Call; Fehler werden als Exception geworfen
+    (der Aufrufer erstattet + zeigt sie), nie sys.exit."""
+    import requests as _rq
+    key = os.environ.get('OPENAI_API_KEY')
+    if not key:
+        raise RuntimeError('Server has no OPENAI_API_KEY set.')
+    with open(audio_path, 'rb') as f:
+        r = _rq.post('https://api.openai.com/v1/audio/transcriptions',
+                     headers={'Authorization': f'Bearer {key}'},
+                     data={'model': 'whisper-1', 'response_format': 'verbose_json',
+                           'timestamp_granularities[]': ['word', 'segment'],
+                           **({} if language == 'auto' else {'language': language})},
+                     files={'file': (os.path.basename(audio_path), f, 'audio/mp4')},
+                     timeout=600)
+    if r.status_code == 413:
+        raise RuntimeError('Audio track too large for transcription.')
+    if r.status_code == 429:
+        raise RuntimeError('Transcription service busy — try again in a few minutes.')
+    if r.status_code >= 400:
+        raise RuntimeError(f'Transcription HTTP {r.status_code}: {r.text[:200]}')
+    data = r.json()
+    return [{'word': w['word'].strip(), 'start': round(w['start'], 3), 'end': round(w['end'], 3)}
+            for w in data.get('words', [])]
+
+
 def _run_motion_auto(jid):
     """v108: hochgeladenes Video -> KI-Regisseur (Whisper-Transkript + Frames ->
     autoDirect, denkt wie ein Senior-Motion-Designer) -> Motion-Graphics als Overlay
@@ -1815,21 +1843,33 @@ def _run_motion_auto(jid):
     out = os.path.join(d, 'fertig.mp4')
     set_state(jid, status='laeuft', phase='Understanding your video …',
               progress=0.08, log_tail=[])
-    # 1) Transkript (Whisper) - transcribe() nutzt sys.exit bei Fehlern -> abfangen.
+    # 1) Audio extrahieren (klein!) - Whisper hat ein 25MB-Limit, ein Handy-Video sprengt
+    # das sofort. Wir ziehen eine schlanke Mono-16kHz-Spur und schicken NUR die.
+    apath = os.path.join(d, 'audio.m4a')
     try:
-        import render as _render
-        words = _render.transcribe(src, j.get('language', 'auto'))
-    except SystemExit as e:
+        _ar = subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', src, '-vn',
+                              '-ac', '1', '-ar', '16000', '-b:a', '64k', apath],
+                             capture_output=True, text=True, timeout=180)
+    except Exception as e:
+        set_state(jid, status='fehler', progress=0, msg='Could not read the video audio.',
+                  detail=f'{type(e).__name__}: {e}'); _maybe_refund(jid); return
+    if not os.path.exists(apath) or os.path.getsize(apath) < 200:
         set_state(jid, status='fehler', progress=0,
-                  msg='Could not transcribe the video.', detail=str(e))
-        _maybe_refund(jid)
-        return
+                  msg='This video has no usable audio track.',
+                  detail=(_ar.stderr or '')[-300:]); _maybe_refund(jid); return
+    # 2) Whisper direkt (self-contained, kein sys.exit, kein schwerer render-Import).
+    try:
+        words = _whisper_words(apath, j.get('language', 'auto'))
     except Exception as e:
         set_state(jid, status='fehler', progress=0,
                   msg='Could not transcribe the video.',
                   detail=f'{type(e).__name__}: {e}')
         _maybe_refund(jid)
         return
+    if not words:
+        set_state(jid, status='fehler', progress=0,
+                  msg='No speech found in the video.',
+                  detail='Whisper returned no words.'); _maybe_refund(jid); return
     wpath = os.path.join(d, 'words.json')
     with open(wpath, 'w', encoding='utf-8') as f:
         json.dump(words, f)
