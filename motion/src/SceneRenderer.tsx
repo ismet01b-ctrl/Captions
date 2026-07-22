@@ -122,7 +122,12 @@ export const SceneRenderer: React.FC<Props> = ({ spec }) => {
       {live.map((a) => (
         <AbsoluteFill
           key={a.scene.id}
-          style={{ transform: affineToCss(a.xf), opacity: a.xf.alpha, willChange: 'transform, opacity' }}
+          style={{
+            transform: affineToCss(a.xf),
+            opacity: a.xf.alpha,
+            filter: a.xf.blur > 0.15 ? `blur(${a.xf.blur.toFixed(2)}px)` : undefined,
+            willChange: 'transform, opacity, filter',
+          }}
         >
           {a.scene.blocks.map((block) => {
             // Full-bleed graphics fill the canvas; `slot` is their back-to-front z-order.

@@ -4,6 +4,7 @@
 import React from 'react';
 import type { StatCard } from '../spec';
 import { springStep } from '../lib/spring';
+import { entrancePose, idleFloat, blurCss } from '../lib/motion';
 import { FONT_FAMILY } from '../fonts';
 
 interface Props {
@@ -27,7 +28,9 @@ export const StatCardBlock: React.FC<Props> = ({
   muted,
   laneH,
 }) => {
-  const s = springStep(t - tIn, block.spring); // 0 -> ~1.08 -> 1
+  const s = springStep(t - tIn, block.spring); // drives the count-up (eased, not linear)
+  const pose = entrancePose(t - tIn, block.spring, laneH * 0.14);
+  const float = idleFloat(t, 0.4, laneH * 0.01) * pose.alpha;
   const shown = block.countUp ? Math.min(block.value, block.value * s) : block.value;
   const valueSize = Math.round(laneH * 0.5);
   const labelSize = Math.round(laneH * 0.12);
@@ -41,8 +44,9 @@ export const StatCardBlock: React.FC<Props> = ({
         justifyContent: 'center',
         width: '100%',
         height: '100%',
-        opacity: Math.min(1, s * 1.6),
-        transform: `scale(${(0.9 + 0.1 * s).toFixed(4)})`,
+        opacity: pose.alpha,
+        transform: `translate3d(0, ${(pose.ty + float).toFixed(2)}px, 0) scale(${pose.scale.toFixed(4)})`,
+        filter: blurCss(pose.blur),
         fontFamily: `'${FONT_FAMILY}', system-ui, sans-serif`,
       }}
     >

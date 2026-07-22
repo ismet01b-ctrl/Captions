@@ -6,6 +6,7 @@
 // stacked collision. Pure function of t -> Remotion-safe, allocation-light.
 
 import { easeOutQuint } from './easing';
+import { idleFloat } from './motion';
 import type { Scene, SceneSpec } from '../spec';
 
 export interface Affine {
@@ -13,6 +14,7 @@ export interface Affine {
   readonly ty: number;
   readonly scale: number;
   readonly alpha: number;
+  readonly blur: number; // px, scene-level focus (defocus on exit)
 }
 
 export type Phase = 'in' | 'hold' | 'out';
@@ -24,33 +26,33 @@ export interface ActiveScene {
   readonly xf: Affine;
 }
 
-const HOLD: Affine = { tx: 0, ty: 0, scale: 1, alpha: 1 };
-
 function enter(kind: Scene['in']['kind'], p: number, riseH: number): Affine {
   switch (kind) {
     case 'rise':
-      return { tx: 0, ty: (1 - p) * riseH, scale: 1, alpha: p };
+      return { tx: 0, ty: (1 - p) * riseH, scale: 1, alpha: p, blur: 0 };
     case 'whip':
-      return { tx: (1 - p) * riseH * 1.6, ty: 0, scale: 1, alpha: p };
+      return { tx: (1 - p) * riseH * 1.6, ty: 0, scale: 1, alpha: p, blur: 0 };
     case 'scaleIn':
-      return { tx: 0, ty: 0, scale: 0.82 + 0.18 * p, alpha: p };
+      return { tx: 0, ty: 0, scale: 0.82 + 0.18 * p, alpha: p, blur: 0 };
     case 'fade':
     default:
-      return { tx: 0, ty: 0, scale: 1, alpha: p };
+      return { tx: 0, ty: 0, scale: 1, alpha: p, blur: 0 };
   }
 }
 
-// Outgoing shares the lane with the incoming scene -> push it OUT of the primary slot.
+// Outgoing shares the lane with the incoming scene -> push it OUT + defocus (blur) so it
+// dissolves like a rack-focus rather than a hard cut.
 function exit(kind: Scene['out']['kind'], p: number, riseH: number): Affine {
+  const blur = p * 6;
   switch (kind) {
     case 'whip':
-      return { tx: -p * riseH * 1.6, ty: 0, scale: 1, alpha: 1 - p };
+      return { tx: -p * riseH * 1.6, ty: 0, scale: 1, alpha: 1 - p, blur };
     case 'scaleIn':
-      return { tx: 0, ty: 0, scale: 1 - 0.06 * p, alpha: 1 - p };
+      return { tx: 0, ty: 0, scale: 1 - 0.06 * p, alpha: 1 - p, blur };
     case 'rise':
     case 'fade':
     default:
-      return { tx: 0, ty: -p * riseH * 0.5, scale: 1 - 0.06 * p, alpha: 1 - p };
+      return { tx: 0, ty: -p * riseH * 0.5, scale: 1 - 0.06 * p, alpha: 1 - p, blur };
   }
 }
 
@@ -65,7 +67,9 @@ export function sceneEnvelope(scene: Scene, t: number, riseH: number): ActiveSce
     return { scene, phase: 'in', local: p, xf: enter(scene.in.kind, p, riseH) };
   }
   if (t < holdEnd) {
-    return { scene, phase: 'hold', local: 1, xf: HOLD };
+    // Held scenes breathe with a tiny idle float so nothing sits frozen.
+    const ty = idleFloat(t, scene.tStart * 1.7, riseH * 0.03);
+    return { scene, phase: 'hold', local: 1, xf: { tx: 0, ty, scale: 1, alpha: 1, blur: 0 } };
   }
   const p = easeOutQuint((t - holdEnd) / scene.out.dur);
   return { scene, phase: 'out', local: p, xf: exit(scene.out.kind, p, riseH) };

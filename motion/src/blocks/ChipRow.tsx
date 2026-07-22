@@ -3,7 +3,7 @@
 
 import React from 'react';
 import type { ChipRow } from '../spec';
-import { springStep } from '../lib/spring';
+import { entrancePose, idleFloat, blurCss } from '../lib/motion';
 import { FONT_FAMILY } from '../fonts';
 
 interface Props {
@@ -33,24 +33,29 @@ export const ChipRowBlock: React.FC<Props> = ({ block, t, tIn, fg, accent, bg, l
       }}
     >
       {block.items.map((it, i) => {
-        const s = springStep(t - tIn, { ...block.spring, delay: block.spring.delay + i * 0.08 });
+        // Scrambled-but-deterministic stagger so pills don't pop strictly left-to-right.
+        const stagger = ((i * 7) % block.items.length) * 0.075;
+        const pose = entrancePose(t - tIn, { ...block.spring, delay: block.spring.delay + stagger }, laneH * 0.16);
+        const float = idleFloat(t, i * 1.3, laneH * 0.012) * pose.alpha;
         const filled = i % 2 === 0;
         return (
           <span
             key={i}
             style={{
-              opacity: Math.min(1, s * 1.6),
-              transform: `translate3d(0, ${((1 - s) * laneH * 0.12).toFixed(1)}px, 0) scale(${(0.8 + 0.2 * s).toFixed(3)})`,
+              opacity: pose.alpha,
+              transform: `translate3d(0, ${(pose.ty + float).toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`,
+              filter: blurCss(pose.blur),
               padding: `${fs * 0.34}px ${fs * 0.7}px`,
               borderRadius: 999,
               background: filled ? accent : 'transparent',
               color: filled ? bg : fg,
               border: `2px solid ${accent}`,
+              boxShadow: filled ? `0 6px 22px ${accent}44` : 'none',
               fontSize: fs,
               fontWeight: 700,
               fontVariationSettings: `'wght' 700`,
               whiteSpace: 'nowrap',
-              willChange: 'transform, opacity',
+              willChange: 'transform, opacity, filter',
             }}
           >
             {it}

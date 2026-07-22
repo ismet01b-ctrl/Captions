@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101z2 Template-Animation auf Senior-SaaS-Niveau (Ismet: "smooth, high end,
+  wie ein Senior SaaS Motion Designer").** Die Remotion-Bloecke (chipRow/kinetic
+  Headline/statCard/bigQuote/accentUnderline) hatten nur eine Basis-Feder + Fade.
+  Neu lib/motion.ts: `entrancePose()` (Feder-Overshoot + Slide + FOCUS-PULL-Blur,
+  der beim Landen aufloest), `idleFloat()` (winziges Leben im Halten statt
+  Standbild), `blurCss()`. Angewandt: ChipRow poppt verwuerfelt-gestaffelt mit
+  Blur-In + weichem Akzent-Schatten; KineticHeadline zieht pro Wort aus dem Fokus
+  (wordPose.blur); StatCard federt + zaehlt eased hoch; BigQuote-Anfuehrung landet
+  einen Tick vor der Zeile; AccentUnderline zieht mit hellem, mitlaufendem Node +
+  Glow-Puls entlang eines Tracks. Szene-Ebene (overlap.ts): Idle-Float im Hold +
+  Rack-Focus-Defocus (Blur) beim Ausgang statt hartem Fade; SceneRenderer legt den
+  Szenen-Blur auf. Alles deterministisch/seekbar (pure in t). GEPRUEFT: tsc clean,
+  Templates headless neu gerendert (Pills-Stagger-Blur-In + Big-Stat-Feder-Count
+  sichtbar) - Videos an Ismet. Regression 654/654 gruen. Wirkt auch auf den
+  KI-Brief (gleiche Bloecke) - hebt die ganze 2D-Engine.
+
 - **v101z Templates ueber Remotion statt alter Python-gfx-Engine (Ismet: "Template
   raus, das ist alte Python; ueber Remotion einfuegen").** Der Motion-Wizard nutzt
   jetzt AUSSCHLIESSLICH Remotion. Kuratiertes Template-Set aus den vorhandenen

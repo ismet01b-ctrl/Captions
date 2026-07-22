@@ -39,7 +39,8 @@ export const KineticHeadlineBlock: React.FC<Props> = ({ block, t, beat, fg, lane
       {triggers.map((tr, i) => {
         const pose =
           wordPose(tr, t, block.weight) ??
-          { text: tr.text, scale: 0.86, alpha: 0, lift: 0.06, wght: block.weight[0] };
+          { text: tr.text, scale: 0.86, alpha: 0, lift: 0.06, wght: block.weight[0], blur: 1 };
+        const blurPx = pose.blur * size * 0.05;
         return (
           <span
             key={i}
@@ -52,8 +53,9 @@ export const KineticHeadlineBlock: React.FC<Props> = ({ block, t, beat, fg, lane
               letterSpacing: '-0.02em',
               opacity: pose.alpha,
               transform: `translate3d(0, ${(pose.lift * laneH).toFixed(2)}px, 0) scale(${pose.scale.toFixed(4)})`,
+              filter: blurPx > 0.15 ? `blur(${blurPx.toFixed(2)}px)` : undefined,
               transformOrigin: '50% 60%',
-              willChange: 'transform, opacity',
+              willChange: 'transform, opacity, filter',
             }}
           >
             {pose.text}

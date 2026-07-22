@@ -4,6 +4,7 @@
 import React from 'react';
 import type { BigQuote } from '../spec';
 import { springStep } from '../lib/spring';
+import { entrancePose, idleFloat, blurCss } from '../lib/motion';
 import { FONT_FAMILY } from '../fonts';
 
 interface Props {
@@ -18,8 +19,12 @@ interface Props {
 
 export const BigQuoteBlock: React.FC<Props> = ({ block, t, tIn, fg, accent, muted, laneH }) => {
   const s = springStep(t - tIn, block.spring);
+  const pose = entrancePose(t - tIn, block.spring, laneH * 0.12);
+  const float = idleFloat(t, 1.1, laneH * 0.01) * pose.alpha;
   const fs = Math.round(laneH * 0.19);
   const authorReveal = Math.max(0, (s - 0.6) / 0.4);
+  // Quote mark lands a touch before the line for a considered, editorial feel.
+  const markPose = entrancePose(t - tIn + 0.12, block.spring, laneH * 0.06);
 
   return (
     <div
@@ -31,12 +36,15 @@ export const BigQuoteBlock: React.FC<Props> = ({ block, t, tIn, fg, accent, mute
         height: '100%',
         padding: '0 4%',
         boxSizing: 'border-box',
-        opacity: Math.min(1, s * 1.6),
-        transform: `translate3d(0, ${((1 - s) * laneH * 0.1).toFixed(1)}px, 0)`,
+        opacity: pose.alpha,
+        transform: `translate3d(0, ${(pose.ty + float).toFixed(1)}px, 0)`,
+        filter: blurCss(pose.blur),
         fontFamily: `'${FONT_FAMILY}', system-ui, sans-serif`,
       }}
     >
-      <div style={{ color: accent, fontSize: fs * 1.9, lineHeight: 0.5, fontWeight: 800, marginBottom: fs * 0.15 }}>
+      <div style={{ color: accent, fontSize: fs * 1.9, lineHeight: 0.5, fontWeight: 800,
+        marginBottom: fs * 0.15, opacity: markPose.alpha,
+        transform: `scale(${markPose.scale.toFixed(3)})`, transformOrigin: 'left center' }}>
         &ldquo;
       </div>
       <div

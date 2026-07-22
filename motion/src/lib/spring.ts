@@ -75,6 +75,7 @@ export interface WordPose {
   readonly alpha: number;
   readonly lift: number; // normalised upward settle (0 at rest)
   readonly wght: number; // resolved variable-font weight
+  readonly blur: number; // 0..1 focus-pull, resolves to 0 as the word lands
 }
 
 /**
@@ -96,5 +97,6 @@ export function wordPose(
     alpha: Math.min(1, s * 1.6),
     lift: (1 - s) * 0.06,
     wght: Math.round(weight[0] + (weight[1] - weight[0]) * peakPulse),
+    blur: Math.max(0, 1 - Math.max(0, e) / 0.42), // focus-pull as the word lands
   };
 }
