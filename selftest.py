@@ -2015,7 +2015,7 @@ def _scenario_logic(clip, transcript, tmp):
     # GEMESSEN (Finite-Difference), nicht von Hand gesetzt; Idle-Drift lässt nichts einfrieren.
     check('v111b: gemessenes, kontinuierliches Motion-Blur (Finite-Difference) + Idle-Drift',
           'const layerCam' in _msh and 'layerCam(i, t - dt)' in _msh
-          and 'idleDrift' in _msh and 'SHUTTER' in _msh
+          and 'idleDrift' in _msh and 'TH.shutter' in _msh
           and 'dx={dx}' in _msh and 'springStep(e - dt' in _msh)  # auch die Kinetik-Typo smeart
     # v111c: interaktive Kamera — motivierte Fahrten INNERHALB der Shots (entlang der Schrift
     # gleiten, in die Punchline pushen, dem Playhead folgen). Smeart via gemessenem Blur mit.
@@ -2038,6 +2038,14 @@ def _scenario_logic(clip, transcript, tmp):
           and 'v: +rng()' in _mbs
           and 'shotCam(shot.kind' in _msh and 'shot.v ?? 0.5' in _msh
           and 'seeded left/right' in _msh)
+    # v113: 4 komplett verschiedene Stile (Farbe/Typo/Card/Bewegungscharakter) via styleId.
+    _mth = _msrc('showcaseThemes.ts')
+    check('v113: 4 Stile (editorial/bold/soft/mono) — teilen sich nichts',
+          all(("%s:" % k) in _mth for k in ['editorial', 'bold', 'soft', 'mono'])
+          and 'export interface Theme' in _mth and 'cameraMult' in _mth and 'shutter' in _mth
+          and "styleId?: string" in _msh and 'TH = th;' in _msh
+          and 'themeFor(styleId)' in _msh
+          and 'const cm = th.cameraMult' in _msh)                 # mono = Kamera aus + kein Blur
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -2050,7 +2058,7 @@ def _scenario_logic(clip, transcript, tmp):
         check('v112: buildShowcase Node-Test (node fehlt -> skip)', True)
     check('v111: Komposition registriert (16:9, storyboard-Dauer)',
           'id="MotionShowcase"' in _mrt3b and 'showcaseMetadata' in _mrt3b
-          and 'showcaseDuration(story)' in _mrt3b)
+          and 'showcaseDuration(story, styleId)' in _mrt3b)
 
     check('v101w: Server + UI reichen den 3D-Schalter durch',
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m

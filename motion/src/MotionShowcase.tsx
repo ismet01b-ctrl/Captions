@@ -20,12 +20,13 @@ import { clamp01, easeOutQuint, easeInOutCubic, easeInOutQuint, easeOutBack, mix
 import { springStep } from './lib/spring';
 import { hash01 } from './lib/rng';
 import { FONT_FAMILY } from './fonts';
+import { themeFor, type Theme } from './showcaseThemes';
 
 const FONT = `'${FONT_FAMILY}', system-ui, -apple-system, "SF Pro Display", sans-serif`;
 
 // The storyboard can come from props (per-user, generated from a transcript by the director) —
 // falling back to the built-in demo storyboard when none is supplied.
-export type MotionShowcaseProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[] };
+export type MotionShowcaseProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string };
 
 // ───────────────────────────────────────────────────────────────────────────── storyboard
 // Each shot names an archetype + its (transcript-sourced) copy + how long it holds. The
@@ -68,14 +69,9 @@ const STORY: readonly Shot[] = [
   { kind: 'signoff',  dur: 3.0, into: 'morph',  accentText: 'made with DouchkoVE' },
 ];
 
-const TRANS = 0.85; // s — cross-shot hand-off window (long + soft; both shots stay sharp through it)
-const SHUTTER = 0.62; // motion-blur shutter angle proxy: fraction of per-frame travel that smears
-
-// ───────────────────────────────────────────────────────────────────────────── palette
-const LIGHT_BG = 'radial-gradient(130% 110% at 50% 32%, #fbfbfd 0%, #eef0f3 58%, #e3e6eb 100%)';
-const DARK_BG = 'radial-gradient(130% 110% at 50% 30%, #202634 0%, #141821 60%, #0c0f16 100%)';
-const INK = '#14161c';
-const INK_ON_DARK = '#f4f6fb';
+// The active theme for this render job. ShowcaseBody sets it once (styleId is constant per job,
+// so this stays deterministic) and every shot component reads it — the four styles share nothing.
+let TH: Theme = themeFor(undefined);
 
 // ───────────────────────────────────────────────────────────────────────────── helpers
 
@@ -180,7 +176,8 @@ const MotionSmear: React.FC<{ dx: number; dy: number; iso: number; children: Rea
  *  carries its own vertical motion blur during the pop (sampled from the spring's velocity), so
  *  the type glides in buttery-smooth instead of stepping frame to frame. */
 const Kinetic: React.FC<{ text: string; t: number; fs: number; color: string; weight?: number }>
-  = ({ text, t, fs, color, weight = 800 }) => {
+  = ({ text, t, fs, color, weight }) => {
+  const wght = weight ?? TH.weight;
   const words = text.split(' ');
   const spring = { stiffness: 150, damping: 0.7, delay: 0 };
   const dt = 1 / 60;
@@ -193,11 +190,12 @@ const Kinetic: React.FC<{ text: string; t: number; fs: number; color: string; we
         const sPrev = springStep(e - dt, spring);
         const y = (1 - s) * fs * 0.5;
         const dyFrame = (s - sPrev) * fs * 0.5;           // per-frame vertical travel
-        const smear = Math.min(fs * 0.5, Math.abs(dyFrame) * SHUTTER);
+        const smear = Math.min(fs * 0.5, Math.abs(dyFrame) * TH.shutter);
         const appear = clamp01(e * 3);
         const base: React.CSSProperties = {
-          display: 'inline-block', color, fontFamily: FONT, fontWeight: weight,
-          fontSize: fs, lineHeight: 1.05, letterSpacing: '-0.02em',
+          display: 'inline-block', color, fontFamily: TH.font, fontWeight: wght,
+          fontSize: fs, lineHeight: 1.05, letterSpacing: TH.tracking,
+          textTransform: TH.upper ? 'uppercase' : 'none',
         };
         const word = (
           <span style={{ ...base, transform: `translateY(${y.toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})` }}>{w}</span>
@@ -207,7 +205,7 @@ const Kinetic: React.FC<{ text: string; t: number; fs: number; color: string; we
             {smear > 1.5 && Array.from({ length: 6 }, (_, k) => {
               const f = (k / 5) - 0.5;
               return <span key={k} style={{ ...base, position: 'absolute', left: 0, top: 0, opacity: 1 / 6,
-                transform: `translateY(${(y - dyFrame * SHUTTER * f).toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})` }}>{w}</span>;
+                transform: `translateY(${(y - dyFrame * TH.shutter * f).toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})` }}>{w}</span>;
             })}
             <span style={{ visibility: smear > 1.5 ? 'hidden' : 'visible', ...base, transform: `translateY(${y.toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})` }}>{w}</span>
           </div>
@@ -241,12 +239,13 @@ const Cursor: React.FC<{ x: number; y: number; press: number; s: number }> = ({ 
 
 interface ShotCtx { shot: Shot; t: number; hold: number; W: number; H: number; S: number; accent: string; press: number; }
 
-const cardShadow = (s: number) => `0 ${30 * s}px ${70 * s}px rgba(20,24,34,0.20), 0 ${6 * s}px ${16 * s}px rgba(20,24,34,0.10)`;
+const cardShadow = (_s: number): string => TH.card.shadow || 'none';
+const cardBorder = (): string | undefined => TH.card.border || undefined;
 
 /** Shot: full-frame kinetic typography (+ optional Apple mark) on the studio ground. */
 const ShotKtypo: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent }) => {
   const warm = shot.c === 'warm';
-  const color = warm ? accent : INK;
+  const color = warm ? accent : TH.ink;
   // auto-fit: long headlines shrink so they never clip the frame (and never collide with the
   // camera glide). Bucketed by character count — robust for whatever copy the director emits.
   const chars = shot.accentText!.length;
@@ -255,7 +254,7 @@ const ShotKtypo: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent }) => {
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: fs * 0.24 }}>
-        <Kinetic text={shot.accentText!} t={t} fs={fs} color={color} weight={warm ? 800 : 820} />
+        <Kinetic text={shot.accentText!} t={t} fs={fs} color={color} />
         {shot.b === 'apple' && (
           <div style={{ opacity: clamp01((t - 0.45) * 2.4), transform: `scale(${(0.7 + 0.3 * easeOutBack(clamp01((t - 0.45) * 1.6))).toFixed(3)})` }}>
             <AppleMark size={fs * 0.92} color="#4a4f5a" />
@@ -287,9 +286,9 @@ const ShotTimer: React.FC<ShotCtx> = ({ shot, t, hold, S, accent }) => {
         </svg>
         {/* percentage counts up EXACTLY with the ring — one truth, not two */}
         <div style={{ position: 'absolute', left: cx - R, top: cy - 30 * S, width: R * 2, textAlign: 'center',
-          color: '#fff', fontFamily: FONT, fontWeight: 700, fontSize: 56 * S, letterSpacing: '-0.03em' }}>{pct}%</div>
+          color: '#fff', fontFamily: TH.font, fontWeight: 700, fontSize: 56 * S, letterSpacing: '-0.03em' }}>{pct}%</div>
         <div style={{ position: 'absolute', left: 320 * S, top: cy - 46 * S, right: 40 * S,
-          color: '#fff', fontFamily: FONT, fontWeight: 700, fontSize: 60 * S, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
+          color: '#fff', fontFamily: TH.font, fontWeight: 700, fontSize: 60 * S, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
           {shot.accentText}
           <div style={{ color: '#8b8f98', fontWeight: 600, fontSize: 30 * S, marginTop: 8 * S }}>Rendering…</div>
         </div>
@@ -326,7 +325,7 @@ const ShotNotes: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent }) => {
         </div>
         {/* body text — line 2 types in behind a blinking caret */}
         <div style={{ position: 'absolute', left: 60 * S, top: 180 * S, right: 60 * S, color: '#fff',
-          fontFamily: FONT, fontWeight: 500, fontSize: 68 * S, lineHeight: 1.28, letterSpacing: '-0.01em' }}>
+          fontFamily: TH.font, fontWeight: 500, fontSize: 68 * S, lineHeight: 1.28, letterSpacing: '-0.01em' }}>
           <div style={{ opacity: clamp01(t * 3) }}>{line1}</div>
           <div>{line2.slice(0, type2)}<span style={{ color: accent, opacity: caretOn ? 0.95 : 0.1,
             fontWeight: 300 }}>|</span></div>
@@ -346,16 +345,16 @@ const ShotSearchbar: React.FC<ShotCtx> = ({ shot, t, W, H, S, press }) => {
       {/* search field pinned near the top, dropping in */}
       <div style={{ marginTop: 40 * S, width: 1500 * S, height: 150 * S, borderRadius: '0 0 60px 60px',
         background: '#fff', boxShadow: cardShadow(S), display: 'flex', alignItems: 'center', paddingLeft: 70 * S,
-        transform: `translateY(${((drop - 1) * 200 * S).toFixed(1)}px)`, color: INK, fontFamily: FONT,
+        transform: `translateY(${((drop - 1) * 200 * S).toFixed(1)}px)`, color: TH.ink, fontFamily: TH.font,
         fontWeight: 600, fontSize: 66 * S }}>{shot.accentText}</div>
       {/* the blue result link, with a momentary RGB split. All three layers are nowrap + exactly
           overlaid so the split never reflows the words (was doubling onto a 2nd line). */}
       <div style={{ marginTop: 150 * S, position: 'relative', opacity: linkApp, whiteSpace: 'nowrap' }}>
         {glitch > 0.4 && <>
-          <span style={{ position: 'absolute', top: 0, left: -glitch, whiteSpace: 'nowrap', color: '#ff2d55', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
-          <span style={{ position: 'absolute', top: 0, left: glitch, whiteSpace: 'nowrap', color: '#00e5ff', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
+          <span style={{ position: 'absolute', top: 0, left: -glitch, whiteSpace: 'nowrap', color: '#ff2d55', fontFamily: TH.font, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
+          <span style={{ position: 'absolute', top: 0, left: glitch, whiteSpace: 'nowrap', color: '#00e5ff', fontFamily: TH.font, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
         </>}
-        <span style={{ position: 'relative', whiteSpace: 'nowrap', color: '#2b6cff', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S,
+        <span style={{ position: 'relative', whiteSpace: 'nowrap', color: '#2b6cff', fontFamily: TH.font, fontWeight: 700, fontSize: 96 * S,
           textDecoration: 'underline', textUnderlineOffset: 12 * S }}>{shot.b}</span>
       </div>
     </AbsoluteFill>
@@ -370,7 +369,7 @@ const ShotImessage: React.FC<ShotCtx> = ({ shot, t, S }) => {
   const bubble = (text: string, sent: boolean, k: number): React.ReactNode => (
     <div style={{ alignSelf: sent ? 'flex-start' : 'flex-end', transform: `scale(${k.toFixed(3)})`,
       transformOrigin: sent ? '0% 50%' : '100% 50%', opacity: clamp01(k * 2), position: 'relative',
-      background: sent ? '#2b6cff' : '#28c93f', color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: fs,
+      background: sent ? '#2b6cff' : '#28c93f', color: '#fff', fontFamily: TH.font, fontWeight: 600, fontSize: fs,
       padding: `${26 * S}px ${40 * S}px`, borderRadius: 46 * S, boxShadow: cardShadow(S),
       maxWidth: 800 * S }}>{text}</div>
   );
@@ -406,15 +405,15 @@ const ShotWidgets: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent, press }) => 
             <div style={{ position: 'absolute', bottom: 0, left: 0, height: 8 * S, width: `${(30 + 55 * clamp01(t / 2)).toFixed(0)}%`, background: accent }} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: INK, fontFamily: FONT, fontWeight: 700, fontSize: 40 * S }}>Real UI, real depth</div>
-            <div style={{ color: '#8b8f98', fontFamily: FONT, fontSize: 28 * S, marginTop: 6 * S }}>built by hand</div>
-            <div style={{ color: '#8b8f98', fontFamily: FONT, fontSize: 24 * S, marginTop: 4 * S }}>vector · light · motion
+            <div style={{ color: TH.ink, fontFamily: TH.font, fontWeight: 700, fontSize: 40 * S }}>Real UI, real depth</div>
+            <div style={{ color: '#8b8f98', fontFamily: TH.font, fontSize: 28 * S, marginTop: 6 * S }}>built by hand</div>
+            <div style={{ color: '#8b8f98', fontFamily: TH.font, fontSize: 24 * S, marginTop: 4 * S }}>vector · light · motion
               <span style={{ marginLeft: 14 * S, background: '#e6e8ec', color: '#4a4f5a', padding: `${4 * S}px ${12 * S}px`, borderRadius: 8 * S, fontWeight: 700 }}>LIVE</span></div>
           </div>
         </div>
         {/* section label */}
         <div style={{ position: 'absolute', top: 260 * S, left: 0, right: 0, textAlign: 'center',
-          color: '#9aa0ab', fontFamily: FONT, fontWeight: 700, fontSize: 66 * S, letterSpacing: '-0.02em' }}>{shot.accentText}</div>
+          color: '#9aa0ab', fontFamily: TH.font, fontWeight: 700, fontSize: 66 * S, letterSpacing: '-0.02em' }}>{shot.accentText}</div>
         {/* wrench row */}
         <div style={{ position: 'absolute', top: 380 * S, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 60 * S }}>
           {[0, 1, 2].map((i) => {
@@ -452,7 +451,7 @@ const ShotPill: React.FC<ShotCtx> = ({ shot, t, S, accent, press }) => {
               strokeDasharray="34" strokeDashoffset={(34 * (1 - clamp01((t - 0.35) * 2.4))).toFixed(1)} />
           </svg>
         </div>
-        <div style={{ color: fg, fontFamily: FONT, fontWeight: 700, fontSize: 68 * S, letterSpacing: '-0.02em' }}>{shot.accentText}</div>
+        <div style={{ color: fg, fontFamily: TH.font, fontWeight: 700, fontSize: 68 * S, letterSpacing: '-0.02em' }}>{shot.accentText}</div>
       </div>
     </AbsoluteFill>
   );
@@ -477,7 +476,7 @@ const ShotTimeline: React.FC<ShotCtx> = ({ shot, t, hold, S }) => {
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 52 * S }}>
       <div style={{ opacity: titleApp, transform: `translateY(${((1 - titleApp) * 20 * S).toFixed(1)}px)`,
-        color: INK, fontFamily: FONT, fontWeight: 800, fontSize: 62 * S, letterSpacing: '-0.02em', textAlign: 'center', maxWidth: cw }}>
+        color: TH.ink, fontFamily: TH.font, fontWeight: 800, fontSize: 62 * S, letterSpacing: '-0.02em', textAlign: 'center', maxWidth: cw }}>
         {shot.accentText}
       </div>
       <div style={{ width: cw, height: ch, borderRadius: 44 * S, background: '#fff', boxShadow: cardShadow(S),
@@ -485,7 +484,7 @@ const ShotTimeline: React.FC<ShotCtx> = ({ shot, t, hold, S }) => {
         <div style={{ position: 'absolute', inset: 30 * S, borderRadius: 30 * S, background: '#0a0a0c', overflow: 'hidden' }}>
           {/* ruler */}
           <div style={{ position: 'absolute', top: 22 * S, left: inner.x, right: inner.x, display: 'flex', justifyContent: 'space-between',
-            color: '#6b7280', fontFamily: FONT, fontWeight: 600, fontSize: 26 * S }}>
+            color: '#6b7280', fontFamily: TH.font, fontWeight: 600, fontSize: 26 * S }}>
             {['00:00f', '01:00f', '02:00f', '03:00f', '04:00f'].map((s) => <span key={s}>{s}</span>)}
           </div>
           {/* clips */}
@@ -514,8 +513,8 @@ const ShotSignoff: React.FC<ShotCtx> = ({ shot, t, S, accent }) => {
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 40 * S }}>
       <div style={{ width: 150 * S, height: 150 * S, borderRadius: 40 * S, transform: `scale(${app.toFixed(3)})`,
         background: `linear-gradient(150deg, ${accent}, #ff8a5c)`, boxShadow: cardShadow(S),
-        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontFamily: FONT, fontWeight: 800, fontSize: 90 * S }}>D</div>
-      <Kinetic text={shot.accentText!} t={t - 0.2} fs={72 * S} color={INK} weight={700} />
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontFamily: TH.font, fontWeight: 800, fontSize: 90 * S }}>D</div>
+      <Kinetic text={shot.accentText!} t={t - 0.2} fs={72 * S} color={TH.ink} />
     </AbsoluteFill>
   );
 };
@@ -527,15 +526,17 @@ const SHOT_RENDER: Record<ShotKind, React.FC<ShotCtx>> = {
 
 // ───────────────────────────────────────────────────────────────────────────── composition
 
-const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[] }> = ({ spec, story }) => {
+const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: string | undefined }> = ({ spec, story, styleId }) => {
   const { fps, width: W, height: H } = useVideoConfig();
   const frame = useCurrentFrame();
   const t = frame / fps;
   const S = H / 1080; // everything is authored against a 1080-tall canvas
-  const accent = spec.palette.accent || '#f0813a';
+  const th = themeFor(styleId);
+  TH = th;                                   // publish the active theme to all shot components
+  const accent = th.accent;
 
   // lay shots on an overlapping timeline: each starts TRANS before the previous ends.
-  const tf = TRANS;
+  const tf = TH.trans;
   const starts: number[] = [];
   let cur = 0;
   for (const s of story) { starts.push(cur); cur += s.dur - tf; }
@@ -557,7 +558,8 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[] }> = ({ s
     // interactive camera: a motivated move that runs through the whole shot (neutral at p=0 so it
     // never fights the entrance). Sampled continuously → it smears via the measured-velocity blur.
     const sc = shotCam(shot.kind, shot.c === 'warm', clamp01(local / shot.dur), W, H, shot.v ?? 0.5);
-    cam = { x: cam.x + sc.x, y: cam.y + sc.y, scale: cam.scale * sc.scale, alpha: cam.alpha };
+    const cm = th.cameraMult;                // 0 for the locked-off "mono" style → no camera move
+    cam = { x: cam.x + sc.x * cm, y: cam.y + sc.y * cm, scale: cam.scale * (1 + (sc.scale - 1) * cm), alpha: cam.alpha };
     // idle drift only while fully settled (fades in as the entrance completes, out as exit starts)
     const settle = clamp01(tin * 2 - 1) * clamp01((1 - tout) * 2 - 0) * (tout <= 0 ? 1 : 0);
     if (settle > 0) {
@@ -570,7 +572,7 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[] }> = ({ s
   const dt = 1 / fps;
 
   return (
-    <AbsoluteFill style={{ background: LIGHT_BG }}>
+    <AbsoluteFill style={{ background: TH.bg }}>
       {story.map((shot, i) => {
         const start = starts[i]!;
         const local = t - start;
@@ -579,9 +581,9 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[] }> = ({ s
         const cam = layerCam(i, t);
         const prev = layerCam(i, t - dt);
         // per-frame motion vector → symmetric shutter smear; scale-rate → a whisper of iso blur.
-        const dx = (cam.x - prev.x) * SHUTTER;
-        const dy = (cam.y - prev.y) * SHUTTER;
-        const iso = Math.abs(cam.scale - prev.scale) * Math.min(W, H) * SHUTTER * 0.5;
+        const dx = (cam.x - prev.x) * TH.shutter;
+        const dy = (cam.y - prev.y) * TH.shutter;
+        const iso = Math.abs(cam.scale - prev.scale) * Math.min(W, H) * TH.shutter * 0.5;
 
         // interaction press: ramps up in the last ~0.3s before this shot hands off.
         const press = i < n - 1 ? clamp01((local - (shot.dur - tf - 0.3)) / 0.22) : 0;
@@ -591,25 +593,28 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[] }> = ({ s
         return (
           <div key={i} style={layerCss(cam)}>
             {/* per-shot ground: dark shots carry their own backdrop over the light stage */}
-            {shot.dark && <AbsoluteFill style={{ background: DARK_BG }} />}
+            {shot.dark && <AbsoluteFill style={{ background: TH.bgDark }} />}
             <MotionSmear dx={dx} dy={dy} iso={iso}>
               <Render {...ctx} />
             </MotionSmear>
           </div>
         );
       })}
-      {/* a faint global grain/vignette for the premium finish */}
-      <AbsoluteFill style={{ background: 'radial-gradient(120% 90% at 50% 42%, transparent 58%, rgba(20,24,34,0.10) 100%)', pointerEvents: 'none' }} />
+      {/* theme-driven vignette (bold is heavy, soft/mono none) */}
+      {th.vignette > 0.001 && (
+        <AbsoluteFill style={{ background: `radial-gradient(120% 90% at 50% 42%, transparent 55%, rgba(0,0,0,${th.vignette}) 100%)`, pointerEvents: 'none' }} />
+      )}
     </AbsoluteFill>
   );
 };
 
-export const MotionShowcase: React.FC<MotionShowcaseProps> = ({ spec, story }) =>
-  <ShowcaseBody spec={spec} story={story && story.length ? story : STORY} />;
+export const MotionShowcase: React.FC<MotionShowcaseProps> = ({ spec, story, styleId }) =>
+  <ShowcaseBody spec={spec} story={story && story.length ? story : STORY} styleId={styleId} />;
 
-/** Total storyboard length in seconds (drives calculateMetadata for this composition). */
-export const showcaseDuration = (story: readonly Shot[] = STORY): number =>
-  story.reduce((a, s) => a + s.dur, 0) - TRANS * Math.max(0, story.length - 1);
+/** Total storyboard length in seconds (drives calculateMetadata for this composition).
+ *  Transition length is theme-dependent (hard-cut styles are shorter). */
+export const showcaseDuration = (story: readonly Shot[] = STORY, styleId?: string): number =>
+  story.reduce((a, s) => a + s.dur, 0) - themeFor(styleId).trans * Math.max(0, story.length - 1);
 
 /** The built-in demo storyboard (used when props supply none). */
 export const DEMO_STORY = STORY;
