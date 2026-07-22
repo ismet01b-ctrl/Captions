@@ -2011,6 +2011,12 @@ def _scenario_logic(clip, transcript, tmp):
     check('v111: interaktive Momente (press treibt den Hand-off)',
           'press' in _msh and 'const press =' in _msh
           and 'showcaseDuration' in _msh)
+    # v111b: Smoothness-Pass — Motion-Blur wird pro Frame aus der echten Layer-Bewegung
+    # GEMESSEN (Finite-Difference), nicht von Hand gesetzt; Idle-Drift lässt nichts einfrieren.
+    check('v111b: gemessenes, kontinuierliches Motion-Blur (Finite-Difference) + Idle-Drift',
+          'const layerCam' in _msh and 'layerCam(i, t - dt)' in _msh
+          and 'idleDrift' in _msh and 'SHUTTER' in _msh
+          and 'dx={dx}' in _msh and 'springStep(e - dt' in _msh)  # auch die Kinetik-Typo smeart
     check('v111: Komposition registriert (16:9, storyboard-Dauer)',
           'id="MotionShowcase"' in _mrt3b and 'showcaseMetadata' in _mrt3b
           and 'showcaseDuration()' in _mrt3b)

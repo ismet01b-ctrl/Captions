@@ -57,7 +57,8 @@ const STORY: readonly Shot[] = [
   { kind: 'signoff',  dur: 3.0, into: 'morph',  accentText: 'made with DouchkoVE' },
 ];
 
-const TRANS = 0.6; // s — cross-shot hand-off window (both shots stay sharp through it)
+const TRANS = 0.85; // s — cross-shot hand-off window (long + soft; both shots stay sharp through it)
+const SHUTTER = 0.62; // motion-blur shutter angle proxy: fraction of per-frame travel that smears
 
 // ───────────────────────────────────────────────────────────────────────────── palette
 const LIGHT_BG = 'radial-gradient(130% 110% at 50% 32%, #fbfbfd 0%, #eef0f3 58%, #e3e6eb 100%)';
@@ -67,37 +68,41 @@ const INK_ON_DARK = '#f4f6fb';
 
 // ───────────────────────────────────────────────────────────────────────────── helpers
 
-/** A camera-style layer transform for one shot: where it sits during its enter/exit hand-off.
- *  Returns the CSS transform + opacity + a directional motion-blur amount (px) for echoes. */
-interface Cam { x: number; y: number; scale: number; alpha: number; blur: number; blurAxis: 'x' | 'y'; }
-const IDENT: Cam = { x: 0, y: 0, scale: 1, alpha: 1, blur: 0, blurAxis: 'x' };
+/** A camera-style layer transform for one shot: pure POSITION (x/y/scale/alpha). Motion blur is
+ *  no longer baked here — it is MEASURED from how this transform changes frame-to-frame, so every
+ *  move (entrances, idle drift, hand-offs) smears continuously and correctly, like the reference. */
+interface Cam { x: number; y: number; scale: number; alpha: number; }
+const IDENT: Cam = { x: 0, y: 0, scale: 1, alpha: 1 };
 
-/** enter side of a boundary transition (progress 0→1 as the shot arrives). */
+/** enter side of a boundary transition (progress 0→1 as the shot arrives). Camera-grade eases. */
 function enterCam(kind: TransKind, e: number, W: number, H: number): Cam {
-  const o = easeOutQuint(e);
-  const vel = (1 - e); // fast at start, 0 at rest → drives motion blur
+  const o = easeInOutQuint(e);
   switch (kind) {
-    case 'slideL':  return { x: (1 - o) * W * 0.9, y: 0, scale: 1, alpha: clamp01(e * 2), blur: vel * 46, blurAxis: 'x' };
-    case 'slideUp': return { x: 0, y: (1 - o) * H * 0.85, scale: 1, alpha: clamp01(e * 2), blur: vel * 40, blurAxis: 'y' };
-    case 'push':    return { x: 0, y: 0, scale: mix(0.82, 1, easeOutBack(e)), alpha: clamp01(e * 2.2), blur: vel * 10, blurAxis: 'x' };
-    case 'morph':   return { x: 0, y: 0, scale: mix(0.04, 1, easeInOutQuint(e)), alpha: clamp01(e * 3), blur: vel * 8, blurAxis: 'x' };
+    case 'slideL':  return { x: (1 - o) * W * 0.92, y: 0, scale: 1, alpha: clamp01(e * 2.4) };
+    case 'slideUp': return { x: 0, y: (1 - o) * H * 0.88, scale: 1, alpha: clamp01(e * 2.4) };
+    case 'push':    return { x: 0, y: 0, scale: mix(0.8, 1, easeOutBack(e)), alpha: clamp01(e * 2.4) };
+    case 'morph':   return { x: 0, y: 0, scale: mix(0.05, 1, easeInOutQuint(e)), alpha: clamp01(e * 3.2) };
   }
 }
 /** exit side (progress 0→1 as the shot leaves). Mirror of the NEXT shot's transition. */
 function exitCam(kind: TransKind, x: number, W: number, H: number): Cam {
-  const o = easeInOutCubic(x);
-  const vel = x; // accelerating away
+  const o = easeInOutQuint(x);
   switch (kind) {
-    case 'slideL':  return { x: -o * W * 0.9, y: 0, scale: 1, alpha: clamp01((1 - x) * 2), blur: vel * 46, blurAxis: 'x' };
-    case 'slideUp': return { x: 0, y: -o * H * 0.85, scale: 1, alpha: clamp01((1 - x) * 2), blur: vel * 40, blurAxis: 'y' };
-    case 'push':    return { x: 0, y: 0, scale: mix(1, 1.16, o), alpha: clamp01((1 - x) * 2.2), blur: vel * 10, blurAxis: 'x' };
-    case 'morph':   return { x: 0, y: 0, scale: mix(1, 0.04, easeInOutQuint(x)), alpha: clamp01((1 - x) * 3), blur: vel * 8, blurAxis: 'x' };
+    case 'slideL':  return { x: -o * W * 0.92, y: 0, scale: 1, alpha: clamp01((1 - x) * 2.4) };
+    case 'slideUp': return { x: 0, y: -o * H * 0.88, scale: 1, alpha: clamp01((1 - x) * 2.4) };
+    case 'push':    return { x: 0, y: 0, scale: mix(1, 1.18, o), alpha: clamp01((1 - x) * 2.4) };
+    case 'morph':   return { x: 0, y: 0, scale: mix(1, 0.05, easeInOutQuint(x)), alpha: clamp01((1 - x) * 3.2) };
   }
 }
 const composeCam = (en: Cam, ex: Cam): Cam => ({
-  x: en.x + ex.x, y: en.y + ex.y, scale: en.scale * ex.scale,
-  alpha: Math.min(en.alpha, ex.alpha),
-  blur: Math.max(en.blur, ex.blur), blurAxis: en.blur >= ex.blur ? en.blurAxis : ex.blurAxis,
+  x: en.x + ex.x, y: en.y + ex.y, scale: en.scale * ex.scale, alpha: Math.min(en.alpha, ex.alpha),
+});
+
+/** A held shot never freezes: a slow, seed-varied float + breathing scale keeps it alive (and
+ *  feeds a whisper of continuous motion blur so even the "still" moments read smooth). */
+const idleDrift = (t: number, phase: number): Cam => ({
+  x: Math.sin(t * 0.7 + phase) * 5, y: Math.cos(t * 0.55 + phase * 1.3) * 4,
+  scale: 1 + Math.sin(t * 0.5 + phase) * 0.004, alpha: 1,
 });
 
 const layerCss = (c: Cam): React.CSSProperties => ({
@@ -106,47 +111,64 @@ const layerCss = (c: Cam): React.CSSProperties => ({
   transformOrigin: '50% 50%', willChange: 'transform, opacity', backfaceVisibility: 'hidden',
 });
 
-/** Real directional motion blur: N ghost copies smeared along the motion axis, fading out.
- *  Reads as a proper camera smear (not an isotropic gaussian), exactly like the reference. */
-const MotionSmear: React.FC<{ blur: number; axis: 'x' | 'y'; children: React.ReactNode }> = ({ blur, axis, children }) => {
-  if (blur < 1.2) return <>{children}</>;
-  const N = 5;
+/** Real per-frame motion blur: sample the layer's motion vector (dx,dy) + zoom rate for THIS
+ *  frame and lay a fan of ghost copies along it — trailing AND leading (a symmetric shutter),
+ *  so fast moves smear like a real camera and slow drifts get a soft edge. Continuous, not gated. */
+const MotionSmear: React.FC<{ dx: number; dy: number; iso: number; children: React.ReactNode }> = ({ dx, dy, iso, children }) => {
+  const mag = Math.hypot(dx, dy);
+  if (mag < 1.1 && iso < 0.4) return <>{children}</>;
+  const N = 8;
   return (
     <>
       {Array.from({ length: N }, (_, i) => {
-        const k = (i + 1) / N;
-        const off = -blur * k;
+        const f = (i / (N - 1)) - 0.5; // -0.5..+0.5 → symmetric smear around the true position
         return (
           <div key={i} style={{
-            position: 'absolute', inset: 0, opacity: (1 - k) * 0.5,
-            transform: axis === 'x' ? `translateX(${off.toFixed(1)}px)` : `translateY(${off.toFixed(1)}px)`,
-            filter: `blur(${(blur * 0.06).toFixed(2)}px)`, pointerEvents: 'none',
+            position: 'absolute', inset: 0, opacity: 1 / N,
+            transform: `translate3d(${(dx * f).toFixed(2)}px,${(dy * f).toFixed(2)}px,0)`,
+            filter: iso > 0.4 ? `blur(${iso.toFixed(2)}px)` : undefined, pointerEvents: 'none',
           }}>{children}</div>
         );
       })}
-      {children}
     </>
   );
 };
 
-/** Big kinetic word-by-word headline with a spring-in per word (scrambled stagger). */
+/** Big kinetic word-by-word headline with a spring-in per word (scrambled stagger). Each word
+ *  carries its own vertical motion blur during the pop (sampled from the spring's velocity), so
+ *  the type glides in buttery-smooth instead of stepping frame to frame. */
 const Kinetic: React.FC<{ text: string; t: number; fs: number; color: string; weight?: number }>
   = ({ text, t, fs, color, weight = 800 }) => {
   const words = text.split(' ');
+  const spring = { stiffness: 150, damping: 0.7, delay: 0 };
+  const dt = 1 / 60;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `0 ${fs * 0.28}px`, maxWidth: '86%' }}>
       {words.map((w, i) => {
-        const delay = 0.05 + hash01(i, 7) * 0.16 + i * 0.04;
-        const s = springStep(t - delay, { stiffness: 190, damping: 0.62, delay: 0 });
-        const appear = clamp01((t - delay) * 3);
+        const delay = 0.05 + hash01(i, 7) * 0.18 + i * 0.05;
+        const e = t - delay;
+        const s = springStep(e, spring);
+        const sPrev = springStep(e - dt, spring);
+        const y = (1 - s) * fs * 0.5;
+        const dyFrame = (s - sPrev) * fs * 0.5;           // per-frame vertical travel
+        const smear = Math.min(fs * 0.5, Math.abs(dyFrame) * SHUTTER);
+        const appear = clamp01(e * 3);
+        const base: React.CSSProperties = {
+          display: 'inline-block', color, fontFamily: FONT, fontWeight: weight,
+          fontSize: fs, lineHeight: 1.05, letterSpacing: '-0.02em',
+        };
+        const word = (
+          <span style={{ ...base, transform: `translateY(${y.toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})` }}>{w}</span>
+        );
         return (
-          <span key={i} style={{
-            display: 'inline-block', color, fontFamily: FONT, fontWeight: weight,
-            fontSize: fs, lineHeight: 1.05, letterSpacing: '-0.02em',
-            opacity: appear,
-            transform: `translateY(${((1 - s) * fs * 0.5).toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})`,
-            filter: appear < 1 ? `blur(${((1 - appear) * 8).toFixed(1)}px)` : undefined,
-          }}>{w}</span>
+          <div key={i} style={{ position: 'relative', opacity: appear, filter: appear < 1 ? `blur(${((1 - appear) * 5).toFixed(1)}px)` : undefined }}>
+            {smear > 1.5 && Array.from({ length: 6 }, (_, k) => {
+              const f = (k / 5) - 0.5;
+              return <span key={k} style={{ ...base, position: 'absolute', left: 0, top: 0, opacity: 1 / 6,
+                transform: `translateY(${(y - dyFrame * SHUTTER * f).toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})` }}>{w}</span>;
+            })}
+            <span style={{ visibility: smear > 1.5 ? 'hidden' : 'visible', ...base, transform: `translateY(${y.toFixed(1)}px) scale(${(0.9 + 0.1 * s).toFixed(3)})` }}>{w}</span>
+          </div>
         );
       })}
     </div>
@@ -464,6 +486,30 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
   for (const s of STORY) { starts.push(cur); cur += s.dur - tf; }
   const n = STORY.length;
 
+  // Pure layer transform for shot i at absolute time `at` — enter/exit hand-off composed with a
+  // never-freeze idle drift. Sampling this at t and t-1frame gives the true motion vector, which
+  // is what drives the continuous motion blur (no hand-tuned blur constants anywhere).
+  const layerCam = (i: number, at: number): Cam => {
+    const shot = STORY[i]!;
+    const local = at - starts[i]!;
+    const tin = clamp01(local / tf);
+    const tout = clamp01((local - (shot.dur - tf)) / tf);
+    const en = tin >= 1 ? IDENT : enterCam(shot.into, tin, W, H);
+    const ex = tout <= 0 ? IDENT
+      : (i < n - 1 ? exitCam(STORY[i + 1]!.into, tout, W, H)
+        : { ...IDENT, alpha: 1 - easeInOutQuint(tout), scale: 1 + 0.06 * easeInOutQuint(tout) });
+    let cam = composeCam(en, ex);
+    // idle drift only while fully settled (fades in as the entrance completes, out as exit starts)
+    const settle = clamp01(tin * 2 - 1) * clamp01((1 - tout) * 2 - 0) * (tout <= 0 ? 1 : 0);
+    if (settle > 0) {
+      const d = idleDrift(local, hash01(i, 3) * 6.28);
+      cam = { x: cam.x + d.x * settle, y: cam.y + d.y * settle, scale: cam.scale * (1 + (d.scale - 1) * settle), alpha: cam.alpha };
+    }
+    return cam;
+  };
+
+  const dt = 1 / fps;
+
   return (
     <AbsoluteFill style={{ background: LIGHT_BG }}>
       {STORY.map((shot, i) => {
@@ -471,11 +517,12 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
         const local = t - start;
         if (local < -0.02 || local > shot.dur + 0.02) return null;
 
-        const tin = clamp01(local / tf);
-        const tout = clamp01((local - (shot.dur - tf)) / tf);
-        const en = tin >= 1 ? IDENT : enterCam(shot.into, tin, W, H);
-        const ex = tout <= 0 ? IDENT : (i < n - 1 ? exitCam(STORY[i + 1]!.into, tout, W, H) : { ...IDENT, alpha: 1 - easeInOutCubic(tout), scale: 1 + 0.05 * easeInOutCubic(tout) });
-        const cam = composeCam(en, ex);
+        const cam = layerCam(i, t);
+        const prev = layerCam(i, t - dt);
+        // per-frame motion vector → symmetric shutter smear; scale-rate → a whisper of iso blur.
+        const dx = (cam.x - prev.x) * SHUTTER;
+        const dy = (cam.y - prev.y) * SHUTTER;
+        const iso = Math.abs(cam.scale - prev.scale) * Math.min(W, H) * SHUTTER * 0.5;
 
         // interaction press: ramps up in the last ~0.3s before this shot hands off.
         const press = i < n - 1 ? clamp01((local - (shot.dur - tf - 0.3)) / 0.22) : 0;
@@ -486,7 +533,7 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
           <div key={i} style={layerCss(cam)}>
             {/* per-shot ground: dark shots carry their own backdrop over the light stage */}
             {shot.dark && <AbsoluteFill style={{ background: DARK_BG }} />}
-            <MotionSmear blur={cam.blur} axis={cam.blurAxis}>
+            <MotionSmear dx={dx} dy={dy} iso={iso}>
               <Render {...ctx} />
             </MotionSmear>
           </div>
