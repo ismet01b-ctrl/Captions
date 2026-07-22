@@ -1357,6 +1357,18 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="page-body">
       <div class="mo-wrap">
         <div class="mo-controls">
+          <!-- v101p: Brief -> Motion-Director (nur wenn der Node-Renderer verfuegbar ist) -->
+          <div class="panel hidden" id="moBriefPanel" style="margin-bottom:14px;">
+            <label class="mo-lab">Describe your clip <span class="mo-hint">(AI directs it)</span></label>
+            <textarea class="mo-in" id="moBrief" rows="2"
+              placeholder="e.g. Bold intro for my fitness channel — 3 stats that shock"
+              style="resize:vertical; font-family:inherit;"></textarea>
+            <button class="btn" id="moBriefGo" style="width:100%; margin-top:10px;">
+              Generate from brief · 1 credit</button>
+            <div id="moBriefStatus" class="mo-status" style="display:none;"></div>
+            <p class="mo-hint" style="margin-top:8px;">Every brief is composed fresh —
+              variable-weight kinetic type, beat-snapped, safe-zone aware.</p>
+          </div>
           <div class="panel">
             <label class="mo-lab">Template</label>
             <div class="mo-gallery" id="moTemplate"></div>
@@ -2573,7 +2585,34 @@ async function initMotion(){
   if(_mbe) _mbe.onclick=()=>{ moShowPreview();
     const c=document.querySelector('#page-motion .mo-controls');
     if(c) c.scrollIntoView({behavior:'smooth', block:'start'}); };
+  // v101p: Brief->Motion-Director nur zeigen, wenn der Node-Renderer da ist
+  if(State.user && State.user.motion_brief){
+    const bp=$('#moBriefPanel'); if(bp) bp.classList.remove('hidden');
+    const bg=$('#moBriefGo'); if(bg) bg.onclick=motionBriefGo;
+  }
   moSync(); motionPreview();
+}
+
+async function motionBriefGo(){
+  const btn=$('#moBriefGo'); const st=$('#moBriefStatus');
+  const brief=($('#moBrief').value||'').trim();
+  if(brief.length<4){ toast('Write a short brief first.','err'); return; }
+  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Directing …';
+  st.style.display='block'; st.textContent='Directing your motion …';
+  try{
+    const fd=new FormData(); fd.append('brief', brief);
+    const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
+    if(r.status===402){ st.style.display='block'; st.textContent='Not enough credits.';
+      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on');
+      setTimeout(showPricing,300); return; }
+    if(r.status===503){ st.textContent='The director is warming up — try again shortly.';
+      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
+    if(!r.ok) throw 0;
+    const j=await r.json();
+    motionPoll(j.jid, st, btn, orig);       // v101o: zeigt den Clip inline
+  }catch(e){ st.style.display='block'; st.textContent='Could not start.';
+    btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
 }
 /* Kontext-Sync: Felder/Hinweise/Preis passen sich Template + Export an. */
 const MO_WORDS={

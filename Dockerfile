@@ -13,6 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# v101p: Node 22 for the Remotion motion-graphics engine (motion/). Separate stack;
+# the caption pipeline stays pure Python. Cached layer, independent of app code.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt \
@@ -23,6 +29,16 @@ COPY . /app/
 # ONNX-Modelle beim Bauen ziehen (RVM ~30 MB, Depth ~80 MB), damit der
 # erste Nutzer nicht wartet.
 RUN python -c "import render; render.ensure_models()" || echo "Modelle werden zur Laufzeit geladen"
+
+# v101p: Motion-Engine-Deps + Headless-Browser. KOMPLETT best-effort - der ganze
+# Block ist mit `|| echo` abgesichert, sodass ein npm-/Browser-/Netz-Fehler den
+# Image-Build NIE kippt. Faellt er aus, erkennt der Server das zur Laufzeit
+# (Feature-Detection) und blendet das Motion-Brief-Feature einfach aus; Captions
+# + bestehende Motion-Templates laufen davon voellig unberuehrt weiter.
+RUN (cd /app/motion \
+      && npm ci --no-audit --no-fund \
+      && (npx remotion browser ensure || echo "Browser zur Laufzeit")) \
+    || echo "WARN: Motion-Engine nicht installiert - Brief-Feature bleibt aus"
 
 ENV DVE_DATA=/data DVE_WORKERS=1 DVE_MAX_SECONDS=180 DVE_MAX_MB=300
 VOLUME /data

@@ -41,6 +41,13 @@ from fastapi.staticfiles import StaticFiles
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 DATA = os.environ.get('DVE_DATA', os.path.join(HERE, 'data'))
+# v101p: der Remotion-Motion-Director (motion/) ist ein separater Node-Stack. Er ist
+# NUR verfuegbar, wenn Node + die installierten Deps im Container liegen. Fehlt beides
+# (z.B. Motion-Layer beim Build uebersprungen), bleibt das Brief-Feature einfach aus -
+# der Rest der App laeuft unveraendert (Feature-Detection statt harter Kopplung).
+MOTION_DIR = os.path.join(ROOT, 'motion')
+MOTION_BRIEF_OK = bool(shutil.which('node')) and os.path.isdir(
+    os.path.join(MOTION_DIR, 'node_modules'))
 # v96p: Besitzer-Konto. Nur dieses Konto sieht/bedient die Stil-Referenzen
 # (global wirksam). Ueberschreibbar per DVE_OWNER.
 OWNER_EMAIL = os.environ.get('DVE_OWNER', 'ismet-01_b@hotmail.de').strip().lower()
@@ -1743,10 +1750,51 @@ def motion_worker():
             MQUEUE.task_done()
 
 
+def _run_motion_brief(jid):
+    """v101p: Brief -> Remotion-Motion-Director -> MP4. Spawnt den Node-Renderer
+    (motion/scripts/render-brief.mjs) genau wie gfx_engine.py - der Python-Server
+    besitzt weiter Queue/Credits/Library."""
+    j = JOBS[jid]
+    d = job_dir(jid)
+    out = os.path.join(d, 'fertig.mp4')
+    brief = str(j.get('brief', '')).strip()[:400]
+    set_state(jid, status='laeuft', phase='Directing your motion …',
+              progress=0.1, log_tail=[])
+    cmd = ['node', os.path.join('scripts', 'render-brief.mjs'), brief, out]
+    p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, bufsize=1)
+    JOBS[jid]['pid'] = p.pid
+    log = []
+    for line in p.stdout:
+        log.append(line.rstrip())
+        m = re.search(r'Rendered (\d+)/(\d+)', line)
+        if m:
+            fr, tot = int(m.group(1)), max(int(m.group(2)), 1)
+            set_state(jid, progress=0.15 + 0.8 * fr / tot,
+                      phase='Rendering motion …')
+    p.wait()
+    if p.returncode == 0 and os.path.exists(out):
+        try:
+            subprocess.run(['ffmpeg', '-y', '-v', 'error', '-ss', '1.2',
+                            '-i', out, '-frames:v', '1', '-vf', 'scale=360:-2',
+                            os.path.join(d, 'poster.jpg')], check=False, timeout=30)
+        except Exception:
+            pass
+        set_state(jid, status='fertig', progress=1.0, phase='Done',
+                  video_url=f'/api/video/{jid}')
+    else:
+        set_state(jid, status='fehler', progress=0, msg='Motion render failed.',
+                  detail='\n'.join([x for x in log[-15:] if x.strip()]))
+        _maybe_refund(jid)
+
+
 def _run_motion(jid):
     """Motion-Graphics-Render (UI-Motion-Engine) statt Caption-Pipeline.
     Eine JSON treibt alles; gfx_engine wird als Subprocess aufgerufen."""
     j = JOBS[jid]
+    if j.get('brief'):                        # v101p: Brief->Motion-Director
+        return _run_motion_brief(jid)
     d = job_dir(jid)
     mc = dict(j.get('motion') or {})
     # MOV-Export: die Engine schreibt fertig.mov (ProRes 4444 Alpha) UND
@@ -2278,6 +2326,7 @@ def api_me(request: Request):
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified']),
             'renders': rc, 'purchased': _has_purchased(u['id']),
             'is_owner': str(u['email']).strip().lower() == OWNER_EMAIL,
+            'motion_brief': MOTION_BRIEF_OK,   # v101p: Brief->Motion verfuegbar?
             'free_reset_days': days_in_month - lt.tm_mday + 1}
 
 
@@ -2809,6 +2858,32 @@ async def motion_render(request: Request,
                  'dauer': 11, 'cost_sec': _need, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …',
               kind='motion')
+    MQUEUE.put(jid)
+    return {'jid': jid, 'status_url': f'/api/status/{jid}'}
+
+
+@app.post('/api/motion/brief')
+async def motion_brief(request: Request, brief: str = Form(...)):
+    """v101p: aus einem Satz eine individuelle Motion-Grafik generieren
+    (Remotion-Director). Kostet wie ein Motion-Clip (1 Credit)."""
+    u = _require_user(request)
+    if not MOTION_BRIEF_OK:
+        raise HTTPException(503, 'The motion director is warming up on this '
+                                 'server - try again shortly.')
+    text = (brief or '').strip()[:400]
+    if len(text) < 4:
+        raise HTTPException(400, 'Write a short brief first.')
+    jid = uuid.uuid4().hex[:12]
+    d = job_dir(jid)
+    os.makedirs(d, exist_ok=True)
+    if not _reserve_credits(u['id'], MOTION_COST_SEC, jid):
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(402, 'Not enough credits (this clip costs 1).')
+    _nm = (text[:40] + ('…' if len(text) > 40 else '')) or 'Motion'
+    JOBS[jid] = {'kind': 'motion', 'brief': text, 'user_id': u['id'],
+                 'name': _nm + '.mp4', 'dauer': 11,
+                 'cost_sec': MOTION_COST_SEC, 'status': 'wartet'}
+    set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 

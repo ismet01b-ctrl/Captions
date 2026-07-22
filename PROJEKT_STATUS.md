@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101p gpt-5 ueberall + Motion-Director LIVE ("Mach live").** ZWEI Dinge:
+  (1) MODELL: alle Regie-KI-Aufrufe in render.py ziehen jetzt gpt-5 als
+  Default (6 Funktions-Defaults `model='gpt-5'` + 4 `ai_model`-Fallbacks),
+  config.yaml stand schon auf gpt-5, der Motion-Director ebenfalls. `_oai_json`
+  laesst bei gpt-5/o-Serie automatisch `temperature` weg. (2) LIVE-WIRING:
+  der separate Remotion-Stack (motion/) haengt jetzt am Web-Produkt. Neu:
+  `POST /api/motion/brief` (Form `brief`) reserviert 1 Credit atomar
+  (`_reserve_credits`, 402 bei zu wenig), legt einen Motion-Job an; der Worker
+  ruft `_run_motion_brief()` -> spawnt `node scripts/render-brief.mjs` (Brief
+  -> validierte SceneSpec -> Remotion-Render -> fertig.mp4), streamt
+  `Rendered n/m` in den Fortschritt, zieht ein Poster, setzt fertig/video_url
+  bzw. fehler+Gutschrift. Der fertige Clip landet automatisch in der Library
+  (gleicher Zustands-Vertrag wie Template-Motion) und spielt inline (reuse
+  motionPoll v101o). FEATURE-DETECTION: `MOTION_BRIEF_OK` (node + motion/
+  node_modules) faellt bei fehlendem Node/Build auf `false`, /api/me meldet
+  `motion_brief`, das SPA blendet das Brief-Panel dann komplett aus -> Captions
+  + bestehende Motion-Templates laufen unberuehrt weiter (503 als Notnagel).
+  DEPLOY: Dockerfile installiert Node 22 + `npm ci` im motion/-Layer, KOMPLETT
+  best-effort (`|| echo`, kein Build-Kipp), neues .dockerignore haelt den
+  Kontext schlank. render-brief.mjs jetzt nebenlaeufig-sicher (eigener temp-
+  Dir je Aufruf). EHRLICH: Docker-Image hier NICHT baubar (kein Daemon in der
+  Sandbox) - abgesichert durch den nicht-fatalen Motion-Layer + update.sh
+  (`set -e` haelt bei Build-Fehler den alten Container am Netz) + Laufzeit-
+  Feature-Detection. gpt-5-Wirkung + echte Motion-Optik erst live auf
+  douchko.eu mit GPU beurteilbar. Python-Selftest 627/627 gruen, JS + server.py
+  Syntax ok.
+
 - **motion/ — Remotion-PoC (TS/Canvas, NEUER separater Stack, Ismet-Entscheidung).**
   Eigenständiger TypeScript/Remotion-Ordner NUR fuer Motion-Graphics. Die
   Caption-Engine (render.py/gfx_engine.py) + FastAPI bleiben Python,

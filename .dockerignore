@@ -1,0 +1,10 @@
+# Keep the build context lean. The motion/ Node deps + browsers are installed
+# INSIDE the image (npm ci + remotion browser ensure), never copied from the host.
+.git
+__pycache__/
+*.pyc
+motion/node_modules/
+motion/out/
+motion/.remotion/
+data/
+*.log
