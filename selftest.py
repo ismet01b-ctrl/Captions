@@ -1920,6 +1920,13 @@ def _scenario_logic(clip, transcript, tmp):
           and 'AdditiveBlending' in _msc3
           # software-GL-sicher: keine Transmission (kein PhysicalMaterial-Render-Target)
           and 'meshPhysicalMaterial' not in _msc3)
+    # v107c: Reflexionen (Env-Map) + Studio-Boden + Kontaktschatten + Post-Grade.
+    _m3d = open(os.path.join(HERE, 'motion', 'src', 'Motion3D.tsx'), encoding='utf-8').read()
+    check('v107c: Env-Reflexionen + Boden/Kontaktschatten + Kamera-Choreo + Post-Grade',
+          'EquirectangularReflectionMapping' in _msc3 and 'scene.environment' in _msc3
+          and 'const Floor' in _msc3 and 'shadowTex' in _msc3
+          and 'envMapIntensity' in _msc3 and 'const arc' in _msc3
+          and 'mixBlendMode' in _m3d)
 
     check('v101w: Server + UI reichen den 3D-Schalter durch',
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m

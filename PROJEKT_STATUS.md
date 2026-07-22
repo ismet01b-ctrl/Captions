@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v107c 3D-Promo Finish-Pass: Reflexionen, Boden, Grade (Ismet: "bau alles ein,
+  wir schauen wie lange es dauert").** Alles rein, was auf dem CPU-Server (software-GL,
+  KEINE GPU) geht: (1) UMGEBUNGS-REFLEXIONEN - prozedurales Studio-HDRI-lite
+  (equirect Canvas: dunkler Raum + helle Softbox-Streifen + warmer Boden) an
+  scene.environment; Glas-Blobs (metalness 0.5, envMapIntensity 1.6) und Handy-Glas
+  spiegeln jetzt Licht (groesster Realismus-Sprung, ohne PMREM/Render-Target). (2)
+  GLOSSY-BODEN + accent-Glow-Pool (additiv) + weiche KONTAKTSCHATTEN unter jedem Device
+  -> die Phones stehen im Raum statt zu schweben. (3) KAMERA-CHOREOGRAFIE: schneller
+  Dolly-in mit Settle + langsamer Orbit-Bogen (easeInOut) statt konstanter Fahrt. (4)
+  POST-GRADE (DOM): warm-kalter Kino-Tint (multiply) + Highlight-Lift (screen) +
+  Vignette, plus etwas mehr Grain. BEWEIS: --3d gerendert (promo3d3.mp4) - Hero-Frame
+  zeigt Glow-Pool am Boden, Vignette-Fokus, reflektierende Kanten. RENDERZEIT: ~157s
+  (2,6 Min) fuer 8,4s Clip / 230 Frames auf CPU. tsc clean. Regression 677/677.
+  EHRLICH - was echte GPU braucht (bewusst NICHT gebaut, wuerde hier nicht rendern):
+  echtes Bloom/DoF/Motion-Blur (Postprocessing-Render-Targets), echtes Glas
+  (Transmission), PMREM-geblurrte Reflexionen. Naechste Stufe = 3D auf GPU-Instanz.
+
 - **v107b 3D-Promo realitaetsnah: echte Dark-Mode-Screens fliegen im Raum (Ismet:
   "passe es so realitaetsnah wie moeglich an, soll fluessig aussehen").** Statt leerer
   Kacheln tragen die fliegenden Panels jetzt ECHTE iOS-Dark-Screens: makeScreen() malt

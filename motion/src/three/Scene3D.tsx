@@ -22,6 +22,40 @@ const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const ease = (x) => 1 - Math.pow(1 - clamp01(x), 3);
 const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
+// ------------------------------------------------------------ studio environment (reflections)
+
+/** A procedural studio HDRI-lite (equirectangular canvas): dark room with bright vertical
+ *  softbox strips + a warm floor. Assigned to scene.environment so the glass and phone glass
+ *  actually REFLECT light — the single biggest step toward a real product-render look.
+ *  (No PMREM: that needs a GPU render-target; raw equirect reflections still read as studio.) */
+const studioEnv = (accent) => {
+  const W = 1024, Hh = 512; const c = document.createElement('canvas'); c.width = W; c.height = Hh;
+  const g = c.getContext('2d');
+  const sky = g.createLinearGradient(0, 0, 0, Hh);
+  sky.addColorStop(0, '#20242e'); sky.addColorStop(0.5, '#14161d'); sky.addColorStop(0.55, '#0c0d12'); sky.addColorStop(1, '#050608');
+  g.fillStyle = sky; g.fillRect(0, 0, W, Hh);
+  // bright softboxes (key + fills)
+  const box = (x, w, a, col) => { const gr = g.createLinearGradient(x, 0, x + w, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, col.replace('A', String(a))); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x, 20, w, Hh * 0.42); };
+  box(W * 0.10, W * 0.14, 0.9, 'rgba(255,255,255,A)');
+  box(W * 0.62, W * 0.10, 0.7, 'rgba(255,255,255,A)');
+  box(W * 0.40, W * 0.08, 0.5, 'rgba(255,240,220,A)');
+  // warm accent wash low
+  const warm = g.createLinearGradient(0, Hh * 0.55, 0, Hh); warm.addColorStop(0, 'rgba(0,0,0,0)'); warm.addColorStop(1, accent + '55');
+  g.fillStyle = warm; g.fillRect(0, Hh * 0.55, W, Hh * 0.45);
+  const tex = new THREE.CanvasTexture(c); tex.mapping = THREE.EquirectangularReflectionMapping; tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+};
+
+const EnvRig: React.FC<any> = ({ accent }) => {
+  const { scene } = useThree();
+  const tex = React.useMemo(() => studioEnv(accent), [accent]);
+  scene.environment = tex;
+  return null;
+};
+
+/** A soft dark contact shadow (radial canvas sprite) laid flat under a device. */
+const shadowTex = (() => { let t = null; return () => { if (t) return t; const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64); grd.addColorStop(0, 'rgba(0,0,0,0.55)'); grd.addColorStop(0.6, 'rgba(0,0,0,0.28)'); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(0, 0, 128, 128); t = new THREE.CanvasTexture(c); return t; }; })();
+
 // -------------------------------------------------------------- screen textures (canvas UI)
 
 const hexToHsl = (hex) => {
@@ -111,16 +145,34 @@ const makeScreen = (variant, accent) => {
   return { tex, aspect: (W - pad * 2) / (H - pad * 2) };
 };
 
-/** Cinematic camera: slow dolly-in over the intro, then a gentle breathing orbit. */
+/** Cinematic camera choreography: a fast-then-settle dolly-in, a slow arc around the hero,
+ *  and a gentle vertical breathe. Eased so it reads hand-keyed, not linear. */
 const CameraRig: React.FC<{ t: number }> = ({ t }) => {
   const { camera } = useThree();
-  const d = easeInOut(clamp01(t / 2.4));
-  const z = 10 - 3.3 * d - Math.sin(t * 0.16) * 0.3;
-  camera.position.set(Math.sin(t * 0.13) * 0.9, 0.35 + Math.cos(t * 0.1) * 0.35, z);
-  camera.lookAt(0, 0.15, 0);
+  const d = easeInOut(clamp01(t / 2.6));         // push in and settle
+  const arc = easeInOut(clamp01((t - 1.2) / 6)); // slow orbit after the push
+  const z = 10.5 - 3.6 * d - Math.sin(t * 0.14) * 0.25;
+  const x = Math.sin(-0.5 + arc * 0.9) * 1.5 + Math.sin(t * 0.11) * 0.25;
+  camera.position.set(x, 0.4 + Math.cos(t * 0.1) * 0.3, z);
+  camera.lookAt(0, 0.12, 0);
   camera.updateProjectionMatrix();
   return null;
 };
+
+/** Glossy studio floor + a warm accent glow pool, so the devices sit in a real space. */
+const Floor: React.FC<any> = ({ accent, t }) => (
+  <group position={[0, -2.5, 0]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={[46, 46]} />
+      <meshStandardMaterial color="#080910" metalness={0.75} roughness={0.32} envMapIntensity={0.7} />
+    </mesh>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 1]}>
+      <planeGeometry args={[14, 14]} />
+      <meshBasicMaterial map={shadowTex()} color={accent} transparent opacity={0.35 + 0.05 * Math.sin(t * 1.1)}
+        blending={THREE.AdditiveBlending} depthWrite={false} />
+    </mesh>
+  </group>
+);
 
 const GlassBlob: React.FC<any> = ({ pos, scale, color, t, phase }) => {
   const breathe = 1 + 0.06 * Math.sin(t * 0.9 + phase);
@@ -128,10 +180,10 @@ const GlassBlob: React.FC<any> = ({ pos, scale, color, t, phase }) => {
     <group position={[pos[0] + Math.sin(t * 0.3 + phase) * 0.1, pos[1] + Math.cos(t * 0.26 + phase) * 0.1, pos[2]]}
       rotation={[t * 0.1 + phase, t * 0.14, 0]} scale={scale * breathe}>
       <mesh><icosahedronGeometry args={[1, 1]} />
-        <meshStandardMaterial color={color} transparent opacity={0.24} metalness={0.1} roughness={0.08}
-          emissive={color} emissiveIntensity={0.4} depthWrite={false} /></mesh>
+        <meshStandardMaterial color={color} transparent opacity={0.3} metalness={0.5} roughness={0.06}
+          emissive={color} emissiveIntensity={0.3} envMapIntensity={1.6} depthWrite={false} /></mesh>
       <mesh scale={0.55}><icosahedronGeometry args={[1, 0]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} metalness={0.2} roughness={0.3} /></mesh>
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} metalness={0.3} roughness={0.25} envMapIntensity={1.2} /></mesh>
     </group>
   );
 };
@@ -147,15 +199,21 @@ const PhonePanel: React.FC<any> = ({ variant, accent, t, delay, x, baseZ, baseSc
   const sway = Math.sin(t * 0.35 + phase) * 0.05;
   return (
     <group position={[x, y, z]} rotation={[sway * 0.5, rotY + sway, sway * 0.3]} scale={baseScale * (0.7 + 0.3 * s)}>
-      {/* soft drop shadow / rim behind the glass screen */}
+      {/* contact shadow on the floor beneath the device */}
+      <mesh position={[0, -H * 0.62, -0.2]} rotation={[-Math.PI / 2.1, 0, 0]}>
+        <planeGeometry args={[Wd * 2.2, Wd * 1.6]} />
+        <meshBasicMaterial map={shadowTex()} transparent opacity={0.7 * s} depthWrite={false} />
+      </mesh>
+      {/* device back / edge (glossy, catches the environment) */}
       <mesh position={[0, 0, -0.06]}>
         <planeGeometry args={[Wd * 1.04, H * 1.02]} />
-        <meshStandardMaterial color="#05060a" metalness={0.3} roughness={0.6} transparent opacity={0.9 * s} />
+        <meshStandardMaterial color="#05060a" metalness={0.7} roughness={0.35} envMapIntensity={0.8} transparent opacity={0.94 * s} />
       </mesh>
+      {/* glossy screen: emissive UI + a real environment reflection on the glass */}
       <mesh>
         <planeGeometry args={[Wd, H]} />
-        <meshStandardMaterial map={tex} emissiveMap={tex} emissive={'#ffffff'} emissiveIntensity={0.45}
-          roughness={0.22} metalness={0.0} transparent opacity={clamp01(s * 1.4)} />
+        <meshStandardMaterial map={tex} emissiveMap={tex} emissive={'#ffffff'} emissiveIntensity={0.5}
+          roughness={0.16} metalness={0.1} envMapIntensity={0.7} transparent opacity={clamp01(s * 1.4)} />
       </mesh>
     </group>
   );
@@ -187,12 +245,14 @@ export const Scene3D: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
   return (
     <>
       <CameraRig t={t} />
-      <ambientLight intensity={0.5} />
+      <EnvRig accent={acc} />
+      <ambientLight intensity={0.4} />
       <pointLight position={[5, 6, 7]} intensity={150} color="#ffffff" />
       <pointLight position={[-6, -2, 4]} intensity={95} color={acc} />
       <pointLight position={[0, 5, -6]} intensity={70} color={palette.fg} />
       <pointLight position={[0, 0, -4]} intensity={55} color={acc} />
 
+      <Floor accent={acc} t={t} />
       <Halo color={acc} t={t} />
 
       {/* background glass blobs for depth + colour */}

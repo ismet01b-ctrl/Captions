@@ -38,7 +38,19 @@ export const Motion3D: React.FC<Motion3DProps> = ({ spec }) => {
       >
         <Scene3D spec={spec} />
       </ThreeCanvas>
-      <Grain amount={spec.grain} seed={spec.seed} />
+      {/* Post grade (DOM): a warm-cool cinematic tint, a soft bloom lift on the highlights,
+          and a vignette to focus the eye — a lightweight stand-in for a GPU post stack. */}
+      <AbsoluteFill style={{
+        background:
+          `radial-gradient(120% 90% at 50% 42%, transparent 46%, rgba(4,5,10,0.55) 100%),`
+          + `linear-gradient(180deg, ${palette.accent}12 0%, transparent 30%, ${palette.fg}10 100%)`,
+        mixBlendMode: 'multiply', pointerEvents: 'none',
+      }} />
+      <AbsoluteFill style={{
+        background: `radial-gradient(90% 70% at 50% 40%, ${palette.accent}14 0%, transparent 60%)`,
+        mixBlendMode: 'screen', pointerEvents: 'none',
+      }} />
+      <Grain amount={Math.max(spec.grain, 2)} seed={spec.seed} />
     </AbsoluteFill>
   );
 };
