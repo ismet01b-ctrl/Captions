@@ -125,8 +125,9 @@ const shotCam = (kind: ShotKind, warm: boolean, p: number, W: number, H: number)
   const e = easeInOutSine(p);
   const base = { x: 0, y: 0, scale: 1, alpha: 1 };
   switch (kind) {
-    case 'ktypo':   // glide along the type (dir alternates), gentle push
-      return { ...base, x: (warm ? 1 : -1) * e * W * 0.13, scale: 1 + e * 0.05 };
+    case 'ktypo':   // glide along the type (dir alternates), gentle push — kept small so long
+                    // headlines never leave the frame
+      return { ...base, x: (warm ? 1 : -1) * e * W * 0.06, scale: 1 + e * 0.05 };
     case 'timer':   return { ...base, x: -e * W * 0.05, scale: 1 + e * 0.06 };
     case 'notes':   return { ...base, y: e * H * 0.06, scale: 1 + e * 0.05 };   // crane down with the typing
     case 'searchbar': return { ...base, y: e * H * 0.03, scale: 1 + e * 0.08 }; // push onto the link
@@ -177,7 +178,7 @@ const Kinetic: React.FC<{ text: string; t: number; fs: number; color: string; we
   const spring = { stiffness: 150, damping: 0.7, delay: 0 };
   const dt = 1 / 60;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `0 ${fs * 0.28}px`, maxWidth: '86%' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `0 ${fs * 0.28}px`, maxWidth: '78%' }}>
       {words.map((w, i) => {
         const delay = 0.05 + hash01(i, 7) * 0.18 + i * 0.05;
         const e = t - delay;
@@ -239,7 +240,11 @@ const cardShadow = (s: number) => `0 ${30 * s}px ${70 * s}px rgba(20,24,34,0.20)
 const ShotKtypo: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent }) => {
   const warm = shot.c === 'warm';
   const color = warm ? accent : INK;
-  const fs = 132 * S * (shot.accentText!.length > 16 ? 0.8 : 1);
+  // auto-fit: long headlines shrink so they never clip the frame (and never collide with the
+  // camera glide). Bucketed by character count — robust for whatever copy the director emits.
+  const chars = shot.accentText!.length;
+  const fit = chars > 30 ? 0.6 : chars > 22 ? 0.72 : chars > 14 ? 0.86 : 1;
+  const fs = 128 * S * fit;
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: fs * 0.24 }}>
@@ -286,11 +291,13 @@ const ShotTimer: React.FC<ShotCtx> = ({ shot, t, hold, S, accent }) => {
   );
 };
 
-/** Shot: dark notes/reader with a nav chrome; a search magnifier springs in and is pressed. */
-const ShotNotes: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent, press }) => {
+/** Shot: dark notes/reader with a nav chrome — a note being written live: line 1 is there,
+ *  line 2 types in behind a blinking caret. (No search magnifier here — this is a reader, not a
+ *  search field; the magnifier lives only in the searchbar shot, where it's logical.) */
+const ShotNotes: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent }) => {
   const line1 = shot.accentText!, line2 = shot.b!;
-  const type2 = Math.round(clamp01((t - 0.7) / 0.9) * line2.length);
-  const magApp = easeOutBack(clamp01((t - 1.1) * 1.5));
+  const type2 = Math.round(clamp01((t - 0.7) / 1.1) * line2.length);
+  const caretOn = Math.floor(t * 1.6) % 2 === 0;
   const cw = 1180 * S, ch = 620 * S;
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -310,18 +317,12 @@ const ShotNotes: React.FC<ShotCtx> = ({ shot, t, W, H, S, accent, press }) => {
           background: '#e7b73a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width={30 * S} height={30 * S} viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="3.4"><path d="M5 13l4 4 10-11" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </div>
-        {/* body text */}
+        {/* body text — line 2 types in behind a blinking caret */}
         <div style={{ position: 'absolute', left: 60 * S, top: 180 * S, right: 60 * S, color: '#fff',
           fontFamily: FONT, fontWeight: 500, fontSize: 68 * S, lineHeight: 1.28, letterSpacing: '-0.01em' }}>
           <div style={{ opacity: clamp01(t * 3) }}>{line1}</div>
-          <div>{line2.slice(0, type2)}<span style={{ opacity: 0.35 }}>{line2.slice(type2)}</span></div>
-        </div>
-        {/* the interactive magnifier that gets pressed to hand off */}
-        <div style={{ position: 'absolute', left: cw * 0.62, top: ch * 0.52, transform: `scale(${(magApp * (1 - press * 0.18)).toFixed(3)})`,
-          filter: `drop-shadow(0 0 ${18 * S}px rgba(255,255,255,0.5))` }}>
-          <svg width={92 * S} height={92 * S} viewBox="0 0 40 40" fill="none" stroke="#fff" strokeWidth="3">
-            <circle cx="17" cy="17" r="12" /><path d="M26 26l9 9" strokeLinecap="round" />
-          </svg>
+          <div>{line2.slice(0, type2)}<span style={{ color: accent, opacity: caretOn ? 0.95 : 0.1,
+            fontWeight: 300 }}>|</span></div>
         </div>
       </div>
     </AbsoluteFill>
@@ -340,13 +341,14 @@ const ShotSearchbar: React.FC<ShotCtx> = ({ shot, t, W, H, S, press }) => {
         background: '#fff', boxShadow: cardShadow(S), display: 'flex', alignItems: 'center', paddingLeft: 70 * S,
         transform: `translateY(${((drop - 1) * 200 * S).toFixed(1)}px)`, color: INK, fontFamily: FONT,
         fontWeight: 600, fontSize: 66 * S }}>{shot.accentText}</div>
-      {/* the blue result link, with a momentary RGB split */}
-      <div style={{ marginTop: 150 * S, position: 'relative', opacity: linkApp }}>
+      {/* the blue result link, with a momentary RGB split. All three layers are nowrap + exactly
+          overlaid so the split never reflows the words (was doubling onto a 2nd line). */}
+      <div style={{ marginTop: 150 * S, position: 'relative', opacity: linkApp, whiteSpace: 'nowrap' }}>
         {glitch > 0.4 && <>
-          <span style={{ position: 'absolute', left: -glitch, color: '#ff2d55', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
-          <span style={{ position: 'absolute', left: glitch, color: '#00e5ff', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
+          <span style={{ position: 'absolute', top: 0, left: -glitch, whiteSpace: 'nowrap', color: '#ff2d55', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
+          <span style={{ position: 'absolute', top: 0, left: glitch, whiteSpace: 'nowrap', color: '#00e5ff', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S }}>{shot.b}</span>
         </>}
-        <span style={{ color: '#2b6cff', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S,
+        <span style={{ position: 'relative', whiteSpace: 'nowrap', color: '#2b6cff', fontFamily: FONT, fontWeight: 700, fontSize: 96 * S,
           textDecoration: 'underline', textUnderlineOffset: 12 * S }}>{shot.b}</span>
       </div>
     </AbsoluteFill>
@@ -429,12 +431,12 @@ const ShotPill: React.FC<ShotCtx> = ({ shot, t, S, accent, press }) => {
   const app = easeOutBack(clamp01((t - 0.05) * 1.4));
   const bg = dark ? '#0e0f12' : '#2b6cff';
   const fg = dark ? accent : '#fff';
-  const pw = 640 * S, ph = 170 * S;
+  const ph = 170 * S;
   return (
     <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: pw, height: ph, borderRadius: ph / 2, background: bg, boxShadow: cardShadow(S),
-        display: 'flex', alignItems: 'center', paddingLeft: 34 * S, gap: 34 * S,
-        transform: `scale(${(app * (1 - press * 0.08)).toFixed(3)})` }}>
+      <div style={{ height: ph, borderRadius: ph / 2, background: bg, boxShadow: cardShadow(S),
+        display: 'inline-flex', alignItems: 'center', paddingLeft: 30 * S, paddingRight: 56 * S, gap: 30 * S,
+        whiteSpace: 'nowrap', transform: `scale(${(app * (1 - press * 0.08)).toFixed(3)})` }}>
         {/* a verified check — reads as "true / accurate", matching the claim */}
         <div style={{ width: 104 * S, height: 104 * S, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
           display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -449,10 +451,12 @@ const ShotPill: React.FC<ShotCtx> = ({ shot, t, S, accent, press }) => {
   );
 };
 
-/** Shot: an NLE timeline card — a ruler + stacked colored clips + a sweeping playhead. */
-const ShotTimeline: React.FC<ShotCtx> = ({ t, hold, W, H, S, accent }) => {
+/** Shot: an NLE timeline card — a ruler + stacked colored clips + a sweeping playhead, with the
+ *  script line captioned above it so this beat carries its words like every other. */
+const ShotTimeline: React.FC<ShotCtx> = ({ shot, t, hold, S }) => {
   const app = easeOutBack(clamp01((t - 0.1) * 1.3));
-  const cw = 980 * S, ch = 520 * S;
+  const titleApp = clamp01((t - 0.2) * 2.4);
+  const cw = 980 * S, ch = 480 * S;
   const inner = { x: 40 * S, y: 74 * S, w: cw - 80 * S, h: ch - 156 * S };
   const clips = [
     { row: 0, x0: 0.18, x1: 0.55, col: '#22d3ee' },
@@ -464,7 +468,11 @@ const ShotTimeline: React.FC<ShotCtx> = ({ t, hold, W, H, S, accent }) => {
   const play = easeInOutCubic(clamp01((t - 0.5) / Math.max(0.8, hold - 1.0)));
   const px = inner.x + inner.w * mix(0.1, 0.92, play);
   return (
-    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
+    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 52 * S }}>
+      <div style={{ opacity: titleApp, transform: `translateY(${((1 - titleApp) * 20 * S).toFixed(1)}px)`,
+        color: INK, fontFamily: FONT, fontWeight: 800, fontSize: 62 * S, letterSpacing: '-0.02em', textAlign: 'center', maxWidth: cw }}>
+        {shot.accentText}
+      </div>
       <div style={{ width: cw, height: ch, borderRadius: 44 * S, background: '#fff', boxShadow: cardShadow(S),
         transform: `scale(${app.toFixed(3)})`, position: 'relative', padding: 30 * S }}>
         <div style={{ position: 'absolute', inset: 30 * S, borderRadius: 30 * S, background: '#0a0a0c', overflow: 'hidden' }}>
