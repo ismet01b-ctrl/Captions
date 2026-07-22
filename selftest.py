@@ -2008,6 +2008,37 @@ def _scenario_logic(clip, transcript, tmp):
           and "sequence:['type','build','render']" in _ui_m
           and "fd.append('sequence'" in _ui_m)
 
+    # v103b: mehrere VERSCHIEDENE aufwaendige Transitions (auto-variiert, kein Repeat) +
+    # direktionale Motion-Blur + Sound-Verdrahtung (nur bei vorhandenem CC0-Asset).
+    _mtr = open(os.path.join(HERE, 'motion', 'src', 'lib', 'transitions.ts'),
+                encoding='utf-8').read()
+    _mseq = open(os.path.join(HERE, 'motion', 'src', 'MotionSequence.tsx'),
+                 encoding='utf-8').read()
+    check('v103b: Transition-Bibliothek - 6 Arten + Auto-Variety ohne Repeat',
+          all(("id: '" + t + "'") in _mtr for t in
+              ('blurzoom', 'push', 'whip', 'glass', 'iris', 'swoosh'))
+          and 'export function pickTransitions' in _mtr
+          and 'export const SFX_KEYS' in _mtr
+          and 'pickTransitions(' in _mseq)
+    check('v103b: direktionale Motion-Blur (SVG feGaussianBlur) + 3D-Perspektive',
+          'feGaussianBlur' in _mseq and 'blurX' in _mtr and 'rotateY' in _mtr
+          and 'perspective(' in _mseq)
+    check('v103b: Sound pro Transition - nur bei vorhandenem Asset, sonst stumm',
+          '<Audio' in _mseq and "staticFile(`sfx/" in _mseq
+          and 'spec.sfx' in _mseq
+          and "existsSync(join(process.cwd(), 'public', 'sfx'" in _mrun
+          and 'MOTION_TRANSITIONS' in _srv_m and "o.transition=r.transition" in _ui_m)
+    if shutil.which('node') and os.path.isdir(os.path.join(_mroot2, 'node_modules')):
+        try:
+            _tr2 = subprocess.run(['node', 'scripts/test-transitions.mjs'], cwd=_mroot2,
+                                  capture_output=True, text=True, timeout=120)
+            check('v103b: Transition Node-Unit-Test (Identity-Enden, kein Repeat)',
+                  _tr2.returncode == 0, (_tr2.stdout + _tr2.stderr)[-200:])
+        except Exception as _e:
+            check('v103b: Transition Node-Unit-Test', False, str(_e))
+    else:
+        check('v103b: Transition Node-Unit-Test (node fehlt -> skip)', True)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

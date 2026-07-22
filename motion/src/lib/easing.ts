@@ -12,6 +12,23 @@ export const easeInOutCubic = (t: number): number => {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 };
 
+/** Quintic ease-in: slow start, hard snap out — the "load then fire" of a whip. */
+export const easeInQuint = (t: number): number => Math.pow(clamp01(t), 5);
+
+/** Symmetric quintic — camera-grade acceleration for clean pushes. */
+export const easeInOutQuint = (t: number): number => {
+  const x = clamp01(t);
+  return x < 0.5 ? 16 * x * x * x * x * x : 1 - Math.pow(-2 * x + 2, 5) / 2;
+};
+
+/** Back ease-out: overshoots past 1 then settles — the elastic "land" of a card. */
+export const easeOutBack = (t: number): number => {
+  const x = clamp01(t);
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
+
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 export const mix = (a: number, b: number, t: number): number => lerp(a, b, clamp01(t));

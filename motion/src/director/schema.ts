@@ -160,7 +160,12 @@ export const sceneSpecZ = z.object({
     lines: z.array(z.string().max(120)).max(8),
     accent: z.string(),
   }).optional(),
-  sequence: z.array(z.object({ ui: z.any(), dur: z.number() })).optional(),
+  sequence: z.array(z.object({
+    ui: z.any(),
+    dur: z.number(),
+    transition: z.enum(['blurzoom', 'push', 'whip', 'glass', 'iris', 'swoosh']).optional(),
+  })).optional(),
+  sfx: z.array(z.string()).optional(),
 });
 
 // Compile-time drift guard (readonly-safe): the schema and SceneSpec must share the same

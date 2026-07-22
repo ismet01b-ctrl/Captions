@@ -2876,6 +2876,9 @@ async def motion_render(request: Request,
 
 
 MOTION_TEMPLATES = {'pills', 'appcard', 'search', 'homescreen', 'chat', 'notify'}
+# Elaborate sequence cross-transitions (mirror of TransId in motion/src/spec.ts). 'auto'
+# is not stored — an absent per-scene value lets the engine vary them deterministically.
+MOTION_TRANSITIONS = {'blurzoom', 'push', 'whip', 'glass', 'iris', 'swoosh'}
 
 
 @app.post('/api/motion/brief')
@@ -2901,7 +2904,11 @@ async def motion_brief(request: Request, brief: str = Form(...),
                 for it in _raw[:8]:
                     _st = str((it or {}).get('template', '')).strip().lower()
                     if _st in MOTION_TEMPLATES:
-                        _seq.append({'template': _st, 'text': str((it or {}).get('text', ''))[:200]})
+                        _row = {'template': _st, 'text': str((it or {}).get('text', ''))[:200]}
+                        _tr = str((it or {}).get('transition', '')).strip().lower()
+                        if _tr in MOTION_TRANSITIONS:
+                            _row['transition'] = _tr
+                        _seq.append(_row)
         except Exception:
             _seq = []
     if len(_seq) < 2:

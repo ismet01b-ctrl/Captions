@@ -749,7 +749,7 @@ body {
   font-weight: 500; color: var(--mut); line-height: 1.4; }
 .mo-tile-txt strong { font-size: 15px; font-weight: 800; color: var(--fg); }
 .mo-tile-txt span { font-size: 12px; color: var(--mut); line-height: 1.4; }
-.seq-row { display: grid; grid-template-columns: 26px 120px 1fr 30px; gap: 8px;
+.seq-row { display: grid; grid-template-columns: 26px 108px 1fr 108px 30px; gap: 8px;
   align-items: center; padding: 6px 0; }
 .seq-row .seq-n { width: 24px; height: 24px; border-radius: 50%; background: var(--surf2);
   display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--fg); }
@@ -757,7 +757,7 @@ body {
   background: var(--surf); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); width: 100%; }
 .seq-row .seq-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 16px; }
 .seq-row .seq-del:hover { color: #ff5a5a; }
-@media (max-width: 560px){ .seq-row { grid-template-columns: 22px 96px 1fr 26px; } }
+@media (max-width: 560px){ .seq-row { grid-template-columns: 20px 84px 1fr 88px 22px; gap: 5px; } }
 .mo-nav { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
 .mo-nav .btn:not(.secondary) { flex: 1; }
 @media (max-width: 640px) { .mo-type-cards { grid-template-columns: 1fr; } }
@@ -1566,7 +1566,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <!-- STEP: BUILD (sequence engine) -->
         <div class="mo-step-view" data-key="build">
           <h2 class="step-title">Build your sequence</h2>
-          <p class="step-sub">Add scenes in order — they flow into one video with seamless transitions.</p>
+          <p class="step-sub">Add scenes in order — they flow into one video with seamless transitions. Leave the transition on <b>Auto</b> and the engine varies them (whip pan, glass slide, app open, push, 3D swoosh) so none repeat, or pin one per scene.</p>
           <div class="panel">
             <div id="moSeqRows"></div>
             <button class="btn secondary" id="moSeqAdd" type="button" style="margin-top:10px;">+ Add scene</button>
@@ -2892,6 +2892,9 @@ function goMoStep(i){
 /* v103: Sequenz-Bau (mehrere Szenen -> ein Video). */
 const MO_SEQ_TPLS=[['pills','Pills'],['appcard','App card'],['search','Search bar'],
   ['homescreen','Home screen'],['chat','Chat'],['notify','Notification']];
+// The transition PLAYED INTO a scene. '' = Auto (engine varies them so none repeat).
+const MO_SEQ_TRANS=[['','Auto'],['whip','Whip pan'],['glass','Glass slide'],
+  ['iris','App open'],['push','Push'],['swoosh','3D swoosh'],['blurzoom','Blur zoom']];
 function renderSeqRows(){
   const el=$('#moSeqRows'); if(!el) return;
   if(!State.seqRows||!State.seqRows.length) State.seqRows=[
@@ -2899,17 +2902,24 @@ function renderSeqRows(){
     {template:'appcard',text:'DouchkoVE, Productivity'},
     {template:'notify',text:'DouchkoVE, Your clip is ready'}];
   const opts=MO_SEQ_TPLS.map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('');
+  const tops=MO_SEQ_TRANS.map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('');
   el.innerHTML='';
   State.seqRows.forEach((r,i)=>{
     const row=document.createElement('div'); row.className='seq-row';
+    // The first scene has no incoming boundary, so its transition slot is inert ("Start").
+    const trCell=i===0
+      ? '<select disabled title="The opening scene has no transition into it"><option>Start</option></select>'
+      : '<select data-i="'+i+'" data-k="transition" title="Transition into this scene">'+tops+'</select>';
     row.innerHTML='<span class="seq-n">'+(i+1)+'</span>'
       +'<select data-i="'+i+'" data-k="template">'+opts+'</select>'
       +'<input type="text" data-i="'+i+'" data-k="text" placeholder="Text for this scene" value="'+(r.text||'').replace(/"/g,'&quot;')+'">'
+      +trCell
       +'<button class="seq-del" data-i="'+i+'" title="Remove" type="button">✕</button>';
     el.appendChild(row);
     row.querySelector('[data-k=template]').value=r.template||'pills';
+    if(i>0) row.querySelector('[data-k=transition]').value=r.transition||'';
   });
-  el.querySelectorAll('select,input').forEach(x=>x.addEventListener(x.tagName==='INPUT'?'input':'change',()=>{
+  el.querySelectorAll('select[data-k],input[data-k]').forEach(x=>x.addEventListener(x.tagName==='INPUT'?'input':'change',()=>{
     const i=parseInt(x.dataset.i); if(State.seqRows[i]) State.seqRows[i][x.dataset.k]=x.value; }));
   el.querySelectorAll('.seq-del').forEach(b=>b.addEventListener('click',()=>{
     if(State.seqRows.length<=2){ toast('A sequence needs at least 2 scenes.','err'); return; }
@@ -2925,7 +2935,11 @@ async function motionSeqGo(){
   try{
     const fd=new FormData();
     fd.append('brief','sequence');
-    fd.append('sequence', JSON.stringify(rows.map(r=>({template:r.template, text:r.text||''}))));
+    fd.append('sequence', JSON.stringify(rows.map((r,i)=>{
+      const o={template:r.template, text:r.text||''};
+      if(i>0 && r.transition) o.transition=r.transition;   // scene 0 has no incoming transition
+      return o;
+    })));
     fd.append('accent', Motion.seqAccent||'#e0483d');
     const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
     if(r.status===402){ st.textContent='Not enough credits.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }

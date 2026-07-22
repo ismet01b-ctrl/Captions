@@ -184,10 +184,19 @@ export interface UiSpec {
   readonly accent: string;
 }
 
+/**
+ * The elaborate cross-transitions the sequencer can play at a boundary. 'auto' lets the
+ * engine pick a varied, non-repeating sequence deterministically from the seed.
+ */
+export type TransId = 'blurzoom' | 'push' | 'whip' | 'glass' | 'iris' | 'swoosh';
+
 /** One segment of a chained sequence: a UI mockup shown for `dur` seconds. */
 export interface SeqSegment {
   readonly ui: UiSpec;
   readonly dur: number; // seconds on screen (incl. its half of each transition)
+  // The transition PLAYED INTO this segment (i.e. the boundary before it). Undefined =
+  // auto-varied by the engine. Ignored for the first segment (nothing precedes it).
+  readonly transition?: TransId;
 }
 
 export interface SceneSpec {
@@ -202,6 +211,10 @@ export interface SceneSpec {
   readonly scenes: readonly Scene[];
   readonly ui?: UiSpec; // set for UI-mockup templates; MotionApple renders it
   readonly sequence?: readonly SeqSegment[]; // set for chained sequences; MotionSequence renders it
+  // Transition-SFX keys whose audio assets are actually present (fs-checked by the director).
+  // MotionSequence only mounts <Audio> for keys listed here — no asset -> silent (never a
+  // cheap synthetic beep). Undefined/empty = the sequence renders silent.
+  readonly sfx?: readonly string[];
 }
 
 /** Runtime guard: the AI director's JSON is validated before it ever reaches the renderer. */

@@ -3,8 +3,9 @@
 // (templateId, text, accent) -> SceneSpec carrying a `ui` payload that the MotionApple
 // composition renders. No Python, one credit.
 
-import type { SceneSpec, Format, Palette, UiTemplate, SeqSegment, UiSpec } from '../spec';
+import type { SceneSpec, Format, Palette, UiTemplate, SeqSegment, UiSpec, TransId } from '../spec';
 import { CANVAS, PALETTES } from './vocabulary';
+import { isTransId } from '../lib/transitions';
 
 export type TemplateId = UiTemplate;
 
@@ -102,18 +103,20 @@ export function templateSpec(id: TemplateId, text: string, opts: TemplateOpts = 
 
 /** Build a chained-sequence spec: several UI mockups played back-to-back as ONE video. */
 export function sequenceSpec(
-  items: readonly { template: string; text: string }[],
+  items: readonly { template: string; text: string; transition?: string }[],
   opts: TemplateOpts = {},
 ): SceneSpec {
   const format = opts.format ?? '9:16';
   const { w, h } = CANVAS[format];
   const accent = opts.accent || '#3574ff';
   const valid = items.filter((it) => isTemplateId(it.template));
-  const segs: SeqSegment[] = (valid.length ? valid : [{ template: 'pills', text: 'Write, Create, Solve' }]).map((it) => {
+  const src = valid.length ? valid : [{ template: 'pills', text: 'Write, Create, Solve' } as typeof items[number]];
+  const segs: SeqSegment[] = src.map((it) => {
     const id = it.template as TemplateId;
     const { title, subtitle, lines } = parseTemplateText(id, it.text);
     const ui: UiSpec = { template: id, title, subtitle, lines, accent };
-    return { ui, dur: DUR[id] };
+    const tr = it.transition && isTransId(it.transition) ? (it.transition as TransId) : undefined;
+    return tr ? { ui, dur: DUR[id], transition: tr } : { ui, dur: DUR[id] };
   });
   const total = segs.reduce((a, s) => a + s.dur, 0) - SEQ_TRANSITION * (segs.length - 1);
   const seed = strHash(segs.map((s) => s.ui.template + s.ui.title).join('|')) % 100000;

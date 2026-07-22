@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v103b Mehrere verschiedene aufwaendige Transitions + Sound-Verdrahtung (Ismet:
+  "mehrere passende verschiedene aufwaendige Transitions, wie von einem High-End-
+  Senior-SaaS-Motion-Designer. Ausserdem den passenden Sound").** Statt EINER Blur-
+  Cross gibt es jetzt eine Transition-Bibliothek (motion/src/lib/transitions.ts) mit
+  6 Arten: Blur-Zoom (airy), Push (cleaner iOS-Nav-Slide), Whip-Pan (mit ECHTER
+  direktionaler Motion-Blur via SVG feGaussianBlur stdDeviation="x 0", Peak in der
+  Mitte), Glass-Slide (steigt von unten mit elastischem easeOutBack-Overshoot +
+  Fokuszug), App-Open/Iris (zoomt aus kleiner zentrierter Kachel), 3D-Swoosh
+  (flacher rotateY-Handoff mit Perspektive). Jede Transition hat sauber Identity an
+  ihrem aufgeloesten Ende (Node-Unit-Test prueft das). Auto-Variety: pickTransitions
+  laeuft die kuratierte Reihenfolge mit Stride 5 (coprim zu 6) ab -> KEINE zwei
+  benachbarten Grenzen gleich, deterministisch aus dem Seed. Optional pro Szene im
+  Wizard fixierbar (Dropdown "Auto/Whip/Glass/App open/Push/3D swoosh/Blur zoom";
+  erste Szene = "Start", inert). SOUND: pro Transition ein SFX-Key, gemountet als
+  Remotion <Audio staticFile('sfx/<key>.wav')> genau am Swipe-Peak - ABER nur wenn
+  das CC0-Asset wirklich existiert (Director fs-prueft public/sfx, setzt spec.sfx).
+  Kein Pack -> stumm (Projektregel "Stille besser als billiger Ton"). BEWEIS: 6-
+  Segment-Kette (25.6s) headless gerendert -> 5 sichtbar verschiedene Uebergaenge
+  (Frame-Streifen an Ismet, Whip-Motion-Blur klar zu sehen). tsc clean, Transition-
+  Node-Unit-Test gruen (Identity-Enden, kein Repeat, Override sanitisiert).
+  Regression 666/666. OFFEN: die CC0-Whoosh/Click/Pop-Assets fuer public/sfx
+  (Quelle mit Ismet klaeren - erst dann klingt es, vorher stumm).
+
 - **v103 Sequencer + seamless Transitions (Ismet, Referenz Notion-Promo: "Die
   Motion muessen genau so aneinander geknuepft werden koennen mit guten seamless
   Transitions - es soll die 50 Stunden Arbeit abnehmen").** Erster von 3 Pfeilern.
