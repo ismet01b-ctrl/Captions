@@ -1482,8 +1482,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <button class="mo-type-card" type="button" id="moTypeTemplate">
               <div class="tc-ic">🧩</div>
               <h3>From a template</h3>
-              <p>Apple-style UI motion — pills, widgets, lower-thirds. Full control,
-                export MP4 or ProRes alpha for your edit.</p>
+              <p>Clean UI-style motion — pills, an app card, search, home screen,
+                chat, a notification. Pick one and add your text.</p>
               <span class="tc-go">Pick a template →</span>
             </button>
           </div>
@@ -2748,11 +2748,12 @@ function moSeg(id, opts, key){
    Beispiel, keinen Fachbegriff. */
 /* v101z: kuratiertes Remotion-Template-Set (ersetzt die alte Python-gfx-Engine). */
 const MO_TPLS=[
-  ['pills','Pills','Up to 5 keyword pills that pop in'],
-  ['title','Title','One bold kinetic headline'],
-  ['lowerthird','Lower third','Name + role with an accent bar'],
-  ['stat','Big stat','A number that counts up'],
-  ['quote','Quote','An oversized pull-quote'],
+  ['pills','Pills','Embossed keyword pills that pop in'],
+  ['appcard','App card','A store-style download card'],
+  ['search','Search bar','A query typing into a search field'],
+  ['homescreen','Home screen','An app grid springing in'],
+  ['chat','Chat','Message bubbles in a conversation'],
+  ['notify','Notification','A banner dropping from the top'],
 ];
 function moGallery(){
   const el=$('#moTemplate'); if(!el) return;
@@ -2873,8 +2874,9 @@ async function motionBriefGo(){
 /* v101z: kuratiertes Remotion-Template rendern (ueber denselben Brief-Endpunkt). */
 async function motionTemplateGo(){
   const btn=$('#moRender'); const st=$('#moStatus');
-  const text=($('#moWords').value||'').trim();
-  if(text.length<2){ toast('Add your words first.','err'); return; }
+  let text=($('#moWords').value||'').trim();
+  if(!text && Motion.sel.template==='homescreen') text='Home';   // Homescreen braucht keinen Text
+  if(text.length<1){ toast('Add your text first.','err'); return; }
   moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
   const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
   st.style.display='block'; st.textContent='Rendering your template …';
@@ -2897,10 +2899,11 @@ async function motionTemplateGo(){
 /* Kontext-Sync: Felder/Hinweise passen sich dem Template an. */
 const MO_TPL_LABEL={
   pills:      ['Keywords <span class="mo-hint">(comma-separated, up to 5)</span>','Write, Create, Solve, Ship, Grow'],
-  title:      ['Headline <span class="mo-hint">(1-4 words)</span>','Ship it'],
-  lowerthird: ['Name, role','Ismet B., Founder'],
-  stat:       ['Number + label','92% faster'],
-  quote:      ['Quote <span class="mo-hint">(add — author)</span>','Done beats perfect — Ismet'],
+  appcard:    ['App name, category','DouchkoVE, Productivity'],
+  search:     ['Search query','Ask anything'],
+  homescreen: ['Label <span class="mo-hint">(optional)</span>','Home'],
+  chat:       ['Messages <span class="mo-hint">(comma-separated, up to 4)</span>','Hey!, New drop is live, Check it now'],
+  notify:     ['Title, message','DouchkoVE, Your clip is ready'],
 };
 function moSync(){
   const tpl=Motion.sel.template||'pills';

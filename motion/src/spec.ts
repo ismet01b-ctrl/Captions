@@ -174,6 +174,16 @@ export interface Palette {
   readonly muted: string;
 }
 
+/** Payload for the UI-mockup templates (rendered by the MotionApple composition). */
+export type UiTemplate = 'pills' | 'appcard' | 'search' | 'homescreen' | 'chat' | 'notify';
+export interface UiSpec {
+  readonly template: UiTemplate;
+  readonly title?: string;
+  readonly subtitle?: string;
+  readonly lines: readonly string[]; // pills / chat messages / notify lines
+  readonly accent: string;
+}
+
 export interface SceneSpec {
   readonly version: 1;
   readonly seed: number; // seeds all procedural jitter -> deterministic
@@ -184,6 +194,7 @@ export interface SceneSpec {
   readonly palette: Palette;
   readonly beat: BeatGrid;
   readonly scenes: readonly Scene[];
+  readonly ui?: UiSpec; // set for UI-mockup templates; MotionApple renders it
 }
 
 /** Runtime guard: the AI director's JSON is validated before it ever reaches the renderer. */

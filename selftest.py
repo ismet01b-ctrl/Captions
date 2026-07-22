@@ -1943,7 +1943,8 @@ def _scenario_logic(clip, transcript, tmp):
                  encoding='utf-8').read()
     check('v101z: Remotion-Template-Builder + CLI-Zweig vorhanden',
           'export function templateSpec' in _mtpl and 'isTemplateId' in _mtpl
-          and "'pills'" in _mtpl and "'lowerthird'" in _mtpl and "'stat'" in _mtpl
+          and "id: 'pills'" in _mtpl and "id: 'appcard'" in _mtpl
+          and "id: 'chat'" in _mtpl and "id: 'notify'" in _mtpl
           and 'isTemplateId(tpl)' in _mrun and 'templateSpec(' in _mrun)
     check('v101z: Server + UI fahren Templates ueber den Remotion-Brief-Endpunkt',
           "template: str = Form('')" in _srv_m and "MOTION_TEMPLATES" in _srv_m
@@ -1958,12 +1959,17 @@ def _scenario_logic(clip, transcript, tmp):
     _mrb2 = open(os.path.join(HERE, 'motion', 'scripts', 'render-brief.mjs'),
                  encoding='utf-8').read()
     _mrt2 = open(os.path.join(HERE, 'motion', 'src', 'Root.tsx'), encoding='utf-8').read()
-    check('v102: Apple-Composition + Routing (pills -> MotionApple)',
+    check('v102: UI-Mockup-Composition + Routing (alle Templates -> MotionApple)',
           os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionApple.tsx'))
           and os.path.exists(os.path.join(HERE, 'motion', 'src', 'apple', 'AppleScene.tsx'))
           and 'id="MotionApple"' in _mrt2
-          and "APPLE = new Set(['pills'])" in _mrb2
-          and "'MotionApple'" in _mrb2)
+          and "isTemplate ? 'MotionApple'" in _mrb2)
+    # Alle 6 UI-Mockups verdrahtet; "Apple" wird auf der Seite NICHT erwaehnt.
+    check('v102: 6 UI-Mockups in Server + UI, kein "Apple" im Frontend',
+          all(x in _srv_m for x in ("'appcard'", "'search'", "'homescreen'", "'chat'", "'notify'"))
+          and "['appcard','App card'" in _ui_m and "['notify','Notification'" in _ui_m
+          # "Apple" wird als Design-Stil nirgends beworben (iOS/Safari-Technikhinweise ok)
+          and 'Apple' not in _ui_m and 'Apple' not in _land)
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.

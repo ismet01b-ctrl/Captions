@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v102b UI-Mockup-Templateset komplett (Ismet: "alte Templates loeschen, diese
+  hier rein, alle auf einmal, Apple auf der Seite nicht erwaehnen").** Die alten
+  Bloeck-Templates (title/lowerthird/stat/quote) sind RAUS; das Templateset ist
+  jetzt die 6 UI-Mockups aus der Referenz, alle als Remotion-Szenen (MotionApple,
+  Light-Theme): Pills (embosst) / App card (Store-Download-Karte: Icon, Titel,
+  Open-Button, 4.8-Stern/12+/#1-Statzeile) / Search bar (Lupe + tippender Query +
+  Waveform) / Home screen (App-Grid mit Badge, gestaffeltes Pop-In) / Chat
+  (iMessage-artige Bubbles, ab-/eingehend) / Notification (Banner dropt von oben
+  mit Icon/Titel/Body/"now"). Datenmodell: SceneSpec bekam `ui`-Payload
+  {template,title,subtitle,lines,accent} (+ Zod optional); templateSpec baut nur
+  noch UI-Specs; run.ts ueberspringt die strikte Validierung fuer die (trusted)
+  Template-Specs; render-brief.mjs routet ALLE Templates auf MotionApple; Icons/
+  Sterne/Sparkles rein VEKTORiell (kein Emoji -> headless-sicher). Server-Template-
+  Liste + UI-Galerie + Feld-Hinweise auf die 6 umgestellt; Text-Mindestlaenge
+  template-tauglich (Search/Home kurz/leer ok). WICHTIG: "Apple" wird auf der
+  Seite NICHT beworben - neutrale Labels (App card / Search bar / Home screen …),
+  Selftest-Garantie prueft das. GEPRUEFT: tsc clean, alle 6 headless gerendert
+  (2x3-Grid an Ismet). Regression 656/656 gruen. Alte Python-gfx-Endpunkte
+  bleiben ungenutzt im Server.
+
 - **v102 Apple/iOS-Mockup-Look (Ismet-Referenzvideo: "solche Motion Graphics
   rede ich die ganze Zeit").** Referenz = der helle Apple-UI-Stil (App-Icon-Reveal,
   App-Store-Karte, Such-Bar, Homescreen, premium embosste Pills) - genau die

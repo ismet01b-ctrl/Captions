@@ -28,13 +28,16 @@ async function main(): Promise<void> {
   const sniff = /\b(no text|without text|textless|kein text|ohne text|nur grafik|graphics only|pure motion)\b/i.test(
     text,
   );
+  const isTpl = tpl && isTemplateId(tpl);
   const tplOpts: { accent?: string; format?: Format } = {};
   if (accent) tplOpts.accent = accent;
   if (format) tplOpts.format = format;
-  const spec = tpl && isTemplateId(tpl)
+  const spec = isTpl
     ? templateSpec(tpl, text, tplOpts)
     : await directBrief({ text, noText: flag || sniff });
-  if (!parseSpec(spec)) {
+  // AI output is untrusted -> validate. Template specs are trusted, deterministic code
+  // and carry a `ui` payload (scenes:[]) the block schema doesn't cover, so skip it.
+  if (!isTpl && !parseSpec(spec)) {
     process.stderr.write('FATAL: director produced a spec the schema rejects\n');
     process.exit(1);
   }

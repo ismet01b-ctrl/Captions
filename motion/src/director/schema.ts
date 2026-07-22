@@ -152,6 +152,14 @@ export const sceneSpecZ = z.object({
     snapTol: z.number().min(0).max(0.3),
   }),
   scenes: z.array(sceneZ).min(1).max(8),
+  // UI-mockup payload (templates); brief specs omit it. Validated only if present.
+  ui: z.object({
+    template: z.enum(['pills', 'appcard', 'search', 'homescreen', 'chat', 'notify']),
+    title: z.string().max(120).optional(),
+    subtitle: z.string().max(120).optional(),
+    lines: z.array(z.string().max(120)).max(8),
+    accent: z.string(),
+  }).optional(),
 });
 
 // Compile-time drift guard (readonly-safe): the schema and SceneSpec must share the same

@@ -64,14 +64,11 @@ try {
   const browser = findBrowser(passthrough);
   // --3d -> the Three.js composition, rendered with software GL (--gl=angle) so it
   // works headless on a GPU-less server. 2D stays the default MotionVideo composition.
-  // Apple/iOS-mockup templates -> the light MotionApple composition. Other templates are
-  // 2D UI motion -> MotionVideo. Only a brief may go 3D.
-  const tplArg = passthrough.find((a) => a.startsWith('--template='));
-  const tplId = tplArg ? tplArg.split('=')[1] : '';
-  const APPLE = new Set(['pills']);
-  const isTemplate = !!tplArg;
+  // All UI-mockup templates render through the light MotionApple composition. A brief
+  // (no --template) uses MotionVideo (2D) or Motion3D (--3d).
+  const isTemplate = passthrough.some((a) => a.startsWith('--template='));
   const is3d = passthrough.includes('--3d') && !isTemplate;
-  const composition = APPLE.has(tplId) ? 'MotionApple' : is3d ? 'Motion3D' : 'MotionVideo';
+  const composition = isTemplate ? 'MotionApple' : is3d ? 'Motion3D' : 'MotionVideo';
   execFileSync(
     'npx',
     [

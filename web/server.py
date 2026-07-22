@@ -2871,7 +2871,7 @@ async def motion_render(request: Request,
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 
 
-MOTION_TEMPLATES = {'pills', 'title', 'lowerthird', 'stat', 'quote'}
+MOTION_TEMPLATES = {'pills', 'appcard', 'search', 'homescreen', 'chat', 'notify'}
 
 
 @app.post('/api/motion/brief')
@@ -2885,8 +2885,11 @@ async def motion_brief(request: Request, brief: str = Form(...),
         raise HTTPException(503, 'The motion director is warming up on this '
                                  'server - try again shortly.')
     text = (brief or '').strip()[:400]
-    if len(text) < 4:
-        raise HTTPException(400, 'Write a short brief first.')
+    _tpl = str(template).strip().lower()
+    _tpl = _tpl if _tpl in MOTION_TEMPLATES else ''
+    # Briefs need a sentence; templates just need a word (search/home can be tiny).
+    if len(text) < (1 if _tpl else 4):
+        raise HTTPException(400, 'Write a short brief first.' if not _tpl else 'Add your text first.')
     jid = uuid.uuid4().hex[:12]
     d = job_dir(jid)
     os.makedirs(d, exist_ok=True)
@@ -2898,8 +2901,6 @@ async def motion_brief(request: Request, brief: str = Form(...),
     _notext = str(no_text).strip().lower() in _yes
     _d3 = str(d3).strip().lower() in _yes
     # v101z: kuratiertes Remotion-Template (ersetzt die alte Python-gfx-Engine).
-    _tpl = str(template).strip().lower()
-    _tpl = _tpl if _tpl in MOTION_TEMPLATES else ''
     _acc = str(accent).strip()
     _acc = _acc if re.match(r'^#[0-9a-fA-F]{6}$', _acc) else ''
     JOBS[jid] = {'kind': 'motion', 'brief': text, 'user_id': u['id'],
