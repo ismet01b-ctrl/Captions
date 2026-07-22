@@ -53,8 +53,19 @@ Font: **Inter Variable is bundled** at `public/fonts/InterVariable.ttf` and load
 `staticFile` (offline, no CDN/CA dependency). Inter is licensed under the SIL Open Font
 License 1.1 (redistribution permitted).
 
+## AI director (built)
+`src/director/` — brief → validated `SceneSpec`, same shape as the Python `ai_direct`:
+- `vocabulary.ts` — the curated design language + the "senior 2026" system prompt.
+- `director.ts` — GPT-4o composes from the vocabulary; falls back to…
+- `heuristic.ts` — a deterministic brief→spec composer (works with no key; the offline path).
+- `schema.ts` — Zod validator; the renderer only ever sees a schema-valid spec.
+- `run.ts` — CLI bridge: `node out/run.mjs "<brief>" > spec.json` → `remotion render --props`.
+
+Proven: two different briefs → two different, valid, deterministic specs, both rendered
+(a brief with "3.4M" auto-becomes a count-up stat; a different brief picks a different
+palette). Cleaner copy comes from the GPT path (needs OPENAI_API_KEY).
+
 ## Next layers (not built yet)
-1. AI director: brief → validated `SceneSpec` (reuses the caption `ai_direct` pattern).
-2. More blocks + a curated vocabulary (the 70% that decides "senior" vs "template").
-3. Wire into the web product: brief field on the Motion page → Studio-grade live preview →
-   server render (this engine) → the existing inline player.
+1. More blocks + a wider curated vocabulary (the 70% that decides "senior" vs "template").
+2. Wire into the web product: brief field on the Motion page → client-side `@remotion/player`
+   live preview (zero server cost) → CPU server render (this engine) → the inline player.
