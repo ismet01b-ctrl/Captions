@@ -1125,7 +1125,7 @@ Antworte NUR mit JSON:
 Maximal 3 Hinweise, nur echte Probleme - kein Lob, keine Fuellhinweise."""
 
 
-def silent_score(out_video, words, fx_map, model='gpt-4o'):
+def silent_score(out_video, words, fx_map, model='gpt-5'):
     """v101: Zweiter Score neben dem Hook-Score - bewertet das FERTIGE Video
     STUMM (so laeuft die Mehrheit der Views). Ein Vision-Call, max. 6 Frames
     (detail low). Ohne Key/Fehler: None, der Render bleibt unberuehrt."""
@@ -1221,7 +1221,7 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     return body
 
 
-def ai_scene_direct(words, fx_map, video_path, model='gpt-4o', min_power=2,
+def ai_scene_direct(words, fx_map, video_path, model='gpt-5', min_power=2,
                     face_cover=None):
     """Regie v4 (Vision): schaut sich pro gewaehltem Moment einen Frame an und
     entscheidet Material ('szene') und Lage ('liegend'/'stehend'/'frei').
@@ -2849,7 +2849,7 @@ def _ref_audio_summary(video_path):
             pass
 
 
-def analyze_reference_video(video_path, name=None, model='gpt-4o',
+def analyze_reference_video(video_path, name=None, model='gpt-5',
                             n_frames=6, save=True):
     """v96n: Lernt aus einem REFERENZ-Video mit High-End-Captions. Sampelt ein
     paar Frames, laesst GPT-4o-Vision den STIL beschreiben (Pacing, Dichte,
@@ -2978,7 +2978,7 @@ def _load_regie_reference():
             + '\n'.join(lines) + "\n\n")
 
 
-def _style_params_from_desc(desc, model='gpt-4o', key=None, frames=None):
+def _style_params_from_desc(desc, model='gpt-5', key=None, frames=None):
     """v96y/z: extrahiert MESSBARE Stil-Parameter - mit den Original-FRAMES
     (Vision, praezise Farben/Groessen), sonst nur aus der Prosa. Die Parameter
     wirken deterministisch auf die Render-Config - so wird der Referenz-Stil
@@ -3239,7 +3239,7 @@ def _regie_chunks(words, max_words=400, overlap=30):
 
 
 def _regie_validate(fx_map, words, model, key):
-    """Zwei-Pass-Validator: gpt-4o kriegt seine eigenen Vorschlaege zurueck und
+    """Zwei-Pass-Validator: die Regie-KI kriegt ihre eigenen Vorschlaege zurueck und
     prueft, ob wirklich Substanz-Woerter markiert wurden. Streicht Hilfsverben,
     Fuellwoerter und generische Phrasen die durch die erste Runde geschluepft
     sind. Kostet einen zweiten Call, faengt aber die "IST/DENN"-Klasse
@@ -3815,11 +3815,11 @@ def _looks_german(words):
     return sum(txt.count(m) for m in de) >= 3
 
 
-def ai_direct(words, language, model='gpt-4o', voice_wav=None, validate=True):
+def ai_direct(words, language, model='gpt-5', voice_wav=None, validate=True):
     """LLM waehlt Keywords, Phrasen, Effekte und Wucht. Gibt {index: info} zurueck oder None.
     Lange Videos werden in Etappen analysiert, damit die JSON-Antwort nie abgeschnitten wird.
 
-    v80d: WORTLISTE ohne STOPWORDS an gpt-4o - die KI KANN Hilfsverben gar
+    v80d: WORTLISTE ohne STOPWORDS an die Regie-KI - sie KANN Hilfsverben gar
     nicht mehr waehlen. Chunks mit 30-Wort-Overlap. Zwei-Pass-Validator und
     Audio-Emotion optional (validate=True, voice_wav gesetzt)."""
     import requests
@@ -4486,7 +4486,7 @@ def _parse_flow_sel(data, groups, words):
     return out
 
 
-def ai_flow_direct(words, groups, language='de', model='gpt-4o'):
+def ai_flow_direct(words, groups, language='de', model='gpt-5'):
     """v97f: GPT waehlt pro Filler-Chunk das ANKER-Wort (wird gross+getippt)
     und optional ein Akzent-Wort (kursiv, warm) - inhaltlich, wie ein Editor,
     statt Laengen-Heuristik. EIN Call pro Video. None bei fehlendem Key/Fehler."""
@@ -7419,7 +7419,7 @@ def main():
         if fx_map is None:
             print("KI-Regie analysiert das Transkript...")
             fx_map = ai_direct(words, cfg.get('language', 'de'),
-                               cfg['keywords'].get('ai_model', 'gpt-4o'),
+                               cfg['keywords'].get('ai_model', 'gpt-5'),
                                voice_wav=voice_wav,
                                validate=cfg['keywords'].get('ai_validate', True))
             _regie_wahl = bool(fx_map)
@@ -7439,7 +7439,7 @@ def main():
                               for i in list(fx_map)}
             if fx_map and cfg['keywords'].get('ai_vision', True):
                 fx_map = ai_scene_direct(words, fx_map, args.input,
-                                         cfg['keywords'].get('ai_model', 'gpt-4o'),
+                                         cfg['keywords'].get('ai_model', 'gpt-5'),
                                          min_power=int(cfg['keywords'].get('vision_min_power', 2)),
                                          face_cover=face_cover)
             elif fx_map:
@@ -7666,7 +7666,7 @@ def main():
                 flow_map = None
         if flow_map is None:
             _sel = ai_flow_direct(words, _fgroups, cfg.get('language', 'de'),
-                                  cfg['keywords'].get('ai_model', 'gpt-4o'))
+                                  cfg['keywords'].get('ai_model', 'gpt-5'))
             if _sel:
                 flow_map = _sel
                 try:
@@ -8441,7 +8441,7 @@ def main():
     # laufen ohne Ton). Ein guenstiger Vision-Call; ohne Key passiert nichts.
     if cfg['keywords'].get('silent_score', True) and fx_map:
         _sil = silent_score(out_path, words, fx_map,
-                            cfg['keywords'].get('ai_model', 'gpt-4o'))
+                            cfg['keywords'].get('ai_model', 'gpt-5'))
         if _sil:
             _sp = os.path.splitext(args.input)[0] + '_silent.json'
             json.dump(_sil, open(_sp, 'w', encoding='utf-8'), ensure_ascii=False)
