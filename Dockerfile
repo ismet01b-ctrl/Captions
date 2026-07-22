@@ -11,7 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libgtk-3-0 libxkbcommon0 libdbus-1-3 \
       fonts-dejavu fonts-noto fonts-noto-color-emoji \
       curl ca-certificates \
+      chromium \
     && rm -rf /var/lib/apt/lists/*
+# v101p-fix: System-Chromium fuer den Remotion-Render. Remotion wuerde sich sonst
+# zur Laufzeit Chrome von remotion.media ziehen -> auf einem Server mit Egress-
+# Allowlist (prod) gibt das 403 und der Motion-Render stirbt. render-brief.mjs
+# findet /usr/bin/chromium automatisch (oder via DVE_CHROMIUM).
 
 # v101p: Node 22 for the Remotion motion-graphics engine (motion/). Separate stack;
 # the caption pipeline stays pure Python. Cached layer, independent of app code.
@@ -35,12 +40,11 @@ RUN python -c "import render; render.ensure_models()" || echo "Modelle werden zu
 # Image-Build NIE kippt. Faellt er aus, erkennt der Server das zur Laufzeit
 # (Feature-Detection) und blendet das Motion-Brief-Feature einfach aus; Captions
 # + bestehende Motion-Templates laufen davon voellig unberuehrt weiter.
-RUN (cd /app/motion \
-      && npm ci --no-audit --no-fund \
-      && (npx remotion browser ensure || echo "Browser zur Laufzeit")) \
+RUN (cd /app/motion && npm ci --no-audit --no-fund) \
     || echo "WARN: Motion-Engine nicht installiert - Brief-Feature bleibt aus"
 
-ENV DVE_DATA=/data DVE_WORKERS=1 DVE_MAX_SECONDS=180 DVE_MAX_MB=300
+ENV DVE_DATA=/data DVE_WORKERS=1 DVE_MAX_SECONDS=180 DVE_MAX_MB=300 \
+    DVE_CHROMIUM=/usr/bin/chromium
 VOLUME /data
 EXPOSE 8000
 # v98: Docker meldet dem Orchestrator/`docker ps`, ob die App wirklich lebt

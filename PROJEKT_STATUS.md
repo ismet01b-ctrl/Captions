@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101q Hotfix Motion-Brief: "Render failed" behoben (Browser-Download).**
+  BEFUND (aus Ismets Live-Screenshot reproduziert): das Brief-Panel erschien
+  live (Docker-Build + Node + npm ci ok), aber jeder Render brach mit "Motion
+  render failed" ab. URSACHE: Remotion zog sich zur RENDER-Zeit Chrome Headless
+  Shell von `remotion.media` — auf einem Server mit Egress-Allowlist (prod)
+  antwortet das mit 403, der Render stirbt. Auch der `remotion browser ensure`
+  im Docker-Build lief ins Leere (gleicher Host geblockt). FIX: kein Runtime-
+  Download mehr. (1) Dockerfile installiert System-`chromium` via apt (bringt
+  seine Chrome-Libs mit), setzt `DVE_CHROMIUM=/usr/bin/chromium`, der nutzlose
+  `remotion browser ensure`-Schritt ist raus. (2) render-brief.mjs findet den
+  Browser automatisch (Flag > `DVE_CHROMIUM`/`REMOTION_BROWSER_EXECUTABLE` >
+  `/usr/bin/chromium` etc.) und reicht ihn als `--browser-executable` an
+  `remotion render`. BEWIESEN in der Sandbox: derselbe Brief aus dem Screenshot
+  ("Dynamic Apple Style Intro for DouchkoVE.") rendert Ende-zu-Ende durch — 218
+  Frames -> 1080x1920 h264, 1.1 MB — sowohl mit explizitem Flag als auch rein
+  ueber die Env-Auto-Erkennung. Beweis-Video an Ismet geschickt.
+
 - **v101p gpt-5 ueberall + Motion-Director LIVE ("Mach live").** ZWEI Dinge:
   (1) MODELL: alle Regie-KI-Aufrufe in render.py ziehen jetzt gpt-5 als
   Default (6 Funktions-Defaults `model='gpt-5'` + 4 `ai_model`-Fallbacks),
