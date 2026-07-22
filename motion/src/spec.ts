@@ -223,6 +223,49 @@ export interface SceneSpec {
   readonly font?: { readonly family: string; readonly url: string };
 }
 
+// ---------------------------------------------------------------------------------------
+// AUTO-OVERLAY (v108): a full uploaded video + AI-directed motion graphics laid ON TOP of it
+// at content-matched timestamps. The AI (GPT-5 vision + transcript) emits a plan of beats;
+// deterministic guardrails enforce density/safe-zones/timing; MotionOverlay composites the
+// video (OffthreadVideo) with the beats. Everything is pure in t (seekable, deterministic).
+
+export type OverlayKind = 'headline' | 'lowerthird' | 'keyword' | 'chips' | 'stat' | 'brand';
+export type OverlayAnchor = 'top' | 'upper' | 'center' | 'lower' | 'bottom';
+export type OverlayEnter = 'rise' | 'pop' | 'slide' | 'wipe';
+
+/** One motion-graphic moment placed over the video. */
+export interface OverlayBeat {
+  readonly t: number;        // start, seconds (absolute video time)
+  readonly dur: number;      // on-screen duration, seconds
+  readonly kind: OverlayKind;
+  readonly text?: string;    // main line (headline/lowerthird/keyword/brand)
+  readonly text2?: string;   // second line (lowerthird sub, brand tagline)
+  readonly items?: readonly string[]; // chips
+  readonly value?: number;   // stat count-up target
+  readonly prefix?: string;
+  readonly suffix?: string;
+  readonly label?: string;   // stat label
+  readonly anchor: OverlayAnchor;
+  readonly enter: OverlayEnter;
+  readonly emphasis: number; // 0..1 → scale / weight / glow
+}
+
+export interface OverlayVideo {
+  readonly src: string;      // staticFile-relative name under public/
+  readonly w: number; readonly h: number; readonly fps: number; readonly duration: number;
+}
+
+export interface OverlayPlan {
+  readonly version: 1;
+  readonly seed: number;
+  readonly video: OverlayVideo;
+  readonly accent: string;
+  readonly logo?: string;    // brand image data URI (Pillar 2, in overlays too)
+  readonly font?: { readonly family: string; readonly url: string };
+  readonly platform?: 'tiktok' | 'reels' | 'shorts' | 'none'; // safe-zone masks
+  readonly beats: readonly OverlayBeat[];
+}
+
 /** Runtime guard: the AI director's JSON is validated before it ever reaches the renderer. */
 export function isSceneSpec(x: unknown): x is SceneSpec {
   if (typeof x !== 'object' || x === null) return false;

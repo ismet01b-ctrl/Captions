@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v108 FULL-CUSTOMIZABLE: Video hochladen -> KI legt Motion-Graphics drauf (Ismet:
+  "ein User laedt ein Video hoch, eine KI entscheidet was wie rein kommt. Muss unseren
+  High-Quality-Standard erfuellen, wie ein Senior-Motion-Designer denken. Kein billiger
+  Standard-Muell. Aufwendig, dynamisch, hand-made, logische Denkweise als Standard").**
+  Entscheidungen (via Frage): Overlay AUFS Video + KI sieht Frames+Transkript + alles in
+  einem Rutsch. Komplett neue Pipeline (getrennt von Captions):
+  1) UPLOAD (/api/motion/auto): Video streamen (Cap 400MB/15min), Credits nach Laenge.
+  2) VERSTEHEN: Whisper-Transkript (render.transcribe, Wort-Timings) + 6 Frames (ffmpeg).
+  3) REGIE (autoDirect.ts, der Senior-Brain): GPT-5-VISION bekommt Transkript + Frames,
+     REGIE_AUTO-Prompt (SENIOR MOTION DESIGNER: sparsam, aufs Wort gelandet, Bedeutung
+     zuerst, Varianz der Platzierung, ans Material angepasst, kein Clutter) -> Plan von
+     Beats {t,dur,kind,text,anchor,enter,emphasis}. Heuristik-Fallback (aus Wort-Timings:
+     Hook-Headline, Keyword-Pops, Stat bei Zahlen, Chips, Lower-Thirds, Brand-Signoff)
+     laeuft ohne Key/offline.
+  4) LEITPLANKEN (autoGuards.ts, "logische Denkweise als Standard"): sanitize (Junk raus)
+     -> Snap auf Wort-Onset -> sort -> KEIN Overlap (Atempause zwischen Beats) -> Dichte-
+     Cap nach Videolaenge -> Anker abwechseln -> in Video clippen. Node-Unit-Test.
+  5) RENDER (MotionOverlay.tsx): OffthreadVideo (Original-Ton bleibt) + Beats obendrauf,
+     jede in Safe-Zone mit Senior-Animation (Feder-Entrance je Stil + Defocus-Out), eine
+     Bildsprache (dunkles Glas + Akzent). Kinds: headline/lowerthird/keyword/chips/stat/
+     brand. Brand: eigenes Logo (Pfeiler 2). Plattform-Safe-Zones (tiktok/reels/shorts).
+  UI: 4. Motion-Typ "From your video" (Upload + Akzent + Plattform + Brand).
+  BEWEIS: Ende-zu-Ende auf synthetischem Video (st_clip) + Heuristik gerendert -> Headline
+  "Ich zeig dir heute wie wir Captions" + Akzentlinie, dann Chips im Lower-Band, getimt
+  aufs Transkript, Original-Ton drin (overlay.mp4). 25s Render. tsc clean, Guards-Test
+  gruen. Regression 683/683. EHRLICH: KI-Regie (GPT-5-Vision) ist hier NICHT getestet
+  (kein Key) - nur der Render/Overlay + Heuristik + Guards; die echte Senior-Qualitaet
+  der KI-Entscheidungen siehst Ismet erst live mit seinem Key auf echtem Material.
+
 - **v107d Echtes GPU-Post ausprobiert - und es rendert auf CPU! (Ismet: "hatte doch
   gesagt, wir sollen es probieren").** Ich hatte Bloom/DoF als "braucht GPU" abgetan -
   Ismet wollte es trotzdem testen. Ergebnis: @react-three/postprocessing + postprocessing

@@ -7,6 +7,7 @@ import { MotionVideo, type MotionProps } from './MotionVideo';
 import { Motion3D } from './Motion3D';
 import { MotionApple } from './MotionApple';
 import { MotionSequence } from './MotionSequence';
+import { MotionOverlay, type MotionOverlayProps } from './MotionOverlay';
 import { demoProps } from './demo-spec';
 
 const calculateMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) => {
@@ -17,6 +18,21 @@ const calculateMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) =>
     fps: spec.fps,
     durationInFrames: Math.max(1, Math.round(spec.duration * spec.fps)),
   };
+};
+
+// Auto-overlay derives canvas + duration straight from the source video.
+const overlayMetadata: CalculateMetadataFunction<MotionOverlayProps> = ({ props }) => {
+  const { plan } = props;
+  return {
+    width: plan.video.w,
+    height: plan.video.h,
+    fps: plan.video.fps,
+    durationInFrames: Math.max(1, Math.round(plan.video.duration * plan.video.fps)),
+  };
+};
+
+const overlayDemo: MotionOverlayProps = {
+  plan: { version: 1, seed: 1, accent: '#e0483d', video: { src: 'demo.mp4', w: 1080, h: 1920, fps: 30, duration: 6 }, beats: [] },
 };
 
 export const RemotionRoot: React.FC = () => {
@@ -62,6 +78,17 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={demoProps}
         calculateMetadata={calculateMetadata}
         durationInFrames={252}
+        fps={30}
+        width={1080}
+        height={1920}
+      />
+      {/* v108: Auto-Overlay - hochgeladenes Video + KI-gesteuerte Motion-Beats obendrauf. */}
+      <Composition
+        id="MotionOverlay"
+        component={MotionOverlay}
+        defaultProps={overlayDemo}
+        calculateMetadata={overlayMetadata}
+        durationInFrames={180}
         fps={30}
         width={1080}
         height={1920}

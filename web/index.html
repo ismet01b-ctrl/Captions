@@ -1510,6 +1510,39 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
                 a full mini-promo, no editing.</p>
               <span class="tc-go">Build a sequence →</span>
             </button>
+            <button class="mo-type-card" type="button" id="moTypeAuto">
+              <div class="tc-ic">🎥</div>
+              <h3>From your video</h3>
+              <p>Upload a clip. An AI watches it and directs bespoke motion graphics
+                onto it — like a senior designer, matched to what you say and show.</p>
+              <span class="tc-go">Upload a video →</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP: UPLOAD (auto-overlay engine) -->
+        <div class="mo-step-view" data-key="upload">
+          <h2 class="step-title">Upload your video</h2>
+          <p class="step-sub">The AI transcribes it, watches the footage, and places motion
+            graphics where they add impact — dynamic, hand-made, never cluttered.</p>
+          <div class="panel">
+            <label class="brand-file" style="height:120px; font-size:15px;">
+              <input type="file" id="moAutoFile" accept="video/*">
+              <span data-brand="video">＋ Choose a video</span>
+            </label>
+            <label class="mo-lab" style="margin-top:16px;">Accent color</label>
+            <input type="color" class="mo-color" id="moAccentAuto" value="#e0483d">
+            <label class="mo-lab" style="margin-top:16px;">Platform safe-zone <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
+            <div class="seg" id="moAutoPlatform"></div>
+            <label class="mo-lab" style="margin-top:16px;">Your brand <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
+            <div class="brand-row">
+              <label class="brand-file"><input type="file" id="moLogoAuto" accept="image/*"><span data-brand="logo">＋ Logo</span></label>
+              <label class="brand-file"><input type="file" id="moFontAuto" accept=".ttf,.otf,.woff,.woff2"><span data-brand="font">＋ Font</span></label>
+            </div>
+          </div>
+          <div class="mo-nav">
+            <button class="btn secondary" data-mo-back type="button">Back</button>
+            <button class="btn" data-mo-next type="button">Continue →</button>
           </div>
         </div>
 
@@ -2843,15 +2876,31 @@ async function initMotion(){
   });
   // v101y: Wizard-Navigation (Schritt fuer Schritt wie Captions).
   Motion.briefOk = !!(State.user && State.user.motion_brief);
-  const tb=$('#moTypeBrief'), tt=$('#moTypeTemplate'), ts=$('#moTypeSequence');
+  const tb=$('#moTypeBrief'), tt=$('#moTypeTemplate'), ts=$('#moTypeSequence'), ta=$('#moTypeAuto');
   if(tb) tb.onclick=()=>setMoEngine('brief');
   if(tt) tt.onclick=()=>setMoEngine('template');
   if(ts) ts.onclick=()=>setMoEngine('sequence');
+  if(ta) ta.onclick=()=>setMoEngine('auto');
   if(tb && !Motion.briefOk){
     tb.setAttribute('disabled','');
     const g=tb.querySelector('.tc-go'); if(g) g.textContent='Warming up — try again soon';
   }
   if(ts && !Motion.briefOk) ts.setAttribute('disabled','');
+  if(ta && !Motion.briefOk) ta.setAttribute('disabled','');
+  // auto-overlay: file feedback + platform seg + accent
+  const _av=$('#moAutoFile');
+  if(_av) _av.onchange=()=>{ const lab=_av.closest('.brand-file'); const sp=lab&&lab.querySelector('span'); const f=_av.files&&_av.files[0];
+    if(sp){ if(f){ sp.textContent='🎬 '+(f.name.length>22?f.name.slice(0,20)+'…':f.name); lab.classList.add('on'); } else { sp.textContent='＋ Choose a video'; lab.classList.remove('on'); } } };
+  [['moLogoAuto','logo'],['moFontAuto','font']].forEach(([id,kind])=>{ const el=$('#'+id); if(!el) return;
+    el.onchange=()=>{ const lab=el.closest('.brand-file'); const sp=lab&&lab.querySelector('span'); const f=el.files&&el.files[0];
+      if(sp){ if(f){ sp.textContent=(f.name.length>14?f.name.slice(0,12)+'…':f.name); lab.classList.add('on'); } else { sp.textContent=(kind==='logo'?'＋ Logo':'＋ Font'); lab.classList.remove('on'); } } }; });
+  const _apl=$('#moAutoPlatform');
+  if(_apl){ Motion.autoPlatform='';
+    [['','None'],['tiktok','TikTok'],['reels','Reels'],['shorts','Shorts']].forEach(([v,l])=>{
+      const b=document.createElement('button'); b.type='button'; b.className='seg-b'+(v===''?' on':''); b.textContent=l;
+      b.onclick=()=>{ Motion.autoPlatform=v; _apl.querySelectorAll('.seg-b').forEach(x=>x.classList.remove('on')); b.classList.add('on'); };
+      _apl.appendChild(b); }); }
+  const _aac=$('#moAccentAuto'); if(_aac){ _aac.oninput=()=>{ Motion.autoAccent=_aac.value; }; Motion.autoAccent=_aac.value||'#e0483d'; }
   const _sa=$('#moSeqAdd'); if(_sa) _sa.onclick=()=>{ (State.seqRows=State.seqRows||[]).push({template:'pills',text:''}); renderSeqRows(); };
   const _asq=$('#moAccentSeq'); if(_asq) _asq.oninput=()=>{ Motion.seqAccent=_asq.value; };
   Motion.seqAccent = (_asq&&_asq.value)||'#e0483d';
@@ -2866,11 +2915,12 @@ async function initMotion(){
 
 const MO_ENGINE_STEPS = { brief:['type','describe','render'],
                           template:['type','template','style','render'],
-                          sequence:['type','build','render'] };
+                          sequence:['type','build','render'],
+                          auto:['type','upload','render'] };
 const MO_STEP_LABELS = { type:'Type', describe:'Describe', template:'Template',
-                         style:'Style', build:'Build', render:'Generate' };
+                         style:'Style', build:'Build', upload:'Upload', render:'Generate' };
 function setMoEngine(eng){
-  if((eng==='brief'||eng==='sequence') && !Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
+  if((eng==='brief'||eng==='sequence'||eng==='auto') && !Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
   Motion.engine=eng; Motion.stepKeys=MO_ENGINE_STEPS[eng];
   renderMoStepper(); goMoStep(1);
 }
@@ -2911,8 +2961,9 @@ function goMoStep(i){
     const bg=$('#moBriefGo'), rn=$('#moRender');
     if(bg) bg.style.display=(Motion.engine==='brief')?'':'none';
     if(rn){
-      rn.style.display=(Motion.engine==='template'||Motion.engine==='sequence')?'':'none';
+      rn.style.display=(Motion.engine==='template'||Motion.engine==='sequence'||Motion.engine==='auto')?'':'none';
       if(Motion.engine==='sequence'){ rn.textContent='Generate sequence · 1 credit'; rn.onclick=motionSeqGo; }
+      else if(Motion.engine==='auto'){ rn.textContent='Generate from video · by length'; rn.onclick=motionAutoGo; }
       else { rn.textContent='Generate template · 1 credit'; rn.onclick=motionTemplateGo; }
     }
   }
@@ -2977,6 +3028,32 @@ async function motionSeqGo(){
     if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
     if(!r.ok) throw 0;
     const j=await r.json();
+    motionPoll(j.jid, st, btn, orig);
+  }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
+}
+
+async function motionAutoGo(){
+  const btn=$('#moRender'); const st=$('#moStatus');
+  const fEl=$('#moAutoFile'); const file=fEl&&fEl.files&&fEl.files[0];
+  if(!file){ toast('Choose a video first.','err'); return; }
+  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Uploading …';
+  st.style.display='block'; st.textContent='Uploading your video …';
+  try{
+    const fd=new FormData();
+    fd.append('video', file);
+    fd.append('accent', Motion.autoAccent||'#e0483d');
+    if(Motion.autoPlatform) fd.append('platform', Motion.autoPlatform);
+    const _lg=$('#moLogoAuto'), _ft=$('#moFontAuto');
+    if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
+    if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);
+    const r=await fetch('/api/motion/auto',{method:'POST', body:fd});
+    if(r.status===402){ st.textContent='Not enough credits for this video.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
+    if(r.status===413){ st.textContent='Video too large or too long.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
+    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
+    if(!r.ok) throw 0;
+    const j=await r.json();
+    st.textContent='Directing your motion …';
     motionPoll(j.jid, st, btn, orig);
   }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
 }

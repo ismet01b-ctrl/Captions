@@ -1805,10 +1805,90 @@ def _run_motion_brief(jid):
         _maybe_refund(jid)
 
 
+def _run_motion_auto(jid):
+    """v108: hochgeladenes Video -> KI-Regisseur (Whisper-Transkript + Frames ->
+    autoDirect, denkt wie ein Senior-Motion-Designer) -> Motion-Graphics als Overlay
+    aufs Video (MotionOverlay). Transkription laeuft ueber Ismets OPENAI_API_KEY."""
+    j = JOBS[jid]
+    d = job_dir(jid)
+    src = j['auto_video']
+    out = os.path.join(d, 'fertig.mp4')
+    set_state(jid, status='laeuft', phase='Understanding your video …',
+              progress=0.08, log_tail=[])
+    # 1) Transkript (Whisper) - transcribe() nutzt sys.exit bei Fehlern -> abfangen.
+    try:
+        import render as _render
+        words = _render.transcribe(src, j.get('language', 'auto'))
+    except SystemExit as e:
+        set_state(jid, status='fehler', progress=0,
+                  msg='Could not transcribe the video.', detail=str(e))
+        _maybe_refund(jid)
+        return
+    except Exception as e:
+        set_state(jid, status='fehler', progress=0,
+                  msg='Could not transcribe the video.',
+                  detail=f'{type(e).__name__}: {e}')
+        _maybe_refund(jid)
+        return
+    wpath = os.path.join(d, 'words.json')
+    with open(wpath, 'w', encoding='utf-8') as f:
+        json.dump(words, f)
+    # 2) Frames fuer die KI-Vision (best effort).
+    fdir = os.path.join(d, 'frames')
+    os.makedirs(fdir, exist_ok=True)
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', src,
+                        '-vf', 'fps=1/2,scale=320:-1', '-frames:v', '6',
+                        os.path.join(fdir, 'f%02d.jpg')], check=False, timeout=120)
+    except Exception:
+        pass
+    set_state(jid, phase='Directing your motion like a senior designer …', progress=0.2)
+    # 3) render-auto.mjs: autoDirect (AI/Heuristik) -> MotionOverlay.
+    cmd = ['node', os.path.join('scripts', 'render-auto.mjs'),
+           os.path.abspath(src), os.path.abspath(out),
+           '--transcript=' + os.path.abspath(wpath), '--frames=' + os.path.abspath(fdir)]
+    if j.get('accent'):
+        cmd.append('--accent=' + str(j['accent']))
+    if j.get('platform'):
+        cmd.append('--platform=' + str(j['platform']))
+    if j.get('logo_path') and os.path.exists(j['logo_path']):
+        cmd.append('--logo=' + os.path.abspath(j['logo_path']))
+    if j.get('font_path') and os.path.exists(j['font_path']):
+        cmd.append('--font=' + os.path.abspath(j['font_path']))
+    p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, bufsize=1)
+    JOBS[jid]['pid'] = p.pid
+    log = []
+    for line in p.stdout:
+        log.append(line.rstrip())
+        m = re.search(r'Rendered (\d+)/(\d+)', line)
+        if m:
+            fr, tot = int(m.group(1)), max(int(m.group(2)), 1)
+            set_state(jid, progress=0.25 + 0.7 * fr / tot,
+                      phase='Laying the motion onto your video …')
+    p.wait()
+    if p.returncode == 0 and os.path.exists(out):
+        try:
+            subprocess.run(['ffmpeg', '-y', '-v', 'error', '-ss', '1.0',
+                            '-i', out, '-frames:v', '1', '-vf', 'scale=360:-2',
+                            os.path.join(d, 'poster.jpg')], check=False, timeout=30)
+        except Exception:
+            pass
+        set_state(jid, status='fertig', progress=1.0, phase='Done',
+                  video_url=f'/api/video/{jid}')
+    else:
+        set_state(jid, status='fehler', progress=0, msg='Motion render failed.',
+                  detail='\n'.join([x for x in log[-15:] if x.strip()]))
+        _maybe_refund(jid)
+
+
 def _run_motion(jid):
     """Motion-Graphics-Render (UI-Motion-Engine) statt Caption-Pipeline.
     Eine JSON treibt alles; gfx_engine wird als Subprocess aufgerufen."""
     j = JOBS[jid]
+    if j.get('auto_video'):                   # v108: Video hochladen -> KI-Auto-Overlay
+        return _run_motion_auto(jid)
     if j.get('brief'):                        # v101p: Brief->Motion-Director
         return _run_motion_brief(jid)
     d = job_dir(jid)
@@ -2971,6 +3051,93 @@ async def motion_brief(request: Request, brief: str = Form(...),
                  'no_text': _notext, 'd3': _d3, 'template': _tpl, 'accent': _acc,
                  'sequence': _seq, 'assets_path': _assets_path,
                  'cost_sec': MOTION_COST_SEC, 'status': 'wartet'}
+    set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
+    MQUEUE.put(jid)
+    return {'jid': jid, 'status_url': f'/api/status/{jid}'}
+
+
+MOTION_AUTO_MAX_MB = 400        # Upload-Cap fuers Auto-Overlay-Video
+MOTION_AUTO_MAX_SEC = 900       # max. Videolaenge (15 min)
+
+
+@app.post('/api/motion/auto')
+async def motion_auto(request: Request, video: UploadFile = File(...),
+                      accent: str = Form(''), platform: str = Form(''),
+                      logo: UploadFile = File(None), font: UploadFile = File(None)):
+    """v108 Full-customizable: der Nutzer laedt ein Video hoch, eine KI (Whisper-
+    Transkript + Frames -> autoDirect, denkt wie ein Senior-Motion-Designer) entscheidet
+    WAS wann WIE als Motion-Graphic aufs Video kommt. Kostet nach Videolaenge (wie
+    Captions), laeuft ueber die Motion-Fast-Lane."""
+    u = _require_user(request)
+    if not MOTION_BRIEF_OK:
+        raise HTTPException(503, 'The motion director is warming up on this server - '
+                                 'try again shortly.')
+    jid = uuid.uuid4().hex[:12]
+    d = job_dir(jid)
+    os.makedirs(d, exist_ok=True)
+    src = os.path.join(d, 'source.mp4')
+    # Video streamen (mit Cap), damit grosse Uploads den Speicher nicht sprengen.
+    cap = MOTION_AUTO_MAX_MB * 1024 * 1024
+    total = 0
+    try:
+        with open(src, 'wb') as f:
+            while True:
+                chunk = await video.read(1 << 20)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > cap:
+                    raise HTTPException(413, f'Video too large (max {MOTION_AUTO_MAX_MB} MB).')
+                f.write(chunk)
+    except HTTPException:
+        shutil.rmtree(d, ignore_errors=True)
+        raise
+    if total == 0:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(400, 'Upload a video first.')
+    # Dauer pruefen (ffprobe) -> Credits nach Laenge.
+    try:
+        _pr = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                              '-of', 'default=noprint_wrappers=1:nokey=1', src],
+                             capture_output=True, text=True, timeout=30)
+        dur = float((_pr.stdout or '0').strip() or 0)
+    except Exception:
+        dur = 0.0
+    if dur <= 0:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(400, 'Could not read that video (is it a valid file with audio?).')
+    if dur > MOTION_AUTO_MAX_SEC:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(413, 'Video too long (max 15 min).')
+    _cost = cost_seconds(dur)
+    if not _reserve_credits(u['id'], _cost, jid):
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(402, 'Not enough credits for this video.')
+    _acc = str(accent).strip()
+    _acc = _acc if re.match(r'^#[0-9a-fA-F]{6}$', _acc) else ''
+    _plat = str(platform).strip().lower()
+    _plat = _plat if _plat in ('tiktok', 'reels', 'shorts') else ''
+
+    async def _save_asset(up, allowed, name):
+        if not up or not getattr(up, 'filename', ''):
+            return ''
+        _ext = os.path.splitext(up.filename)[1].lower()
+        if _ext not in allowed:
+            return ''
+        _b = await up.read(4 * 1024 * 1024 + 1)
+        if not _b or len(_b) > 4 * 1024 * 1024:
+            return ''
+        _p = os.path.join(d, name + _ext)
+        with open(_p, 'wb') as _f:
+            _f.write(_b)
+        return _p
+    _logo_p = await _save_asset(logo, ('.png', '.jpg', '.jpeg', '.webp', '.svg'), 'brandlogo')
+    _font_p = await _save_asset(font, ('.ttf', '.otf', '.woff', '.woff2'), 'brandfont')
+
+    JOBS[jid] = {'kind': 'motion', 'auto_video': src, 'user_id': u['id'],
+                 'name': 'AutoMotion.mp4', 'dauer': dur, 'accent': _acc,
+                 'platform': _plat, 'logo_path': _logo_p, 'font_path': _font_p,
+                 'cost_sec': _cost, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}

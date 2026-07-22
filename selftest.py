@@ -1935,6 +1935,43 @@ def _scenario_logic(clip, transcript, tmp):
           and '<DepthOfField' in _m3d and '<Vignette' in _m3d
           and '@react-three/postprocessing' in _mpkg2 and '"postprocessing"' in _mpkg2)
 
+    # v108 Full-customizable: Video hochladen -> KI entscheidet Motion-Graphics als Overlay.
+    _mov = os.path.join(HERE, 'motion', 'src')
+    _msrc = lambda p: open(os.path.join(_mov, p), encoding='utf-8').read()
+    _mo = _msrc('MotionOverlay.tsx'); _mad = _msrc('director/autoDirect.ts')
+    _mag = _msrc('director/autoGuards.ts'); _msp = _msrc('spec.ts')
+    _mrt3 = _msrc('Root.tsx')
+    check('v108: Overlay-Composition (Video + getimte Beats obendrauf)',
+          '<OffthreadVideo' in _mo and 'plan.beats.map' in _mo
+          and 'OverlayPlan' in _msp and 'OverlayBeat' in _msp
+          and 'id="MotionOverlay"' in _mrt3)
+    check('v108: KI-Regisseur (Senior-Brain) + Heuristik-Fallback',
+          'export function heuristicAuto' in _mad and 'async function gptAuto' in _mad
+          and 'SENIOR MOTION DESIGNER' in _mad and 'image_url' in _mad   # Vision
+          and "process.env['OPENAI_API_KEY']" in _mad)
+    check('v108: Qualitaets-Leitplanken (kein Overlap, Dichte, Snap auf Wort)',
+          'export function guardPlan' in _mag and 'de-overlap' in _mag
+          and 'density cap' in _mag and 'onsets' in _mag)
+    _mrb3 = open(os.path.join(HERE, 'motion', 'scripts', 'render-auto.mjs'), encoding='utf-8').read()
+    _mra = open(os.path.join(HERE, 'motion', 'src', 'director', 'run-auto.ts'), encoding='utf-8').read()
+    check('v108: Render-Bridge + Server + UI verdrahtet',
+          "'MotionOverlay'" in _mrb3 and 'JSON.stringify({ plan })' in _mra
+          and 'def _run_motion_auto' in _srv_m and "j.get('auto_video')" in _srv_m
+          and '_render.transcribe(' in _srv_m and 'render-auto.mjs' in _srv_m
+          and 'id="moTypeAuto"' in _ui_m and 'function motionAutoGo' in _ui_m
+          and "auto:['type','upload','render']" in _ui_m)
+    _mgroot = os.path.join(HERE, 'motion')
+    if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
+        try:
+            _tg = subprocess.run(['node', 'scripts/test-autoguards.mjs'], cwd=_mgroot,
+                                 capture_output=True, text=True, timeout=120)
+            check('v108: autoGuards Node-Unit-Test (kein Overlap/Junk/Dichte)',
+                  _tg.returncode == 0, (_tg.stdout + _tg.stderr)[-200:])
+        except Exception as _e:
+            check('v108: autoGuards Node-Unit-Test', False, str(_e))
+    else:
+        check('v108: autoGuards Node-Unit-Test (node fehlt -> skip)', True)
+
     check('v101w: Server + UI reichen den 3D-Schalter durch',
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
           and 'id="moBrief3d"' in _ui_m and "fd.append('d3'" in _ui_m)
