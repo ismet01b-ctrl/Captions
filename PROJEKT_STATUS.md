@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v105 iOS-26 Liquid-Glass-Look + interaktive Transitions + Synth-Sounds raus
+  (Ismet: "alle Templates im iOS-26-Liquid-Glass-Stil, damit alles aktuell bleibt.
+  Transition muss interagieren - bei der Suche drueckt man suchen, dann kommt passend
+  das naechste. Nimm die synthetischen Sounds raus, klingen grauenhaft").** DREI Sachen:
+  (1) LIQUID GLASS ueberall: neuer glass()-Helper (durchscheinend, backdrop blur+saturate
+  180%, Spekular-Rand, Tiefe) + farbiger Liquid-Hintergrund (LiquidBg: 3 Akzent-getoente
+  Blobs, damit das Glas Farbe bricht). Angewandt auf Pills, App-Card, Search-Feld, Dock,
+  Chat-Bubbles/Input, Notify-Banner - alles frosted Glas ueber vibrierender Farbe statt
+  flachem Weiss. (2) INTERAKTIVE Transition: der Uebergang wird durch die Aktion der Szene
+  AUSGELOEST. MotionSequence berechnet einen press-Ramp, der ~0.2s VOR dem Exit auf 1
+  geht; AppleScene bekommt press und spielt die Bedien-Aktion: Search -> Feld leuchtet im
+  Akzent auf, Waveform + Vorschlaege klappen weg (submit), Ripple; App-Card -> "Open"
+  gedrueckt; Home -> erste App gedrueckt; Chat -> Sende-Button; Notify -> Banner. Erst die
+  Aktion, DANN faehrt die Kamera. (3) Die 6 synthetischen SFX + gen_sfx.py GELOESCHT
+  (klangen schlecht) - Verdrahtung bleibt dormant, Sequenz rendert stumm bis ein echtes
+  Pack in public/sfx liegt (Regel "Stille besser als billiger Ton"). BEWEIS: 6-Segment-
+  Kette gerendert - Glas-Look-Streifen (alle Szenen durchscheinend/farbig) + Search-Press-
+  Streifen (tippen -> suchen druecken: Feld leuchtet, Vorschlaege weg -> naechste Szene
+  faehrt rein). tsc clean. Regression 673/673.
+
 - **v104 Pfeiler 2: eigene Bilder/Logos/Schriften ueberall (Ismet: "jeder soll seine
   eigenen Bilder, Logos, Schriften etc. ueberall einfuegen koennen").** Erste Version.
   EIGENES LOGO/BILD: ersetzt das App-Icon in App card, die erste Kachel im Home screen,

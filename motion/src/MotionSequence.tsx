@@ -90,12 +90,19 @@ export const MotionSequence: React.FC<MotionSequenceProps> = ({ spec }) => {
             : outroAff(tout);
         const aff = composeAffine(enterAff, exitAff);
 
+        // The transition is INTERACTIVE: just before a scene hands off, its own control is
+        // "pressed" (search submitted, Open tapped, message sent…), and that press drives the
+        // camera move. press ramps to 1 in the ~0.2s BEFORE the exit, then the motion follows.
+        const pressLead = Math.round(0.22 * fps);
+        const pressDur = Math.max(1, Math.round(0.14 * fps));
+        const press = i < n - 1 ? clamp01((local - (durF - tf - pressLead)) / pressDur) : 0;
+
         const segSpec: SceneSpec = { ...spec, ui: seg.ui, seed: spec.seed + i * 97, sequence: undefined as never };
 
         return (
           <Sequence key={i} from={startF} durationInFrames={durF} layout="none">
             <AbsoluteFill style={layerStyle(aff)}>
-              <AppleScene spec={segSpec} />
+              <AppleScene spec={segSpec} press={press} />
             </AbsoluteFill>
           </Sequence>
         );

@@ -2027,18 +2027,15 @@ def _scenario_logic(clip, transcript, tmp):
           and 'blurX' not in _mtr
           and 'rotateX' in _mtr and 'rotateY' in _mtr
           and 'perspective(' in _mseq)
-    check('v103b: Sound pro Transition - nur bei vorhandenem Asset, sonst stumm',
+    # Sound-Verdrahtung bleibt (mountet <Audio> NUR bei vorhandenem CC0-Asset), aber es
+    # werden KEINE synthetischen Sounds mehr ausgeliefert (Ismet: klangen grauenhaft) ->
+    # die Sequenz rendert stumm, bis ein echtes Pack in public/sfx liegt.
+    check('v103b: Sound-Verdrahtung dormant - kein synthetisches SFX ausgeliefert',
           '<Audio' in _mseq and "staticFile(`sfx/" in _mseq
           and 'spec.sfx' in _mseq
           and "existsSync(join(process.cwd(), 'public', 'sfx'" in _mrun
-          and 'MOTION_TRANSITIONS' in _srv_m and "o.transition=r.transition" in _ui_m)
-    # Die 6 designten Transition-SFX liegen als Asset vor (sonst rendert die Sequenz
-    # stumm) + der Generator ist im Repo (reproduzierbar, dokumentierte Herkunft).
-    _sfxdir = os.path.join(HERE, 'motion', 'public', 'sfx')
-    check('v103b: 6 Transition-SFX-Assets vorhanden + Generator im Repo',
-          all(os.path.exists(os.path.join(_sfxdir, k + '.wav'))
-              for k in ('whoosh', 'whoosh2', 'swish', 'airy', 'click', 'pop'))
-          and os.path.exists(os.path.join(HERE, 'motion', 'scripts', 'gen_sfx.py')))
+          and not os.path.isdir(os.path.join(HERE, 'motion', 'public', 'sfx'))
+          and not os.path.exists(os.path.join(HERE, 'motion', 'scripts', 'gen_sfx.py')))
     if shutil.which('node') and os.path.isdir(os.path.join(_mroot2, 'node_modules')):
         try:
             _tr2 = subprocess.run(['node', 'scripts/test-transitions.mjs'], cwd=_mroot2,
@@ -2070,6 +2067,22 @@ def _scenario_logic(clip, transcript, tmp):
           'id="moLogo"' in _ui_m and 'id="moFont"' in _ui_m
           and 'id="moLogoSeq"' in _ui_m and 'id="moFontSeq"' in _ui_m
           and "fd.append('logo'" in _ui_m and "fd.append('font'" in _ui_m)
+
+    # v105: iOS-26 Liquid-Glass-Look fuer alle Mockups + INTERAKTIVE Transitions
+    # (Aktion loest den Uebergang aus: Suche druecken -> naechstes kommt).
+    check('v105: Liquid-Glass-System (Glas-Helper + farbiger Liquid-Hintergrund)',
+          'const glass = ' in _mas and 'backdropFilter' in _mas
+          and 'saturate(180%)' in _mas and 'LiquidBg' in _mas
+          and 'hueFromAccent(accent)' in _mas)
+    check('v105: interaktive Transition - Press treibt den Uebergang',
+          'press?: number' in _mas and 'press={press}' in _mseq
+          and "clamp01((local - (durF - tf - pressLead))" in _mseq)
+    # Die Kern-Interaktion: bei Search klappt beim "Suchen druecken" der Vorschlags-
+    # Layer weg + Feld leuchtet im Akzent (submit = press).
+    check('v105: Search - "Suchen druecken" (Vorschlaege weg, Feld leuchtet)',
+          'const submit = clamp01(press)' in _mas
+          and 'opacity: 1 - submit' in _mas
+          and '<Ripple press={submit}' in _mas)
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.

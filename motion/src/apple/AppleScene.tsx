@@ -64,25 +64,65 @@ const StatusBar: React.FC<{ W: number; u: number; color?: string }> = ({ W, u, c
   );
 };
 
-const Field: React.FC<{ children: React.ReactNode; wallpaper?: boolean; font?: string }> = ({ children, wallpaper, font }) => (
-  <AbsoluteFill style={{ fontFamily: font ?? FONT }}>
+// iOS-26 "Liquid Glass": translucent surfaces that blur + saturate what's behind them, with
+// a bright specular rim and layered depth. hueFromAccent(accent) tints a colourful liquid
+// background so the glass has something to refract — the hallmark of the look.
+const LiquidBg: React.FC<{ accent: string; wallpaper?: boolean }> = ({ accent, wallpaper }) => {
+  const h = hueFromAccent(accent);
+  const blob = (x: string, y: string, w: string, hh: string, hue: number, a: number, b: number): React.CSSProperties => ({
+    position: 'absolute', left: x, top: y, width: w, height: hh, borderRadius: '50%',
+    filter: `blur(${b}px)`, background: `hsla(${((hue % 360) + 360) % 360}, 88%, 62%, ${a})`,
+  });
+  return (
     <AbsoluteFill style={{
       background: wallpaper
-        ? 'linear-gradient(160deg, #b9d0ff 0%, #e7ecfb 42%, #f3e9ff 100%)'
-        : 'radial-gradient(120% 90% at 50% 16%, #ffffff 0%, #eef2f9 46%, #dbe4f3 100%)',
-    }} />
+        ? `linear-gradient(160deg, hsl(${h},72%,90%), hsl(${(h + 40) % 360},64%,93%), hsl(${(h + 305) % 360},70%,91%))`
+        : 'radial-gradient(125% 95% at 50% 8%, #ffffff 0%, #eef2f9 48%, #dde6f4 100%)',
+    }}>
+      <div style={blob('-12%', '4%', '72%', '42%', h, wallpaper ? 0.5 : 0.34, 72)} />
+      <div style={blob('44%', '40%', '68%', '46%', h + 52, wallpaper ? 0.44 : 0.3, 82)} />
+      <div style={blob('8%', '70%', '64%', '38%', h + 308, wallpaper ? 0.42 : 0.28, 84)} />
+    </AbsoluteFill>
+  );
+};
+
+const Field: React.FC<{ children: React.ReactNode; wallpaper?: boolean; font?: string; accent: string }> = ({ children, wallpaper, font, accent }) => (
+  <AbsoluteFill style={{ fontFamily: font ?? FONT }}>
+    <LiquidBg accent={accent} wallpaper={!!wallpaper} />
     {children}
   </AbsoluteFill>
 );
 
-const softCard = (u: number, strong = false): React.CSSProperties => ({
-  background: 'linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%)',
-  borderRadius: u * 0.05,
-  boxShadow: strong
-    ? `0 ${u * 0.04}px ${u * 0.1}px rgba(20,40,80,0.22), 0 ${u * 0.01}px ${u * 0.02}px rgba(20,40,80,0.12)`
-    : `0 ${u * 0.03}px ${u * 0.07}px rgba(30,50,90,0.16), 0 ${u * 0.008}px ${u * 0.02}px rgba(30,50,90,0.1)`,
-  border: '1px solid rgba(255,255,255,0.9)',
-});
+/** Liquid-glass surface: translucent, backdrop blur+saturate, specular rim, depth shadow. */
+const glass = (u: number, opts: { radius?: number; alpha?: number; blur?: number; strong?: boolean; tint?: string } = {}): React.CSSProperties => {
+  const { radius = u * 0.055, alpha = 0.52, blur = 26, strong = false, tint } = opts;
+  const bf = `blur(${blur}px) saturate(180%)`;
+  return {
+    background: tint
+      ? `linear-gradient(180deg, ${tint}, ${tint})`
+      : `linear-gradient(180deg, rgba(255,255,255,${Math.min(0.9, alpha + 0.2)}) 0%, rgba(255,255,255,${Math.max(0.16, alpha - 0.08)}) 100%)`,
+    backdropFilter: bf,
+    WebkitBackdropFilter: bf,
+    borderRadius: radius,
+    border: '1px solid rgba(255,255,255,0.6)',
+    boxShadow: `0 ${u * (strong ? 0.05 : 0.03)}px ${u * (strong ? 0.13 : 0.08)}px rgba(20,40,80,0.24), `
+      + `inset 0 1.5px 1px rgba(255,255,255,0.85), inset 0 -${u * 0.007}px ${u * 0.014}px rgba(20,40,80,0.07)`,
+  } as React.CSSProperties;
+};
+
+// Retained name; now a liquid-glass surface so existing call sites pick up the new look.
+const softCard = (u: number, strong = false): React.CSSProperties => glass(u, { strong, alpha: 0.5 });
+
+/** A quick press feedback: expanding ripple ring at the tapped control. */
+const Ripple: React.FC<{ press: number; size: number; color: string }> = ({ press, size, color }) => {
+  if (press <= 0.001) return null;
+  const p = press;
+  return (
+    <div style={{ position: 'absolute', left: '50%', top: '50%', width: size, height: size, borderRadius: '50%',
+      transform: `translate(-50%,-50%) scale(${(0.3 + p * 1.5).toFixed(3)})`, border: `2px solid ${color}`,
+      opacity: (1 - p) * 0.7, pointerEvents: 'none' }} />
+  );
+};
 
 const Stars: React.FC<{ size: number; color: string }> = ({ size, color }) => (
   <svg width={size * 5.6} height={size} viewBox="0 0 56 10">
@@ -142,7 +182,7 @@ const AppIcon: React.FC<{ size: number; hue: number; glyph?: number; badge?: num
 
 // -------------------------------------------------------------------- templates
 
-const Pills: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: number }> = ({ ui, t, W, H, seed }) => {
+const Pills: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: number; press: number }> = ({ ui, t, W, H, seed, press }) => {
   const u = Math.min(W, H);
   const items = (ui.lines.length ? ui.lines : ['Write', 'Create', 'Solve']).slice(0, 5);
   const fs = Math.round(u * 0.062);
@@ -175,11 +215,9 @@ const Pills: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: numbe
             const float = idleFloat(t, i * 1.9, u * 0.006) * pose.alpha;
             return (
               <div key={i} style={{ opacity: pose.alpha,
-                transform: `translate3d(0, ${(pose.ty + float).toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`,
-                filter: blurCss(pose.blur), padding: `${fs * 0.42}px ${fs * 0.9}px`, borderRadius: fs * 1.1,
-                background: 'linear-gradient(180deg, #ffffff 0%, #f3f5fa 100%)', color: INK, fontSize: fs, fontWeight: 800,
-                boxShadow: `0 ${fs * 0.5}px ${fs * 1.1}px rgba(30,50,90,0.18), inset 0 2px 1px rgba(255,255,255,0.9), inset 0 -2px 2px rgba(20,40,80,0.06)`,
-                whiteSpace: 'nowrap', willChange: 'transform, opacity, filter' }}>{it}</div>
+                transform: `translate3d(0, ${(pose.ty + float).toFixed(1)}px, 0) scale(${(pose.scale * (1 - 0.04 * press)).toFixed(3)})`,
+                filter: blurCss(pose.blur), padding: `${fs * 0.42}px ${fs * 0.9}px`, color: INK, fontSize: fs, fontWeight: 800,
+                whiteSpace: 'nowrap', willChange: 'transform, opacity, filter', ...glass(u, { radius: fs * 1.1, alpha: 0.58, blur: 22 }) }}>{it}</div>
             );
           })}
         </div>
@@ -188,7 +226,7 @@ const Pills: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: numbe
   );
 };
 
-const AppCard: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t, W, H }) => {
+const AppCard: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: number }> = ({ ui, t, W, H, press }) => {
   const u = Math.min(W, H);
   const pose = entrancePose(t, { stiffness: 140, damping: 0.6, delay: 0 }, u * 0.05);
   const openPulse = 1 + 0.05 * Math.max(0, Math.sin((t - 0.6) * 4));
@@ -211,9 +249,11 @@ const AppCard: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui
               <span style={{ fontSize: u * 0.022, color: GRAY, fontWeight: 700 }}>289K</span>
             </div>
           </div>
-          <div style={{ padding: `${u * 0.015}px ${u * 0.045}px`, borderRadius: 999, background: ui.accent, color: '#fff',
-            fontWeight: 800, fontSize: u * 0.03, transform: `scale(${openPulse.toFixed(3)})`,
-            boxShadow: `0 ${u * 0.012}px ${u * 0.03}px ${ui.accent}66` }}>Open</div>
+          <div style={{ position: 'relative', padding: `${u * 0.015}px ${u * 0.045}px`, borderRadius: 999, background: ui.accent, color: '#fff',
+            fontWeight: 800, fontSize: u * 0.03, transform: `scale(${(openPulse * (1 - 0.1 * press)).toFixed(3)})`,
+            boxShadow: `0 ${u * 0.012}px ${u * 0.03}px ${ui.accent}${press > 0.3 ? 'aa' : '66'}`, filter: press > 0.3 ? 'brightness(1.12)' : undefined }}>
+            Open<Ripple press={press} size={u * 0.12} color="#fff" />
+          </div>
         </div>
         {/* screenshot strip */}
         <div style={{ display: 'flex', gap: u * 0.025, marginTop: u * 0.04 }}>
@@ -245,7 +285,7 @@ const AppCard: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui
   );
 };
 
-const Search: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t, W, H }) => {
+const Search: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: number }> = ({ ui, t, W, H, press }) => {
   const u = Math.min(W, H);
   const pose = entrancePose(t, { stiffness: 150, damping: 0.6, delay: 0 }, u * 0.04);
   const query = ui.title || 'Ask anything';
@@ -255,32 +295,38 @@ const Search: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui,
   const cursorOn = Math.floor(t * 2) % 2 === 0;
   const fs = u * 0.038;
   const suggestions = [query, `${query} fast`, `${query} for creators`, `best ${query.toLowerCase()}`].slice(0, 4);
+  // The interaction that drives the hand-off: as the scene ends the user "presses Search" —
+  // the field lights up with the accent, a ripple fires and the suggestions collapse away.
+  const submit = clamp01(press);
   return (
     <>
       <StatusBar W={W} u={u} />
       <div style={{ position: 'absolute', top: u * 0.1, left: '9%', width: '82%' }}>
         <div style={{ fontSize: u * 0.05, fontWeight: 800, color: INK, marginBottom: u * 0.03 }}>Search</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: u * 0.022, padding: `${u * 0.026}px ${u * 0.035}px`,
-          borderRadius: u * 0.035, background: '#eef1f6', boxShadow: 'inset 0 1px 3px rgba(20,40,80,0.08)',
-          opacity: pose.alpha, transform: `translateY(${pose.ty.toFixed(1)}px) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
-          <svg width={fs} height={fs} viewBox="0 0 24 24" fill="none" stroke={GRAY} strokeWidth={2.4} strokeLinecap="round">
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: u * 0.022, padding: `${u * 0.026}px ${u * 0.035}px`,
+          ...glass(u, { radius: u * 0.04, alpha: 0.5, blur: 22 }),
+          border: submit > 0.2 ? `1.5px solid ${ui.accent}` : '1px solid rgba(255,255,255,0.6)',
+          boxShadow: submit > 0.2 ? `0 ${u * 0.02}px ${u * 0.05}px ${ui.accent}55, inset 0 1px 1px rgba(255,255,255,0.8)` : glass(u).boxShadow,
+          opacity: pose.alpha, transform: `translateY(${pose.ty.toFixed(1)}px) scale(${(pose.scale * (1 - 0.03 * submit)).toFixed(3)})`, filter: blurCss(pose.blur) }}>
+          <svg width={fs} height={fs} viewBox="0 0 24 24" fill="none" stroke={submit > 0.2 ? ui.accent : GRAY} strokeWidth={2.4} strokeLinecap="round">
             <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
           </svg>
           <div style={{ flex: 1, fontSize: fs, color: typed ? INK : '#9aa0ae', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden' }}>
             {typed || 'Ask anything'}{!done && cursorOn ? <span style={{ color: ui.accent }}>|</span> : null}
           </div>
-          <svg width={fs * 3} height={fs} viewBox="0 0 60 24">
+          <svg width={fs * 3} height={fs} viewBox="0 0 60 24" style={{ opacity: 1 - submit }}>
             {[0, 1, 2, 3, 4].map((i) => { const h = 6 + 9 * (0.5 + 0.5 * Math.sin(t * 6 + i));
               return <rect key={i} x={12 + i * 9} y={12 - h / 2} width={4} height={h} rx={2} fill={ui.accent} />; })}
           </svg>
+          <Ripple press={submit} size={fs * 2.6} color={ui.accent} />
         </div>
-        {/* suggestions dropdown */}
-        <div style={{ marginTop: u * 0.02 }}>
+        {/* suggestions dropdown — collapses as Search is pressed */}
+        <div style={{ marginTop: u * 0.02, opacity: 1 - submit, transform: `translateY(${(-submit * u * 0.02).toFixed(1)}px)` }}>
           {suggestions.map((s, i) => {
             const rv = clamp01((t - 0.9 - i * 0.12) / 0.3);
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: u * 0.025,
-                padding: `${u * 0.022}px ${u * 0.01}px`, borderBottom: '1px solid #e8ebf1',
+                padding: `${u * 0.022}px ${u * 0.01}px`, borderBottom: '1px solid rgba(180,190,210,0.35)',
                 opacity: rv, transform: `translateX(${(1 - rv) * u * 0.03}px)` }}>
                 <svg width={fs * 0.9} height={fs * 0.9} viewBox="0 0 24 24" fill="none" stroke="#b3b8c4" strokeWidth={2.2} strokeLinecap="round">
                   <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
@@ -295,7 +341,7 @@ const Search: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui,
   );
 };
 
-const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: number }> = ({ ui, t, W, H, seed }) => {
+const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: number; press: number }> = ({ ui, t, W, H, seed, press }) => {
   const u = Math.min(W, H);
   const cols = 4, rows = 4;
   const gap = W * 0.055;
@@ -305,11 +351,15 @@ const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: 
   const Icon = (i: number, x: number, y: number, badge?: number) => {
     const stagger = (hash01(i, seed) * 0.4) + i * 0.03;
     const pose = entrancePose(t - stagger, { stiffness: 170, damping: 0.55, delay: 0 }, H * 0.02);
+    const pr = i === 0 ? press : 0; // the user "opens" the first (brand) app -> hand-off
     return (
       <div key={`${x}-${y}`} style={{ position: 'absolute', left: x, top: y, width: size, textAlign: 'center',
-        opacity: pose.alpha, transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
-        <AppIcon size={size} hue={Math.floor(hash01(i, seed + 2) * 360)} glyph={i} radius={size * 0.24}
-          {...(badge != null ? { badge } : {})} {...(i === 0 && ui.logo ? { logo: ui.logo } : {})} />
+        opacity: pose.alpha, transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${(pose.scale * (1 - 0.12 * pr)).toFixed(3)})`, filter: blurCss(pose.blur) }}>
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <AppIcon size={size} hue={Math.floor(hash01(i, seed + 2) * 360)} glyph={i} radius={size * 0.24}
+            {...(badge != null ? { badge } : {})} {...(i === 0 && ui.logo ? { logo: ui.logo } : {})} />
+          {pr > 0 && <Ripple press={pr} size={size} color="#fff" />}
+        </div>
         <div style={{ marginTop: size * 0.1, fontSize: size * 0.17, color: '#243', fontWeight: 600, textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>{labels[i % labels.length]}</div>
       </div>
     );
@@ -327,8 +377,8 @@ const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: 
       </div>
       {/* dock */}
       <div style={{ position: 'absolute', bottom: H * 0.04, left: '6%', width: '88%', height: u * 0.2,
-        borderRadius: u * 0.06, background: 'rgba(255,255,255,0.45)', backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: `0 ${u * 0.04}px` }}>
+        ...glass(u, { radius: u * 0.06, alpha: 0.4, blur: 30 }),
+        display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: `0 ${u * 0.04}px` }}>
         {[0, 1, 2, 3].map((i) => {
           const pose = entrancePose(t - 0.5 - i * 0.06, { stiffness: 170, damping: 0.55, delay: 0 }, H * 0.02);
           return <div key={i} style={{ opacity: pose.alpha, transform: `scale(${pose.scale.toFixed(3)})` }}>
@@ -340,7 +390,7 @@ const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: 
   );
 };
 
-const Chat: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t, W, H }) => {
+const Chat: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: number }> = ({ ui, t, W, H, press }) => {
   const u = Math.min(W, H);
   const msgs = (ui.lines.length ? ui.lines : ['Hey!', 'The new drop is live', 'Check it now']).slice(0, 4);
   const fs = u * 0.038;
@@ -388,8 +438,10 @@ const Chat: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t
                   transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
                   <div style={{ maxWidth: '74%', padding: `${fs * 0.55}px ${fs * 0.85}px`, borderRadius: fs * 1.3,
                     borderBottomRightRadius: out ? fs * 0.3 : fs * 1.3, borderBottomLeftRadius: out ? fs * 1.3 : fs * 0.3,
-                    background: out ? ui.accent : '#e9ebf0', color: out ? '#fff' : INK, fontSize: fs, fontWeight: 600,
-                    boxShadow: '0 6px 16px rgba(30,50,90,0.1)' }}>{m}</div>
+                    color: out ? '#fff' : INK, fontSize: fs, fontWeight: 600,
+                    ...(out
+                      ? { background: ui.accent, boxShadow: `0 ${fs * 0.4}px ${fs}px ${ui.accent}44` }
+                      : glass(u, { radius: fs * 1.3, alpha: 0.62, blur: 16 })) }}>{m}</div>
                 </div>
               )}
               {out && i === lastOutIdx && pose.alpha > 0.9 && (
@@ -399,31 +451,34 @@ const Chat: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t
           );
         })}
       </div>
-      {/* input bar */}
+      {/* input bar — the user "sends" (press) which drives the hand-off to the next scene */}
       <div style={{ position: 'absolute', bottom: u * 0.03, left: '5%', width: '90%', display: 'flex', alignItems: 'center', gap: u * 0.02 }}>
-        <div style={{ flex: 1, height: u * 0.075, borderRadius: 999, border: '1.5px solid #d8dce6', background: '#fff',
-          display: 'flex', alignItems: 'center', paddingLeft: u * 0.03, color: '#a2a8b6', fontSize: u * 0.032 }}>iMessage</div>
-        <div style={{ width: u * 0.075, height: u * 0.075, borderRadius: '50%', background: ui.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ flex: 1, height: u * 0.075, ...glass(u, { radius: 999, alpha: 0.5, blur: 18 }),
+          display: 'flex', alignItems: 'center', paddingLeft: u * 0.03, color: '#8a90a0', fontSize: u * 0.032 }}>iMessage</div>
+        <div style={{ position: 'relative', width: u * 0.075, height: u * 0.075, borderRadius: '50%', background: ui.accent,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `scale(${(1 - 0.12 * press).toFixed(3)})`,
+          filter: press > 0.3 ? 'brightness(1.12)' : undefined, boxShadow: press > 0.3 ? `0 0 ${u * 0.03}px ${ui.accent}` : undefined }}>
           <svg width={u * 0.04} height={u * 0.04} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V5M6 11l6-6 6 6" /></svg>
+          <Ripple press={press} size={u * 0.12} color={ui.accent} />
         </div>
       </div>
     </AbsoluteFill>
   );
 };
 
-const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t, W, H }) => {
+const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: number }> = ({ ui, t, W, H, press }) => {
   const u = Math.min(W, H);
   const title = ui.title || 'DouchkoVE';
   const body = ui.lines[1] || ui.subtitle || 'Your clip is ready to share.';
   const drop = springStep(t - 0.25, { stiffness: 130, damping: 0.62, delay: 0 });
   const drop2 = springStep(t - 0.5, { stiffness: 130, damping: 0.64, delay: 0 });
   const iconSz = u * 0.085;
-  const banner = (title2: string, body2: string, dd: number, top: number, z: number, scale: number) => (
+  const banner = (title2: string, body2: string, dd: number, top: number, z: number, scale: number, pr = 0) => (
     <div style={{ position: 'absolute', top, left: '5%', width: '90%', zIndex: z,
       display: 'flex', alignItems: 'center', gap: u * 0.028, padding: u * 0.032,
-      borderRadius: u * 0.05, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(24px)',
-      boxShadow: `0 ${u * 0.02}px ${u * 0.06}px rgba(20,40,80,0.18)`, border: '1px solid rgba(255,255,255,0.7)',
-      transform: `translateY(${(-u * 0.4 * (1 - Math.min(1, dd))).toFixed(1)}px) scale(${scale})`, opacity: Math.min(1, dd * 1.5) }}>
+      ...glass(u, { radius: u * 0.05, alpha: 0.68, blur: 30, strong: true }),
+      filter: pr > 0.3 ? 'brightness(1.06)' : undefined,
+      transform: `translateY(${(-u * 0.4 * (1 - Math.min(1, dd))).toFixed(1)}px) scale(${(scale * (1 - 0.03 * pr)).toFixed(3)})`, opacity: Math.min(1, dd * 1.5) }}>
       <AppIcon size={iconSz} hue={hueFromAccent(ui.accent)} glyph={0} radius={iconSz * 0.28} {...(ui.logo ? { logo: ui.logo } : {})} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: u * 0.032, fontWeight: 800, color: INK }}>{title2}</div>
@@ -441,26 +496,27 @@ const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui,
         <div style={{ fontSize: u * 0.17, fontWeight: 700, marginTop: u * 0.005, letterSpacing: '-0.02em' }}>9:41</div>
       </div>
       {banner(title, 'Tap to see what’s new', drop2, H * 0.34, 1, 0.96)}
-      {banner(title, body, drop, H * 0.32, 2, 1)}
+      {banner(title, body, drop, H * 0.32, 2, 1, press)}
     </>
   );
 };
 
-export const AppleScene: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
+export const AppleScene: React.FC<{ spec: SceneSpec; press?: number }> = ({ spec, press = 0 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = frame / fps;
   const ui: UiSpec = spec.ui ?? { template: 'pills', lines: ['Write', 'Create', 'Solve'], accent: spec.palette.accent };
   const wallpaper = ui.template === 'homescreen' || ui.template === 'notify';
   ensureUserFont(spec.font); // Pillar 2: block render until the user's font is ready
+  const p = clamp01(press);
   return (
-    <Field wallpaper={wallpaper} font={fontStack(spec)}>
-      {ui.template === 'pills' && <Pills ui={ui} t={t} W={width} H={height} seed={spec.seed} />}
-      {ui.template === 'appcard' && <AppCard ui={ui} t={t} W={width} H={height} />}
-      {ui.template === 'search' && <Search ui={ui} t={t} W={width} H={height} />}
-      {ui.template === 'homescreen' && <HomeScreen ui={ui} t={t} W={width} H={height} seed={spec.seed} />}
-      {ui.template === 'chat' && <Chat ui={ui} t={t} W={width} H={height} />}
-      {ui.template === 'notify' && <Notify ui={ui} t={t} W={width} H={height} />}
+    <Field wallpaper={wallpaper} font={fontStack(spec)} accent={ui.accent}>
+      {ui.template === 'pills' && <Pills ui={ui} t={t} W={width} H={height} seed={spec.seed} press={p} />}
+      {ui.template === 'appcard' && <AppCard ui={ui} t={t} W={width} H={height} press={p} />}
+      {ui.template === 'search' && <Search ui={ui} t={t} W={width} H={height} press={p} />}
+      {ui.template === 'homescreen' && <HomeScreen ui={ui} t={t} W={width} H={height} seed={spec.seed} press={p} />}
+      {ui.template === 'chat' && <Chat ui={ui} t={t} W={width} H={height} press={p} />}
+      {ui.template === 'notify' && <Notify ui={ui} t={t} W={width} H={height} press={p} />}
     </Field>
   );
 };
