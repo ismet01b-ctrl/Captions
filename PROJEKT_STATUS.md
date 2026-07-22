@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101v Resumable Chunk-Upload (Ismet: "Upload bricht ab, wenn ich am Handy den
+  Tab wechsle").** DER echte Fix: ein normaler fetch/XHR-Upload stirbt, sobald der
+  mobile Tab in den Hintergrund geht (Screen-Lock, App-Wechsel) - die ganze Datei
+  war weg. Jetzt laedt die Datei in 2-MB-Chunks: Server-Endpunkte
+  `/api/upload/init` (Session + leere Zieldatei, Auth/Endung/Cap vorab),
+  `/api/upload/chunk/{up}?offset=N` (haengt an genau der Byte-Grenze an; partial-
+  safe via seek+write+truncate; falscher Offset -> 409 mit Serverstand),
+  `/api/upload/status/{up}` (Resume-Punkt), `/api/upload/finish/{up}` (Dauer/
+  Credits/Job/Queue). Frontend `chunkedUpload()`: schickt Chunks sequentiell,
+  pausiert bei `document.hidden` (waitVisible) und SETZT beim Zurueckkommen an der
+  vom Server bestaetigten Grenze FORT, Retry mit Backoff + Offset-Resync bei
+  Netz-Abriss. Beide Upload-Wege (Render + Hintergrund-Vorab) laufen darueber; der
+  Einmal-Upload bleibt als Fallback. Gemeinsamer `_finalize_upload()` (kein Credit-
+  Logik-Drift). BEWIESEN: Live-Integrationstest gegen echten Server - init ->
+  erzwungenes 409-Resync -> Resume -> finish, Datei byte-identisch reassembliert,
+  Job angelegt; Alt-Upload weiter gruen. 2 neue Quelltext-Garantien. Regression
+  647/647 gruen. EHRLICH: iOS Safari kann NICHT im Hintergrund weiterladen (kein
+  Background-Fetch) - der Upload PAUSIERT beim Tab-Weg und laeuft beim Zurueck-
+  kommen weiter; er bricht aber nie mehr ab / verliert nichts.
+
 - **v101u Handy-Weggehen + kein Caption/Akzent-Overlap + High-End-Akzente
   (Ismet-Batch).** DREI Dinge auf einmal: (1) HANDY: Fertig-Mail existiert schon
   (_notify_job_done, Caption + Motion, verifizierte Accounts, 1x/Job) - jetzt sagt

@@ -2892,6 +2892,173 @@ async def motion_brief(request: Request, brief: str = Form(...),
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 
 
+async def _finalize_upload(request, jid, d, src, filename, look, code, mode, overrides):
+    """Gemeinsamer Abschluss fuer Einmal- UND Chunk-Upload: Dauer pruefen, Credits
+    (atomar) reservieren, Job anlegen + einreihen. Datei liegt bereits komplett in
+    src. Wirft 413/402 bei zu lang / zu wenig Guthaben und raeumt dann d auf."""
+    import asyncio as _aio
+    try:
+        # v98: to_thread - der sync ffprobe blockierte sonst den Event-Loop.
+        _r = await _aio.to_thread(
+            subprocess.run,
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=nw=1:nk=1', src],
+            capture_output=True, text=True)
+        dur = float(_r.stdout.strip() or 0)
+    except Exception:
+        dur = 0
+    if dur > MAX_SECONDS:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(413, f'Video too long ({dur:.0f}s). '
+                                 f'Maximum {MAX_SECONDS} seconds.')
+    u = _current_user(request) if mode != 'demo' else None
+    uid = None
+    if u:
+        uid = u['id']
+        need = cost_seconds(dur)
+        if mode == 'pre':
+            if u['balance_sec'] < need:
+                shutil.rmtree(d, ignore_errors=True)
+                have = credits_of(u['balance_sec'])
+                fehlt = credits_of(need) - have
+                raise HTTPException(
+                    402,
+                    f"Not enough credits (video costs {credits_of(need)} "
+                    f"credit{'s' if credits_of(need) != 1 else ''}, you have "
+                    f"{have}). Missing {max(1, fehlt)} - please top up.")
+        elif not _reserve_credits(uid, need, jid):
+            shutil.rmtree(d, ignore_errors=True)
+            have = credits_of(u['balance_sec'])
+            fehlt = credits_of(need) - have
+            raise HTTPException(
+                402,
+                f"Not enough credits (video costs {credits_of(need)} "
+                f"credit{'s' if credits_of(need) != 1 else ''}, you have "
+                f"{have}). Missing {max(1, fehlt)} - please top up.")
+    _vh = await _aio.to_thread(_video_hash, src)
+    JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': (code or '').strip(),
+                 'user_id': uid, 'vhash': _vh, 'mode': mode,
+                 'cfg_overrides': overrides, 'status': 'wartet', 'progress': 0.0,
+                 'phase': 'Queued …', 'dauer': round(dur, 1),
+                 'name': _safe_name(filename)}
+    set_state(jid, **{k: v for k, v in JOBS[jid].items()
+                      if k not in ('input', 'code')})
+    q_put(jid)
+    return {'job': jid, 'position': QUEUE.qsize()}
+
+
+# v101v: Resumable Chunk-Upload. Auf dem Handy bricht ein normaler fetch()-Upload
+# ab, sobald der Tab in den Hintergrund geht (Screen-Lock, App-Wechsel). Der
+# Chunk-Upload laedt die Datei in kleinen Stuecken; verlaesst der Nutzer den Tab,
+# pausiert es und SETZT beim Zurueckkommen an der letzten bestaetigten Byte-Grenze
+# FORT, statt alles zu verlieren. Sessions leben im Prozess (Single-Worker).
+UPLOADS = {}
+UPLOAD_TTL = 3600
+_ALLOWED_EXT = ('.mp4', '.mov', '.m4v', '.webm', '.mkv')
+
+
+def _upload_gc():
+    now = time.time()
+    for k in [k for k, v in list(UPLOADS.items())
+              if now - v.get('ts', now) > UPLOAD_TTL]:
+        v = UPLOADS.pop(k, None)
+        if v:
+            shutil.rmtree(v.get('dir', ''), ignore_errors=True)
+
+
+@app.post('/api/upload/init')
+async def upload_init(request: Request, filename: str = Form(...),
+                      size: int = Form(0), look: str = Form('creator'),
+                      code: str = Form(''), mode: str = Form('full'),
+                      cfg_overrides: str = Form('{}')):
+    """Startet eine resumable Upload-Session. Prueft Auth + Endung + Groessen-Cap
+    vorab und legt die (leere) Zieldatei an. Rueckgabe: upload_id + received=0."""
+    if mode == 'demo':
+        ip = request.client.host if request.client else 'unknown'
+        if not _demo_ok(ip):
+            raise HTTPException(429, 'Demo limit reached for today. '
+                                     'Create a free account to keep going.')
+    else:
+        ok, msg = check_auth(code, request)
+        if not ok:
+            raise HTTPException(403, msg)
+    if look not in LOOKS:
+        look = 'creator'
+    ext = os.path.splitext(filename or '')[1].lower() or '.mp4'
+    if ext not in _ALLOWED_EXT:
+        raise HTTPException(400, 'Only video files (mp4, mov, webm, mkv).')
+    if size and size > MAX_MB * 1024 * 1024:
+        raise HTTPException(413, f'Video too large (max {MAX_MB} MB).')
+    try:
+        overrides = _sanitize_overrides(json.loads(cfg_overrides) if cfg_overrides else {})
+    except Exception:
+        overrides = {}
+    _upload_gc()
+    up = uuid.uuid4().hex[:16]
+    jid = uuid.uuid4().hex[:12]
+    d = job_dir(jid)
+    os.makedirs(d, exist_ok=True)
+    src = os.path.join(d, 'quelle' + ext)
+    open(src, 'wb').close()
+    UPLOADS[up] = {'jid': jid, 'dir': d, 'src': src, 'received': 0,
+                   'size': int(size or 0), 'look': look, 'code': code,
+                   'mode': mode, 'overrides': overrides, 'filename': filename,
+                   'ts': time.time()}
+    return {'upload_id': up, 'received': 0}
+
+
+@app.get('/api/upload/status/{up}')
+def upload_status(up: str):
+    """Wie viele Bytes hat der Server sicher? Der Client fragt das nach dem
+    Zurueckkommen und setzt genau dort fort."""
+    s = UPLOADS.get(up)
+    if not s:
+        raise HTTPException(404, 'Upload session expired - please start over.')
+    return {'received': s['received'], 'size': s['size']}
+
+
+@app.post('/api/upload/chunk/{up}')
+async def upload_chunk(up: str, request: Request, offset: int = 0):
+    """Haengt einen Chunk an genau der Byte-Grenze `offset` an. Passt offset nicht
+    zum Serverstand (halb geschriebener, abgebrochener Chunk), antwortet 409 mit der
+    Wahrheit - der Client re-synct und schickt ab dort neu. Idempotent + partial-safe:
+    wir seeken auf offset und truncaten, ueberschreiben also evtl. Muell sauber."""
+    s = UPLOADS.get(up)
+    if not s:
+        raise HTTPException(404, 'Upload session expired - please start over.')
+    if offset != s['received']:
+        return JSONResponse({'received': s['received'], 'resync': True}, status_code=409)
+    data = await request.body()
+    if not data:
+        return {'received': s['received']}
+    if s['received'] + len(data) > MAX_MB * 1024 * 1024:
+        shutil.rmtree(s['dir'], ignore_errors=True)
+        UPLOADS.pop(up, None)
+        raise HTTPException(413, f'Video too large (max {MAX_MB} MB).')
+    with open(s['src'], 'r+b') as f:
+        f.seek(offset)
+        f.write(data)
+        f.truncate(offset + len(data))
+    s['received'] = offset + len(data)
+    s['ts'] = time.time()
+    return {'received': s['received']}
+
+
+@app.post('/api/upload/finish/{up}')
+async def upload_finish(up: str, request: Request):
+    """Alle Chunks da -> Datei ist komplett. Gleicher Abschluss wie der Einmal-
+    Upload (Dauer, Credits, Job, Queue)."""
+    s = UPLOADS.pop(up, None)
+    if not s:
+        raise HTTPException(404, 'Upload session expired - please start over.')
+    if not os.path.exists(s['src']) or os.path.getsize(s['src']) == 0:
+        shutil.rmtree(s['dir'], ignore_errors=True)
+        raise HTTPException(400, 'Upload incomplete - please try again.')
+    return await _finalize_upload(request, s['jid'], s['dir'], s['src'],
+                                  s['filename'], s['look'], s['code'], s['mode'],
+                                  s['overrides'])
+
+
 @app.post('/api/upload')
 async def upload(request: Request, datei: UploadFile = File(...),
                  look: str = Form('creator'), code: str = Form(''),
@@ -2932,70 +3099,8 @@ async def upload(request: Request, datei: UploadFile = File(...),
                 raise HTTPException(413, f'Video too large (max {MAX_MB} MB).')
             f.write(chunk)
 
-    try:
-        # v98: to_thread - der sync ffprobe blockierte sonst den Event-Loop
-        # (bei parallelen Uploads hing die GANZE API inkl. /api/health)
-        import asyncio as _aio
-        _r = await _aio.to_thread(
-            subprocess.run,
-            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-             '-of', 'default=nw=1:nk=1', src],
-            capture_output=True, text=True)
-        dur = float(_r.stdout.strip() or 0)
-    except Exception:
-        dur = 0
-    if dur > MAX_SECONDS:
-        shutil.rmtree(d, ignore_errors=True)
-        raise HTTPException(413, f'Video too long ({dur:.0f}s). '
-                                 f'Maximum {MAX_SECONDS} seconds.')
-
-    # v80i: Pre-Check auf Guthaben. Ohne Balance kein Render.
-    # v89: Demo kostet nichts und braucht keinen Account.
-    u = _current_user(request) if mode != 'demo' else None
-    uid = None
-    if u:
-        uid = u['id']
-        need = cost_seconds(dur)
-        # v95: Vorab-Transkription (mode 'pre') kostet NICHTS. Sie laeuft schon,
-        # waehrend der User noch Presets einstellt - abgebucht wird erst beim
-        # echten Render (/api/render_start reserviert dann atomar). Hier nur
-        # pruefen, dass ueberhaupt genug Guthaben DA ist - sonst lohnt das
-        # Prewarming nicht (der User koennte eh nicht rendern) und wir sparen
-        # Ismets Whisper-Kosten.
-        if mode == 'pre':
-            if u['balance_sec'] < need:
-                shutil.rmtree(d, ignore_errors=True)
-                have = credits_of(u['balance_sec'])
-                fehlt = credits_of(need) - have
-                raise HTTPException(
-                    402,
-                    f"Not enough credits (video costs {credits_of(need)} "
-                    f"credit{'s' if credits_of(need) != 1 else ''}, you have "
-                    f"{have}). Missing {max(1, fehlt)} - please top up.")
-        # v92: ATOMAR reservieren statt nur pruefen (schliesst den Race, in dem
-        # gleichzeitige Uploads mehrfach denselben Credit ausgeben). Klappt es
-        # nicht, ist zu wenig Guthaben da. Bei Render-Fehler wird erstattet.
-        elif not _reserve_credits(uid, need, jid):
-            shutil.rmtree(d, ignore_errors=True)
-            have = credits_of(u['balance_sec'])
-            fehlt = credits_of(need) - have
-            raise HTTPException(
-                402,
-                f"Not enough credits (video costs {credits_of(need)} "
-                f"credit{'s' if credits_of(need) != 1 else ''}, you have "
-                f"{have}). Missing {max(1, fehlt)} - please top up.")
-
-    _vh = await _aio.to_thread(_video_hash, src)  # v98: 2 MB lesen, nie im Loop
-    JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': code.strip(),
-                 'user_id': uid, 'vhash': _vh,     # v88b: Transkript-Cache
-                 'mode': mode, 'cfg_overrides': overrides,
-                 'status': 'wartet', 'progress': 0.0,
-                 'phase': 'Queued …',
-                 'dauer': round(dur, 1), 'name': _safe_name(datei.filename)}
-    set_state(jid, **{k: v for k, v in JOBS[jid].items()
-                      if k not in ('input', 'code')})
-    q_put(jid)
-    return {'job': jid, 'position': QUEUE.qsize()}
+    return await _finalize_upload(request, jid, d, src, datei.filename,
+                                  look, code, mode, overrides)
 
 
 @app.post('/api/render_start/{jid}')

@@ -1879,6 +1879,23 @@ def _scenario_logic(clip, transcript, tmp):
           'id="progMailNote"' in _ui_m and 'State.user.verified' in _ui_m
           and 'email you' in _ui_m)
 
+    check('v101v: Server hat resumable Chunk-Upload-Endpunkte + gemeinsamen Abschluss',
+          "@app.post('/api/upload/init')" in _srv_m
+          and "@app.post('/api/upload/chunk/{up}')" in _srv_m
+          and "@app.get('/api/upload/status/{up}')" in _srv_m
+          and "@app.post('/api/upload/finish/{up}')" in _srv_m
+          and 'async def _finalize_upload(' in _srv_m
+          and "'resync': True" in _srv_m
+          and 'f.truncate(offset + len(data))' in _srv_m)
+    check('v101v: UI laedt in Chunks + setzt bei Tab-Rueckkehr fort',
+          'async function chunkedUpload' in _ui_m
+          and "'visibilitychange'" in _ui_m
+          and '/api/upload/init' in _ui_m
+          and '/api/upload/chunk/' in _ui_m
+          and '/api/upload/status/' in _ui_m
+          and '/api/upload/finish/' in _ui_m
+          and 'file.slice(offset, end)' in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
