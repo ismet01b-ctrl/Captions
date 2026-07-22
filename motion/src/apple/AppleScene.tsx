@@ -505,18 +505,20 @@ const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: num
   const drop = springStep(t - 0.25, { stiffness: 130, damping: 0.62, delay: 0 });
   const drop2 = springStep(t - 0.5, { stiffness: 130, damping: 0.64, delay: 0 });
   const iconSz = u * 0.085;
-  const banner = (title2: string, body2: string, dd: number, top: number, z: number, scale: number, pr = 0) => (
-    <div style={{ position: 'absolute', top, left: '5%', width: '90%', zIndex: z,
-      display: 'flex', alignItems: 'center', gap: u * 0.028, padding: u * 0.032,
-      ...glass(u, { radius: u * 0.05, alpha: 0.68, blur: 30, strong: true }),
+  // Notification-centre banners are SEPARATE cards stacked vertically with a clear gap —
+  // never overlapping. Each drops in on its own spring; the front one reacts to the press.
+  const banner = (title2: string, body2: string, when: string, dd: number, top: number, pr = 0) => (
+    <div style={{ position: 'absolute', top, left: '5%', width: '90%',
+      display: 'flex', alignItems: 'center', gap: u * 0.028, padding: u * 0.03,
+      ...glass(u, { radius: u * 0.05, alpha: 0.6, blur: 30, strong: true }),
       filter: pr > 0.3 ? 'brightness(1.06)' : undefined,
-      transform: `translateY(${(-u * 0.4 * (1 - Math.min(1, dd))).toFixed(1)}px) scale(${(scale * (1 - 0.03 * pr)).toFixed(3)})`, opacity: Math.min(1, dd * 1.5) }}>
+      transform: `translateY(${(-u * 0.4 * (1 - Math.min(1, dd))).toFixed(1)}px) scale(${(1 - 0.03 * pr).toFixed(3)})`, opacity: Math.min(1, dd * 1.5) }}>
       <AppIcon size={iconSz} hue={hueFromAccent(ui.accent)} glyph={0} radius={iconSz * 0.28} {...(ui.logo ? { logo: ui.logo } : {})} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: u * 0.032, fontWeight: 800, color: INK }}>{title2}</div>
+        <div style={{ fontSize: u * 0.032, fontWeight: 800, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title2}</div>
         <div style={{ fontSize: u * 0.028, color: '#c2c7d2', marginTop: u * 0.004, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{body2}</div>
       </div>
-      <div style={{ fontSize: u * 0.022, color: '#9096a6', fontWeight: 600, alignSelf: 'flex-start' }}>now</div>
+      <div style={{ fontSize: u * 0.022, color: '#9096a6', fontWeight: 600, alignSelf: 'flex-start' }}>{when}</div>
     </div>
   );
   return (
@@ -527,8 +529,9 @@ const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: num
         <div style={{ fontSize: u * 0.03, fontWeight: 600, opacity: 0.85 }}>Wednesday, 22 July</div>
         <div style={{ fontSize: u * 0.18, fontWeight: 700, marginTop: u * 0.005, letterSpacing: '-0.02em', textShadow: '0 2px 20px rgba(0,0,0,0.35)' }}>13:39</div>
       </div>
-      {banner(title, 'Tap to see what’s new', drop2, H * 0.34, 1, 0.96)}
-      {banner(title, body, drop, H * 0.32, 2, 1, press)}
+      {/* front (newest) banner reacts to the press; the older one sits clearly below it */}
+      {banner(title, body, 'now', drop, H * 0.30, press)}
+      {banner(title, 'Tap to see what’s new', '2m ago', drop2, H * 0.44)}
     </>
   );
 };
