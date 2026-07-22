@@ -44,6 +44,11 @@ if (!sB.some((x) => x.kind==='signoff' && x.accentText.includes('Bean&Co'))) { f
 // 5) reality-only: no abstract kinds; only the known real-UI archetypes
 const OK = new Set(['ktypo','timer','notes','searchbar','imessage','widgets','pill','timeline','signoff']);
 if (![...sA,...sB].every((x) => OK.has(x.kind))) { fail++; console.error('FAIL unknown archetype'); }
+// 6) MOTION varies per video too: transition order differs, and per-shot v knobs are set (0..1)
+if (sA.map((x)=>x.into).join(',') === sB.map((x)=>x.into).join(',')) { fail++; console.error('FAIL identical transition order'); }
+if (![...sA,...sB].every((x) => typeof x.v === 'number' && x.v >= 0 && x.v <= 1)) { fail++; console.error('FAIL missing per-shot v'); }
+// 7) no boundary repeats the previous transition (avoids a mechanical rhythm)
+for (const s of [sA, sB]) for (let i=1;i<s.length;i++) if (s[i].into === s[i-1].into) { fail++; console.error('FAIL repeated transition'); }
 
 console.log('buildShowcase:', sA.length, '+', sB.length, 'shots,', fail, 'fail');
 if (fail) process.exit(1);

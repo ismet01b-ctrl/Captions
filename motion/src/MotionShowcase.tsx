@@ -43,6 +43,9 @@ export interface Shot {
   readonly dark?: boolean;           // dark studio ground instead of light
   readonly accentText?: string;      // headline / accent copy (verbatim, from transcript)
   readonly a?: string; readonly b?: string; readonly c?: string; // per-shot payload
+  readonly v?: number;               // 0..1 per-shot motion-variation knob (seeded per video):
+                                     // flips camera direction + scales magnitude so two videos
+                                     // never move identically, even with the same archetype.
 }
 
 // ONE coherent script, read top to bottom, is the through-line — a senior never ships a bag of
@@ -123,20 +126,22 @@ const easeInOutSine = (x: number): number => -(Math.cos(Math.PI * clamp01(x)) - 
  * playhead. `p` is progress 0→1 through the shot. Because the layer's velocity is measured for
  * motion blur, every one of these camera moves smears on its own — buttery, for free.
  */
-const shotCam = (kind: ShotKind, warm: boolean, p: number, W: number, H: number): Cam => {
+const shotCam = (kind: ShotKind, warm: boolean, p: number, W: number, H: number, v = 0.5): Cam => {
   const e = easeInOutSine(p);
   const base = { x: 0, y: 0, scale: 1, alpha: 1 };
+  const dir = v < 0.5 ? -1 : 1;          // seeded left/right (or up/down) flip
+  const m = 0.65 + v * 0.8;              // seeded magnitude 0.65..1.45 — no two videos move alike
   switch (kind) {
-    case 'ktypo':   // glide along the type (dir alternates), gentle push — kept small so long
+    case 'ktypo':   // glide along the type — direction + amount seeded, kept small so long
                     // headlines never leave the frame
-      return { ...base, x: (warm ? 1 : -1) * e * W * 0.06, scale: 1 + e * 0.05 };
-    case 'timer':   return { ...base, x: -e * W * 0.05, scale: 1 + e * 0.06 };
-    case 'notes':   return { ...base, y: e * H * 0.06, scale: 1 + e * 0.05 };   // crane down with the typing
-    case 'searchbar': return { ...base, y: e * H * 0.03, scale: 1 + e * 0.08 }; // push onto the link
-    case 'imessage': return { ...base, y: -e * H * 0.07, scale: 1 + e * 0.03 }; // crane up with the reply
-    case 'widgets': return { ...base, x: e * W * 0.03, y: e * H * 0.025, scale: 1 + e * 0.09 }; // push toward the tap
-    case 'pill':    return { ...base, scale: 1 + e * 0.06 };
-    case 'timeline': return { ...base, x: -e * W * 0.14, scale: 1 + e * 0.05 }; // FOLLOW the playhead sweep
+      return { ...base, x: (warm ? -dir : dir) * e * W * 0.06 * m, scale: 1 + e * 0.05 * m };
+    case 'timer':   return { ...base, x: dir * e * W * 0.05 * m, scale: 1 + e * 0.06 * m };
+    case 'notes':   return { ...base, y: e * H * 0.06 * m, scale: 1 + e * 0.05 * m };   // crane down with the typing
+    case 'searchbar': return { ...base, y: e * H * 0.03 * m, scale: 1 + e * 0.08 * m }; // push onto the link
+    case 'imessage': return { ...base, y: -e * H * 0.07 * m, scale: 1 + e * 0.03 * m }; // crane up with the reply
+    case 'widgets': return { ...base, x: dir * e * W * 0.03 * m, y: e * H * 0.025 * m, scale: 1 + e * 0.09 * m }; // push toward the tap
+    case 'pill':    return { ...base, scale: 1 + e * (0.05 + 0.03 * v) };
+    case 'timeline': return { ...base, x: -e * W * 0.14 * (0.8 + 0.4 * v), scale: 1 + e * 0.05 }; // FOLLOW the playhead (dir fixed, amount seeded)
     case 'signoff': return { ...base, scale: 1 + e * 0.05 };
     default:        return base;
   }
@@ -551,7 +556,7 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[] }> = ({ s
     let cam = composeCam(en, ex);
     // interactive camera: a motivated move that runs through the whole shot (neutral at p=0 so it
     // never fights the entrance). Sampled continuously → it smears via the measured-velocity blur.
-    const sc = shotCam(shot.kind, shot.c === 'warm', clamp01(local / shot.dur), W, H);
+    const sc = shotCam(shot.kind, shot.c === 'warm', clamp01(local / shot.dur), W, H, shot.v ?? 0.5);
     cam = { x: cam.x + sc.x, y: cam.y + sc.y, scale: cam.scale * sc.scale, alpha: cam.alpha };
     // idle drift only while fully settled (fades in as the entrance completes, out as exit starts)
     const settle = clamp01(tin * 2 - 1) * clamp01((1 - tout) * 2 - 0) * (tout <= 0 ? 1 : 0);

@@ -2031,6 +2031,13 @@ def _scenario_logic(clip, transcript, tmp):
           and 'function pickKind' in _mbs and 'signoff' in _mbs
           and 'export type MotionShowcaseProps = { readonly spec: SceneSpec; readonly story?' in _msh
           and 'story={story && story.length ? story : STORY}' in _msh)
+    # v112b: auch die BEWEGUNG variiert pro Video (nicht nur der Text) — seed-getriebene
+    # Übergangs-Reihenfolge + per-Shot-Kamera-Variation (Richtung/Stärke).
+    check('v112b: seed-getriebene Bewegungs-Variation (Übergänge + Kamera)',
+          'mulberry32' in _mbs and 'nextTrans' in _mbs and 'per-shot motion-variation' in _mbs
+          and 'v: +rng()' in _mbs
+          and 'shotCam(shot.kind' in _msh and 'shot.v ?? 0.5' in _msh
+          and 'seeded left/right' in _msh)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,

@@ -10,6 +10,7 @@
 // can refine the picks later, but it can never introduce new words — provenance stays enforced.
 
 import type { Shot, ShotKind, TransKind } from '../MotionShowcase';
+import { mulberry32 } from '../lib/rng';
 
 export interface SWord { readonly word: string; readonly start: number; readonly end: number; }
 export interface BuildOpts { readonly brandName?: string; readonly maxShots?: number; }
@@ -92,15 +93,22 @@ export function buildShowcase(words: readonly SWord[], opts: BuildOpts = {}): Sh
   const maxContent = Math.max(3, (opts.maxShots ?? 10) - 1); // leave room for the sign-off
   const use = ph.slice(0, maxContent);
 
+  // Per-video seed → the MOTION varies too, not just the words: transition ORDER and each shot's
+  // camera-variation knob `v` are drawn from it, so two different voiceovers never move alike.
+  const seed = (Math.abs(words.reduce((a, w, i) => a + w.word.length * 31 + Math.round(w.start * 13) + i, 0)) % 2147483647) || 1;
+  const rng = mulberry32(seed);
   const shots: Shot[] = [];
-  const TRANS_CYCLE: TransKind[] = ['slideL', 'push', 'slideUp', 'morph'];
-  let ti = 0;
-  const nextTrans = (): TransKind => TRANS_CYCLE[(ti++) % TRANS_CYCLE.length]!;
+  const POOL: TransKind[] = ['slideL', 'slideUp', 'push', 'morph'];
+  let prevT: TransKind | null = null;
+  const nextTrans = (): TransKind => {   // seeded, never repeating the previous boundary
+    let c: TransKind; do { c = POOL[Math.floor(rng() * POOL.length)]!; } while (c === prevT);
+    prevT = c; return c;
+  };
 
   use.forEach((p, i) => {
     let kind = pickKind(p, i, use.length);
     const dur = clampDur(p.words.length);
-    const into = i === 0 ? 'slideL' : nextTrans();
+    const into = nextTrans();
     const kw = keywords(p.words);
 
     // Build the shot, always with verbatim copy. If a two-part archetype can't be split, fall back.
@@ -128,7 +136,9 @@ export function buildShowcase(words: readonly SWord[], opts: BuildOpts = {}): Sh
   });
 
   // sign-off always closes on the brand (the one non-transcript, trusted string).
-  shots.push({ kind: 'signoff', dur: 2.8, into: 'morph', accentText: `made with ${brand}` });
+  shots.push({ kind: 'signoff', dur: 2.8, into: nextTrans(), accentText: `made with ${brand}` });
 
-  return shots.length >= 3 ? shots : null;
+  // attach the seeded per-shot motion-variation knob so the camera moves differ per video.
+  const withV = shots.map((s) => ({ ...s, v: +rng().toFixed(3) }));
+  return withV.length >= 3 ? withV : null;
 }
