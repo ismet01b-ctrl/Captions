@@ -1763,6 +1763,8 @@ def _run_motion_brief(jid):
     cmd = ['node', os.path.join('scripts', 'render-brief.mjs'), brief, out]
     if j.get('no_text'):                      # reine Motion Graphics, keine Typo
         cmd.append('--no-text')
+    if j.get('d3'):                           # v101w: echtes 3D (Three.js, --gl=angle)
+        cmd.append('--3d')
     p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          text=True, bufsize=1)
@@ -2866,7 +2868,7 @@ async def motion_render(request: Request,
 
 @app.post('/api/motion/brief')
 async def motion_brief(request: Request, brief: str = Form(...),
-                       no_text: str = Form('0')):
+                       no_text: str = Form('0'), d3: str = Form('1')):
     """v101p: aus einem Satz eine individuelle Motion-Grafik generieren
     (Remotion-Director). Kostet wie ein Motion-Clip (1 Credit)."""
     u = _require_user(request)
@@ -2883,9 +2885,11 @@ async def motion_brief(request: Request, brief: str = Form(...),
         shutil.rmtree(d, ignore_errors=True)
         raise HTTPException(402, 'Not enough credits (this clip costs 1).')
     _nm = (text[:40] + ('…' if len(text) > 40 else '')) or 'Motion'
-    _notext = str(no_text).strip().lower() in ('1', 'true', 'on', 'yes')
+    _yes = ('1', 'true', 'on', 'yes')
+    _notext = str(no_text).strip().lower() in _yes
+    _d3 = str(d3).strip().lower() in _yes
     JOBS[jid] = {'kind': 'motion', 'brief': text, 'user_id': u['id'],
-                 'name': _nm + '.mp4', 'dauer': 11, 'no_text': _notext,
+                 'name': _nm + '.mp4', 'dauer': 11, 'no_text': _notext, 'd3': _d3,
                  'cost_sec': MOTION_COST_SEC, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)

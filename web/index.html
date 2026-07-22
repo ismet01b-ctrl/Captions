@@ -1383,6 +1383,10 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               <input type="checkbox" id="moBriefNoText" checked style="width:16px; height:16px; accent-color:var(--acc2);">
               Pure motion graphics <span class="mo-hint">— no text on screen</span>
             </label>
+            <label class="mo-check" style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer; font-size:14px; color:var(--fg2);">
+              <input type="checkbox" id="moBrief3d" checked style="width:16px; height:16px; accent-color:var(--acc2);">
+              3D <span class="mo-hint">— real lit geometry, depth &amp; camera move</span>
+            </label>
             <button class="btn" id="moBriefGo" style="width:100%; margin-top:10px;">
               Generate from brief · 1 credit</button>
             <div id="moBriefStatus" class="mo-status" style="display:none;"></div>
@@ -2634,6 +2638,7 @@ async function motionBriefGo(){
   try{
     const fd=new FormData(); fd.append('brief', brief);
     const nt=$('#moBriefNoText'); fd.append('no_text', (nt && nt.checked) ? '1' : '0');
+    const d3=$('#moBrief3d'); fd.append('d3', (d3 && d3.checked) ? '1' : '0');
     const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
     if(r.status===402){ st.style.display='block'; st.textContent='Not enough credits.';
       btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on');

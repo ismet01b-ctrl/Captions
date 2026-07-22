@@ -1896,6 +1896,22 @@ def _scenario_logic(clip, transcript, tmp):
           and '/api/upload/finish/' in _ui_m
           and 'file.slice(offset, end)' in _ui_m)
 
+    # v101w: echtes 3D fuer die Motion-Graphics (Three.js via @remotion/three).
+    _mroot = os.path.join(HERE, 'motion')
+    _mpkg = open(os.path.join(_mroot, 'package.json'), encoding='utf-8').read()
+    _mrb = open(os.path.join(_mroot, 'scripts', 'render-brief.mjs'),
+                encoding='utf-8').read()
+    _mrt = open(os.path.join(_mroot, 'src', 'Root.tsx'), encoding='utf-8').read()
+    check('v101w: 3D-Stack vorhanden (Three.js, Motion3D-Composition, --gl=angle)',
+          '@remotion/three' in _mpkg and '"three"' in _mpkg
+          and os.path.exists(os.path.join(_mroot, 'src', 'Motion3D.tsx'))
+          and os.path.exists(os.path.join(_mroot, 'src', 'three', 'Scene3D.tsx'))
+          and 'id="Motion3D"' in _mrt
+          and "'Motion3D'" in _mrb and '--gl=angle' in _mrb)
+    check('v101w: Server + UI reichen den 3D-Schalter durch',
+          "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
+          and 'id="moBrief3d"' in _ui_m and "fd.append('d3'" in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

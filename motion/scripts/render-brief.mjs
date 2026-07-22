@@ -59,18 +59,25 @@ try {
   const codecArg = passthrough.find((a) => a.startsWith('--codec='));
   const codec = codecArg ? codecArg.split('=')[1] : 'h264';
   const browser = findBrowser(passthrough);
+  // --3d -> the Three.js composition, rendered with software GL (--gl=angle) so it
+  // works headless on a GPU-less server. 2D stays the default MotionVideo composition.
+  const is3d = passthrough.includes('--3d');
+  const composition = is3d ? 'Motion3D' : 'MotionVideo';
   execFileSync(
     'npx',
     [
       'remotion',
       'render',
       'src/index.ts',
-      'MotionVideo',
+      composition,
       out,
       `--props=${specPath}`,
       `--codec=${codec}`,
+      ...(is3d ? ['--gl=angle'] : []),
       ...(browser ? [`--browser-executable=${browser}`] : []),
-      ...passthrough.filter((a) => !a.startsWith('--codec=') && a !== '--no-text'),
+      ...passthrough.filter(
+        (a) => !a.startsWith('--codec=') && a !== '--no-text' && a !== '--3d',
+      ),
     ],
     { stdio: 'inherit' },
   );

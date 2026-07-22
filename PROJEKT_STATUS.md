@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101w Echtes 3D fuer die Motion-Graphics (Ismet: "Ich will 3D, high end").**
+  Die Brief-Motion-Graphics sind jetzt echtes 3D via Three.js (@remotion/three) -
+  keine 2.5D-CSS mehr. Neu im motion/-Stack: Scene3D (R3F) - facettierter Metall-
+  Hero-Koerper mit PBR-Material (metalness 0.85), der ueber die Szenen morpht
+  (Ikosaeder/Torusknoten/Oktaeder/Dodekaeder), ein Ring tiefen-gestreuter 3D-
+  Splitter, Drei-Punkt-Licht (Key weiss / Rim Akzent / Fill), langsam driftende
+  Kamera (CameraRig, imperativ -> seekbar), Beat-Puls, Fog fuer Tiefe; Motion3D-
+  Composition (gleicher SceneSpec-Vertrag) mit Farbwelt-Gradient hinter transp.
+  ThreeCanvas + Grain. render-brief.mjs `--3d` -> rendert Motion3D mit `--gl=angle`
+  (SwiftShader-Software-GL, headless, GPU-LOS). Server + UI: 3D-Toggle im Brief-
+  Panel (default AN) -> /api/motion/brief d3 -> --3d. Deterministisch (Position aus
+  Seed, Bewegung aus absoluter Zeit, kein useFrame -> Remotion kann jeden Frame
+  seeken). GEPRUEFT in der Sandbox: Feasibility-Spike (Torusknoten headless
+  gerendert) UND voller 3D-Brief-Clip (278 Frames -> 1080x1920, 10.3 MB, Metall-
+  Hero + Splitter + Kamera-Drift) - Strip + Video an Ismet. tsc clean (R3F-JSX via
+  @ts-nocheck, Rest voll typisiert). Regression 649/649 gruen. EHRLICH: headless-3D
+  bewiesen mit dem Playwright-Chromium; prod nutzt Debian-`chromium` (apt) - dessen
+  `--gl=angle`-Software-GL muss beim ersten Deploy verifiziert werden. 2D bleibt
+  ueber den Toggle waehlbar.
+
 - **v101v Resumable Chunk-Upload (Ismet: "Upload bricht ab, wenn ich am Handy den
   Tab wechsle").** DER echte Fix: ein normaler fetch/XHR-Upload stirbt, sobald der
   mobile Tab in den Hintergrund geht (Screen-Lock, App-Wechsel) - die ganze Datei
