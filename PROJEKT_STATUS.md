@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v107d Echtes GPU-Post ausprobiert - und es rendert auf CPU! (Ismet: "hatte doch
+  gesagt, wir sollen es probieren").** Ich hatte Bloom/DoF als "braucht GPU" abgetan -
+  Ismet wollte es trotzdem testen. Ergebnis: @react-three/postprocessing + postprocessing
+  installiert, EffectComposer in Motion3D (im ThreeCanvas): ECHTES Bloom (mipmapBlur,
+  luminanceThreshold 0.62 - die emissiven Screens/Glas-Blobs bluten jetzt echt Licht
+  aus), ECHTES Depth-of-Field (Bokeh - Hero scharf, Seiten-Phones + Hintergrund weich)
+  und Vignette - alles ueber WebGL-Render-Targets. Laeuft headless auf software-GL
+  (--gl=angle), nur langsamer. RENDERZEIT-MESSUNG: ohne Post ~157s, MIT echtem Post
+  ~319s (5,3 Min) fuer 8,4s/230 Frames - Post ~verdoppelt die Zeit. Deutlich edler
+  (echtes Lichtausbluten + Kino-Tiefenunschaerfe statt DOM-Fake). Docker: npm ci zieht
+  die neuen Deps ueber die committete package-lock.json. tsc clean. Regression 678/678.
+  LEHRE: die CPU-Grenze war weniger hart als gedacht - Render-Targets gehen in ANGLE,
+  nur teurer. (Motion-Blur weiter offen; DoF/Bloom sind jetzt ECHT statt gefaked.)
+
 - **v107c 3D-Promo Finish-Pass: Reflexionen, Boden, Grade (Ismet: "bau alles ein,
   wir schauen wie lange es dauert").** Alles rein, was auf dem CPU-Server (software-GL,
   KEINE GPU) geht: (1) UMGEBUNGS-REFLEXIONEN - prozedurales Studio-HDRI-lite

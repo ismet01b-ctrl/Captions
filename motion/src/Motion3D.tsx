@@ -6,6 +6,8 @@
 import React from 'react';
 import { AbsoluteFill, useVideoConfig } from 'remotion';
 import { ThreeCanvas } from '@remotion/three';
+// @ts-ignore — postprocessing effect components are runtime JSX, not strictly typed here.
+import { EffectComposer, Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
 import type { SceneSpec } from './spec';
 import { Scene3D } from './three/Scene3D';
 import { Grain } from './blocks/Grain';
@@ -37,18 +39,19 @@ export const Motion3D: React.FC<Motion3DProps> = ({ spec }) => {
         style={{ position: 'absolute', inset: 0 }}
       >
         <Scene3D spec={spec} />
+        {/* REAL GPU-style post stack (via render-targets): physically-based Bloom on the
+            emissive screens/glass, a Depth-of-Field bokeh that holds the hero sharp and
+            softens the depth, and a vignette. Heavier on software-GL but it renders. */}
+        <EffectComposer multisampling={0}>
+          <Bloom intensity={0.9} luminanceThreshold={0.62} luminanceSmoothing={0.25} mipmapBlur radius={0.7} />
+          <DepthOfField focusDistance={0.012} focalLength={0.05} bokehScale={2.6} height={480} />
+          <Vignette eskil={false} offset={0.28} darkness={0.72} />
+        </EffectComposer>
       </ThreeCanvas>
-      {/* Post grade (DOM): a warm-cool cinematic tint, a soft bloom lift on the highlights,
-          and a vignette to focus the eye — a lightweight stand-in for a GPU post stack. */}
+      {/* A subtle DOM colour-grade tint over the top, then film grain. */}
       <AbsoluteFill style={{
-        background:
-          `radial-gradient(120% 90% at 50% 42%, transparent 46%, rgba(4,5,10,0.55) 100%),`
-          + `linear-gradient(180deg, ${palette.accent}12 0%, transparent 30%, ${palette.fg}10 100%)`,
-        mixBlendMode: 'multiply', pointerEvents: 'none',
-      }} />
-      <AbsoluteFill style={{
-        background: `radial-gradient(90% 70% at 50% 40%, ${palette.accent}14 0%, transparent 60%)`,
-        mixBlendMode: 'screen', pointerEvents: 'none',
+        background: `linear-gradient(180deg, ${palette.accent}10 0%, transparent 32%, ${palette.fg}0e 100%)`,
+        mixBlendMode: 'soft-light', pointerEvents: 'none',
       }} />
       <Grain amount={Math.max(spec.grain, 2)} seed={spec.seed} />
     </AbsoluteFill>

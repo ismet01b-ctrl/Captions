@@ -1927,6 +1927,13 @@ def _scenario_logic(clip, transcript, tmp):
           and 'const Floor' in _msc3 and 'shadowTex' in _msc3
           and 'envMapIntensity' in _msc3 and 'const arc' in _msc3
           and 'mixBlendMode' in _m3d)
+    # v107d: echtes GPU-Post via Render-Targets (Bloom + DoF + Vignette), laeuft auf
+    # software-GL (langsamer, aber es rendert - Ismet: "wir sollen es probieren").
+    _mpkg2 = open(os.path.join(HERE, 'motion', 'package.json'), encoding='utf-8').read()
+    check('v107d: echtes Bloom + DepthOfField + Vignette (EffectComposer)',
+          'EffectComposer' in _m3d and '<Bloom' in _m3d
+          and '<DepthOfField' in _m3d and '<Vignette' in _m3d
+          and '@react-three/postprocessing' in _mpkg2 and '"postprocessing"' in _mpkg2)
 
     check('v101w: Server + UI reichen den 3D-Schalter durch',
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
