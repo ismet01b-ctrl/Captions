@@ -1912,16 +1912,18 @@ def _scenario_logic(clip, transcript, tmp):
     # Glas-Chips mit Icons + Hero-Orb + Ringe) auf hellem Studio-Env, Kamerafluss.
     _msc3 = open(os.path.join(HERE, 'motion', 'src', 'three', 'Scene3D.tsx'),
                  encoding='utf-8').read()
-    check('v109: Red-Glass-Promo - Transmission-Glas + Chips(Icons) + Orb + Ringe',
-          'const RedGlass' in _msc3 and 'meshPhysicalMaterial' in _msc3
-          and 'transmission={1}' in _msc3 and 'const Chip' in _msc3
-          and 'iconTex' in _msc3 and 'const Rings' in _msc3
-          and 'const Blob' in _msc3 and 'CameraRig' in _msc3)
+    check('v109b: 3D-Promo = ECHTE Widget-Karten (Kalender/Akku/Uhr/Aktivitaet/App)',
+          'const WidgetCard' in _msc3 and 'const WIDGETS' in _msc3
+          and 'calendar:' in _msc3 and 'battery:' in _msc3 and 'clock:' in _msc3
+          and 'activity:' in _msc3 and 'appcard:' in _msc3
+          and 'widgetTex' in _msc3
+          # kein abstraktes Glas mehr (Ismet: "soll Bezug auf was Realem haben")
+          and 'meshPhysicalMaterial' not in _msc3 and 'const Blob' not in _msc3)
     _m3d = open(os.path.join(HERE, 'motion', 'src', 'Motion3D.tsx'), encoding='utf-8').read()
-    check('v109: helles Studio-Env (Glas refraktiert) + Chromatic Aberration',
+    check('v109b: helles Studio-Env + neutraler Hintergrund + DoF/Bloom',
           'EquirectangularReflectionMapping' in _msc3 and 'scene.environment' in _msc3
-          and 'const studioEnv' in _msc3 and 'envMapIntensity' in _msc3
-          and 'ChromaticAberration' in _m3d and 'mixBlendMode' in _m3d)
+          and 'const studioEnv' in _msc3 and 'shadowTex' in _msc3
+          and 'EffectComposer' in _m3d)
     # v107d: echtes GPU-Post via Render-Targets (Bloom + DoF + Vignette), laeuft auf
     # software-GL (langsamer, aber es rendert - Ismet: "wir sollen es probieren").
     _mpkg2 = open(os.path.join(HERE, 'motion', 'package.json'), encoding='utf-8').read()

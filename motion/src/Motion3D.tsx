@@ -22,16 +22,11 @@ export const Motion3D: React.FC<Motion3DProps> = ({ spec }) => {
   const { palette } = spec;
 
   return (
-    <AbsoluteFill style={{ backgroundColor: '#ffffff' }}>
-      {/* Bright reference-style backdrop: soft white with a warm accent wash, so the red
-          glass reads against light (not a black void). */}
+    <AbsoluteFill style={{ backgroundColor: '#eef0f4' }}>
+      {/* Clean neutral studio backdrop (reference style) — soft grey so the glossy widget
+          cards read as premium objects, not floating in a colour wash. */}
       <AbsoluteFill
-        style={{
-          background:
-            `radial-gradient(90% 70% at 30% 24%, ${palette.accent}22 0%, transparent 55%),`
-            + `radial-gradient(90% 70% at 76% 82%, ${palette.accent}1a 0%, transparent 55%),`
-            + `radial-gradient(120% 100% at 50% 38%, #ffffff 0%, #f3f5f9 55%, #e8ebf1 100%)`,
-        }}
+        style={{ background: 'radial-gradient(120% 100% at 50% 34%, #f6f7fa 0%, #e9ecf1 55%, #dde1e8 100%)' }}
       />
       <ThreeCanvas
         width={width}
@@ -47,10 +42,9 @@ export const Motion3D: React.FC<Motion3DProps> = ({ spec }) => {
         <EffectComposer multisampling={0}>
           {/* bright scene → bloom only the strongest highlights; heavy DoF for the reference's
               creamy bokeh; a whisper of chromatic aberration on the edges. */}
-          <Bloom intensity={0.7} luminanceThreshold={0.82} luminanceSmoothing={0.2} mipmapBlur radius={0.75} />
-          <DepthOfField focusDistance={0.015} focalLength={0.06} bokehScale={3.2} height={480} />
-          <ChromaticAberration offset={new Vector2(0.0012, 0.0012)} radialModulation={false} modulationOffset={0} />
-          <Vignette eskil={false} offset={0.34} darkness={0.5} />
+          <Bloom intensity={0.4} luminanceThreshold={0.9} luminanceSmoothing={0.2} mipmapBlur radius={0.6} />
+          <DepthOfField focusDistance={0.012} focalLength={0.045} bokehScale={2.4} height={480} />
+          <Vignette eskil={false} offset={0.4} darkness={0.4} />
         </EffectComposer>
       </ThreeCanvas>
       {/* A whisper of warm grade + film grain. */}
