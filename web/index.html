@@ -707,6 +707,40 @@ body {
 .tc-go { display: inline-block; margin-top: 16px; color: var(--acc2); font-weight: 700; }
 @media (max-width: 640px) { .tc-cards { grid-template-columns: 1fr; }
   .tc-inner h2 { font-size: 24px; } }
+/* v101y Motion-Wizard (Schritt fuer Schritt wie Captions) */
+.mo-stepper { display: flex; align-items: center; gap: 6px; padding: 6px 2px 18px;
+  overflow-x: auto; scrollbar-width: none; }
+.mo-stepper::-webkit-scrollbar { display: none; }
+.mo-schip { display: flex; align-items: center; gap: 9px; padding: 8px 12px;
+  border-radius: 999px; cursor: pointer; user-select: none; color: var(--mut);
+  flex-shrink: 0; transition: background .15s; }
+.mo-schip:hover { background: var(--surf); color: var(--fg); }
+.mo-schip.done { color: var(--acc2); }
+.mo-schip.active { background: var(--acc); color: #fff; box-shadow: 0 6px 20px -6px var(--acc-glow); }
+.mo-schip .n { width: 24px; height: 24px; border-radius: 50%; background: var(--surf2);
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+  font-weight: 700; color: var(--fg); }
+.mo-schip.active .n { background: rgba(255,255,255,.25); }
+.mo-schip.done .n { background: var(--acc-soft); color: var(--acc2); }
+.mo-schip .l { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.mo-sline { height: 2px; width: 18px; background: var(--line); border-radius: 1px; flex-shrink: 0; }
+.mo-sline.done { background: var(--acc); }
+.mo-step-view { display: none; max-width: 620px; }
+.mo-step-view.active { display: block; }
+.mo-type-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+.mo-type-card { text-align: left; background: var(--surf); border: 1px solid var(--line);
+  border-radius: 16px; padding: 22px 20px; cursor: pointer; color: var(--fg);
+  transition: transform .15s, border-color .15s, box-shadow .15s; }
+.mo-type-card:hover { transform: translateY(-3px); border-color: var(--acc2);
+  box-shadow: 0 16px 44px rgba(0,0,0,.4); }
+.mo-type-card[disabled] { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+.mo-type-card .tc-ic { font-size: 30px; margin-bottom: 10px; }
+.mo-type-card h3 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+.mo-type-card p { color: var(--mut); font-size: 13.5px; line-height: 1.55; }
+.mo-type-card .tc-go { display: inline-block; margin-top: 14px; color: var(--acc2); font-weight: 700; }
+.mo-nav { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+.mo-nav .btn:not(.secondary) { flex: 1; }
+@media (max-width: 640px) { .mo-type-cards { grid-template-columns: 1fr; } }
 /* v101t Auto-Akzente im Momente-Editor */
 .accx-section { padding: 6px 30px 14px; border-top: 1px solid var(--line); }
 .accx-head { display: flex; align-items: center; justify-content: space-between;
@@ -1412,19 +1446,47 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
   <section class="page" id="page-motion">
     <div class="page-head">
       <h1>Motion graphics</h1>
-      <p>Premium Apple-style UI motion — pick a template and a style, fine-tune,
-         and render. Live preview updates as you tweak. 1 credit per clip.</p>
+      <p>Step by step: pick how you want to make it, then follow the flow to a
+         finished clip. AI brief → 3D, or a template you fine-tune. 1 credit per clip.</p>
     </div>
     <div class="page-body">
-      <div class="mo-wrap">
-        <div class="mo-controls">
-          <!-- v101p: Brief -> Motion-Director (nur wenn der Node-Renderer verfuegbar ist) -->
-          <div class="panel hidden" id="moBriefPanel" style="margin-bottom:14px;">
-            <label class="mo-lab">Describe your clip <span class="mo-hint">(AI directs it)</span></label>
-            <textarea class="mo-in" id="moBrief" rows="2"
-              placeholder="e.g. Bold intro for my fitness channel — 3 stats that shock"
+      <!-- v101y: Motion als Schritt-fuer-Schritt-Wizard (wie Captions). Der Stepper
+           passt sich der Engine an: Brief = Type/Describe/Generate, Template =
+           Type/Template/Style/Generate. -->
+      <div class="mo-stepper" id="moStepper" role="tablist" aria-label="Steps"></div>
+      <div class="mo-wizard" id="moWizard">
+
+        <!-- STEP: TYPE -->
+        <div class="mo-step-view active" data-key="type">
+          <h2 class="step-title">What do you want to make?</h2>
+          <p class="step-sub">Two ways to a clip. Pick one — switch back anytime.</p>
+          <div class="mo-type-cards">
+            <button class="mo-type-card" type="button" id="moTypeBrief">
+              <div class="tc-ic">🌀</div>
+              <h3>From a brief <span class="mo-hint">· AI</span></h3>
+              <p>Describe it in one line. Get high-end 3D motion graphics, composed
+                fresh every time. No settings needed.</p>
+              <span class="tc-go">Describe a clip →</span>
+            </button>
+            <button class="mo-type-card" type="button" id="moTypeTemplate">
+              <div class="tc-ic">🧩</div>
+              <h3>From a template</h3>
+              <p>Apple-style UI motion — pills, widgets, lower-thirds. Full control,
+                export MP4 or ProRes alpha for your edit.</p>
+              <span class="tc-go">Pick a template →</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP: DESCRIBE (brief engine) -->
+        <div class="mo-step-view" data-key="describe">
+          <h2 class="step-title">Describe your clip</h2>
+          <p class="step-sub">One line. The AI directs the rest.</p>
+          <div class="panel" id="moBriefPanel">
+            <textarea class="mo-in" id="moBrief" rows="3"
+              placeholder="e.g. Bold intro for my fitness channel — energetic, futuristic"
               style="resize:vertical; font-family:inherit;"></textarea>
-            <label class="mo-check" style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer; font-size:14px; color:var(--fg2);">
+            <label class="mo-check" style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer; font-size:14px; color:var(--fg2);">
               <input type="checkbox" id="moBriefNoText" checked style="width:16px; height:16px; accent-color:var(--acc2);">
               Pure motion graphics <span class="mo-hint">— no text on screen</span>
             </label>
@@ -1432,25 +1494,47 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               <input type="checkbox" id="moBrief3d" checked style="width:16px; height:16px; accent-color:var(--acc2);">
               3D <span class="mo-hint">— real lit geometry, depth &amp; camera move</span>
             </label>
-            <button class="btn" id="moBriefGo" style="width:100%; margin-top:10px;">
-              Generate from brief · 1 credit</button>
-            <div id="moBriefStatus" class="mo-status" style="display:none;"></div>
-            <p class="mo-hint" style="margin-top:8px;">Every brief is composed fresh —
-              variable-weight kinetic type, beat-snapped, safe-zone aware.</p>
+            <p class="mo-hint" style="margin-top:10px;">Every brief is composed fresh —
+              beat-snapped, safe-zone aware.</p>
           </div>
+          <div class="mo-nav">
+            <button class="btn secondary" data-mo-back type="button">Back</button>
+            <button class="btn" data-mo-next type="button">Continue →</button>
+          </div>
+        </div>
+
+        <!-- STEP: TEMPLATE (template engine) -->
+        <div class="mo-step-view" data-key="template">
+          <h2 class="step-title">Pick a template</h2>
+          <p class="step-sub">Choose a base, then add your words.</p>
           <div class="panel">
-            <label class="mo-lab">Template</label>
             <div class="mo-gallery" id="moTemplate"></div>
+            <div id="moWordsWrap">
+              <label class="mo-lab" id="moWordsLab">Words / title <span class="mo-hint">(up to 3)</span></label>
+              <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
+            </div>
+            <div id="moImageWrap">
+              <label class="mo-lab">Image insert <span class="mo-hint">(optional)</span></label>
+              <input type="file" class="mo-file" id="moImage" accept="image/*">
+            </div>
+          </div>
+          <div class="mo-nav">
+            <button class="btn secondary" data-mo-back type="button">Back</button>
+            <button class="btn" data-mo-next type="button">Continue →</button>
+          </div>
+        </div>
+
+        <!-- STEP: STYLE (template engine) -->
+        <div class="mo-step-view" data-key="style">
+          <h2 class="step-title">Style it</h2>
+          <p class="step-sub">Look, format and export.</p>
+          <div class="panel">
             <label class="mo-lab" id="moStyleLab">Style</label>
             <div class="seg" id="moStyle"></div>
             <label class="mo-lab">Format</label>
             <div class="seg" id="moFormat"></div>
             <label class="mo-lab">Export <span class="mo-hint">(MOV = ProRes 4444 with alpha, for Premiere)</span></label>
             <div class="seg" id="moExport"></div>
-            <div id="moWordsWrap">
-              <label class="mo-lab" id="moWordsLab">Words / title <span class="mo-hint">(up to 3)</span></label>
-              <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
-            </div>
             <label class="mo-lab">Accent color</label>
             <input type="color" class="mo-color" id="moAccent" value="#ff7a1a">
             <label class="mo-lab">Motion strength <span id="moMotionV" class="mo-hint"></span></label>
@@ -1459,29 +1543,39 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               <label class="mo-lab">Grain <span id="moGrainV" class="mo-hint"></span></label>
               <div class="slider"><input type="range" id="moGrain" min="0" max="10" step="0.5" value="6"></div>
             </div>
-            <div id="moImageWrap">
-              <label class="mo-lab">Image insert <span class="mo-hint">(optional)</span></label>
-              <input type="file" class="mo-file" id="moImage" accept="image/*">
+          </div>
+          <div class="mo-nav">
+            <button class="btn secondary" data-mo-back type="button">Back</button>
+            <button class="btn" data-mo-next type="button">Continue →</button>
+          </div>
+        </div>
+
+        <!-- STEP: GENERATE / RESULT -->
+        <div class="mo-step-view" data-key="render">
+          <h2 class="step-title">Generate</h2>
+          <div class="mo-preview" style="position:static;">
+            <div class="mo-frame" id="moFrame">
+              <img id="moImg" alt="">
+              <video id="moVid" class="hidden" controls playsinline
+                     preload="metadata" loop></video>
+              <div class="mo-spin" id="moSpin"></div>
             </div>
-            <button class="btn" id="moRender" style="width:100%;margin-top:18px;">Render clip · 1 credit</button>
-            <div id="moStatus" class="mo-status" style="display:none;"></div>
+            <p class="mo-note" id="moNote">Your clip renders here — with motion + sound.</p>
+            <div id="moResultBar" class="mo-result hidden">
+              <a class="btn secondary" id="moDl" download>Download MP4</a>
+              <a class="btn secondary hidden" id="moDlMov" target="_blank" rel="noopener">MOV · Alpha</a>
+              <button class="btn secondary" id="moBackToEdit" type="button">Adjust &amp; re-render</button>
+            </div>
+          </div>
+          <div id="moBriefStatus" class="mo-status" style="display:none;"></div>
+          <div id="moStatus" class="mo-status" style="display:none;"></div>
+          <div class="mo-nav">
+            <button class="btn secondary" data-mo-back type="button">Back</button>
+            <button class="btn" id="moBriefGo" type="button" style="display:none;">Generate from brief · 1 credit</button>
+            <button class="btn" id="moRender" type="button" style="display:none;">Render clip · 1 credit</button>
           </div>
         </div>
-        <div class="mo-preview">
-          <div class="mo-frame" id="moFrame">
-            <img id="moImg" alt="">
-            <video id="moVid" class="hidden" controls playsinline
-                   preload="metadata" loop></video>
-            <div class="mo-spin" id="moSpin"></div>
-          </div>
-          <p class="mo-note" id="moNote">Live preview — a still from the clip.
-             The rendered video adds motion + sound.</p>
-          <div id="moResultBar" class="mo-result hidden">
-            <a class="btn secondary" id="moDl" download>Download MP4</a>
-            <a class="btn secondary hidden" id="moDlMov" target="_blank" rel="noopener">MOV · Alpha</a>
-            <button class="btn secondary" id="moBackToEdit" type="button">Adjust &amp; re-render</button>
-          </div>
-        </div>
+
       </div>
     </div>
   </section>
@@ -2689,15 +2783,73 @@ async function initMotion(){
   $('#moAccent').oninput=()=>{ Motion.sel.accent=$('#moAccent').value; motionPreviewDebounced(); };
   $('#moRender').onclick=motionRender;
   const _mbe=$('#moBackToEdit');
-  if(_mbe) _mbe.onclick=()=>{ moShowPreview();
-    const c=document.querySelector('#page-motion .mo-controls');
-    if(c) c.scrollIntoView({behavior:'smooth', block:'start'}); };
-  // v101p: Brief->Motion-Director nur zeigen, wenn der Node-Renderer da ist
-  if(State.user && State.user.motion_brief){
-    const bp=$('#moBriefPanel'); if(bp) bp.classList.remove('hidden');
-    const bg=$('#moBriefGo'); if(bg) bg.onclick=motionBriefGo;
+  if(_mbe) _mbe.onclick=()=>{ moShowPreview(); goMoStep(1); };
+  const _bg=$('#moBriefGo'); if(_bg) _bg.onclick=motionBriefGo;
+  // v101y: Wizard-Navigation (Schritt fuer Schritt wie Captions).
+  Motion.briefOk = !!(State.user && State.user.motion_brief);
+  const tb=$('#moTypeBrief'), tt=$('#moTypeTemplate');
+  if(tb) tb.onclick=()=>setMoEngine('brief');
+  if(tt) tt.onclick=()=>setMoEngine('template');
+  if(tb && !Motion.briefOk){
+    tb.setAttribute('disabled','');
+    const g=tb.querySelector('.tc-go'); if(g) g.textContent='Warming up — try again soon';
   }
-  moSync(); motionPreview();
+  document.querySelectorAll('#moWizard [data-mo-next]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx+1));
+  document.querySelectorAll('#moWizard [data-mo-back]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx-1));
+  Motion.engine = Motion.briefOk ? 'brief' : 'template';
+  Motion.stepKeys = MO_ENGINE_STEPS[Motion.engine];
+  Motion.stepIdx = 0;
+  renderMoStepper(); goMoStep(0);
+  moSync();
+}
+
+const MO_ENGINE_STEPS = { brief:['type','describe','render'],
+                          template:['type','template','style','render'] };
+const MO_STEP_LABELS = { type:'Type', describe:'Describe', template:'Template',
+                         style:'Style', render:'Generate' };
+function setMoEngine(eng){
+  if(eng==='brief' && !Motion.briefOk){ toast('The AI director is warming up — try again shortly.','err'); return; }
+  Motion.engine=eng; Motion.stepKeys=MO_ENGINE_STEPS[eng];
+  renderMoStepper(); goMoStep(1);
+}
+function renderMoStepper(){
+  const el=$('#moStepper'); if(!el) return;
+  const keys=Motion.stepKeys||MO_ENGINE_STEPS.template;
+  el.innerHTML='';
+  keys.forEach((k,i)=>{
+    if(i>0){ const ln=document.createElement('div'); ln.className='mo-sline'; ln.dataset.i=i; el.appendChild(ln); }
+    const c=document.createElement('div'); c.className='mo-schip'; c.dataset.i=i;
+    c.innerHTML='<div class="n">'+(i+1)+'</div><div class="l">'+(MO_STEP_LABELS[k]||k)+'</div>';
+    c.onclick=()=>{ if(i<=Motion.stepIdx) goMoStep(i); };
+    el.appendChild(c);
+  });
+  updateMoStepper();
+}
+function updateMoStepper(){
+  document.querySelectorAll('#moStepper .mo-schip').forEach(c=>{
+    const i=parseInt(c.dataset.i);
+    c.classList.toggle('active', i===Motion.stepIdx);
+    c.classList.toggle('done', i<Motion.stepIdx);
+  });
+  document.querySelectorAll('#moStepper .mo-sline').forEach(l=>{
+    l.classList.toggle('done', parseInt(l.dataset.i)<=Motion.stepIdx);
+  });
+}
+function goMoStep(i){
+  const keys=Motion.stepKeys||MO_ENGINE_STEPS.template;
+  i=Math.max(0, Math.min(keys.length-1, i));
+  Motion.stepIdx=i; const key=keys[i];
+  document.querySelectorAll('#moWizard .mo-step-view').forEach(v=>{
+    v.classList.toggle('active', v.dataset.key===key);
+  });
+  updateMoStepper();
+  window.scrollTo({top:0, behavior:'smooth'});
+  if(key==='render'){
+    const bg=$('#moBriefGo'), rn=$('#moRender');
+    if(bg) bg.style.display=(Motion.engine==='brief')?'':'none';
+    if(rn) rn.style.display=(Motion.engine==='template')?'':'none';
+    if(Motion.engine==='template'){ try{ motionPreview(); }catch(e){} }
+  }
 }
 
 async function motionBriefGo(){

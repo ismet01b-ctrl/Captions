@@ -1926,6 +1926,16 @@ def _scenario_logic(clip, transcript, tmp):
           and '/app#create' in _land and '/app#motion' in _land
           and 'Motion Graphics' in _land)
 
+    # v101y: Motion als Schritt-fuer-Schritt-Wizard (wie Captions), Engine-adaptiv.
+    check('v101y: Motion-Wizard - Stepper, Type-Fork, adaptive Schritte',
+          'id="moStepper"' in _ui_m and 'id="moWizard"' in _ui_m
+          and 'function goMoStep' in _ui_m and 'function setMoEngine' in _ui_m
+          and 'MO_ENGINE_STEPS' in _ui_m
+          and "brief:['type','describe','render']" in _ui_m
+          and "template:['type','template','style','render']" in _ui_m
+          and 'id="moTypeBrief"' in _ui_m and 'id="moTypeTemplate"' in _ui_m
+          and 'data-key="render"' in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

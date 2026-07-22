@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101y Motion als Schritt-fuer-Schritt-Wizard (Ismet: "Mach Motion genau so
+  wie Captions, step by step").** Die Motion-Seite war ein Ein-Bildschirm-Formular
+  (alles auf einmal); jetzt fuehrt sie wie der Caption-Flow durch nummerierte
+  Schritte mit eigenem Stepper. Schritt 1 "What do you want to make?" gabelt in
+  zwei Engines; der Stepper ist ENGINE-ADAPTIV: Brief-AI = Type/Describe/Generate
+  (3), Template = Type/Template/Style/Generate (4). Pro Schritt eine Karte + Back/
+  Continue, klickbare Stepper-Chips (nur zurueck/aktuell), Generieren erst im
+  letzten Schritt (richtiger Button je Engine eingeblendet, Ergebnis inline).
+  Reiner Frontend-Umbau: alle Element-IDs erhalten -> bestehende Wiring
+  (motionBriefGo/motionRender/motionPoll/moSync/moSeg) unveraendert; goMoStep/
+  setMoEngine/renderMoStepper neu. BEWIESEN: Playwright-Screenshots aller Schritte
+  (Type, Describe, Template) an Ismet - Stepper + Karten rendern sauber. 1 neue
+  Quelltext-Garantie, Regression 652/652 gruen.
+
 - **v101x Captions & Motion als getrennte Produkte (Ismet: "Leute brauchen nur
   Motion ODER nur Captions - loes das").** Beide Zielgruppen bekommen jetzt einen
   klaren, eigenen Einstieg statt in EIN Tool getrichtert zu werden. LANDING:
