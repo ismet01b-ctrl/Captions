@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101z Templates ueber Remotion statt alter Python-gfx-Engine (Ismet: "Template
+  raus, das ist alte Python; ueber Remotion einfuegen").** Der Motion-Wizard nutzt
+  jetzt AUSSCHLIESSLICH Remotion. Kuratiertes Template-Set aus den vorhandenen
+  Bausteinen: Pills (chipRow), Title (kineticHeadline), Lower third (headline +
+  accentUnderline), Big stat (statCard, zaehlt hoch), Quote (bigQuote). Neu
+  motion/src/director/templates.ts: `templateSpec(id,text,{accent,format})` ->
+  deterministische SceneSpec; run.ts-Zweig rendert bei `--template=<id>` das
+  Template statt der KI-Regie; render-brief.mjs reicht --template/--accent/--format
+  durch (Templates immer 2D MotionVideo). Server: /api/motion/brief nimmt template
+  + accent (validiert gegen MOTION_TEMPLATES / Hex), _run_motion_brief haengt
+  --template/--accent an. UI: der Template-Schritt zeigt die Remotion-Templates
+  (Text-Kacheln), Style-Schritt auf Akzentfarbe + Format reduziert; die alte
+  gfx-Bewerbung (Studio/Dark/Bold/Mono, Motion/Grain, Bild-Insert, MOV-Seg) ist
+  raus, moRender feuert jetzt motionTemplateGo -> denselben Remotion-Brief-Endpunkt.
+  BEWIESEN: 3+1 Templates headless gerendert (Pills/Lower-Third/Stat, akzentfarben)
+  + Playwright-Screenshot des Schritts an Ismet; tsc clean. 2 neue Garantien,
+  Regression 654/654 gruen. Die Python-gfx-Endpunkte (/api/motion/render|schema|
+  preview) bleiben im Server, werden vom Wizard aber NICHT mehr genutzt (spaeter
+  entfernbar). NOCH nicht portiert (bewusst, spaeter): widgets/appstore/chat/notify.
+
 - **v101y Motion als Schritt-fuer-Schritt-Wizard (Ismet: "Mach Motion genau so
   wie Captions, step by step").** Die Motion-Seite war ein Ein-Bildschirm-Formular
   (alles auf einmal); jetzt fuehrt sie wie der Caption-Flow durch nummerierte

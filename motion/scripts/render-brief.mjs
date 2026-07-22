@@ -48,8 +48,11 @@ try {
     `--outfile=${directorBundle}`,
     '--log-level=error',
   ]);
-  const noText = passthrough.includes('--no-text') ? ['--no-text'] : [];
-  const specJson = execFileSync('node', [directorBundle, brief, ...noText], {
+  // Pass template / no-text / style flags through to the director bundle.
+  const directorArgs = passthrough.filter(
+    (a) => a === '--no-text' || a.startsWith('--template=') || a.startsWith('--accent=') || a.startsWith('--format='),
+  );
+  const specJson = execFileSync('node', [directorBundle, brief, ...directorArgs], {
     maxBuffer: 8 << 20,
   }).toString();
   writeFileSync(specPath, specJson);
@@ -61,7 +64,9 @@ try {
   const browser = findBrowser(passthrough);
   // --3d -> the Three.js composition, rendered with software GL (--gl=angle) so it
   // works headless on a GPU-less server. 2D stays the default MotionVideo composition.
-  const is3d = passthrough.includes('--3d');
+  // Templates are 2D UI motion -> always MotionVideo. Only a brief may go 3D.
+  const isTemplate = passthrough.some((a) => a.startsWith('--template='));
+  const is3d = passthrough.includes('--3d') && !isTemplate;
   const composition = is3d ? 'Motion3D' : 'MotionVideo';
   execFileSync(
     'npx',
@@ -76,7 +81,8 @@ try {
       ...(is3d ? ['--gl=angle'] : []),
       ...(browser ? [`--browser-executable=${browser}`] : []),
       ...passthrough.filter(
-        (a) => !a.startsWith('--codec=') && a !== '--no-text' && a !== '--3d',
+        (a) => !a.startsWith('--codec=') && a !== '--no-text' && a !== '--3d'
+          && !a.startsWith('--template=') && !a.startsWith('--accent=') && !a.startsWith('--format='),
       ),
     ],
     { stdio: 'inherit' },

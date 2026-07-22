@@ -1761,10 +1761,15 @@ def _run_motion_brief(jid):
     set_state(jid, status='laeuft', phase='Directing your motion …',
               progress=0.1, log_tail=[])
     cmd = ['node', os.path.join('scripts', 'render-brief.mjs'), brief, out]
-    if j.get('no_text'):                      # reine Motion Graphics, keine Typo
-        cmd.append('--no-text')
-    if j.get('d3'):                           # v101w: echtes 3D (Three.js, --gl=angle)
-        cmd.append('--3d')
+    if j.get('template'):                     # v101z: kuratiertes Remotion-Template
+        cmd.append('--template=' + str(j['template']))
+        if j.get('accent'):
+            cmd.append('--accent=' + str(j['accent']))
+    else:
+        if j.get('no_text'):                  # reine Motion Graphics, keine Typo
+            cmd.append('--no-text')
+        if j.get('d3'):                       # v101w: echtes 3D (Three.js, --gl=angle)
+            cmd.append('--3d')
     p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          text=True, bufsize=1)
@@ -2866,9 +2871,13 @@ async def motion_render(request: Request,
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 
 
+MOTION_TEMPLATES = {'pills', 'title', 'lowerthird', 'stat', 'quote'}
+
+
 @app.post('/api/motion/brief')
 async def motion_brief(request: Request, brief: str = Form(...),
-                       no_text: str = Form('0'), d3: str = Form('1')):
+                       no_text: str = Form('0'), d3: str = Form('1'),
+                       template: str = Form(''), accent: str = Form('')):
     """v101p: aus einem Satz eine individuelle Motion-Grafik generieren
     (Remotion-Director). Kostet wie ein Motion-Clip (1 Credit)."""
     u = _require_user(request)
@@ -2888,8 +2897,14 @@ async def motion_brief(request: Request, brief: str = Form(...),
     _yes = ('1', 'true', 'on', 'yes')
     _notext = str(no_text).strip().lower() in _yes
     _d3 = str(d3).strip().lower() in _yes
+    # v101z: kuratiertes Remotion-Template (ersetzt die alte Python-gfx-Engine).
+    _tpl = str(template).strip().lower()
+    _tpl = _tpl if _tpl in MOTION_TEMPLATES else ''
+    _acc = str(accent).strip()
+    _acc = _acc if re.match(r'^#[0-9a-fA-F]{6}$', _acc) else ''
     JOBS[jid] = {'kind': 'motion', 'brief': text, 'user_id': u['id'],
                  'name': _nm + '.mp4', 'dauer': 11, 'no_text': _notext, 'd3': _d3,
+                 'template': _tpl, 'accent': _acc,
                  'cost_sec': MOTION_COST_SEC, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)

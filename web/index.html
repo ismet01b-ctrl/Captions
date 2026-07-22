@@ -738,6 +738,11 @@ body {
 .mo-type-card h3 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
 .mo-type-card p { color: var(--mut); font-size: 13.5px; line-height: 1.55; }
 .mo-type-card .tc-go { display: inline-block; margin-top: 14px; color: var(--acc2); font-weight: 700; }
+.mo-tile-txt { display: flex; flex-direction: column; gap: 5px; justify-content: center;
+  padding: 16px 14px; aspect-ratio: auto; min-height: 92px; background: var(--surf); }
+.mo-tile-txt.on { border-color: var(--acc); background: var(--acc-soft); }
+.mo-tile-txt strong { font-size: 15px; font-weight: 800; color: var(--fg); }
+.mo-tile-txt span { font-size: 12px; color: var(--mut); line-height: 1.4; }
 .mo-nav { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
 .mo-nav .btn:not(.secondary) { flex: 1; }
 @media (max-width: 640px) { .mo-type-cards { grid-template-columns: 1fr; } }
@@ -1510,12 +1515,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <div class="panel">
             <div class="mo-gallery" id="moTemplate"></div>
             <div id="moWordsWrap">
-              <label class="mo-lab" id="moWordsLab">Words / title <span class="mo-hint">(up to 3)</span></label>
+              <label class="mo-lab" id="moWordsLab">Words / title</label>
               <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
-            </div>
-            <div id="moImageWrap">
-              <label class="mo-lab">Image insert <span class="mo-hint">(optional)</span></label>
-              <input type="file" class="mo-file" id="moImage" accept="image/*">
             </div>
           </div>
           <div class="mo-nav">
@@ -1527,22 +1528,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <!-- STEP: STYLE (template engine) -->
         <div class="mo-step-view" data-key="style">
           <h2 class="step-title">Style it</h2>
-          <p class="step-sub">Look, format and export.</p>
+          <p class="step-sub">Accent colour and format.</p>
           <div class="panel">
-            <label class="mo-lab" id="moStyleLab">Style</label>
-            <div class="seg" id="moStyle"></div>
+            <label class="mo-lab">Accent color</label>
+            <input type="color" class="mo-color" id="moAccent" value="#7c5cff">
             <label class="mo-lab">Format</label>
             <div class="seg" id="moFormat"></div>
-            <label class="mo-lab">Export <span class="mo-hint">(MOV = ProRes 4444 with alpha, for Premiere)</span></label>
-            <div class="seg" id="moExport"></div>
-            <label class="mo-lab">Accent color</label>
-            <input type="color" class="mo-color" id="moAccent" value="#ff7a1a">
-            <label class="mo-lab">Motion strength <span id="moMotionV" class="mo-hint"></span></label>
-            <div class="slider"><input type="range" id="moMotion" min="0.4" max="1.6" step="0.05" value="1"></div>
-            <div id="moGrainWrap">
-              <label class="mo-lab">Grain <span id="moGrainV" class="mo-hint"></span></label>
-              <div class="slider"><input type="range" id="moGrain" min="0" max="10" step="0.5" value="6"></div>
-            </div>
           </div>
           <div class="mo-nav">
             <button class="btn secondary" data-mo-back type="button">Back</button>
@@ -2749,39 +2740,37 @@ function moSeg(id, opts, key){
 }
 /* Template-Galerie: Bild-Kacheln statt nackter Buttons - man waehlt ein
    Beispiel, keinen Fachbegriff. */
+/* v101z: kuratiertes Remotion-Template-Set (ersetzt die alte Python-gfx-Engine). */
+const MO_TPLS=[
+  ['pills','Pills','Up to 5 keyword pills that pop in'],
+  ['title','Title','One bold kinetic headline'],
+  ['lowerthird','Lower third','Name + role with an accent bar'],
+  ['stat','Big stat','A number that counts up'],
+  ['quote','Quote','An oversized pull-quote'],
+];
 function moGallery(){
   const el=$('#moTemplate'); if(!el) return;
-  const TPLS=[['pills','Pills'],['widgets','Widgets'],['appstore','App Store'],
-    ['lowerthird','Lower Third'],['chat','Chat'],['notify','Notify']];
+  if(!MO_TPLS.some(t=>t[0]===Motion.sel.template)) Motion.sel.template='pills';
   el.innerHTML='';
-  TPLS.forEach(([val,label])=>{
+  MO_TPLS.forEach(([val,label,hint])=>{
     const c=document.createElement('div');
-    c.className='mo-tile'+(Motion.sel.template===val?' on':'');
-    c.innerHTML=`<img src="/motion_previews/${val}.jpg" alt="" loading="lazy"><span>${label}</span>`;
+    c.className='mo-tile mo-tile-txt'+(Motion.sel.template===val?' on':'');
+    c.innerHTML='<strong>'+label+'</strong><span>'+hint+'</span>';
     c.onclick=()=>{ Motion.sel.template=val;
       el.querySelectorAll('.mo-tile').forEach(x=>x.classList.remove('on'));
-      c.classList.add('on'); moSync(); motionPreview(); };
+      c.classList.add('on'); moSync(); };
     el.appendChild(c);
   });
 }
 
 async function initMotion(){
-  if(Motion.ready){ motionPreview(); return; }
+  if(Motion.ready){ return; }
   Motion.ready=true;
-  try{ const r=await fetch('/api/motion/schema'); Motion.schema=await r.json(); }catch(e){}
   moGallery();
-  moSeg('moStyle',[['Studio','studio'],['Dark','dark'],['Bold','bold'],['Mono','mono']],'style');
   moSeg('moFormat',[['9:16','9:16'],['1:1','1:1'],['16:9','16:9']],'format');
-  moSeg('moExport',[['MP4 · 1 credit','mp4'],['MOV · Alpha · 2 credits','mov']],'exportFmt');
-  const bind=(id,key,fmt)=>{ const el=$('#'+id); if(!el) return;
-    const lab=$('#'+id+'V'); const upd=()=>{ Motion.sel[key]=parseFloat(el.value);
-      if(lab) lab.textContent=fmt?fmt(el.value):el.value; };
-    el.oninput=()=>{ upd(); motionPreviewDebounced(); }; upd(); };
-  bind('moMotion','motion',v=>Number(v).toFixed(2)+'×');
-  bind('moGrain','grain',v=>Number(v).toFixed(1));
-  $('#moWords').oninput=motionPreviewDebounced;
-  $('#moAccent').oninput=()=>{ Motion.sel.accent=$('#moAccent').value; motionPreviewDebounced(); };
-  $('#moRender').onclick=motionRender;
+  Motion.sel.accent=($('#moAccent')&&$('#moAccent').value)||'#7c5cff';
+  $('#moAccent').oninput=()=>{ Motion.sel.accent=$('#moAccent').value; };
+  $('#moRender').onclick=motionTemplateGo;
   const _mbe=$('#moBackToEdit');
   if(_mbe) _mbe.onclick=()=>{ moShowPreview(); goMoStep(1); };
   const _bg=$('#moBriefGo'); if(_bg) _bg.onclick=motionBriefGo;
@@ -2848,7 +2837,7 @@ function goMoStep(i){
     const bg=$('#moBriefGo'), rn=$('#moRender');
     if(bg) bg.style.display=(Motion.engine==='brief')?'':'none';
     if(rn) rn.style.display=(Motion.engine==='template')?'':'none';
-    if(Motion.engine==='template'){ try{ motionPreview(); }catch(e){} }
+    if($('#moRender')) $('#moRender').textContent='Generate template · 1 credit';
   }
 }
 
@@ -2875,35 +2864,43 @@ async function motionBriefGo(){
   }catch(e){ st.style.display='block'; st.textContent='Could not start.';
     btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
 }
-/* Kontext-Sync: Felder/Hinweise/Preis passen sich Template + Export an. */
-const MO_WORDS={
-  pills:      ['Words / title <span class="mo-hint">(up to 3)</span>','Write, Create, Solve',1],
-  widgets:    ['','',0],
-  appstore:   ['App / brand name','DouchkoVE',1],
-  lowerthird: ['Name, role <span class="mo-hint">(2 lines)</span>','Ismet B., Founder',1],
-  chat:       ['Messages <span class="mo-hint">(up to 3)</span>','Hey!, New drop is live, Check it now',1],
-  notify:     ['Notification lines <span class="mo-hint">(up to 2)</span>','Render finished, Your clip is ready',1],
+/* v101z: kuratiertes Remotion-Template rendern (ueber denselben Brief-Endpunkt). */
+async function motionTemplateGo(){
+  const btn=$('#moRender'); const st=$('#moStatus');
+  const text=($('#moWords').value||'').trim();
+  if(text.length<2){ toast('Add your words first.','err'); return; }
+  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
+  st.style.display='block'; st.textContent='Rendering your template …';
+  try{
+    const fd=new FormData(); fd.append('brief', text);
+    fd.append('template', Motion.sel.template||'pills');
+    fd.append('accent', Motion.sel.accent||'#7c5cff');
+    const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
+    if(r.status===402){ st.textContent='Not enough credits.';
+      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on');
+      setTimeout(showPricing,300); return; }
+    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.';
+      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
+    if(!r.ok) throw 0;
+    const j=await r.json();
+    motionPoll(j.jid, st, btn, orig);
+  }catch(e){ st.style.display='block'; st.textContent='Could not start.';
+    btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
+}
+/* Kontext-Sync: Felder/Hinweise passen sich dem Template an. */
+const MO_TPL_LABEL={
+  pills:      ['Keywords <span class="mo-hint">(comma-separated, up to 5)</span>','Write, Create, Solve, Ship, Grow'],
+  title:      ['Headline <span class="mo-hint">(1-4 words)</span>','Ship it'],
+  lowerthird: ['Name, role','Ismet B., Founder'],
+  stat:       ['Number + label','92% faster'],
+  quote:      ['Quote <span class="mo-hint">(add — author)</span>','Done beats perfect — Ismet'],
 };
 function moSync(){
-  const tpl=Motion.sel.template;
-  const [lab,ph,show]=MO_WORDS[tpl]||MO_WORDS.pills;
-  const ww=$('#moWordsWrap'); if(ww) ww.style.display=show?'':'none';
+  const tpl=Motion.sel.template||'pills';
+  const [lab,ph]=MO_TPL_LABEL[tpl]||MO_TPL_LABEL.pills;
   const wl=$('#moWordsLab'); if(wl&&lab) wl.innerHTML=lab;
   const wi=$('#moWords'); if(wi&&ph) wi.placeholder=ph;
-  const iw=$('#moImageWrap'); if(iw) iw.style.display=(tpl==='pills')?'':'none';
-  const mov=Motion.sel.exportFmt==='mov';
-  const frm=$('#moFrame'); if(frm) frm.classList.toggle('alpha', mov);
-  // MOV = transparent: Hintergrund-Regler verschwinden. Grain liegt nur auf
-  // dem Hintergrund-Composite (im MOV nicht enthalten); Style wirkt weiter
-  // auf die Karten -> Hinweis statt verstecken.
-  const gw=$('#moGrainWrap'); if(gw) gw.style.display=mov?'none':'';
-  const sl=$('#moStyleLab'); if(sl) sl.innerHTML=mov
-    ? 'Style <span class="mo-hint">(cards only — background is transparent)</span>'
-    : 'Style';
-  const btn=$('#moRender');
-  if(btn&&!btn.disabled) btn.textContent = Motion.sel.exportFmt==='mov'
-    ? 'Render clip · 2 credits · ProRes 4444 Alpha'
-    : 'Render clip · 1 credit';
 }
 function motionSpec(){
   const words=($('#moWords').value||'').split(',').map(s=>s.trim()).filter(Boolean).slice(0,3);

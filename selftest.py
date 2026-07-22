@@ -1936,6 +1936,24 @@ def _scenario_logic(clip, transcript, tmp):
           and 'id="moTypeBrief"' in _ui_m and 'id="moTypeTemplate"' in _ui_m
           and 'data-key="render"' in _ui_m)
 
+    # v101z: Templates ueber Remotion statt alter Python-gfx-Engine.
+    _mtpl = open(os.path.join(HERE, 'motion', 'src', 'director', 'templates.ts'),
+                 encoding='utf-8').read()
+    _mrun = open(os.path.join(HERE, 'motion', 'src', 'director', 'run.ts'),
+                 encoding='utf-8').read()
+    check('v101z: Remotion-Template-Builder + CLI-Zweig vorhanden',
+          'export function templateSpec' in _mtpl and 'isTemplateId' in _mtpl
+          and "'pills'" in _mtpl and "'lowerthird'" in _mtpl and "'stat'" in _mtpl
+          and 'isTemplateId(tpl)' in _mrun and 'templateSpec(' in _mrun)
+    check('v101z: Server + UI fahren Templates ueber den Remotion-Brief-Endpunkt',
+          "template: str = Form('')" in _srv_m and "MOTION_TEMPLATES" in _srv_m
+          and "cmd.append('--template=" in _srv_m
+          and 'function motionTemplateGo' in _ui_m
+          and "fd.append('template'" in _ui_m
+          # alte gfx-Template-Bewerbung raus aus dem Wizard
+          and "moSeg('moStyle'" not in _ui_m
+          and 'const MO_TPLS=' in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
