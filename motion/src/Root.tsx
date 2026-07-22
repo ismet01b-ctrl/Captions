@@ -23,13 +23,13 @@ const calculateMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) =>
 
 // Showcase: a fixed hand-designed storyboard. Canvas comes from the spec (16:9), duration
 // from the storyboard itself — not spec.duration.
-const showcaseMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) => {
-  const { spec } = props;
+const showcaseMetadata: CalculateMetadataFunction<React.ComponentProps<typeof MotionShowcase>> = ({ props }) => {
+  const { spec, story } = props;
   return {
     width: spec.canvas.w,
     height: spec.canvas.h,
     fps: spec.fps,
-    durationInFrames: Math.max(1, Math.round(showcaseDuration() * spec.fps)),
+    durationInFrames: Math.max(1, Math.round(showcaseDuration(story) * spec.fps)),
   };
 };
 

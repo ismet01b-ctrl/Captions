@@ -23,18 +23,20 @@ import { FONT_FAMILY } from './fonts';
 
 const FONT = `'${FONT_FAMILY}', system-ui, -apple-system, "SF Pro Display", sans-serif`;
 
-export type MotionShowcaseProps = { readonly spec: SceneSpec };
+// The storyboard can come from props (per-user, generated from a transcript by the director) —
+// falling back to the built-in demo storyboard when none is supplied.
+export type MotionShowcaseProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[] };
 
 // ───────────────────────────────────────────────────────────────────────────── storyboard
 // Each shot names an archetype + its (transcript-sourced) copy + how long it holds. The
 // order and copy mirror the reference montage's message so the rebuild is 1:1 in feel.
 
-type ShotKind =
+export type ShotKind =
   | 'ktypo' | 'timer' | 'notes' | 'searchbar' | 'imessage'
   | 'widgets' | 'pill' | 'timeline' | 'signoff';
-type TransKind = 'slideL' | 'morph' | 'push' | 'slideUp';
+export type TransKind = 'slideL' | 'morph' | 'push' | 'slideUp';
 
-interface Shot {
+export interface Shot {
   readonly kind: ShotKind;
   readonly dur: number;              // seconds held (incl. its half of each transition)
   readonly into: TransKind;          // the transition PLAYED INTO this shot
@@ -520,7 +522,7 @@ const SHOT_RENDER: Record<ShotKind, React.FC<ShotCtx>> = {
 
 // ───────────────────────────────────────────────────────────────────────────── composition
 
-const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
+const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[] }> = ({ spec, story }) => {
   const { fps, width: W, height: H } = useVideoConfig();
   const frame = useCurrentFrame();
   const t = frame / fps;
@@ -531,20 +533,20 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
   const tf = TRANS;
   const starts: number[] = [];
   let cur = 0;
-  for (const s of STORY) { starts.push(cur); cur += s.dur - tf; }
-  const n = STORY.length;
+  for (const s of story) { starts.push(cur); cur += s.dur - tf; }
+  const n = story.length;
 
   // Pure layer transform for shot i at absolute time `at` — enter/exit hand-off composed with a
   // never-freeze idle drift. Sampling this at t and t-1frame gives the true motion vector, which
   // is what drives the continuous motion blur (no hand-tuned blur constants anywhere).
   const layerCam = (i: number, at: number): Cam => {
-    const shot = STORY[i]!;
+    const shot = story[i]!;
     const local = at - starts[i]!;
     const tin = clamp01(local / tf);
     const tout = clamp01((local - (shot.dur - tf)) / tf);
     const en = tin >= 1 ? IDENT : enterCam(shot.into, tin, W, H);
     const ex = tout <= 0 ? IDENT
-      : (i < n - 1 ? exitCam(STORY[i + 1]!.into, tout, W, H)
+      : (i < n - 1 ? exitCam(story[i + 1]!.into, tout, W, H)
         : { ...IDENT, alpha: 1 - easeInOutQuint(tout), scale: 1 + 0.06 * easeInOutQuint(tout) });
     let cam = composeCam(en, ex);
     // interactive camera: a motivated move that runs through the whole shot (neutral at p=0 so it
@@ -564,7 +566,7 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
 
   return (
     <AbsoluteFill style={{ background: LIGHT_BG }}>
-      {STORY.map((shot, i) => {
+      {story.map((shot, i) => {
         const start = starts[i]!;
         const local = t - start;
         if (local < -0.02 || local > shot.dur + 0.02) return null;
@@ -597,7 +599,12 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
   );
 };
 
-export const MotionShowcase: React.FC<MotionShowcaseProps> = ({ spec }) => <ShowcaseBody spec={spec} />;
+export const MotionShowcase: React.FC<MotionShowcaseProps> = ({ spec, story }) =>
+  <ShowcaseBody spec={spec} story={story && story.length ? story : STORY} />;
 
 /** Total storyboard length in seconds (drives calculateMetadata for this composition). */
-export const showcaseDuration = (): number => STORY.reduce((a, s) => a + s.dur, 0) - TRANS * (STORY.length - 1);
+export const showcaseDuration = (story: readonly Shot[] = STORY): number =>
+  story.reduce((a, s) => a + s.dur, 0) - TRANS * Math.max(0, story.length - 1);
+
+/** The built-in demo storyboard (used when props supply none). */
+export const DEMO_STORY = STORY;

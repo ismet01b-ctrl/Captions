@@ -2023,9 +2023,27 @@ def _scenario_logic(clip, transcript, tmp):
           'const shotCam' in _msh and 'shotCam(shot.kind' in _msh
           and 'FOLLOW the playhead' in _msh and 'glide along the type' in _msh
           and 'easeInOutSine' in _msh)
+    # v112: pro-User-Generierung — Storyboard kommt aus dem Transkript (individuell), Text WÖRTLICH
+    # aus dem Transkript (kein Halluzinieren), nur Realitäts-Archetypen. Storyboard = Daten (Props).
+    _mbs = _msrc('director/buildShowcase.ts')
+    check('v112: Transkript→Storyboard-Generator (individuell, Provenance by construction)',
+          'export function buildShowcase' in _mbs and 'VERBATIM' in _mbs
+          and 'function pickKind' in _mbs and 'signoff' in _mbs
+          and 'export type MotionShowcaseProps = { readonly spec: SceneSpec; readonly story?' in _msh
+          and 'story={story && story.length ? story : STORY}' in _msh)
+    if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
+        try:
+            _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
+                                 capture_output=True, text=True, timeout=120)
+            check('v112: buildShowcase Node-Test (Individualität + Provenance + nur-Realität)',
+                  _ts.returncode == 0, (_ts.stdout + _ts.stderr)[-200:])
+        except Exception as _e:
+            check('v112: buildShowcase Node-Test', False, str(_e))
+    else:
+        check('v112: buildShowcase Node-Test (node fehlt -> skip)', True)
     check('v111: Komposition registriert (16:9, storyboard-Dauer)',
           'id="MotionShowcase"' in _mrt3b and 'showcaseMetadata' in _mrt3b
-          and 'showcaseDuration()' in _mrt3b)
+          and 'showcaseDuration(story)' in _mrt3b)
 
     check('v101w: Server + UI reichen den 3D-Schalter durch',
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
