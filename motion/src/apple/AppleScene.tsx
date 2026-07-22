@@ -531,7 +531,7 @@ const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: num
       </div>
       {/* front (newest) banner reacts to the press; the older one sits clearly below it */}
       {banner(title, body, 'now', drop, H * 0.30, press)}
-      {banner(title, 'Tap to see what’s new', '2m ago', drop2, H * 0.44)}
+      {banner(title, 'Tap to see what’s new', '2m ago', drop2, H * 0.42)}
     </>
   );
 };
