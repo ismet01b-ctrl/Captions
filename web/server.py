@@ -1846,9 +1846,12 @@ def _run_motion_auto(jid):
     # 1) Audio extrahieren (klein!) - Whisper hat ein 25MB-Limit, ein Handy-Video sprengt
     # das sofort. Wir ziehen eine schlanke Mono-16kHz-Spur und schicken NUR die.
     apath = os.path.join(d, 'audio.m4a')
+    # Bitrate nach Laenge (wie render.py), damit auch lange Videos < 25MB bleiben.
+    _br = max(24, min(64, int(24 * 8192 / max(float(j.get('dauer') or 1.0), 1.0))))
     try:
         _ar = subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', src, '-vn',
-                              '-ac', '1', '-ar', '16000', '-b:a', '64k', apath],
+                              '-ac', '1', '-ar', '16000', '-c:a', 'aac',
+                              '-b:a', f'{_br}k', apath],
                              capture_output=True, text=True, timeout=180)
     except Exception as e:
         set_state(jid, status='fehler', progress=0, msg='Could not read the video audio.',
@@ -1861,8 +1864,9 @@ def _run_motion_auto(jid):
     try:
         words = _whisper_words(apath, j.get('language', 'auto'))
     except Exception as e:
+        # Surface the real reason inline (the UI shows msg) so failures are diagnosable.
         set_state(jid, status='fehler', progress=0,
-                  msg='Could not transcribe the video.',
+                  msg=f'Transcription failed: {str(e)[:180]}',
                   detail=f'{type(e).__name__}: {e}')
         _maybe_refund(jid)
         return
