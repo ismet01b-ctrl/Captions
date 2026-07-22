@@ -2,13 +2,13 @@
 // runtime-augmented; strict TS typing of them is brittle and adds no safety to a render
 // that esbuild bundles anyway. The rest of the stack stays fully typed.
 //
-// Scene3D — the HIGH-END 3D PROMO look (Pillar 3): glowing accent GLASS BLOBS breathing at
-// the centre, a fan of FLOATING DEVICE PANELS (app slabs with emissive UI hints) that fly in
-// from depth on a staggered spring, dramatic three-point + rim lighting, a soft bloom halo,
-// and a cinematic camera push-in with a gentle orbit. Deterministic (positions from the spec
-// seed, motion from absolute time — no useFrame, so Remotion can seek any frame). Software-GL
-// friendly: no transmission/render-targets, only Standard/Basic materials + transparency, so
-// it renders headless on a GPU-less server via `remotion render … --gl=angle`.
+// Scene3D — the HIGH-END 3D PRODUCT PROMO (Pillar 3). A hero phone floats centre-stage with
+// two supporting phones fanned behind it; each phone carries a REAL dark-mode iOS screen
+// (drawn to a canvas texture: status bar, app grid / WhatsApp chat / notification centre) so
+// actual UI flies through space, not empty tiles. Glowing accent glass blobs + an additive
+// bloom halo sit behind for depth; a cinematic camera dollies in and breathes. Deterministic
+// (seed + absolute time, no useFrame → seekable) and software-GL safe (Standard/Basic
+// materials + canvas textures only, no transmission/render-targets → renders via --gl=angle).
 
 import React from 'react';
 import { useThree } from '@react-three/fiber';
@@ -20,109 +20,158 @@ import { hash01 } from '../lib/rng';
 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const ease = (x) => 1 - Math.pow(1 - clamp01(x), 3);
+const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
-/** Cinematic camera: a slow dolly-in over the intro, then a gentle breathing orbit that
- *  always frames the origin. Pure function of the frame (set every render → seekable). */
+// -------------------------------------------------------------- screen textures (canvas UI)
+
+const hexToHsl = (hex) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '') ;
+  const n = m ? parseInt(m[1], 16) : 0x3574ff;
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0; const l = (mx + mn) / 2; const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; }
+  return [((h * 60) + 360) % 360, s, l];
+};
+
+const rr = (g, x, y, w, h, r) => { g.beginPath(); g.roundRect(x, y, w, h, r); };
+
+const drawStatus = (g, W, hue) => {
+  g.fillStyle = '#f3f5fb'; g.font = '700 26px system-ui, sans-serif'; g.textBaseline = 'middle';
+  g.textAlign = 'left'; g.fillText('13:39', 34, 40);
+  g.textAlign = 'right'; g.font = '700 24px system-ui, sans-serif'; g.fillText('5G', W - 78, 40);
+  // signal
+  for (let i = 0; i < 4; i++) { g.globalAlpha = i < 2 ? 1 : 0.4; g.fillRect(W - 150 + i * 9, 48 - (8 + i * 4), 6, 8 + i * 4); }
+  g.globalAlpha = 1;
+  // battery
+  g.strokeStyle = 'rgba(243,245,251,0.5)'; g.lineWidth = 2; rr(g, W - 64, 30, 40, 20, 5); g.stroke();
+  g.fillStyle = '#ffcf3f'; rr(g, W - 60, 34, 20, 12, 3); g.fill();
+};
+
+/** Draw a full dark-mode iOS screen to a canvas → CanvasTexture. Rounded phone with a small
+ *  transparent margin so the plane reads as an actual device. */
+const makeScreen = (variant, accent) => {
+  const W = 480, H = 1010; const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'); const [hue] = hexToHsl(accent);
+  const pad = 10, r = 62;
+  // device body (rounded), transparent outside
+  rr(g, pad, pad, W - pad * 2, H - pad * 2, r); g.save(); g.clip();
+
+  if (variant === 'chat') {
+    g.fillStyle = '#0b141a'; g.fillRect(0, 0, W, H);
+    drawStatus(g, W, hue);
+    // nav
+    g.fillStyle = 'rgba(30,33,42,0.85)'; g.fillRect(0, 60, W, 96);
+    g.fillStyle = `hsl(${hue},55%,50%)`; g.beginPath(); g.arc(96, 116, 30, 0, 7); g.fill();
+    g.fillStyle = '#eaf0f2'; g.font = '700 30px system-ui'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText('Mervenur', 140, 104);
+    g.fillStyle = '#8aa0a8'; g.font = '400 22px system-ui'; g.fillText('online', 140, 132);
+    // bubbles
+    const bub = (x, y, w, h, col) => { g.fillStyle = col; rr(g, x, y, w, h, 26); g.fill(); };
+    bub(40, 210, 300, 92, '#1f2c33'); bub(W - 330, 330, 290, 78, '#075e54');
+    bub(40, 430, 340, 78, '#1f2c33'); bub(W - 300, 530, 260, 78, '#075e54');
+    g.fillStyle = '#e9edef'; g.font = '400 24px system-ui';
+    g.fillText('Das sieht cute aus', 62, 256); g.fillText('Mein Favorit', W - 312, 369);
+    g.fillText('So besser?', 62, 469); g.fillText('Ja perfekt', W - 282, 569);
+    // input bar
+    g.fillStyle = '#1f2c33'; rr(g, 30, H - 108, W - 130, 74, 37); g.fill();
+    g.fillStyle = '#25d366'; g.beginPath(); g.arc(W - 62, H - 71, 34, 0, 7); g.fill();
+  } else if (variant === 'notify') {
+    const grd = g.createLinearGradient(0, 0, W, H);
+    grd.addColorStop(0, `hsl(${(hue + 20) % 360},32%,15%)`); grd.addColorStop(0.5, '#14100e'); grd.addColorStop(1, 'hsl(28,45%,20%)');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H); drawStatus(g, W, hue);
+    g.fillStyle = '#f3f5fb'; g.textAlign = 'center'; g.font = '600 24px system-ui'; g.fillText('Wednesday, 22 July', W / 2, 150);
+    g.font = '700 120px system-ui'; g.fillText('13:39', W / 2, 250);
+    const card = (y, t1, t2) => {
+      g.fillStyle = 'rgba(44,47,58,0.72)'; rr(g, 34, y, W - 68, 130, 34); g.fill();
+      g.fillStyle = `hsl(${hue},75%,55%)`; rr(g, 60, y + 30, 66, 66, 18); g.fill();
+      g.fillStyle = '#f3f5fb'; g.textAlign = 'left'; g.font = '800 26px system-ui'; g.fillText(t1, 150, y + 52);
+      g.fillStyle = '#c2c7d2'; g.font = '400 23px system-ui'; g.fillText(t2, 150, y + 90);
+    };
+    card(430, 'DouchkoVE', 'Your clip is ready'); card(590, 'DouchkoVE', 'Tap to see what’s new');
+  } else { // home
+    const grd = g.createLinearGradient(0, 0, W, H);
+    grd.addColorStop(0, `hsl(${(hue + 15) % 360},34%,16%)`); grd.addColorStop(0.5, '#14110f'); grd.addColorStop(1, 'hsl(26,42%,19%)');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H); drawStatus(g, W, hue);
+    const cols = 4, gap = 30, m = 44, cell = (W - m * 2 - gap * (cols - 1)) / cols;
+    for (let i = 0; i < 16; i++) {
+      const cx = m + (i % cols) * (cell + gap), cy = 120 + Math.floor(i / cols) * (cell + gap + 22);
+      const hh = (i * 47 + hue) % 360; g.fillStyle = `hsl(${hh},68%,55%)`; rr(g, cx, cy, cell, cell, cell * 0.26); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(cx + cell * 0.32, cy + cell * 0.32, cell * 0.36, cell * 0.1);
+      g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '600 18px system-ui'; g.textAlign = 'center'; g.fillText('App', cx + cell / 2, cy + cell + 18);
+    }
+    // dock
+    g.fillStyle = 'rgba(60,64,76,0.5)'; rr(g, 40, H - 150, W - 80, 118, 40); g.fill();
+    for (let i = 0; i < 4; i++) { const dx = 78 + i * ((W - 160) / 3 - 6); g.fillStyle = `hsl(${(i * 80 + 200) % 360},65%,55%)`; rr(g, dx, H - 132, 82, 82, 22); g.fill(); }
+  }
+  g.restore();
+  // bezel highlight
+  g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = 3; rr(g, pad + 1.5, pad + 1.5, W - pad * 2 - 3, H - pad * 2 - 3, r - 2); g.stroke();
+
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return { tex, aspect: (W - pad * 2) / (H - pad * 2) };
+};
+
+/** Cinematic camera: slow dolly-in over the intro, then a gentle breathing orbit. */
 const CameraRig: React.FC<{ t: number }> = ({ t }) => {
   const { camera } = useThree();
-  const dolly = ease(t / 2.2); // push in during the first ~2.2s
-  const z = 9.2 - 3.1 * dolly - Math.sin(t * 0.2) * 0.35;
-  camera.position.set(Math.sin(t * 0.16) * 1.15, 0.3 + Math.cos(t * 0.12) * 0.5, z);
-  camera.lookAt(0, 0.1, 0);
+  const d = easeInOut(clamp01(t / 2.4));
+  const z = 10 - 3.3 * d - Math.sin(t * 0.16) * 0.3;
+  camera.position.set(Math.sin(t * 0.13) * 0.9, 0.35 + Math.cos(t * 0.1) * 0.35, z);
+  camera.lookAt(0, 0.15, 0);
   camera.updateProjectionMatrix();
   return null;
 };
 
-/** A glowing "glass" blob: a translucent emissive shell over a bright inner core, with a
- *  faint wireframe rim for edge definition — reads as lit glass without transmission. */
-const GlassBlob: React.FC<{ pos; scale; color; t; phase }>
-  = ({ pos, scale, color, t, phase }) => {
-    const breathe = 1 + 0.06 * Math.sin(t * 0.9 + phase);
-    const drift = [Math.sin(t * 0.3 + phase) * 0.12, Math.cos(t * 0.26 + phase) * 0.12, 0];
-    return (
-      <group position={[pos[0] + drift[0], pos[1] + drift[1], pos[2]]}
-        rotation={[t * 0.12 + phase, t * 0.16, 0]} scale={scale * breathe}>
-        {/* translucent outer shell */}
-        <mesh>
-          <icosahedronGeometry args={[1, 1]} />
-          <meshStandardMaterial color={color} transparent opacity={0.26}
-            metalness={0.1} roughness={0.08} emissive={color} emissiveIntensity={0.4}
-            depthWrite={false} />
-        </mesh>
-        {/* bright inner core (the glow source) */}
-        <mesh scale={0.6}>
-          <icosahedronGeometry args={[1, 0]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.6}
-            metalness={0.2} roughness={0.3} />
-        </mesh>
-        {/* wire rim */}
-        <mesh scale={1.02}>
-          <icosahedronGeometry args={[1, 1]} />
-          <meshBasicMaterial color={color} wireframe transparent opacity={0.12} />
-        </mesh>
-      </group>
-    );
-  };
-
-/** A floating device panel: a thin dark slab with an emissive accent face and a few glowing
- *  UI bars, flying in from depth on a spring with a slight perspective tilt. */
-const DevicePanel: React.FC<{ i; n; acc; fg; t; seed }>
-  = ({ i, n, acc, fg, t, seed }) => {
-    const spread = (i - (n - 1) / 2);
-    const inSpring = springStep(t - 0.35 - i * 0.18, { stiffness: 90, damping: 0.72, delay: 0 });
-    const s = clamp01(inSpring);
-    const x = spread * 2.35;
-    const y = Math.sin(t * 0.4 + i) * 0.18 + spread * 0.12;
-    const z = -1.4 - Math.abs(spread) * 0.6 + (1 - s) * -7; // fly in from far
-    const tilt = spread * 0.26;
-    const w = 1.35, h = 2.75, d = 0.12;
-    const col = i % 2 ? fg : acc;
-    return (
-      <group position={[x, y, z]} rotation={[Math.sin(t * 0.3 + i) * 0.06, -tilt, spread * 0.04]}
-        scale={0.5 + 0.5 * s}>
-        {/* body */}
-        <mesh>
-          <boxGeometry args={[w, h, d]} />
-          <meshStandardMaterial color="#14161d" metalness={0.6} roughness={0.35}
-            emissive={col} emissiveIntensity={0.06} />
-        </mesh>
-        {/* emissive screen face */}
-        <mesh position={[0, 0, d / 2 + 0.001]}>
-          <planeGeometry args={[w * 0.9, h * 0.92]} />
-          <meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.9}
-            metalness={0.1} roughness={0.5} transparent opacity={0.92} />
-        </mesh>
-        {/* glowing UI bars */}
-        {[0, 1, 2, 3].map((k) => (
-          <mesh key={k} position={[-w * 0.16, h * (0.28 - k * 0.16), d / 2 + 0.01]}>
-            <boxGeometry args={[w * (0.5 - k * 0.06), h * 0.05, 0.02]} />
-            <meshStandardMaterial color="#ffffff" emissive="#ffffff"
-              emissiveIntensity={0.6} transparent opacity={0.85} />
-          </mesh>
-        ))}
-      </group>
-    );
-  };
-
-/** Soft additive bloom halo behind the hero — a big camera-facing gradient sprite. */
-const Halo: React.FC<{ color; t }> = ({ color, t }) => {
-  const tex = React.useMemo(() => {
-    const c = document.createElement('canvas'); c.width = c.height = 128;
-    const g = c.getContext('2d');
-    const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    grd.addColorStop(0, 'rgba(255,255,255,0.9)');
-    grd.addColorStop(0.25, 'rgba(255,255,255,0.5)');
-    grd.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
-    const texture = new THREE.CanvasTexture(c);
-    return texture;
-  }, []);
-  const pulse = 1 + 0.08 * Math.sin(t * 1.1);
+const GlassBlob: React.FC<any> = ({ pos, scale, color, t, phase }) => {
+  const breathe = 1 + 0.06 * Math.sin(t * 0.9 + phase);
   return (
-    <mesh position={[0, 0, -3.2]} scale={6 * pulse}>
+    <group position={[pos[0] + Math.sin(t * 0.3 + phase) * 0.1, pos[1] + Math.cos(t * 0.26 + phase) * 0.1, pos[2]]}
+      rotation={[t * 0.1 + phase, t * 0.14, 0]} scale={scale * breathe}>
+      <mesh><icosahedronGeometry args={[1, 1]} />
+        <meshStandardMaterial color={color} transparent opacity={0.24} metalness={0.1} roughness={0.08}
+          emissive={color} emissiveIntensity={0.4} depthWrite={false} /></mesh>
+      <mesh scale={0.55}><icosahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} metalness={0.2} roughness={0.3} /></mesh>
+    </group>
+  );
+};
+
+/** A floating phone carrying a real dark-mode screen texture. Flies in from depth on a
+ *  spring, then floats + sways smoothly. */
+const PhonePanel: React.FC<any> = ({ variant, accent, t, delay, x, baseZ, baseScale, rotY, phase }) => {
+  const { tex, aspect } = React.useMemo(() => makeScreen(variant, accent), [variant, accent]);
+  const s = clamp01(springStep(t - delay, { stiffness: 80, damping: 0.82, delay: 0 }));
+  const H = 3.15, Wd = H * aspect;
+  const z = baseZ + (1 - s) * -8;
+  const y = 0.12 + Math.sin(t * 0.5 + phase) * 0.09;
+  const sway = Math.sin(t * 0.35 + phase) * 0.05;
+  return (
+    <group position={[x, y, z]} rotation={[sway * 0.5, rotY + sway, sway * 0.3]} scale={baseScale * (0.7 + 0.3 * s)}>
+      {/* soft drop shadow / rim behind the glass screen */}
+      <mesh position={[0, 0, -0.06]}>
+        <planeGeometry args={[Wd * 1.04, H * 1.02]} />
+        <meshStandardMaterial color="#05060a" metalness={0.3} roughness={0.6} transparent opacity={0.9 * s} />
+      </mesh>
+      <mesh>
+        <planeGeometry args={[Wd, H]} />
+        <meshStandardMaterial map={tex} emissiveMap={tex} emissive={'#ffffff'} emissiveIntensity={0.45}
+          roughness={0.22} metalness={0.0} transparent opacity={clamp01(s * 1.4)} />
+      </mesh>
+    </group>
+  );
+};
+
+const Halo: React.FC<any> = ({ color, t }) => {
+  const tex = React.useMemo(() => {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+    const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, 'rgba(255,255,255,0.9)'); grd.addColorStop(0.28, 'rgba(255,255,255,0.45)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+  }, []);
+  return (
+    <mesh position={[0, 0, -3.5]} scale={8 * (1 + 0.07 * Math.sin(t * 1.1))}>
       <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial map={tex} color={color} transparent opacity={0.3}
-        blending={THREE.AdditiveBlending} depthWrite={false} />
+      <meshBasicMaterial map={tex} color={color} transparent opacity={0.28} blending={THREE.AdditiveBlending} depthWrite={false} />
     </mesh>
   );
 };
@@ -133,39 +182,32 @@ export const Scene3D: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
   const t = frame / fps;
   const { palette, beat, seed } = spec;
   const acc = palette.accent;
-  const fg = palette.fg;
   const pulse = beatPulse(t, beat);
-
-  // A small cluster of glass blobs at the centre, sizes/offsets from the seed.
-  const blobs = Array.from({ length: 3 }, (_, i) => ({
-    pos: [(hash01(i, seed) - 0.5) * 1.5, (hash01(i, seed + 7) - 0.5) * 1.0 - 0.1, 0.6 + hash01(i, seed + 13) * 0.7],
-    scale: (0.52 + hash01(i, seed + 3) * 0.5) * (1 + 0.05 * pulse),
-    phase: i * 2.1,
-  }));
 
   return (
     <>
       <CameraRig t={t} />
-      <ambientLight intensity={0.4} />
-      <pointLight position={[5, 6, 6]} intensity={140} color="#ffffff" />
-      <pointLight position={[-6, -2, 4]} intensity={90} color={acc} />
-      <pointLight position={[0, 5, -6]} intensity={70} color={fg} />
-      {/* bright key rim from behind for a glossy edge */}
-      <pointLight position={[0, 0, -4]} intensity={60} color={acc} />
+      <ambientLight intensity={0.5} />
+      <pointLight position={[5, 6, 7]} intensity={150} color="#ffffff" />
+      <pointLight position={[-6, -2, 4]} intensity={95} color={acc} />
+      <pointLight position={[0, 5, -6]} intensity={70} color={palette.fg} />
+      <pointLight position={[0, 0, -4]} intensity={55} color={acc} />
 
       <Halo color={acc} t={t} />
 
-      {/* floating device panels fanned behind/around the hero */}
+      {/* background glass blobs for depth + colour */}
       {Array.from({ length: 3 }, (_, i) => (
-        <DevicePanel key={i} i={i} n={3} acc={acc} fg={fg} t={t} seed={seed} />
+        <GlassBlob key={i} color={acc} t={t} phase={i * 2.1}
+          pos={[(hash01(i, seed) - 0.5) * 4.4, (hash01(i, seed + 7) - 0.5) * 2.4, -2.2 - hash01(i, seed + 3) * 1.5]}
+          scale={(0.5 + hash01(i, seed + 5) * 0.5) * (1 + 0.05 * pulse)} />
       ))}
 
-      {/* hero: cluster of glowing glass blobs */}
-      {blobs.map((b, i) => (
-        <GlassBlob key={i} pos={b.pos} scale={b.scale} color={acc} t={t} phase={b.phase} />
-      ))}
+      {/* supporting phones fan in behind, then the hero rises in front */}
+      <PhonePanel variant="chat" accent={acc} t={t} delay={0.35} x={-2.35} baseZ={-1.3} baseScale={0.74} rotY={0.42} phase={1.2} />
+      <PhonePanel variant="notify" accent={acc} t={t} delay={0.55} x={2.35} baseZ={-1.3} baseScale={0.74} rotY={-0.42} phase={2.7} />
+      <PhonePanel variant="home" accent={acc} t={t} delay={0.15} x={0} baseZ={0.5} baseScale={1.0} rotY={0} phase={0} />
 
-      <fog attach="fog" args={[palette.bg, 8, 18]} />
+      <fog attach="fog" args={[palette.bg, 9, 20]} />
     </>
   );
 };

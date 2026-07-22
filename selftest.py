@@ -1912,8 +1912,10 @@ def _scenario_logic(clip, transcript, tmp):
     # Bloom-Halo, Kino-Kamerafahrt (software-GL-sicher, keine Transmission).
     _msc3 = open(os.path.join(HERE, 'motion', 'src', 'three', 'Scene3D.tsx'),
                  encoding='utf-8').read()
-    check('v107: 3D-Promo - Glas-Blobs + Device-Panels + Halo + Kino-Kamera',
-          'const GlassBlob' in _msc3 and 'const DevicePanel' in _msc3
+    check('v107: 3D-Promo - echte Screens auf Phones + Glas-Blobs + Halo + Kino-Kamera',
+          'const GlassBlob' in _msc3 and 'const PhonePanel' in _msc3
+          and 'const makeScreen' in _msc3   # echte Dark-Mode-Screens als Canvas-Textur
+          and "variant === 'chat'" in _msc3 and 'CanvasTexture' in _msc3
           and 'const Halo' in _msc3 and 'dolly' in _msc3
           and 'AdditiveBlending' in _msc3
           # software-GL-sicher: keine Transmission (kein PhysicalMaterial-Render-Target)

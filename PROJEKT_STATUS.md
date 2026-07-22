@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v107b 3D-Promo realitaetsnah: echte Dark-Mode-Screens fliegen im Raum (Ismet:
+  "passe es so realitaetsnah wie moeglich an, soll fluessig aussehen").** Statt leerer
+  Kacheln tragen die fliegenden Panels jetzt ECHTE iOS-Dark-Screens: makeScreen() malt
+  pro Variante einen kompletten Screen auf Canvas (Statusleiste 13:39/5G/Akku, Home =
+  4x4-App-Grid + Glas-Dock, Chat = WhatsApp-Nav + gruene/dunkle Bubbles + Input, Notify
+  = grosse Uhr + gestapelte Banner) -> THREE.CanvasTexture (SRGB, als map UND emissiveMap,
+  damit die Screens wie eingeschaltet leuchten). Komposition wie ein echtes Produkt-Promo:
+  Hero-Home-Phone gross mittig vorne, Chat-Phone links + Notify-Phone rechts faechern
+  dahinter ein, gerundete Device-Koerper (transparente Ecken via Canvas-Alpha) + Bezel-
+  Highlight + weicher Schlagschatten. Fluessig: Feder-Fly-in (damping 0.82) gestaffelt,
+  danach sanftes Float+Sway, Kamera easeInOut-Dolly ueber 2.4s. Glas-Blobs nach hinten
+  (Hintergrund-Glow), Bloom-Halo. BEWEIS: --3d headless gerendert (promo3d2.mp4) - Hero-
+  Frame zeigt lesbaren Home-Screen (App-Grid, Dock, 5G-Statusbar), Seiten-Phones Chat +
+  Notify, Kamerafahrt. tsc clean. Regression 676/676. EHRLICH: Screens sind Canvas-
+  gezeichnet (getreue Nachbildung, nicht pixelgleich die React-Mockups); naechste Stufe
+  waere echte Mockup-Frames als Textur + Reflexionen/DOF.
+
 - **v107 Pfeiler 3: High-End-3D-Promo-Look (Ismet: "mach dich an Pfeiler 3 dran";
   Referenz Notion-Promo - rote Glas-Blobs, Produkt-Fly-in, Kamerafahrten).** Erste
   Version. Die bestehende 3D-Composition (Motion3D, --3d, Three.js) von abstrakten
