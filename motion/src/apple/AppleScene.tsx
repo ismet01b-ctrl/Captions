@@ -344,16 +344,33 @@ const Chat: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: u * 0.022, padding: '0 6%' }}>
         {msgs.map((m, i) => {
           const out = i % 2 === 1;
-          const pose = entrancePose(t - (0.5 + i * each), { stiffness: 160, damping: 0.6, delay: 0 }, u * 0.05);
+          const t0 = 0.5 + i * each;
+          const pose = entrancePose(t - t0, { stiffness: 160, damping: 0.6, delay: 0 }, u * 0.05);
+          // Incoming messages are preceded by a typing indicator (3 dots) for ~0.7s.
+          const typing = !out && t >= t0 - 0.72 && t < t0;
           return (
             <div key={i}>
-              <div style={{ display: 'flex', justifyContent: out ? 'flex-end' : 'flex-start', opacity: pose.alpha,
-                transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
-                <div style={{ maxWidth: '74%', padding: `${fs * 0.55}px ${fs * 0.85}px`, borderRadius: fs * 1.3,
-                  borderBottomRightRadius: out ? fs * 0.3 : fs * 1.3, borderBottomLeftRadius: out ? fs * 1.3 : fs * 0.3,
-                  background: out ? ui.accent : '#e9ebf0', color: out ? '#fff' : INK, fontSize: fs, fontWeight: 600,
-                  boxShadow: '0 6px 16px rgba(30,50,90,0.1)' }}>{m}</div>
-              </div>
+              {typing ? (
+                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                  <div style={{ display: 'flex', gap: fs * 0.28, padding: `${fs * 0.62}px ${fs * 0.8}px`,
+                    borderRadius: fs * 1.3, borderBottomLeftRadius: fs * 0.3, background: '#e9ebf0',
+                    boxShadow: '0 6px 16px rgba(30,50,90,0.1)' }}>
+                    {[0, 1, 2].map((k) => {
+                      const s = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 9 - k * 0.9));
+                      return <div key={k} style={{ width: fs * 0.42, height: fs * 0.42, borderRadius: '50%',
+                        background: '#b3b8c4', transform: `scale(${s.toFixed(2)})`, opacity: 0.5 + 0.5 * s }} />;
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: out ? 'flex-end' : 'flex-start', opacity: pose.alpha,
+                  transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
+                  <div style={{ maxWidth: '74%', padding: `${fs * 0.55}px ${fs * 0.85}px`, borderRadius: fs * 1.3,
+                    borderBottomRightRadius: out ? fs * 0.3 : fs * 1.3, borderBottomLeftRadius: out ? fs * 1.3 : fs * 0.3,
+                    background: out ? ui.accent : '#e9ebf0', color: out ? '#fff' : INK, fontSize: fs, fontWeight: 600,
+                    boxShadow: '0 6px 16px rgba(30,50,90,0.1)' }}>{m}</div>
+                </div>
+              )}
               {out && i === lastOutIdx && pose.alpha > 0.9 && (
                 <div style={{ textAlign: 'right', fontSize: u * 0.022, color: GRAY, marginTop: u * 0.006, paddingRight: '2%' }}>Delivered</div>
               )}

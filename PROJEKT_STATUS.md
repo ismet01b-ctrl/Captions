@@ -3,6 +3,11 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v102d Chat-Tipp-Indikator (3 Punkte).** Vor jeder EINGEHENDEN Nachricht
+  pulst ~0.7s eine graue "..."-Bubble (3 wellen-animierte Punkte), dann poppt die
+  Nachricht. Ausgehende Nachrichten haben keinen Indikator. tsc clean, gerendert,
+  656/656 gruen. (Bestaetigt: das GESAMTE Mockup-Set ist reines Remotion/React.)
+
 - **v102c UI-Mockups mit Realismus-Detail (Ismet: "mehr Detail + Politur, als
   waere es echt").** Jede der 6 Mockups liest sich jetzt wie ein echter iOS-Screen.
   Geteilte STATUSLEISTE (9:41 + Signal/WLAN/Akku als Vektor) auf Search/Home/
