@@ -1857,6 +1857,28 @@ def _scenario_logic(clip, transcript, tmp):
           _achon and _achon[0]['lane'] == 'bl'
           and [a['lane'] for a in _acrot] == ['tl', 'tr'])
 
+    # v101u: Akzent weicht der Caption aus (nie Ueberschneidung).
+    _capA = np.zeros((int(1920 * 0.14), int(1080 * 0.7), 4), np.uint8)
+    _capA[..., 3] = 255
+    _plansA = [{'start': 0.5, 'end': 3.0, 'cx': 540, 'cy': 1920 * 0.40, 'arr': _capA}]
+    _accU = [{'art': 'chip', 'text': 'RETENTION', 'zeit': 1.0, 'dauer': 1.6,
+              'lane': 'bl', 'aktiv': True}]
+    R.resolve_accent_positions(_accU, _plansA, 1080, 1920, None)
+    _sprU = R._accent_sprite('chip', 'RETENTION', None, 1, 1, {'accent': '#fff'}, 1080)
+    _accBot = _accU[0]['cy'] + _sprU.shape[0] / 2
+    _capTop = 1920 * 0.40 - _capA.shape[0] / 2
+    check('v101u: Akzent ueberdeckt die Caption nicht (weicht nach oben aus)',
+          'cx' in _accU[0] and _accBot <= _capTop + 1, f'{_accBot:.0f}/{_capTop:.0f}')
+    # ohne Caption bleibt die Lane-Position (kein unnoetiges Anheben)
+    _accV = [{'art': 'chip', 'text': 'X', 'zeit': 8.0, 'dauer': 1.6, 'lane': 'tl',
+              'aktiv': True}]
+    R.resolve_accent_positions(_accV, _plansA, 1080, 1920, None)
+    check('v101u: ohne Kollision behaelt der Akzent seine Lane-Position',
+          'cx' in _accV[0] and _accV[0]['cy'] < 1920 * 0.35)
+    check('v101u: UI verspricht Fertig-Mail nur bei verifiziertem Account',
+          'id="progMailNote"' in _ui_m and 'State.user.verified' in _ui_m
+          and 'email you' in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

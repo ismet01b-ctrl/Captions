@@ -3947,9 +3947,12 @@ def _accent_ease(x):
 
 
 def _accent_sprite(art, text, wert, count_prog, ent, style, W):
-    """Ein Akzent -> RGBA-Sprite (numpy uint8). Dezenter Finishing-Look: dunkle
-    Glas-Pille, feiner Akzent-Punkt, weisse Bold-Type. 'pop' ohne Pille (nur
-    betonter Text + Unterstrich-Wisch). Alles relativ zu W skaliert."""
+    """Ein Akzent -> RGBA-Sprite (numpy uint8), Senior-Motion-Designer-Niveau:
+    weicher Schlagschatten (Lesbarkeit auf JEDEM Footage) + Akzent-Aussenglow +
+    Glas-Pille mit Vertikal-Gradient + Top-Highlight + Akzent-Rand. counter zaehlt
+    hoch mit einer Fortschritts-Fuellung, badge = Vektor-Haken im Akzent-Chip,
+    pop = betonter Text ohne Pille + Unterstrich-Wisch. Alles relativ zu W."""
+    from PIL import ImageFilter
     u = W / 1080.0
     rgb = _hex_rgb(style.get('accent'))
     fs = max(int(round(40 * u)), 12)
@@ -3963,57 +3966,91 @@ def _accent_sprite(art, text, wert, count_prog, ent, style, W):
         m = re.match(r'^\s*(\d[\d.,]*)(.*)$', str(text))
         if m:
             disp = str(int(round(wert * count_prog))) + m.group(2)
-    disp = (disp or '').strip() or ' '
-
-    pad_x = int(round(30 * u))
-    pad_y = int(round(18 * u))
-    mark = 'dot' if art in ('chip', 'counter') else ('check' if art == 'badge' else '')
-    dot_r = int(round(7 * u)) if mark else 0
-    label = disp
+    label = (disp or '').strip() or ' '
 
     tmp = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
     bb = tmp.textbbox((0, 0), label, font=font)
     tw, th = bb[2] - bb[0], bb[3] - bb[1]
+    P = int(round(20 * u))                    # Rand fuer Schatten + Glow
 
     if art == 'pop':
-        # Kein Pille: betonter Akzent-Text mit Schatten + Unterstrich-Wisch.
-        m2 = int(round(18 * u))
-        w = tw + m2 * 2
-        h = th + m2 * 2 + int(round(10 * u))
-        img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        m2 = int(round(16 * u))
+        pw, ph = tw + m2 * 2, th + m2 * 2 + int(round(12 * u))
+        img = Image.new('RGBA', (pw + 2 * P, ph + 2 * P), (0, 0, 0, 0))
+        tx, ty = P + m2 - bb[0], P + m2 - bb[1]
+        # weicher Textschatten fuer Lesbarkeit
+        sh = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        ImageDraw.Draw(sh).text((tx, ty + int(3 * u)), label, font=font, fill=(0, 0, 0, 200))
+        img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(4 * u)))
         d = ImageDraw.Draw(img)
-        tx, ty = m2 - bb[0], m2 - bb[1]
-        d.text((tx + 2, ty + 2), label, font=font, fill=(0, 0, 0, 150))   # Schatten
-        d.text((tx, ty), label, font=font, fill=(*rgb, 255))
+        d.text((tx, ty), label, font=font, fill=(255, 255, 255, 255))
         uw = int(tw * max(0.0, min(1.0, ent)))
-        uy = ty + th + int(round(8 * u))
+        uy = ty + th + int(round(9 * u))
         if uw > 1:
             d.rounded_rectangle([tx, uy, tx + uw, uy + int(round(6 * u))],
                                 radius=int(round(3 * u)), fill=(*rgb, 255))
         return np.array(img)
 
-    dot_gap = (dot_r * 2 + int(round(12 * u))) if dot_r else 0
-    w = tw + pad_x * 2 + dot_gap
-    h = th + pad_y * 2
-    img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    mark = 'dot' if art in ('chip', 'counter') else ('check' if art == 'badge' else '')
+    dot_r = int(round(7 * u)) if mark else 0
+    pad_x = int(round(30 * u))
+    pad_y = int(round(18 * u))
+    dot_gap = (dot_r * 2 + int(round(13 * u))) if dot_r else 0
+    pw = tw + pad_x * 2 + dot_gap
+    ph = th + pad_y * 2
+    rad = ph // 2
+    W_, H_ = pw + 2 * P, ph + 2 * P
+    img = Image.new('RGBA', (W_, H_), (0, 0, 0, 0))
+    box = [P, P, P + pw - 1, P + ph - 1]
+
+    # 1) Schlagschatten: Pillen-Silhouette, dunkel, versetzt, weich.
+    sh = Image.new('RGBA', (W_, H_), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle(
+        [box[0], box[1] + int(6 * u), box[2], box[3] + int(6 * u)],
+        radius=rad, fill=(0, 0, 0, 150))
+    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(9 * u)))
+    # 2) Akzent-Aussenglow: gleiche Form, Akzentfarbe, stark verwischt.
+    gl = Image.new('RGBA', (W_, H_), (0, 0, 0, 0))
+    ImageDraw.Draw(gl).rounded_rectangle(box, radius=rad, fill=(*rgb, 90))
+    img.alpha_composite(gl.filter(ImageFilter.GaussianBlur(11 * u)))
+    # 3) Glas-Koerper: Vertikal-Gradient (oben heller) durch Rundeck-Maske.
+    grad = np.empty((ph, pw, 4), np.uint8)
+    top, bot = np.array((34, 34, 42)), np.array((12, 12, 17))
+    ramp = np.linspace(0, 1, ph)[:, None]
+    grad[..., :3] = (top * (1 - ramp) + bot * ramp)[:, None, :].astype(np.uint8)
+    grad[..., 3] = 224
+    mask = Image.new('L', (pw, ph), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, pw - 1, ph - 1], radius=rad, fill=255)
+    body = Image.fromarray(grad)
+    body.putalpha(Image.composite(mask, Image.new('L', (pw, ph), 0), mask))
+    img.alpha_composite(body, (P, P))
     d = ImageDraw.Draw(img)
-    rad = h // 2
-    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=rad, fill=(16, 16, 20, 210))
-    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=rad, outline=(*rgb, 235),
+    # 4) Akzent-Rand (der Gradient gibt schon Tiefe - kein Glanz-Bogen noetig).
+    d.rounded_rectangle(box, radius=rad, outline=(*rgb, 240),
                         width=max(int(round(2.5 * u)), 2))
-    tx = pad_x + dot_gap - bb[0]
+    # 5) Marke (Punkt / Vektor-Haken).
+    cyd = H_ // 2
+    cxd = P + pad_x - int(round(2 * u))
     if mark == 'dot':
-        cyd = h // 2
-        cxd = pad_x - int(round(2 * u))
+        gd = Image.new('RGBA', (W_, H_), (0, 0, 0, 0))
+        ImageDraw.Draw(gd).ellipse([cxd - dot_r, cyd - dot_r, cxd + dot_r, cyd + dot_r],
+                                   fill=(*rgb, 255))
+        img.alpha_composite(gd.filter(ImageFilter.GaussianBlur(3 * u)))
         d.ellipse([cxd - dot_r, cyd - dot_r, cxd + dot_r, cyd + dot_r], fill=(*rgb, 255))
     elif mark == 'check':
-        cyd = h // 2
-        cxd = pad_x - int(round(2 * u))
         lw = max(int(round(3.5 * u)), 2)
         d.line([(cxd - dot_r, cyd), (cxd - dot_r * 0.2, cyd + dot_r),
                 (cxd + dot_r, cyd - dot_r)], fill=(*rgb, 255), width=lw, joint='curve')
-    d.text((tx, pad_y - bb[1]), label, font=font,
-           fill=(*rgb, 255) if art == 'badge' else (245, 245, 248, 255))
+    # 6) Text.
+    tx = P + pad_x + dot_gap - bb[0]
+    d.text((tx, P + pad_y - bb[1]), label, font=font, fill=(245, 245, 248, 255))
+    # 7) counter: duenne Fortschritts-Fuellung unter der Zahl (zaehlt mit hoch).
+    if art == 'counter':
+        uy = P + ph - int(round(7 * u))
+        fw = int((pw - pad_x - dot_gap) * max(0.0, min(1.0, count_prog)))
+        if fw > 1:
+            d.rounded_rectangle([tx, uy, tx + fw, uy + int(round(4 * u))],
+                                radius=int(round(2 * u)), fill=(*rgb, 255))
     return np.array(img)
 
 
@@ -4038,9 +4075,53 @@ def _accent_place(lane, w, h, W, H, pz):
     }.get(lane, (left_x, y_top))
 
 
+def _caption_boxes(plans, t0, t1, W, H):
+    """Bounding-Boxen der Caption-Plaene, die im Fenster [t0,t1] sichtbar sind."""
+    out = []
+    for p in (plans or []):
+        if p.get('end', 0) < t0 or p.get('start', 1e9) > t1:
+            continue
+        arr = p.get('arr')
+        cx = p.get('cx', W / 2)
+        cy = p.get('cy', p.get('by', H * 0.398))
+        if arr is not None and hasattr(arr, 'shape'):
+            cw, ch = arr.shape[1], arr.shape[0]
+        else:                                  # Komposit (flow/stack) - konservativ
+            cw, ch = int(W * 0.82), int(H * 0.17)
+        out.append((cx - cw / 2, cy - ch / 2, cx + cw / 2, cy + ch / 2))
+    return out
+
+
+def resolve_accent_positions(accents, plans, W, H, pz=None):
+    """v101u: Akzent-Position EINMAL vor dem Rendern festlegen, so dass sie die im
+    Zeitfenster aktiven Captions NICHT ueberdeckt. Bevorzugt die Lane; kollidiert
+    sie, wird der Akzent knapp UEBER die oberste Caption gehoben. Danach stabil
+    (kein Per-Frame-Springen). Setzt a['cx'], a['cy']."""
+    for a in (accents or []):
+        t0 = float(a.get('zeit', 0))
+        t1 = t0 + float(a.get('dauer', 1.6))
+        try:
+            spr = _accent_sprite(a.get('art', 'chip'), a.get('text', ''),
+                                 a.get('wert'), 1.0, 1.0, {'accent': '#ffffff'}, W)
+            h, w = spr.shape[:2]
+        except Exception:
+            w, h = int(W * 0.3), int(H * 0.06)
+        cx, cy = _accent_place(a.get('lane', 'tl'), w, h, W, H, pz)
+        boxes = _caption_boxes(plans, t0, t1, W, H)
+        ax0, ay0, ax1, ay1 = cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2
+        hit = [b for b in boxes
+               if not (ax1 < b[0] or ax0 > b[2] or ay1 < b[1] or ay0 > b[3])]
+        if hit:
+            cap_top = min(b[1] for b in hit)
+            cy = max(int(H * 0.04) + h / 2, cap_top - int(H * 0.02) - h / 2)
+        a['cx'], a['cy'] = int(cx), int(cy)
+    return accents
+
+
 def draw_accents(comp, t, accents, style, W, H, pz=None):
     """Zeichnet die aktiven Akzente OBEN auf das fertige Frame (nach den Captions).
-    Feder-Einflug, Halt, weicher Abgang; Counter zaehlt hoch. Reine paste()-Blits."""
+    Feder-Einflug, Halt, weicher Abgang; Counter zaehlt hoch. Reine paste()-Blits.
+    Position kommt (falls vorher aufgeloest) aus a['cx']/a['cy'], sonst aus der Lane."""
     for a in accents:
         if not a.get('aktiv', True):
             continue
@@ -4063,8 +4144,11 @@ def draw_accents(comp, t, accents, style, W, H, pz=None):
         except Exception:
             continue
         sh, sw = spr.shape[:2]
-        cx, cy = _accent_place(a.get('lane', 'tl'),
-                               int(sw * scale), int(sh * scale), W, H, pz)
+        if 'cx' in a and 'cy' in a:
+            cx, cy = int(a['cx']), int(a['cy'])
+        else:
+            cx, cy = _accent_place(a.get('lane', 'tl'),
+                                   int(sw * scale), int(sh * scale), W, H, pz)
         paste(comp, spr, cx, cy, W, H, scale=scale, opacity=alpha)
     return comp
 
@@ -8093,6 +8177,9 @@ def main():
         except Exception:
             _pz_for_accents = None
         if accents_render:
+            # v101u: Position gegen die echten Caption-Boxen aufloesen -> Akzent
+            # und Caption ueberschneiden sich nie (Akzent weicht nach oben aus).
+            resolve_accent_positions(accents_render, plans, W, H, _pz_for_accents)
             print(f"Auto-Akzente: {len(accents_render)} dezente Motion-Graphics")
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.

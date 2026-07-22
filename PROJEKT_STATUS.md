@@ -3,6 +3,24 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101u Handy-Weggehen + kein Caption/Akzent-Overlap + High-End-Akzente
+  (Ismet-Batch).** DREI Dinge auf einmal: (1) HANDY: Fertig-Mail existiert schon
+  (_notify_job_done, Caption + Motion, verifizierte Accounts, 1x/Job) - jetzt sagt
+  es die Render-Seite auch klar an ("Close the tab - we'll email you", nur bei
+  verifiziertem Account per progMailNote). (2) KEIN OVERLAP: die Captions dieses
+  Produkts sitzen ~0.40H (Mitte) - Akzente in bl/br kollidierten. Neu
+  resolve_accent_positions() legt die Akzent-Position EINMAL vor dem Rendern gegen
+  die echten Caption-Boxen im jeweiligen Zeitfenster fest (_caption_boxes) und hebt
+  einen kollidierenden Akzent knapp UEBER die oberste Caption; danach stabil (kein
+  Per-Frame-Springen). (3) HIGH-END-OPTIK: _accent_sprite komplett aufgewertet auf
+  Senior-Niveau - weicher Schlagschatten (Lesbarkeit auf JEDEM Footage),
+  Akzent-Aussenglow, Glas-Pille mit Vertikal-Gradient, Akzent-Rand, Punkt-Glow,
+  Counter mit Fortschritts-Fuellbalken, Badge = Vektor-Haken, pop = Text +
+  Unterstrich-Wisch (alles via PIL GaussianBlur, deterministisch). BEWIESEN:
+  echter Render (Frames + Video an Ismet), Overlap-Unit-Test (Akzent-Unterkante <=
+  Caption-Oberkante). 4 neue Tests. Regression 645/645 + render1 7/7 gruen.
+  EHRLICH: Optik-Feinschliff + KI-Platzierung final erst auf echtem Material/GPU.
+
 - **v101t Auto-Akzente Etappe 3/4: Editor (sehen/aendern/loeschen/hinzufuegen).**
   Die Akzente sind jetzt im Momente-Editor kuratierbar. render.py schreibt den
   Akzent-Plan ZUSAMMEN mit den Momenten (bei der Ausgabe/plan-only), sodass er im
