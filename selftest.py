@@ -2028,6 +2028,13 @@ def _scenario_logic(clip, transcript, tmp):
           and 'spec.sfx' in _mseq
           and "existsSync(join(process.cwd(), 'public', 'sfx'" in _mrun
           and 'MOTION_TRANSITIONS' in _srv_m and "o.transition=r.transition" in _ui_m)
+    # Die 6 designten Transition-SFX liegen als Asset vor (sonst rendert die Sequenz
+    # stumm) + der Generator ist im Repo (reproduzierbar, dokumentierte Herkunft).
+    _sfxdir = os.path.join(HERE, 'motion', 'public', 'sfx')
+    check('v103b: 6 Transition-SFX-Assets vorhanden + Generator im Repo',
+          all(os.path.exists(os.path.join(_sfxdir, k + '.wav'))
+              for k in ('whoosh', 'whoosh2', 'swish', 'airy', 'click', 'pop'))
+          and os.path.exists(os.path.join(HERE, 'motion', 'scripts', 'gen_sfx.py')))
     if shutil.which('node') and os.path.isdir(os.path.join(_mroot2, 'node_modules')):
         try:
             _tr2 = subprocess.run(['node', 'scripts/test-transitions.mjs'], cwd=_mroot2,

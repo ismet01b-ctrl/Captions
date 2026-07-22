@@ -23,8 +23,17 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
   Segment-Kette (25.6s) headless gerendert -> 5 sichtbar verschiedene Uebergaenge
   (Frame-Streifen an Ismet, Whip-Motion-Blur klar zu sehen). tsc clean, Transition-
   Node-Unit-Test gruen (Identity-Enden, kein Repeat, Override sanitisiert).
-  Regression 666/666. OFFEN: die CC0-Whoosh/Click/Pop-Assets fuer public/sfx
-  (Quelle mit Ismet klaeren - erst dann klingt es, vorher stumm).
+  Regression 666/666.
+  SOUND-NACHTRAG: Ismet-Entscheid = "Sounds selbst designen" (ausdrueckliches OK,
+  bewusste Ausnahme der CC0-Regel NUR fuer Motion-Transition-SFX). 6 Sounds selbst
+  synthetisiert (motion/scripts/gen_sfx.py, echtes Sound-Design: zeitvariabler
+  Chamberlin-SVF-Bandpass auf geformtem Rauschen, Pitch/Formant-Sweeps passend zur
+  Bewegung, saubere Attack/Decay-Huellkurven, Stereo-Breite - KEINE Beeps):
+  whoosh(whip), whoosh2(3D-swoosh, mit Doppler-Shimmer), swish(glass), airy(blurzoom),
+  click(push, 60ms-Transient), pop(iris, Pitch-Drop). 48kHz Stereo in public/sfx/.
+  BEWEIS: 6-Segment-Kette neu gerendert MIT Ton (AAC-Stereo im MP4); Audio-Analyse
+  zeigt exakt 5 Bursts an den Grenzen (3.88/7.91/12.34/16.37/21.41s) und ECHTE Stille
+  dazwischen. Regression 667/667. (An Ismet: seq_sound.mp4.)
 
 - **v103 Sequencer + seamless Transitions (Ismet, Referenz Notion-Promo: "Die
   Motion muessen genau so aneinander geknuepft werden koennen mit guten seamless
