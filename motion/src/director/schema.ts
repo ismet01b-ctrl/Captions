@@ -159,6 +159,7 @@ export const sceneSpecZ = z.object({
     subtitle: z.string().max(120).optional(),
     lines: z.array(z.string().max(120)).max(8),
     accent: z.string(),
+    logo: z.string().optional(),
   }).optional(),
   sequence: z.array(z.object({
     ui: z.any(),
@@ -166,6 +167,7 @@ export const sceneSpecZ = z.object({
     transition: z.enum(['push', 'panv', 'cover', 'dolly', 'swoosh', 'tilt']).optional(),
   })).optional(),
   sfx: z.array(z.string()).optional(),
+  font: z.object({ family: z.string(), url: z.string() }).optional(),
 });
 
 // Compile-time drift guard (readonly-safe): the schema and SceneSpec must share the same

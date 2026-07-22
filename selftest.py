@@ -2050,6 +2050,27 @@ def _scenario_logic(clip, transcript, tmp):
     else:
         check('v103b: Transition Node-Unit-Test (node fehlt -> skip)', True)
 
+    # v104 (Pfeiler 2): eigenes Logo/Bild + eigene Schrift ueberall in die Mockups.
+    _mas = open(os.path.join(HERE, 'motion', 'src', 'apple', 'AppleScene.tsx'),
+                encoding='utf-8').read()
+    _mspec = open(os.path.join(HERE, 'motion', 'src', 'spec.ts'), encoding='utf-8').read()
+    check('v104: Logo/Font im Spec-Vertrag + Director liest --assets',
+          'logo?: string' in _mspec and 'font?:' in _mspec
+          and "argVal('assets')" in _mrun
+          and "family: 'DVEUserFont'" in _mrun)
+    check('v104: AppleScene rendert Logo (Img) + laedt User-Font (FontFace)',
+          'logo?: string' in _mas and '<Img src={logo}' in _mas
+          and 'ensureUserFont' in _mas and 'FontFace(font.family' in _mas
+          and 'fontStack(spec)' in _mas)
+    check('v104: Server nimmt Logo/Font-Uploads an (validiert) + reicht --assets durch',
+          'logo: UploadFile = File(None)' in _srv_m and 'font: UploadFile = File(None)' in _srv_m
+          and '_ASSET_CAP' in _srv_m and "cmd.append('--assets=" in _srv_m
+          and "a.startsWith('--assets=')" in _mrb2)
+    check('v104: UI - Brand-Upload (Logo/Font) in Template- + Sequence-Schritt',
+          'id="moLogo"' in _ui_m and 'id="moFont"' in _ui_m
+          and 'id="moLogoSeq"' in _ui_m and 'id="moFontSeq"' in _ui_m
+          and "fd.append('logo'" in _ui_m and "fd.append('font'" in _ui_m)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

@@ -36,6 +36,8 @@ const strHash = (s: string): number => {
 export interface TemplateOpts {
   readonly format?: Format;
   readonly accent?: string;
+  readonly logo?: string; // user brand image (data URI) — Pillar 2
+  readonly font?: { readonly family: string; readonly url: string }; // user font (data URI)
 }
 
 const DUR: Record<TemplateId, number> = {
@@ -97,7 +99,8 @@ export function templateSpec(id: TemplateId, text: string, opts: TemplateOpts = 
     palette,
     beat: { bpm: 120, offset: 0, snapTol: 0.09 },
     scenes: [],
-    ui: { template: id, title, subtitle, lines, accent },
+    ui: { template: id, title, subtitle, lines, accent, ...(opts.logo ? { logo: opts.logo } : {}) },
+    ...(opts.font ? { font: opts.font } : {}),
   };
 }
 
@@ -114,7 +117,7 @@ export function sequenceSpec(
   const segs: SeqSegment[] = src.map((it) => {
     const id = it.template as TemplateId;
     const { title, subtitle, lines } = parseTemplateText(id, it.text);
-    const ui: UiSpec = { template: id, title, subtitle, lines, accent };
+    const ui: UiSpec = { template: id, title, subtitle, lines, accent, ...(opts.logo ? { logo: opts.logo } : {}) };
     const tr = it.transition && isTransId(it.transition) ? (it.transition as TransId) : undefined;
     return tr ? { ui, dur: DUR[id], transition: tr } : { ui, dur: DUR[id] };
   });
@@ -126,5 +129,6 @@ export function sequenceSpec(
     duration: Math.round(total * 100) / 100, grain: 0,
     palette: { ...base, accent }, beat: { bpm: 120, offset: 0, snapTol: 0.09 },
     scenes: [], sequence: segs,
+    ...(opts.font ? { font: opts.font } : {}),
   };
 }

@@ -182,6 +182,9 @@ export interface UiSpec {
   readonly subtitle?: string;
   readonly lines: readonly string[]; // pills / chat messages / notify lines
   readonly accent: string;
+  // User-supplied brand image (data URI). When set it replaces the generated app icon /
+  // chat avatar / featured tile so the mockup carries the user's own logo. Pillar 2.
+  readonly logo?: string;
 }
 
 /**
@@ -215,6 +218,9 @@ export interface SceneSpec {
   // MotionSequence only mounts <Audio> for keys listed here — no asset -> silent (never a
   // cheap synthetic beep). Undefined/empty = the sequence renders silent.
   readonly sfx?: readonly string[];
+  // User-supplied custom font (data URI + family name). When set, all mockup text renders
+  // in the user's own typeface. Loaded via FontFace under delayRender. Pillar 2.
+  readonly font?: { readonly family: string; readonly url: string };
 }
 
 /** Runtime guard: the AI director's JSON is validated before it ever reaches the renderer. */

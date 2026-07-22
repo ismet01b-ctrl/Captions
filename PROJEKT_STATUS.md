@@ -3,6 +3,24 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v104 Pfeiler 2: eigene Bilder/Logos/Schriften ueberall (Ismet: "jeder soll seine
+  eigenen Bilder, Logos, Schriften etc. ueberall einfuegen koennen").** Erste Version.
+  EIGENES LOGO/BILD: ersetzt das App-Icon in App card, die erste Kachel im Home screen,
+  den Chat-Avatar und das Notification-Icon - dein Logo zieht sich durch alle Szenen.
+  EIGENE SCHRIFT: die hochgeladene Font faerbt ALLE Mockup-Texte (Titel, Labels,
+  Nachrichten). Technik: Uploads werden serverseitig validiert (Bild-/Font-MIME, 4MB-Cap),
+  als data-URI base64-kodiert und ueber eine Temp-Datei (assets.json, --assets=<pfad>) an
+  den Director gereicht (data-URIs sind zu gross fuer argv). Der Director legt sie in
+  spec.ui.logo bzw. spec.font (family 'DVEUserFont'). AppleScene rendert das Logo via
+  Remotion <Img> (rundes Masken-Icon) und laedt die Font via FontFace unter delayRender
+  (blockt bis bereit, wie die gebundelte Inter). Gilt fuer Template UND Sequence; UI:
+  "Your brand (optional)" mit Logo- + Font-Upload in beiden Schritten. BEWEIS: App card
+  einzeln + 4-Szenen-Kette (App card->Home->Chat->Notify) mit Test-Logo (teal Ø) +
+  Serifen-Font gerendert - Logo erscheint in JEDER Szene, alle Texte in Serif
+  (brand_appcard.mp4, brand_seq.mp4 an Ismet). tsc clean. Regression 671/671.
+  OFFEN (bewusst v1): eigene Screenshots in den App-card-Strip / Bilder in pills+search
+  als Brand-Mark; Font-Weight-Achse; Brief-Pfad (MotionVideo) bekommt Logo/Font noch nicht.
+
 - **v103c Transitions umgebaut: interaktiv/kamera-raeumlich statt Blur (Ismet: "Ich
   will NICHT, dass die Transition out in Blur ist. Ich will, dass sie interaktiv ist -
   eins wird angezeigt, dann wird das andere passend reingeschoben, Kamera schwenkt").**

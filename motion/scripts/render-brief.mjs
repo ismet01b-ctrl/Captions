@@ -51,7 +51,7 @@ try {
   // Pass template / sequence / no-text / style flags through to the director bundle.
   const directorArgs = passthrough.filter(
     (a) => a === '--no-text' || a.startsWith('--template=') || a.startsWith('--accent=')
-      || a.startsWith('--format=') || a.startsWith('--sequence='),
+      || a.startsWith('--format=') || a.startsWith('--sequence=') || a.startsWith('--assets='),
   );
   const specJson = execFileSync('node', [directorBundle, brief, ...directorArgs], {
     maxBuffer: 8 << 20,
@@ -86,7 +86,7 @@ try {
       ...passthrough.filter(
         (a) => !a.startsWith('--codec=') && a !== '--no-text' && a !== '--3d'
           && !a.startsWith('--template=') && !a.startsWith('--accent=') && !a.startsWith('--format=')
-          && !a.startsWith('--sequence='),
+          && !a.startsWith('--sequence=') && !a.startsWith('--assets='),
       ),
     ],
     { stdio: 'inherit' },

@@ -5,7 +5,7 @@
 //
 // Bundled to ESM via esbuild (no ts-node needed). Also asserts schema<->heuristic parity.
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { directBrief } from './director';
 import { parseSpec } from './schema';
@@ -33,9 +33,19 @@ async function main(): Promise<void> {
   );
   const seqJson = argVal('sequence');
   const isTpl = tpl && isTemplateId(tpl);
-  const tplOpts: { accent?: string; format?: Format } = {};
+  const tplOpts: { accent?: string; format?: Format; logo?: string; font?: { family: string; url: string } } = {};
   if (accent) tplOpts.accent = accent;
   if (format) tplOpts.format = format;
+  // Pillar 2: user brand image + font, passed via a temp file (data URIs are too big for
+  // argv). {logo?: dataUri, font?: dataUri}. Applied to templates & sequences.
+  const assetsPath = argVal('assets');
+  if (assetsPath && existsSync(assetsPath)) {
+    try {
+      const a = JSON.parse(readFileSync(assetsPath, 'utf8')) as { logo?: string; font?: string };
+      if (a.logo && typeof a.logo === 'string' && a.logo.startsWith('data:')) tplOpts.logo = a.logo;
+      if (a.font && typeof a.font === 'string' && a.font.startsWith('data:')) tplOpts.font = { family: 'DVEUserFont', url: a.font };
+    } catch { /* ignore malformed assets — render without brand */ }
+  }
   let seqItems: { template: string; text: string; transition?: string }[] | null = null;
   if (seqJson) {
     try {

@@ -1774,6 +1774,9 @@ def _run_motion_brief(jid):
             cmd.append('--no-text')
         if j.get('d3'):                       # v101w: echtes 3D (Three.js, --gl=angle)
             cmd.append('--3d')
+    _ap = j.get('assets_path')                 # Pfeiler 2: eigenes Logo/Font (data-URI-Datei)
+    if _ap and os.path.exists(_ap):
+        cmd.append('--assets=' + os.path.abspath(_ap))
     p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          text=True, bufsize=1)
@@ -2885,7 +2888,8 @@ MOTION_TRANSITIONS = {'push', 'panv', 'cover', 'dolly', 'swoosh', 'tilt'}
 async def motion_brief(request: Request, brief: str = Form(...),
                        no_text: str = Form('0'), d3: str = Form('1'),
                        template: str = Form(''), accent: str = Form(''),
-                       sequence: str = Form('')):
+                       sequence: str = Form(''),
+                       logo: UploadFile = File(None), font: UploadFile = File(None)):
     """v101p: aus einem Satz eine individuelle Motion-Grafik generieren
     (Remotion-Director). Kostet wie ein Motion-Clip (1 Credit)."""
     u = _require_user(request)
@@ -2916,9 +2920,42 @@ async def motion_brief(request: Request, brief: str = Form(...),
     # Briefs need a sentence; templates/sequences just need a word.
     if not _seq and len(text) < (1 if _tpl else 4):
         raise HTTPException(400, 'Write a short brief first.' if not _tpl else 'Add your text first.')
+    # Pillar 2: user brand assets (own logo image + own font) embedded as data URIs and
+    # handed to the director via a temp file (data URIs are too large for argv). Validated:
+    # image / font MIME + a hard size cap. Bad/oversized uploads are ignored (render plain).
+    _assets = {}
+    _MIME = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+             '.webp': 'image/webp', '.svg': 'image/svg+xml', '.gif': 'image/gif'}
+    _FMIME = {'.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2'}
+    _ASSET_CAP = 4 * 1024 * 1024
+
+    async def _read_asset(up, allowed):
+        if not up or not getattr(up, 'filename', ''):
+            return None
+        _ext = os.path.splitext(up.filename)[1].lower()
+        if _ext not in allowed:
+            return None
+        _b = await up.read(_ASSET_CAP + 1)
+        if not _b or len(_b) > _ASSET_CAP:
+            return None
+        import base64 as _b64
+        return 'data:' + allowed[_ext] + ';base64,' + _b64.b64encode(_b).decode()
+
+    _logo_uri = await _read_asset(logo, _MIME)
+    _font_uri = await _read_asset(font, _FMIME)
+    if _logo_uri:
+        _assets['logo'] = _logo_uri
+    if _font_uri:
+        _assets['font'] = _font_uri
+
     jid = uuid.uuid4().hex[:12]
     d = job_dir(jid)
     os.makedirs(d, exist_ok=True)
+    _assets_path = ''
+    if _assets:
+        _assets_path = os.path.join(d, 'assets.json')
+        with open(_assets_path, 'w', encoding='utf-8') as _af:
+            json.dump(_assets, _af)
     if not _reserve_credits(u['id'], MOTION_COST_SEC, jid):
         shutil.rmtree(d, ignore_errors=True)
         raise HTTPException(402, 'Not enough credits (this clip costs 1).')
@@ -2932,7 +2969,7 @@ async def motion_brief(request: Request, brief: str = Form(...),
     JOBS[jid] = {'kind': 'motion', 'brief': text or 'sequence', 'user_id': u['id'],
                  'name': (('Sequence' if _seq else _nm) + '.mp4'), 'dauer': 11,
                  'no_text': _notext, 'd3': _d3, 'template': _tpl, 'accent': _acc,
-                 'sequence': _seq,
+                 'sequence': _seq, 'assets_path': _assets_path,
                  'cost_sec': MOTION_COST_SEC, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)

@@ -537,6 +537,14 @@ body {
 .mo-in, .mo-file { width: 100%; background: var(--surf2); border: 1px solid
   rgba(255,255,255,.07); border-radius: 10px; padding: 12px 14px; color: var(--fg);
   font-family: inherit; font-size: 14px; }
+.brand-row { display: flex; gap: 10px; }
+.brand-file { flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+  height: 46px; border: 1px dashed var(--bord); border-radius: 12px; background: var(--surf2);
+  color: var(--mut); font-size: 13px; font-weight: 600; cursor: pointer; overflow: hidden; text-align: center; padding: 0 8px; }
+.brand-file:hover { border-color: var(--acc); color: var(--fg); }
+.brand-file.on { border-style: solid; border-color: var(--acc); color: var(--fg); }
+.brand-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.mo-hint { margin: 8px 2px 0; font-size: 12px; color: var(--mut); }
 .mo-color { width: 100%; height: 44px; background: var(--surf2); border: 1px solid
   rgba(255,255,255,.07); border-radius: 10px; cursor: pointer; padding: 4px; }
 .mo-preview { position: sticky; top: 90px; }
@@ -1556,6 +1564,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <input type="color" class="mo-color" id="moAccent" value="#7c5cff">
             <label class="mo-lab">Format</label>
             <div class="seg" id="moFormat"></div>
+            <label class="mo-lab" style="margin-top:16px;">Your brand <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
+            <div class="brand-row">
+              <label class="brand-file"><input type="file" id="moLogo" accept="image/*"><span data-brand="logo">＋ Logo / image</span></label>
+              <label class="brand-file"><input type="file" id="moFont" accept=".ttf,.otf,.woff,.woff2"><span data-brand="font">＋ Font</span></label>
+            </div>
+            <p class="mo-hint">Your logo replaces the app icon; your font styles all text.</p>
           </div>
           <div class="mo-nav">
             <button class="btn secondary" data-mo-back type="button">Back</button>
@@ -1572,6 +1586,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <button class="btn secondary" id="moSeqAdd" type="button" style="margin-top:10px;">+ Add scene</button>
             <label class="mo-lab" style="margin-top:16px;">Accent color</label>
             <input type="color" class="mo-color" id="moAccentSeq" value="#e0483d">
+            <label class="mo-lab" style="margin-top:16px;">Your brand <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
+            <div class="brand-row">
+              <label class="brand-file"><input type="file" id="moLogoSeq" accept="image/*"><span data-brand="logo">＋ Logo / image</span></label>
+              <label class="brand-file"><input type="file" id="moFontSeq" accept=".ttf,.otf,.woff,.woff2"><span data-brand="font">＋ Font</span></label>
+            </div>
+            <p class="mo-hint">Your logo appears across the scenes; your font styles all text.</p>
           </div>
           <div class="mo-nav">
             <button class="btn secondary" data-mo-back type="button">Back</button>
@@ -2813,6 +2833,14 @@ async function initMotion(){
   const _mbe=$('#moBackToEdit');
   if(_mbe) _mbe.onclick=()=>{ moShowPreview(); goMoStep(1); };
   const _bg=$('#moBriefGo'); if(_bg) _bg.onclick=motionBriefGo;
+  // Pfeiler 2: Brand-Uploads (Logo/Font) — Datei-Feedback im Label.
+  [['moLogo','logo'],['moFont','font'],['moLogoSeq','logo'],['moFontSeq','font']].forEach(([id,kind])=>{
+    const el=$('#'+id); if(!el) return;
+    el.onchange=()=>{ const lab=el.closest('.brand-file'); const sp=lab&&lab.querySelector('span');
+      const f=el.files&&el.files[0];
+      if(sp){ if(f){ sp.textContent=(f.name.length>16?f.name.slice(0,14)+'…':f.name); lab.classList.add('on'); }
+        else { sp.textContent=(kind==='logo'?'＋ Logo / image':'＋ Font'); lab.classList.remove('on'); } } };
+  });
   // v101y: Wizard-Navigation (Schritt fuer Schritt wie Captions).
   Motion.briefOk = !!(State.user && State.user.motion_brief);
   const tb=$('#moTypeBrief'), tt=$('#moTypeTemplate'), ts=$('#moTypeSequence');
@@ -2941,6 +2969,9 @@ async function motionSeqGo(){
       return o;
     })));
     fd.append('accent', Motion.seqAccent||'#e0483d');
+    const _lg=$('#moLogoSeq'), _ft=$('#moFontSeq');
+    if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
+    if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);
     const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
     if(r.status===402){ st.textContent='Not enough credits.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
     if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
@@ -2986,6 +3017,9 @@ async function motionTemplateGo(){
     const fd=new FormData(); fd.append('brief', text);
     fd.append('template', Motion.sel.template||'pills');
     fd.append('accent', Motion.sel.accent||'#7c5cff');
+    const _lg=$('#moLogo'), _ft=$('#moFont');
+    if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
+    if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);
     const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
     if(r.status===402){ st.textContent='Not enough credits.';
       btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on');

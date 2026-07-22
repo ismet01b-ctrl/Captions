@@ -5,7 +5,7 @@
 // renders headless.
 
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Img, continueRender, delayRender, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { SceneSpec, UiSpec } from '../spec';
 import { entrancePose, idleFloat, blurCss } from '../lib/motion';
 import { springStep } from '../lib/spring';
@@ -13,6 +13,21 @@ import { hash01 } from '../lib/rng';
 import { FONT_FAMILY } from '../fonts';
 
 const FONT = `'${FONT_FAMILY}', system-ui, -apple-system, sans-serif`;
+
+// Pillar 2: load a user-supplied font (data URI) once, blocking the render until it is
+// ready (same delayRender discipline as the bundled Inter). Idempotent per url.
+const loadedUserFonts = new Set<string>();
+function ensureUserFont(font?: { family: string; url: string }): void {
+  if (!font || typeof document === 'undefined' || loadedUserFonts.has(font.url)) return;
+  loadedUserFonts.add(font.url);
+  const handle = delayRender('Loading user font');
+  const done = (): void => continueRender(handle);
+  try {
+    new FontFace(font.family, `url(${font.url})`, { display: 'block' })
+      .load().then((f) => { document.fonts.add(f); done(); }).catch(done);
+  } catch { done(); }
+}
+const fontStack = (spec: SceneSpec): string => (spec.font ? `'${spec.font.family}', ${FONT}` : FONT);
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 const INK = '#0f1420';
 const GRAY = '#8a90a0';
@@ -49,8 +64,8 @@ const StatusBar: React.FC<{ W: number; u: number; color?: string }> = ({ W, u, c
   );
 };
 
-const Field: React.FC<{ children: React.ReactNode; wallpaper?: boolean }> = ({ children, wallpaper }) => (
-  <AbsoluteFill style={{ fontFamily: FONT }}>
+const Field: React.FC<{ children: React.ReactNode; wallpaper?: boolean; font?: string }> = ({ children, wallpaper, font }) => (
+  <AbsoluteFill style={{ fontFamily: font ?? FONT }}>
     <AbsoluteFill style={{
       background: wallpaper
         ? 'linear-gradient(160deg, #b9d0ff 0%, #e7ecfb 42%, #f3e9ff 100%)'
@@ -91,25 +106,29 @@ const hueFromAccent = (accent: string): number => {
   return ((h * 60) + 360) % 360;
 };
 
-const AppIcon: React.FC<{ size: number; hue: number; glyph?: number; badge?: number; radius?: number }>
-  = ({ size, hue, glyph = 0, badge, radius }) => {
+const AppIcon: React.FC<{ size: number; hue: number; glyph?: number; badge?: number; radius?: number; logo?: string }>
+  = ({ size, hue, glyph = 0, badge, radius, logo }) => {
     const c1 = `hsl(${hue}, 78%, 58%)`;
     const c2 = `hsl(${(hue + 24) % 360}, 82%, 46%)`;
     const r = radius ?? size * 0.24;
     return (
       <div style={{ position: 'relative', width: size, height: size }}>
-        <div style={{ width: size, height: size, borderRadius: r,
-          background: `linear-gradient(150deg, ${c1}, ${c2})`,
+        <div style={{ width: size, height: size, borderRadius: r, overflow: 'hidden',
+          background: logo ? '#fff' : `linear-gradient(150deg, ${c1}, ${c2})`,
           boxShadow: `0 ${size * 0.06}px ${size * 0.16}px rgba(20,40,80,0.22), inset 0 1px 1px rgba(255,255,255,0.5)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none" stroke="#fff"
-            strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-            {glyph % 5 === 0 && <><circle cx="12" cy="12" r="7" /><path d="M12 8v8M8 12h8" /></>}
-            {glyph % 5 === 1 && <rect x="5" y="5" width="14" height="14" rx="3" />}
-            {glyph % 5 === 2 && <path d="M4 15l5-6 4 4 7-8" />}
-            {glyph % 5 === 3 && <><circle cx="12" cy="12" r="8" /><path d="M12 4v8l5 3" /></>}
-            {glyph % 5 === 4 && <path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z" />}
-          </svg>
+          {logo ? (
+            <Img src={logo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none" stroke="#fff"
+              strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+              {glyph % 5 === 0 && <><circle cx="12" cy="12" r="7" /><path d="M12 8v8M8 12h8" /></>}
+              {glyph % 5 === 1 && <rect x="5" y="5" width="14" height="14" rx="3" />}
+              {glyph % 5 === 2 && <path d="M4 15l5-6 4 4 7-8" />}
+              {glyph % 5 === 3 && <><circle cx="12" cy="12" r="8" /><path d="M12 4v8l5 3" /></>}
+              {glyph % 5 === 4 && <path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z" />}
+            </svg>
+          )}
         </div>
         {badge != null && (
           <div style={{ position: 'absolute', top: -size * 0.08, right: -size * 0.08,
@@ -183,7 +202,7 @@ const AppCard: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui
       <div style={{ width: '82%', padding: u * 0.05, ...softCard(u, true), opacity: pose.alpha,
         transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: u * 0.035 }}>
-          <AppIcon size={iconSz} hue={hue} glyph={0} radius={iconSz * 0.26} />
+          <AppIcon size={iconSz} hue={hue} glyph={0} radius={iconSz * 0.26} {...(ui.logo ? { logo: ui.logo } : {})} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: u * 0.044, fontWeight: 800, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
             <div style={{ fontSize: u * 0.027, color: GRAY, marginTop: u * 0.006 }}>{sub}</div>
@@ -289,7 +308,8 @@ const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: 
     return (
       <div key={`${x}-${y}`} style={{ position: 'absolute', left: x, top: y, width: size, textAlign: 'center',
         opacity: pose.alpha, transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
-        <AppIcon size={size} hue={Math.floor(hash01(i, seed + 2) * 360)} glyph={i} radius={size * 0.24} {...(badge != null ? { badge } : {})} />
+        <AppIcon size={size} hue={Math.floor(hash01(i, seed + 2) * 360)} glyph={i} radius={size * 0.24}
+          {...(badge != null ? { badge } : {})} {...(i === 0 && ui.logo ? { logo: ui.logo } : {})} />
         <div style={{ marginTop: size * 0.1, fontSize: size * 0.17, color: '#243', fontWeight: 600, textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>{labels[i % labels.length]}</div>
       </div>
     );
@@ -333,9 +353,10 @@ const Chat: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui, t
       <div style={{ position: 'absolute', top: 0, left: 0, width: W, height: u * 0.17,
         background: 'rgba(248,249,252,0.9)', backdropFilter: 'blur(20px)', borderBottom: '1px solid #e6e9f0',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: u * 0.02 }}>
-        <div style={{ width: u * 0.11, height: u * 0.11, borderRadius: '50%', background: `linear-gradient(150deg, hsl(${hueFromAccent(ui.accent)},70%,60%), hsl(${hueFromAccent(ui.accent) + 30},70%,50%))`,
+        <div style={{ width: u * 0.11, height: u * 0.11, borderRadius: '50%', overflow: 'hidden',
+          background: ui.logo ? '#fff' : `linear-gradient(150deg, hsl(${hueFromAccent(ui.accent)},70%,60%), hsl(${hueFromAccent(ui.accent) + 30},70%,50%))`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: u * 0.045 }}>
-          {name.slice(0, 1).toUpperCase()}
+          {ui.logo ? <Img src={ui.logo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : name.slice(0, 1).toUpperCase()}
         </div>
         <div style={{ fontSize: u * 0.028, fontWeight: 700, color: INK, marginTop: u * 0.008 }}>{name}</div>
         <svg style={{ position: 'absolute', left: u * 0.05, bottom: u * 0.05 }} width={u * 0.04} height={u * 0.04} viewBox="0 0 24 24" fill="none" stroke={ui.accent} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
@@ -403,7 +424,7 @@ const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number }> = ({ ui,
       borderRadius: u * 0.05, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(24px)',
       boxShadow: `0 ${u * 0.02}px ${u * 0.06}px rgba(20,40,80,0.18)`, border: '1px solid rgba(255,255,255,0.7)',
       transform: `translateY(${(-u * 0.4 * (1 - Math.min(1, dd))).toFixed(1)}px) scale(${scale})`, opacity: Math.min(1, dd * 1.5) }}>
-      <AppIcon size={iconSz} hue={hueFromAccent(ui.accent)} glyph={0} radius={iconSz * 0.28} />
+      <AppIcon size={iconSz} hue={hueFromAccent(ui.accent)} glyph={0} radius={iconSz * 0.28} {...(ui.logo ? { logo: ui.logo } : {})} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: u * 0.032, fontWeight: 800, color: INK }}>{title2}</div>
         <div style={{ fontSize: u * 0.028, color: '#4a5060', marginTop: u * 0.004, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{body2}</div>
@@ -431,8 +452,9 @@ export const AppleScene: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
   const t = frame / fps;
   const ui: UiSpec = spec.ui ?? { template: 'pills', lines: ['Write', 'Create', 'Solve'], accent: spec.palette.accent };
   const wallpaper = ui.template === 'homescreen' || ui.template === 'notify';
+  ensureUserFont(spec.font); // Pillar 2: block render until the user's font is ready
   return (
-    <Field wallpaper={wallpaper}>
+    <Field wallpaper={wallpaper} font={fontStack(spec)}>
       {ui.template === 'pills' && <Pills ui={ui} t={t} W={width} H={height} seed={spec.seed} />}
       {ui.template === 'appcard' && <AppCard ui={ui} t={t} W={width} H={height} />}
       {ui.template === 'search' && <Search ui={ui} t={t} W={width} H={height} />}
