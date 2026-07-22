@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v107 Pfeiler 3: High-End-3D-Promo-Look (Ismet: "mach dich an Pfeiler 3 dran";
+  Referenz Notion-Promo - rote Glas-Blobs, Produkt-Fly-in, Kamerafahrten).** Erste
+  Version. Die bestehende 3D-Composition (Motion3D, --3d, Three.js) von abstrakten
+  Metall-Solids zu einem Promo-Look umgebaut (motion/src/three/Scene3D.tsx): (1)
+  gluehende GLAS-BLOBS im Zentrum - translucent-emissive Schale ueber hellem Kern +
+  Wire-Rim (fake-Glas ohne Transmission, damit software-GL/ANGLE es rendert), atmen
+  auf dem Beat; (2) fliegende DEVICE-PANELS - duenne dunkle Slabs mit emissiver
+  Screen-Flaeche + gluehenden UI-Balken, fliegen per Feder gestaffelt aus der Tiefe
+  ein, mit Perspektiv-Tilt; (3) additiver Bloom-HALO (CanvasTexture-Radialverlauf)
+  hinter dem Hero; (4) KINO-KAMERA: Dolly-Push-In ueber die ersten ~2.2s + sanfter
+  Orbit. Deterministisch (Seed + absolute Zeit, kein useFrame -> seekbar),
+  software-GL-sicher (nur Standard/Basic-Material + Transparenz, KEINE Transmission/
+  Render-Targets). Tuning-Pass: Blobs kompakter, Halo dezenter, damit die Panels
+  lesbar bleiben. BEWEIS: --3d headless mit --gl=angle gerendert (promo3d.mp4, 7.3MB,
+  230 Frames) - Frame-Streifen zeigt rote Glas-Blobs + einfliegende App-Panels + Glow
+  + Kamerafahrt. tsc clean. Regression 676/676. EHRLICH: solider v1, aber noch Luft
+  nach oben (Panels koennten echte gerundete Devices sein, Blobs glasiger, echte
+  Mockup-Screens als Textur) - hier nur CPU/software-GL/synthetisch beurteilt.
+
 - **v106 iOS-Dark-Mode-Re-Theme nach Ismets echten Screenshots (Ismet: "So sieht die
   UI aus ungefaehr, das ist meins. Orientiere dich daran").** Ismet schickte 4
   Screenshots seines echten iPhones (Home, WhatsApp, Einstellungen, Sperrbildschirm) -

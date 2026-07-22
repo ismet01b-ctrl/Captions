@@ -1908,6 +1908,17 @@ def _scenario_logic(clip, transcript, tmp):
           and os.path.exists(os.path.join(_mroot, 'src', 'three', 'Scene3D.tsx'))
           and 'id="Motion3D"' in _mrt
           and "'Motion3D'" in _mrb and '--gl=angle' in _mrb)
+    # v107 (Pfeiler 3): High-End-3D-Promo-Look - Glas-Blobs, fliegende Device-Panels,
+    # Bloom-Halo, Kino-Kamerafahrt (software-GL-sicher, keine Transmission).
+    _msc3 = open(os.path.join(HERE, 'motion', 'src', 'three', 'Scene3D.tsx'),
+                 encoding='utf-8').read()
+    check('v107: 3D-Promo - Glas-Blobs + Device-Panels + Halo + Kino-Kamera',
+          'const GlassBlob' in _msc3 and 'const DevicePanel' in _msc3
+          and 'const Halo' in _msc3 and 'dolly' in _msc3
+          and 'AdditiveBlending' in _msc3
+          # software-GL-sicher: keine Transmission (kein PhysicalMaterial-Render-Target)
+          and 'meshPhysicalMaterial' not in _msc3)
+
     check('v101w: Server + UI reichen den 3D-Schalter durch',
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
           and 'id="moBrief3d"' in _ui_m and "fd.append('d3'" in _ui_m)
