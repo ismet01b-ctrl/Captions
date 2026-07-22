@@ -34,14 +34,44 @@ export interface TemplateOpts {
   readonly accent?: string;
 }
 
-const parts = (text: string): string[] =>
-  (text.includes(',') ? text.split(',') : text.split(/\s+/))
-    .map((s) => s.trim())
-    .filter(Boolean);
-
 const DUR: Record<TemplateId, number> = {
   pills: 4.2, appcard: 5.0, search: 4.6, homescreen: 4.6, chat: 5.6, notify: 4.4,
 };
+
+const commaParts = (text: string): string[] =>
+  text.split(',').map((s) => s.trim()).filter(Boolean);
+
+/**
+ * Per-template text parsing. This is the ONE place input semantics live, so a phrase
+ * template (search) is never word-split, comma templates keep multi-word fields intact,
+ * and every branch degrades gracefully on odd input. Pure + unit-tested.
+ */
+export function parseTemplateText(id: TemplateId, raw: string): { title: string; subtitle: string; lines: string[] } {
+  const safe = (raw || '').trim() || 'DouchkoVE';
+  const cp = commaParts(safe);
+  switch (id) {
+    case 'pills': {
+      // multiple pills: comma-separated (keeps multi-word pills), else one pill per word.
+      const items = safe.includes(',') ? cp : safe.split(/\s+/).filter(Boolean);
+      return { title: '', subtitle: '', lines: items.slice(0, 5) };
+    }
+    case 'search':
+      // the WHOLE phrase is the query — never word-split.
+      return { title: safe, subtitle: '', lines: [] };
+    case 'appcard':
+      return { title: cp[0] || safe, subtitle: cp[1] || 'Productivity', lines: [] };
+    case 'notify':
+      return { title: cp[0] || safe, subtitle: cp.slice(1).join(', ') || 'Your clip is ready to share', lines: [] };
+    case 'homescreen':
+      return { title: cp[0] || '', subtitle: '', lines: [] };
+    case 'chat':
+    default:
+      // "Contact, messages…". With <2 parts, show the input as a single message.
+      return cp.length >= 2
+        ? { title: cp[0]!, subtitle: '', lines: cp.slice(1, 5) }
+        : { title: 'Messages', subtitle: '', lines: cp.slice(0, 4) };
+  }
+}
 
 export function templateSpec(id: TemplateId, text: string, opts: TemplateOpts = {}): SceneSpec {
   const format = opts.format ?? '9:16';
@@ -51,16 +81,7 @@ export function templateSpec(id: TemplateId, text: string, opts: TemplateOpts = 
   const base = PALETTES[palKeys[seed % palKeys.length]!]!;
   const accent = opts.accent || '#3574ff';
   const palette: Palette = { ...base, accent };
-  const safe = (text || '').trim() || 'DouchkoVE';
-  const p = parts(safe);
-
-  const title = p[0] ?? safe;
-  const subtitle = p[1] ?? '';
-  const lines =
-    id === 'pills' ? p.slice(0, 5)
-    : id === 'chat' ? p.slice(1, 5) // p[0] is the contact name (title)
-    : id === 'notify' ? [p[0] ?? safe, p.slice(1).join(' ')].filter(Boolean)
-    : p;
+  const { title, subtitle, lines } = parseTemplateText(id, text);
 
   return {
     version: 1,

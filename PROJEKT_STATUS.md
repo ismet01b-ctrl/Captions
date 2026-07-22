@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v102e Fix: mehrwortige Template-Eingaben (Ismet: "Search mit mehr als 1
+  Wort klappt nicht - solche Logikfehler vermeiden, bei allen").** URSACHE: ein
+  generischer parts()-Splitter zerlegte den Text bei fehlendem Komma per
+  Leerzeichen und nahm p[0] -> 'Ask anything' wurde 'Ask'. FIX: jedes Template
+  hat jetzt seine eigene, robuste Parsing-Logik (neue reine Funktion
+  parseTemplateText): search = GANZE Phrase (nie wortgesplittet); appcard/notify/
+  chat = komma-basiert (mehrwortige Felder bleiben ganz), degradiert sauber bei
+  odd input; pills = Komma ODER Woerter. 10-Faelle-Node-Unit-Test
+  (motion/scripts/test-templates.mjs) laeuft jetzt IM Selftest mit (graceful skip
+  ohne node). Search+App-Card mehrwortig neu gerendert (voller Text) an Ismet.
+  Regression 658/658 gruen.
+
 - **v102d Chat-Tipp-Indikator (3 Punkte).** Vor jeder EINGEHENDEN Nachricht
   pulst ~0.7s eine graue "..."-Bubble (3 wellen-animierte Punkte), dann poppt die
   Nachricht. Ausgehende Nachrichten haben keinen Indikator. tsc clean, gerendert,

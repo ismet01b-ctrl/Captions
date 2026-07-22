@@ -1971,6 +1971,24 @@ def _scenario_logic(clip, transcript, tmp):
           # "Apple" wird als Design-Stil nirgends beworben (iOS/Safari-Technikhinweise ok)
           and 'Apple' not in _ui_m and 'Apple' not in _land)
 
+    # v102e: Template-Text-Parsing pro Template korrekt (Search mehrwortig NICHT
+    # zerhackt etc.). Quelltext-Garantie + echter Node-Unit-Test wenn node da ist.
+    check('v102e: Parser pro Template (Search = ganzer Satz, Pills = Woerter)',
+          'export function parseTemplateText' in _mtpl
+          and "case 'search':" in _mtpl and 'title: safe' in _mtpl
+          and 'safe.split(/\\s+/)' in _mtpl)
+    _mroot2 = os.path.join(HERE, 'motion')
+    if shutil.which('node') and os.path.isdir(os.path.join(_mroot2, 'node_modules')):
+        try:
+            _tr = subprocess.run(['node', 'scripts/test-templates.mjs'], cwd=_mroot2,
+                                 capture_output=True, text=True, timeout=120)
+            check('v102e: parseTemplateText Node-Unit-Test (multiword/odd input)',
+                  _tr.returncode == 0, (_tr.stdout + _tr.stderr)[-200:])
+        except Exception as _e:
+            check('v102e: parseTemplateText Node-Unit-Test', False, str(_e))
+    else:
+        check('v102e: parseTemplateText Node-Unit-Test (node fehlt -> skip)', True)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
