@@ -36,6 +36,14 @@ keywords:
   include: []
   exclude: []
   ai_vision: true
+# v101s AUTO-AKZENTE: dezente Motion-Graphics-Akzente (Counter/Chip/Badge/Pop) auf
+# dem Transkript. KI (ai_model) schlaegt vor, ohne Key greift die Heuristik. intensity
+# (0..2) dosiert die Dichte; das persoenliche Stil-Profil ueberschreibt sie pro Konto.
+# Wiring in Editor + Compositing folgt in den naechsten Etappen - hier vorbereitet.
+accents:
+  auto: true
+  ai_model: gpt-5
+  intensity: 1.0
 effects:
   words_per_group: 3
   words_per_group_max: 5

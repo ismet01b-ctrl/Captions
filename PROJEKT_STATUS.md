@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101s Auto-Akzente Etappe 1/4: Akzent-Regie (Ismet: "Transkript mit passenden
+  Motion Graphics bestuecken, dezent, individuell, editierbar").** Fundament fuer
+  automatische DEZENTE Motion-Graphics-Akzente auf dem Caption-Transkript - KEIN
+  B-Roll (Finishing-Linie bleibt). Neu in render.py: `ai_accents()` (GPT-5 waehlt
+  WENIGE Stellen + Art: counter/chip/badge/pop, Spiegel von ai_direct),
+  `heuristic_accents()` (deterministischer Notnagel ohne Key: echte Zahl->counter,
+  markanter Begriff->chip), `sanitize_accents()` (harte Leitplanke: Dichte-Cap,
+  Mindestabstand 3.5s, gueltige Arten/Lanes, Lane-Rotation), `accent_style()`
+  (persoenliches Stil-Profil: accent-Farbe/intensity/vibe dosiert die Dichte).
+  config.yaml `accents:`-Block (auto/ai_model gpt-5/intensity). BEWUSSTE
+  ENTSCHEIDUNGEN (Ismet, per Frage): Auto-Vorschlag + im Editor editierbar /
+  dezente Akzente statt voller Grafik-Szenen / persoenliches Stil-Profil (baut auf
+  Korrektur-Gedaechtnis). NOCH NICHT verdrahtet (folgt Etappe 2-4): Editor-UI,
+  Compositing ins Video, Profil-Speicher pro Konto - DAHER laeuft im echten Render
+  noch KEIN Akzent (rein additives Fundament, kein Kostentreiber). 9 neue Tests
+  (Cap, Counter-auf-Zahl, Mindestabstand, Lane-Rotation, Fuellwort-Filter,
+  sanitize-Leitplanke, Key-loser Notnagel = Heuristik, Intensitaets-Dosierung).
+  Regression 636/636 gruen. EHRLICH: KI-Trefferqualitaet (ai_accents) erst live
+  mit Key + echtem Material beurteilbar; hier nur Heuristik + Invarianten.
+
 - **v101r Motion Graphics OHNE Text (Ismet: "Ich will Motion Graphics, kein Text").**
   Bisher war der Brief-Output reine kinetische TYPOGRAFIE (Headline/Stat/Quote).
   Jetzt hat die Remotion-Engine ein echtes GRAFIK-Vokabular: 5 neue Full-Bleed-

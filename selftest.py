@@ -1776,6 +1776,45 @@ def _scenario_logic(clip, transcript, tmp):
     check('v101n: zwei benachbarte erzwungene Woerter -> BEIDE werden Highlights',
           1 in _nfgot and 2 in _nfgot, str(_nfgot))
 
+    # v101s: Auto-Akzente (dezente Motion-Graphics-Regie auf dem Transkript).
+    _accw = [{'word': w, 'start': i * 0.9, 'end': i * 0.9 + 0.6}
+             for i, w in enumerate(
+                 ['We', 'got', '3', 'million', 'views', 'in', 'just', '24', 'hours',
+                  'with', 'zero', 'budget', 'because', 'the', 'algorithm', 'rewards',
+                  'retention', 'and', 'our', 'editing', 'kept', '87', 'percent',
+                  'watching', 'until', 'the', 'end'])]
+    _acc = R.heuristic_accents(_accw, {}, {'intensity': 1.0})
+    _acc_cap = R._accent_cap(_accw, 1.0)
+    _acc_gaps = [_acc[i + 1]['zeit'] - _acc[i]['zeit'] for i in range(len(_acc) - 1)]
+    check('v101s: Akzente nur aus gueltigen Arten + Cap eingehalten',
+          all(a['art'] in R.ACCENT_ARTS for a in _acc) and len(_acc) <= _acc_cap
+          and _acc_cap >= 1, f'{len(_acc)}/{_acc_cap}')
+    check('v101s: echte Zahl wird zum Counter (mit Wert)',
+          any(a['art'] == 'counter' and a['wert'] for a in _acc))
+    check('v101s: Mindestabstand haelt die Akzente dezent (>=3.5s)',
+          all(g >= 3.5 for g in _acc_gaps), str([round(g, 2) for g in _acc_gaps]))
+    check('v101s: Lanes rotieren (kein Stapeln an einer Ecke)',
+          len({a['lane'] for a in _acc}) >= min(2, len(_acc))
+          and all(a['lane'] in R.ACCENT_LANES for a in _acc))
+    check('v101s: Binde-/Fuellwoerter werden NICHT gechipt (because raus)',
+          not any(a['text'] == 'BECAUSE' for a in _acc))
+    # sanitize verwirft Unfug (falsche Art, negative Zeit) und clamped
+    _acc_junk = R.sanitize_accents(
+        [{'art': 'explode', 'zeit': 1}, {'art': 'chip', 'zeit': -5, 'text': 'x'},
+         {'art': 'chip', 'zeit': 3.0, 'text': 'OK'}], _accw, {'intensity': 1.0})
+    check('v101s: sanitize_accents wirft ungueltige Akzente raus',
+          all(a['art'] in R.ACCENT_ARTS and a['zeit'] >= 0 for a in _acc_junk)
+          and all(a['text'] != 'x' for a in _acc_junk))
+    # ohne OpenAI-Key faellt ai_accents deckungsgleich auf die Heuristik
+    check('v101s: ai_accents ohne Key == heuristic_accents (Notnagel-Pfad)',
+          R.ai_accents(_accw, 'en', 'gpt-5', {'intensity': 1.0}, {}) == _acc)
+    # Intensitaet dosiert die Dichte (0 -> weniger/gleich als 2)
+    check('v101s: Stil-Profil-Intensitaet dosiert die Akzent-Dichte',
+          R._accent_cap(_accw, 0.0) <= R._accent_cap(_accw, 2.0))
+    check('v101s: leere/kurze Transkripte liefern keine Akzente',
+          R.heuristic_accents([], {}, None) == []
+          and R.heuristic_accents(_accw[:2], {}, None) == [])
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

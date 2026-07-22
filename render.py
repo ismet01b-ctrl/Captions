@@ -3737,6 +3737,191 @@ def correction_profile(corrections, min_count=2, max_rules=6):
             "generalisiere sie auf neue, aehnliche Stellen):\n" + lines + "\n\n")
 
 
+# ---- v101s AUTO-AKZENTE ----------------------------------------------------------
+# Dezente Motion-Graphics-Akzente auf dem Transkript (NICHT B-Roll): ein Counter auf
+# einer echten Zahl, ein Chip auf einem markanten Begriff, ein kurzer Betonungs-Pop.
+# Regel bleibt Finishing-Look: WENIGE Akzente, safe-zone-fromm, vom persoenlichen
+# Stil-Profil dosiert, im Momente-Editor editierbar. KI schlaegt vor (ai_accents),
+# ohne Key greift der deterministische heuristic_accents-Pfad. Beide Ausgaben laufen
+# durch sanitize_accents (Dichte-Cap, gueltige Arten/Lanes) - Ansage ist Gesetz.
+ACCENT_ARTS = ('counter', 'chip', 'badge', 'pop')
+ACCENT_LANES = ('tl', 'tr', 'bl', 'br')
+
+_ACC_STOP = set(
+    'the a an to for of and or but my your our their with in on at is are was were be '
+    'been being this that these those it its as by from we you they he she so if then '
+    'than just really very can will would should der die das und oder aber mit von zu '
+    'im in am ist sind war ich du wir ihr sie es ein eine einen dem den man auch noch '
+    'nur schon sehr '
+    # lange Binde-/Fuellwoerter, die sonst die Laenge-Heuristik (>=7) faelschlich faengt
+    'because however therefore although between without another through people really '
+    'actually basically literally something everything trotzdem trotz waehrend zwischen '
+    'ohne durch wieder immer eigentlich einfach natuerlich'.split())
+
+
+def _accent_number(tok):
+    """Zahl im Wort -> (wert, suffix) oder None. '3x'/'50%'/'1.2k'/'87'."""
+    m = re.match(r'^[^\d]*(\d[\d.,]*)\s*(%|x|k|m|bn|€|\$)?', tok or '')
+    if not m:
+        return None
+    try:
+        val = float(m.group(1).replace(',', ''))
+    except ValueError:
+        return None
+    unit = (m.group(2) or '').lower()
+    mult = {'k': 1e3, 'm': 1e6, 'bn': 1e9}.get(unit, 1)
+    suf = unit if unit in ('%', 'x', '€', '$') else ''
+    return (val * mult, suf)
+
+
+def accent_style(profile):
+    """Persoenliches Stil-Profil -> {'accent','intensity'(0..2),'vibe'}. Fehlt es,
+    neutrale Defaults. intensity dosiert die Dichte (mehr = mehr Akzente)."""
+    p = profile if isinstance(profile, dict) else {}
+    acc = str(p.get('accent') or '#ff7a1a')
+    try:
+        inten = max(0.0, min(2.0, float(p.get('intensity', 1.0))))
+    except (TypeError, ValueError):
+        inten = 1.0
+    return {'accent': acc, 'intensity': inten, 'vibe': str(p.get('vibe') or 'clean')}
+
+
+def _accent_cap(words, intensity):
+    """Wie viele Akzente maximal - dezent, laenge-skaliert x Intensitaet."""
+    if not words:
+        return 0
+    dur = float(words[-1].get('end', 0)) - float(words[0].get('start', 0))
+    base = max(1, int(dur / 8.0))              # ~1 Akzent je 8s
+    return max(0, min(8, int(round(base * (0.5 + 0.75 * intensity)))))
+
+
+def sanitize_accents(raw, words, profile=None):
+    """Beliebige (KI- oder Heuristik-)Akzentliste -> gueltige, dichte-begrenzte,
+    zeitsortierte Liste mit Mindestabstand + Lane-Rotation. Verwirft Unfug still.
+    DAS ist die Leitplanke: egal was die KI liefert, hier wird es dezent."""
+    words = words or []
+    st = accent_style(profile)
+    cap = _accent_cap(words, st['intensity'])
+    dur_v = float(words[-1].get('end', 0)) if words else 0.0
+    seen, tmp = [], []
+    for a in (raw or []):
+        if not isinstance(a, dict):
+            continue
+        art = str(a.get('art', '')).lower()
+        if art not in ACCENT_ARTS:
+            continue
+        try:
+            t = round(float(a.get('zeit', 0)), 2)
+        except (TypeError, ValueError):
+            continue
+        if t < 0 or (dur_v and t > dur_v):
+            continue
+        text = str(a.get('text', '')).strip()[:24]
+        if art != 'counter' and not text:
+            continue
+        wert = a.get('wert')
+        try:
+            wert = float(wert) if wert is not None else None
+        except (TypeError, ValueError):
+            wert = None
+        tmp.append({'zeit': t, 'art': art, 'text': text, 'wert': wert,
+                    'anker': int(a.get('anker', a.get('id', 0)) or 0),
+                    'aktiv': a.get('aktiv', True) is not False,
+                    'quelle': str(a.get('quelle', 'ki'))})
+    tmp.sort(key=lambda x: x['zeit'])
+    out, last_t = [], -1e9
+    for a in tmp:
+        if len([o for o in out if o['aktiv']]) >= cap and a['aktiv']:
+            continue
+        if a['zeit'] - last_t < 3.5:           # Mindestabstand -> dezent
+            continue
+        a['id'] = len(out)
+        a['dauer'] = 1.6
+        a['lane'] = ACCENT_LANES[len(out) % len(ACCENT_LANES)]
+        out.append(a)
+        last_t = a['zeit']
+    return out
+
+
+def heuristic_accents(words, cfg=None, profile=None):
+    """Deterministischer Akzent-Vorschlag OHNE KI (Notnagel ohne OpenAI-Key und der
+    offline testbare Beweis): echte Zahlen -> counter, markante Begriffe -> chip.
+    Dichte + Abstand macht sanitize_accents. Rueckgabe: Liste von Akzent-Dicts."""
+    words = words or []
+    if len(words) < 3:
+        return []
+    raw = []
+    for i, w in enumerate(words):
+        word = w.get('word', '')
+        t = float(w.get('start', 0))
+        num = _accent_number(word)
+        if num is not None:
+            lab = ''
+            for j in range(i + 1, min(i + 3, len(words))):
+                nx = clean(words[j].get('word', '')).strip('.,!?:;')
+                if nx and nx.lower() not in _ACC_STOP:
+                    lab = nx
+                    break
+            head = (str(int(num[0])) + num[1]) if num[1] else str(int(num[0]))
+            raw.append({'zeit': t, 'art': 'counter', 'wert': num[0], 'anker': i,
+                        'text': (head + (' ' + lab.upper() if lab else ''))[:24],
+                        'quelle': 'heuristik'})
+            continue
+        core = clean(word).strip('.,!?:;')
+        salient = core.isalpha() and core.lower() not in _ACC_STOP and (
+            (core[:1].isupper() and i > 0) or len(core) >= 7)
+        if salient:
+            raw.append({'zeit': t, 'art': 'chip', 'text': core.upper()[:24],
+                        'anker': i, 'quelle': 'heuristik'})
+    return sanitize_accents(raw, words, profile)
+
+
+def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None):
+    """KI-Akzent-Regie (Spiegel von ai_direct): GPT-5 waehlt WENIGE Stellen, die
+    einen dezenten Motion-Graphics-Akzent verdienen, und die Art. Faellt bei jedem
+    Fehler / fehlendem Key lautlos auf heuristic_accents zurueck. Immer durch
+    sanitize_accents gefiltert (die KI kann nie zu dicht/zu wild werden)."""
+    key = os.environ.get('OPENAI_API_KEY')
+    words = words or []
+    if not key or len(words) < 3:
+        return heuristic_accents(words, cfg, profile)
+    st = accent_style(profile)
+    cap = _accent_cap(words, st['intensity'])
+    if cap <= 0:
+        return []
+    wl = ' '.join(f"[{i}]{clean(w.get('word',''))}" for i, w in enumerate(words)
+                  if clean(w.get('word', '')).strip())[:6000]
+    sys_p = (
+        "Du bist Senior Motion-Graphics-Designer (2026). Du setzt DEZENTE Akzente auf "
+        "ein gesprochenes Transkript - KEIN B-Roll, kein Deko-Feuerwerk. Ein Akzent nur, "
+        "wo er dem Gesagten dient: eine echte ZAHL -> 'counter'; ein zentraler BEGRIFF/"
+        "Marke -> 'chip'; ein Guetesiegel/Status -> 'badge'; eine kurze Betonung -> 'pop'. "
+        f"Waehle HOECHSTENS {cap} Stellen, gut verteilt (>=4s Abstand). Passe Text + Art "
+        "an Thema und Aussage an. Antworte NUR JSON: "
+        '{"akzente":[{"anker":<wortindex>,"zeit":<sekunden>,"art":"counter|chip|badge|pop",'
+        '"text":"<max 3 Woerter, GROSS>","wert":<zahl oder null>}]}')
+    usr = (f"Sprache: {language}\nWORTLISTE (Index in eckigen Klammern):\n{wl}\n\n"
+           "Gib die dezenten Akzente als JSON zurueck.")
+    try:
+        r = requests.post('https://api.openai.com/v1/chat/completions',
+                          headers={'Authorization': f'Bearer {key}'},
+                          json=_oai_json(model,
+                                         [{'role': 'system', 'content': sys_p},
+                                          {'role': 'user', 'content': usr}],
+                                         max_toks=1200, temperature=0.3),
+                          timeout=90)
+        r.raise_for_status()
+        data = json.loads(r.json()['choices'][0]['message']['content'])
+        arr = data.get('akzente') if isinstance(data, dict) else data
+        san = sanitize_accents(arr, words, profile)
+        for a in san:
+            a['quelle'] = 'ki'
+        return san if san else heuristic_accents(words, cfg, profile)
+    except Exception as e:
+        print(f"KI-Akzente nicht verfuegbar ({type(e).__name__}), nutze Heuristik.")
+        return heuristic_accents(words, cfg, profile)
+
+
 def apply_keyword_marks(kw, fx_map, words, marks, cfg):
     """v101m: Keyword-Markierungen aus dem Text-Editor uebersteuern die KI-Wahl.
     marks[i] = 1 (Wort ERZWINGEN als Highlight) / -1 (Wort NIE highlighten).
