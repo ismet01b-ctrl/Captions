@@ -58,7 +58,7 @@ export function templateSpec(id: TemplateId, text: string, opts: TemplateOpts = 
   const subtitle = p[1] ?? '';
   const lines =
     id === 'pills' ? p.slice(0, 5)
-    : id === 'chat' ? p.slice(0, 4)
+    : id === 'chat' ? p.slice(1, 5) // p[0] is the contact name (title)
     : id === 'notify' ? [p[0] ?? safe, p.slice(1).join(' ')].filter(Boolean)
     : p;
 

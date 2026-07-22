@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v102c UI-Mockups mit Realismus-Detail (Ismet: "mehr Detail + Politur, als
+  waere es echt").** Jede der 6 Mockups liest sich jetzt wie ein echter iOS-Screen.
+  Geteilte STATUSLEISTE (9:41 + Signal/WLAN/Akku als Vektor) auf Search/Home/
+  Notify. App card: echte App-Store-Produktkarte - Icon, ★★★★★ 289K, Open,
+  SCREENSHOT-STRIP (3 Platzhalter mit UI-Andeutung, gestaffelt rein), Statzeile
+  mit Trennlinien. Search: "Search"-Titel + Feld + Waveform + SUGGESTIONS-Dropdown
+  (4 Zeilen mit Lupe). Home screen: 4x4-Grid mit APP-LABELS, PAGE-DOTS, frosted
+  DOCK (4 Icons, backdrop-blur), Badge. Chat: echte iMessage-Ansicht - NAV-BAR
+  (Back-Chevron, Avatar-Initiale, Kontaktname), Bubbles mit Tails, DELIVERED-
+  Receipt, EINGABELEISTE ("iMessage" + Sende-Button). Notify: LOCKSCREEN (grosse
+  9:41 + Datum) + gestapelte frosted Banner. accent->HSL-Ableitung faerbt Icons
+  konsistent. Chat-Feld jetzt "Kontakt, Nachrichten" (p[0]=Name). Alles rein
+  vektoriell (kein Emoji) -> headless-sicher. GEPRUEFT: tsc clean, alle 6 neu
+  gerendert (2x3-Grid an Ismet). Regression 656/656 gruen.
+
 - **v102b UI-Mockup-Templateset komplett (Ismet: "alte Templates loeschen, diese
   hier rein, alle auf einmal, Apple auf der Seite nicht erwaehnen").** Die alten
   Bloeck-Templates (title/lowerthird/stat/quote) sind RAUS; das Templateset ist
