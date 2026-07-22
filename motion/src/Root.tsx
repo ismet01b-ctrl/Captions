@@ -5,6 +5,7 @@ import React from 'react';
 import { Composition, type CalculateMetadataFunction } from 'remotion';
 import { MotionVideo, type MotionProps } from './MotionVideo';
 import { Motion3D } from './Motion3D';
+import { MotionApple } from './MotionApple';
 import { demoProps } from './demo-spec';
 
 const calculateMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) => {
@@ -35,6 +36,17 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="Motion3D"
         component={Motion3D}
+        defaultProps={demoProps}
+        calculateMetadata={calculateMetadata}
+        durationInFrames={252}
+        fps={30}
+        width={1080}
+        height={1920}
+      />
+      {/* v102: Apple/iOS-Mockup-Look (light theme) - Referenz-Stil (embossed pills …). */}
+      <Composition
+        id="MotionApple"
+        component={MotionApple}
         defaultProps={demoProps}
         calculateMetadata={calculateMetadata}
         durationInFrames={252}

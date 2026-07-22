@@ -1954,6 +1954,17 @@ def _scenario_logic(clip, transcript, tmp):
           and "moSeg('moStyle'" not in _ui_m
           and 'const MO_TPLS=' in _ui_m)
 
+    # v102: Apple/iOS-Mockup-Look (Referenz-Stil) als eigene Remotion-Composition.
+    _mrb2 = open(os.path.join(HERE, 'motion', 'scripts', 'render-brief.mjs'),
+                 encoding='utf-8').read()
+    _mrt2 = open(os.path.join(HERE, 'motion', 'src', 'Root.tsx'), encoding='utf-8').read()
+    check('v102: Apple-Composition + Routing (pills -> MotionApple)',
+          os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionApple.tsx'))
+          and os.path.exists(os.path.join(HERE, 'motion', 'src', 'apple', 'AppleScene.tsx'))
+          and 'id="MotionApple"' in _mrt2
+          and "APPLE = new Set(['pills'])" in _mrb2
+          and "'MotionApple'" in _mrb2)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

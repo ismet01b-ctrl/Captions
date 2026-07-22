@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v102 Apple/iOS-Mockup-Look (Ismet-Referenzvideo: "solche Motion Graphics
+  rede ich die ganze Zeit").** Referenz = der helle Apple-UI-Stil (App-Icon-Reveal,
+  App-Store-Karte, Such-Bar, Homescreen, premium embosste Pills) - genau die
+  frueher zurueckgestellte widgets/appstore/chat/notify-Familie. FLAGGSCHIFF
+  gebaut: die hellen 3D-Pills. Neu motion/src/apple/AppleScene.tsx +
+  MotionApple.tsx (eigene Composition, Light-Theme): weiches Blau-Weiss-
+  Gradientfeld, weisse embosste Pills (Drop-Shadow + Innen-Highlight + Hairline,
+  dunkler Text), staggered entrancePose-Feder + Blur-In, schwebende Vektor-
+  Sparkles (Akzent + Gold, headless-sicher statt Emoji). render-brief.mjs routet
+  APPLE-Templates (pills) auf MotionApple; Root registriert die Composition. Das
+  "Pills"-Template rendert ab jetzt genau den Referenz-Look (kein UI/Server-Umbau
+  noetig - laeuft ueber den bestehenden template-Pfad). GEPRUEFT: tsc clean,
+  headless gerendert (Frame-Streifen deckungsgleich mit der Referenz) - Video an
+  Ismet. Regression 655/655 gruen. NOCH offen (bewusst, je eigener Build):
+  App-Store-Karte, Such-Bar, Homescreen, Chat, Notify.
+
 - **v101z2 Template-Animation auf Senior-SaaS-Niveau (Ismet: "smooth, high end,
   wie ein Senior SaaS Motion Designer").** Die Remotion-Bloecke (chipRow/kinetic
   Headline/statCard/bigQuote/accentUnderline) hatten nur eine Basis-Feder + Fade.
