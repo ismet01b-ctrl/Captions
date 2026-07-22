@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101x Captions & Motion als getrennte Produkte (Ismet: "Leute brauchen nur
+  Motion ODER nur Captions - loes das").** Beide Zielgruppen bekommen jetzt einen
+  klaren, eigenen Einstieg statt in EIN Tool getrichtert zu werden. LANDING:
+  Zwei-Produkt-Hero ("Two tools for one job") mit zwei Karten -> Auto-Captions
+  (/app#create) und Motion Graphics (/app#motion), je eigener Deep-Link; darunter
+  ein eigener Produkt-Abschnitt pro Tool (#captions / #motion) mit eigenem Titel,
+  Feature-Grid und CTA; Nav Captions/Motion/Pricing. Motion-Sektion bewirbt das
+  echte 3D. APP: Erst-Besuch-Auswahl "What are you here to make?" (#toolChooser)
+  -> routet direkt ins gewaehlte Tool; routeFromHash akzeptiert /app#motion UND
+  #/motion (Landing-Deep-Link); das zuletzt genutzte Tool wird gemerkt
+  (localStorage dve_tool) -> ein Motion-only-Nutzer landet naechstes Mal direkt in
+  Motion. BEWIESEN: Playwright-Screenshots (Landing-Hero + In-App-Chooser rendern
+  sauber) an Ismet. 2 neue Quelltext-Garantien, Regression 651/651 gruen. Landing
+  bleibt Englisch/international, keine Konkurrenznamen, kein Datenschutz-Block.
+
 - **v101w Echtes 3D fuer die Motion-Graphics (Ismet: "Ich will 3D, high end").**
   Die Brief-Motion-Graphics sind jetzt echtes 3D via Three.js (@remotion/three) -
   keine 2.5D-CSS mehr. Neu im motion/-Stack: Scene3D (R3F) - facettierter Metall-

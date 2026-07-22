@@ -1912,6 +1912,20 @@ def _scenario_logic(clip, transcript, tmp):
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
           and 'id="moBrief3d"' in _ui_m and "fd.append('d3'" in _ui_m)
 
+    # v101x: Captions + Motion als getrennte Produkte (Einstieg waehlbar + gemerkt).
+    _land = open(os.path.join(HERE, 'web', 'landing.html'), encoding='utf-8').read()
+    check('v101x: App - Werkzeugauswahl, Deep-Link, gemerktes Tool',
+          'id="toolChooser"' in _ui_m and 'function pickTool' in _ui_m
+          and 'function showToolChooser' in _ui_m
+          and "localStorage.setItem('dve_tool'" in _ui_m
+          and "localStorage.getItem('dve_chosen')" in _ui_m
+          # routeFromHash akzeptiert #motion UND #/motion
+          and ".replace(/^#\\/?/, '')" in _ui_m)
+    check('v101x: Landing - zwei getrennte Produkte mit eigenen Deep-Link-CTAs',
+          'id="captions"' in _land and 'id="motion"' in _land
+          and '/app#create' in _land and '/app#motion' in _land
+          and 'Motion Graphics' in _land)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.

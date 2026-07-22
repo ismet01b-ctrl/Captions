@@ -91,6 +91,25 @@ nav .cta:hover { color: white; transform: translateY(-1px);
 .hero .small {
   margin-top: 16px; color: var(--mut); font-size: 13px;
 }
+/* Two-product chooser + per-product sections (v101x) */
+.chooser { display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  max-width: 820px; margin: 34px auto 0; text-align: left; }
+.ch-card { display: block; background: var(--card, #14141c);
+  border: 1px solid var(--line, #26263a); border-radius: 18px; padding: 26px 24px;
+  text-decoration: none; color: inherit; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.ch-card:hover { transform: translateY(-4px); border-color: var(--acc);
+  box-shadow: 0 20px 54px rgba(0,0,0,.45); }
+.ch-ic { font-size: 34px; margin-bottom: 12px; }
+.ch-card h3 { font-size: 21px; font-weight: 800; margin-bottom: 8px; }
+.ch-card p { color: var(--mut); font-size: 14.5px; line-height: 1.6; }
+.ch-go { display: inline-block; margin-top: 16px; color: var(--acc); font-weight: 800; }
+.prod-tag { display: inline-block; margin-bottom: 12px; padding: 6px 14px;
+  border-radius: 999px; font-weight: 800; font-size: 13px; letter-spacing: .02em;
+  background: rgba(124,92,255,.14); color: var(--acc); }
+.prod-tag.pinktag { background: rgba(255,90,120,.14); color: #ff6a86; }
+.prod-cta-wrap { text-align: center; margin-top: 34px; }
+.prod-cta-wrap .small { margin-top: 12px; color: var(--mut); font-size: 13px; }
+@media (max-width: 640px) { .chooser { grid-template-columns: 1fr; } }
 
 .preview-strip {
   padding: 20px 24px 60px;
@@ -279,8 +298,9 @@ footer .links a:hover { color: var(--fg); }
   <div class="inner">
     <div class="logo"><img src="/logo_white.png" alt="">Douchko<span class="dot">·</span>VE<span class="beta">Beta</span></div>
     <div>
-      <a href="#features">Features</a>
-      <a href="#how">How it works</a>
+      <a href="#captions">Captions</a>
+      <a href="#motion">Motion</a>
+      <a href="#pricing">Pricing</a>
       <a href="/app" class="cta">Get started</a>
     </div>
   </div>
@@ -288,20 +308,31 @@ footer .links a:hover { color: var(--fg); }
 
 <section class="hero">
   <span class="badge">Private Beta · v0.1</span>
-  <h1>Captions that look like<br><span class="accent">you hired an editor</span></h1>
-  <p class="sub">Upload your talking-head video. The AI director finds your hook and key
-    lines, picks from 26 text animations, reads every scene in the frame and places your
-    words the way a good editor would after hours in the timeline.</p>
-  <a href="/app" class="hero-cta">
-    Upload your video
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M5 12h14M12 5l7 7-7 7"/>
-    </svg>
-  </a>
-  <div class="small" style="margin-top:10px;">
+  <h1>Two tools for one job:<br><span class="accent">making your video look edited</span></h1>
+  <p class="sub">Pick what you need. Editorial auto-captions for your talking-head videos,
+    or high-end 3D motion graphics from a one-line brief. One credit balance, no
+    subscription — ever.</p>
+
+  <div class="chooser">
+    <a href="/app#create" class="ch-card">
+      <div class="ch-ic">✍️</div>
+      <h3>Auto-Captions</h3>
+      <p>Upload a talking-head video. An AI director finds your hook, picks from 26
+        animations and places every word like an editor would.</p>
+      <span class="ch-go">Caption my video →</span>
+    </a>
+    <a href="/app#motion" class="ch-card">
+      <div class="ch-ic">🌀</div>
+      <h3>Motion Graphics</h3>
+      <p>Describe a clip in one line. Get real 3D motion graphics — lit geometry,
+        depth and a moving camera. No motion designer, no After Effects.</p>
+      <span class="ch-go">Create motion →</span>
+    </a>
+  </div>
+
+  <div class="small" style="margin-top:16px;">
     <a href="/app" style="color:var(--acc); font-weight:700; text-decoration:none;">
-      Or test it on your own clip first · 10 second demo, no account →</a>
+      Or test captions on your own clip first · 10 second demo, no account →</a>
   </div>
   <div class="small">3 free minutes every month · No credit card required · No subscription, ever</div>
   <div class="small" id="liveStats" style="display:none; margin-top:8px; color:var(--gold);
@@ -328,10 +359,12 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   <span class="chip">Vertical, wide, square</span>
 </div>
 
-<section id="features" class="wrap">
-  <h2>Why this is different</h2>
-  <p class="section-sub">Most tools slap a big word on screen every 3 seconds.
-    DouchkoVE works like an editor. It knows when silence works and when a word should hit hard.</p>
+<section id="captions" class="wrap">
+  <span class="prod-tag">Tool 1 · ✍️ Auto-Captions</span>
+  <h2>Captions that look like you hired an editor</h2>
+  <p class="section-sub">Upload a talking-head video. The AI director reads your
+    transcript, finds the hook and places every word the way a good editor would —
+    it knows when silence works and when a word should hit hard.</p>
 
   <div class="features">
     <div class="feat">
@@ -341,8 +374,8 @@ fetch('/api/stats').then(r => r.json()).then(d => {
         </svg>
       </div>
       <h3>An AI director, not a template</h3>
-      <p>The AI reads your transcript like an editor and decides keywords, effects
-        and camera moves. Nothing is random. Every choice fits what you actually say.</p>
+      <p>The AI decides keywords, effects and camera moves from what you actually say.
+        Nothing is random. 8 looks, 26 text animations, beat-synced to your music.</p>
     </div>
 
     <div class="feat gold">
@@ -356,17 +389,6 @@ fetch('/api/stats').then(r => r.json()).then(d => {
         and can correct any word. It only renders once it reads right.</p>
     </div>
 
-    <div class="feat pink">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-      </div>
-      <h3>Motion graphics without a motion designer</h3>
-      <p>6 clean, animated templates. Export as MP4 or as ProRes 4444 with alpha
-        and drop them straight onto your footage in Premiere.</p>
-    </div>
-
     <div class="feat">
       <div class="icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
@@ -377,18 +399,62 @@ fetch('/api/stats').then(r => r.json()).then(d => {
       <p>Real licensed sounds instead of synthetic beeps, matching emojis, a hook
         score for your opener, and captions in 17 languages.</p>
     </div>
+  </div>
+  <div class="prod-cta-wrap">
+    <a href="/app#create" class="hero-cta">Caption my video
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+    <div class="small">10 second demo, no account · watermark clears with your first purchase</div>
+  </div>
+</section>
+
+<section id="motion" class="wrap">
+  <span class="prod-tag pinktag">Tool 2 · 🌀 Motion Graphics</span>
+  <h2>3D motion graphics from a one-line brief</h2>
+  <p class="section-sub">No timeline, no After Effects. Describe the clip you want and
+    get a fresh, high-end motion-graphics piece — every one composed from scratch, never
+    a template.</p>
+
+  <div class="features">
+    <div class="feat pink">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </div>
+      <h3>Real 3D, not flat shapes</h3>
+      <p>Lit geometry with a metal surface, real depth, drifting camera and beat-reactive
+        motion. Rendered frame by frame on the server — no plugins on your side.</p>
+    </div>
 
     <div class="feat pink">
       <div class="icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <path d="M20 6L9 17l-5-5"/>
+          <path d="M12 3v18M3 12h18"/>
         </svg>
       </div>
-      <h3>Try it free, no risk</h3>
-      <p>10 second demo without an account (watermarked). Confirm your email and you
-        get 2 free credits to start, plus 3 free minutes every month. The watermark
-        disappears with your first purchase.</p>
+      <h3>Type a brief, get a clip</h3>
+      <p>“Bold intro for my fitness channel.” That’s the whole workflow. Toggle pure
+        motion graphics with no text, or keep kinetic type — you decide.</p>
     </div>
+
+    <div class="feat pink">
+      <div class="icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14"/>
+        </svg>
+      </div>
+      <h3>Drop it onto your footage</h3>
+      <p>Export as MP4, or as ProRes 4444 with a real alpha channel and drop the motion
+        straight onto your edit. One credit per clip, no subscription.</p>
+    </div>
+  </div>
+  <div class="prod-cta-wrap">
+    <a href="/app#motion" class="hero-cta">Create motion
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
   </div>
 </section>
 

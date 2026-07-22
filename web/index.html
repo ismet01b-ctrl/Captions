@@ -687,6 +687,26 @@ body {
 .modal .foot { padding: 18px 30px; border-top: 1px solid var(--line);
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   background: var(--bg2); }
+/* v101x Erst-Besuch-Werkzeugauswahl */
+.tool-chooser { position: fixed; inset: 0; z-index: 200; display: none;
+  align-items: center; justify-content: center; padding: 24px;
+  background: rgba(6,6,10,0.86); backdrop-filter: blur(8px); }
+.tool-chooser.show { display: flex; }
+.tc-inner { max-width: 780px; width: 100%; text-align: center; }
+.tc-inner h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+.tc-sub { color: var(--mut); margin: 10px 0 26px; font-size: 15px; }
+.tc-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.tc-card { text-align: left; background: var(--surf); border: 1px solid var(--line);
+  border-radius: 18px; padding: 26px 24px; cursor: pointer; color: var(--fg);
+  transition: transform .15s, border-color .15s, box-shadow .15s; }
+.tc-card:hover { transform: translateY(-3px); border-color: var(--acc2);
+  box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+.tc-ic { font-size: 34px; margin-bottom: 12px; }
+.tc-card h3 { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+.tc-card p { color: var(--mut); font-size: 14px; line-height: 1.6; }
+.tc-go { display: inline-block; margin-top: 16px; color: var(--acc2); font-weight: 700; }
+@media (max-width: 640px) { .tc-cards { grid-template-columns: 1fr; }
+  .tc-inner h2 { font-size: 24px; } }
 /* v101t Auto-Akzente im Momente-Editor */
 .accx-section { padding: 6px 30px 14px; border-top: 1px solid var(--line); }
 .accx-head { display: flex; align-items: center; justify-content: space-between;
@@ -1343,6 +1363,31 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
 <!-- ---------- APP (Wizard) ---------- -->
 <div id="appView" class="app">
+  <!-- v101x: Erst-Besuch-Auswahl. Captions- und Motion-Nutzer sind getrennte
+       Zielgruppen - hier waehlt man sein Werkzeug, danach wird es gemerkt. -->
+  <div id="toolChooser" class="tool-chooser" role="dialog" aria-modal="true"
+       aria-labelledby="tcTitle">
+    <div class="tc-inner">
+      <h2 id="tcTitle">What are you here to make?</h2>
+      <p class="tc-sub">Two separate tools, one credit balance. Switch anytime up top.</p>
+      <div class="tc-cards">
+        <button class="tc-card" type="button" onclick="pickTool('create')">
+          <div class="tc-ic">✍️</div>
+          <h3>Auto-Captions</h3>
+          <p>Upload a talking-head video. An AI director places editorial captions,
+            effects and camera moves that fit what you say.</p>
+          <span class="tc-go">Start captioning →</span>
+        </button>
+        <button class="tc-card" type="button" onclick="pickTool('motion')">
+          <div class="tc-ic">🌀</div>
+          <h3>Motion Graphics</h3>
+          <p>Describe a clip in one line. Get high-end 3D motion graphics — lit
+            geometry, depth and camera moves. No motion designer needed.</p>
+          <span class="tc-go">Start motion →</span>
+        </button>
+      </div>
+    </div>
+  </div>
   <header class="header">
     <div class="brand"><img class="brand-logo" src="/logo_white.png" alt="">DouchkoVE<sup class="brand-beta">Beta</sup></div>
     <nav class="topnav" id="topnav" aria-label="Sections">
@@ -2553,14 +2598,41 @@ function showSection(name) {
     try { history.replaceState(null, '', '#/' + name); } catch (e) {}
   }
   window.scrollTo(0, 0);
+  // v101x: das zuletzt genutzte Tool merken - ein Captions- oder Motion-only-
+  // Nutzer landet beim naechsten Besuch direkt wieder in seinem Werkzeug.
+  if (name === 'create' || name === 'motion') {
+    try { localStorage.setItem('dve_tool', name); } catch (e) {}
+  }
   if (name === 'motion') initMotion();
   if (name === 'library') renderLibrary();
   if (name === 'billing') renderBilling();
   if (name === 'account') renderAccount();
 }
 function routeFromHash() {
-  const m = (location.hash || '').match(/^#\/(\w+)/);
-  showSection(m ? m[1] : 'create');
+  // Deep-Link aus der Landing: /app#motion bzw. #/motion (beide Formen).
+  const raw = (location.hash || '').replace(/^#\/?/, '');
+  const m = raw.match(/^(\w+)/);
+  let target = (m && PAGES.includes(m[1])) ? m[1] : null;
+  if (!target) {
+    let pref = null;
+    try { pref = localStorage.getItem('dve_tool'); } catch (e) {}
+    if (pref === 'create' || pref === 'motion') target = pref;
+  }
+  // Erst-Besuch ohne Ziel/Vorliebe -> "Was willst du machen?"-Auswahl.
+  let chosen = false;
+  try { chosen = !!localStorage.getItem('dve_chosen'); } catch (e) {}
+  if (!target && !chosen) { showToolChooser(); return; }
+  showSection(target || 'create');
+}
+function showToolChooser() {
+  const el = $('#toolChooser');
+  if (el) el.classList.add('show');
+  else showSection('create');
+}
+function pickTool(name) {
+  try { localStorage.setItem('dve_chosen', '1'); localStorage.setItem('dve_tool', name); } catch (e) {}
+  const el = $('#toolChooser'); if (el) el.classList.remove('show');
+  showSection(name);
 }
 window.addEventListener('hashchange', routeFromHash);
 
