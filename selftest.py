@@ -2017,6 +2017,12 @@ def _scenario_logic(clip, transcript, tmp):
           'const layerCam' in _msh and 'layerCam(i, t - dt)' in _msh
           and 'idleDrift' in _msh and 'SHUTTER' in _msh
           and 'dx={dx}' in _msh and 'springStep(e - dt' in _msh)  # auch die Kinetik-Typo smeart
+    # v111c: interaktive Kamera — motivierte Fahrten INNERHALB der Shots (entlang der Schrift
+    # gleiten, in die Punchline pushen, dem Playhead folgen). Smeart via gemessenem Blur mit.
+    check('v111c: interaktive Kamera (per-Shot-Fahrt, folgt dem Inhalt)',
+          'const shotCam' in _msh and 'shotCam(shot.kind' in _msh
+          and 'FOLLOW the playhead' in _msh and 'glide along the type' in _msh
+          and 'easeInOutSine' in _msh)
     check('v111: Komposition registriert (16:9, storyboard-Dauer)',
           'id="MotionShowcase"' in _mrt3b and 'showcaseMetadata' in _mrt3b
           and 'showcaseDuration()' in _mrt3b)

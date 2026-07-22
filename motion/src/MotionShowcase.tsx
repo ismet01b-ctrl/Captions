@@ -105,6 +105,34 @@ const idleDrift = (t: number, phase: number): Cam => ({
   scale: 1 + Math.sin(t * 0.5 + phase) * 0.004, alpha: 1,
 });
 
+const easeInOutSine = (x: number): number => -(Math.cos(Math.PI * clamp01(x)) - 1) / 2;
+
+/**
+ * The INTERACTIVE camera: a motivated move that lives INSIDE each shot (not just at the
+ * boundaries). It starts at neutral when the shot arrives (so it never fights the entrance)
+ * and glides through the hold — the way an operator tracks the subject: pan ALONG the opening
+ * headline, push INTO a punchline, crane with a conversation, and literally FOLLOW the timeline
+ * playhead. `p` is progress 0→1 through the shot. Because the layer's velocity is measured for
+ * motion blur, every one of these camera moves smears on its own — buttery, for free.
+ */
+const shotCam = (kind: ShotKind, warm: boolean, p: number, W: number, H: number): Cam => {
+  const e = easeInOutSine(p);
+  const base = { x: 0, y: 0, scale: 1, alpha: 1 };
+  switch (kind) {
+    case 'ktypo':   // glide along the type (dir alternates), gentle push
+      return { ...base, x: (warm ? 1 : -1) * e * W * 0.13, scale: 1 + e * 0.05 };
+    case 'timer':   return { ...base, x: -e * W * 0.05, scale: 1 + e * 0.06 };
+    case 'notes':   return { ...base, y: e * H * 0.06, scale: 1 + e * 0.05 };   // crane down with the typing
+    case 'searchbar': return { ...base, y: e * H * 0.03, scale: 1 + e * 0.08 }; // push onto the link
+    case 'imessage': return { ...base, y: -e * H * 0.07, scale: 1 + e * 0.03 }; // crane up with the reply
+    case 'widgets': return { ...base, x: e * W * 0.03, y: e * H * 0.025, scale: 1 + e * 0.09 }; // push toward the tap
+    case 'pill':    return { ...base, scale: 1 + e * 0.06 };
+    case 'timeline': return { ...base, x: -e * W * 0.14, scale: 1 + e * 0.05 }; // FOLLOW the playhead sweep
+    case 'signoff': return { ...base, scale: 1 + e * 0.05 };
+    default:        return base;
+  }
+};
+
 const layerCss = (c: Cam): React.CSSProperties => ({
   position: 'absolute', inset: 0, opacity: clamp01(c.alpha),
   transform: `translate3d(${c.x.toFixed(2)}px,${c.y.toFixed(2)}px,0) scale(${c.scale.toFixed(4)})`,
@@ -499,6 +527,10 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec }> = ({ spec }) => {
       : (i < n - 1 ? exitCam(STORY[i + 1]!.into, tout, W, H)
         : { ...IDENT, alpha: 1 - easeInOutQuint(tout), scale: 1 + 0.06 * easeInOutQuint(tout) });
     let cam = composeCam(en, ex);
+    // interactive camera: a motivated move that runs through the whole shot (neutral at p=0 so it
+    // never fights the entrance). Sampled continuously → it smears via the measured-velocity blur.
+    const sc = shotCam(shot.kind, shot.c === 'warm', clamp01(local / shot.dur), W, H);
+    cam = { x: cam.x + sc.x, y: cam.y + sc.y, scale: cam.scale * sc.scale, alpha: cam.alpha };
     // idle drift only while fully settled (fades in as the entrance completes, out as exit starts)
     const settle = clamp01(tin * 2 - 1) * clamp01((1 - tout) * 2 - 0) * (tout <= 0 ? 1 : 0);
     if (settle > 0) {
