@@ -1908,25 +1908,20 @@ def _scenario_logic(clip, transcript, tmp):
           and os.path.exists(os.path.join(_mroot, 'src', 'three', 'Scene3D.tsx'))
           and 'id="Motion3D"' in _mrt
           and "'Motion3D'" in _mrb and '--gl=angle' in _mrb)
-    # v107 (Pfeiler 3): High-End-3D-Promo-Look - Glas-Blobs, fliegende Device-Panels,
-    # Bloom-Halo, Kino-Kamerafahrt (software-GL-sicher, keine Transmission).
+    # v109 (Pfeiler 3 nach Referenz): RED-GLASS-Promo - echtes Transmission-Glas (Blobs +
+    # Glas-Chips mit Icons + Hero-Orb + Ringe) auf hellem Studio-Env, Kamerafluss.
     _msc3 = open(os.path.join(HERE, 'motion', 'src', 'three', 'Scene3D.tsx'),
                  encoding='utf-8').read()
-    check('v107: 3D-Promo - echte Screens auf Phones + Glas-Blobs + Halo + Kino-Kamera',
-          'const GlassBlob' in _msc3 and 'const PhonePanel' in _msc3
-          and 'const makeScreen' in _msc3   # echte Dark-Mode-Screens als Canvas-Textur
-          and "variant === 'chat'" in _msc3 and 'CanvasTexture' in _msc3
-          and 'const Halo' in _msc3 and 'dolly' in _msc3
-          and 'AdditiveBlending' in _msc3
-          # software-GL-sicher: keine Transmission (kein PhysicalMaterial-Render-Target)
-          and 'meshPhysicalMaterial' not in _msc3)
-    # v107c: Reflexionen (Env-Map) + Studio-Boden + Kontaktschatten + Post-Grade.
+    check('v109: Red-Glass-Promo - Transmission-Glas + Chips(Icons) + Orb + Ringe',
+          'const RedGlass' in _msc3 and 'meshPhysicalMaterial' in _msc3
+          and 'transmission={1}' in _msc3 and 'const Chip' in _msc3
+          and 'iconTex' in _msc3 and 'const Rings' in _msc3
+          and 'const Blob' in _msc3 and 'CameraRig' in _msc3)
     _m3d = open(os.path.join(HERE, 'motion', 'src', 'Motion3D.tsx'), encoding='utf-8').read()
-    check('v107c: Env-Reflexionen + Boden/Kontaktschatten + Kamera-Choreo + Post-Grade',
+    check('v109: helles Studio-Env (Glas refraktiert) + Chromatic Aberration',
           'EquirectangularReflectionMapping' in _msc3 and 'scene.environment' in _msc3
-          and 'const Floor' in _msc3 and 'shadowTex' in _msc3
-          and 'envMapIntensity' in _msc3 and 'const arc' in _msc3
-          and 'mixBlendMode' in _m3d)
+          and 'const studioEnv' in _msc3 and 'envMapIntensity' in _msc3
+          and 'ChromaticAberration' in _m3d and 'mixBlendMode' in _m3d)
     # v107d: echtes GPU-Post via Render-Targets (Bloom + DoF + Vignette), laeuft auf
     # software-GL (langsamer, aber es rendert - Ismet: "wir sollen es probieren").
     _mpkg2 = open(os.path.join(HERE, 'motion', 'package.json'), encoding='utf-8').read()
