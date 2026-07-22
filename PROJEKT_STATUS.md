@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v111 MotionShowcase: 1:1-Nachbau des Referenz-Montage-Looks (Ismet: "Kann sowas gebaut werden?").**
+  Neue self-contained Komposition `MotionShowcase.tsx` (+ in Root registriert, 16:9,
+  Storyboard-Dauer ~27s) baut den kompletten Referenz-Clip (@beingmayy, 37s) Shot fuer Shot
+  nach — als ECHTE UI-Objekte, nichts Abstraktes: (1) Kinetik-Typo weiss + echtes Apple-Vektor-
+  Logo, (2) Timer-Card (Progress-Ring + "Well" + Pause, orange), (3) Dark Notes/Reader mit
+  Nav-Chrome (Back/Share/•••/gelbes Haekchen) + tippendem Text + Lupe die reinspringt,
+  (4) weisse Search-Bar die von oben reinfaellt + blauer Result-Link mit kurzem RGB-Chromatik-
+  Split, (5) zweite Kinetik-Typo (orange "60 Frames Per Second"), (6) iMessage-Bubbles
+  (gruen "🧈 Buttery Smooth" + blau "Apple Style Animations"), (7) Widget-Stage YouTube-Card
+  ("So in today's video / Bart_VFX / 34K views / NEW") + Schraubenschluessel-Reihe + Cursor
+  der reinfaehrt und tippt, (8/9) Pill-Buttons mit Mini-Device (blau "Track Order" + dark),
+  (10) NLE-Timeline-Card (Ruler 00-04f + farbige Clips + laufender Playhead), (11) Marken-
+  Sign-off (UNSER "made with DouchkoVE", nie das Quell-Wasserzeichen).
+  KERN was Ismet wollte — die UEBERGAENGE: jeder Hand-off ist KAMERAGEFUEHRT (slideL/slideUp
+  mit echtem gerichtetem Motion-Blur via 5 Ghost-Echos entlang der Bewegungsachse, scale-morph
+  durch einen Punkt wie in der Referenz f_22, dolly-push), BEIDE Szenen bleiben scharf — NIE
+  ein Blur-Dissolve (explizite Ismet-Regel). Und INTERAKTIV: `press` rampt in den letzten
+  ~0.3s vor dem Hand-off hoch (Lupe wird gedrueckt, Cursor tippt, Pause-Button sinkt) und
+  treibt die Kamerabewegung in den naechsten Shot. Alles pure in `t` (seekbar, RAM-flat,
+  deterministisch, kein Math.random). Text ist DATEN (Storyboard) — die Komponente erfindet
+  nichts; der KI-Regisseur koennte dieses Storyboard spaeter aus einem Transkript emittieren.
+  BEWEIS: 11 Verifikations-Stills gerendert (jede matcht ihre Referenz: Notes≈f_7, Search≈f_10,
+  iMessage≈f_16, Widgets≈f_19, Timeline≈f_31) + volles 27s-Video (1280x720, h264) gerendert.
+  Selftest 690/690 gruen, tsc clean. NUR Linux/CPU/synthetisch — Feintuning am echten Material
+  offen. OFFEN als Naechstes: Server/UI-Verdrahtung (eigener Motion-Typ) + KI-Shot-Wahl pro
+  Transkript-Beat (der Weg zu "individuell fuer jeden").
 - **v110 Transkript-Provenance: kein halluzinierter Text + Voiceover-Sync (Ismet-Bedingung).**
   Zwei harte Regeln fuer den Auto-Overlay durchgesetzt: (1) KEIN eingeblendetes Wort darf
   erfunden sein - jeder On-Screen-Text (headline/lowerthird/keyword/chips/stat-label) MUSS

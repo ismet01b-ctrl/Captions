@@ -1995,6 +1995,26 @@ def _scenario_logic(clip, transcript, tmp):
     else:
         check('v108: autoGuards Node-Unit-Test (node fehlt -> skip)', True)
 
+    # v111: MotionShowcase — 1:1-Nachbau des Referenz-Montage-Looks. Kamerageführte,
+    # motion-geblurrte Übergänge (kein Blur-Dissolve), interaktive Momente, alle Shot-
+    # Archetypen als echte UI-Objekte, 16:9. Text ist Daten (Storyboard), nichts erfunden.
+    _msh = _msrc('MotionShowcase.tsx'); _mrt3b = _msrc('Root.tsx')
+    check('v111: MotionShowcase — alle Shot-Archetypen + Storyboard',
+          'export const MotionShowcase' in _msh and 'const STORY' in _msh
+          and all(k in _msh for k in ["'ktypo'", "'timer'", "'notes'", "'searchbar'",
+                                        "'imessage'", "'widgets'", "'pill'", "'timeline'", "'signoff'"])
+          and 'AppleMark' in _msh and 'Cursor' in _msh)
+    check('v111: kamerageführte, motion-geblurrte Übergänge (kein Blur-Dissolve)',
+          'MotionSmear' in _msh and 'enterCam' in _msh and 'exitCam' in _msh
+          and all(t in _msh for t in ["'slideL'", "'morph'", "'push'", "'slideUp'"])
+          and 'ghost' in _msh.lower())
+    check('v111: interaktive Momente (press treibt den Hand-off)',
+          'press' in _msh and 'const press =' in _msh
+          and 'showcaseDuration' in _msh)
+    check('v111: Komposition registriert (16:9, storyboard-Dauer)',
+          'id="MotionShowcase"' in _mrt3b and 'showcaseMetadata' in _mrt3b
+          and 'showcaseDuration()' in _mrt3b)
+
     check('v101w: Server + UI reichen den 3D-Schalter durch',
           "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
           and 'id="moBrief3d"' in _ui_m and "fd.append('d3'" in _ui_m)

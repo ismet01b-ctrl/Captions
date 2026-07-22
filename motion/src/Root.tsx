@@ -7,6 +7,7 @@ import { MotionVideo, type MotionProps } from './MotionVideo';
 import { Motion3D } from './Motion3D';
 import { MotionApple } from './MotionApple';
 import { MotionSequence } from './MotionSequence';
+import { MotionShowcase, showcaseDuration } from './MotionShowcase';
 import { MotionOverlay, type MotionOverlayProps } from './MotionOverlay';
 import { demoProps } from './demo-spec';
 
@@ -17,6 +18,18 @@ const calculateMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) =>
     height: spec.canvas.h,
     fps: spec.fps,
     durationInFrames: Math.max(1, Math.round(spec.duration * spec.fps)),
+  };
+};
+
+// Showcase: a fixed hand-designed storyboard. Canvas comes from the spec (16:9), duration
+// from the storyboard itself — not spec.duration.
+const showcaseMetadata: CalculateMetadataFunction<MotionProps> = ({ props }) => {
+  const { spec } = props;
+  return {
+    width: spec.canvas.w,
+    height: spec.canvas.h,
+    fps: spec.fps,
+    durationInFrames: Math.max(1, Math.round(showcaseDuration() * spec.fps)),
   };
 };
 
@@ -81,6 +94,18 @@ export const RemotionRoot: React.FC = () => {
         fps={30}
         width={1080}
         height={1920}
+      />
+      {/* v111: MotionShowcase - 1:1-Nachbau des Referenz-Montage-Looks (Kinetik-Typo + UI-Cards
+          + Widget-Stage + Timeline) mit kamerageführten, motion-geblurrten Übergängen, 16:9. */}
+      <Composition
+        id="MotionShowcase"
+        component={MotionShowcase}
+        defaultProps={demoProps}
+        calculateMetadata={showcaseMetadata}
+        durationInFrames={900}
+        fps={30}
+        width={1920}
+        height={1080}
       />
       {/* v108: Auto-Overlay - hochgeladenes Video + KI-gesteuerte Motion-Beats obendrauf. */}
       <Composition
