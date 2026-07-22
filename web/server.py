@@ -1814,20 +1814,45 @@ def _whisper_words(audio_path, language='auto'):
     key = os.environ.get('OPENAI_API_KEY')
     if not key:
         raise RuntimeError('Server has no OPENAI_API_KEY set.')
-    with open(audio_path, 'rb') as f:
-        r = _rq.post('https://api.openai.com/v1/audio/transcriptions',
-                     headers={'Authorization': f'Bearer {key}'},
-                     data={'model': 'whisper-1', 'response_format': 'verbose_json',
-                           'timestamp_granularities[]': ['word', 'segment'],
-                           **({} if language == 'auto' else {'language': language})},
-                     files={'file': (os.path.basename(audio_path), f, 'audio/mp4')},
-                     timeout=600)
-    if r.status_code == 413:
-        raise RuntimeError('Audio track too large for transcription.')
-    if r.status_code == 429:
-        raise RuntimeError('Transcription service busy — try again in a few minutes.')
-    if r.status_code >= 400:
-        raise RuntimeError(f'Transcription HTTP {r.status_code}: {r.text[:200]}')
+
+    def _reason(resp):
+        try:
+            return ((resp.json().get('error') or {}).get('message') or resp.text or '')[:220]
+        except Exception:
+            return (resp.text or '')[:220]
+
+    # 429/5xx sind oft transient (Rate-Limit) -> mit Backoff neu versuchen. Ein echtes
+    # Quota-/Billing-Problem ("insufficient_quota") ueberlebt die Retries und wird als
+    # klarer Grund durchgereicht, damit man weiss: OpenAI-Konto pruefen, nicht der Code.
+    r = None
+    for attempt in range(4):
+        with open(audio_path, 'rb') as f:
+            r = _rq.post('https://api.openai.com/v1/audio/transcriptions',
+                         headers={'Authorization': f'Bearer {key}'},
+                         data={'model': 'whisper-1', 'response_format': 'verbose_json',
+                               'timestamp_granularities[]': ['word', 'segment'],
+                               **({} if language == 'auto' else {'language': language})},
+                         files={'file': (os.path.basename(audio_path), f, 'audio/mp4')},
+                         timeout=600)
+        if r.status_code < 400:
+            break
+        _rsn = _reason(r)
+        _quota = 'quota' in _rsn.lower() or 'billing' in _rsn.lower()
+        # nur transiente Fehler wiederholen, kein Quota/4xx (ausser 429)
+        if (r.status_code == 429 and not _quota) or 500 <= r.status_code < 600:
+            if attempt < 3:
+                time.sleep(2 ** attempt)   # 1s, 2s, 4s
+                continue
+        break
+    if r is None or r.status_code >= 400:
+        _rsn = _reason(r) if r is not None else 'no response'
+        if r is not None and r.status_code == 413:
+            raise RuntimeError('Audio track too large for transcription.')
+        if r is not None and r.status_code == 429:
+            if 'quota' in _rsn.lower() or 'billing' in _rsn.lower():
+                raise RuntimeError('OpenAI account is out of quota/credits — top up billing on the OpenAI account.')
+            raise RuntimeError('Transcription rate-limited after retries — try again in a few minutes.')
+        raise RuntimeError(f'Transcription HTTP {r.status_code if r is not None else "?"}: {_rsn}')
     data = r.json()
     return [{'word': w['word'].strip(), 'start': round(w['start'], 3), 'end': round(w['end'], 3)}
             for w in data.get('words', [])]
