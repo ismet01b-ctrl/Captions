@@ -3824,9 +3824,11 @@ def sanitize_accents(raw, words, profile=None):
             wert = float(wert) if wert is not None else None
         except (TypeError, ValueError):
             wert = None
+        _ln = str(a.get('lane', '')).lower()
         tmp.append({'zeit': t, 'art': art, 'text': text, 'wert': wert,
                     'anker': int(a.get('anker', a.get('id', 0)) or 0),
                     'aktiv': a.get('aktiv', True) is not False,
+                    'lane': _ln if _ln in ACCENT_LANES else None,
                     'quelle': str(a.get('quelle', 'ki'))})
     tmp.sort(key=lambda x: x['zeit'])
     out, last_t = [], -1e9
@@ -3837,7 +3839,9 @@ def sanitize_accents(raw, words, profile=None):
             continue
         a['id'] = len(out)
         a['dauer'] = 1.6
-        a['lane'] = ACCENT_LANES[len(out) % len(ACCENT_LANES)]
+        # Nutzer-Lane gewinnt (Editor); sonst rotieren, damit nichts stapelt.
+        if not a.get('lane'):
+            a['lane'] = ACCENT_LANES[len(out) % len(ACCENT_LANES)]
         out.append(a)
         last_t = a['zeit']
     return out
@@ -7918,6 +7922,29 @@ def main():
                     _mom_export[-1][k] = prev[i][k]
     json.dump(_mom_export, open(mom_path, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
+    # v101t: Akzent-Plan ZUSAMMEN mit den Momenten ausgeben, damit der Momente-
+    # Editor die Akzente zeigen + editieren kann. Editierte Datei behaelt ihre
+    # Werte (wie die Momente); sonst schlaegt KI/Heuristik vor. Der Voll-Render
+    # laedt danach nur noch (editierte Datei gewinnt).
+    if (cfg.get('accents') or {}).get('auto', False):
+        _acc_path0 = os.path.splitext(args.input)[0] + '_accents.json'
+        _acc_prof0 = (cfg.get('accents') or {}).get('profile')
+        if os.path.exists(_acc_path0):
+            try:
+                _acc_list0 = sanitize_accents(
+                    json.load(open(_acc_path0, encoding='utf-8')), words, _acc_prof0)
+            except Exception:
+                _acc_list0 = []
+        else:
+            _acc_list0 = ai_accents(
+                words, cfg.get('language', 'auto'),
+                str((cfg.get('accents') or {}).get('ai_model', 'gpt-5')),
+                _acc_prof0, cfg)
+        try:
+            json.dump(_acc_list0, open(_acc_path0, 'w', encoding='utf-8'),
+                      ensure_ascii=False, indent=1)
+        except Exception:
+            pass
     if args.plan_only:
         print(f"Momente exportiert: {mom_path}")
         sys.exit(0)
@@ -8046,15 +8073,13 @@ def main():
                             beat_times=_beat_ts, light_dir=_light)
 
     # --- v101t Auto-Akzente: dezente Motion-Graphics-Akzente aufs Transkript.
-    # Editierter Akzent-File hat Vorrang (Momente-Editor, Etappe 3); sonst schlaegt
-    # die KI/Heuristik vor und wir schreiben ihn - so ist er editierbar. Gestylt vom
-    # persoenlichen Profil (accents.profile). Compositing macht die Render-Schleife.
+    # Der Akzent-Plan wird bei der Momente-Ausgabe geschrieben (compute_accents,
+    # oben) und im Editor editiert; hier nur noch LADEN (editierte Datei gewinnt).
     accents_render = []
     acc_style = accent_style((cfg.get('accents') or {}).get('profile'))
-    _acc_pz = _pz_for_accents = None
+    _pz_for_accents = None
     if (cfg.get('accents') or {}).get('auto', False):
-        _acc_base = os.path.splitext(args.input)[0]
-        _acc_path = _acc_base + '_accents.json'
+        _acc_path = os.path.splitext(args.input)[0] + '_accents.json'
         if os.path.exists(_acc_path):
             try:
                 accents_render = sanitize_accents(
@@ -8062,16 +8087,6 @@ def main():
                     (cfg.get('accents') or {}).get('profile'))
             except Exception:
                 accents_render = []
-        if not accents_render:
-            _acc_model = str((cfg.get('accents') or {}).get('ai_model', 'gpt-5'))
-            accents_render = ai_accents(words, cfg.get('language', 'auto'),
-                                        _acc_model,
-                                        (cfg.get('accents') or {}).get('profile'), cfg)
-            try:
-                json.dump(accents_render, open(_acc_path, 'w', encoding='utf-8'),
-                          ensure_ascii=False, indent=1)
-            except Exception:
-                pass
         _plat_a = str(cfg.get('output', {}).get('platform', 'generic')).lower()
         try:
             _pz_for_accents = platform_safe_zones(_plat_a, W, H)

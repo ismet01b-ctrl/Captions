@@ -1759,6 +1759,15 @@ def _scenario_logic(clip, transcript, tmp):
           and 'tx-mode' in _ui_m and "txMode === 'kw'" in _ui_m
           and "fd.append('kwmarks'" in _ui_m)
 
+    check('v101t: Server serviert + speichert Akzente, UI editiert sie',
+          "@app.get('/api/accents/{jid}')" in _srv_m
+          and "accents: str = Form('')" in _srv_m
+          and "_accents.json" in _srv_m
+          and "function renderAccents" in _ui_m
+          and "/api/accents/'" in _ui_m
+          and "fd.append('accents'" in _ui_m
+          and "id=\"accSection\"" in _ui_m)
+
     # v101n: mehrere erzwungene Woerter in EINER Phrase -> Phrase auftrennen,
     # damit jedes markierte Wort ein eigenes Highlight wird (sonst faellt eins weg).
     check('v101n: split_forced_groups trennt an den Marken, sonst unveraendert',
@@ -1837,6 +1846,16 @@ def _scenario_logic(clip, transcript, tmp):
           int(np.abs(R.draw_accents(_acfr.copy(), 1.3,
               [{**_acli[0], 'aktiv': False}], _acst, 1080, 1920, None).astype(int)
               - _acfr.astype(int)).sum()) == 0)
+    # Editor-Roundtrip: eine gueltige Nutzer-Lane gewinnt, fehlende rotiert
+    _acw2 = [{'word': 'x', 'start': 0, 'end': .5}, {'word': 'y', 'start': 10, 'end': 10.5}]
+    _achon = R.sanitize_accents([{'art': 'badge', 'zeit': 2.5, 'text': 'EDIT', 'lane': 'bl'}],
+                                _acw2, {'intensity': 2})
+    _acrot = R.sanitize_accents([{'art': 'chip', 'zeit': 2, 'text': 'A'},
+                                 {'art': 'chip', 'zeit': 6, 'text': 'B'}],
+                                _acw2, {'intensity': 2})
+    check('v101t: Editor-Lane gewinnt, fehlende Lane rotiert',
+          _achon and _achon[0]['lane'] == 'bl'
+          and [a['lane'] for a in _acrot] == ['tl', 'tr'])
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.

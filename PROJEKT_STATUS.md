@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101t Auto-Akzente Etappe 3/4: Editor (sehen/aendern/loeschen/hinzufuegen).**
+  Die Akzente sind jetzt im Momente-Editor kuratierbar. render.py schreibt den
+  Akzent-Plan ZUSAMMEN mit den Momenten (bei der Ausgabe/plan-only), sodass er im
+  Editor vorliegt; der Voll-Render laedt danach nur noch (editierte Datei gewinnt).
+  Server: `GET /api/accents/{jid}` (Plan laden) + `save_and_render` nimmt
+  `accents`-Form entgegen und schreibt `<base>_accents.json` ("[]" = bewusst alle
+  entfernt). UI: neue Sektion "Motion-graphic accents" unter der Momente-Tabelle -
+  pro Akzent Zeit / Text / Art (counter/chip/badge/pop) / Position (4 Lanes) /
+  an-aus + Loeschen, dazu "+ Add accent". sanitize_accents ehrt jetzt eine gueltige
+  Nutzer-Lane (Editor gewinnt), rotiert nur fehlende. BEWIESEN: plan-only schreibt
+  den Akzent-File (2 Akzente), eine simulierte Editor-Aenderung ("MY EDIT", Lane
+  bl) ueberlebt den Re-Export unveraendert. 3 neue Tests (Lane-Ehrung, Server-+UI-
+  Quelltext-Garantien). Regression 642/642 gruen. OFFEN: Stil-Profil pro Konto
+  (Etappe 4). Browser-Smoke NICHT gelaufen (node --check + Quelltext-Garantien
+  gruen) - Live-Klick erst nach Deploy verifizierbar.
+
 - **v101t Auto-Akzente Etappe 2/4: Compositing ins Caption-Video.** Der dezente
   Akzent wird zum kleinen Alpha-Sprite und sitzt jetzt WIRKLICH im Video. Neu in
   render.py: `_accent_sprite()` (PIL-RGBA: dunkle Glas-Pille, Akzent-Rand + -Punkt,

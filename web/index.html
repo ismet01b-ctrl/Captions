@@ -687,6 +687,22 @@ body {
 .modal .foot { padding: 18px 30px; border-top: 1px solid var(--line);
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   background: var(--bg2); }
+/* v101t Auto-Akzente im Momente-Editor */
+.accx-section { padding: 6px 30px 14px; border-top: 1px solid var(--line); }
+.accx-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 12px 0 8px; font-size: 15px; font-weight: 700; }
+.accx-head .btn { padding: 7px 14px; font-size: 13px; }
+.acc-row { display: grid; grid-template-columns: 30px 66px 1fr 96px 74px 30px;
+  gap: 8px; align-items: center; padding: 6px 0; }
+.acc-row select, .acc-row input[type=text] { padding: 8px 10px; font-size: 13px;
+  background: var(--surf); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--fg); width: 100%; }
+.acc-row .acc-del { background: none; border: none; color: var(--mut);
+  cursor: pointer; font-size: 18px; line-height: 1; }
+.acc-row .acc-del:hover { color: #ff5a5a; }
+.acc-empty { color: var(--mut); font-size: 13px; padding: 8px 0; }
+@media (max-width: 640px) { .acc-row { grid-template-columns: 26px 56px 1fr 84px 30px; }
+  .acc-row .acc-lane { display: none; } }
 
 /* Progress-Screen */
 .prog-box {
@@ -2041,6 +2057,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
     <div id="momTimeline" class="mom-timeline" aria-hidden="true"></div>
     <div class="body" id="momBody"></div>
+    <div id="accSection" class="accx-section hidden">
+      <div class="accx-head">
+        <span>Motion-graphic accents <span class="mo-hint">— subtle, on-topic</span></span>
+        <button class="btn secondary" id="accAdd" type="button">+ Add accent</button>
+      </div>
+      <div id="accBody"></div>
+    </div>
     <div class="foot">
       <button class="btn secondary" id="btnFixTranscript">Fix transcript</button>
       <button class="btn secondary" id="momUndo" disabled aria-label="Undo">Undo</button>
@@ -4320,6 +4343,11 @@ async function openMomentsEditor() {
     const r = await fetch('/api/moments/' + State.jid);
     State.moments = await r.json();
   } catch (e) { toast('Could not load moments.', 'err'); return; }
+  try {
+    const ra = await fetch('/api/accents/' + State.jid);
+    State.accents = ra.ok ? await ra.json() : [];
+  } catch (e) { State.accents = []; }
+  if (!Array.isArray(State.accents)) State.accents = [];
   State.history = new EditorHistory();
   const [fxLabels, animLabels] = await Promise.all([
     fetch('/api/fx_labels').then(r => r.json()),
@@ -4391,9 +4419,65 @@ async function openMomentsEditor() {
   syncFromDom(); pushSnap();
   renderTimeline();
   showHookScore();
+  renderAccents();
   $('#momEditor').classList.remove('hidden');
   aBtn(false);
   aStat('');
+}
+
+const ACC_ARTS = [['counter','123 Counter'],['chip','Chip'],['badge','Badge ✓'],['pop','Emphasis']];
+const ACC_LANES = [['tl','top-left'],['tr','top-right'],['bl','mid-left'],['br','mid-right']];
+
+function renderAccents() {
+  const sec = $('#accSection'), body = $('#accBody');
+  if (!sec || !body) return;
+  sec.classList.remove('hidden');
+  body.innerHTML = '';
+  const list = State.accents || [];
+  if (!list.length) {
+    body.innerHTML = '<div class="acc-empty">No accents — the AI adds subtle ones '
+      + 'automatically, or tap “+ Add accent”.</div>';
+    return;
+  }
+  const artOpts = ACC_ARTS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+  const laneOpts = ACC_LANES.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+  list.forEach((a, i) => {
+    const row = document.createElement('div');
+    row.className = 'acc-row';
+    row.innerHTML = `
+      <input type="checkbox" data-i="${i}" data-k="aktiv" ${a.aktiv !== false ? 'checked' : ''}>
+      <input type="text" data-i="${i}" data-k="zeit" value="${(+a.zeit || 0).toFixed(1)}" inputmode="decimal" aria-label="Time">
+      <input type="text" data-i="${i}" data-k="text" value="${(a.text || '').replace(/"/g, '&quot;')}" placeholder="TEXT" aria-label="Accent text">
+      <select data-i="${i}" data-k="art" aria-label="Type">${artOpts}</select>
+      <select data-i="${i}" data-k="lane" class="acc-lane" aria-label="Position">${laneOpts}</select>
+      <button class="acc-del" data-i="${i}" title="Remove" type="button">✕</button>`;
+    body.appendChild(row);
+    row.querySelector('[data-k=art]').value = a.art || 'chip';
+    row.querySelector('[data-k=lane]').value = a.lane || 'tl';
+  });
+  body.querySelectorAll('input, select').forEach(el => {
+    const isText = el.tagName === 'INPUT' && el.type === 'text';
+    el.addEventListener(isText ? 'input' : 'change', syncAccentsFromDom);
+  });
+  body.querySelectorAll('.acc-del').forEach(b => {
+    b.addEventListener('click', () => {
+      State.accents.splice(parseInt(b.dataset.i), 1);
+      renderAccents();
+    });
+  });
+}
+
+function syncAccentsFromDom() {
+  $('#accBody').querySelectorAll('.acc-row').forEach(row => {
+    const i = parseInt(row.querySelector('[data-k=text]').dataset.i);
+    const a = State.accents[i]; if (!a) return;
+    row.querySelectorAll('input, select').forEach(x => {
+      if (x.type === 'checkbox') a[x.dataset.k] = x.checked;
+      else if (x.dataset.k === 'zeit') a.zeit = parseFloat(x.value) || 0;
+      else a[x.dataset.k] = x.value;
+    });
+    if (a.art !== 'counter') a.wert = null;
+  });
 }
 
 /* v80y: Hook-Score - Heuristik aus den Momente-Daten, 0 API-Kosten */
@@ -4594,6 +4678,13 @@ window.addEventListener('keydown', e => {
   }
 });
 $('#momCancel').addEventListener('click', () => $('#momEditor').classList.add('hidden'));
+if ($('#accAdd')) $('#accAdd').addEventListener('click', () => {
+  if (!Array.isArray(State.accents)) State.accents = [];
+  const lastT = State.accents.reduce((m, a) => Math.max(m, +a.zeit || 0), 0);
+  State.accents.push({ art: 'chip', text: 'NEW', zeit: Math.round((lastT + 4) * 10) / 10,
+    lane: ACC_LANES[State.accents.length % 4][0], aktiv: true, wert: null });
+  renderAccents();
+});
 if ($('#btnTplSave')) $('#btnTplSave').addEventListener('click', saveTemplate);
 if ($('#tplLoad')) $('#tplLoad').addEventListener('change', (e) => {
   if (e.target.value) applyTemplate(e.target.value);   // v94: Auswahl bleibt sichtbar
@@ -4609,9 +4700,11 @@ $('#momSave').addEventListener('click', async () => {
   const btn = $('#momSave');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Speichere …';
   try {
+    syncAccentsFromDom();
     const fd = new FormData();
     fd.append('moments', JSON.stringify(State.moments));
     fd.append('code', State.code);
+    fd.append('accents', JSON.stringify(State.accents || []));
     const r = await fetch('/api/moments/' + State.jid, { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok || !d.ok) { toast('Error: ' + (d.detail || d.msg || 'unknown'), 'err'); return; }

@@ -3222,6 +3222,24 @@ def get_moments(jid: str, request: Request):
     return json.load(open(mom_path, encoding='utf-8'))
 
 
+@app.get('/api/accents/{jid}')
+def get_accents(jid: str, request: Request):
+    """v101t: Auto-Akzent-Plan eines Jobs (dezente Motion-Graphics) fuer den
+    Momente-Editor. Leere Liste, wenn (noch) keiner erzeugt wurde."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    acc_path = os.path.splitext(j['input'])[0] + '_accents.json'
+    if not os.path.exists(acc_path):
+        return []
+    try:
+        return json.load(open(acc_path, encoding='utf-8'))
+    except Exception:
+        return []
+
+
 TEMPLATES_PATH = os.path.join(DATA, 'templates.json')
 
 
@@ -3521,7 +3539,8 @@ def _capture_corrections(old_mom_path, edited):
 
 @app.post('/api/moments/{jid}')
 async def save_and_render(request: Request, jid: str,
-                          moments: str = Form(...), code: str = Form('')):
+                          moments: str = Form(...), code: str = Form(''),
+                          accents: str = Form('')):
     """Momente speichern und Voll-Render starten."""
     ok, msg = check_auth(code, request)
     if not ok:
@@ -3546,6 +3565,16 @@ async def save_and_render(request: Request, jid: str,
         print(f"Korrektur-Erfassung uebersprungen ({type(e).__name__})")
     json.dump(mom, open(mom_path, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
+    # v101t: editierte Auto-Akzente mitspeichern (leerer String = unveraendert;
+    # "[]" = der Nutzer hat bewusst alle entfernt). render.py laedt die Datei.
+    if accents:
+        try:
+            _acc = json.loads(accents)
+            if isinstance(_acc, list):
+                json.dump(_acc, open(base + '_accents.json', 'w', encoding='utf-8'),
+                          ensure_ascii=False, indent=1)
+        except Exception:
+            print('Akzent-Edit ignoriert (JSON ungueltig)')
     # Voll-Render mit den neuen Momenten
     j['mode'] = 'full'
     j['status'] = 'wartet'
