@@ -3922,6 +3922,149 @@ def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None):
         return heuristic_accents(words, cfg, profile)
 
 
+# ---- v101t Akzent-Compositing: der dezente Akzent wird zum kleinen Alpha-Sprite -----
+
+def _hex_rgb(h):
+    """'#rrggbb' -> (r,g,b). Fehlerhaft -> DouchkoVE-Orange."""
+    h = str(h or '').lstrip('#')
+    try:
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+    except (ValueError, IndexError):
+        return (255, 122, 26)
+
+
+def _accent_ease(x):
+    """Overshoot-Pop (Feder), 0->~1.06->1. Kein linearer Tell."""
+    if x <= 0:
+        return 0.0
+    if x >= 1:
+        return 1.0
+    return 1 - math.pow(1 - x, 3) * math.cos(x * 3.4)
+
+
+def _accent_sprite(art, text, wert, count_prog, ent, style, W):
+    """Ein Akzent -> RGBA-Sprite (numpy uint8). Dezenter Finishing-Look: dunkle
+    Glas-Pille, feiner Akzent-Punkt, weisse Bold-Type. 'pop' ohne Pille (nur
+    betonter Text + Unterstrich-Wisch). Alles relativ zu W skaliert."""
+    u = W / 1080.0
+    rgb = _hex_rgb(style.get('accent'))
+    fs = max(int(round(40 * u)), 12)
+    try:
+        font = ImageFont.truetype(os.path.join(HERE, 'fonts', 'poppins_b.ttf'), fs)
+    except Exception:
+        font = ImageFont.load_default()
+
+    disp = text
+    if art == 'counter' and wert is not None:
+        m = re.match(r'^\s*(\d[\d.,]*)(.*)$', str(text))
+        if m:
+            disp = str(int(round(wert * count_prog))) + m.group(2)
+    disp = (disp or '').strip() or ' '
+
+    pad_x = int(round(30 * u))
+    pad_y = int(round(18 * u))
+    mark = 'dot' if art in ('chip', 'counter') else ('check' if art == 'badge' else '')
+    dot_r = int(round(7 * u)) if mark else 0
+    label = disp
+
+    tmp = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+    bb = tmp.textbbox((0, 0), label, font=font)
+    tw, th = bb[2] - bb[0], bb[3] - bb[1]
+
+    if art == 'pop':
+        # Kein Pille: betonter Akzent-Text mit Schatten + Unterstrich-Wisch.
+        m2 = int(round(18 * u))
+        w = tw + m2 * 2
+        h = th + m2 * 2 + int(round(10 * u))
+        img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        tx, ty = m2 - bb[0], m2 - bb[1]
+        d.text((tx + 2, ty + 2), label, font=font, fill=(0, 0, 0, 150))   # Schatten
+        d.text((tx, ty), label, font=font, fill=(*rgb, 255))
+        uw = int(tw * max(0.0, min(1.0, ent)))
+        uy = ty + th + int(round(8 * u))
+        if uw > 1:
+            d.rounded_rectangle([tx, uy, tx + uw, uy + int(round(6 * u))],
+                                radius=int(round(3 * u)), fill=(*rgb, 255))
+        return np.array(img)
+
+    dot_gap = (dot_r * 2 + int(round(12 * u))) if dot_r else 0
+    w = tw + pad_x * 2 + dot_gap
+    h = th + pad_y * 2
+    img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    rad = h // 2
+    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=rad, fill=(16, 16, 20, 210))
+    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=rad, outline=(*rgb, 235),
+                        width=max(int(round(2.5 * u)), 2))
+    tx = pad_x + dot_gap - bb[0]
+    if mark == 'dot':
+        cyd = h // 2
+        cxd = pad_x - int(round(2 * u))
+        d.ellipse([cxd - dot_r, cyd - dot_r, cxd + dot_r, cyd + dot_r], fill=(*rgb, 255))
+    elif mark == 'check':
+        cyd = h // 2
+        cxd = pad_x - int(round(2 * u))
+        lw = max(int(round(3.5 * u)), 2)
+        d.line([(cxd - dot_r, cyd), (cxd - dot_r * 0.2, cyd + dot_r),
+                (cxd + dot_r, cyd - dot_r)], fill=(*rgb, 255), width=lw, joint='curve')
+    d.text((tx, pad_y - bb[1]), label, font=font,
+           fill=(*rgb, 255) if art == 'badge' else (245, 245, 248, 255))
+    return np.array(img)
+
+
+def _accent_place(lane, w, h, W, H, pz):
+    """Lane -> Bildposition (cx,cy), safe-zone-fromm. Akzente sitzen im OBEREN Band
+    (Captions liegen unten/mittig) - bl/br also nur bis Bildmitte."""
+    mL = int(W * 0.055)
+    mR = int(W * 0.055)
+    if pz:
+        mL = max(mL, int(pz.get('left', 0)))
+        rr = pz.get('right_rail')
+        if rr:
+            mR = max(mR, W - int(rr) + int(W * 0.01))
+    top = int(H * (0.14 if not pz else max(0.14, pz.get('top', 0) / H + 0.04)))
+    left_x = mL + w // 2
+    right_x = W - mR - w // 2
+    y_top = top + h // 2
+    y_mid = int(H * 0.40) + h // 2
+    return {
+        'tl': (left_x, y_top), 'tr': (right_x, y_top),
+        'bl': (left_x, y_mid), 'br': (right_x, y_mid),
+    }.get(lane, (left_x, y_top))
+
+
+def draw_accents(comp, t, accents, style, W, H, pz=None):
+    """Zeichnet die aktiven Akzente OBEN auf das fertige Frame (nach den Captions).
+    Feder-Einflug, Halt, weicher Abgang; Counter zaehlt hoch. Reine paste()-Blits."""
+    for a in accents:
+        if not a.get('aktiv', True):
+            continue
+        t0 = float(a.get('zeit', 0))
+        dur = float(a.get('dauer', 1.6))
+        local = t - t0
+        fade_out = 0.4
+        if local < -0.03 or local > dur + fade_out:
+            continue
+        ent = _accent_ease(min(1.0, max(0.0, local) / 0.42))
+        if local <= dur:
+            alpha = min(1.0, local / 0.22) if local < 0.22 else 1.0
+        else:
+            alpha = max(0.0, 1 - (local - dur) / fade_out)
+        scale = 0.86 + 0.14 * ent
+        count_prog = _accent_ease(min(1.0, max(0.0, local) / 0.6))
+        try:
+            spr = _accent_sprite(a.get('art', 'chip'), a.get('text', ''),
+                                 a.get('wert'), count_prog, ent, style, W)
+        except Exception:
+            continue
+        sh, sw = spr.shape[:2]
+        cx, cy = _accent_place(a.get('lane', 'tl'),
+                               int(sw * scale), int(sh * scale), W, H, pz)
+        paste(comp, spr, cx, cy, W, H, scale=scale, opacity=alpha)
+    return comp
+
+
 def apply_keyword_marks(kw, fx_map, words, marks, cfg):
     """v101m: Keyword-Markierungen aus dem Text-Editor uebersteuern die KI-Wahl.
     marks[i] = 1 (Wort ERZWINGEN als Highlight) / -1 (Wort NIE highlighten).
@@ -7902,6 +8045,41 @@ def main():
                             flow_map=flow_map, loud=loud_map,
                             beat_times=_beat_ts, light_dir=_light)
 
+    # --- v101t Auto-Akzente: dezente Motion-Graphics-Akzente aufs Transkript.
+    # Editierter Akzent-File hat Vorrang (Momente-Editor, Etappe 3); sonst schlaegt
+    # die KI/Heuristik vor und wir schreiben ihn - so ist er editierbar. Gestylt vom
+    # persoenlichen Profil (accents.profile). Compositing macht die Render-Schleife.
+    accents_render = []
+    acc_style = accent_style((cfg.get('accents') or {}).get('profile'))
+    _acc_pz = _pz_for_accents = None
+    if (cfg.get('accents') or {}).get('auto', False):
+        _acc_base = os.path.splitext(args.input)[0]
+        _acc_path = _acc_base + '_accents.json'
+        if os.path.exists(_acc_path):
+            try:
+                accents_render = sanitize_accents(
+                    json.load(open(_acc_path, encoding='utf-8')), words,
+                    (cfg.get('accents') or {}).get('profile'))
+            except Exception:
+                accents_render = []
+        if not accents_render:
+            _acc_model = str((cfg.get('accents') or {}).get('ai_model', 'gpt-5'))
+            accents_render = ai_accents(words, cfg.get('language', 'auto'),
+                                        _acc_model,
+                                        (cfg.get('accents') or {}).get('profile'), cfg)
+            try:
+                json.dump(accents_render, open(_acc_path, 'w', encoding='utf-8'),
+                          ensure_ascii=False, indent=1)
+            except Exception:
+                pass
+        _plat_a = str(cfg.get('output', {}).get('platform', 'generic')).lower()
+        try:
+            _pz_for_accents = platform_safe_zones(_plat_a, W, H)
+        except Exception:
+            _pz_for_accents = None
+        if accents_render:
+            print(f"Auto-Akzente: {len(accents_render)} dezente Motion-Graphics")
+
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.
     if cfg['effects'].get('blender_water', True):
@@ -8467,6 +8645,9 @@ def main():
             comp = composite_frame(frame, alpha, t, plans, words, face_stable[fidx],
                                    cfg, S, W, H, cam_state, tuple(scene_smooth),
                                    **_cf_kw)
+            if accents_render:            # v101t: dezente Akzente OBEN drauf
+                comp = draw_accents(comp, t, accents_render, acc_style, W, H,
+                                    _pz_for_accents)
         if not win or t >= win[0] - 1e-6:
             if first_abs is None:
                 first_abs = fi + off_frames

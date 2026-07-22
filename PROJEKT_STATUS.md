@@ -3,6 +3,24 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v101t Auto-Akzente Etappe 2/4: Compositing ins Caption-Video.** Der dezente
+  Akzent wird zum kleinen Alpha-Sprite und sitzt jetzt WIRKLICH im Video. Neu in
+  render.py: `_accent_sprite()` (PIL-RGBA: dunkle Glas-Pille, Akzent-Rand + -Punkt,
+  weisse Bold-Type; counter=Punkt+Hochzaehlen, chip=Punkt, badge=Vektor-Haken,
+  pop=betonter Text + Unterstrich-Wisch), `_accent_place()` (Lane -> Ecke im
+  OBEREN Band, safe-zone-fromm ueber platform_safe_zones, meidet die Caption-Zone
+  unten), `draw_accents()` (Feder-Einflug/Halt/Abgang, Counter zaehlt hoch, reine
+  paste()-Blits). Pipeline: nach build_plans wird der Akzent-Plan geladen (editierter
+  `<base>_accents.json` hat Vorrang -> Etappe 3 Editor; sonst ai_accents/Heuristik,
+  dann geschrieben = editierbar), gestylt vom Profil; die Render-Schleife legt die
+  Akzente nach den Captions oben drauf. BEWIESEN: echter Ende-zu-Ende-Render des
+  Test-Clips mit 2 Akzenten (Counter "3 MILLION" oben-links, Chip "VERIFIED"
+  oben-rechts) - Frames + Video an Ismet, Akzente kollidieren nicht mit den
+  Captions. 5 neue Compositing-Tests. Regression 640/640 + render1 7/7 + render2a
+  1/1 gruen. NUR im finalen MP4 (Alpha-Caption-Export noch ohne Akzente - separat).
+  OFFEN: Editor-UI (Etappe 3), Profil-Speicher pro Konto (Etappe 4). EHRLICH:
+  KI-Platzierung erst live mit Key + echtem Material final; hier Heuristik/synthetisch.
+
 - **v101s Auto-Akzente Etappe 1/4: Akzent-Regie (Ismet: "Transkript mit passenden
   Motion Graphics bestuecken, dezent, individuell, editierbar").** Fundament fuer
   automatische DEZENTE Motion-Graphics-Akzente auf dem Caption-Transkript - KEIN

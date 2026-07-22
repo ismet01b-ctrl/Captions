@@ -1815,6 +1815,29 @@ def _scenario_logic(clip, transcript, tmp):
           R.heuristic_accents([], {}, None) == []
           and R.heuristic_accents(_accw[:2], {}, None) == [])
 
+    # v101t: Akzent-Compositing (Sprite + Einbau ins Frame).
+    _acst = R.accent_style({'accent': '#7c5cff'})
+    _acsp = {a: R._accent_sprite(a, 'TEST 3', 3.0, 1.0, 1.0, _acst, 1080)
+             for a in R.ACCENT_ARTS}
+    check('v101t: jede Akzent-Art baut ein nicht-leeres RGBA-Sprite',
+          all(s.ndim == 3 and s.shape[2] == 4 and s.shape[0] > 4 and s.shape[1] > 4
+              and int(s[..., 3].max()) > 0 for s in _acsp.values()))
+    _acfr = np.full((1920, 1080, 3), 30, np.uint8)
+    _acli = [{'art': 'counter', 'zeit': 1.0, 'wert': 3.0, 'text': '3 M', 'dauer': 1.6,
+              'lane': 'tl', 'aktiv': True}]
+    _acon = R.draw_accents(_acfr.copy(), 1.3, _acli, _acst, 1080, 1920, None)
+    _acoff = R.draw_accents(_acfr.copy(), 30.0, _acli, _acst, 1080, 1920, None)
+    _actop = int(np.abs(_acon[:960].astype(int) - _acfr[:960].astype(int)).sum())
+    check('v101t: aktiver Akzent wird ins obere Band komponiert',
+          _actop > 0 and int(np.abs(_acon[960:].astype(int)
+                                    - _acfr[960:].astype(int)).sum()) == 0)
+    check('v101t: nach seinem Fenster hinterlaesst der Akzent nichts',
+          int(np.abs(_acoff.astype(int) - _acfr.astype(int)).sum()) == 0)
+    check('v101t: deaktivierter Akzent wird nicht gezeichnet',
+          int(np.abs(R.draw_accents(_acfr.copy(), 1.3,
+              [{**_acli[0], 'aktiv': False}], _acst, 1080, 1920, None).astype(int)
+              - _acfr.astype(int)).sum()) == 0)
+
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
     # Aufbau: Person-Matte deckt die obere Bildhaelfte + Mitte, unten frei.
