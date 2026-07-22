@@ -14,7 +14,9 @@ export type BlockKind =
   | 'kineticHeadline'
   | 'statCard'
   | 'accentUnderline'
-  | 'deviceFrame';
+  | 'deviceFrame'
+  | 'chipRow'
+  | 'bigQuote';
 
 export type TransitionKind = 'rise' | 'whip' | 'fade' | 'scaleIn';
 
@@ -78,7 +80,24 @@ export interface DeviceFrame extends BlockBase {
   readonly depth: number; // 0..1 parallax
 }
 
-export type Block = KineticHeadline | StatCard | AccentUnderline | DeviceFrame;
+export interface ChipRow extends BlockBase {
+  readonly kind: 'chipRow';
+  readonly items: readonly string[]; // 1..5 short pills
+}
+
+export interface BigQuote extends BlockBase {
+  readonly kind: 'bigQuote';
+  readonly text: string;
+  readonly author?: string;
+}
+
+export type Block =
+  | KineticHeadline
+  | StatCard
+  | AccentUnderline
+  | DeviceFrame
+  | ChipRow
+  | BigQuote;
 
 export interface Scene {
   readonly id: string;

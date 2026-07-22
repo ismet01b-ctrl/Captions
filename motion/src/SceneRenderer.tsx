@@ -12,6 +12,8 @@ import { KineticHeadlineBlock } from './blocks/KineticHeadline';
 import { StatCardBlock } from './blocks/StatCard';
 import { AccentUnderlineBlock } from './blocks/AccentUnderline';
 import { DeviceFrameBlock } from './blocks/DeviceFrame';
+import { ChipRowBlock } from './blocks/ChipRow';
+import { BigQuoteBlock } from './blocks/BigQuote';
 
 interface Props {
   readonly spec: SceneSpec;
@@ -48,6 +50,30 @@ function renderBlock(
       );
     case 'deviceFrame':
       return <DeviceFrameBlock block={block} t={t} tIn={tIn} laneH={laneH} />;
+    case 'chipRow':
+      return (
+        <ChipRowBlock
+          block={block}
+          t={t}
+          tIn={tIn}
+          fg={palette.fg}
+          accent={palette.accent}
+          bg={palette.bg}
+          laneH={laneH}
+        />
+      );
+    case 'bigQuote':
+      return (
+        <BigQuoteBlock
+          block={block}
+          t={t}
+          tIn={tIn}
+          fg={palette.fg}
+          accent={palette.accent}
+          muted={palette.muted}
+          laneH={laneH}
+        />
+      );
     default:
       return null;
   }

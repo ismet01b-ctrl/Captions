@@ -26,7 +26,8 @@ motion clips by ARRANGING a fixed vocabulary of vetted blocks — you never inve
 Return ONLY JSON matching the SceneSpec schema. Rules:
 - 2 to 4 scenes, total 6-10s. One idea per scene. Hook in scene 1.
 - Blocks: kineticHeadline (1-4 words, big, variable weight), statCard (one number that
-  matters), accentUnderline (follows a headline), deviceFrame (a media insert).
+  matters), accentUnderline (follows a headline), deviceFrame (a media insert),
+  chipRow (2-5 short pills / tags), bigQuote (one oversized pull-quote, optional author).
 - Use kineticHeadline for punchy lines; split a headline into its own words with realistic
   onsets so the type snaps to the beat (beatSync:true).
 - Keep it restrained and premium: never more than 2 blocks per scene, never a wall of text.

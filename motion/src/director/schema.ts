@@ -56,7 +56,27 @@ const deviceZ = z.object({
   depth: z.number().min(0).max(1),
 });
 
-const blockZ = z.discriminatedUnion('kind', [kineticZ, statZ, underlineZ, deviceZ]);
+const chipRowZ = z.object({
+  ...baseFields,
+  kind: z.literal('chipRow'),
+  items: z.array(z.string().min(1).max(24)).min(1).max(5),
+});
+
+const bigQuoteZ = z.object({
+  ...baseFields,
+  kind: z.literal('bigQuote'),
+  text: z.string().min(1).max(140),
+  author: z.string().max(40).optional(),
+});
+
+const blockZ = z.discriminatedUnion('kind', [
+  kineticZ,
+  statZ,
+  underlineZ,
+  deviceZ,
+  chipRowZ,
+  bigQuoteZ,
+]);
 
 const sceneZ = z.object({
   id: z.string().min(1),
