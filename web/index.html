@@ -741,6 +741,12 @@ body {
 .mo-tile-txt { display: flex; flex-direction: column; gap: 5px; justify-content: center;
   padding: 16px 14px; aspect-ratio: auto; min-height: 92px; background: var(--surf); }
 .mo-tile-txt.on { border-color: var(--acc); background: var(--acc-soft); }
+/* Text-Kacheln erben sonst die absolute Bild-Label-Position -> Ueberlappung. */
+.mo-tile-txt strong { position: static; text-align: left; font-size: 15px;
+  font-weight: 800; color: var(--fg); }
+.mo-tile-txt span { position: static; left: auto; right: auto; bottom: auto;
+  padding: 0; background: none; text-align: left; font-size: 12px;
+  font-weight: 500; color: var(--mut); line-height: 1.4; }
 .mo-tile-txt strong { font-size: 15px; font-weight: 800; color: var(--fg); }
 .mo-tile-txt span { font-size: 12px; color: var(--mut); line-height: 1.4; }
 .mo-nav { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
