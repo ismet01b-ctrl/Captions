@@ -536,9 +536,14 @@ const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: num
   );
 };
 
-export const AppleScene: React.FC<{ spec: SceneSpec; press?: number }> = ({ spec, press = 0 }) => {
+export const AppleScene: React.FC<{ spec: SceneSpec; press?: number; vw?: number; vh?: number }> = ({ spec, press = 0, vw, vh }) => {
   const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
+  const cfg = useVideoConfig();
+  const fps = cfg.fps;
+  // vw/vh override the composition dims so the phone mockup can render into a portrait
+  // device-stage that is centred inside a wider 16:9 / 1:1 canvas (see DeviceStage).
+  const width = vw ?? cfg.width;
+  const height = vh ?? cfg.height;
   const t = frame / fps;
   const ui: UiSpec = spec.ui ?? { template: 'pills', lines: ['Write', 'Create', 'Solve'], accent: spec.palette.accent };
   const wallpaper = ui.template === 'homescreen' || ui.template === 'notify';

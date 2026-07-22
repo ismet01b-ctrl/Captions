@@ -13,6 +13,7 @@ import React from 'react';
 import { AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { SceneSpec, SeqSegment, TransId } from './spec';
 import { AppleScene } from './apple/AppleScene';
+import { DeviceStage } from './apple/DeviceStage';
 import { clamp01, easeOutQuint, easeInOutCubic } from './lib/easing';
 import {
   TRANSITIONS, IDENTITY, composeAffine, pickTransitions, type Affine,
@@ -50,7 +51,7 @@ const layerStyle = (a: Affine): React.CSSProperties => {
   };
 };
 
-export const MotionSequence: React.FC<MotionSequenceProps> = ({ spec }) => {
+const SeqBody: React.FC<{ spec: SceneSpec; W: number; H: number }> = ({ spec, W, H }) => {
   const { fps } = useVideoConfig();
   const frame = useCurrentFrame();
   const segs: readonly SeqSegment[] = spec.sequence ?? [];
@@ -83,10 +84,10 @@ export const MotionSequence: React.FC<MotionSequenceProps> = ({ spec }) => {
         // Entrance uses the boundary BEFORE this segment; exit uses the boundary AFTER it.
         // First segment => clean intro; last segment => clean outro (sharp scale+fade).
         const enterAff = tin >= 1 ? IDENTITY
-          : i > 0 ? TRANSITIONS[boundary[i - 1]!].enter(tin, spec.canvas.w, spec.canvas.h)
+          : i > 0 ? TRANSITIONS[boundary[i - 1]!].enter(tin, W, H)
             : introAff(tin);
         const exitAff = tout <= 0 ? IDENTITY
-          : i < n - 1 ? TRANSITIONS[boundary[i]!].exit(tout, spec.canvas.w, spec.canvas.h)
+          : i < n - 1 ? TRANSITIONS[boundary[i]!].exit(tout, W, H)
             : outroAff(tout);
         const aff = composeAffine(enterAff, exitAff);
 
@@ -102,7 +103,7 @@ export const MotionSequence: React.FC<MotionSequenceProps> = ({ spec }) => {
         return (
           <Sequence key={i} from={startF} durationInFrames={durF} layout="none">
             <AbsoluteFill style={layerStyle(aff)}>
-              <AppleScene spec={segSpec} press={press} />
+              <AppleScene spec={segSpec} press={press} vw={W} vh={H} />
             </AbsoluteFill>
           </Sequence>
         );
@@ -123,3 +124,10 @@ export const MotionSequence: React.FC<MotionSequenceProps> = ({ spec }) => {
     </AbsoluteFill>
   );
 };
+
+// For 16:9 / 1:1 output the whole sequence plays inside a centred portrait device on a
+// liquid-glass stage; for 9:16 it fills the frame. Transitions + mockups use the stage dims.
+export const MotionSequence: React.FC<MotionSequenceProps> = ({ spec }) => (
+  <DeviceStage W={spec.canvas.w} H={spec.canvas.h} accent={spec.palette.accent}
+    render={(vw, vh) => <SeqBody spec={spec} W={vw} H={vh} />} />
+);

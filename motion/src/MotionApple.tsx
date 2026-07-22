@@ -5,6 +5,7 @@ import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import type { SceneSpec } from './spec';
 import { AppleScene } from './apple/AppleScene';
+import { DeviceStage } from './apple/DeviceStage';
 
 export type MotionAppleProps = {
   readonly spec: SceneSpec;
@@ -12,6 +13,7 @@ export type MotionAppleProps = {
 
 export const MotionApple: React.FC<MotionAppleProps> = ({ spec }) => (
   <AbsoluteFill>
-    <AppleScene spec={spec} />
+    <DeviceStage W={spec.canvas.w} H={spec.canvas.h} accent={spec.ui?.accent ?? spec.palette.accent}
+      render={(vw, vh) => <AppleScene spec={spec} vw={vw} vh={vh} />} />
   </AbsoluteFill>
 );

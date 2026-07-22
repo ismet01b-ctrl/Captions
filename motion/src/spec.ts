@@ -229,7 +229,10 @@ export interface SceneSpec {
 // deterministic guardrails enforce density/safe-zones/timing; MotionOverlay composites the
 // video (OffthreadVideo) with the beats. Everything is pure in t (seekable, deterministic).
 
-export type OverlayKind = 'headline' | 'lowerthird' | 'keyword' | 'chips' | 'stat' | 'brand';
+// Text-carrying kinds + PURE-GRAPHIC kinds (no text): burst (impact shards + ring), sweep
+// (accent band wipes across), pulse (full-frame accent energy hit), brackets (focus corners).
+export type OverlayKind = 'headline' | 'lowerthird' | 'keyword' | 'chips' | 'stat' | 'brand'
+  | 'burst' | 'sweep' | 'pulse' | 'brackets';
 export type OverlayAnchor = 'top' | 'upper' | 'center' | 'lower' | 'bottom';
 export type OverlayEnter = 'rise' | 'pop' | 'slide' | 'wipe';
 

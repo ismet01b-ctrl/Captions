@@ -1765,10 +1765,14 @@ def _run_motion_brief(jid):
         cmd.append('--sequence=' + json.dumps(j['sequence']))
         if j.get('accent'):
             cmd.append('--accent=' + str(j['accent']))
+        if j.get('format'):
+            cmd.append('--format=' + str(j['format']))
     elif j.get('template'):                    # v101z: kuratiertes Remotion-Template
         cmd.append('--template=' + str(j['template']))
         if j.get('accent'):
             cmd.append('--accent=' + str(j['accent']))
+        if j.get('format'):
+            cmd.append('--format=' + str(j['format']))
     else:
         if j.get('no_text'):                  # reine Motion Graphics, keine Typo
             cmd.append('--no-text')
@@ -3037,7 +3041,7 @@ MOTION_TRANSITIONS = {'push', 'panv', 'cover', 'dolly', 'swoosh', 'tilt'}
 async def motion_brief(request: Request, brief: str = Form(...),
                        no_text: str = Form('0'), d3: str = Form('1'),
                        template: str = Form(''), accent: str = Form(''),
-                       sequence: str = Form(''),
+                       sequence: str = Form(''), format: str = Form(''),
                        logo: UploadFile = File(None), font: UploadFile = File(None)):
     """v101p: aus einem Satz eine individuelle Motion-Grafik generieren
     (Remotion-Director). Kostet wie ein Motion-Clip (1 Credit)."""
@@ -3119,6 +3123,7 @@ async def motion_brief(request: Request, brief: str = Form(...),
                  'name': (('Sequence' if _seq else _nm) + '.mp4'), 'dauer': 11,
                  'no_text': _notext, 'd3': _d3, 'template': _tpl, 'accent': _acc,
                  'sequence': _seq, 'assets_path': _assets_path,
+                 'format': (format if format in ('9:16', '16:9', '1:1') else '9:16'),
                  'cost_sec': MOTION_COST_SEC, 'status': 'wartet'}
     set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)

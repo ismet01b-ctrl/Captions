@@ -10,7 +10,9 @@
 
 import type { OverlayBeat, OverlayAnchor, OverlayEnter, OverlayKind } from '../spec';
 
-const KINDS: readonly OverlayKind[] = ['headline', 'lowerthird', 'keyword', 'chips', 'stat', 'brand'];
+const KINDS: readonly OverlayKind[] = ['headline', 'lowerthird', 'keyword', 'chips', 'stat', 'brand',
+  'burst', 'sweep', 'pulse', 'brackets'];
+const GRAPHIC: ReadonlySet<OverlayKind> = new Set<OverlayKind>(['burst', 'sweep', 'pulse', 'brackets']);
 const ANCHORS: readonly OverlayAnchor[] = ['top', 'upper', 'center', 'lower', 'bottom'];
 const ENTERS: readonly OverlayEnter[] = ['rise', 'pop', 'slide', 'wipe'];
 
@@ -52,10 +54,13 @@ const sanitizeBeat = (b: any, minDur: number, maxDur: number): OverlayBeat | nul
   const value = Number.isFinite(Number(b.value)) ? Number(b.value) : undefined;
   const prefix = typeof b.prefix === 'string' ? b.prefix.slice(0, 4) : undefined;
   const suffix = typeof b.suffix === 'string' ? b.suffix.slice(0, 4) : undefined;
-  // content sanity: every kind needs its payload, else it is cheap filler → drop.
-  if ((kind === 'headline' || kind === 'keyword' || kind === 'lowerthird' || kind === 'brand') && !text) return null;
-  if (kind === 'chips' && (!items || items.length < 2)) return null;
-  if (kind === 'stat' && value == null) return null;
+  // content sanity: text kinds need their payload, else it is cheap filler → drop. Pure-
+  // graphic kinds (burst/sweep/pulse/brackets) carry no text and are always valid.
+  if (!GRAPHIC.has(kind)) {
+    if ((kind === 'headline' || kind === 'keyword' || kind === 'lowerthird' || kind === 'brand') && !text) return null;
+    if (kind === 'chips' && (!items || items.length < 2)) return null;
+    if (kind === 'stat' && value == null) return null;
+  }
   const beat: any = { t, dur, kind, anchor, enter, emphasis };
   if (text) beat.text = text; if (text2) beat.text2 = text2; if (label) beat.label = label;
   if (items) beat.items = items; if (value != null) beat.value = value;

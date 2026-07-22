@@ -70,6 +70,12 @@ export function heuristicAuto(input: AutoInput): OverlayBeat[] {
       raw.push({ t: p.start, dur: 2.2, kind: 'chips', items: content.slice(0, 3).map((w) => clean(w.word)), anchor: 'lower', enter: 'slide', emphasis: 0.6 });
     } else if (p.words.length >= 3 && i % 2 === 0) {
       raw.push({ t: p.start, dur: Math.min(2.6, p.end - p.start + 0.3), kind: 'lowerthird', text: p.text, anchor: 'lower', enter: 'slide', emphasis: 0.55 });
+    } else if (p.words.length <= 2) {
+      // short punchy line → a pure-graphic IMPACT instead of yet more text.
+      raw.push({ t: p.start, dur: 1.1, kind: 'burst', anchor: 'center', enter: 'pop', emphasis: 0.75 });
+    } else if (i % 4 === 3) {
+      // section change → an accent SWEEP wipe (no text).
+      raw.push({ t: p.start, dur: 0.9, kind: 'sweep', anchor: 'center', enter: 'wipe', emphasis: 0.6 });
     } else {
       const kw = strongestWord(p.words);
       if (kw) raw.push({ t: p.words.find((w) => clean(w.word) === kw)!.start, dur: 1.6, kind: 'keyword', text: kw, anchor: i % 2 ? 'upper' : 'center', enter: 'pop', emphasis: 0.7 });
@@ -98,9 +104,14 @@ HARD RULES:
 - Match the footage: use what you SEE in the frames (subject, setting, mood) to choose tone.
 - No overlaps. Durations 1.2–3.4s.
 
-Beat kinds: "headline" (the opening hook, big), "lowerthird" (name/claim, lower band),
+Beat kinds — TEXT: "headline" (the opening hook, big), "lowerthird" (name/claim, lower band),
 "keyword" (one punchy word popping), "chips" (2–5 short tags), "stat" (a number counting up),
 "brand" (sign-off with the brand).
+Beat kinds — PURE GRAPHIC (NO text, used sparingly as motion accents, not every beat):
+"burst" (an impact of shards + ring on a punchline), "sweep" (an accent band wiping across at
+a section change / transition), "pulse" (a full-frame accent energy hit on a strong beat),
+"brackets" (focus corners snapping in to spotlight the subject). Mix these in for rhythm so
+the piece is motion design, not just captions — but keep it restrained.
 
 Return STRICT JSON: {"beats":[{"t":s,"dur":s,"kind":..,"text":..,"text2":..,"items":[..],
 "value":n,"label":..,"anchor":"top|upper|center|lower|bottom","enter":"rise|pop|slide|wipe",

@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v108c (A) reine Grafik-Beats + (B) 16:9/1:1 fuer alle Engines (Ismet: "A und B").**
+  (A) Der Auto-Overlay ist nicht mehr nur Text: 4 REINE GRAFIK-Beats ohne Text -
+  burst (Impact: Ring + Funken-Burst), sweep (Akzent-Band wischt durchs Bild), pulse
+  (Vollbild-Akzent-Energie), brackets (Fokus-Ecken schnappen ein). Guards akzeptieren
+  sie (kein Text-Payload), Heuristik streut sie ein (kurze Zeile -> burst, Abschnitt ->
+  sweep), KI-Prompt kennt sie ("mix these in for rhythm, restrained"). BEWEIS: 20s-Clip
+  gerendert -> Regie mischt headline/chips/lowerthird/burst/keyword; Burst-Frame zeigt
+  Ring + Funken ohne Text.
+  (B) 16:9 UND 1:1 fuer Template + Sequence (waren fix 9:16): neuer DeviceStage -
+  Hochkant-Mockup wird als ECHTES Device (gerundeter Bezel + Schlagschatten) zentriert
+  auf einer Liquid-Glass-Buehne mit Akzent-Glow gerendert, NICHT gestreckt (AppleScene
+  bekommt vw/vh-Override, MotionSequence-Transitions nutzen Stage-Masse). 9:16 bleibt
+  full-bleed. Format-Wahl im UI (Template-Style + neuer Sequence-Schritt), Server reicht
+  --format durch. Auto-Overlay war schon aspect-automatisch. BEWEIS: 16:9-Homescreen +
+  16:9-Sequence gerendert - Phone sauber zentriert im Device-Frame. tsc clean.
+  Regression 685/685.
+
 - **v108 FULL-CUSTOMIZABLE: Video hochladen -> KI legt Motion-Graphics drauf (Ismet:
   "ein User laedt ein Video hoch, eine KI entscheidet was wie rein kommt. Muss unseren
   High-Quality-Standard erfuellen, wie ein Senior-Motion-Designer denken. Kein billiger

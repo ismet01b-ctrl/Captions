@@ -1619,6 +1619,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <button class="btn secondary" id="moSeqAdd" type="button" style="margin-top:10px;">+ Add scene</button>
             <label class="mo-lab" style="margin-top:16px;">Accent color</label>
             <input type="color" class="mo-color" id="moAccentSeq" value="#e0483d">
+            <label class="mo-lab" style="margin-top:16px;">Format</label>
+            <div class="seg" id="moFormatSeq"></div>
             <label class="mo-lab" style="margin-top:16px;">Your brand <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
             <div class="brand-row">
               <label class="brand-file"><input type="file" id="moLogoSeq" accept="image/*"><span data-brand="logo">＋ Logo / image</span></label>
@@ -2904,6 +2906,12 @@ async function initMotion(){
   const _sa=$('#moSeqAdd'); if(_sa) _sa.onclick=()=>{ (State.seqRows=State.seqRows||[]).push({template:'pills',text:''}); renderSeqRows(); };
   const _asq=$('#moAccentSeq'); if(_asq) _asq.oninput=()=>{ Motion.seqAccent=_asq.value; };
   Motion.seqAccent = (_asq&&_asq.value)||'#e0483d';
+  const _fseq=$('#moFormatSeq');
+  if(_fseq){ Motion.seqFormat='9:16'; _fseq.innerHTML='';
+    [['9:16','9:16'],['1:1','1:1'],['16:9','16:9']].forEach(([l,v])=>{
+      const b=document.createElement('button'); b.textContent=l; b.classList.toggle('on', v==='9:16');
+      b.onclick=()=>{ Motion.seqFormat=v; _fseq.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); };
+      _fseq.appendChild(b); }); }
   document.querySelectorAll('#moWizard [data-mo-next]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx+1));
   document.querySelectorAll('#moWizard [data-mo-back]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx-1));
   Motion.engine = Motion.briefOk ? 'brief' : 'template';
@@ -3020,6 +3028,7 @@ async function motionSeqGo(){
       return o;
     })));
     fd.append('accent', Motion.seqAccent||'#e0483d');
+    fd.append('format', Motion.seqFormat||'9:16');
     const _lg=$('#moLogoSeq'), _ft=$('#moFontSeq');
     if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
     if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);
@@ -3094,6 +3103,7 @@ async function motionTemplateGo(){
     const fd=new FormData(); fd.append('brief', text);
     fd.append('template', Motion.sel.template||'pills');
     fd.append('accent', Motion.sel.accent||'#7c5cff');
+    fd.append('format', Motion.sel.format||'9:16');
     const _lg=$('#moLogo'), _ft=$('#moFont');
     if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
     if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);

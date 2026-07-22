@@ -115,6 +115,59 @@ const OverlayItem: React.FC<{ beat: OverlayBeat; idx: number; plan: OverlayPlan;
   };
   const draw = easeOut((t - 0.18) / 0.45); // underline / bar draw-in progress
 
+  // ---- PURE-GRAPHIC beats (no text): full-frame motion accents. ----
+  const glife = clamp01(t / 0.12) * (1 - clamp01((t - (beat.dur - 0.3)) / 0.3));
+  if (beat.kind === 'burst') {
+    const ring = easeOut(t / 0.5);
+    return (
+      <AbsoluteFill style={{ pointerEvents: 'none', opacity: glife }}>
+        <div style={{ position: 'absolute', left: '50%', top: `${yPct * 100}%`, width: u * 0.9, height: u * 0.9, transform: 'translate(-50%,-50%)' }}>
+          <Glow u={u} color={`${accent}88`} scale={1} op={0.5 * (1 - ring)} />
+          <div style={{ position: 'absolute', left: '50%', top: '50%', width: u * 0.7 * ring, height: u * 0.7 * ring,
+            transform: 'translate(-50%,-50%)', borderRadius: '50%', border: `${u * 0.006 * (1 - ring)}px solid ${accent}`, opacity: (1 - ring) * 1.2 }} />
+          <Shards u={u} color={accent} t={t} seed={seed} n={16} />
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  if (beat.kind === 'sweep') {
+    const s = easeOut(t / Math.max(0.35, beat.dur - 0.15));
+    return (
+      <AbsoluteFill style={{ pointerEvents: 'none', overflow: 'hidden', opacity: glife }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '55%', height: '100%',
+          transform: `translateX(${(-60 + s * 200).toFixed(1)}%) skewX(-14deg)`,
+          background: `linear-gradient(90deg, transparent, ${accent}cc, #ffffffdd, ${accent}cc, transparent)`,
+          filter: `blur(${u * 0.004}px)`, boxShadow: `0 0 ${u * 0.06}px ${accent}` }} />
+      </AbsoluteFill>
+    );
+  }
+  if (beat.kind === 'pulse') {
+    const p = Math.sin(clamp01(t / (beat.dur * 0.7)) * Math.PI); // 0→1→0
+    return (
+      <AbsoluteFill style={{ pointerEvents: 'none', opacity: glife * p }}>
+        <AbsoluteFill style={{ background: `radial-gradient(70% 60% at 50% ${yPct * 100}%, ${accent}33, transparent 70%)` }} />
+        <AbsoluteFill style={{ boxShadow: `inset 0 0 ${u * 0.3}px ${accent}55` }} />
+      </AbsoluteFill>
+    );
+  }
+  if (beat.kind === 'brackets') {
+    const s = easeOut(t / 0.4); const m = u * (0.18 - 0.06 * s); const len = u * 0.12; const th = u * 0.008;
+    const cx = W / 2, cy = H * yPct; const bw = landscape ? W * 0.42 : W * 0.7; const bh = bw;
+    const corner = (dx: number, dy: number, i: number): React.CSSProperties => ({
+      position: 'absolute', left: cx + dx * (bw / 2) - (dx < 0 ? 0 : th), top: cy + dy * (bh / 2) - (dy < 0 ? 0 : th),
+      width: len, height: len, opacity: s,
+      borderTop: dy < 0 ? `${th}px solid ${accent}` : 'none', borderBottom: dy > 0 ? `${th}px solid ${accent}` : 'none',
+      borderLeft: dx < 0 ? `${th}px solid ${accent}` : 'none', borderRight: dx > 0 ? `${th}px solid ${accent}` : 'none',
+      boxShadow: `0 0 ${u * 0.02}px ${accent}`, transform: `translate(${dx * m * (1 - s)}px, ${dy * m * (1 - s)}px)`,
+    });
+    return (
+      <AbsoluteFill style={{ pointerEvents: 'none', opacity: glife }}>
+        <div style={corner(-1, -1, 0)} /><div style={corner(1, -1, 1)} />
+        <div style={corner(-1, 1, 2)} /><div style={corner(1, 1, 3)} />
+      </AbsoluteFill>
+    );
+  }
+
   if (beat.kind === 'headline') {
     const size = u * (0.078 + 0.024 * em) * (landscape ? 0.85 : 1);
     return (

@@ -1961,6 +1961,21 @@ def _scenario_logic(clip, transcript, tmp):
           and 'id="moTypeAuto"' in _ui_m and 'function motionAutoGo' in _ui_m
           and "auto:['type','upload','render']" in _ui_m)
     _mgroot = os.path.join(HERE, 'motion')
+    # v108b: reine Grafik-Beats (kein Text) + 16:9/1:1 via Device-Stage.
+    check('v108b: reine Grafik-Beats (burst/sweep/pulse/brackets, kein Text)',
+          "'burst'" in _msp and "'sweep'" in _msp and "'pulse'" in _msp
+          and "beat.kind === 'burst'" in _mo and "beat.kind === 'sweep'" in _mo
+          and "beat.kind === 'pulse'" in _mo and 'GRAPHIC' in _mag
+          and 'burst' in _mad and 'PURE GRAPHIC' in _mad)
+    _mds = open(os.path.join(_mov, 'apple', 'DeviceStage.tsx'), encoding='utf-8').read()
+    _mapp = open(os.path.join(_mov, 'MotionApple.tsx'), encoding='utf-8').read()
+    _mseqf = open(os.path.join(_mov, 'MotionSequence.tsx'), encoding='utf-8').read()
+    check('v108b: 16:9/1:1 via Device-Stage (Hochkant-Mockup zentriert, nicht gestreckt)',
+          'export const stageDims' in _mds and 'DeviceStage' in _mapp and 'DeviceStage' in _mseqf
+          and 'vw?: number' in _msrc('apple/AppleScene.tsx')
+          and "cmd.append('--format=" in _srv_m
+          and 'id="moFormatSeq"' in _ui_m and "fd.append('format'" in _ui_m)
+
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _tg = subprocess.run(['node', 'scripts/test-autoguards.mjs'], cwd=_mgroot,
