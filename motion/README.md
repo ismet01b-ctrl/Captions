@@ -65,7 +65,31 @@ Proven: two different briefs → two different, valid, deterministic specs, both
 (a brief with "3.4M" auto-becomes a count-up stat; a different brief picks a different
 palette). Cleaner copy comes from the GPT path (needs OPENAI_API_KEY).
 
-## Next layers (not built yet)
-1. More blocks + a wider curated vocabulary (the 70% that decides "senior" vs "template").
-2. Wire into the web product: brief field on the Motion page → client-side `@remotion/player`
-   live preview (zero server cost) → CPU server render (this engine) → the inline player.
+## One-command bridge (built)
+```bash
+npm run brief -- "5 reasons this blows up. Fast, bold, made for you." out/video.mp4
+# brief → director → validated SceneSpec → Remotion render → MP4 (add --codec=prores for 4444)
+```
+Self-contained: the Python server spawns this exactly like it spawns `gfx_engine.py` today,
+then serves the output file through the existing motion job flow. Proven end-to-end on CPU.
+
+## Wiring into the live product — NEEDS SIGN-OFF (touches deploy)
+This is the only step that changes the running container, so it is documented, not applied:
+
+1. **Dockerfile** — add Node 22 + `npm ci` in `motion/` + a headless browser:
+   ```dockerfile
+   RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
+   COPY motion/ /app/motion/
+   RUN cd /app/motion && npm ci && npx remotion browser ensure
+   ```
+2. **web/server.py** — in the motion worker, for a "brief" job spawn:
+   ```py
+   subprocess.run(["node", "scripts/render-brief.mjs", brief, out_mp4], cwd=ROOT+"/motion")
+   ```
+   Credits / queue / library / the v101o inline player all stay as-is.
+3. **Frontend** — a brief input on the Motion page; optional client-side `@remotion/player`
+   live preview (bundle the composition once, mount `<Player>`), zero server cost.
+
+Risk note: the browser download + image size grow the container; a failed `npm ci`/browser
+fetch would fail the autodeploy rebuild. Apply behind a check and test the image build once
+before the first live deploy.
