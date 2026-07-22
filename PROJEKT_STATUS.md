@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v110 Transkript-Provenance: kein halluzinierter Text + Voiceover-Sync (Ismet-Bedingung).**
+  Zwei harte Regeln fuer den Auto-Overlay durchgesetzt: (1) KEIN eingeblendetes Wort darf
+  erfunden sein - jeder On-Screen-Text (headline/lowerthird/keyword/chips/stat-label) MUSS
+  woertlich im gesprochenen Transkript stehen (oder der vom Nutzer gesetzte Markenname).
+  (2) Timing laeuft am Transkript (Snap auf Wort-Onsets), damit es zu einem Voiceover passt.
+  Umsetzung DETERMINISTISCH in autoGuards (`groundBeat`): nach normalisiertem Abgleich mit
+  dem Transkript wird ungegroundeter Text NICHT gezeigt, sondern zu einem TEXT-FREIEN
+  Grafik-Akzent degradiert (headline->pulse, lowerthird/chips->sweep, keyword->burst,
+  stat->pulse) - Rhythmus bleibt, Halluzination raus. stat-Zahlen muessen ebenfalls
+  tatsaechlich gesprochen sein (`nums.has(value)`), sonst degradiert. brand-Beat wird auf
+  den vertrauenswuerdigen Markennamen gezwungen, nie Modell-Text. Der GPT-Regie-Prompt
+  bekommt zusaetzlich die HARD RULE "NEVER invent text ... copy VERBATIM from the transcript".
+  WICHTIG: die KI ist weiterhin Regisseur (welcher Moment, welche Behandlung) - sie ist
+  nur nicht mehr Autor. Reine KI-Video-Generierung (veo/kling) waere hier falsch: sie
+  wuerde Text-Pixel erfinden und nicht Wort-genau zum Voiceover sitzen - genau die zwei
+  Dinge, die Ismet ausschliesst. BEWEIS: neuer Node-Unit-Test (erfundene Headline/Keyword
+  degradiert, ungesprochene Zahl 999 raus, gesprochene 42 bleibt, chips gefiltert, brand
+  erzwungen, jedes ueberlebende Wort im Transkript) gruen; Selftest 686/686. tsc clean.
+  Nur Linux/CPU/synthetisch getestet - echte KI-Regie + Material erst live.
 - **v108c (A) reine Grafik-Beats + (B) 16:9/1:1 fuer alle Engines (Ismet: "A und B").**
   (A) Der Auto-Overlay ist nicht mehr nur Text: 4 REINE GRAFIK-Beats ohne Text -
   burst (Impact: Ring + Funken-Burst), sweep (Akzent-Band wischt durchs Bild), pulse

@@ -87,7 +87,10 @@ export function heuristicAuto(input: AutoInput): OverlayBeat[] {
     raw.push({ t, dur: 2.2, kind: 'brand', text: input.brandName || 'DouchkoVE', text2: 'made with DouchkoVE', anchor: 'center', enter: 'rise', emphasis: 0.8 });
   }
   const onsets = input.words.map((w) => w.start);
-  return guardPlan(raw, { videoDur: input.video.duration, onsets });
+  const transcript = input.words.map((w) => w.word).join(' ');
+  const opts: any = { videoDur: input.video.duration, onsets, transcript };
+  if (input.brandName) opts.brandName = input.brandName;
+  return guardPlan(raw, opts);
 }
 
 const REGIE_AUTO = `You are a SENIOR MOTION DESIGNER directing motion graphics laid over a creator's video.
@@ -96,6 +99,11 @@ Decide a SPARSE, high-impact set of motion "beats" that reinforce the message â€
 designer works, never a cheap template dump.
 
 HARD RULES:
+- NEVER invent text. Every word you put on screen (text, text2, keyword, chips, stat label)
+  MUST be copied VERBATIM from the transcript below â€” same spelling, no paraphrase, no new words,
+  no translation. A "stat" value must be a number actually spoken. If you cannot ground a caption
+  in the transcript, use a text-free graphic beat (burst/sweep/pulse/brackets) instead. Ungrounded
+  text will be discarded, so grounding it is the only way your beat keeps its words.
 - Restraint: far fewer beats than words. Silence between beats is good. Never clutter the frame.
 - Land on the word: a beat's "t" must equal the start time of the exact word it reinforces.
 - Meaning first: only surface a beat when it ADDS (a hook, a key term, a number, a punchline,
@@ -140,7 +148,13 @@ async function gptAuto(input: AutoInput, key: string): Promise<OverlayBeat[] | n
     const parsed = JSON.parse(j.choices[0].message.content);
     const beats = Array.isArray(parsed) ? parsed : parsed.beats;
     if (!Array.isArray(beats)) return null;
-    return guardPlan(beats, { videoDur: input.video.duration, onsets: input.words.map((w) => w.start) });
+    const gopts: any = {
+      videoDur: input.video.duration,
+      onsets: input.words.map((w) => w.start),
+      transcript: input.words.map((w) => w.word).join(' '),
+    };
+    if (input.brandName) gopts.brandName = input.brandName;
+    return guardPlan(beats, gopts);
   } catch { return null; }
 }
 

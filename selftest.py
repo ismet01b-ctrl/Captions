@@ -1973,6 +1973,17 @@ def _scenario_logic(clip, transcript, tmp):
           and "cmd.append('--format=" in _srv_m
           and 'id="moFormatSeq"' in _ui_m and "fd.append('format'" in _ui_m)
 
+    # v110: Transkript-Provenance — kein On-Screen-Text darf halluziniert sein. Jedes
+    # eingeblendete Wort MUSS wörtlich im Transkript stehen (oder der Markenname); sonst
+    # degradiert der Beat zu einem text-freien Grafik-Akzent. Timing bleibt am Wort-Onset
+    # (Voiceover-Sync). Beides deterministisch in autoGuards erzwungen.
+    check('v110: Transkript-Provenance-Zwang (kein halluzinierter Text, Voiceover-Sync)',
+          'function groundBeat' in _mag and 'opts.transcript' in _mag
+          and 'DEGRADE' in _mag and 'asGraphic' in _mag
+          and "b.value == null || !nums.has(b.value)" in _mag         # Zahlen müssen gesprochen sein
+          and "transcript: input.words.map((w) => w.word).join(' ')" in _mad
+          and 'NEVER invent text' in _mad)                            # Modell-Prompt schärft es zusätzlich
+
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _tg = subprocess.run(['node', 'scripts/test-autoguards.mjs'], cwd=_mgroot,

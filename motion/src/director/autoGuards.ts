@@ -27,6 +27,64 @@ export interface GuardOpts {
   readonly minGap?: number;        // default 0.45  (breath between beats)
   readonly snapTol?: number;       // default 0.22  (max shift to a word onset)
   readonly perMinute?: number;     // default 22    (density ceiling)
+  readonly transcript?: string;    // full spoken text — the ONLY allowed source of on-screen words
+  readonly brandName?: string;     // trusted product/brand identity (the one non-transcript text allowed)
+}
+
+// ── Transcript provenance ─────────────────────────────────────────────────────
+// The hard anti-hallucination rule: any word shown on screen must come from a TRUSTED
+// source — verbatim from the spoken transcript, or the user's own brand name. The model
+// directs (which moment, which treatment) but never authors text. A beat whose text is not
+// grounded in the transcript is not shown as text; it degrades to a text-free graphic accent
+// so the rhythm survives without inventing words. Numbers (stat) must be spoken too.
+
+const norm = (s: string): string =>
+  s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+
+// text kind → the text-free graphic it collapses to when its words aren't grounded.
+const DEGRADE: Readonly<Record<string, OverlayKind>> = {
+  headline: 'pulse', lowerthird: 'sweep', keyword: 'burst', chips: 'sweep', stat: 'pulse',
+};
+
+const asGraphic = (b: OverlayBeat, kind: OverlayKind): OverlayBeat => ({
+  t: b.t, dur: b.dur, kind, anchor: b.anchor, enter: kind === 'sweep' ? 'wipe' : 'pop',
+  emphasis: b.emphasis,
+});
+
+/** Enforce that every on-screen word is grounded in the transcript (or is the brand name).
+ *  Ungrounded text beats degrade to text-free graphic accents. */
+function groundBeat(b: OverlayBeat, transcript: string, brandName?: string): OverlayBeat {
+  const tn = norm(transcript);
+  const tokens = new Set(tn.split(' ').filter(Boolean));
+  const nums = new Set((transcript.match(/\d[\d.,]*/g) ?? []).map((s) => parseFloat(s.replace(/,/g, '.'))).filter(Number.isFinite));
+  const inText = (s: string): boolean => { const n = norm(s); return n.length > 0 && tn.includes(n); };
+  const isTok = (s: string): boolean => tokens.has(norm(s));
+
+  switch (b.kind) {
+    case 'brand': {
+      // Product identity, not transcript — force to the trusted brand name; never model text.
+      const nb: any = { ...b, text: brandName || 'DouchkoVE' };
+      nb.text2 = 'made with DouchkoVE';
+      return nb as OverlayBeat;
+    }
+    case 'headline':
+    case 'lowerthird':
+      return b.text && inText(b.text) ? b : asGraphic(b, DEGRADE[b.kind]!);
+    case 'keyword':
+      return b.text && isTok(b.text) ? b : asGraphic(b, DEGRADE[b.kind]!);
+    case 'chips': {
+      const kept = (b.items ?? []).filter(isTok);
+      return kept.length >= 2 ? ({ ...b, items: kept } as OverlayBeat) : asGraphic(b, DEGRADE[b.kind]!);
+    }
+    case 'stat': {
+      if (b.value == null || !nums.has(b.value)) return asGraphic(b, DEGRADE[b.kind]!);
+      const label = b.label && isTok(b.label) ? b.label : undefined;
+      const nb: any = { ...b }; if (label) nb.label = label; else delete nb.label;
+      return nb as OverlayBeat;
+    }
+    default:
+      return b; // pure-graphic kinds carry no text
+  }
 }
 
 /** Snap a time to the nearest word onset within tolerance (motion lands on the word). */
@@ -80,6 +138,9 @@ export function guardPlan(raw: readonly any[], opts: GuardOpts): OverlayBeat[] {
   const onsets = opts.onsets ?? [];
 
   let beats = (raw || []).map((b) => sanitizeBeat(b, minDur, maxDur)).filter(Boolean) as OverlayBeat[];
+  // TRANSCRIPT PROVENANCE: no on-screen word survives that isn't spoken (or the brand name).
+  // Ungrounded text collapses to a text-free graphic accent — never an invented word.
+  if (opts.transcript != null) beats = beats.map((b) => groundBeat(b, opts.transcript!, opts.brandName));
   // snap starts to word onsets, keep beats that start before the video ends
   beats = beats
     .map((b) => ({ ...b, t: onsets.length ? snap(b.t, onsets, snapTol) : b.t }))

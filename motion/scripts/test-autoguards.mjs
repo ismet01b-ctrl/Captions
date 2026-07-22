@@ -43,7 +43,46 @@ for (let i = 1; i < beats.length; i++) if (beats[i].anchor === beats[i-1].anchor
 const dense = guardPlan(Array.from({length: 40}, (_, i) => ({ t: i*0.15, dur: 2, kind: 'keyword', text: 'w'+i, anchor: 'center', enter: 'pop', emphasis: Math.random?0.5:0.5 })), { videoDur: 10, onsets: [] });
 if (dense.length > Math.round((10/60)*22) + 1) { fail++; console.error('FAIL density not capped:', dense.length); }
 
-console.log('autoGuards:', beats.length, 'beats kept,', fail, 'fail');
+// 7) TRANSCRIPT PROVENANCE: on-screen text must be spoken (or the brand name); else it degrades
+//    to a text-free graphic accent. No invented words ever survive.
+const transcript = 'Today we shipped the new dashboard and revenue jumped 42 percent';
+const rawProv = [
+  { t: 0, dur: 2, kind: 'headline', text: 'Today we shipped', anchor: 'center', enter: 'rise', emphasis: 0.9 }, // grounded -> keep
+  { t: 3, dur: 2, kind: 'headline', text: 'Buy now for cheap', anchor: 'center', enter: 'rise', emphasis: 0.9 }, // INVENTED -> degrade
+  { t: 5, dur: 2, kind: 'keyword', text: 'dashboard', anchor: 'upper', enter: 'pop', emphasis: 0.7 },            // grounded token -> keep
+  { t: 7, dur: 2, kind: 'keyword', text: 'discount', anchor: 'center', enter: 'pop', emphasis: 0.7 },            // INVENTED token -> degrade
+  { t: 9, dur: 2, kind: 'stat', value: 42, label: 'revenue', anchor: 'upper', emphasis: 0.8 },                   // spoken number -> keep
+  { t: 11, dur: 2, kind: 'stat', value: 999, label: 'sales', anchor: 'center', emphasis: 0.8 },                  // UNSPOKEN number -> degrade
+  { t: 13, dur: 2, kind: 'chips', items: ['dashboard', 'revenue', 'unicorn'], anchor: 'lower', emphasis: 0.6 },  // filter to spoken tokens
+  { t: 15, dur: 2, kind: 'brand', text: 'Whatever The Model Wrote', anchor: 'center', enter: 'rise', emphasis: 0.8 }, // force brand name
+];
+const prov = guardPlan(rawProv, { videoDur: 20, onsets: [], transcript, brandName: 'Acme', minGap: 0.2 });
+const byTime = (t) => prov.find((b) => Math.abs(b.t - t) < 0.6);
+const GRAPHIC = new Set(['burst', 'sweep', 'pulse', 'brackets']);
+// grounded headline keeps its text
+if (!prov.some((b) => b.kind === 'headline' && b.text === 'Today we shipped')) { fail++; console.error('FAIL grounded headline lost'); }
+// invented headline/keyword/stat became text-free graphics (no invented words anywhere)
+if (prov.some((b) => (b.text && /Buy now|discount|cheap/i.test(b.text)))) { fail++; console.error('FAIL invented text survived'); }
+if (prov.some((b) => b.kind === 'stat' && b.value === 999)) { fail++; console.error('FAIL unspoken number survived'); }
+// spoken stat survives
+if (!prov.some((b) => b.kind === 'stat' && b.value === 42)) { fail++; console.error('FAIL spoken stat lost'); }
+// chips filtered to only spoken tokens (unicorn gone)
+const chip = prov.find((b) => b.kind === 'chips');
+if (chip && chip.items.includes('unicorn')) { fail++; console.error('FAIL unspoken chip survived'); }
+// brand forced to the trusted name, never model text
+const brand = prov.find((b) => b.kind === 'brand');
+if (!brand || brand.text !== 'Acme') { fail++; console.error('FAIL brand not forced to trusted name'); }
+// every surviving text token must exist in the transcript (the whole point)
+const tnorm = transcript.toLowerCase();
+for (const b of prov) {
+  for (const s of [b.text, b.label, ...(b.items || [])].filter(Boolean)) {
+    if (b.kind === 'brand') continue;
+    const words = String(s).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+    if (!words.every((w) => tnorm.includes(w))) { fail++; console.error('FAIL ungrounded word on screen:', s); }
+  }
+}
+
+console.log('autoGuards:', beats.length, 'beats kept,', prov.length, 'prov beats,', fail, 'fail');
 if (fail) process.exit(1);
 `);
   execFileSync('node_modules/.bin/esbuild', [entry, '--bundle', '--platform=node', '--format=esm', `--outfile=${out}`, '--log-level=error']);
