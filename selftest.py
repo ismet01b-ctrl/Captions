@@ -2072,7 +2072,7 @@ def _scenario_logic(clip, transcript, tmp):
     # (Aktion loest den Uebergang aus: Suche druecken -> naechstes kommt).
     check('v105: Liquid-Glass-System (Glas-Helper + farbiger Liquid-Hintergrund)',
           'const glass = ' in _mas and 'backdropFilter' in _mas
-          and 'saturate(180%)' in _mas and 'LiquidBg' in _mas
+          and 'saturate(' in _mas and 'LiquidBg' in _mas
           and 'hueFromAccent(accent)' in _mas)
     check('v105: interaktive Transition - Press treibt den Uebergang',
           'press?: number' in _mas and 'press={press}' in _mseq
@@ -2083,6 +2083,17 @@ def _scenario_logic(clip, transcript, tmp):
           'const submit = clamp01(press)' in _mas
           and 'opacity: 1 - submit' in _mas
           and '<Ripple press={submit}' in _mas)
+
+    # v106: iOS-Dark-Mode-Re-Theme nach Ismets echten Screenshots (Statusbar 5G+Akku,
+    # dunkles Glas, WhatsApp-Style-Chat, dunkler Notification-Lockscreen).
+    check('v106: Dark-Mode-Tokens + Statusleiste (5G) + dunkles Glas',
+          "INK = '#f3f5fb'" in _mas and '>5G<' in _mas
+          and 'rgba(58,62,74' in _mas   # dunkle Glas-Fuellung statt weiss
+          and "background: '#0b141a'" in _mas)  # WhatsApp-Canvas
+    check('v106: WhatsApp-Style-Chat (gruene Bubbles, Ticks, Nav, Input-Bar)',
+          "OUT_BG = '#075e54'" in _mas and 'const Tick' in _mas
+          and "'#53bdeb'" in _mas and 'online' in _mas
+          and '#25d366' in _mas)
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.

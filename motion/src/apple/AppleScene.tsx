@@ -29,34 +29,32 @@ function ensureUserFont(font?: { family: string; url: string }): void {
 }
 const fontStack = (spec: SceneSpec): string => (spec.font ? `'${spec.font.family}', ${FONT}` : FONT);
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
-const INK = '#0f1420';
-const GRAY = '#8a90a0';
+// iOS dark mode: light text on dark surfaces.
+const INK = '#f3f5fb';
+const GRAY = '#9096a6';
 
 // -------------------------------------------------------------------- chrome & primitives
 
 const StatusBar: React.FC<{ W: number; u: number; color?: string }> = ({ W, u, color = INK }) => {
-  const fs = u * 0.03;
+  const fs = u * 0.031;
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: W, height: u * 0.06,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: `0 ${u * 0.06}px`, color, fontWeight: 700, fontSize: fs }}>
-      <div style={{ letterSpacing: '0.02em' }}>9:41</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: u * 0.014 }}>
-        {/* signal */}
-        <svg width={fs * 1.1} height={fs} viewBox="0 0 18 12">
+      padding: `0 ${u * 0.065}px`, color, fontWeight: 700, fontSize: fs }}>
+      <div style={{ letterSpacing: '0.02em' }}>13:39</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: u * 0.016 }}>
+        {/* cellular signal */}
+        <svg width={fs * 1.15} height={fs} viewBox="0 0 18 12">
           {[0, 1, 2, 3].map((i) => (
-            <rect key={i} x={i * 4.5} y={12 - (4 + i * 2.6)} width={3} height={4 + i * 2.6} rx={0.8} fill={color} />
+            <rect key={i} x={i * 4.5} y={12 - (4 + i * 2.6)} width={3} height={4 + i * 2.6} rx={0.8}
+              fill={color} fillOpacity={i < 2 ? 1 : 0.35} />
           ))}
         </svg>
-        {/* wifi */}
-        <svg width={fs * 1.1} height={fs} viewBox="0 0 16 12" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round">
-          <path d="M1 4a10 10 0 0 1 14 0M3.5 6.5a6.4 6.4 0 0 1 9 0" />
-          <circle cx="8" cy="9.5" r="0.9" fill={color} stroke="none" />
-        </svg>
-        {/* battery */}
+        <span style={{ fontSize: fs * 0.92, fontWeight: 700 }}>5G</span>
+        {/* battery + % badge */}
         <svg width={fs * 1.7} height={fs} viewBox="0 0 26 12">
           <rect x="0.5" y="1" width="22" height="10" rx="2.6" fill="none" stroke={color} strokeOpacity="0.5" />
-          <rect x="2" y="2.5" width="16" height="7" rx="1.4" fill={color} />
+          <rect x="2" y="2.5" width="10" height="7" rx="1.4" fill="#ffcf3f" />
           <rect x="24" y="4" width="1.8" height="4" rx="0.9" fill={color} fillOpacity="0.5" />
         </svg>
       </div>
@@ -69,19 +67,23 @@ const StatusBar: React.FC<{ W: number; u: number; color?: string }> = ({ W, u, c
 // background so the glass has something to refract — the hallmark of the look.
 const LiquidBg: React.FC<{ accent: string; wallpaper?: boolean }> = ({ accent, wallpaper }) => {
   const h = hueFromAccent(accent);
-  const blob = (x: string, y: string, w: string, hh: string, hue: number, a: number, b: number): React.CSSProperties => ({
+  const blob = (x: string, y: string, w: string, hh: string, hue: number, a: number, b: number, light = 55): React.CSSProperties => ({
     position: 'absolute', left: x, top: y, width: w, height: hh, borderRadius: '50%',
-    filter: `blur(${b}px)`, background: `hsla(${((hue % 360) + 360) % 360}, 88%, 62%, ${a})`,
+    filter: `blur(${b}px)`, background: `hsla(${((hue % 360) + 360) % 360}, 80%, ${light}%, ${a})`,
   });
   return (
     <AbsoluteFill style={{
+      // iOS dark mode: near-black base. Wallpaper screens get a warm cinematic wash
+      // (like a real photo lock screen); content screens stay a deep neutral charcoal.
       background: wallpaper
-        ? `linear-gradient(160deg, hsl(${h},72%,90%), hsl(${(h + 40) % 360},64%,93%), hsl(${(h + 305) % 360},70%,91%))`
-        : 'radial-gradient(125% 95% at 50% 8%, #ffffff 0%, #eef2f9 48%, #dde6f4 100%)',
+        ? `linear-gradient(165deg, hsl(${(h + 20) % 360},32%,14%) 0%, #14100e 45%, hsl(28,45%,20%) 100%)`
+        : 'radial-gradient(130% 100% at 50% 0%, #1c1f27 0%, #121319 55%, #0b0c11 100%)',
     }}>
-      <div style={blob('-12%', '4%', '72%', '42%', h, wallpaper ? 0.5 : 0.34, 72)} />
-      <div style={blob('44%', '40%', '68%', '46%', h + 52, wallpaper ? 0.44 : 0.3, 82)} />
-      <div style={blob('8%', '70%', '64%', '38%', h + 308, wallpaper ? 0.42 : 0.28, 84)} />
+      <div style={blob('-14%', '2%', '74%', '44%', h, wallpaper ? 0.4 : 0.28, 80, wallpaper ? 42 : 52)} />
+      <div style={blob('46%', '42%', '70%', '48%', h + 52, wallpaper ? 0.34 : 0.22, 90, wallpaper ? 40 : 50)} />
+      <div style={blob('6%', '72%', '66%', '40%', h + 305, wallpaper ? 0.32 : 0.2, 92, wallpaper ? 44 : 54)} />
+      {/* subtle top vignette for depth */}
+      <AbsoluteFill style={{ background: 'radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,0.06), transparent 60%)' }} />
     </AbsoluteFill>
   );
 };
@@ -93,20 +95,21 @@ const Field: React.FC<{ children: React.ReactNode; wallpaper?: boolean; font?: s
   </AbsoluteFill>
 );
 
-/** Liquid-glass surface: translucent, backdrop blur+saturate, specular rim, depth shadow. */
+/** Dark liquid-glass surface: translucent charcoal, backdrop blur+saturate, faint specular
+ *  rim + top highlight, deep drop shadow — the iOS-26 dark-mode material. */
 const glass = (u: number, opts: { radius?: number; alpha?: number; blur?: number; strong?: boolean; tint?: string } = {}): React.CSSProperties => {
-  const { radius = u * 0.055, alpha = 0.52, blur = 26, strong = false, tint } = opts;
-  const bf = `blur(${blur}px) saturate(180%)`;
+  const { radius = u * 0.055, alpha = 0.5, blur = 26, strong = false, tint } = opts;
+  const bf = `blur(${blur}px) saturate(160%) brightness(1.05)`;
   return {
     background: tint
       ? `linear-gradient(180deg, ${tint}, ${tint})`
-      : `linear-gradient(180deg, rgba(255,255,255,${Math.min(0.9, alpha + 0.2)}) 0%, rgba(255,255,255,${Math.max(0.16, alpha - 0.08)}) 100%)`,
+      : `linear-gradient(180deg, rgba(58,62,74,${Math.min(0.8, alpha + 0.12)}) 0%, rgba(30,33,42,${Math.max(0.3, alpha - 0.04)}) 100%)`,
     backdropFilter: bf,
     WebkitBackdropFilter: bf,
     borderRadius: radius,
-    border: '1px solid rgba(255,255,255,0.6)',
-    boxShadow: `0 ${u * (strong ? 0.05 : 0.03)}px ${u * (strong ? 0.13 : 0.08)}px rgba(20,40,80,0.24), `
-      + `inset 0 1.5px 1px rgba(255,255,255,0.85), inset 0 -${u * 0.007}px ${u * 0.014}px rgba(20,40,80,0.07)`,
+    border: '1px solid rgba(255,255,255,0.14)',
+    boxShadow: `0 ${u * (strong ? 0.05 : 0.03)}px ${u * (strong ? 0.14 : 0.09)}px rgba(0,0,0,0.45), `
+      + `inset 0 1px 1px rgba(255,255,255,0.16), inset 0 -${u * 0.006}px ${u * 0.012}px rgba(0,0,0,0.3)`,
   } as React.CSSProperties;
 };
 
@@ -268,15 +271,15 @@ const AppCard: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: nu
             </div>
           ))}
         </div>
-        <div style={{ height: 1, background: '#eceef3', margin: `${u * 0.04}px 0` }} />
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: `${u * 0.04}px 0` }} />
         <div style={{ display: 'flex', textAlign: 'center' }}>
           {[{ big: '4.8', star: true, lab: 'RATINGS' }, { big: '12+', lab: 'AGE' }, { big: '#1', lab: (sub.slice(0, 12).toUpperCase() || 'TOP') }].map((s, i) => (
             <div key={i} style={{ flex: 1, opacity: rev(i + 3), transform: `translateY(${(1 - rev(i + 3)) * u * 0.02}px)`,
-              borderLeft: i ? '1px solid #eceef3' : 'none' }}>
+              borderLeft: i ? '1px solid rgba(255,255,255,0.1)' : 'none' }}>
               <div style={{ fontSize: u * 0.034, fontWeight: 800, color: INK, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: u * 0.006 }}>
-                {s.big}{s.star && <Stars size={u * 0.012} color="#b7bdca" />}
+                {s.big}{s.star && <Stars size={u * 0.012} color="#6b7180" />}
               </div>
-              <div style={{ fontSize: u * 0.019, color: '#a2a8b6', fontWeight: 700, letterSpacing: '0.06em', marginTop: u * 0.008 }}>{s.lab}</div>
+              <div style={{ fontSize: u * 0.019, color: '#8b91a0', fontWeight: 700, letterSpacing: '0.06em', marginTop: u * 0.008 }}>{s.lab}</div>
             </div>
           ))}
         </div>
@@ -328,10 +331,10 @@ const Search: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: num
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: u * 0.025,
                 padding: `${u * 0.022}px ${u * 0.01}px`, borderBottom: '1px solid rgba(180,190,210,0.35)',
                 opacity: rv, transform: `translateX(${(1 - rv) * u * 0.03}px)` }}>
-                <svg width={fs * 0.9} height={fs * 0.9} viewBox="0 0 24 24" fill="none" stroke="#b3b8c4" strokeWidth={2.2} strokeLinecap="round">
+                <svg width={fs * 0.9} height={fs * 0.9} viewBox="0 0 24 24" fill="none" stroke="#7a8090" strokeWidth={2.2} strokeLinecap="round">
                   <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
                 </svg>
-                <span style={{ fontSize: u * 0.032, color: '#3a3f4b' }}>{s}</span>
+                <span style={{ fontSize: u * 0.032, color: '#cdd2de' }}>{s}</span>
               </div>
             );
           })}
@@ -360,7 +363,7 @@ const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: 
             {...(badge != null ? { badge } : {})} {...(i === 0 && ui.logo ? { logo: ui.logo } : {})} />
           {pr > 0 && <Ripple press={pr} size={size} color="#fff" />}
         </div>
-        <div style={{ marginTop: size * 0.1, fontSize: size * 0.17, color: '#243', fontWeight: 600, textShadow: '0 1px 2px rgba(255,255,255,0.6)' }}>{labels[i % labels.length]}</div>
+        <div style={{ marginTop: size * 0.1, fontSize: size * 0.17, color: '#fff', fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{labels[i % labels.length]}</div>
       </div>
     );
   };
@@ -373,7 +376,7 @@ const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: 
       })}
       {/* page dots */}
       <div style={{ position: 'absolute', bottom: H * 0.165, left: 0, width: W, display: 'flex', justifyContent: 'center', gap: u * 0.02 }}>
-        {[0, 1, 2].map((i) => <div key={i} style={{ width: u * 0.014, height: u * 0.014, borderRadius: '50%', background: i === 0 ? '#334' : 'rgba(40,50,70,0.35)' }} />)}
+        {[0, 1, 2].map((i) => <div key={i} style={{ width: u * 0.014, height: u * 0.014, borderRadius: '50%', background: i === 0 ? '#fff' : 'rgba(255,255,255,0.4)' }} />)}
       </div>
       {/* dock */}
       <div style={{ position: 'absolute', bottom: H * 0.04, left: '6%', width: '88%', height: u * 0.2,
@@ -390,76 +393,105 @@ const HomeScreen: React.FC<{ ui: UiSpec; t: number; W: number; H: number; seed: 
   );
 };
 
+// WhatsApp-style dark chat: green outgoing bubbles with tails + double read-ticks, dark
+// incoming bubbles, a nav bar (back, avatar, name, video + call), a typing indicator, and a
+// real input bar (+, field, sticker, camera / mic). Matches the reference dark-mode UI.
+const OUT_BG = '#075e54'; // WhatsApp outgoing green (dark)
+const IN_BG = '#1f2c33';  // incoming dark bubble
+const Tick: React.FC<{ size: number; read?: boolean }> = ({ size, read }) => (
+  <svg width={size * 1.6} height={size} viewBox="0 0 20 12" fill="none" stroke={read ? '#53bdeb' : '#8aa0a8'} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 6.5l3 3 6-7" /><path d="M7 9.5l1.5 1.5 7-8" />
+  </svg>
+);
 const Chat: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: number }> = ({ ui, t, W, H, press }) => {
   const u = Math.min(W, H);
   const msgs = (ui.lines.length ? ui.lines : ['Hey!', 'The new drop is live', 'Check it now']).slice(0, 4);
-  const fs = u * 0.038;
+  const fs = u * 0.036;
   const name = ui.title && ui.title.length < 22 ? ui.title : 'Messages';
   const each = 0.95;
   const lastOutIdx = msgs.reduce((a, _m, i) => (i % 2 === 1 ? i : a), -1);
+  const nameHue = hueFromAccent(ui.accent);
   return (
     <AbsoluteFill>
+      {/* WhatsApp dark canvas */}
+      <AbsoluteFill style={{ background: '#0b141a' }} />
+      <AbsoluteFill style={{ background: 'radial-gradient(130% 90% at 50% 0%, rgba(255,255,255,0.04), transparent 55%)' }} />
       {/* nav bar */}
-      <div style={{ position: 'absolute', top: 0, left: 0, width: W, height: u * 0.17,
-        background: 'rgba(248,249,252,0.9)', backdropFilter: 'blur(20px)', borderBottom: '1px solid #e6e9f0',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: u * 0.02 }}>
-        <div style={{ width: u * 0.11, height: u * 0.11, borderRadius: '50%', overflow: 'hidden',
-          background: ui.logo ? '#fff' : `linear-gradient(150deg, hsl(${hueFromAccent(ui.accent)},70%,60%), hsl(${hueFromAccent(ui.accent) + 30},70%,50%))`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: u * 0.045 }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: W, height: u * 0.155, zIndex: 3,
+        ...glass(u, { radius: 0, alpha: 0.42, blur: 22 }), borderRadius: 0, borderBottom: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', alignItems: 'flex-end', paddingBottom: u * 0.018, paddingLeft: u * 0.05, paddingRight: u * 0.05, gap: u * 0.028 }}>
+        <svg width={u * 0.05} height={u * 0.05} viewBox="0 0 24 24" fill="none" stroke="#eaf0f2" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+        <div style={{ width: u * 0.09, height: u * 0.09, borderRadius: '50%', overflow: 'hidden',
+          background: ui.logo ? '#fff' : `linear-gradient(150deg, hsl(${nameHue},60%,52%), hsl(${(nameHue + 30) % 360},60%,42%))`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: u * 0.04 }}>
           {ui.logo ? <Img src={ui.logo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : name.slice(0, 1).toUpperCase()}
         </div>
-        <div style={{ fontSize: u * 0.028, fontWeight: 700, color: INK, marginTop: u * 0.008 }}>{name}</div>
-        <svg style={{ position: 'absolute', left: u * 0.05, bottom: u * 0.05 }} width={u * 0.04} height={u * 0.04} viewBox="0 0 24 24" fill="none" stroke={ui.accent} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: u * 0.03, fontWeight: 700, color: '#eaf0f2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+          <div style={{ fontSize: u * 0.02, color: '#8aa0a8', marginTop: u * 0.002 }}>online</div>
+        </div>
+        <svg width={u * 0.05} height={u * 0.05} viewBox="0 0 24 24" fill="none" stroke="#eaf0f2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="13" height="12" rx="3" /><path d="M22 8l-5 4 5 4z" /></svg>
+        <svg width={u * 0.045} height={u * 0.045} viewBox="0 0 24 24" fill="#eaf0f2"><path d="M6.6 2.3l3 .7c.5.1.9.5 1 1l.5 3c.1.5-.1 1-.5 1.3L8.5 11c1 2 2.5 3.5 4.5 4.5l1.7-2.1c.3-.4.8-.6 1.3-.5l3 .5c.5.1.9.5 1 1l.7 3c.1.6-.3 1.2-.9 1.3-9 1.7-16.6-5.9-14.9-14.9.1-.6.7-1 1.3-.9z" /></svg>
       </div>
-      <div style={{ position: 'absolute', top: u * 0.19, left: 0, width: W, bottom: u * 0.13,
-        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: u * 0.022, padding: '0 6%' }}>
+      <div style={{ position: 'absolute', top: u * 0.175, left: 0, width: W, bottom: u * 0.125, zIndex: 2,
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: u * 0.016, padding: '0 5%' }}>
         {msgs.map((m, i) => {
           const out = i % 2 === 1;
           const t0 = 0.5 + i * each;
           const pose = entrancePose(t - t0, { stiffness: 160, damping: 0.6, delay: 0 }, u * 0.05);
-          // Incoming messages are preceded by a typing indicator (3 dots) for ~0.7s.
           const typing = !out && t >= t0 - 0.72 && t < t0;
+          const time = `13:${(32 + i).toString().padStart(2, '0')}`;
           return (
             <div key={i}>
               {typing ? (
                 <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                  <div style={{ display: 'flex', gap: fs * 0.28, padding: `${fs * 0.62}px ${fs * 0.8}px`,
-                    borderRadius: fs * 1.3, borderBottomLeftRadius: fs * 0.3, background: '#e9ebf0',
-                    boxShadow: '0 6px 16px rgba(30,50,90,0.1)' }}>
+                  <div style={{ display: 'flex', gap: fs * 0.28, padding: `${fs * 0.6}px ${fs * 0.75}px`,
+                    borderRadius: fs * 1.2, borderBottomLeftRadius: fs * 0.25, background: IN_BG }}>
                     {[0, 1, 2].map((k) => {
                       const s = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(t * 9 - k * 0.9));
-                      return <div key={k} style={{ width: fs * 0.42, height: fs * 0.42, borderRadius: '50%',
-                        background: '#b3b8c4', transform: `scale(${s.toFixed(2)})`, opacity: 0.5 + 0.5 * s }} />;
+                      return <div key={k} style={{ width: fs * 0.4, height: fs * 0.4, borderRadius: '50%',
+                        background: '#8aa0a8', transform: `scale(${s.toFixed(2)})`, opacity: 0.5 + 0.5 * s }} />;
                     })}
                   </div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', justifyContent: out ? 'flex-end' : 'flex-start', opacity: pose.alpha,
                   transform: `translate3d(0, ${pose.ty.toFixed(1)}px, 0) scale(${pose.scale.toFixed(3)})`, filter: blurCss(pose.blur) }}>
-                  <div style={{ maxWidth: '74%', padding: `${fs * 0.55}px ${fs * 0.85}px`, borderRadius: fs * 1.3,
-                    borderBottomRightRadius: out ? fs * 0.3 : fs * 1.3, borderBottomLeftRadius: out ? fs * 1.3 : fs * 0.3,
-                    color: out ? '#fff' : INK, fontSize: fs, fontWeight: 600,
-                    ...(out
-                      ? { background: ui.accent, boxShadow: `0 ${fs * 0.4}px ${fs}px ${ui.accent}44` }
-                      : glass(u, { radius: fs * 1.3, alpha: 0.62, blur: 16 })) }}>{m}</div>
+                  <div style={{ position: 'relative', maxWidth: '78%', padding: `${fs * 0.5}px ${fs * 0.8}px ${fs * 0.42}px`,
+                    borderRadius: fs * 1.0, borderBottomRightRadius: out ? fs * 0.16 : fs * 1.0, borderBottomLeftRadius: out ? fs * 1.0 : fs * 0.16,
+                    background: out ? OUT_BG : IN_BG, color: '#e9edef', fontSize: fs, fontWeight: 500, lineHeight: 1.28,
+                    boxShadow: '0 1px 1px rgba(0,0,0,0.35)' }}>
+                    {/* group-style sender name on incoming, in an accent hue */}
+                    {!out && i === 0 && <div style={{ fontSize: fs * 0.82, fontWeight: 800, color: `hsl(${(nameHue + 20) % 360},70%,66%)`, marginBottom: fs * 0.15 }}>{name}</div>}
+                    <span>{m}</span>
+                    <span style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: fs * 0.2, marginLeft: fs * 0.6, marginTop: fs * 0.35, fontSize: fs * 0.6, color: out ? '#8fb7ab' : '#8aa0a8' }}>
+                      {time}{out && <Tick size={fs * 0.6} read={t > t0 + 0.6} />}
+                    </span>
+                  </div>
                 </div>
-              )}
-              {out && i === lastOutIdx && pose.alpha > 0.9 && (
-                <div style={{ textAlign: 'right', fontSize: u * 0.022, color: GRAY, marginTop: u * 0.006, paddingRight: '2%' }}>Delivered</div>
               )}
             </div>
           );
         })}
       </div>
       {/* input bar — the user "sends" (press) which drives the hand-off to the next scene */}
-      <div style={{ position: 'absolute', bottom: u * 0.03, left: '5%', width: '90%', display: 'flex', alignItems: 'center', gap: u * 0.02 }}>
-        <div style={{ flex: 1, height: u * 0.075, ...glass(u, { radius: 999, alpha: 0.5, blur: 18 }),
-          display: 'flex', alignItems: 'center', paddingLeft: u * 0.03, color: '#8a90a0', fontSize: u * 0.032 }}>iMessage</div>
-        <div style={{ position: 'relative', width: u * 0.075, height: u * 0.075, borderRadius: '50%', background: ui.accent,
+      <div style={{ position: 'absolute', bottom: u * 0.028, left: '4%', width: '92%', display: 'flex', alignItems: 'center', gap: u * 0.022, zIndex: 3 }}>
+        <div style={{ flex: 1, height: u * 0.08, borderRadius: 999, background: IN_BG, border: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', alignItems: 'center', gap: u * 0.025, padding: `0 ${u * 0.03}px` }}>
+          <svg width={u * 0.045} height={u * 0.045} viewBox="0 0 24 24" fill="none" stroke="#8aa0a8" strokeWidth={2.2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          <div style={{ flex: 1, height: u * 0.045, display: 'flex', alignItems: 'center' }}>
+            <div style={{ width: 2, height: u * 0.036, background: '#25d366', opacity: Math.floor(t * 2) % 2 === 0 ? 1 : 0.2 }} />
+          </div>
+          <svg width={u * 0.045} height={u * 0.045} viewBox="0 0 24 24" fill="none" stroke="#8aa0a8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="9" cy="9" r="1.6" fill="#8aa0a8" stroke="none" /><path d="M8 15c1.5 1.5 6.5 1.5 8 0" /></svg>
+          <svg width={u * 0.045} height={u * 0.045} viewBox="0 0 24 24" fill="none" stroke="#8aa0a8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="6" width="13" height="12" rx="3" /><circle cx="10.5" cy="12" r="2.6" /><path d="M20 8l-3 4 3 4z" /></svg>
+        </div>
+        <div style={{ position: 'relative', width: u * 0.085, height: u * 0.085, borderRadius: '50%', background: '#25d366',
           display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `scale(${(1 - 0.12 * press).toFixed(3)})`,
-          filter: press > 0.3 ? 'brightness(1.12)' : undefined, boxShadow: press > 0.3 ? `0 0 ${u * 0.03}px ${ui.accent}` : undefined }}>
-          <svg width={u * 0.04} height={u * 0.04} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V5M6 11l6-6 6 6" /></svg>
-          <Ripple press={press} size={u * 0.12} color={ui.accent} />
+          filter: press > 0.3 ? 'brightness(1.12)' : undefined, boxShadow: press > 0.3 ? `0 0 ${u * 0.03}px #25d366` : undefined }}>
+          {press > 0.15
+            ? <svg width={u * 0.042} height={u * 0.042} viewBox="0 0 24 24" fill="none" stroke="#08120c" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l16-7-7 16-2-7z" /></svg>
+            : <svg width={u * 0.042} height={u * 0.042} viewBox="0 0 24 24" fill="none" stroke="#08120c" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v3" /></svg>}
+          <Ripple press={press} size={u * 0.12} color="#25d366" />
         </div>
       </div>
     </AbsoluteFill>
@@ -482,18 +514,18 @@ const Notify: React.FC<{ ui: UiSpec; t: number; W: number; H: number; press: num
       <AppIcon size={iconSz} hue={hueFromAccent(ui.accent)} glyph={0} radius={iconSz * 0.28} {...(ui.logo ? { logo: ui.logo } : {})} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: u * 0.032, fontWeight: 800, color: INK }}>{title2}</div>
-        <div style={{ fontSize: u * 0.028, color: '#4a5060', marginTop: u * 0.004, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{body2}</div>
+        <div style={{ fontSize: u * 0.028, color: '#c2c7d2', marginTop: u * 0.004, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{body2}</div>
       </div>
-      <div style={{ fontSize: u * 0.022, color: '#a2a8b6', fontWeight: 600, alignSelf: 'flex-start' }}>now</div>
+      <div style={{ fontSize: u * 0.022, color: '#9096a6', fontWeight: 600, alignSelf: 'flex-start' }}>now</div>
     </div>
   );
   return (
     <>
       <StatusBar W={W} u={u} />
-      {/* lock-screen time */}
-      <div style={{ position: 'absolute', top: H * 0.1, width: W, textAlign: 'center', color: '#243' }}>
-        <div style={{ fontSize: u * 0.03, fontWeight: 600, opacity: 0.75 }}>Tuesday, 22 July</div>
-        <div style={{ fontSize: u * 0.17, fontWeight: 700, marginTop: u * 0.005, letterSpacing: '-0.02em' }}>9:41</div>
+      {/* lock-screen time (light on the dark wallpaper) */}
+      <div style={{ position: 'absolute', top: H * 0.1, width: W, textAlign: 'center', color: '#f3f5fb' }}>
+        <div style={{ fontSize: u * 0.03, fontWeight: 600, opacity: 0.85 }}>Wednesday, 22 July</div>
+        <div style={{ fontSize: u * 0.18, fontWeight: 700, marginTop: u * 0.005, letterSpacing: '-0.02em', textShadow: '0 2px 20px rgba(0,0,0,0.35)' }}>13:39</div>
       </div>
       {banner(title, 'Tap to see what’s new', drop2, H * 0.34, 1, 0.96)}
       {banner(title, body, drop, H * 0.32, 2, 1, press)}

@@ -3,6 +3,24 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v106 iOS-Dark-Mode-Re-Theme nach Ismets echten Screenshots (Ismet: "So sieht die
+  UI aus ungefaehr, das ist meins. Orientiere dich daran").** Ismet schickte 4
+  Screenshots seines echten iPhones (Home, WhatsApp, Einstellungen, Sperrbildschirm) -
+  alles iOS DARK MODE. Die Mockups waren hell -> jetzt authentisch dunkel: INK ->
+  hell (#f3f5fb), dunkles Glas (charcoal rgba(58,62,74)+backdrop blur/saturate statt
+  weiss), dunkler Liquid-Hintergrund (near-black + warme Blobs; Wallpaper-Screens
+  cinematic dunkel-warm). Statusleiste jetzt echt: 13:39, Signal, "5G", Akku-Pill
+  (gelb, Low-Power). CHAT komplett auf WhatsApp-Dark neu: gruene Outgoing-Bubbles
+  (#075e54) mit Tails + doppelten Read-Ticks (blau #53bdeb), dunkle Incoming-Bubbles
+  (#1f2c33) mit Sender-Name im Akzent, Nav-Bar (Back, Avatar, Name, "online", Video +
+  Call), Tipp-Indikator, echte Input-Bar (+, Feld mit Cursor, Sticker, Kamera, gruener
+  Mic/Send-Button #25d366). Home/Notify: dunkle Wallpaper, weisse App-Labels, Glas-Dock,
+  heller Lockscreen-Clock. (Ismets persoenliche Inhalte - Fotos, Name, Nachrichten -
+  bewusst NICHT uebernommen, nur der Stil; Mockups nutzen generische Platzhalter.)
+  Press-Interaktion + Liquid-Glass-Helper + Logo/Font bleiben. BEWEIS: 6-Segment-Kette
+  dunkel gerendert (seq_dark.mp4) - Streifen zeigt alle 6 Templates im iOS-Dark-Look,
+  Chat = WhatsApp-Dark. tsc clean. Regression 675/675.
+
 - **v105 iOS-26 Liquid-Glass-Look + interaktive Transitions + Synth-Sounds raus
   (Ismet: "alle Templates im iOS-26-Liquid-Glass-Stil, damit alles aktuell bleibt.
   Transition muss interagieren - bei der Suche drueckt man suchen, dann kommt passend
