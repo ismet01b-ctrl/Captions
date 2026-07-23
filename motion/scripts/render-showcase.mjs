@@ -34,7 +34,20 @@ const brand = arg(rest, 'brand', 'DouchkoVE');
 const format = arg(rest, 'format', '9:16');
 const customFile = arg(rest, 'custom-file', '');   // optional JSON of per-render overrides (Custom)
 const codec = arg(rest, 'codec', 'h264');
-const dims = ({ '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080] })[format] || [1080, 1920];
+// --format accepts a preset (16:9 / 9:16 / 1:1) OR real pixel dims "WxH" — so the output can
+// match the SOURCE VIDEO's aspect exactly. Dims are made even and capped to a sane long edge.
+function parseDims(f) {
+  const m = String(f).match(/^(\d{2,5})x(\d{2,5})$/i);
+  if (m) {
+    let w = parseInt(m[1], 10), h = parseInt(m[2], 10);
+    const CAP = 1920, long = Math.max(w, h);
+    if (long > CAP) { const s = CAP / long; w = Math.round(w * s); h = Math.round(h * s); }
+    w -= w % 2; h -= h % 2;                    // even dimensions (h264 requirement)
+    return [Math.max(16, w), Math.max(16, h)];
+  }
+  return ({ '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080] })[f] || [1080, 1920];
+}
+const dims = parseDims(format);
 mkdirSync(dirname(out), { recursive: true });
 
 const work = mkdtempSync(join(tmpdir(), 'dve-showcase-'));

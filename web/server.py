@@ -1910,32 +1910,60 @@ def _run_motion_showcase(jid):
     set_state(jid, phase='Preparing', progress=0.2)
     comp = j.get('composition', 'showcase')
     style = j.get('style', 'editorial')
-    fmt = j.get('format', '9:16')
+    # Format AUTOMATISCH aus dem Quellvideo (echtes Seitenverhaeltnis, kein Nutzer-Regler
+    # mehr). Nur wenn ein Video vorliegt; bei Text/Transkript-Datei bleibt der Default 9:16.
+    fmt = '9:16'
+    if j.get('showcase_video'):
+        try:
+            _pr = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                                  '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x',
+                                  j['showcase_video']], capture_output=True, text=True, timeout=30)
+            _m = re.match(r'(\d+)x(\d+)', (_pr.stdout or '').strip())
+            if _m:
+                fmt = f'{int(_m.group(1))}x{int(_m.group(2))}'
+        except Exception:
+            fmt = '9:16'
     brand = str(custom.get('brand') or 'DouchkoVE')
     # --log=info (NICHT error): sonst schluckt Remotion die "Rendered N/M"-Zeilen und der
     # Balken haengt den ganzen (minutenlangen) Render bei 20% fest. Wir parsen Bundling,
     # Rendered und Encoded und bewegen den Balken sichtbar durch alle Phasen.
+    # Gebremste Concurrency: unbeschraenkt startet Remotion 1 Chromium-Tab pro CPU-Kern —
+    # auf einem vielkernigen Container sprengt das den Speicher, Chromium haengt/stirbt und
+    # der Render kommt nie voran (klassischer „bleibt haengen"-Fall). 2 ist container-sicher.
+    _conc = os.environ.get('DVE_MOTION_CONCURRENCY', '2')
     cmd = ['node', os.path.join('scripts', 'render-showcase.mjs'),
            os.path.abspath(wpath), os.path.abspath(out),
            '--composition=' + comp, '--style=' + style, '--format=' + fmt,
-           '--brand=' + brand, '--custom-file=' + os.path.abspath(cpath), '--log=info']
+           '--brand=' + brand, '--custom-file=' + os.path.abspath(cpath),
+           '--concurrency=' + str(_conc), '--log=info']
     p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     JOBS[jid]['pid'] = p.pid
-    # Harte Zeitgrenze: ein haengender Render darf NICHT die (einspurige) Motion-Queue
-    # blockieren (sonst haengen alle Folge-Jobs frueh fest). Timer killt den Prozess,
-    # die stdout-Schleife endet, returncode != 0 -> Fehler-Zweig + Erstattung.
-    _killed = {'v': False}
-    _to = float(os.environ.get('DVE_MOTION_TIMEOUT', '900'))     # 15 min pro Motion-Render
-    def _reap():
-        _killed['v'] = True
-        try:
-            p.kill()
-        except Exception:
-            pass
-    _timer = threading.Timer(_to, _reap); _timer.daemon = True; _timer.start()
+    # Stall-Waechter: ein haengender Render darf die (einspurige) Motion-Queue NICHT
+    # blockieren (sonst haengen alle Folge-Jobs frueh bei „Queued" fest). Kommt STALL
+    # Sekunden lang KEINE Ausgabe mehr, oder ueberschreitet der Render den Gesamt-Deckel,
+    # wird der Prozess gekillt -> stdout-Schleife endet -> Fehler-Zweig + Erstattung.
+    _killed = {'v': False, 'why': ''}
+    _stall = float(os.environ.get('DVE_MOTION_STALL', '240'))    # 4 min ohne jede Ausgabe
+    _max = float(os.environ.get('DVE_MOTION_TIMEOUT', '1200'))   # 20 min Gesamt-Deckel
+    _t0 = time.time(); _last = [time.time()]; _wd_stop = threading.Event()
+    def _watchdog():
+        while not _wd_stop.wait(5):
+            now = time.time()
+            if now - _last[0] > _stall:
+                _killed['v'] = True; _killed['why'] = 'stalled'
+            elif now - _t0 > _max:
+                _killed['v'] = True; _killed['why'] = 'timeout'
+            if _killed['v']:
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+                return
+    _wd = threading.Thread(target=_watchdog, daemon=True); _wd.start()
     log = []
     for line in p.stdout:
+        _last[0] = time.time()                                   # Lebenszeichen fuer den Waechter
         log.append(line.rstrip())
         mb = re.search(r'Bundl\w+ (\d+)%', line)                 # 0.20 -> 0.28 waehrend Bundling
         if mb:
@@ -1952,10 +1980,12 @@ def _run_motion_showcase(jid):
             fr, tot = int(me.group(1)), max(int(me.group(2)), 1)
             set_state(jid, progress=0.90 + 0.08 * fr / tot, phase='Encoding')
     p.wait()
-    _timer.cancel()
+    _wd_stop.set()
     if _killed['v']:
+        _why = ('stalled with no progress' if _killed['why'] == 'stalled'
+                else 'took too long')
         set_state(jid, status='fehler', progress=0,
-                  msg='This render took too long and was stopped. Your credits were refunded.',
+                  msg=f'This render {_why} and was stopped. Your credits were refunded.',
                   detail='\n'.join([x for x in log[-15:] if x.strip()]))
         _maybe_refund(jid); return
     if p.returncode == 0 and os.path.exists(out):

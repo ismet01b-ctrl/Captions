@@ -2008,7 +2008,7 @@ def _scenario_logic(clip, transcript, tmp):
           'id="moTypeStudio"' in _ui_m and 'data-key="studio"' in _ui_m
           and "studio:['type','studio']" in _ui_m
           and 'function motionStudioGo' in _ui_m and "'/api/motion/showcase'" in _ui_m
-          and all(x in _ui_m for x in ['id="stComp"', 'id="stStyle"', 'id="stFormat"',
+          and all(x in _ui_m for x in ['id="stComp"', 'id="stStyle"',
                                         'id="stAccent"', 'id="stBrand"', 'id="stBlur"', 'id="stLines"']))
     # v117d: Transkript-DATEI hochladen (.txt/.srt/.vtt/.json) -> automatisch verarbeitet.
     check('v117d: Transkript-Datei-Upload (Server: Parser + Endpoint + Worker)',
@@ -2033,11 +2033,19 @@ def _scenario_logic(clip, transcript, tmp):
           and 'Math.max(s.progress||0, 0.06)' not in _ui_m
           and 'moLoadSet(s.progress || 0' in _ui_m
           and '—' not in _mo_lo and '–' not in _mo_lo)      # keine em/en-dashes im Loader
-    check('v120: Server-Phasen sachlich + Render-Timeout (Queue nicht blockierbar)',
+    check('v120/122: Server-Phasen sachlich + Stall-Waechter + gebremste Concurrency',
           "phase='Rendering')" in _srv_m and "phase='Encoding')" in _srv_m
           and 'senior designer' not in _srv_m
-          and 'DVE_MOTION_TIMEOUT' in _srv_m and 'threading.Timer' in _srv_m
-          and "msg='This render took too long" in _srv_m)
+          and 'DVE_MOTION_STALL' in _srv_m and 'DVE_MOTION_TIMEOUT' in _srv_m
+          and 'def _watchdog' in _srv_m and "_killed['why'] = 'stalled'" in _srv_m
+          and 'DVE_MOTION_CONCURRENCY' in _srv_m and "'--concurrency='" in _srv_m)
+    # v122: Format automatisch aus dem Quellvideo (kein Regler mehr); Bridge nimmt WxH.
+    check('v122: Auto-Format aus Video (Server ffprobe WxH) + Bridge parst Pixel-Dims',
+          "'stream=width,height'" in _srv_m and "f'{int(_m.group(1))}x{int(_m.group(2))}'" in _srv_m
+          and 'function parseDims' in _mrbs and '\\d{2,5})x(\\d{2,5}' in _mrbs
+          and 'id="stFormat"' not in _ui_m and "fd.append('format'" not in _ui_m
+          and 'keeps the aspect ratio of your' in _ui_m
+          and 'vid.videoWidth+' in _ui_m)
     # v121: Admin-Transkript-Werkzeug in der (owner-gated) Reference-UI verdrahtet.
     check('v121: UI — Transcribe-Werkzeug unter Reference (owner-gated + Downloads)',
           'id="btnTranscribe"' in _ui_m and 'id="trFile"' in _ui_m

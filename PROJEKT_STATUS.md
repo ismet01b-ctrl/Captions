@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v122 Motion: Auto-Format + „18%-Hänger" gehärtet (live).** Ismet: „Hängt jetzt auf 18% die
+  ganze Zeit. Nimm das mit dem Format raus, es soll automatisch das Format des Videos zurückgeben."
+  - **Auto-Format:** Der Format-Regler ist raus. Bei Video-Eingabe liest der Server das echte
+    Seitenverhältnis (ffprobe `width,height`) und rendert exakt in diesen Pixel-Maßen
+    (`render-showcase.mjs` nimmt jetzt `--format=WxH`, macht sie gerade + deckelt die lange
+    Kante auf 1920). Skript/Transkript ohne Video → Default 9:16. Der Ergebnis-Rahmen übernimmt
+    per `onloadedmetadata` das echte Video-Seitenverhältnis. Beweis: Bridge mit `1280x718`
+    rendert ein gültiges 1280×718-MP4.
+  - **18%-Hänger (Queue-Blockade):** 18% war der Frontend-„Queued"-Wert — der Job wurde also
+    gar nicht abgearbeitet. Der volle Worker-Pfad läuft lokal sauber durch (Text→fertig in 75s),
+    also ist die Ursache serverseitig: (a) **unbegrenzte Remotion-Concurrency** startet 1
+    Chromium-Tab pro CPU-Kern → auf vielkernigem Container Speicher-Überlauf, Chromium hängt →
+    jetzt gebremst auf `--concurrency=2` (`DVE_MOTION_CONCURRENCY`). (b) Ein hängender Render
+    blockierte die einspurige Queue 15 min → jetzt **Stall-Wächter**: kommt 4 min lang keine
+    Ausgabe (`DVE_MOTION_STALL`) oder reißt der 20-min-Deckel (`DVE_MOTION_TIMEOUT`), wird der
+    Prozess gekillt → klare Fehlermeldung + Gutschrift, Queue frei. Selftest **684/684 grün**.
+    EHRLICH: die Server-Ursache kann ich hier nicht direkt beobachten; die Härtung adressiert
+    die zwei wahrscheinlichsten Gründe. Falls es weiter klemmt, steht die echte Remotion-
+    Fehlermeldung jetzt im Job-Detail.
 - **v121 Admin-Transkript-Werkzeug unter Reference (live).** Ismet: „Bau eine Funktion ein,
   die das Transkript von einem Video ausgibt, nur bei Admin-Berechtigung unter Reference."
   Umgesetzt im bestehenden owner-gated Reference-Bereich (Create-Seite, `#refPanel`, sichtbar

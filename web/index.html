@@ -1538,8 +1538,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="seg" id="stComp"></div>
             <label class="mo-lab" style="margin-top:14px;">Style</label>
             <div class="seg" id="stStyle"></div>
-            <label class="mo-lab" style="margin-top:14px;">Format</label>
-            <div class="seg" id="stFormat"></div>
+            <p class="hint" style="margin-top:10px;">The output keeps the aspect ratio of your
+              video automatically. Script or transcript input renders in 9:16.</p>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px;">
               <div><label class="mo-lab">Accent</label><input type="color" class="mo-color" id="stAccent" value="#f0813a"></div>
@@ -2844,7 +2844,6 @@ function initStudio(){
      if(vw) vw.style.display=(v==='video')?'':'none'; if(tw) tw.style.display=(v==='text')?'':'none'; if(fw) fw.style.display=(v==='tfile')?'':'none'; });
   _seg($('#stComp'), [['showcase','Card montage'],['kinetic','Kinetic type'],['prompt','Prompt build']], ST.comp, v=>ST.comp=v);
   _seg($('#stStyle'), [['editorial','Editorial'],['bold','Bold'],['soft','Soft'],['mono','Mono']], ST.style, v=>ST.style=v);
-  _seg($('#stFormat'), [['9:16','9:16'],['1:1','1:1'],['16:9','16:9']], ST.format, v=>ST.format=v);
   _seg($('#stFont'), [['sans','Sans'],['mono','Mono'],['serif','Serif']], ST.font, v=>ST.font=v);
   const vfile=$('#stVideo'); if(vfile) vfile.onchange=()=>{ const lab=vfile.closest('.brand-file'), sp=lab&&lab.querySelector('span'), f=vfile.files&&vfile.files[0];
      if(sp){ if(f){ sp.textContent='🎬 '+(f.name.length>22?f.name.slice(0,20)+'…':f.name); lab.classList.add('on'); } else { sp.textContent='＋ Choose a video'; lab.classList.remove('on'); } } };
@@ -2916,10 +2915,9 @@ async function motionStudioGo(){
   else if(ST.input==='tfile'){ const f=$('#stTFile').files&&$('#stTFile').files[0]; if(!f){ toast('Choose a transcript file first.','err'); return; } fd.append('transcript_file', f); isUpload=true; upLabel='Uploading transcript'; }
   else { const txt=($('#stText').value||'').trim(); const ov=($('#stLines').value||'').trim();
     if(txt.length<3 && !ov){ toast('Add your script first.','err'); return; } fd.append('text', txt); }
-  fd.append('composition', ST.comp); fd.append('style', ST.style); fd.append('format', ST.format);
+  fd.append('composition', ST.comp); fd.append('style', ST.style);
   fd.append('custom', JSON.stringify(_studioCustom()));
   moShowPreview();
-  const _fr=$('#moFrame'); if(_fr) _fr.style.aspectRatio = ST.format==='1:1'?'1/1' : ST.format==='16:9'?'16/9' : '9/16';
   const orig=btn.textContent; btn.disabled=true; btn.textContent=isUpload?'Uploading':'Rendering';
   moLoadStart();
   const fail=(msg,pricing)=>{ moLoadStop(); st.style.display='block'; st.textContent=msg;
@@ -2960,6 +2958,9 @@ async function motionPoll(jid, st, btn, orig){
         vid.poster='/api/poster/'+jid;
         vid.src='/api/video/'+jid+'?t='+Date.now();
         vid.classList.remove('hidden'); if(img) img.classList.add('hidden');
+        // Der Rahmen uebernimmt das echte Seitenverhaeltnis des Ergebnisvideos (Auto-Format).
+        vid.onloadedmetadata=()=>{ const fr=$('#moFrame');
+          if(fr && vid.videoWidth && vid.videoHeight) fr.style.aspectRatio=vid.videoWidth+'/'+vid.videoHeight; };
         try{ vid.play().catch(()=>{}); }catch(e){}
       }
       const bar=$('#moResultBar');
