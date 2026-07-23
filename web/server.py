@@ -2213,35 +2213,11 @@ def _notify_job_fail(jid):
 
 
 def _notify_job_done(jid):
-    """v98: 'Dein Video ist fertig'-Mail. Renders dauern Minuten - viele
-    Nutzer machen den Tab zu und vergessen das Video (7-Tage-Loeschung!).
-    Nur echte Renders (mode 'full' / Motion), nur verifizierte Accounts,
-    genau 1 Mail pro Job."""
-    j = JOBS.get(jid) or {}
-    if j.get('status') != 'fertig' or j.get('done_mail'):
-        return
-    if j.get('kind') != 'motion' and j.get('mode') != 'full':
-        return
-    uid = j.get('user_id')
-    if not uid:
-        return
-    u = _find_user_by_id(uid)
-    if not u or not u['verified']:
-        return
-    j['done_mail'] = True
-    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu')
-    art = 'Motion-Clip' if j.get('kind') == 'motion' else 'Video'
-    try:
-        _send_mail(
-            u['email'], f'Dein {art} ist fertig',
-            f"Hey {u['name'] or ''},\n\n"
-            f"dein {art} ist fertig gerendert.\n"
-            f"Anschauen & herunterladen: {base}/app#/library\n\n"
-            f"Wichtig: Fertige Videos werden nach {RETENTION_DAYS:.0f} Tagen "
-            f"automatisch vom Server geloescht - lad es dir rechtzeitig "
-            f"herunter.\n\n- DouchkoVE")
-    except Exception as e:
-        print(f'Fertig-Mail fehlgeschlagen: {e}')
+    """v98 -> v130: 'Dein Video ist fertig'-Mail. Auf Ismets Wunsch DEAKTIVIERT.
+    Nach dem Render wird KEINE Mail mehr verschickt. Bleibt als No-op erhalten
+    (Aufrufer in worker/motion_worker unveraendert); zum Reaktivieren die alte
+    Logik aus der Git-Historie zuruecknehmen."""
+    return
 
 
 def worker():

@@ -2145,10 +2145,6 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           so it's slower for now. Once we leave beta this will be down to a few
           seconds. You can leave this page open, close the tab, or come back later,
           your video keeps rendering and lands in your Library when it's ready.
-          <div id="progMailNote" class="hidden" style="margin-top:10px;
-               padding-top:10px; border-top:1px solid var(--line); color:var(--acc2);
-               font-weight:700;">📧 Close the tab if you like — we'll email you
-            the moment it's ready.</div>
         </div>
       </div>
 
@@ -4554,10 +4550,7 @@ function progAnim() {
 
 async function pollRender() {
   if (!State.progRAF) progAnim();   // Smoother laeuft unabhaengig vom Poll
-  // v101u: Handy-Nutzer duerfen weggehen - Mail-Zusage nur zeigen, wenn wir
-  // wirklich eine Adresse haben (verifizierter Account bekommt die Fertig-Mail).
-  const _mn = $('#progMailNote');
-  if (_mn) _mn.classList.toggle('hidden', !(State.user && State.user.verified));
+  // v130: Fertig-Mail deaktiviert (Ismet) -> keine Mail-Zusage mehr im Render-Screen.
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     State.progTarget = st.progress || 0;

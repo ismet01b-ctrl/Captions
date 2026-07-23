@@ -1875,9 +1875,9 @@ def _scenario_logic(clip, transcript, tmp):
     R.resolve_accent_positions(_accV, _plansA, 1080, 1920, None)
     check('v101u: ohne Kollision behaelt der Akzent seine Lane-Position',
           'cx' in _accV[0] and _accV[0]['cy'] < 1920 * 0.35)
-    check('v101u: UI verspricht Fertig-Mail nur bei verifiziertem Account',
-          'id="progMailNote"' in _ui_m and 'State.user.verified' in _ui_m
-          and 'email you' in _ui_m)
+    # v130: Fertig-Mail deaktiviert (Ismet) -> KEINE Mail-Zusage mehr im Render-Screen.
+    check('v130: keine Fertig-Mail-Zusage im Render-Screen',
+          'id="progMailNote"' not in _ui_m and "we'll email you" not in _ui_m)
 
     check('v101v: Server hat resumable Chunk-Upload-Endpunkte + gemeinsamen Abschluss',
           "@app.post('/api/upload/init')" in _srv_m
@@ -3869,7 +3869,7 @@ def _scenario_v98(tmp):
     check('Loeschung: Kauf archiviert (GoBD), Ledger+User weg',
           len(arch) == 1 and arch[0]['grund'] == 'Kauf test'
           and led == 0 and usr == 0, f'{len(arch)}/{led}/{usr}')
-    # 6) Fertig-Mail: 1x pro Job, nur mode full/motion + verifiziert
+    # 6) v130: Fertig-Mail DEAKTIVIERT (Ismet) -> nach dem Render keine Mail.
     sent = []
     SV._send_mail = lambda to, s, b: sent.append(to)
     con = SV._db()
@@ -3877,9 +3877,7 @@ def _scenario_v98(tmp):
     con.commit(); con.close()
     SV.JOBS['jd1'] = {'status': 'fertig', 'mode': 'full', 'user_id': uid_free}
     SV._notify_job_done('jd1'); SV._notify_job_done('jd1')
-    SV.JOBS['jd2'] = {'status': 'fertig', 'mode': 'demo'}
-    SV._notify_job_done('jd2')
-    check('Fertig-Mail: genau 1x, nie fuer Demo', sent == ['v98free@test'],
+    check('v130: Fertig-Mail deaktiviert (keine Mail nach Render)', sent == [],
           str(sent))
     # 7) Quelltext-Garantien: Watchdog killt, atomare Writes, Proxy-Header
     _src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
