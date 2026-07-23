@@ -1855,20 +1855,33 @@ def _run_motion_showcase(jid):
     style = j.get('style', 'editorial')
     fmt = j.get('format', '9:16')
     brand = str(custom.get('brand') or 'DouchkoVE')
+    # --log=info (NICHT error): sonst schluckt Remotion die "Rendered N/M"-Zeilen und der
+    # Balken haengt den ganzen (minutenlangen) Render bei 20% fest. Wir parsen Bundling,
+    # Rendered und Encoded und bewegen den Balken sichtbar durch alle Phasen.
     cmd = ['node', os.path.join('scripts', 'render-showcase.mjs'),
            os.path.abspath(wpath), os.path.abspath(out),
            '--composition=' + comp, '--style=' + style, '--format=' + fmt,
-           '--brand=' + brand, '--custom-file=' + os.path.abspath(cpath), '--log=error']
+           '--brand=' + brand, '--custom-file=' + os.path.abspath(cpath), '--log=info']
     p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     JOBS[jid]['pid'] = p.pid
     log = []
     for line in p.stdout:
         log.append(line.rstrip())
-        m = re.search(r'Rendered (\d+)/(\d+)', line)
-        if m:
-            fr, tot = int(m.group(1)), max(int(m.group(2)), 1)
-            set_state(jid, progress=0.25 + 0.7 * fr / tot, phase='Rendering your motion …')
+        mb = re.search(r'Bundl\w+ (\d+)%', line)                 # 0.20 -> 0.28 waehrend Bundling
+        if mb:
+            set_state(jid, progress=0.20 + 0.08 * int(mb.group(1)) / 100.0,
+                      phase='Preparing the render …')
+            continue
+        mr = re.search(r'Rendered (\d+)/(\d+)', line)            # 0.30 -> 0.90 Frames
+        if mr:
+            fr, tot = int(mr.group(1)), max(int(mr.group(2)), 1)
+            set_state(jid, progress=0.30 + 0.60 * fr / tot, phase='Rendering your motion …')
+            continue
+        me = re.search(r'Encoded (\d+)/(\d+)', line)             # 0.90 -> 0.98 Encoding
+        if me:
+            fr, tot = int(me.group(1)), max(int(me.group(2)), 1)
+            set_state(jid, progress=0.90 + 0.08 * fr / tot, phase='Encoding your video …')
     p.wait()
     if p.returncode == 0 and os.path.exists(out):
         try:
