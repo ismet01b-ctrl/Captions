@@ -299,7 +299,6 @@ footer .links a:hover { color: var(--fg); }
     <div class="logo"><img src="/logo_white.png" alt="">Douchko<span class="dot">·</span>VE<span class="beta">Beta</span></div>
     <div>
       <a href="#captions">Captions</a>
-      <a href="#motion">Motion</a>
       <a href="#pricing">Pricing</a>
       <a href="/app" class="cta">Get started</a>
     </div>
@@ -308,10 +307,9 @@ footer .links a:hover { color: var(--fg); }
 
 <section class="hero">
   <span class="badge">Private Beta · v0.1</span>
-  <h1>Two tools for one job:<br><span class="accent">making your video look edited</span></h1>
-  <p class="sub">Pick what you need. Editorial auto-captions for your talking-head videos,
-    or high-end 3D motion graphics from a one-line brief. One credit balance, no
-    subscription — ever.</p>
+  <h1>Make your talking-head video<br><span class="accent">look professionally edited</span></h1>
+  <p class="sub">An AI director adds editorial captions, effects and camera moves that fit
+    exactly what you say. Upload, and get back a finished clip. No subscription, ever.</p>
 
   <div class="chooser">
     <a href="/app#create" class="ch-card">
@@ -320,13 +318,6 @@ footer .links a:hover { color: var(--fg); }
       <p>Upload a talking-head video. An AI director finds your hook, picks from 26
         animations and places every word like an editor would.</p>
       <span class="ch-go">Caption my video →</span>
-    </a>
-    <a href="/app#motion" class="ch-card">
-      <div class="ch-ic">🌀</div>
-      <h3>Motion Graphics</h3>
-      <p>Describe a clip in one line. Get real 3D motion graphics — lit geometry,
-        depth and a moving camera. No motion designer, no After Effects.</p>
-      <span class="ch-go">Create motion →</span>
     </a>
   </div>
 
@@ -360,7 +351,7 @@ fetch('/api/stats').then(r => r.json()).then(d => {
 </div>
 
 <section id="captions" class="wrap">
-  <span class="prod-tag">Tool 1 · ✍️ Auto-Captions</span>
+  <span class="prod-tag">✍️ Auto-Captions</span>
   <h2>Captions that look like you hired an editor</h2>
   <p class="section-sub">Upload a talking-head video. The AI director reads your
     transcript, finds the hook and places every word the way a good editor would —
@@ -409,6 +400,8 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   </div>
 </section>
 
+<!-- v123: Motion Graphics ausgeblendet (Fokus auf Captions). Zum Wiederanschalten diesen
+     Kommentar entfernen und in web/index.html MOTION_ENABLED = true setzen.
 <section id="motion" class="wrap">
   <span class="prod-tag pinktag">Tool 2 · 🌀 Motion Graphics</span>
   <h2>3D motion graphics from a one-line brief</h2>
@@ -457,6 +450,7 @@ fetch('/api/stats').then(r => r.json()).then(d => {
     </a>
   </div>
 </section>
+-->
 
 <section id="how" class="how">
   <div class="wrap">
@@ -575,8 +569,7 @@ fetch('/api/stats').then(r => r.json()).then(d => {
     <details>
       <summary>What is a credit?</summary>
       <p>1 credit renders 1 minute of finished video, billed per started minute.
-        A 90 second clip costs 2 credits. Motion graphic clips cost 1 credit
-        (2 as ProRes with alpha).</p>
+        A 90 second clip costs 2 credits.</p>
     </details>
     <details>
       <summary>Do I need a subscription?</summary>

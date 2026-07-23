@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v123 Motion Design ausgeblendet — Fokus zurück auf Captions (live).** Ismet-Entscheidung
+  nach 2 Tagen: die Motion-Qualität kommt (an echtem Material beurteilt) nicht an Tools wie
+  Jitter ran; statt weiter zu kämpfen wird Motion für Kunden ausgeblendet. **Nichts gelöscht,
+  ein Schalter:** `MOTION_ENABLED = false` in `web/index.html`. Damit:
+  - **App:** „Motion"-Nav-Link versteckt, `PAGES` ohne `motion`, `routeFromHash`/`showToolChooser`
+    führen ohne Tool-Auswahl direkt zu Captions (auch alte `#motion`-Bookmarks/`dve_tool`-Prefs
+    landen sauber in Create).
+  - **Landing:** Motion-Produktsektion + Nav-Link + Hero-Chooser-Karte auskommentiert/entfernt,
+    Hero wieder Ein-Produkt („Make your talking-head video look professionally edited"),
+    Pricing-FAQ ohne Motion-Zeile.
+  - **Code bleibt komplett liegen** (Server-Endpoint, Remotion-Kompositionen, Tests) — zum
+    Wiederanschalten `MOTION_ENABLED = true` + den Landing-Kommentar entfernen. Voll reversibel.
+  Selftest **685/685 grün** (v123-Garantie: ausgeblendet UND Code intakt; alle Motion-Engine-
+  Tests laufen weiter, weil der Code da ist). Positionierung wieder scharf: reines Finishing-
+  Tool für Captions, kein Feature-Stacking.
 - **v122 Motion: Auto-Format + „18%-Hänger" gehärtet (live).** Ismet: „Hängt jetzt auf 18% die
   ganze Zeit. Nimm das mit dem Format raus, es soll automatisch das Format des Videos zurückgeben."
   - **Auto-Format:** Der Format-Regler ist raus. Bei Video-Eingabe liest der Server das echte

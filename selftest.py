@@ -2055,6 +2055,19 @@ def _scenario_logic(clip, transcript, tmp):
           # sitzt im refPanel, das refApplyOwner fuer Nicht-Owner versteckt
           and _ui_m.find('id="trFile"') > _ui_m.find('id="refPanel"')
           and _ui_m.find('id="trFile"') < _ui_m.find('class="panel danger-zone"'))
+    # v123: Motion Design fuer Kunden AUSGEBLENDET (Code bleibt, ein Schalter). App: Flag aus +
+    # Nav/Routing/Chooser gegated. Landing: Motion-Sektion auskommentiert.
+    _land123 = open(os.path.join(HERE, 'web', 'landing.html'), encoding='utf-8').read()
+    check('v123: Motion ausgeblendet (Flag/Nav/Routing) — Code intakt',
+          'const MOTION_ENABLED = false' in _ui_m
+          and "if (!MOTION_ENABLED) { showSection('create'); return; }" in _ui_m
+          and 'a[data-nav="motion"]' in _ui_m
+          # Landing wirbt nicht mehr mit Motion (Sektion im Kommentar), Nav-Link weg
+          and '<!-- v123: Motion' in _land123
+          and '<a href="#motion">Motion</a>' not in _land123
+          # Beweis „nur versteckt, nicht geloescht": die Motion-Engine ist weiterhin da
+          and "@app.post('/api/motion/showcase')" in _srv_m
+          and os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionShowcase.tsx')))
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,

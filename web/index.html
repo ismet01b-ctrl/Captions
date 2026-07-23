@@ -2704,6 +2704,10 @@ function enterApp(user) {
   $('#appView').classList.add('show');
   $('#topName').textContent = State.codeName || 'Account';
   updateCreditHeader(State.balanceSec);
+  if (!MOTION_ENABLED) {                         // v123: Motion-Einstieg aus der Nav nehmen
+    const mn = document.querySelector('#topnav a[data-nav="motion"]');
+    if (mn) mn.style.display = 'none';
+  }
   loadDefaults().then(rebuildAllWidgets).then(buildLooks).then(resumeActiveJob)
     .then(() => routeFromHash());
 }
@@ -2717,7 +2721,13 @@ function updateCreditHeader(sec) {
 }
 
 /* v84: Client-Router - eine echte Seite pro Bereich statt Popups. */
-const PAGES = ['create', 'motion', 'library', 'billing', 'account'];
+// v123: Motion Design ausgeblendet (Fokus auf Captions). Der Code bleibt komplett liegen —
+// zum Wiederanschalten einfach MOTION_ENABLED = true setzen (Nav, Tool-Auswahl, Routing,
+// Landing-Sektion kommen dann automatisch zurueck).
+const MOTION_ENABLED = false;
+const PAGES = MOTION_ENABLED
+  ? ['create', 'motion', 'library', 'billing', 'account']
+  : ['create', 'library', 'billing', 'account'];
 function showSection(name) {
   if (!PAGES.includes(name)) name = 'create';
   PAGES.forEach(p => {
@@ -2750,6 +2760,8 @@ function routeFromHash() {
     try { pref = localStorage.getItem('dve_tool'); } catch (e) {}
     if (pref === 'create' || pref === 'motion') target = pref;
   }
+  // v123: Motion aus -> keine Tool-Auswahl, immer direkt zu Captions (Create).
+  if (!MOTION_ENABLED) { showSection('create'); return; }
   // Erst-Besuch ohne Ziel/Vorliebe -> "Was willst du machen?"-Auswahl.
   let chosen = false;
   try { chosen = !!localStorage.getItem('dve_chosen'); } catch (e) {}
@@ -2757,6 +2769,7 @@ function routeFromHash() {
   showSection(target || 'create');
 }
 function showToolChooser() {
+  if (!MOTION_ENABLED) { showSection('create'); return; }   // v123: keine Auswahl mehr noetig
   const el = $('#toolChooser');
   if (el) el.classList.add('show');
   else showSection('create');
