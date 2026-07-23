@@ -2075,6 +2075,8 @@ def _scenario_logic(clip, transcript, tmp):
           'sendPress' in _mpr and 'ctaPress' in _mpr
           and 'CLOSEUP' in _mpr                                 # Closeup auf den Send-Button
           and 'fires the code' in _mpr and 'press is what fires' in _mpr)  # Druck löst Code aus
+    check('v115e: Kamera folgt dem getippten Prompt (Follow-Caret)',
+          'FOLLOW the caret' in _mpr and 'caretX' in _mpr and 'outerTx' in _mpr)
     # v116: Render-Bridge — Transkript → gewählte Komposition + Stil + Format, ein Befehl.
     _mrbs = open(os.path.join(HERE, 'motion', 'scripts', 'render-showcase.mjs'), encoding='utf-8').read()
     check('v116: render-showcase Bridge (Komposition/Stil/Format aus Transkript)',

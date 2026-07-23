@@ -182,20 +182,32 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
         const typed = Math.max(0, Math.min(prompt.length, Math.round(((t - (box[0] + 0.2)) / (dur - 2.2)) * prompt.length)));
         const caretOn = Math.floor(t * 1.8) % 2 === 0;
         const tin = p * dur;
-        // TWO-PHASE CAMERA: (1) start zoomed into the glowing top-left corner while it types
-        // (you can't tell it's a box), pull back to reveal it; (2) at the end, a CLOSEUP zooms into
-        // the send button as the cursor presses it — that press is what fires the code build.
-        let sc = 1, origin = '50% 50%';
-        if (tin < 1.8) { origin = '9% 30%'; sc = mix(2.15, 1.0, easeInOutQuint(tin / 1.8)); }
-        else if (tin > dur - 1.6) { origin = '95% 74%'; sc = mix(1.0, 2.0, easeInOutQuint((tin - (dur - 1.6)) / 1.4)); }
+        // TWO-PHASE CAMERA: (1) a CLOSEUP that FOLLOWS the caret — the view tracks the last typed
+        // word as the prompt is written (you read it word by word, not the whole box); (2) pull back
+        // to reveal the full box; (3) a CLOSEUP on the send button as the cursor presses it — that
+        // press is what fires the code build.
+        const typeDone = dur - 2.0;
+        const charW = 27 * S;
+        const caretX = 52 * S + typed * charW;
+        const caretFull = 52 * S + prompt.length * charW;
+        let sc = 1, origin = '50% 50%', outerTx = 0;
+        if (tin < typeDone) {
+          sc = 1.5; outerTx = sc * (760 * S - caretX);            // FOLLOW the caret
+        } else if (tin < dur - 1.5) {
+          const q = easeInOutQuint((tin - typeDone) / ((dur - 1.5) - typeDone));
+          sc = mix(1.5, 1.0, q); outerTx = mix(1.5 * (760 * S - caretFull), 0, q);  // pull to whole box
+        } else {
+          origin = '95% 74%'; sc = mix(1.0, 2.0, easeInOutQuint((tin - (dur - 1.5)) / 1.5));  // send closeup
+        }
         // cursor travels to the send button and presses; the press drives the hand-off to code.
         const sendPress = clamp01((tin - (dur - 1.35)) / 0.25);
-        const curT = easeInOutCubic(clamp01((tin - (dur - 2.0)) / 0.6));
-        const curShow = clamp01((tin - (dur - 2.0)) * 2);
+        const curT = easeInOutCubic(clamp01((tin - (dur - 1.9)) / 0.55));
+        const curShow = clamp01((tin - (dur - 1.9)) * 2);
         const sx = 1441 * S, sy = 207 * S;                         // send-button centre inside the box
         const curX = mix(sx - 150 * S, sx - 8 * S, curT), curY = mix(sy + 150 * S, sy + 26 * S, curT);
         return (
           <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app }}>
+           <div style={{ transform: `translateX(${outerTx.toFixed(1)}px)` }}>
             <div style={{ position: 'relative', transformOrigin: origin, transform: `scale(${sc.toFixed(3)})` }}>
               <GlowEdge w={1520 * S} h={280 * S} r={40 * S} t={t} accent={accent} bw={bw}>
                 <div style={{ position: 'absolute', inset: 0, padding: `${46 * S}px ${52 * S}px` }}>
@@ -229,6 +241,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
                 </svg>
               )}
             </div>
+           </div>
           </AbsoluteFill>
         );
       })()}
@@ -271,7 +284,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
         const ctaPress = clamp01((rt - 2.9) / 0.3);
         const ctaCurShow = clamp01((rt - 2.2) * 2);
         const ctaCurT = easeInOutCubic(clamp01((rt - 2.2) / 0.6));
-        const bx = 210 * S, by = 815 * S;                         // CTA centre inside the panel
+        const bx = 190 * S, by = 650 * S;                         // "Connect with us" centre inside the panel
         return (
           <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', perspective: `${1500 * S}px`, opacity: app }}>
             <div style={{ transformStyle: 'preserve-3d', transform: `scale(${camPush.toFixed(3)}) translateZ(${rz.toFixed(0)}px) rotateY(${rotY.toFixed(2)}deg) rotateX(${rotX.toFixed(2)}deg) scale(${rScale.toFixed(3)})` }}>
@@ -299,7 +312,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
                 {/* cursor presses the primary CTA once the page has settled */}
                 {ctaCurShow > 0.01 && (
                   <svg width={50 * S} height={50 * S} viewBox="0 0 54 54" style={{ position: 'absolute',
-                    left: mix(bx - 150 * S, bx - 6 * S, ctaCurT), top: mix(by + 130 * S, by + 24 * S, ctaCurT),
+                    left: mix(bx + 120 * S, bx - 8 * S, ctaCurT), top: mix(by + 150 * S, by - 2 * S, ctaCurT),
                     opacity: ctaCurShow, transform: `scale(${1 - ctaPress * 0.18})`, transformOrigin: '30% 30%', filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.5))' }}>
                     <path d="M14 6 L14 40 L21 33 L26 45 L31 43 L26 31 L36 31 Z" fill="#fff" stroke="#111" strokeWidth="2.4" strokeLinejoin="round" />
                   </svg>
