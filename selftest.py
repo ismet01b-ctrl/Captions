@@ -2007,7 +2007,7 @@ def _scenario_logic(clip, transcript, tmp):
     check('v117c: UI — Studio-Panel (alle Knöpfe) + verdrahtet',
           'id="moTypeStudio"' in _ui_m and 'data-key="studio"' in _ui_m
           and "studio:['type','studio']" in _ui_m
-          and 'function motionStudioGo' in _ui_m and "fetch('/api/motion/showcase'" in _ui_m
+          and 'function motionStudioGo' in _ui_m and "'/api/motion/showcase'" in _ui_m
           and all(x in _ui_m for x in ['id="stComp"', 'id="stStyle"', 'id="stFormat"',
                                         'id="stAccent"', 'id="stBrand"', 'id="stBlur"', 'id="stLines"']))
     # v117d: Transkript-DATEI hochladen (.txt/.srt/.vtt/.json) -> automatisch verarbeitet.
@@ -2019,6 +2019,13 @@ def _scenario_logic(clip, transcript, tmp):
     check('v117d: Transkript-Datei-Upload (UI: Segment + File-Input + verdrahtet)',
           'id="stTFile"' in _ui_m and "['tfile','Transcript file']" in _ui_m
           and "ST.input==='tfile'" in _ui_m and "fd.append('transcript_file'" in _ui_m)
+    # v119: sichtbarer Upload-Fortschritt (XHR) + dynamischer, kriechender Ladescreen.
+    check('v119: Upload-Progress (XHR) + dynamischer Ladescreen',
+          'function moUpload' in _ui_m and 'xhr.upload.onprogress' in _ui_m
+          and 'function moLoadStart' in _ui_m and 'function moLoadTick' in _ui_m
+          and 'MO_MSGS' in _ui_m and "_fr.classList.add('loading')" in _ui_m
+          and '.mo-frame.loading::after' in _ui_m and '@keyframes moshim' in _ui_m
+          and 'moUpload(' in _ui_m and 's.phase || MoLoad.phase' in _ui_m)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,

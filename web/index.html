@@ -586,6 +586,14 @@ body {
 .mo-phase::after { content: ''; animation: modots 1.4s steps(4) infinite; }
 @keyframes modots { 0%{content:'';} 25%{content:' .';} 50%{content:' ..';}
   75%{content:' ...';} }
+/* v119: dynamischer Ladescreen — kriechender Balken (nie eingefroren) + Shimmer im Frame. */
+.mo-bar.live i { transition: width .34s linear; }
+.mo-frame.loading::after { content:''; position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(115deg, transparent 32%, rgba(255,255,255,.06) 50%, transparent 68%);
+  background-size: 240% 100%; animation: moshim 1.7s ease-in-out infinite; }
+@keyframes moshim { 0%{background-position:135% 0;} 100%{background-position:-135% 0;} }
+.mo-note { transition: opacity .22s ease; }
+.mo-status .mo-sub { display:block; margin-top:6px; color:var(--mut); font-size:12px; }
 @media (max-width: 860px) { .mo-wrap { grid-template-columns: 1fr; }
   .mo-preview { position: static; } .mo-frame { max-height: 60vh; } }
 
@@ -2828,48 +2836,106 @@ function _studioCustom(){
   if(lines.length) c.text=lines.slice(0,16);
   return c;
 }
+/* v119: XHR-Upload MIT Fortschritt (fetch kann keinen Upload-Progress). */
+function moUpload(url, fd, onUp){
+  return new Promise((resolve, reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST', url);
+    if(xhr.upload) xhr.upload.onprogress=(e)=>{ if(e.lengthComputable && onUp) onUp(e.loaded/e.total); };
+    xhr.onload=()=>resolve({ status:xhr.status, ok:(xhr.status>=200&&xhr.status<300),
+      json:()=>{ try{ return JSON.parse(xhr.responseText); }catch(_){ return {}; } } });
+    xhr.onerror=()=>reject(new Error('network'));
+    xhr.ontimeout=()=>reject(new Error('timeout'));
+    xhr.send(fd);
+  });
+}
+
+/* v119: dynamischer Ladescreen — Balken KRIECHT immer weiter (nie eingefroren) und
+   rotierende „Regisseur"-Zeilen halten den Screen lebendig, unabhaengig vom exakten %. */
+const MoLoad = { disp:0, target:0, phase:'', iv:null, miv:null, mi:0, on:false };
+const MO_MSGS = [
+  'Reading your words …', 'Directing the camera …', 'Placing every line …',
+  'Adding motion blur …', 'Timing it to your voice …', 'Polishing the transitions …',
+  'Colour-grading the frame …', 'Sweating the details …', 'Almost there …',
+];
+function moLoadStart(){
+  MoLoad.on=true; MoLoad.disp=0.02; MoLoad.target=0.03; MoLoad.mi=0; MoLoad.phase='Starting';
+  const res=$('#moResult'); if(res) res.style.display='';
+  const _fr=$('#moFrame'); if(_fr) _fr.classList.add('loading');
+  const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  const note=$('#moNote'); if(note) note.textContent=MO_MSGS[0];
+  moLoadRender();
+  clearInterval(MoLoad.iv);  MoLoad.iv=setInterval(moLoadTick, 340);
+  clearInterval(MoLoad.miv); MoLoad.miv=setInterval(()=>{
+    MoLoad.mi=(MoLoad.mi+1)%MO_MSGS.length; const n=$('#moNote');
+    if(n){ n.style.opacity='0'; setTimeout(()=>{ n.textContent=MO_MSGS[MoLoad.mi]; n.style.opacity='1'; }, 220); }
+  }, 2600);
+}
+function moLoadSet(target, phase){ if(target>MoLoad.target) MoLoad.target=target; if(phase) MoLoad.phase=phase; }
+function moLoadTick(){
+  // eased creep zum echten Ziel, aber lasse etwas Luft (fuehlt sich lebendig an statt „steht").
+  const head=Math.max(0, MoLoad.target-0.004);
+  const gap=head-MoLoad.disp;
+  if(gap>0.0004) MoLoad.disp+=Math.max(0.0007, gap*0.10);
+  if(MoLoad.disp>head) MoLoad.disp=head;
+  moLoadRender();
+}
+function moLoadRender(){
+  const st=$('#moStudioStatus'); if(!st) return; st.style.display='block';
+  const pct=Math.max(2, Math.round(Math.min(MoLoad.disp,0.99)*100));
+  st.innerHTML=`<div class="mo-bar live"><i style="width:${pct}%"></i></div>`+
+    `<span class="mo-phase">${MoLoad.phase||'Working'}</span> · ${pct}%`;
+}
+function moLoadStop(){ MoLoad.on=false; clearInterval(MoLoad.iv); clearInterval(MoLoad.miv);
+  const _fr=$('#moFrame'); if(_fr) _fr.classList.remove('loading');
+  const _sp=$('#moSpin'); if(_sp) _sp.classList.remove('on'); }
+
 async function motionStudioGo(){
   const btn=$('#moStudioGo'), st=$('#moStudioStatus');
-  const fd=new FormData();
-  if(ST.input==='video'){ const f=$('#stVideo').files&&$('#stVideo').files[0]; if(!f){ toast('Choose a video first.','err'); return; } fd.append('video', f); }
-  else if(ST.input==='tfile'){ const f=$('#stTFile').files&&$('#stTFile').files[0]; if(!f){ toast('Choose a transcript file first.','err'); return; } fd.append('transcript_file', f); }
+  const fd=new FormData(); let isUpload=false, upLabel='Uploading …';
+  if(ST.input==='video'){ const f=$('#stVideo').files&&$('#stVideo').files[0]; if(!f){ toast('Choose a video first.','err'); return; } fd.append('video', f); isUpload=true; upLabel='Uploading your video …'; }
+  else if(ST.input==='tfile'){ const f=$('#stTFile').files&&$('#stTFile').files[0]; if(!f){ toast('Choose a transcript file first.','err'); return; } fd.append('transcript_file', f); isUpload=true; upLabel='Uploading your transcript …'; }
   else { const txt=($('#stText').value||'').trim(); const ov=($('#stLines').value||'').trim();
     if(txt.length<3 && !ov){ toast('Add your script first.','err'); return; } fd.append('text', txt); }
   fd.append('composition', ST.comp); fd.append('style', ST.style); fd.append('format', ST.format);
   fd.append('custom', JSON.stringify(_studioCustom()));
-  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  moShowPreview();
   const _fr=$('#moFrame'); if(_fr) _fr.style.aspectRatio = ST.format==='1:1'?'1/1' : ST.format==='16:9'?'16/9' : '9/16';
-  const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
-  st.style.display='block'; st.textContent='Designing your motion …';
+  const orig=btn.textContent; btn.disabled=true; btn.textContent=isUpload?'Uploading …':'Rendering …';
+  moLoadStart();
+  const fail=(msg,pricing)=>{ moLoadStop(); st.style.display='block'; st.textContent=msg;
+    btn.disabled=false; btn.textContent=orig; if(pricing) setTimeout(showPricing,300); };
   try{
-    const r=await fetch('/api/motion/showcase',{method:'POST', body:fd});
-    if(r.status===402){ st.textContent='Not enough credits.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
-    if(r.status===413){ let m=''; try{ m=(await r.json()).detail||''; }catch(e){} st.textContent=m||'File too large or too long.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    if(!r.ok){ let m=''; try{ m=(await r.json()).detail||''; }catch(e){} st.textContent=m||'Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    const j=await r.json();
-    motionPoll(j.jid, st, btn, orig);
-  }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
+    // 1) Upload MIT sichtbarem Fortschritt (Video/Transkript) -> 2%..16% des Balkens.
+    const r=await moUpload('/api/motion/showcase', fd, (p)=>{
+      moLoadSet(0.02+0.14*p, upLabel);
+      if(p>=1){ btn.textContent='Rendering …'; moLoadSet(0.17,'Received — queuing …'); }
+    });
+    if(r.status===402){ return fail('Not enough credits.', true); }
+    if(r.status===413){ return fail((r.json().detail)||'File too large or too long.'); }
+    if(r.status===503){ return fail('The motion engine is warming up — try again shortly.'); }
+    if(!r.ok){ return fail((r.json().detail)||'Could not start.'); }
+    moLoadSet(0.18, 'Queued …');
+    motionPoll(r.json().jid, st, btn, orig);
+  }catch(e){ fail('Could not start — check your connection and try again.'); }
 }
 
 function moShowPreview(){
-  // v118: die Ergebnis-Ansicht einblenden + zuruecksetzen (Spinner laeuft bis fertig).
+  // v118/119: die Ergebnis-Ansicht einblenden + zuruecksetzen (Ladescreen uebernimmt danach).
   const res=$('#moResult'); if(res) res.style.display='';
-  const vid=$('#moVid'), img=$('#moImg'), bar=$('#moResultBar'), note=$('#moNote');
+  const vid=$('#moVid'), img=$('#moImg'), bar=$('#moResultBar');
   if(vid){ try{ vid.pause(); }catch(e){} vid.classList.add('hidden');
     vid.removeAttribute('src'); vid.load(); }
   if(img) img.classList.add('hidden');
   if(bar) bar.classList.add('hidden');
-  if(note) note.textContent='Designing your motion — this renders like a senior designer, '+
-    'so give it a moment.';
 }
 
 async function motionPoll(jid, st, btn, orig){
   try{
     const r=await fetch('/api/status/'+jid); const s=await r.json();
     if(s.status==='fertig'){
-      const _sp=$('#moSpin'); if(_sp) _sp.classList.remove('on');
-      // v101o: fertigen Clip INLINE zeigen (nicht nur auf die Library verweisen)
+      moLoadSet(1.0, 'Done'); moLoadRender(); moLoadStop();
+      // fertigen Clip INLINE zeigen (nicht nur auf die Library verweisen)
       const vid=$('#moVid'), img=$('#moImg');
       if(vid){
         vid.poster='/api/poster/'+jid;
@@ -2893,25 +2959,21 @@ async function motionPoll(jid, st, btn, orig){
       btn.disabled=false; btn.textContent=orig;
       fetch('/api/me').then(x=>x.json()).then(d=>updateCreditHeader(d.balance_sec)).catch(()=>{});
       return; }
-    if(s.status==='fehler'){ const _sp=$('#moSpin'); if(_sp) _sp.classList.remove('on');
+    if(s.status==='fehler'){ moLoadStop();
       st.style.display='block'; st.textContent='Render failed: '+(s.msg||'');
       btn.disabled=false; btn.textContent=orig; return; }
-    // Psychologie: nie 0%, klare Etappen-Texte, weich animierter Balken
+    // Der Balken KRIECHT selbst weiter (moLoadTick) — hier nur das echte Ziel + die
+    // Server-Phase nachfuehren, damit er nie einfriert und trotzdem ehrlich bleibt.
     const pr=Math.max(s.progress||0, 0.06);
-    const phase = pr<0.22 ? 'Building the scene'
-                : pr<0.45 ? 'Light & materials'
-                : pr<0.70 ? 'Motion polish'
-                : pr<0.92 ? 'Laying the sound'
-                : 'Finishing up';
-    st.innerHTML=`<div class="mo-bar"><i style="width:${Math.round(pr*100)}%"></i></div>`+
-      `<span class="mo-phase">${phase}</span> · ${Math.round(pr*100)}%`;
+    moLoadSet(pr, s.phase || MoLoad.phase);
     Motion.pollErrs=0;
   }catch(e){
-    // v98: nach ~30s ohne Server-Antwort aufgeben statt endlos zu pollen
+    // nach ~30s ohne Server-Antwort aufgeben statt endlos zu pollen
     Motion.pollErrs=(Motion.pollErrs||0)+1;
     if(Motion.pollErrs>=20){
-      Motion.pollErrs=0;
-      st.textContent='Connection lost - the clip keeps rendering, check your Library in a minute.';
+      Motion.pollErrs=0; moLoadStop();
+      st.style.display='block';
+      st.textContent='Connection lost — the clip keeps rendering, check your Library in a minute.';
       btn.disabled=false; btn.textContent=orig; return;
     }
   }

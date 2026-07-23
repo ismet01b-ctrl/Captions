@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v119 Sichtbarer Upload + dynamischer Ladescreen (live).** Ismet: „Mach es sichtbar, dass
+  der Upload läuft. Mach es dynamisch, psychologisch den Ladescreen." Umgesetzt:
+  - **Upload-Fortschritt:** Der Showcase-Call läuft jetzt über **XHR** statt `fetch`
+    (`moUpload` mit `xhr.upload.onprogress`) — der Balken zeigt echten Upload-% (Video/
+    Transkript) im Band 2–16%, dann übernimmt der Render. Vorher war der Upload eine
+    Blackbox (fetch kann keinen Upload-Progress).
+  - **Dynamischer Ladescreen:** Der Balken **kriecht immer weiter** (eased creep alle 340ms,
+    lässt bewusst etwas Luft) — friert nie ein, auch zwischen den 1,5s-Polls. Rotierende
+    „Regisseur"-Zeilen (`MO_MSGS`: „Directing the camera…/Adding motion blur…/Timing it to
+    your voice…") wechseln alle 2,6s mit Fade. Der Frame bekommt einen **Shimmer**
+    (`.mo-frame.loading::after`, Sweep-Gradient). Die Phase-Zeile spiegelt die **echte**
+    Server-Phase (Preparing/Rendering/Encoding) — lebendig, aber ehrlich (kein Fake-%).
+  - Fertig/Fehler stoppen Creep + Shimmer sauber; Verbindungsabbruch nach ~30s abgefangen.
+  Selftest **678/678 grün**, UI-JS syntaxgeprüft (node --check). Rein Frontend; die echte
+  Optik sieht Ismet live.
 - **v118 Alt-Motion-Engines komplett entfernt — nur noch das Studio-Showcase (live).**
   Ismet: „Entferne alle andere mit Motion Design." Umgesetzt: der Motion-Wizard hat nur noch
   EINEN Weg — das Full-customizable **Studio** (Showcase / Kinetic / Prompt, alle Knöpfe).
