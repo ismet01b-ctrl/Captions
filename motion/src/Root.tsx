@@ -7,7 +7,8 @@ import { MotionVideo, type MotionProps } from './MotionVideo';
 import { Motion3D } from './Motion3D';
 import { MotionApple } from './MotionApple';
 import { MotionSequence } from './MotionSequence';
-import { MotionShowcase, showcaseDuration } from './MotionShowcase';
+import { MotionShowcase, showcaseDuration, DEMO_STORY } from './MotionShowcase';
+import { MotionKinetic, kineticDuration } from './MotionKinetic';
 import { MotionOverlay, type MotionOverlayProps } from './MotionOverlay';
 import { demoProps } from './demo-spec';
 
@@ -30,6 +31,17 @@ const showcaseMetadata: CalculateMetadataFunction<React.ComponentProps<typeof Mo
     height: spec.canvas.h,
     fps: spec.fps,
     durationInFrames: Math.max(1, Math.round(showcaseDuration(story, styleId) * spec.fps)),
+  };
+};
+
+// Kinetic — a structurally different composition (pure typography). Same spec/story contract.
+const kineticMetadata: CalculateMetadataFunction<React.ComponentProps<typeof MotionKinetic>> = ({ props }) => {
+  const { spec, story } = props;
+  return {
+    width: spec.canvas.w,
+    height: spec.canvas.h,
+    fps: spec.fps,
+    durationInFrames: Math.max(1, Math.round(kineticDuration(story && story.length ? story : DEMO_STORY) * spec.fps)),
   };
 };
 
@@ -103,6 +115,17 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={demoProps}
         calculateMetadata={showcaseMetadata}
         durationInFrames={900}
+        fps={30}
+        width={1920}
+        height={1080}
+      />
+      {/* v114: MotionKinetic - strukturell ANDERE Komposition (reine Typografie, keine Cards). */}
+      <Composition
+        id="MotionKinetic"
+        component={MotionKinetic}
+        defaultProps={demoProps}
+        calculateMetadata={kineticMetadata}
+        durationInFrames={600}
         fps={30}
         width={1920}
         height={1080}

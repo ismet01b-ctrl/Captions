@@ -2046,6 +2046,15 @@ def _scenario_logic(clip, transcript, tmp):
           and "styleId?: string" in _msh and 'TH = th;' in _msh
           and 'themeFor(styleId)' in _msh
           and 'const cm = th.cameraMult' in _msh)                 # mono = Kamera aus + kein Blur
+    # v114: strukturell ANDERE Komposition (nicht nur Umfärbung): reine Typografie, keine Cards,
+    # eigene Layouts + Reveals + typografische Übergänge. Gleicher Transkript-Vertrag.
+    _mkn = _msrc('MotionKinetic.tsx')
+    check('v114: MotionKinetic — eigene Komposition (Typo-Layouts, keine UI-Cards)',
+          'export const MotionKinetic' in _mkn and 'TypeScene' in _mkn
+          and all(r in _mkn for r in ["'maskUp'", "'punch'", "'slide'", "'wipe'"])
+          and 'GIANT WORD' in _mkn and 'LEFT STACK' in _mkn and 'SPLIT' in _mkn
+          and 'lineOf' in _mkn                                    # Text weiterhin verbatim aus Story
+          and 'id="MotionKinetic"' in _mrt3b and 'kineticDuration' in _mrt3b)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
