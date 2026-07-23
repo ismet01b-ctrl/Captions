@@ -99,9 +99,9 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
   // ── timeline ────────────────────────────────────────────────────────────────
   const intro = [0.0, 1.9] as const;
   const chips = [1.7, 3.7] as const;
-  const box = [3.5, 7.2] as const;
-  const code = [6.2, 9.3] as const;
-  const reveal = [8.6, 13.0] as const;
+  const box = [3.5, 7.6] as const;      // longer, so the send-button closeup+press is its own beat
+  const code = [6.9, 10.0] as const;    // code fires AFTER the send press (logical causality)
+  const reveal = [9.4, 13.8] as const;
 
   const seg = (a: number, b: number): number => clamp01((t - a) / (b - a));
   const inOut = (a: number, b: number, fin = 0.25): number => {
@@ -179,15 +179,24 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
         const app = inOut(box[0], box[1], 0.18);
         const p = seg(box[0], box[1]);
         const dur = box[1] - box[0];
-        const typed = Math.max(0, Math.min(prompt.length, Math.round(((t - (box[0] + 0.2)) / (dur - 1.4)) * prompt.length)));
+        const typed = Math.max(0, Math.min(prompt.length, Math.round(((t - (box[0] + 0.2)) / (dur - 2.2)) * prompt.length)));
         const caretOn = Math.floor(t * 1.8) % 2 === 0;
-        // ZOOM-IN → REVEAL: start pushed into the glowing top-left corner WHERE the text is being
-        // typed (you read a few words but not the whole box), then pull back to reveal the box.
-        const zr = easeInOutQuint(clamp01((p * dur) / 1.9));
-        const sc = mix(2.15, 1.0, zr);
+        const tin = p * dur;
+        // TWO-PHASE CAMERA: (1) start zoomed into the glowing top-left corner while it types
+        // (you can't tell it's a box), pull back to reveal it; (2) at the end, a CLOSEUP zooms into
+        // the send button as the cursor presses it — that press is what fires the code build.
+        let sc = 1, origin = '50% 50%';
+        if (tin < 1.8) { origin = '9% 30%'; sc = mix(2.15, 1.0, easeInOutQuint(tin / 1.8)); }
+        else if (tin > dur - 1.6) { origin = '95% 74%'; sc = mix(1.0, 2.0, easeInOutQuint((tin - (dur - 1.6)) / 1.4)); }
+        // cursor travels to the send button and presses; the press drives the hand-off to code.
+        const sendPress = clamp01((tin - (dur - 1.35)) / 0.25);
+        const curT = easeInOutCubic(clamp01((tin - (dur - 2.0)) / 0.6));
+        const curShow = clamp01((tin - (dur - 2.0)) * 2);
+        const sx = 1441 * S, sy = 207 * S;                         // send-button centre inside the box
+        const curX = mix(sx - 150 * S, sx - 8 * S, curT), curY = mix(sy + 150 * S, sy + 26 * S, curT);
         return (
           <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app }}>
-            <div style={{ transformOrigin: '9% 30%', transform: `scale(${sc.toFixed(3)})` }}>
+            <div style={{ position: 'relative', transformOrigin: origin, transform: `scale(${sc.toFixed(3)})` }}>
               <GlowEdge w={1520 * S} h={280 * S} r={40 * S} t={t} accent={accent} bw={bw}>
                 <div style={{ position: 'absolute', inset: 0, padding: `${46 * S}px ${52 * S}px` }}>
                   <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 56 * S, lineHeight: 1.25, color: '#f3f4f7' }}>
@@ -203,13 +212,22 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
                       <div style={{ display: 'flex', alignItems: 'center', gap: 3 * S, height: 34 * S }}>
                         {[10, 22, 14, 28, 12, 20].map((hh, i) => <div key={i} style={{ width: 3 * S, height: hh * S, background: '#c9ccd4', borderRadius: 2 }} />)}
                       </div>
-                      <div style={{ width: 66 * S, height: 66 * S, borderRadius: '50%', background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 ${20 * S}px ${accent}aa` }}>
+                      <div style={{ width: 66 * S, height: 66 * S, borderRadius: '50%', background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transform: `scale(${(1 - sendPress * 0.18).toFixed(3)})`,
+                        boxShadow: `0 0 ${(20 + sendPress * 34) * S}px ${accent}${sendPress > 0.3 ? 'ff' : 'aa'}` }}>
                         <svg width={30 * S} height={30 * S} viewBox="0 0 24 24" fill="none" stroke="#0b0b0d" strokeWidth="3"><path d="M12 20V5M6 11l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </div>
                     </div>
                   </div>
                 </div>
               </GlowEdge>
+              {/* cursor that presses the send button (the interaction that fires the code) */}
+              {curShow > 0.01 && (
+                <svg width={52 * S} height={52 * S} viewBox="0 0 54 54" style={{ position: 'absolute', left: curX, top: curY, opacity: curShow,
+                  transform: `scale(${1 - sendPress * 0.18})`, transformOrigin: '30% 30%', filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.5))' }}>
+                  <path d="M14 6 L14 40 L21 33 L26 45 L31 43 L26 31 L36 31 Z" fill="#fff" stroke="#111" strokeWidth="2.4" strokeLinejoin="round" />
+                </svg>
+              )}
             </div>
           </AbsoluteFill>
         );
@@ -248,6 +266,12 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
         // pull back and flatten to reveal the whole website.
         const rotY = mix(34, 0, rp), rotX = mix(18, 0, rp), rScale = mix(1.55, 1, rp), rz = mix(-120, 0, rp);
         const camPush = mix(1.0, 1.03, easeInOutCubic(clamp01((seg(reveal[0], reveal[1]) - 0.6) / 0.4)));  // slow push after settle
+        // once the page is flat, a cursor reaches the primary CTA and presses it (the button reacts).
+        const rt = t - reveal[0];
+        const ctaPress = clamp01((rt - 2.9) / 0.3);
+        const ctaCurShow = clamp01((rt - 2.2) * 2);
+        const ctaCurT = easeInOutCubic(clamp01((rt - 2.2) / 0.6));
+        const bx = 210 * S, by = 815 * S;                         // CTA centre inside the panel
         return (
           <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', perspective: `${1500 * S}px`, opacity: app }}>
             <div style={{ transformStyle: 'preserve-3d', transform: `scale(${camPush.toFixed(3)}) translateZ(${rz.toFixed(0)}px) rotateY(${rotY.toFixed(2)}deg) rotateX(${rotX.toFixed(2)}deg) scale(${rScale.toFixed(3)})` }}>
@@ -267,10 +291,19 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
                   <div style={{ color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 100 * S, lineHeight: 1.04, letterSpacing: '-0.02em', maxWidth: '72%' }}>{head}</div>
                   <div style={{ color: '#c9ccd6', fontFamily: FONT, fontSize: 34 * S, marginTop: 20 * S }}>{sub}</div>
                   <div style={{ display: 'flex', gap: 20 * S, marginTop: 44 * S }}>
-                    <div style={{ background: '#fff', color: '#0a0c12', fontWeight: 600, fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S }}>Connect with us</div>
+                    <div style={{ background: '#fff', color: '#0a0c12', fontWeight: 600, fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S,
+                      transform: `scale(${(1 - ctaPress * 0.08).toFixed(3)})`, boxShadow: ctaPress > 0.3 ? `0 0 ${24 * S}px #ffffffaa` : 'none' }}>Connect with us</div>
                     <div style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S }}>Who is {brand}?</div>
                   </div>
                 </div>
+                {/* cursor presses the primary CTA once the page has settled */}
+                {ctaCurShow > 0.01 && (
+                  <svg width={50 * S} height={50 * S} viewBox="0 0 54 54" style={{ position: 'absolute',
+                    left: mix(bx - 150 * S, bx - 6 * S, ctaCurT), top: mix(by + 130 * S, by + 24 * S, ctaCurT),
+                    opacity: ctaCurShow, transform: `scale(${1 - ctaPress * 0.18})`, transformOrigin: '30% 30%', filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.5))' }}>
+                    <path d="M14 6 L14 40 L21 33 L26 45 L31 43 L26 31 L36 31 Z" fill="#fff" stroke="#111" strokeWidth="2.4" strokeLinejoin="round" />
+                  </svg>
+                )}
               </GlowEdge>
             </div>
           </AbsoluteFill>
@@ -283,4 +316,4 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
 export const MotionPrompt: React.FC<MotionPromptProps> = ({ spec, story, styleId }) =>
   <PromptBody spec={spec} story={story && story.length ? story : []} styleId={styleId} />;
 
-export const promptDuration = (): number => 13.4;
+export const promptDuration = (): number => 14.4;

@@ -2068,8 +2068,13 @@ def _scenario_logic(clip, transcript, tmp):
     check('v115: MotionPrompt markensicher (keine Fremd-Marke im Render)',
           not any(bad in _mpr for bad in ['Claude', 'Sonnet', 'Anthropic', 'claude']))
     check('v115c: MotionPrompt Zoom-in→Reveal (Detail rein, dann aufdecken)',
-          'ZOOM-IN' in _mpr and _mpr.count('ZOOM-IN') >= 2      # Box + Website
+          'TWO-PHASE CAMERA' in _mpr and 'ZOOM-IN' in _mpr      # Box (2-Phasen) + Website
           and 'transformOrigin' in _mpr)
+    # v115d: interaktive Buttons + kausale Logik (Klick löst den nächsten Schritt aus) + Send-Closeup.
+    check('v115d: Buttons reagieren + kausale Logik + Send-Closeup',
+          'sendPress' in _mpr and 'ctaPress' in _mpr
+          and 'CLOSEUP' in _mpr                                 # Closeup auf den Send-Button
+          and 'fires the code' in _mpr and 'press is what fires' in _mpr)  # Druck löst Code aus
     # v116: Render-Bridge — Transkript → gewählte Komposition + Stil + Format, ein Befehl.
     _mrbs = open(os.path.join(HERE, 'motion', 'scripts', 'render-showcase.mjs'), encoding='utf-8').read()
     check('v116: render-showcase Bridge (Komposition/Stil/Format aus Transkript)',
