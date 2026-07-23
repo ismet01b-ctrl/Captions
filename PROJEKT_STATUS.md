@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v128 Admin-Panel Tier 1 (Betrieb/Nutzer/Umsatz) + Orange-Vereinheitlichung.** Ismet: eigenes
+  Admin-Menue + Orange auf allen Seiten.
+  - **Orange ueberall (v127a):** SPA (index.html) und Impressum/Datenschutz/AGB liefen noch auf dem
+    alten Violett (#7c5cff) = generischer KI-Lila-Look. Jetzt durchgehend Landing-Orange #ff7a1a
+    (Akzent/Glow/Buttons/Success-Card entpurpelt, Recht-Seiten warmes Near-Black). 0 Violett im
+    ganzen web/. Sekundaere Delight-Farben (Gold/Konfetti) bleiben.
+  - **Admin-Panel (`/admin`, eigene Seite `admin.html`):** ALLE Endpoints haengen am Server-Key
+    `DVE_ADMIN` (Header X-Admin-Key, timing-safe) - NICHT an der Owner-Session; fehlt der Key, ist
+    das Panel tot. Drei Tabs:
+    - **Overview:** echter Umsatz heute/7T/30T/gesamt (neue `purchases`-Tabelle speichert den
+      TATSAECHLICH gezahlten Betrag amount_total pro Stripe-Session, idempotent), Nutzerzahlen
+      (gesamt/verifiziert/zahlend), offene Credit-Verbindlichkeit, Render-Summe, Job-/Queue-Status,
+      System-Health mit Ampel (OpenAI-Key?, Stripe live/test?, Webhook-Secret?, Disk, DB-Groesse,
+      letztes Backup, Admin-Key gesetzt?).
+    - **Jobs:** wartende/laufende/fehlgeschlagene Jobs; Aktion „Kill" killt den Prozess (Render-Loop
+      endet -> Fehler-Zweig + automatische Erstattung).
+    - **Users:** Suche/Liste (E-Mail, verifiziert?, Credits, zahlend?, Beitritt); Detail mit
+      Ledger-Historie + Aktionen: Credits gutschreiben/abziehen (nie unter 0, mit Grund im Ledger),
+      als verifiziert markieren, Verify-Mail neu senden, Konto loeschen (Kaeufe -> Archiv wie die
+      Selbst-Loeschung).
+  - **Wo/Zugang:** URL `/<domain>/admin`, Admin-Key eingeben (aus Server-Env `DVE_ADMIN`). Das alte
+    Owner-Panel (Reference styles + Transcribe) bleibt separat in Account und haengt weiter an der
+    Owner-Mail. NICHT gebaut (bewusst, Tier 2/3): Missbrauch-Signale, Consents-Log, Job-Suche,
+    Wartungsmodus/Toggles - kommen erst bei Bedarf.
+  Selftest **719/719 gruen** (funktional gegen isolierte Test-DB: falscher Key -> 403, Overview mit
+  echtem Umsatz, Nutzer-Liste, Credits-Adjust, Verify; plus Verdrahtungs-Garantien). Live-Smoke:
+  Server hochgezogen, /admin mit Key geladen, Overview + Nutzer-Detail per Screenshot bestaetigt.
 - **v127 Launch-Audit-Fixes (Credits/Auth/Missbrauch/Recht) + Landing-Redesign.** Ismet vor
   dem Launch: "Keine Bugs wegen Credits, die verloren gehen, kein Hack, rechtssicher?" Dazu ein
   adversarialer Audit ueber 6 Achsen (Credits, Auth, Injection/XSS, Payment, Missbrauch, Recht),

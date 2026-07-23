@@ -2150,6 +2150,19 @@ def _scenario_logic(clip, transcript, tmp):
           and '§ 18 (2) MStV' in _impr and '§ 55 RStV' not in _impr
           and '§ 19 UStG' in _impr and '§ 19 UStG' in _term
           and 'Prices include applicable VAT where required' not in _term)
+    # v128 Admin-Panel: Endpoints + Server-Key-Gate + purchases-Umsatz + Seite.
+    _adm = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v128 Admin: Endpoints, DVE_ADMIN-Gate, purchases-Umsatz, /admin-Seite',
+          "@app.get('/api/admin/overview')" in _srv_m
+          and "@app.post('/api/admin/jobs/{jid}/kill')" in _srv_m
+          and "@app.post('/api/admin/users/{uid}/credits')" in _srv_m
+          and "@app.post('/api/admin/users/{uid}/delete')" in _srv_m
+          and 'def _require_admin' in _srv_m and 'if not _admin_ok(request)' in _srv_m
+          and "@app.get('/admin'" in _srv_m
+          and 'CREATE TABLE IF NOT EXISTS purchases' in _srv_m
+          and 'INSERT OR IGNORE INTO purchases' in _srv_m
+          and "'X-Admin-Key': KEY" in _adm and '/api/admin/overview' in _adm
+          and 'noindex' in _adm)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -3200,6 +3213,41 @@ def _scenario_security(tmp):
     _osq, _oerr = SV._create_user(SV.OWNER_EMAIL, 'x' * 8, 'Squatter')
     check('v127-sec: OWNER_EMAIL nicht registrierbar',
           _osq is None and bool(_oerr))
+    # v128 Admin-Panel: alle Endpoints haengen am Server-Key DVE_ADMIN, nicht an
+    # der Owner-Session. Falscher Key -> 403. Danach Overview/Users/Credits echt.
+    os.environ['DVE_ADMIN'] = 'testkey_admin'
+    class _AReq:
+        def __init__(self, key):
+            self.headers = {'x-admin-key': key} if key else {}
+    _denied = False
+    try:
+        SV.admin_overview(_AReq('wrong'))
+    except SV.HTTPException as _e:
+        _denied = (_e.status_code == 403)
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('adm@test','x','Adm',120,?,0)", (int(_t.time()),))
+    con.commit()
+    _auid = con.execute("SELECT id FROM users WHERE email='adm@test'").fetchone()['id']
+    con.execute("INSERT OR IGNORE INTO purchases (session_id, user_id, pack, cents, sekunden, created_at) "
+                "VALUES ('sess_adm', ?, 'starter', 900, 1200, ?)", (_auid, int(_t.time())))
+    con.execute("INSERT OR IGNORE INTO ledger (user_id, delta_sec, grund, created_at) "
+                "VALUES (?, 1200, 'Kauf sess_adm', ?)", (_auid, int(_t.time())))
+    con.commit(); con.close()
+    _good = _AReq('testkey_admin')
+    _ov = SV.admin_overview(_good)
+    _us = SV.admin_users(_good, q='adm@test', limit=10)
+    _cr = SV.admin_user_credits(_auid, _good, delta_min=5, reason='test')   # +5 Min = +300s
+    _ver = SV.admin_user_verify(_auid, _good)
+    _uverified = SV._find_user_by_id(_auid)['verified']
+    check('v128 Admin: DVE_ADMIN-gated + Overview/Users/Credits/Verify funktionieren',
+          _denied is True
+          and _ov['revenue']['total']['eur'] == 9.0
+          and _ov['users']['total'] >= 1 and 'disk' in _ov['system']
+          and any(u['email'] == 'adm@test' for u in _us['users'])
+          and _cr['balance_sec'] == 420 and bool(_uverified) is True,
+          f"denied={_denied} eur={_ov['revenue']['total']['eur']} bal={_cr.get('balance_sec')}")
+    del os.environ['DVE_ADMIN']
     # 3) cfg_overrides-Whitelist + Deckel
     ov = SV._sanitize_overrides({'output': {'height': 4320, 'master': True},
                                  'effects': {'blender_samples': 99999, 'bg_blur': 0.5},

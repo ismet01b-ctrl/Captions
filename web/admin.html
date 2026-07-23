@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin · DouchkoVE</title>
+<style>
+:root{--bg:#0a0a0b;--surf:#161417;--surf2:#1e1c20;--fg:#f6f4ef;--mut:#b0a99e;--mut2:#8b857b;
+  --acc:#ff7a1a;--line:#242320;--ok:#3ec46d;--warn:#f2c14e;--bad:#ff5233;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);
+  color:var(--fg);line-height:1.5;padding:28px 22px;min-height:100vh}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:24px;font-weight:800;letter-spacing:-.4px;margin-bottom:2px}
+h1 .dot{color:var(--acc)}
+.subtle{color:var(--mut2);font-size:12.5px}
+.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.gate{max-width:360px;margin:14vh auto 0;text-align:center}
+.gate input{width:100%;padding:12px 14px;background:var(--surf);border:1px solid var(--line);
+  border-radius:10px;color:var(--fg);font-size:15px;margin:14px 0}
+.btn{background:var(--acc);color:#111;border:none;font-weight:700;font-size:14px;padding:10px 18px;
+  border-radius:999px;cursor:pointer}
+.btn:hover{filter:brightness(1.06)}
+.btn.sm{padding:6px 12px;font-size:12.5px}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn.bad{background:var(--bad);color:#fff}
+.tabs{display:flex;gap:8px;margin:22px 0 18px;border-bottom:1px solid var(--line)}
+.tabs button{background:none;border:none;color:var(--mut);font-size:14px;font-weight:600;padding:10px 4px;
+  margin-right:14px;cursor:pointer;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--acc)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut2)}
+.card .v{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-top:6px}
+.card .v small{font-size:13px;font-weight:600;color:var(--mut)}
+.card.acc .v{color:var(--acc)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.health{display:flex;flex-wrap:wrap;gap:10px 22px;background:var(--surf);border:1px solid var(--line);
+  border-radius:12px;padding:16px 18px;margin-top:12px;font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:7px}
+.led{width:9px;height:9px;border-radius:50%;background:var(--mut2)}
+.led.ok{background:var(--ok)}.led.warn{background:var(--warn)}.led.bad{background:var(--bad)}
+table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--mut2);font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+tr.click{cursor:pointer}tr.click:hover{background:var(--surf)}
+.search{width:100%;max-width:340px;padding:9px 12px;background:var(--surf);border:1px solid var(--line);
+  border-radius:8px;color:var(--fg);margin-bottom:6px}
+.tag{font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);color:var(--mut)}
+.tag.ok{color:var(--ok);border-color:rgba(62,196,109,.4)}
+.tag.no{color:var(--bad);border-color:rgba(255,82,51,.4)}
+.tag.buy{color:var(--acc);border-color:rgba(255,122,26,.4)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;
+  justify-content:center;padding:40px 16px;overflow:auto;z-index:50}
+.overlay.on{display:flex}
+.modal{background:var(--bg);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;
+  padding:24px}
+.modal h2{font-size:18px;margin-bottom:2px}
+.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0;padding:14px 0;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.acts input{width:80px;padding:7px 10px;background:var(--surf);border:1px solid var(--line);
+  border-radius:8px;color:var(--fg)}
+.acts input.reason{width:150px}
+.msg{font-size:13px;color:var(--mut);margin-top:8px;min-height:18px}
+.led-row{max-height:260px;overflow:auto;margin-top:4px}
+.pos{color:var(--ok)}.neg{color:var(--mut)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="gate" class="gate">
+    <h1>DouchkoVE <span class="dot">Admin</span></h1>
+    <p class="subtle" style="margin-top:6px">Enter the admin key (server env DVE_ADMIN).</p>
+    <input type="password" id="keyIn" placeholder="Admin key" autocomplete="off"
+           onkeydown="if(event.key==='Enter')saveKey()">
+    <button class="btn" onclick="saveKey()">Unlock</button>
+    <p class="msg" id="gateMsg"></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><h1>DouchkoVE <span class="dot">Admin</span></h1>
+        <span class="subtle">Tier 1 · Betrieb, Nutzer, Umsatz</span></div>
+      <button class="btn ghost sm" onclick="logout()">Lock</button>
+    </div>
+    <div class="tabs">
+      <button class="on" data-tab="overview" onclick="tab('overview')">Overview</button>
+      <button data-tab="jobs" onclick="tab('jobs')">Jobs</button>
+      <button data-tab="users" onclick="tab('users')">Users</button>
+    </div>
+
+    <div id="t-overview">
+      <div class="grid" id="revCards"></div>
+      <div class="row2">
+        <div class="card"><div class="k">Users</div><div class="v" id="cUsers">–</div></div>
+        <div class="card acc"><div class="k">Open credit liability</div><div class="v" id="cLiab">–</div></div>
+      </div>
+      <div class="health" id="health"></div>
+      <p class="subtle" style="margin-top:14px">Revenue uses real paid amounts recorded from Stripe (from v128 onward).</p>
+    </div>
+
+    <div id="t-jobs" class="hidden">
+      <p class="subtle" style="margin-bottom:8px">In-flight and recently failed jobs. Kill stops a hung render and refunds it.</p>
+      <table><thead><tr><th>Job</th><th>User</th><th>Status</th><th>Phase</th><th>Kind</th><th></th></tr></thead>
+        <tbody id="jobRows"></tbody></table>
+    </div>
+
+    <div id="t-users" class="hidden">
+      <input class="search" id="uSearch" placeholder="Search email…" oninput="userSearchDebounced()">
+      <table><thead><tr><th>Email</th><th>Verified</th><th>Credits</th><th>Type</th><th>Joined</th></tr></thead>
+        <tbody id="userRows"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal"></div>
+</div>
+
+<script>
+let KEY = sessionStorage.getItem('dve_admin_key') || '';
+const $ = s => document.querySelector(s);
+function hdr(){ return {'X-Admin-Key': KEY}; }
+async function api(path, opts={}){
+  opts.headers = Object.assign(hdr(), opts.headers||{});
+  const r = await fetch(path, opts);
+  if(r.status===403){ logout('Wrong or missing key.'); throw new Error('403'); }
+  if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||('HTTP '+r.status)); }
+  return r.json();
+}
+function saveKey(){ KEY = $('#keyIn').value.trim(); if(!KEY)return;
+  sessionStorage.setItem('dve_admin_key',KEY); boot(); }
+function logout(m){ KEY=''; sessionStorage.removeItem('dve_admin_key');
+  $('#app').classList.add('hidden'); $('#gate').classList.remove('hidden');
+  if(m)$('#gateMsg').textContent=m; }
+function fdt(ts){ if(!ts)return '–'; const d=new Date(ts*1000);
+  return d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+function fdate(ts){ return ts?new Date(ts*1000).toLocaleDateString():'–'; }
+
+async function boot(){
+  try{ await loadOverview(); }
+  catch(e){ if(e.message==='403')return; $('#gateMsg').textContent=e.message; return; }
+  $('#gate').classList.add('hidden'); $('#app').classList.remove('hidden');
+}
+function tab(name){
+  ['overview','jobs','users'].forEach(t=>{
+    $('#t-'+t).classList.toggle('hidden', t!==name);
+    document.querySelector('.tabs button[data-tab="'+t+'"]').classList.toggle('on', t===name);
+  });
+  if(name==='jobs')loadJobs(); if(name==='users')loadUsers(); if(name==='overview')loadOverview();
+}
+
+async function loadOverview(){
+  const d = await api('/api/admin/overview');
+  const r = d.revenue;
+  const cell = (label,o)=>`<div class="card"><div class="k">${label}</div>
+    <div class="v">€${o.eur.toFixed(2)} <small>· ${o.count}×</small></div></div>`;
+  $('#revCards').innerHTML = cell('Today',r.today)+cell('7 days',r.week)+cell('30 days',r.month)+cell('Total',r.total);
+  $('#cUsers').innerHTML = `${d.users.total} <small>· ${d.users.verified} verified · ${d.users.purchasers} paid</small>`;
+  $('#cLiab').innerHTML = `${d.credits.liability_min} <small>min owed</small>`;
+  const s=d.system, st=s.stripe;
+  const led=(cond,warn)=>`<span class="led ${cond?'ok':(warn?'warn':'bad')}"></span>`;
+  const diskBad = s.disk && s.disk.used_pct>90, diskWarn = s.disk && s.disk.used_pct>75;
+  $('#health').innerHTML = [
+    `<span class="pill">${led(s.openai)}<b>OpenAI key</b> ${s.openai?'set':'MISSING'}</span>`,
+    `<span class="pill">${led(st.ready&&st.mode==='live', st.mode==='test')}<b>Stripe</b> ${st.mode}${st.ready?'':' (off)'}</span>`,
+    `<span class="pill">${led(st.webhook_secret)}<b>Webhook secret</b> ${st.webhook_secret?'set':'MISSING'}</span>`,
+    `<span class="pill">${led(s.admin_key_set)}<b>Admin key</b> set</span>`,
+    s.disk?`<span class="pill">${led(!diskBad&&!diskWarn, diskWarn)}<b>Disk</b> ${s.disk.free_gb}G free (${s.disk.used_pct}% used)</span>`:'',
+    `<span class="pill"><span class="led ok"></span><b>DB</b> ${s.db_mb??'?'} MB</span>`,
+    `<span class="pill">${led(s.last_backup)}<b>Backup</b> ${s.last_backup?fdate(s.last_backup):'none'}</span>`,
+    `<span class="pill"><span class="led ${d.jobs.queue>0?'warn':'ok'}"></span><b>Queue</b> ${d.jobs.queue} · run ${d.jobs.running} · fail ${d.jobs.failed}</span>`,
+    `<span class="pill"><span class="led ok"></span><b>Renders</b> ${d.renders.count} (${d.renders.minutes} min)</span>`,
+  ].join('');
+}
+
+async function loadJobs(){
+  const d = await api('/api/admin/jobs');
+  $('#jobRows').innerHTML = d.jobs.length ? d.jobs.map(j=>`<tr>
+    <td class="mono">${j.jid.slice(0,10)}</td><td>${j.email||'<span class="subtle">demo</span>'}</td>
+    <td>${j.status||''}${j.progress?` <span class="subtle">${Math.round(j.progress*100)}%</span>`:''}</td>
+    <td class="subtle">${j.phase||''}</td><td>${j.kind}</td>
+    <td>${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" onclick="killJob('${j.jid}')">Kill</button>`:''}</td>
+  </tr>`).join('') : `<tr><td colspan="6" class="subtle">No active jobs.</td></tr>`;
+}
+async function killJob(jid){
+  if(!confirm('Kill and refund job '+jid+'?'))return;
+  try{ await api('/api/admin/jobs/'+jid+'/kill',{method:'POST'}); loadJobs(); }
+  catch(e){ alert(e.message); }
+}
+
+let _uT=null;
+function userSearchDebounced(){ clearTimeout(_uT); _uT=setTimeout(loadUsers,250); }
+async function loadUsers(){
+  const q = encodeURIComponent($('#uSearch').value.trim());
+  const d = await api('/api/admin/users?limit=80&q='+q);
+  $('#userRows').innerHTML = d.users.length ? d.users.map(u=>`<tr class="click" onclick="openUser(${u.id})">
+    <td>${u.email}</td>
+    <td>${u.verified?'<span class="tag ok">yes</span>':'<span class="tag no">no</span>'}</td>
+    <td>${u.credits}</td>
+    <td>${u.purchased?'<span class="tag buy">paid</span>':'<span class="tag">free</span>'}</td>
+    <td class="subtle">${fdate(u.created_at)}</td>
+  </tr>`).join('') : `<tr><td colspan="5" class="subtle">No users.</td></tr>`;
+}
+
+async function openUser(uid){
+  let d; try{ d = await api('/api/admin/users/'+uid); }catch(e){ alert(e.message); return; }
+  const u=d.user;
+  const led = d.ledger.map(l=>`<tr><td class="${l.delta_sec>=0?'pos':'neg'}">${l.delta_sec>=0?'+':''}${Math.round(l.delta_sec/60)}m</td>
+    <td>${l.grund}</td><td class="subtle">${fdate(l.created_at)}</td></tr>`).join('') || '<tr><td class="subtle" colspan="3">No entries.</td></tr>';
+  $('#modal').innerHTML = `
+    <h2>${u.email} ${u.is_owner?'<span class="tag buy">owner</span>':''}</h2>
+    <p class="subtle">#${u.id} · ${u.name||'(no name)'} · joined ${fdate(u.created_at)} ·
+      ${u.verified?'verified':'<span style="color:var(--bad)">unverified</span>'} ·
+      <b>${u.credits} credits</b></p>
+    <div class="acts">
+      <input type="number" id="mDelta" placeholder="±min" title="minutes (60s=1 credit)">
+      <input type="text" class="reason" id="mReason" placeholder="reason">
+      <button class="btn sm" onclick="grantCredits(${uid})">Adjust credits</button>
+      ${u.verified?'':`<button class="btn ghost sm" onclick="uAct(${uid},'verify')">Mark verified</button>
+      <button class="btn ghost sm" onclick="uAct(${uid},'resend_verify')">Resend verify</button>`}
+      <button class="btn bad sm" onclick="delUser(${uid},'${u.email.replace(/'/g,"")}')">Delete</button>
+    </div>
+    <p class="msg" id="mMsg"></p>
+    <div class="k subtle" style="text-transform:uppercase;font-size:11px;letter-spacing:.1em">Ledger (last 100)</div>
+    <div class="led-row"><table><tbody>${led}</tbody></table></div>`;
+  $('#overlay').classList.add('on');
+}
+function closeModal(){ $('#overlay').classList.remove('on'); if($('#t-users').classList.contains('hidden')===false)loadUsers(); }
+async function grantCredits(uid){
+  const v=parseInt($('#mDelta').value,10); if(!v){ $('#mMsg').textContent='Enter ± minutes.'; return; }
+  const fd=new FormData(); fd.append('delta_min',v); fd.append('reason',$('#mReason').value||'manual');
+  try{ const d=await api('/api/admin/users/'+uid+'/credits',{method:'POST',body:fd});
+    $('#mMsg').textContent='New balance: '+d.credits+' credits.'; }
+  catch(e){ $('#mMsg').textContent=e.message; }
+}
+async function uAct(uid,act){
+  try{ await api('/api/admin/users/'+uid+'/'+act,{method:'POST'}); openUser(uid); }
+  catch(e){ $('#mMsg').textContent=e.message; }
+}
+async function delUser(uid,email){
+  if(!confirm('DELETE account '+email+'? Purchases go to the archive, everything else is erased.'))return;
+  try{ await api('/api/admin/users/'+uid+'/delete',{method:'POST'}); closeModal(); loadUsers(); }
+  catch(e){ alert(e.message); }
+}
+
+if(KEY) boot();
+</script>
+</body>
+</html>
