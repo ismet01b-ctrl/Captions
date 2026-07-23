@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v117 Full-customizable Motion-Studio (live).** Neuer Weg im Motion-Wizard: „Studio — full
+  control". Eingabe = Video ODER eigenes Skript/Transkript. Wählbar: Komposition (Card-Montage /
+  Kinetik-Typo / Prompt-Build), Stil (editorial/bold/soft/mono), Format (9:16/1:1/16:9). Und ALLES
+  einstellbar via Custom-Override (`showcaseThemes.applyTheme`, zieht durch alle 3 Kompositionen):
+  Akzent, Textfarbe, Font (Sans/Mono/Serif), Versalien, Motion-Blur, Kamera-Intensität, Grain,
+  Marke, Text pro Beat. Text bleibt VERBATIM (kein Halluzinieren). Server: `/api/motion/showcase`
+  (+ `_run_motion_showcase`, `_sanitize_custom`), Credits nach Länge (Video) bzw. Wortzahl (Text).
+  Bridge `render-showcase.mjs --custom-file`. Default-Marke überall DouchkoVE. Fix: Kinetik-Giant-
+  Word passt jetzt in schmale 9:16-Formate. Selftest 706/706, tsc clean, End-to-End-Smoke grün.
+  NUR Linux/CPU getestet — echte Wirkung live. Offen: Font-DATEI-Upload (aktuell Presets), Sound,
+  Alt-Engines aufräumen.
+
 - **v111d Logik-Pass: kohärentes Skript + interne Konsistenz (Ismet: "unfertiges Video, kein Senior gibt das so ab").**
   Kritik war berechtigt — der 1:1-Nachbau hatte zusammenhanglose Fragmente (aus den Referenz-
   Einzelframes kopiert) ohne roten Faden + interne Fehler. Behoben: (1) EIN kohärentes Skript

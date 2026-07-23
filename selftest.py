@@ -2097,6 +2097,12 @@ def _scenario_logic(clip, transcript, tmp):
           and "if j.get('showcase')" in _srv_m
           and 'render-showcase.mjs' in _srv_m and "'--custom-file='" in _srv_m
           and 'custom-file' in _mrbs)
+    check('v117c: UI — Studio-Panel (alle Knöpfe) + verdrahtet',
+          'id="moTypeStudio"' in _ui_m and 'data-key="studio"' in _ui_m
+          and "studio:['type','studio']" in _ui_m
+          and 'function motionStudioGo' in _ui_m and "fetch('/api/motion/showcase'" in _ui_m
+          and all(x in _ui_m for x in ['id="stComp"', 'id="stStyle"', 'id="stFormat"',
+                                        'id="stAccent"', 'id="stBrand"', 'id="stBlur"', 'id="stLines"']))
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,

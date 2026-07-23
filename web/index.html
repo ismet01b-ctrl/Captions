@@ -1517,7 +1517,69 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
                 onto it — like a senior designer, matched to what you say and show.</p>
               <span class="tc-go">Upload a video →</span>
             </button>
+            <button class="mo-type-card" type="button" id="moTypeStudio">
+              <div class="tc-ic">🎛️</div>
+              <h3>Studio — full control</h3>
+              <p>A video or your script → a standalone promo. Pick the composition &amp;
+                style, then tune everything: colors, type, motion, text, brand.</p>
+              <span class="tc-go">Open the studio →</span>
+            </button>
           </div>
+        </div>
+
+        <!-- STEP: STUDIO (full-customizable showcase) -->
+        <div class="mo-step-view" data-key="studio">
+          <h2 class="step-title">Studio</h2>
+          <p class="step-sub">Everything is adjustable. Start from a video or your own script.</p>
+          <div class="panel">
+            <label class="mo-lab">Start from</label>
+            <div class="seg" id="stInput"></div>
+            <div id="stVideoWrap" style="margin-top:12px; display:none;">
+              <label class="brand-file" style="height:110px; font-size:15px;">
+                <input type="file" id="stVideo" accept="video/*">
+                <span data-brand="video">＋ Choose a video</span>
+              </label>
+            </div>
+            <div id="stTextWrap" style="margin-top:12px;">
+              <textarea class="mo-in" id="stText" rows="4" style="resize:vertical; font-family:inherit;"
+                placeholder="Paste your script / voiceover. Each line becomes a beat. Text stays exactly as written."></textarea>
+            </div>
+
+            <label class="mo-lab" style="margin-top:18px;">Composition</label>
+            <div class="seg" id="stComp"></div>
+            <label class="mo-lab" style="margin-top:14px;">Style</label>
+            <div class="seg" id="stStyle"></div>
+            <label class="mo-lab" style="margin-top:14px;">Format</label>
+            <div class="seg" id="stFormat"></div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px;">
+              <div><label class="mo-lab">Accent</label><input type="color" class="mo-color" id="stAccent" value="#f0813a"></div>
+              <div><label class="mo-lab">Text color</label><input type="color" class="mo-color" id="stInk" value="#14161c"></div>
+            </div>
+            <label class="mo-lab" style="margin-top:14px;">Typeface</label>
+            <div class="seg" id="stFont"></div>
+            <label class="mo-check" style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer; font-size:14px; color:var(--fg2);">
+              <input type="checkbox" id="stUpper" style="width:16px; height:16px; accent-color:var(--acc2);"> UPPERCASE headings
+            </label>
+
+            <label class="mo-lab" style="margin-top:16px;">Motion blur <span class="mo-hint" id="stBlurV"></span></label>
+            <input type="range" id="stBlur" min="0" max="1.4" step="0.05" value="0.62" style="width:100%;">
+            <label class="mo-lab" style="margin-top:10px;">Camera intensity <span class="mo-hint" id="stCamV"></span></label>
+            <input type="range" id="stCam" min="0" max="2" step="0.05" value="1" style="width:100%;">
+            <label class="mo-lab" style="margin-top:10px;">Grain <span class="mo-hint" id="stGrainV"></span></label>
+            <input type="range" id="stGrain" min="0" max="3" step="0.1" value="2" style="width:100%;">
+
+            <label class="mo-lab" style="margin-top:16px;">Brand</label>
+            <input class="mo-in" id="stBrand" value="DouchkoVE" style="font-family:inherit;">
+            <label class="mo-lab" style="margin-top:14px;">Override text <span style="color:var(--mut);font-weight:500;">(optional — one line per beat)</span></label>
+            <textarea class="mo-in" id="stLines" rows="3" style="resize:vertical; font-family:inherit;"
+              placeholder="Leave empty to use the script/transcript. One line = one beat."></textarea>
+          </div>
+          <div class="mo-nav">
+            <button class="btn secondary" data-mo-back type="button">Back</button>
+            <button class="btn" id="moStudioGo" type="button">Generate · by length</button>
+          </div>
+          <div id="moStudioStatus" class="mo-status" style="display:none;"></div>
         </div>
 
         <!-- STEP: UPLOAD (auto-overlay engine) -->
@@ -2883,6 +2945,9 @@ async function initMotion(){
   if(tt) tt.onclick=()=>setMoEngine('template');
   if(ts) ts.onclick=()=>setMoEngine('sequence');
   if(ta) ta.onclick=()=>setMoEngine('auto');
+  const tstudio=$('#moTypeStudio');
+  if(tstudio){ tstudio.onclick=()=>setMoEngine('studio'); if(!Motion.briefOk) tstudio.setAttribute('disabled',''); }
+  initStudio();
   if(tb && !Motion.briefOk){
     tb.setAttribute('disabled','');
     const g=tb.querySelector('.tc-go'); if(g) g.textContent='Warming up — try again soon';
@@ -2924,11 +2989,13 @@ async function initMotion(){
 const MO_ENGINE_STEPS = { brief:['type','describe','render'],
                           template:['type','template','style','render'],
                           sequence:['type','build','render'],
-                          auto:['type','upload','render'] };
+                          auto:['type','upload','render'],
+                          studio:['type','studio'] };
 const MO_STEP_LABELS = { type:'Type', describe:'Describe', template:'Template',
-                         style:'Style', build:'Build', upload:'Upload', render:'Generate' };
+                         style:'Style', build:'Build', upload:'Upload', render:'Generate',
+                         studio:'Studio' };
 function setMoEngine(eng){
-  if((eng==='brief'||eng==='sequence'||eng==='auto') && !Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
+  if((eng==='brief'||eng==='sequence'||eng==='auto'||eng==='studio') && !Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
   Motion.engine=eng; Motion.stepKeys=MO_ENGINE_STEPS[eng];
   renderMoStepper(); goMoStep(1);
 }
@@ -3036,6 +3103,62 @@ async function motionSeqGo(){
     if(r.status===402){ st.textContent='Not enough credits.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
     if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
     if(!r.ok) throw 0;
+    const j=await r.json();
+    motionPoll(j.jid, st, btn, orig);
+  }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
+}
+
+/* v117: Studio — full-customizable Showcase (video OR script -> chosen composition + all settings). */
+const ST = { input:'text', comp:'showcase', style:'editorial', format:'9:16', font:'sans', inkTouched:false };
+const FONT_MAP = { sans:"'Inter', system-ui, -apple-system, sans-serif", mono:"ui-monospace, 'Menlo', monospace", serif:"Georgia, 'Times New Roman', serif" };
+function _seg(el, items, cur, cb){
+  if(!el) return; el.innerHTML='';
+  items.forEach(([v,l])=>{ const b=document.createElement('button'); b.type='button'; b.className='seg-b'+(v===cur?' on':''); b.textContent=l;
+    b.onclick=()=>{ el.querySelectorAll('.seg-b').forEach(x=>x.classList.remove('on')); b.classList.add('on'); cb(v); };
+    el.appendChild(b); });
+}
+function initStudio(){
+  if(ST._init) return; ST._init=true;
+  _seg($('#stInput'), [['text','Script / text'],['video','A video']], ST.input, v=>{ ST.input=v;
+     const vw=$('#stVideoWrap'), tw=$('#stTextWrap'); if(vw) vw.style.display=(v==='video')?'':'none'; if(tw) tw.style.display=(v==='text')?'':'none'; });
+  _seg($('#stComp'), [['showcase','Card montage'],['kinetic','Kinetic type'],['prompt','Prompt build']], ST.comp, v=>ST.comp=v);
+  _seg($('#stStyle'), [['editorial','Editorial'],['bold','Bold'],['soft','Soft'],['mono','Mono']], ST.style, v=>ST.style=v);
+  _seg($('#stFormat'), [['9:16','9:16'],['1:1','1:1'],['16:9','16:9']], ST.format, v=>ST.format=v);
+  _seg($('#stFont'), [['sans','Sans'],['mono','Mono'],['serif','Serif']], ST.font, v=>ST.font=v);
+  const vfile=$('#stVideo'); if(vfile) vfile.onchange=()=>{ const lab=vfile.closest('.brand-file'), sp=lab&&lab.querySelector('span'), f=vfile.files&&vfile.files[0];
+     if(sp){ if(f){ sp.textContent='🎬 '+(f.name.length>22?f.name.slice(0,20)+'…':f.name); lab.classList.add('on'); } else { sp.textContent='＋ Choose a video'; lab.classList.remove('on'); } } };
+  const bind=(id,out,fmt)=>{ const s=$('#'+id), o=$('#'+out); if(s&&o){ const upd=()=>o.textContent=fmt(s.value); s.oninput=upd; upd(); } };
+  bind('stBlur','stBlurV',v=>Number(v).toFixed(2)); bind('stCam','stCamV',v=>Number(v).toFixed(2)); bind('stGrain','stGrainV',v=>Number(v).toFixed(1));
+  const ink=$('#stInk'); if(ink) ink.oninput=()=>{ ST.inkTouched=true; };
+  const go=$('#moStudioGo'); if(go) go.onclick=motionStudioGo;
+}
+function _studioCustom(){
+  const c={ style:ST.style, brand:(($('#stBrand').value||'DouchkoVE').trim()||'DouchkoVE'),
+    accent:$('#stAccent').value, upper:$('#stUpper').checked,
+    shutter:Number($('#stBlur').value), cameraMult:Number($('#stCam').value), grain:Number($('#stGrain').value) };
+  if(ST.font!=='sans') c.font=FONT_MAP[ST.font];
+  if(ST.inkTouched) c.ink=$('#stInk').value;
+  const lines=($('#stLines').value||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  if(lines.length) c.text=lines.slice(0,16);
+  return c;
+}
+async function motionStudioGo(){
+  const btn=$('#moStudioGo'), st=$('#moStudioStatus');
+  const fd=new FormData();
+  if(ST.input==='video'){ const f=$('#stVideo').files&&$('#stVideo').files[0]; if(!f){ toast('Choose a video first.','err'); return; } fd.append('video', f); }
+  else { const txt=($('#stText').value||'').trim(); const ov=($('#stLines').value||'').trim();
+    if(txt.length<3 && !ov){ toast('Add your script first.','err'); return; } fd.append('text', txt); }
+  fd.append('composition', ST.comp); fd.append('style', ST.style); fd.append('format', ST.format);
+  fd.append('custom', JSON.stringify(_studioCustom()));
+  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
+  st.style.display='block'; st.textContent='Designing your motion …';
+  try{
+    const r=await fetch('/api/motion/showcase',{method:'POST', body:fd});
+    if(r.status===402){ st.textContent='Not enough credits.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
+    if(r.status===413){ st.textContent='Video too large or too long.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
+    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
+    if(!r.ok){ let m=''; try{ m=(await r.json()).detail||''; }catch(e){} st.textContent=m||'Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
     const j=await r.json();
     motionPoll(j.jid, st, btn, orig);
   }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }

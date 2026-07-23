@@ -94,7 +94,8 @@ const TypeScene: React.FC<Ctx> = ({ text, t, hold, W, H, S, th, seed }) => {
     // GIANT WORD: the emphasis word huge, the rest small above it
     const big = words[emph] ?? words[0]!;
     const rest = words.filter((_, i) => i !== emph).join(' ');
-    const bigFs = Math.min(340 * S, (W * 0.9) / Math.max(3, big.length) * 1.7);
+    // fit the giant word to the frame width so long words never clip (esp. narrow 9:16).
+    const bigFs = Math.min(300 * S, (W * 0.92) / Math.max(3, big.length) * 1.15);
     return (
       <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 * S }}>
         <div style={{ color: ink, opacity: clamp01((t - 0.1) * 3), fontFamily: th.font, fontWeight: th.weight,
