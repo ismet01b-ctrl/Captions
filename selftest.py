@@ -3342,6 +3342,24 @@ def _scenario_security(tmp):
     con.close()
     check('v130 Admin: Job-Refund bucht +Credits mit traceable Refund-Ledger-Zeile',
           _bal_r1 == _bal_r0 + 120 and _refline == 1, f'{_bal_r0}->{_bal_r1} lines={_refline}')
+    # v130-fix (Review): admin_refund clampt den Clawback aufs Guthaben (Ledger-
+    # Invariant heil) UND ist idempotent (zweiter Aufruf bucht nicht nochmal ab).
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('rf@test','x','Rf',60,?,1)", (int(_t.time()),))
+    con.commit()
+    _rfid = con.execute("SELECT id FROM users WHERE email='rf@test'").fetchone()['id']
+    con.execute("INSERT OR IGNORE INTO purchases (session_id,user_id,pack,cents,sekunden,created_at) "
+                "VALUES ('rfsess',?,'starter',900,1200,?)", (_rfid, int(_t.time())))
+    con.commit(); con.close()
+    _rf1 = SV.admin_refund(_ar, session_id='rfsess', clawback='1')   # Guthaben 60s < Kauf 1200s
+    _bal_rf1 = SV._find_user_by_id(_rfid)['balance_sec']
+    _rf2 = SV.admin_refund(_ar, session_id='rfsess', clawback='1')   # zweiter Klick -> no-op
+    _bal_rf2 = SV._find_user_by_id(_rfid)['balance_sec']
+    check('v130-fix: admin_refund clampt Clawback aufs Guthaben + idempotent',
+          _rf1['clawed_back_min'] == 1 and _bal_rf1 == 0
+          and _rf2.get('already_refunded') is True and _bal_rf2 == 0,
+          f"claw={_rf1['clawed_back_min']} bal={_bal_rf1} again={_rf2.get('already_refunded')}")
     # Codes: anlegen + sperren ueber die Admin-API.
     _cw = SV.admin_codes_write(_ar, action='new', name='Tester', limit=7)
     _cl = SV.admin_codes_list(_ar)

@@ -4577,6 +4577,10 @@ async def save_and_render(request: Request, jid: str,
     j['status'] = 'wartet'
     j['progress'] = 0.0
     j['phase'] = 'Queued (re-render) …'
+    # v130-fix: Render-Zeitstempel fuer den neuen Pass zuruecksetzen, sonst
+    # messen Avg-Renderzeit/ETA im Admin-Panel noch die Analyse-Phase mit.
+    j['started_at'] = None
+    j['finished_at'] = None
     set_state(jid, **{k: v for k, v in j.items()
                       if k not in ('input', 'code')})
     q_put(jid)
@@ -5513,9 +5517,17 @@ def admin_refund(request: Request, session_id: str = Form(...), clawback: str = 
     con = _db()
     p = con.execute("SELECT user_id, cents, sekunden FROM purchases WHERE session_id = ?",
                     (session_id,)).fetchone()
+    # v130-fix: Idempotenz. Existiert schon eine 'Refund {session}'-Ledger-Zeile,
+    # war dieser Kauf bereits erstattet -> No-op (kein zweiter Geld-Refund, kein
+    # zweiter Clawback). 'Refund %' hat keinen Unique-Index, also hier pruefen.
+    already = con.execute("SELECT 1 FROM ledger WHERE grund LIKE ?",
+                          (f'Refund {session_id}%',)).fetchone()
     con.close()
     if not p:
         raise HTTPException(404, 'No purchase with that session_id.')
+    if already:
+        return {'ok': True, 'already_refunded': True,
+                'stripe': 'skipped (already refunded)', 'clawed_back_min': 0}
     uid = p['user_id']; sek = p['sekunden']
     stripe_result = 'skipped (no stripe configured)'
     st = _stripe()
@@ -5524,19 +5536,22 @@ def admin_refund(request: Request, session_id: str = Form(...), clawback: str = 
             sess = st.checkout.Session.retrieve(session_id)
             pi = sess.get('payment_intent') if isinstance(sess, dict) else getattr(sess, 'payment_intent', None)
             if pi:
-                st.Refund.create(payment_intent=pi)
+                # Stripe-Idempotency-Key: ein Doppelklick erstattet nie doppelt Geld.
+                st.Refund.create(payment_intent=pi, idempotency_key=f'refund_{session_id}')
                 stripe_result = 'refunded'
             else:
                 stripe_result = 'no payment_intent on session'
         except Exception as e:
             stripe_result = f'stripe error: {type(e).__name__}: {e}'
-    clawed = 0
-    if str(clawback).strip() in ('1', 'true', 'on', 'yes'):
-        _adjust_balance(uid, -sek, f'Refund {session_id} admin clawback')
-        clawed = sek // 60
-    else:
-        _adjust_balance(uid, 0, f'Refund {session_id} admin (money only)')
-    return {'ok': True, 'stripe': stripe_result, 'clawed_back_min': clawed}
+    # v130-fix: Clawback auf das AKTUELLE Guthaben deckeln, damit die Ledger-Zeile
+    # exakt der Balance-Bewegung entspricht (_adjust_balance clampt die Balance bei
+    # 0, nicht die Ledger-Zeile) -> Invariant sum(delta)==balance_sec bleibt heil.
+    do_claw = str(clawback).strip() in ('1', 'true', 'on', 'yes')
+    cur = _find_user_by_id(uid)
+    claw_sec = min(sek, cur['balance_sec']) if (do_claw and cur) else 0
+    _adjust_balance(uid, -claw_sec,
+                    f'Refund {session_id} admin' + (' clawback' if claw_sec else ' (money only)'))
+    return {'ok': True, 'stripe': stripe_result, 'clawed_back_min': claw_sec // 60}
 
 
 @app.get('/api/admin/users')

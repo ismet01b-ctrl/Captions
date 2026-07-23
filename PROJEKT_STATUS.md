@@ -28,7 +28,13 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
   - **Bewusst NICHT** (Anti-Feature-Stacking): keine Chart-Library (nur Inline-Sparklines), kein
     WebSocket/SSE (visibility-pausiertes Polling reicht), kein Live-Config-Toggle (Env/Boot-time, nur
     Anzeige), keine MRR/Churn/Cohort-Analytik (Einmalkauf-Modell), kein Marketing-Tooling.
-  Selftest **728/728 gruen** (funktional: revenue/credits/system/abuse-Aggregate, Suspend sperrt
+  - **Adversariale Review danach (2 bestaetigte Funde gefixt):** (1) `admin_refund`-Clawback war
+    weder idempotent noch geclampt -> Doppelklick zog Credits doppelt ab und eine Clawback groesser
+    als das Guthaben brach das Ledger-Invariant; jetzt: No-op bei bereits erstatteter Session
+    ('Refund {session}'-Ledger-Marker), Clawback auf das aktuelle Guthaben gedeckelt, Stripe-
+    Idempotency-Key. (2) Momente-Editor-Re-Renders froren started_at/finished_at auf der Analyse-
+    Phase ein -> Avg-Renderzeit/ETA im Panel falsch; jetzt beim Re-Render zurueckgesetzt.
+  Selftest **729/729 gruen** (funktional: revenue/credits/system/abuse-Aggregate, Suspend sperrt
   Login+Session/Unsuspend gibt frei, Job-Refund bucht +Credits mit traceable Ledger-Zeile, Codes
   anlegen/listen; plus Verdrahtungs- + UI-Dynamik-Garantien). Alle 26 Endpoints Runtime-gesmoked
   (0 Fehler), UI live in 9 Tabs gesmoked (0 JS-Fehler). EHRLICH: nur Linux/CPU/Test-DB; Stripe-Refund
