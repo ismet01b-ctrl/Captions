@@ -252,6 +252,11 @@ def _init_users_db():
         con.execute("ALTER TABLE users ADD COLUMN ref_code TEXT")
         con.execute("ALTER TABLE users ADD COLUMN referred_by INTEGER")
         con.commit()
+    # v130 Admin: reversible Konto-Sperre (Suspend). Gesperrte Konten koennen
+    # sich nicht mehr einloggen und bestehende Sessions gelten als tot.
+    if 'disabled' not in cols:
+        con.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+        con.commit()
     # v125: einmalige System-Mails (z.B. Verfall-Warnung) gegen Doppelversand.
     con.execute("CREATE TABLE IF NOT EXISTS mail_log ("
                 "user_id INTEGER NOT NULL, key TEXT NOT NULL, sent_at INTEGER NOT NULL, "
@@ -764,7 +769,18 @@ def _session_user(token):
         "WHERE s.token = ? AND s.expires_at > ?",
         (token, int(time.time()))).fetchone()
     con.close()
+    # v130 Admin: gesperrtes Konto -> wie ausgeloggt (kein Zugriff mehr).
+    if row is not None and _row_get(row, 'disabled'):
+        return None
     return row
+
+
+def _row_get(row, key, default=None):
+    """sqlite3.Row hat kein .get(); sicher auf evtl. fehlende Spalten zugreifen."""
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return default
 
 
 def _kill_session(token):
@@ -1241,7 +1257,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v97f-kiflow'
+DVE_BUILD = 'v130-admin'
 
 
 @app.middleware('http')
@@ -1445,6 +1461,9 @@ if os.path.isdir(_mprev_dir):
     app.mount('/motion_previews', StaticFiles(directory=_mprev_dir),
               name='motion_previews')
 JOBS = {}
+# v130 Admin: Liveness-Zeitstempel der Hintergrund-Threads (Watchdog/Cleanup),
+# damit das Admin-Panel echten Herzschlag statt Vermutung zeigt.
+_HEARTBEAT = {}
 # v98: Echte Priority-Queue - die Pakete bewerben 'Priority queue', jetzt
 # stimmt es auch: Jobs zahlender Kunden (je ein Kauf im Ledger) laufen vor
 # Free-Tier-Jobs. Innerhalb einer Stufe bleibt es strikt FIFO (Sequenz-Nr).
@@ -1987,6 +2006,15 @@ def job_dir(jid):
 
 def set_state(jid, **kw):
     j = JOBS.setdefault(jid, {})
+    # v130: Render-Latenz messbar machen. started_at beim Uebergang auf 'laeuft',
+    # finished_at beim ersten terminalen Status - lokale Zeitvariablen waren
+    # vorher nicht persistiert, Durchsatz-/Latenz-Statistik war unmoeglich.
+    _st = kw.get('status')
+    if _st == 'laeuft' and not j.get('started_at'):
+        kw.setdefault('started_at', time.time())
+    if _st in ('fertig', 'fehler', 'analysiert') and j.get('started_at') \
+            and not j.get('finished_at'):
+        kw['finished_at'] = time.time()
     j.update(kw)
     try:
         # v98: atomar via tmp + os.replace - ein Crash mitten im Schreiben
@@ -2748,6 +2776,7 @@ def _cleanup_worker():
     import time as _t
     retention = RETENTION_DAYS
     while True:
+        _HEARTBEAT['cleanup'] = time.time()          # v130: Liveness-Beweis
         _backup_users_db()
         try:
             _credit_expiry_sweep()           # v125: Verfall buchen + Warn-Mails
@@ -2908,6 +2937,7 @@ def _watchdog_worker():
     while True:
         time.sleep(120)
         tick += 1
+        _HEARTBEAT['watchdog'] = time.time()          # v130: Liveness-Beweis
         try:
             if tick % disk_every == 0:
                 free_gb = shutil.disk_usage(DATA).free / 1e9
@@ -3067,6 +3097,8 @@ def api_login(request: Request, response: Response, email: str = Form(...),
         raise HTTPException(401, 'Email or password is wrong.')
     if not _verify_pw(password, row['pw_hash']):
         raise HTTPException(401, 'Email or password is wrong.')
+    if _row_get(row, 'disabled'):                    # v130: gesperrtes Konto
+        raise HTTPException(403, 'This account is suspended. Contact support.')
     tok, exp = _create_session(row['id'])
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
@@ -4900,6 +4932,8 @@ def admin_codes(request: Request):
 # Tier 1: Betrieb (Health/Jobs) + Nutzer/Credits + Umsatz. ALLE Endpoints haengen
 # am Server-Schluessel DVE_ADMIN (Header X-Admin-Key, timing-safe) - NICHT an der
 # Owner-Session. Fehlt DVE_ADMIN, ist das ganze Panel tot (kein erratbarer Default).
+
+
 def _require_admin(request: Request):
     if not _admin_ok(request):
         raise HTTPException(403, 'Admin key missing or wrong.')
@@ -4912,6 +4946,77 @@ def _admin_purchaser_ids():
     return {r['user_id'] for r in rows}
 
 
+# ---- v130 admin helpers (grounded read-side) ----
+def _disk_info():
+    try:
+        du = shutil.disk_usage(DATA)
+        return {'free_gb': round(du.free / 2 ** 30, 1), 'total_gb': round(du.total / 2 ** 30, 1),
+                'used_pct': round(100 * du.used / du.total)}
+    except Exception:
+        return None
+
+
+def _last_backup_ts():
+    try:
+        bdir = os.path.join(DATA, 'backups')
+        snaps = [os.path.join(bdir, f) for f in os.listdir(bdir) if f.startswith('users_')]
+        return int(max(os.path.getmtime(s) for s in snaps)) if snaps else None
+    except Exception:
+        return None
+
+
+def _db_size_mb():
+    try:
+        return round(os.path.getsize(USERS_DB) / 2 ** 20, 1)
+    except Exception:
+        return None
+
+
+def _stripe_health():
+    skey = os.environ.get('STRIPE_SECRET_KEY', '').strip()
+    return {'ready': _stripe() is not None,
+            'mode': 'live' if skey.startswith('sk_live_') else ('test' if skey else 'none'),
+            'webhook_secret': bool(os.environ.get('STRIPE_WEBHOOK_SECRET', '').strip())}
+
+
+def _mail_health():
+    if os.environ.get('RESEND_API_KEY', '').strip():
+        transport = 'resend'
+    elif os.environ.get('SMTP_USER', '').strip():
+        transport = 'smtp'
+    else:
+        transport = 'none'
+    return {'transport': transport, 'from': os.environ.get('MAIL_FROM', ''), 'admin_to': ADMIN_MAIL}
+
+
+def _admin_email(uid):
+    if not uid:
+        return None
+    u = _find_user_by_id(uid)
+    return u['email'] if u else None
+
+
+def _sum_grund(con, like, sign=0):
+    q = "SELECT COALESCE(SUM(delta_sec),0) s FROM ledger WHERE grund LIKE ?"
+    if sign > 0:
+        q += " AND delta_sec > 0"
+    elif sign < 0:
+        q += " AND delta_sec < 0"
+    return con.execute(q, (like,)).fetchone()['s']
+
+
+def _revrow(con, since, until=None):
+    if until is None:
+        r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents, "
+                        "COALESCE(SUM(sekunden),0) sek FROM purchases WHERE created_at >= ?",
+                        (since,)).fetchone()
+    else:
+        r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents, "
+                        "COALESCE(SUM(sekunden),0) sek FROM purchases "
+                        "WHERE created_at >= ? AND created_at < ?", (since, until)).fetchone()
+    return {'count': r['c'], 'eur': round(r['cents'] / 100.0, 2), 'minutes': r['sek'] // 60}
+
+
 @app.get('/admin', response_class=HTMLResponse)
 def admin_page():
     return _page('admin.html')
@@ -4919,88 +5024,105 @@ def admin_page():
 
 @app.get('/api/admin/overview')
 def admin_overview(request: Request):
+    """Live-Ops-Puls (Poll-Ziel, ~15s). Guenstig: purchases-Aggregat + In-Memory-
+    Queues. Zeigt Umsatz, Signups, aktive Sessions, beide Queues, Liability,
+    Jobs, System-Health-Ampel, aktive Alerts, Build."""
     _require_admin(request)
     now = int(time.time()); day = 86400
     con = _db()
-    # Nutzer
     u_total = con.execute("SELECT COUNT(*) c FROM users").fetchone()['c']
     u_verif = con.execute("SELECT COUNT(*) c FROM users WHERE verified = 1").fetchone()['c']
     liability = con.execute("SELECT COALESCE(SUM(balance_sec),0) s FROM users").fetchone()['s']
-    # Umsatz (echte cents aus purchases)
-    def _rev(since):
-        r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents, "
-                        "COALESCE(SUM(sekunden),0) sek FROM purchases WHERE created_at >= ?",
-                        (since,)).fetchone()
-        return {'count': r['c'], 'eur': round(r['cents'] / 100.0, 2), 'minutes': r['sek'] // 60}
-    # ALLE Fenster berechnen, BEVOR die Verbindung schliesst (die Closures im
-    # Return-Dict wuerden sonst auf eine geschlossene DB zugreifen).
-    rev = {'today': _rev(now - day), 'week': _rev(now - 7 * day),
-           'month': _rev(now - 30 * day), 'total': _rev(0)}
-    # Renders gesamt
+    rev = {'today': _revrow(con, now - day), 'week': _revrow(con, now - 7 * day),
+           'month': _revrow(con, now - 30 * day), 'total': _revrow(con, 0)}
+
+    def _signup(since):
+        return con.execute("SELECT COUNT(*) c FROM users WHERE created_at >= ?",
+                           (since,)).fetchone()['c']
+    signups = {'today': _signup(now - day), 'week': _signup(now - 7 * day),
+               'month': _signup(now - 30 * day), 'total': u_total}
+    sessions_active = con.execute("SELECT COUNT(*) c FROM sessions WHERE expires_at > ?",
+                                  (now,)).fetchone()['c']
     rr = con.execute("SELECT COUNT(*) c, COALESCE(SUM(-delta_sec),0) s FROM ledger "
                      "WHERE grund LIKE 'Render %'").fetchone()
     con.close()
     purchasers = len(_admin_purchaser_ids())
-    # Jobs (In-Memory)
+
     def _jstat(s):
         return sum(1 for j in list(JOBS.values()) if j.get('status') == s)
-    # System
-    try:
-        du = shutil.disk_usage(DATA); disk = {'free_gb': round(du.free / 2**30, 1),
-                                              'total_gb': round(du.total / 2**30, 1),
-                                              'used_pct': round(100 * du.used / du.total)}
-    except Exception:
-        disk = None
-    try:
-        db_mb = round(os.path.getsize(USERS_DB) / 2**20, 1)
-    except Exception:
-        db_mb = None
-    last_backup = None
-    try:
-        bdir = os.path.join(DATA, 'backups')
-        snaps = [os.path.join(bdir, f) for f in os.listdir(bdir) if f.startswith('users_')]
-        if snaps:
-            last_backup = int(max(os.path.getmtime(s) for s in snaps))
-    except Exception:
-        pass
-    skey = os.environ.get('STRIPE_SECRET_KEY', '').strip()
-    stripe = {'ready': _stripe() is not None,
-              'mode': 'live' if skey.startswith('sk_live_') else ('test' if skey else 'none'),
-              'webhook_secret': bool(os.environ.get('STRIPE_WEBHOOK_SECRET', '').strip())}
+    stripe = _stripe_health()
+    hb = dict(_HEARTBEAT)
     return {
+        'now': now,
+        'build': DVE_BUILD,
         'users': {'total': u_total, 'verified': u_verif, 'purchasers': purchasers,
                   'free': u_total - purchasers},
+        'signups': signups,
+        'sessions_active': sessions_active,
         'revenue': rev,
         'credits': {'liability_min': liability // 60},
         'renders': {'count': rr['c'], 'minutes': rr['s'] // 60},
         'jobs': {'waiting': _jstat('wartet'), 'running': _jstat('laeuft'),
-                 'failed': _jstat('fehler'), 'queue': QUEUE.qsize()},
-        'system': {'disk': disk, 'db_mb': db_mb, 'last_backup': last_backup,
+                 'failed': _jstat('fehler'), 'queue': QUEUE.qsize(),
+                 'motion_queue': MQUEUE.qsize()},
+        'alerts_active': len(_ADMIN_NOTIFIED),
+        'system': {'disk': _disk_info(), 'db_mb': _db_size_mb(),
+                   'last_backup': _last_backup_ts(),
                    'openai': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
-                   'stripe': stripe, 'retention_days': RETENTION_DAYS,
-                   'admin_key_set': bool(os.environ.get('DVE_ADMIN', '').strip())},
+                   'stripe': stripe, 'mail': _mail_health(),
+                   'motion': bool(MOTION_BRIEF_OK),
+                   'retention_days': RETENTION_DAYS,
+                   'admin_key_set': bool(os.environ.get('DVE_ADMIN', '').strip()),
+                   'heartbeats': {'watchdog': hb.get('watchdog'), 'cleanup': hb.get('cleanup')}},
     }
 
 
 @app.get('/api/admin/jobs')
 def admin_jobs(request: Request):
+    """Jobs-Poll-Ziel (~5s, In-Memory). Erweiterte Projektion + Status-
+    Verteilung + Queue-Zusammensetzung + Durchschnitts-Renderzeit + At-Risk."""
     _require_admin(request)
-    out = []
+    now = time.time()
+    out = []; dist = {}; durations = []; paid_wait = 0; free_wait = 0
     for jid, j in list(JOBS.items()):
+        st = j.get('status'); dist[st] = dist.get(st, 0) + 1
         uid = j.get('user_id')
-        email = None
-        if uid:
-            u = _find_user_by_id(uid)
-            email = u['email'] if u else None
-        out.append({'jid': jid, 'user_id': uid, 'email': email,
-                    'status': j.get('status'), 'phase': j.get('phase'),
-                    'progress': j.get('progress'), 'kind': j.get('kind', 'caption'),
-                    'mode': j.get('mode'), 'dauer': j.get('dauer'),
-                    'name': j.get('name'), 'has_pid': bool(j.get('pid'))})
-    # Aktive zuerst
+        started = j.get('started_at'); finished = j.get('finished_at')
+        if st == 'fertig' and started and finished and finished > started:
+            durations.append(finished - started)
+        if st == 'wartet':
+            paid = False
+            try:
+                paid = bool(uid and _has_purchased(uid))
+            except Exception:
+                pass
+            paid_wait += 1 if paid else 0
+            free_wait += 0 if paid else 1
+        eta = None; prog = j.get('progress') or 0
+        if st == 'laeuft' and started and prog > 0.02:
+            el = now - started
+            eta = max(0, int(el / prog - el))
+        updated = None
+        try:
+            updated = int(os.path.getmtime(os.path.join(job_dir(jid), 'state.json')))
+        except OSError:
+            pass
+        at_risk = bool(st in ('wartet', 'laeuft') and updated
+                       and now - updated > JOB_STUCK_SECONDS * 0.7)
+        out.append({'jid': jid, 'user_id': uid, 'email': _admin_email(uid),
+                    'status': st, 'phase': j.get('phase'), 'progress': prog,
+                    'kind': j.get('kind', 'caption'), 'mode': j.get('mode'),
+                    'dauer': j.get('dauer'), 'name': j.get('name'),
+                    'has_pid': bool(j.get('pid')), 'eta_sec': eta,
+                    'started_at': int(started) if started else None,
+                    'updated_at': updated, 'at_risk': at_risk,
+                    'wm': bool(j.get('wm')), 'alpha': j.get('alpha')})
     order = {'laeuft': 0, 'wartet': 1, 'fehler': 2}
-    out.sort(key=lambda x: order.get(x['status'], 3))
-    return {'jobs': out}
+    out.sort(key=lambda x: (order.get(x['status'], 3), -(x['updated_at'] or 0)))
+    avg = round(sum(durations) / len(durations)) if durations else None
+    return {'jobs': out, 'distribution': dist, 'avg_render_sec': avg,
+            'queue': {'caption': QUEUE.qsize(), 'motion': MQUEUE.qsize(),
+                      'paid_waiting': paid_wait, 'free_waiting': free_wait}}
 
 
 @app.post('/api/admin/jobs/{jid}/kill')
@@ -5009,16 +5131,15 @@ def admin_kill_job(jid: str, request: Request):
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
-    pid = j.get('pid')
-    killed = False
+    pid = j.get('pid'); killed = False
     if pid:
         try:
-            os.kill(pid, 9); killed = True         # Render-Loop endet -> Fehler-Zweig + Refund
-        except Exception as e:
+            os.kill(int(pid), signal.SIGKILL); killed = True
+        except (OSError, ValueError) as e:
             print(f'Admin-Kill {jid}: {e}')
     set_state(jid, status='fehler', progress=0, msg='Stopped by admin.')
     try:
-        _maybe_refund(jid)                          # falls noch nichts geliefert wurde
+        _maybe_refund(jid)
     except Exception as e:
         print(f'Admin-Kill Refund {jid}: {e}')
     return {'ok': True, 'killed': killed}
@@ -5026,35 +5147,427 @@ def admin_kill_job(jid: str, request: Request):
 
 @app.post('/api/admin/jobs/reap_stuck')
 def admin_reap_stuck(request: Request):
-    """Alle aktuell wartenden/laufenden Jobs auf einmal hart beenden + erstatten
-    (Sammel-Stopp, z.B. um nach einem Neustart liegengebliebene Zombie-Jobs zu
-    raeumen). Gleiche Wirkung wie einzeln 'Kill', nur fuer alle."""
+    """Alle wartenden/laufenden Jobs auf einmal beenden + erstatten."""
     _require_admin(request)
-    jids = [jid for jid, j in list(JOBS.items())
-            if j.get('status') in ('wartet', 'laeuft')]
+    jids = [jid for jid, j in list(JOBS.items()) if j.get('status') in ('wartet', 'laeuft')]
     for jid in jids:
         _reap_stuck_job(jid, f'Admin-Sammel-Stopp: Job {jid} beendet + erstattet.')
     return {'ok': True, 'reaped': len(jids)}
 
 
-@app.get('/api/admin/users')
-def admin_users(request: Request, q: str = '', limit: int = 50):
+@app.get('/api/admin/jobs/{jid}/log')
+def admin_job_log(jid: str, request: Request):
     _require_admin(request)
-    limit = max(1, min(200, limit))
-    con = _db()
-    if q.strip():
-        rows = con.execute(
-            "SELECT id, email, name, verified, balance_sec, created_at FROM users "
-            "WHERE email LIKE ? ORDER BY created_at DESC LIMIT ?",
-            (f'%{q.strip().lower()}%', limit)).fetchall()
+    p = os.path.join(job_dir(jid), 'log.txt')
+    if os.path.exists(p):
+        try:
+            return {'log': open(p, encoding='utf-8', errors='replace').read()[-40000:]}
+        except OSError:
+            pass
+    j = JOBS.get(jid) or {}
+    return {'log': j.get('detail') or j.get('msg') or '(no log available)'}
+
+
+@app.post('/api/admin/jobs/{jid}/retry')
+def admin_job_retry(jid: str, request: Request):
+    _require_admin(request)
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    if j.get('status') in ('wartet', 'laeuft'):
+        raise HTTPException(409, 'Job is already queued/running.')
+    set_state(jid, status='wartet', progress=0, phase='Queued (admin retry) …',
+              started_at=None, finished_at=None)
+    if j.get('kind') == 'motion':
+        MQUEUE.put(jid)
     else:
-        rows = con.execute(
-            "SELECT id, email, name, verified, balance_sec, created_at FROM users "
-            "ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        q_put(jid)
+    return {'ok': True}
+
+
+@app.post('/api/admin/jobs/{jid}/refund')
+def admin_job_refund(jid: str, request: Request,
+                     minutes: int = Form(0), reason: str = Form('')):
+    """Kulanz-Gutschrift fuer einen (evtl. schon gelieferten) Job. Traceable
+    ueber eine 'Refund {jid} admin'-Ledger-Zeile (positiv)."""
+    _require_admin(request)
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    uid = j.get('user_id')
+    if not uid:
+        raise HTTPException(400, 'Job has no user.')
+    sec = int(minutes) * 60 if minutes else cost_seconds(j.get('dauer', 0) or 0)
+    if sec <= 0:
+        raise HTTPException(400, 'Nothing to refund.')
+    _adjust_balance(uid, sec, f'Refund {jid} admin {(reason or "")[:40]}')
+    nu = _find_user_by_id(uid)
+    return {'ok': True, 'refunded_min': sec // 60,
+            'credits': credits_of(nu['balance_sec']) if nu else None}
+
+
+@app.post('/api/admin/jobs/{jid}/unlock')
+def admin_job_unlock(jid: str, request: Request):
+    """Wasserzeichen zwangsweise entfernen (Support-Kulanz). IRREVERSIBEL: der
+    saubere Master ersetzt fertig.mp4 (os.replace)."""
+    _require_admin(request)
+    ok = _unlock_job(jid)
+    return {'ok': True, 'unlocked': bool(ok)}
+
+
+@app.post('/api/admin/jobs/{jid}/delete')
+def admin_job_delete(jid: str, request: Request):
+    _require_admin(request)
+    shutil.rmtree(job_dir(jid), ignore_errors=True)
+    JOBS.pop(jid, None)
+    return {'ok': True}
+
+
+@app.get('/api/admin/revenue')
+def admin_revenue(request: Request, days: int = 90):
+    """Alles Geld aus der purchases-Tabelle (v128+). Fenster, Zeitreihe, pro
+    Paket, AOV/ARPPU, Wiederkaeufer, Top-Spender, Pre-v128-Schaetzung, Katalog."""
+    _require_admin(request)
+    now = int(time.time()); day = 86400; days = max(7, min(365, days))
+    con = _db()
+    windows = {'today': _revrow(con, now - day), 'week': _revrow(con, now - 7 * day),
+               'month': _revrow(con, now - 30 * day), 'total': _revrow(con, 0)}
+    packs = con.execute("SELECT pack, COUNT(*) c, COALESCE(SUM(cents),0) cents "
+                        "FROM purchases GROUP BY pack ORDER BY cents DESC").fetchall()
+    per_pack = [{'pack': r['pack'], 'count': r['c'], 'eur': round(r['cents'] / 100.0, 2)}
+                for r in packs]
+    tot = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents, "
+                      "COUNT(DISTINCT user_id) u FROM purchases").fetchone()
+    aov = round(tot['cents'] / 100.0 / tot['c'], 2) if tot['c'] else 0.0
+    arppu = round(tot['cents'] / 100.0 / tot['u'], 2) if tot['u'] else 0.0
+    rb = con.execute("SELECT user_id, COUNT(*) c FROM purchases GROUP BY user_id").fetchall()
+    repeat = sum(1 for r in rb if r['c'] > 1); once = sum(1 for r in rb if r['c'] == 1)
+    series = con.execute("SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') d, "
+                         "COALESCE(SUM(cents),0) cents FROM purchases WHERE created_at >= ? "
+                         "GROUP BY d ORDER BY d", (now - days * day,)).fetchall()
+    ser = [{'d': r['d'], 'eur': round(r['cents'] / 100.0, 2)} for r in series]
+    top = con.execute("SELECT p.user_id uid, COALESCE(SUM(p.cents),0) cents, COUNT(*) c, "
+                      "u.email email FROM purchases p LEFT JOIN users u ON u.id = p.user_id "
+                      "GROUP BY p.user_id ORDER BY cents DESC LIMIT 15").fetchall()
+    tops = [{'uid': r['uid'], 'email': r['email'] or '(deleted)',
+             'eur': round(r['cents'] / 100.0, 2), 'orders': r['c']} for r in top]
+    # Pre-v128: Kauf-Ledger-Zeilen ohne purchases-Match -> aus Sekunden schaetzen.
+    known = {('Kauf ' + r['session_id']) for r in
+             con.execute("SELECT session_id FROM purchases").fetchall()}
+    sek2cent = {v['sekunden']: v['preis_cent'] for v in PACKS.values()}
+    kauf = con.execute("SELECT grund, delta_sec FROM ledger WHERE grund LIKE 'Kauf %' "
+                       "AND delta_sec > 0").fetchall()
+    pre_n = 0; pre_cent = 0
+    for r in kauf:
+        if r['grund'] in known:
+            continue
+        pre_n += 1
+        pre_cent += sek2cent.get(r['delta_sec'], 0)
+    con.close()
+    catalog = [{'id': k, 'eur': v['preis_cent'] / 100.0, 'credits': v['sekunden'] // 60,
+                'per_credit': round(v['preis_cent'] / 100.0 / (v['sekunden'] // 60), 3)}
+               for k, v in PACKS.items()]
+    return {'windows': windows, 'per_pack': per_pack, 'aov': aov, 'arppu': arppu,
+            'buyers': {'once': once, 'repeat': repeat}, 'series': ser,
+            'top_spenders': tops, 'catalog': catalog, 'stripe': _stripe_health(),
+            'pre_v128_estimate': {'count': pre_n, 'eur_est': round(pre_cent / 100.0, 2)}}
+
+
+@app.get('/api/admin/credits')
+def admin_credits(request: Request):
+    """Credit-Oekonomie aus der Ledger-Grund-Taxonomie: gratis vs bezahlt vs
+    admin, Verbrauch (render+alpha+style), Verfall/Breakage, Liability + Aging."""
+    _require_admin(request)
+    con = _db()
+    paid = _sum_grund(con, 'Kauf %', 1)
+    welcome = _sum_grund(con, 'Welcome credit', 1)
+    monthly = _sum_grund(con, 'Monthly free credit %', 1)
+    referral = _sum_grund(con, 'Referral %', 1)
+    reload_b = _sum_grund(con, 'Reload bonus %', 1)
+    admin_grant = _sum_grund(con, 'Admin adjust %', 1)
+    admin_claw = -_sum_grund(con, 'Admin adjust %', -1)
+    refunded = _sum_grund(con, 'Refund %', 1)
+    render_used = -_sum_grund(con, 'Render %', -1)
+    alpha_used = -_sum_grund(con, 'Alpha %', -1)
+    style_used = -_sum_grund(con, 'Style learn %', -1)
+    expired = -_sum_grund(con, 'Expired credits %', -1)
+    liability = con.execute("SELECT COALESCE(SUM(balance_sec),0) s FROM users").fetchone()['s']
+    uids = [r['id'] for r in con.execute("SELECT id FROM users").fetchall()]
+    con.close()
+    now = time.time(); buckets = {'d0_30': 0, 'd30_90': 0, 'd90_180': 0}; soon = 0
+    for uid in uids:
+        for g in _fifo_remainders(uid):
+            remain = CREDIT_VALIDITY_DAYS - (now - g['created_at']) / 86400
+            if remain <= 30:
+                buckets['d0_30'] += g['left']; soon += g['left']
+            elif remain <= 90:
+                buckets['d30_90'] += g['left']
+            else:
+                buckets['d90_180'] += g['left']
+
+    def m(x):
+        return int(x) // 60
+    return {
+        'granted': {'paid': m(paid), 'welcome': m(welcome), 'monthly': m(monthly),
+                    'referral': m(referral), 'reload_bonus': m(reload_b),
+                    'admin': m(admin_grant), 'refund': m(refunded),
+                    'free_total': m(welcome + monthly + referral + reload_b)},
+        'consumed': {'render': m(render_used), 'alpha': m(alpha_used),
+                     'style_learn': m(style_used), 'admin_clawback': m(admin_claw),
+                     'expired_breakage': m(expired)},
+        'liability_min': m(liability),
+        'aging_min': {k: m(v) for k, v in buckets.items()},
+        'expiring_30d_min': m(soon),
+    }
+
+
+@app.get('/api/admin/abuse')
+def admin_abuse(request: Request):
+    """Missbrauchs-Signale: Farming (verwaiste Anspruch-Hashes), Wegwerf-Mails,
+    unbestaetigte Konten, Referral-Graph, Rate-Limit-Lockouts, offene Resets,
+    Demo-IP-Missbrauch. Vieles In-Memory (setzt sich bei Neustart zurueck)."""
+    _require_admin(request)
+    now = time.time()
+    con = _db()
+    users = con.execute("SELECT id, email, verified, created_at, disabled FROM users").fetchall()
+    cur_hashes = {_email_hash(u['email']) for u in users}
+    cc = con.execute("SELECT email_hash FROM credit_claims").fetchall()
+    rcl = con.execute("SELECT email_hash FROM referral_claims").fetchall()
+    pending_resets = con.execute("SELECT COUNT(*) c FROM resets WHERE used = 0 "
+                                 "AND expires_at > ?", (int(now),)).fetchone()['c']
+    refs = con.execute("SELECT referred_by rb, COUNT(*) c FROM users "
+                       "WHERE referred_by IS NOT NULL GROUP BY referred_by "
+                       "ORDER BY c DESC LIMIT 15").fetchall()
+    con.close()
+    orphan_credit = sum(1 for r in cc if r['email_hash'] not in cur_hashes)
+    orphan_ref = sum(1 for r in rcl if r['email_hash'] not in cur_hashes)
+    disposable = [{'id': u['id'], 'email': u['email']} for u in users
+                  if _is_disposable_email(u['email'])]
+    unverified = [{'id': u['id'], 'email': u['email'], 'created_at': u['created_at']}
+                  for u in users if not u['verified']][:100]
+    top_ref = [{'uid': r['rb'], 'email': _admin_email(r['rb']), 'invited': r['c']}
+               for r in refs]
+    locks = []
+    for key, ts in list(_REG_ATTEMPTS.items()):
+        recent = [t for t in ts if now - t < 900]
+        if len(recent) >= 15:
+            locks.append({'key': key, 'hits': len(recent)})
+    demo = []
+    for ip, v in list(_DEMO_IPS.items()):
+        hits = len([t for t in v if now - t < 86400])
+        if hits >= 2:
+            demo.append({'ip': ip, 'hits': hits})
+    return {'orphan_claims': {'credit': orphan_credit, 'referral': orphan_ref},
+            'disposable_accounts': disposable, 'unverified_accounts': unverified,
+            'pending_resets': pending_resets, 'top_referrers': top_ref,
+            'rate_limit_lockouts': locks, 'demo_ip_abuse': demo,
+            'note': 'Lockouts/demo/alerts are in-memory and reset on restart.'}
+
+
+@app.get('/api/admin/system')
+def admin_system(request: Request):
+    """Alle Betriebs-Konstanten + Health an einem Ort. Nur bool-Present fuer
+    Secrets, nie Werte. Config ist env/boot-time (nur Anzeige, kein Live-Toggle)."""
+    _require_admin(request)
+    hb = dict(_HEARTBEAT)
+    return {
+        'build': DVE_BUILD,
+        'keys': {'openai': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
+                 'stripe': _stripe_health(), 'mail': _mail_health(),
+                 'admin_key': bool(os.environ.get('DVE_ADMIN', '').strip()),
+                 'ref_salt': bool(os.environ.get('DVE_REF_SALT', '').strip())
+                 or os.path.exists(os.path.join(DATA, 'ref_salt'))},
+        'disk': _disk_info(), 'db_mb': _db_size_mb(), 'last_backup': _last_backup_ts(),
+        'heartbeats': {'watchdog': hb.get('watchdog'), 'cleanup': hb.get('cleanup')},
+        'alerts_active': len(_ADMIN_NOTIFIED),
+        'config': {
+            'workers': int(os.environ.get('DVE_WORKERS', '1')),
+            'inflight_cap': CAPTION_INFLIGHT_CAP,
+            'motion_concurrency': int(os.environ.get('DVE_MOTION_CONCURRENCY', '2')),
+            'max_mb': int(os.environ.get('DVE_MAX_MB', '300')),
+            'max_seconds': int(os.environ.get('DVE_MAX_SECONDS', '180')),
+            'retention_days': RETENTION_DAYS,
+            'credit_valid_days': CREDIT_VALIDITY_DAYS,
+            'job_timeout_min': round(JOB_STUCK_SECONDS / 60),
+            'trial_seconds': TRIAL_SECONDS,
+            'referral_seconds': REFERRAL_SECONDS, 'referral_cap': REFERRAL_CAP,
+            'public_url': os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu'),
+            'owner_email': OWNER_EMAIL,
+            'motion_available': bool(MOTION_BRIEF_OK),
+        },
+    }
+
+
+@app.get('/api/admin/alerts')
+def admin_alerts(request: Request):
+    _require_admin(request)
+    now = time.time()
+    items = [{'key': k, 'ago_min': round((now - ts) / 60)}
+             for k, ts in sorted(_ADMIN_NOTIFIED.items(), key=lambda x: -x[1])][:40]
+    return {'alerts': items,
+            'note': 'In-memory notification throttle state; resets on restart.'}
+
+
+@app.get('/api/admin/compliance/consents')
+def admin_consents(request: Request, limit: int = 200):
+    _require_admin(request)
+    limit = max(1, min(1000, limit))
+    con = _db()
+    rows = con.execute("SELECT c.id, c.user_id, c.kind, c.created_at, u.email "
+                       "FROM consents c LEFT JOIN users u ON u.id = c.user_id "
+                       "ORDER BY c.created_at DESC LIMIT ?", (limit,)).fetchall()
+    con.close()
+    return {'consents': [{'id': r['id'], 'uid': r['user_id'],
+                          'email': r['email'] or '(deleted)', 'kind': r['kind'],
+                          'created_at': r['created_at']} for r in rows]}
+
+
+@app.get('/api/admin/compliance/archive')
+def admin_archive(request: Request):
+    _require_admin(request)
+    con = _db()
+    rows = con.execute("SELECT user_email, delta_sec, grund, created_at, archived_at "
+                       "FROM ledger_archive ORDER BY archived_at DESC LIMIT 500").fetchall()
+    con.close()
+    return {'archive': [dict(r) for r in rows]}
+
+
+@app.get('/api/admin/export/{table}.csv')
+def admin_export_csv(table: str, request: Request, since: int = 0, until: int = 0):
+    _require_admin(request)
+    import csv
+    import io
+    until = until or int(time.time()) + 1
+    con = _db()
+    if table == 'purchases':
+        rows = con.execute("SELECT session_id, user_id, pack, cents, sekunden, created_at "
+                           "FROM purchases WHERE created_at >= ? AND created_at < ? "
+                           "ORDER BY created_at", (since, until)).fetchall()
+    elif table == 'ledger':
+        rows = con.execute("SELECT user_id, delta_sec, grund, created_at FROM ledger "
+                           "WHERE created_at >= ? AND created_at < ? ORDER BY created_at",
+                           (since, until)).fetchall()
+    elif table == 'users':
+        rows = con.execute("SELECT id, email, name, verified, disabled, balance_sec, "
+                           "created_at FROM users ORDER BY created_at").fetchall()
+    else:
+        con.close()
+        raise HTTPException(400, 'Unknown table (users|purchases|ledger).')
+    con.close()
+    buf = io.StringIO(); w = csv.writer(buf)
+    if rows:
+        w.writerow(rows[0].keys())
+    for r in rows:
+        w.writerow(list(r))
+    return Response(content=buf.getvalue(), media_type='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename="{table}.csv"'})
+
+
+@app.post('/api/admin/backup/run')
+def admin_backup_run(request: Request):
+    _require_admin(request)
+    _backup_users_db()
+    return {'ok': True, 'last_backup': _last_backup_ts()}
+
+
+@app.post('/api/admin/mail/test')
+def admin_mail_test(request: Request):
+    _require_admin(request)
+    try:
+        _send_mail(ADMIN_MAIL, 'DouchkoVE admin test mail',
+                   'This is a test mail from the admin panel. Delivery works.')
+    except Exception as e:
+        raise HTTPException(502, f'Mail failed: {type(e).__name__}: {e}')
+    return {'ok': True, 'to': ADMIN_MAIL}
+
+
+@app.post('/api/admin/cleanup/run')
+def admin_cleanup_run(request: Request):
+    _require_admin(request)
+    now = time.time(); cutoff = RETENTION_DAYS * 86400; removed = 0
+    if os.path.isdir(JOBS_DIR):
+        for jid in list(os.listdir(JOBS_DIR)):
+            d = os.path.join(JOBS_DIR, jid)
+            try:
+                if os.path.isdir(d) and now - os.path.getmtime(d) > cutoff:
+                    shutil.rmtree(d, ignore_errors=True)
+                    JOBS.pop(jid, None)
+                    removed += 1
+            except OSError:
+                pass
+    return {'ok': True, 'removed': removed}
+
+
+@app.post('/api/admin/expiry/run')
+def admin_expiry_run(request: Request):
+    _require_admin(request)
+    _credit_expiry_sweep()
+    return {'ok': True}
+
+
+@app.post('/api/admin/refund')
+def admin_refund(request: Request, session_id: str = Form(...), clawback: str = Form('1')):
+    """Echte Stripe-Erstattung nach session_id (best-effort) + optionaler Credit-
+    Clawback + traceable 'Refund {session}'-Ledger-Zeile. Bewegt ECHTES Geld."""
+    _require_admin(request)
+    con = _db()
+    p = con.execute("SELECT user_id, cents, sekunden FROM purchases WHERE session_id = ?",
+                    (session_id,)).fetchone()
+    con.close()
+    if not p:
+        raise HTTPException(404, 'No purchase with that session_id.')
+    uid = p['user_id']; sek = p['sekunden']
+    stripe_result = 'skipped (no stripe configured)'
+    st = _stripe()
+    if st:
+        try:
+            sess = st.checkout.Session.retrieve(session_id)
+            pi = sess.get('payment_intent') if isinstance(sess, dict) else getattr(sess, 'payment_intent', None)
+            if pi:
+                st.Refund.create(payment_intent=pi)
+                stripe_result = 'refunded'
+            else:
+                stripe_result = 'no payment_intent on session'
+        except Exception as e:
+            stripe_result = f'stripe error: {type(e).__name__}: {e}'
+    clawed = 0
+    if str(clawback).strip() in ('1', 'true', 'on', 'yes'):
+        _adjust_balance(uid, -sek, f'Refund {session_id} admin clawback')
+        clawed = sek // 60
+    else:
+        _adjust_balance(uid, 0, f'Refund {session_id} admin (money only)')
+    return {'ok': True, 'stripe': stripe_result, 'clawed_back_min': clawed}
+
+
+@app.get('/api/admin/users')
+def admin_users(request: Request, q: str = '', limit: int = 50, offset: int = 0,
+                sort: str = 'created_at', flt: str = ''):
+    _require_admin(request)
+    limit = max(1, min(200, limit)); offset = max(0, offset)
+    sort_col = {'created_at': 'created_at', 'balance': 'balance_sec',
+                'email': 'email'}.get(sort, 'created_at')
+    where = []; args = []
+    if q.strip():
+        where.append("email LIKE ?"); args.append(f'%{q.strip().lower()}%')
+    if flt == 'unverified':
+        where.append("verified = 0")
+    elif flt == 'verified':
+        where.append("verified = 1")
+    elif flt == 'disabled':
+        where.append("disabled = 1")
+    wsql = (' WHERE ' + ' AND '.join(where)) if where else ''
+    con = _db()
+    total = con.execute(f"SELECT COUNT(*) c FROM users{wsql}", args).fetchone()['c']
+    rows = con.execute(
+        f"SELECT id, email, name, verified, disabled, balance_sec, created_at "
+        f"FROM users{wsql} ORDER BY {sort_col} DESC LIMIT ? OFFSET ?",
+        args + [limit, offset]).fetchall()
     con.close()
     buyers = _admin_purchaser_ids()
-    return {'users': [{'id': r['id'], 'email': r['email'], 'name': r['name'],
+    return {'total': total, 'limit': limit, 'offset': offset,
+            'users': [{'id': r['id'], 'email': r['email'], 'name': r['name'],
                        'verified': bool(r['verified']),
+                       'disabled': bool(_row_get(r, 'disabled')),
                        'credits': credits_of(r['balance_sec']),
                        'balance_sec': r['balance_sec'], 'created_at': r['created_at'],
                        'purchased': r['id'] in buyers} for r in rows]}
@@ -5066,20 +5579,45 @@ def admin_user_detail(uid: int, request: Request):
     u = _find_user_by_id(uid)
     if not u:
         raise HTTPException(404, 'Unknown user.')
+    now = int(time.time())
     con = _db()
     led = con.execute("SELECT delta_sec, grund, created_at FROM ledger "
                       "WHERE user_id = ? ORDER BY created_at DESC LIMIT 100", (uid,)).fetchall()
-    pur = con.execute("SELECT pack, cents, sekunden, created_at FROM purchases "
+    pur = con.execute("SELECT session_id, pack, cents, sekunden, created_at FROM purchases "
                       "WHERE user_id = ? ORDER BY created_at DESC", (uid,)).fetchall()
+    cons = con.execute("SELECT kind, created_at FROM consents WHERE user_id = ? "
+                       "ORDER BY created_at DESC", (uid,)).fetchall()
+    ltv = con.execute("SELECT COALESCE(SUM(cents),0) cents, COUNT(*) c FROM purchases "
+                      "WHERE user_id = ?", (uid,)).fetchone()
+    rcount = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id = ? AND "
+                         "grund LIKE 'Render %'", (uid,)).fetchone()['c']
+    active_sess = con.execute("SELECT COUNT(*) c FROM sessions WHERE user_id = ? "
+                              "AND expires_at > ?", (uid, now)).fetchone()['c']
     con.close()
-    return {'user': {'id': u['id'], 'email': u['email'], 'name': u['name'],
-                     'verified': bool(u['verified']), 'credits': credits_of(u['balance_sec']),
-                     'balance_sec': u['balance_sec'], 'created_at': u['created_at'],
-                     'is_owner': str(u['email']).strip().lower() == OWNER_EMAIL},
-            'ledger': [{'delta_sec': r['delta_sec'], 'grund': r['grund'],
-                        'created_at': r['created_at']} for r in led],
-            'purchases': [{'pack': r['pack'], 'eur': round(r['cents'] / 100.0, 2),
-                           'minutes': r['sekunden'] // 60, 'created_at': r['created_at']} for r in pur]}
+    refby = _row_get(u, 'referred_by')
+    try:
+        exp_sec, exp_days = _expiring_info(uid, 30)
+    except Exception:
+        exp_sec, exp_days = 0, None
+    return {
+        'user': {'id': u['id'], 'email': u['email'], 'name': u['name'],
+                 'verified': bool(u['verified']), 'disabled': bool(_row_get(u, 'disabled')),
+                 'credits': credits_of(u['balance_sec']), 'balance_sec': u['balance_sec'],
+                 'created_at': u['created_at'],
+                 'is_owner': str(u['email']).strip().lower() == OWNER_EMAIL,
+                 'disposable': _is_disposable_email(u['email']),
+                 'ref_code': _row_get(u, 'ref_code'),
+                 'referred_by_email': _admin_email(refby) if refby else None,
+                 'ltv_eur': round(ltv['cents'] / 100.0, 2), 'orders': ltv['c'],
+                 'render_count': rcount, 'active_sessions': active_sess,
+                 'expiring_credits': credits_of(exp_sec), 'expiring_days': exp_days},
+        'ledger': [{'delta_sec': r['delta_sec'], 'grund': r['grund'],
+                    'created_at': r['created_at']} for r in led],
+        'purchases': [{'session_id': r['session_id'], 'pack': r['pack'],
+                       'eur': round(r['cents'] / 100.0, 2), 'minutes': r['sekunden'] // 60,
+                       'created_at': r['created_at']} for r in pur],
+        'consents': [{'kind': r['kind'], 'created_at': r['created_at']} for r in cons],
+    }
 
 
 @app.post('/api/admin/users/{uid}/credits')
@@ -5090,7 +5628,7 @@ def admin_user_credits(uid: int, request: Request,
     if not u:
         raise HTTPException(404, 'Unknown user.')
     delta = int(delta_min) * 60
-    if delta < 0:                                   # nie unter 0 abziehen
+    if delta < 0:
         delta = max(delta, -u['balance_sec'])
     if delta == 0:
         return {'ok': True, 'credits': credits_of(u['balance_sec']), 'changed': 0}
@@ -5121,15 +5659,102 @@ def admin_user_resend(uid: int, request: Request):
     return {'ok': True}
 
 
+@app.post('/api/admin/users/{uid}/reset')
+def admin_user_reset(uid: int, request: Request):
+    _require_admin(request)
+    u = _find_user_by_id(uid)
+    if not u:
+        raise HTTPException(404, 'Unknown user.')
+    tok = _create_reset(uid)
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    link = f'{base}/app?reset={tok}'
+    try:
+        _send_mail(u['email'], 'Reset your DouchkoVE password',
+                   f'Hi{" " + u["name"] if u["name"] else ""},\n\n'
+                   f'a password reset was requested for your account.\n\n'
+                   f'Reset link (valid 30 minutes):\n{link}\n\n- DouchkoVE')
+    except Exception as e:
+        return {'ok': True, 'mail': f'failed: {type(e).__name__}', 'link': link}
+    return {'ok': True, 'mail': 'sent'}
+
+
+@app.post('/api/admin/users/{uid}/revoke_sessions')
+def admin_user_revoke(uid: int, request: Request):
+    _require_admin(request)
+    con = _db()
+    n = con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,)).rowcount
+    con.commit(); con.close()
+    return {'ok': True, 'revoked': n}
+
+
+@app.post('/api/admin/users/{uid}/disable')
+def admin_user_disable(uid: int, request: Request, on: str = Form('1')):
+    _require_admin(request)
+    val = 1 if str(on).strip() in ('1', 'true', 'on', 'yes') else 0
+    con = _db()
+    con.execute("UPDATE users SET disabled = ? WHERE id = ?", (val, uid))
+    if val:
+        con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))   # sofort ausloggen
+    con.commit(); con.close()
+    return {'ok': True, 'disabled': bool(val)}
+
+
+@app.get('/api/admin/users/{uid}/export')
+def admin_user_export(uid: int, request: Request):
+    _require_admin(request)
+    u = _find_user_by_id(uid)
+    if not u:
+        raise HTTPException(404, 'Unknown user.')
+    con = _db()
+    led = [dict(r) for r in con.execute(
+        "SELECT delta_sec, grund, created_at FROM ledger WHERE user_id = ?", (uid,)).fetchall()]
+    pur = [dict(r) for r in con.execute(
+        "SELECT session_id, pack, cents, sekunden, created_at FROM purchases "
+        "WHERE user_id = ?", (uid,)).fetchall()]
+    cons = [dict(r) for r in con.execute(
+        "SELECT kind, created_at FROM consents WHERE user_id = ?", (uid,)).fetchall()]
+    con.close()
+    return {'user': {'id': u['id'], 'email': u['email'], 'name': u['name'],
+                     'verified': bool(u['verified']), 'created_at': u['created_at'],
+                     'balance_sec': u['balance_sec']},
+            'ledger': led, 'purchases': pur, 'consents': cons}
+
+
 @app.post('/api/admin/users/{uid}/delete')
 def admin_user_delete(uid: int, request: Request):
     _require_admin(request)
     u = _find_user_by_id(uid)
     if not u:
         raise HTTPException(404, 'Unknown user.')
-    # Job-Ordner + In-Memory-Jobs weg, dann DB-Purge (Kaeufe -> Archiv, siehe
-    # _purge_user_db). Gleiche Wirkung wie die Selbst-Loeschung des Nutzers.
     for jid in [jid for jid, j in list(JOBS.items()) if j.get('user_id') == uid]:
         shutil.rmtree(job_dir(jid), ignore_errors=True); JOBS.pop(jid, None)
     _purge_user_db(uid)
     return {'ok': True}
+
+
+@app.get('/api/admin/codes')
+def admin_codes_list(request: Request):
+    _require_admin(request)
+    c = load_codes()
+    return {'codes': [dict({'code': k}, **v) for k, v in c.items()]}
+
+
+@app.post('/api/admin/codes')
+def admin_codes_write(request: Request, action: str = Form(...), code: str = Form(''),
+                      name: str = Form(''), limit: int = Form(5)):
+    _require_admin(request)
+    import random
+    import string
+    c = load_codes()
+    if action == 'new':
+        code = (name.upper()[:6].replace(' ', '') or 'CODE') + '-' + \
+            ''.join(random.choices(string.digits, k=4))
+        c[code] = {'name': name or 'Tester', 'limit': int(limit), 'genutzt': 0, 'aktiv': True}
+    elif action in ('block', 'unblock') and code in c:
+        c[code]['aktiv'] = (action == 'unblock')
+    elif action == 'limit' and code in c:
+        c[code]['limit'] = int(limit)
+    else:
+        raise HTTPException(400, 'Unknown action or code.')
+    save_codes(c)
+    return {'ok': True, 'code': code}

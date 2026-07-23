@@ -3,6 +3,36 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v130 Admin-Panel Vollausbau (dynamisch, 9 Tabs) + Suspend + Heartbeats.** Ismet: Admin-Menue
+  dynamischer + alle Infos, die ein Admin-Menue braucht. Grundlage: Inventar-Workflow (5 Agenten
+  kartierten 142 echte Datenpunkte im Code, ein Design-Agent synthetisierte die Spezifikation), danach
+  Bau + adversariale Sicherheits-Review. Alle Endpoints weiter am Server-Key `DVE_ADMIN`.
+  - **Dynamisch (der Kern-Wunsch):** Live-Ops-Tab pollt alle 15s, Jobs-Tab alle 5s; pausiert bei
+    verstecktem Tab (visibilitychange) und per Button; „live · updated Xs ago"-Anzeige + Puls.
+    Schwere Aggregate (Revenue/Credits/Abuse/User-Listen) laden on-demand, kein Dauer-Poll.
+  - **9 Tabs:** Live (Umsatz/Signups/Sessions/Queues/Liability/Health-Ampel/Alerts/Build),
+    Jobs (Verteilung, Queue-Zusammensetzung paid/free, Avg-Renderzeit, At-Risk, Aktionen
+    Log/Retry/Kill/Refund/Unlock/Delete + Stop-all-stuck), Revenue (Fenster, Trend-Sparkline, pro
+    Paket, AOV/ARPPU, Wiederkaeufer, Top-Spender, Katalog, Pre-v128-Schaetzung, CSV), Credits
+    (gratis/bezahlt/admin, Verbrauch render+alpha+style, Breakage, Liability-Aging), Users
+    (Suche/Filter/Sort/Pagination, CRM-Detail mit LTV/Orders/Sessions/Consents/Referral + Aktionen
+    Credits/Verify/Reset/Revoke/Suspend/Export/Delete + Stripe-Refund pro Kauf), Abuse (verwaiste
+    Farming-Hashes, Wegwerf-Konten, Unverifizierte, Referral-Graph, Rate-Limit-Lockouts, Demo-IPs),
+    System (Keys/Health nur bool, Config-Werte, Heartbeats, Aktionen Backup/Test-Mail/Cleanup/Expiry),
+    Compliance (Widerruf-Consent-Log, GoBD-Archiv, CSV), Codes (Tester-Zugangscodes anlegen/sperren).
+  - **Neue Infrastruktur:** `users.disabled` (reversible Sperre; `_session_user`+Login blocken
+    gesperrte Konten sofort), `purchases`-Umsatz (schon v128), Render-Zeitstempel in `set_state`
+    (started_at/finished_at -> Avg-Renderzeit), `_HEARTBEAT` in Watchdog/Cleanup (echter Herzschlag),
+    DVE_BUILD auf v130 aktualisiert (war veraltet). Admin-Refunds hinterlassen eine nachvollziehbare
+    positive 'Refund %'-Ledger-Zeile (schliesst die alte Refund-Blindstelle fuer manuelle Faelle).
+  - **Bewusst NICHT** (Anti-Feature-Stacking): keine Chart-Library (nur Inline-Sparklines), kein
+    WebSocket/SSE (visibility-pausiertes Polling reicht), kein Live-Config-Toggle (Env/Boot-time, nur
+    Anzeige), keine MRR/Churn/Cohort-Analytik (Einmalkauf-Modell), kein Marketing-Tooling.
+  Selftest **728/728 gruen** (funktional: revenue/credits/system/abuse-Aggregate, Suspend sperrt
+  Login+Session/Unsuspend gibt frei, Job-Refund bucht +Credits mit traceable Ledger-Zeile, Codes
+  anlegen/listen; plus Verdrahtungs- + UI-Dynamik-Garantien). Alle 26 Endpoints Runtime-gesmoked
+  (0 Fehler), UI live in 9 Tabs gesmoked (0 JS-Fehler). EHRLICH: nur Linux/CPU/Test-DB; Stripe-Refund
+  ist echt-Geld-Code, best-effort und ungetestet live.
 - **v129 Globaler Job-Timeout (haengende/Zombie-Jobs enden automatisch).** Ismet sah im Admin-Panel
   mehrere Motion-Jobs ewig auf „Queued (restored after restart)" bzw. „laeuft" haengen. Ursache: der
   alte 45-Min-Waechter beobachtete NUR `laeuft`, killte nur den Prozess und verliess sich darauf,

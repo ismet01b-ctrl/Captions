@@ -2161,7 +2161,7 @@ def _scenario_logic(clip, transcript, tmp):
           and "@app.get('/admin'" in _srv_m
           and 'CREATE TABLE IF NOT EXISTS purchases' in _srv_m
           and 'INSERT OR IGNORE INTO purchases' in _srv_m
-          and "'X-Admin-Key': KEY" in _adm and '/api/admin/overview' in _adm
+          and "'X-Admin-Key'" in _adm and '/api/admin/overview' in _adm
           and 'noindex' in _adm)
     check('v129: Job-Timeout-Reaper (wartet+laeuft, Fingerabdruck, aktiv beenden+erstatten)',
           'def _reap_stuck_job' in _srv_m and 'JOB_STUCK_SECONDS' in _srv_m
@@ -2169,6 +2169,27 @@ def _scenario_logic(clip, transcript, tmp):
           and '_maybe_refund(jid)' in _srv_m
           and "@app.post('/api/admin/jobs/reap_stuck')" in _srv_m
           and 'Stop all stuck' in _adm)
+    # v130: dynamisches Admin-Vollpanel (Auto-Refresh + alle Domaenen) verdrahtet.
+    check('v130 Admin: Endpoints (revenue/credits/abuse/system/compliance/codes/refund) verdrahtet',
+          "@app.get('/api/admin/revenue')" in _srv_m and "@app.get('/api/admin/credits')" in _srv_m
+          and "@app.get('/api/admin/abuse')" in _srv_m and "@app.get('/api/admin/system')" in _srv_m
+          and "@app.get('/api/admin/compliance/consents')" in _srv_m
+          and "@app.get('/api/admin/export/{table}.csv')" in _srv_m
+          and "@app.post('/api/admin/refund')" in _srv_m
+          and "@app.post('/api/admin/users/{uid}/disable')" in _srv_m
+          and "@app.post('/api/admin/backup/run')" in _srv_m
+          and 'def _reap_stuck_job' in _srv_m and 'ADD COLUMN disabled' in _srv_m)
+    check('v130 Admin: Suspend-Gate + Heartbeats + Build verdrahtet',
+          'gesperrtes Konto -> wie ausgeloggt' in _srv_m
+          and 'This account is suspended' in _srv_m
+          and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
+          and "DVE_BUILD = 'v130-admin'" in _srv_m)
+    check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
+          "const AUTO={live:15000, jobs:5000}" in _adm
+          and 'visibilitychange' in _adm and 'togglePause' in _adm
+          and 'X-Admin-Key' in _adm
+          and all(t in _adm for t in ("'revenue'", "'credits'", "'abuse'",
+                                      "'system'", "'compliance'", "'codes'")))
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -3270,6 +3291,63 @@ def _scenario_security(tmp):
           _resv_ok is True and SV.JOBS[_rjid]['status'] == 'fehler'
           and _bal_pre == 60 and _bal_post == 120,
           f'pre={_bal_pre} post={_bal_post} st={SV.JOBS[_rjid]["status"]}')
+    # v130 Admin-Panel (dynamisch, Vollumfang): neue Endpoints funktional gegen
+    # die Test-DB. Reuse des Admin-Gate-Musters (DVE_ADMIN gesetzt).
+    os.environ['DVE_ADMIN'] = 'testkey_admin'
+
+    class _AReq2:
+        def __init__(self, key):
+            self.headers = {'x-admin-key': key} if key else {}
+    _ar = _AReq2('testkey_admin')
+    # seed: verifizierter Kaeufer + Kauf + Consent
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('v130@test','x','V130',300,?,1)", (int(_t.time()),))
+    con.commit()
+    _vid = con.execute("SELECT id FROM users WHERE email='v130@test'").fetchone()['id']
+    con.execute("INSERT OR IGNORE INTO purchases (session_id,user_id,pack,cents,sekunden,created_at) "
+                "VALUES ('v130sess',?,'starter',900,1200,?)", (_vid, int(_t.time())))
+    con.execute("INSERT OR IGNORE INTO ledger (user_id,delta_sec,grund,created_at) "
+                "VALUES (?,1200,'Kauf v130sess',?)", (_vid, int(_t.time())))
+    con.commit(); con.close()
+    _rev130 = SV.admin_revenue(_ar)
+    _cr130 = SV.admin_credits(_ar)
+    _sys130 = SV.admin_system(_ar)
+    _ab130 = SV.admin_abuse(_ar)
+    check('v130 Admin: revenue/credits/system/abuse liefern echte Aggregate',
+          _rev130['windows']['total']['eur'] >= 9.0            # >= dieser Kauf (Test-DB teilt sich)
+          and 'catalog' in _rev130 and _rev130['aov'] > 0
+          and _cr130['granted']['paid'] >= 20 and 'liability_min' in _cr130
+          and 'config' in _sys130 and _sys130['build'] == SV.DVE_BUILD
+          and 'orphan_claims' in _ab130,
+          f"rev={_rev130['windows']['total']['eur']} paid={_cr130['granted']['paid']}")
+    # Suspend-Gate: gesperrtes Konto -> Session gilt als tot (auch neue Session).
+    _tok, _exp = SV._create_session(_vid)
+    _live_before = SV._session_user(_tok) is not None
+    SV.admin_user_disable(_vid, _ar, on='1')
+    _tok2, _ = SV._create_session(_vid)            # frische Session NACH dem Sperren
+    _dead_after = SV._session_user(_tok2) is None
+    SV.admin_user_disable(_vid, _ar, on='0')
+    _live_again = SV._session_user(SV._create_session(_vid)[0]) is not None
+    check('v130 Admin: Suspend sperrt Login/Session, Unsuspend gibt frei',
+          _live_before is True and _dead_after is True and _live_again is True)
+    # Job-Refund erzeugt eine nachvollziehbare positive 'Refund %'-Ledger-Zeile.
+    SV.JOBS['v130job'] = {'id': 'v130job', 'user_id': _vid, 'status': 'fertig', 'dauer': 60}
+    _bal_r0 = SV._find_user_by_id(_vid)['balance_sec']
+    SV.admin_job_refund('v130job', _ar, minutes=2, reason='make-good')
+    _bal_r1 = SV._find_user_by_id(_vid)['balance_sec']
+    con = SV._db()
+    _refline = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id=? AND "
+                           "grund LIKE 'Refund v130job%'", (_vid,)).fetchone()['c']
+    con.close()
+    check('v130 Admin: Job-Refund bucht +Credits mit traceable Refund-Ledger-Zeile',
+          _bal_r1 == _bal_r0 + 120 and _refline == 1, f'{_bal_r0}->{_bal_r1} lines={_refline}')
+    # Codes: anlegen + sperren ueber die Admin-API.
+    _cw = SV.admin_codes_write(_ar, action='new', name='Tester', limit=7)
+    _cl = SV.admin_codes_list(_ar)
+    check('v130 Admin: Access-Code anlegen + listen',
+          _cw.get('ok') and any(c['code'] == _cw['code'] for c in _cl['codes']))
+    del os.environ['DVE_ADMIN']
     # 3) cfg_overrides-Whitelist + Deckel
     ov = SV._sanitize_overrides({'output': {'height': 4320, 'master': True},
                                  'effects': {'blender_samples': 99999, 'bg_blur': 0.5},

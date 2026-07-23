@@ -7,65 +7,73 @@
 <title>Admin · DouchkoVE</title>
 <style>
 :root{--bg:#0a0a0b;--surf:#161417;--surf2:#1e1c20;--fg:#f6f4ef;--mut:#b0a99e;--mut2:#8b857b;
-  --acc:#ff7a1a;--line:#242320;--ok:#3ec46d;--warn:#f2c14e;--bad:#ff5233;}
+  --acc:#ff7a1a;--line:#242320;--ok:#3ec46d;--warn:#f2c14e;--bad:#ff5233;--info:#5b9dff;}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);
-  color:var(--fg);line-height:1.5;padding:28px 22px;min-height:100vh}
-.wrap{max-width:1080px;margin:0 auto}
-h1{font-size:24px;font-weight:800;letter-spacing:-.4px;margin-bottom:2px}
+  color:var(--fg);line-height:1.5;padding:22px 20px 60px;min-height:100vh;font-size:14px}
+.wrap{max-width:1200px;margin:0 auto}
+h1{font-size:22px;font-weight:800;letter-spacing:-.4px}
 h1 .dot{color:var(--acc)}
-.subtle{color:var(--mut2);font-size:12.5px}
+h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);margin:22px 0 10px;font-weight:700}
+.subtle{color:var(--mut2);font-size:12px}
 .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
 .gate{max-width:360px;margin:14vh auto 0;text-align:center}
-.gate input{width:100%;padding:12px 14px;background:var(--surf);border:1px solid var(--line);
-  border-radius:10px;color:var(--fg);font-size:15px;margin:14px 0}
-.btn{background:var(--acc);color:#111;border:none;font-weight:700;font-size:14px;padding:10px 18px;
-  border-radius:999px;cursor:pointer}
-.btn:hover{filter:brightness(1.06)}
-.btn.sm{padding:6px 12px;font-size:12.5px}
+.gate input{width:100%;padding:12px 14px;background:var(--surf);border:1px solid var(--line);border-radius:10px;color:var(--fg);font-size:15px;margin:14px 0}
+.btn{background:var(--acc);color:#111;border:none;font-weight:700;font-size:13px;padding:8px 15px;border-radius:999px;cursor:pointer}
+.btn:hover{filter:brightness(1.07)}
+.btn.sm{padding:5px 11px;font-size:12px}
 .btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
 .btn.bad{background:var(--bad);color:#fff}
-.tabs{display:flex;gap:8px;margin:22px 0 18px;border-bottom:1px solid var(--line)}
-.tabs button{background:none;border:none;color:var(--mut);font-size:14px;font-weight:600;padding:10px 4px;
-  margin-right:14px;cursor:pointer;border-bottom:2px solid transparent}
+.btn.warn{background:var(--warn);color:#111}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.live{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(62,196,109,.5);animation:pl 2s infinite}
+.pulse.off{background:var(--mut2);animation:none}
+@keyframes pl{0%{box-shadow:0 0 0 0 rgba(62,196,109,.5)}70%{box-shadow:0 0 0 7px rgba(62,196,109,0)}100%{box-shadow:0 0 0 0 rgba(62,196,109,0)}}
+.tabs{display:flex;gap:4px;margin:18px 0 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs button{background:none;border:none;color:var(--mut);font-size:13.5px;font-weight:600;padding:9px 12px;cursor:pointer;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--fg);border-bottom-color:var(--acc)}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
-.card .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut2)}
-.card .v{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-top:6px}
-.card .v small{font-size:13px;font-weight:600;color:var(--mut)}
+.grid{display:grid;gap:11px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:820px){.g4,.g3{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card .k{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2)}
+.card .v{font-size:23px;font-weight:800;letter-spacing:-.5px;margin-top:5px}
+.card .v small{font-size:12px;font-weight:600;color:var(--mut)}
 .card.acc .v{color:var(--acc)}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-.health{display:flex;flex-wrap:wrap;gap:10px 22px;background:var(--surf);border:1px solid var(--line);
-  border-radius:12px;padding:16px 18px;margin-top:12px;font-size:13px}
+.health{display:flex;flex-wrap:wrap;gap:9px 20px;background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:12.5px}
 .pill{display:inline-flex;align-items:center;gap:7px}
-.led{width:9px;height:9px;border-radius:50%;background:var(--mut2)}
+.led{width:9px;height:9px;border-radius:50%;background:var(--mut2);flex:0 0 auto}
 .led.ok{background:var(--ok)}.led.warn{background:var(--warn)}.led.bad{background:var(--bad)}
-table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13.5px}
-th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
-th{color:var(--mut2);font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+table{width:100%;border-collapse:collapse;margin-top:4px;font-size:13px}
+th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut2);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
 tr.click{cursor:pointer}tr.click:hover{background:var(--surf)}
-.search{width:100%;max-width:340px;padding:9px 12px;background:var(--surf);border:1px solid var(--line);
-  border-radius:8px;color:var(--fg);margin-bottom:6px}
-.tag{font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);color:var(--mut)}
+.search{padding:8px 11px;background:var(--surf);border:1px solid var(--line);border-radius:8px;color:var(--fg)}
+select.search{cursor:pointer}
+.tag{font-size:10.5px;padding:2px 7px;border-radius:6px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
 .tag.ok{color:var(--ok);border-color:rgba(62,196,109,.4)}
 .tag.no{color:var(--bad);border-color:rgba(255,82,51,.4)}
 .tag.buy{color:var(--acc);border-color:rgba(255,122,26,.4)}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;
-  justify-content:center;padding:40px 16px;overflow:auto;z-index:50}
+.tag.warn{color:var(--warn);border-color:rgba(242,193,78,.4)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-start;justify-content:center;padding:34px 14px;overflow:auto;z-index:50}
 .overlay.on{display:flex}
-.modal{background:var(--bg);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;
-  padding:24px}
-.modal h2{font-size:18px;margin-bottom:2px}
-.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0;padding:14px 0;
-  border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.acts input{width:80px;padding:7px 10px;background:var(--surf);border:1px solid var(--line);
-  border-radius:8px;color:var(--fg)}
-.acts input.reason{width:150px}
-.msg{font-size:13px;color:var(--mut);margin-top:8px;min-height:18px}
-.led-row{max-height:260px;overflow:auto;margin-top:4px}
+.modal{background:var(--bg);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;padding:22px}
+.modal h2{font-size:17px;margin-bottom:2px;word-break:break-all}
+.acts{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:14px 0;padding:13px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.acts input{width:78px;padding:6px 9px;background:var(--surf);border:1px solid var(--line);border-radius:8px;color:var(--fg)}
+.acts input.reason{width:140px}
+.msg{font-size:12.5px;color:var(--mut);margin-top:8px;min-height:16px}
+.scroll{max-height:280px;overflow:auto;margin-top:4px;border:1px solid var(--line);border-radius:8px}
 .pos{color:var(--ok)}.neg{color:var(--mut)}
 .hidden{display:none}
+.bars{display:flex;align-items:flex-end;gap:2px;height:46px;margin-top:8px}
+.bars i{flex:1;background:var(--acc);border-radius:2px 2px 0 0;min-height:2px;opacity:.85}
+.row-actions{display:flex;gap:5px;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:12.5px}
+.kv .kk{color:var(--mut2)}
+.note{font-size:11.5px;color:var(--mut2);margin-top:10px;font-style:italic}
+.spin{color:var(--mut2);padding:14px 2px}
 </style>
 </head>
 <body>
@@ -73,189 +81,391 @@ tr.click{cursor:pointer}tr.click:hover{background:var(--surf)}
   <div id="gate" class="gate">
     <h1>DouchkoVE <span class="dot">Admin</span></h1>
     <p class="subtle" style="margin-top:6px">Enter the admin key (server env DVE_ADMIN).</p>
-    <input type="password" id="keyIn" placeholder="Admin key" autocomplete="off"
-           onkeydown="if(event.key==='Enter')saveKey()">
+    <input type="password" id="keyIn" placeholder="Admin key" autocomplete="off" onkeydown="if(event.key==='Enter')saveKey()">
     <button class="btn" onclick="saveKey()">Unlock</button>
     <p class="msg" id="gateMsg"></p>
   </div>
 
   <div id="app" class="hidden">
-    <div style="display:flex;justify-content:space-between;align-items:center">
+    <div class="top">
       <div><h1>DouchkoVE <span class="dot">Admin</span></h1>
-        <span class="subtle">Tier 1 · Betrieb, Nutzer, Umsatz</span></div>
-      <button class="btn ghost sm" onclick="logout()">Lock</button>
-    </div>
-    <div class="tabs">
-      <button class="on" data-tab="overview" onclick="tab('overview')">Overview</button>
-      <button data-tab="jobs" onclick="tab('jobs')">Jobs</button>
-      <button data-tab="users" onclick="tab('users')">Users</button>
-    </div>
-
-    <div id="t-overview">
-      <div class="grid" id="revCards"></div>
-      <div class="row2">
-        <div class="card"><div class="k">Users</div><div class="v" id="cUsers">–</div></div>
-        <div class="card acc"><div class="k">Open credit liability</div><div class="v" id="cLiab">–</div></div>
+        <span class="subtle" id="buildLine">live ops console</span></div>
+      <div class="live">
+        <span class="pulse" id="pulse"></span><span id="liveTxt">live</span>
+        <button class="btn ghost sm" onclick="togglePause()" id="pauseBtn">Pause</button>
+        <button class="btn ghost sm" onclick="logout()">Lock</button>
       </div>
-      <div class="health" id="health"></div>
-      <p class="subtle" style="margin-top:14px">Revenue uses real paid amounts recorded from Stripe (from v128 onward).</p>
     </div>
-
-    <div id="t-jobs" class="hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px">
-        <p class="subtle" style="margin:0">In-flight and recently failed jobs. Kill stops a hung render and refunds it. Stuck jobs also time out automatically.</p>
-        <button class="btn bad sm" onclick="reapStuck()">Stop all stuck</button>
-      </div>
-      <table><thead><tr><th>Job</th><th>User</th><th>Status</th><th>Phase</th><th>Kind</th><th></th></tr></thead>
-        <tbody id="jobRows"></tbody></table>
-    </div>
-
-    <div id="t-users" class="hidden">
-      <input class="search" id="uSearch" placeholder="Search email…" oninput="userSearchDebounced()">
-      <table><thead><tr><th>Email</th><th>Verified</th><th>Credits</th><th>Type</th><th>Joined</th></tr></thead>
-        <tbody id="userRows"></tbody></table>
-    </div>
+    <div class="tabs" id="tabs"></div>
+    <div id="view"><div class="spin">Loading…</div></div>
   </div>
 </div>
 
-<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
-  <div class="modal" id="modal"></div>
-</div>
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"></div></div>
 
 <script>
 let KEY = sessionStorage.getItem('dve_admin_key') || '';
-const $ = s => document.querySelector(s);
-function hdr(){ return {'X-Admin-Key': KEY}; }
-async function api(path, opts={}){
-  opts.headers = Object.assign(hdr(), opts.headers||{});
-  const r = await fetch(path, opts);
-  if(r.status===403){ logout('Wrong or missing key.'); throw new Error('403'); }
-  if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||('HTTP '+r.status)); }
-  return r.json();
+let POLL=null, TICK=null, paused=false, active='live', lastLoad={}, serverNow=0;
+const AUTO={live:15000, jobs:5000};
+const TABS=[['live','Live'],['jobs','Jobs'],['revenue','Revenue'],['credits','Credits'],
+  ['users','Users'],['abuse','Abuse'],['system','System'],['compliance','Compliance'],['codes','Codes']];
+const $=s=>document.querySelector(s), el=id=>document.getElementById(id);
+function hdr(){return {'X-Admin-Key':KEY};}
+async function api(path,opts={}){
+  opts.headers=Object.assign(hdr(),opts.headers||{});
+  const r=await fetch(path,opts);
+  if(r.status===403){logout('Wrong or missing key.');throw new Error('403');}
+  if(!r.ok){let d={};try{d=await r.json();}catch(e){}throw new Error(d.detail||('HTTP '+r.status));}
+  const ct=r.headers.get('content-type')||''; return ct.includes('json')?r.json():r.text();
 }
-function saveKey(){ KEY = $('#keyIn').value.trim(); if(!KEY)return;
-  sessionStorage.setItem('dve_admin_key',KEY); boot(); }
-function logout(m){ KEY=''; sessionStorage.removeItem('dve_admin_key');
-  $('#app').classList.add('hidden'); $('#gate').classList.remove('hidden');
-  if(m)$('#gateMsg').textContent=m; }
-function fdt(ts){ if(!ts)return '–'; const d=new Date(ts*1000);
-  return d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
-function fdate(ts){ return ts?new Date(ts*1000).toLocaleDateString():'–'; }
+function saveKey(){KEY=el('keyIn').value.trim();if(!KEY)return;sessionStorage.setItem('dve_admin_key',KEY);boot();}
+function logout(m){KEY='';sessionStorage.removeItem('dve_admin_key');stopPoll();el('app').classList.add('hidden');el('gate').classList.remove('hidden');if(m)el('gateMsg').textContent=m;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fdt(ts){if(!ts)return '–';const d=new Date(ts*1000);return d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
+function fdate(ts){return ts?new Date(ts*1000).toLocaleDateString():'–';}
+function ago(ts){if(!ts)return 'never';const s=Math.max(0,Math.floor((serverNow||Date.now()/1000)-ts));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+function dur(s){if(s==null)return '–';s=Math.round(s);if(s<60)return s+'s';const m=Math.floor(s/60);return m+'m '+(s%60)+'s';}
+function eur(n){return '€'+Number(n||0).toFixed(2);}
 
-async function boot(){
-  try{ await loadOverview(); }
-  catch(e){ if(e.message==='403')return; $('#gateMsg').textContent=e.message; return; }
-  $('#gate').classList.add('hidden'); $('#app').classList.remove('hidden');
+function boot(){
+  el('tabs').innerHTML=TABS.map(([id,t])=>`<button data-t="${id}" onclick="go('${id}')">${t}</button>`).join('');
+  api('/api/admin/overview').then(()=>{el('gate').classList.add('hidden');el('app').classList.remove('hidden');go('live');})
+    .catch(e=>{if(e.message!=='403')el('gateMsg').textContent=e.message;});
+  if(TICK)clearInterval(TICK);
+  TICK=setInterval(()=>{const t=lastLoad[active];if(t)el('liveTxt').textContent=(AUTO[active]?'live · ':'')+'updated '+ago(t);},1000);
 }
-function tab(name){
-  ['overview','jobs','users'].forEach(t=>{
-    $('#t-'+t).classList.toggle('hidden', t!==name);
-    document.querySelector('.tabs button[data-tab="'+t+'"]').classList.toggle('on', t===name);
-  });
-  if(name==='jobs')loadJobs(); if(name==='users')loadUsers(); if(name==='overview')loadOverview();
+function stopPoll(){if(POLL){clearInterval(POLL);POLL=null;}}
+function setPulse(){const on=AUTO[active]&&!paused&&!document.hidden;el('pulse').classList.toggle('off',!on);}
+function go(name){
+  active=name;stopPoll();
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===name));
+  el('view').innerHTML='<div class="spin">Loading…</div>';
+  RENDER[name]();
+  if(AUTO[name]&&!paused){POLL=setInterval(()=>{if(!document.hidden)RENDER[name](true);},AUTO[name]);}
+  setPulse();
+}
+function togglePause(){paused=!paused;el('pauseBtn').textContent=paused?'Resume':'Pause';go(active);}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPoll();else if(AUTO[active]&&!paused){go(active);}setPulse();});
+function danger(msg){return confirm('⚠ '+msg);}
+
+/* ---------- LIVE ---------- */
+async function loadLive(silent){
+  let d;try{d=await api('/api/admin/overview');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.live=Date.now()/1000; serverNow=d.now;
+  el('buildLine').textContent='build '+d.build;
+  const r=d.revenue,s=d.system,st=s.stripe;
+  const led=(c,w)=>`<span class="led ${c?'ok':(w?'warn':'bad')}"></span>`;
+  const rc=(t,o)=>`<div class="card"><div class="k">${t}</div><div class="v">${eur(o.eur)} <small>${o.count}×</small></div></div>`;
+  const diskBad=s.disk&&s.disk.used_pct>90,diskWarn=s.disk&&s.disk.used_pct>78;
+  el('view').innerHTML=`
+    <div class="grid g4">${rc('Revenue today',r.today)}${rc('7 days',r.week)}${rc('30 days',r.month)}${rc('Total',r.total)}</div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">Signups today / 7d / 30d</div><div class="v">${d.signups.today} <small>/ ${d.signups.week} / ${d.signups.month}</small></div></div>
+      <div class="card"><div class="k">Users (verified · paid)</div><div class="v">${d.users.total} <small>${d.users.verified}v · ${d.users.purchasers}p</small></div></div>
+      <div class="card"><div class="k">Active sessions</div><div class="v">${d.sessions_active}</div></div>
+      <div class="card acc"><div class="k">Open liability</div><div class="v">${d.credits.liability_min} <small>min owed</small></div></div>
+    </div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">Caption queue</div><div class="v">${d.jobs.queue} <small>wait ${d.jobs.waiting} · run ${d.jobs.running} · fail ${d.jobs.failed}</small></div></div>
+      <div class="card"><div class="k">Motion queue</div><div class="v">${d.jobs.motion_queue}</div></div>
+      <div class="card"><div class="k">Renders total</div><div class="v">${d.renders.count} <small>${d.renders.minutes} min</small></div></div>
+      <div class="card"><div class="k">Active alerts</div><div class="v">${d.alerts_active}</div></div>
+    </div>
+    <h3>System health</h3>
+    <div class="health">
+      ${led(s.openai)}<span class="pill"><b>OpenAI</b> ${s.openai?'set':'MISSING'}</span>
+      ${led(st.ready&&st.mode==='live',st.mode==='test')}<span class="pill"><b>Stripe</b> ${st.mode}${st.ready?'':' (off)'}</span>
+      ${led(st.webhook_secret)}<span class="pill"><b>Webhook</b> ${st.webhook_secret?'set':'MISSING'}</span>
+      ${led(s.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${s.mail.transport}</span>
+      ${led(!diskBad&&!diskWarn,diskWarn)}<span class="pill"><b>Disk</b> ${s.disk?s.disk.free_gb+'G free ('+s.disk.used_pct+'%)':'?'}</span>
+      <span class="pill"><span class="led ok"></span><b>DB</b> ${s.db_mb??'?'} MB</span>
+      ${led(s.last_backup)}<span class="pill"><b>Backup</b> ${s.last_backup?fdate(s.last_backup):'none'}</span>
+      ${led(s.heartbeats.watchdog)}<span class="pill"><b>Watchdog</b> ${s.heartbeats.watchdog?ago(s.heartbeats.watchdog):'—'}</span>
+      ${led(s.heartbeats.cleanup)}<span class="pill"><b>Cleanup</b> ${s.heartbeats.cleanup?ago(s.heartbeats.cleanup):'—'}</span>
+      ${led(s.motion,true)}<span class="pill"><b>Motion</b> ${s.motion?'available':'off'}</span>
+    </div>`;
 }
 
-async function loadOverview(){
-  const d = await api('/api/admin/overview');
-  const r = d.revenue;
-  const cell = (label,o)=>`<div class="card"><div class="k">${label}</div>
-    <div class="v">€${o.eur.toFixed(2)} <small>· ${o.count}×</small></div></div>`;
-  $('#revCards').innerHTML = cell('Today',r.today)+cell('7 days',r.week)+cell('30 days',r.month)+cell('Total',r.total);
-  $('#cUsers').innerHTML = `${d.users.total} <small>· ${d.users.verified} verified · ${d.users.purchasers} paid</small>`;
-  $('#cLiab').innerHTML = `${d.credits.liability_min} <small>min owed</small>`;
-  const s=d.system, st=s.stripe;
-  const led=(cond,warn)=>`<span class="led ${cond?'ok':(warn?'warn':'bad')}"></span>`;
-  const diskBad = s.disk && s.disk.used_pct>90, diskWarn = s.disk && s.disk.used_pct>75;
-  $('#health').innerHTML = [
-    `<span class="pill">${led(s.openai)}<b>OpenAI key</b> ${s.openai?'set':'MISSING'}</span>`,
-    `<span class="pill">${led(st.ready&&st.mode==='live', st.mode==='test')}<b>Stripe</b> ${st.mode}${st.ready?'':' (off)'}</span>`,
-    `<span class="pill">${led(st.webhook_secret)}<b>Webhook secret</b> ${st.webhook_secret?'set':'MISSING'}</span>`,
-    `<span class="pill">${led(s.admin_key_set)}<b>Admin key</b> set</span>`,
-    s.disk?`<span class="pill">${led(!diskBad&&!diskWarn, diskWarn)}<b>Disk</b> ${s.disk.free_gb}G free (${s.disk.used_pct}% used)</span>`:'',
-    `<span class="pill"><span class="led ok"></span><b>DB</b> ${s.db_mb??'?'} MB</span>`,
-    `<span class="pill">${led(s.last_backup)}<b>Backup</b> ${s.last_backup?fdate(s.last_backup):'none'}</span>`,
-    `<span class="pill"><span class="led ${d.jobs.queue>0?'warn':'ok'}"></span><b>Queue</b> ${d.jobs.queue} · run ${d.jobs.running} · fail ${d.jobs.failed}</span>`,
-    `<span class="pill"><span class="led ok"></span><b>Renders</b> ${d.renders.count} (${d.renders.minutes} min)</span>`,
-  ].join('');
+/* ---------- JOBS ---------- */
+async function loadJobs(silent){
+  let d;try{d=await api('/api/admin/jobs');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.jobs=Date.now()/1000;
+  const q=d.queue, dist=d.distribution||{};
+  const distTxt=Object.entries(dist).map(([k,v])=>`${k} ${v}`).join(' · ')||'none';
+  const rows=d.jobs.length?d.jobs.map(j=>`<tr>
+    <td class="mono">${esc((j.jid||'').slice(0,10))}</td>
+    <td>${j.email?esc(j.email):'<span class="subtle">demo</span>'}</td>
+    <td>${esc(j.status||'')}${j.progress?` <span class="subtle">${Math.round(j.progress*100)}%</span>`:''}${j.at_risk?' <span class="tag warn">at risk</span>':''}</td>
+    <td class="subtle">${esc(j.phase||'')}${j.eta_sec!=null?` <span class="subtle">~${dur(j.eta_sec)}</span>`:''}</td>
+    <td>${esc(j.kind)}${j.wm?' <span class="tag">wm</span>':''}</td>
+    <td class="subtle">${j.updated_at?ago(j.updated_at):'–'}</td>
+    <td><div class="row-actions">
+      <button class="btn ghost sm" onclick="jobLog('${j.jid}')">Log</button>
+      ${j.status==='fehler'?`<button class="btn ghost sm" onclick="jobAct('${j.jid}','retry','Retry job?')">Retry</button>`:''}
+      ${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" onclick="jobAct('${j.jid}','kill','Kill & refund this job?')">Kill</button>`:''}
+      <button class="btn warn sm" onclick="jobRefund('${j.jid}')">Refund</button>
+      ${j.wm?`<button class="btn ghost sm" onclick="jobAct('${j.jid}','unlock','Force-unlock watermark? This PERMANENTLY replaces the file with the clean master.')">Unlock</button>`:''}
+      <button class="btn ghost sm" onclick="jobAct('${j.jid}','delete','Delete this job dir? Removes its files.')">Del</button>
+    </div></td></tr>`).join(''):`<tr><td colspan="7" class="subtle">No jobs.</td></tr>`;
+  el('view').innerHTML=`
+    <div class="grid g4">
+      <div class="card"><div class="k">Status distribution</div><div class="v" style="font-size:15px;font-weight:700">${esc(distTxt)}</div></div>
+      <div class="card"><div class="k">Caption / Motion queue</div><div class="v">${q.caption} <small>/ ${q.motion}</small></div></div>
+      <div class="card"><div class="k">Waiting paid / free</div><div class="v">${q.paid_waiting} <small>/ ${q.free_waiting}</small></div></div>
+      <div class="card"><div class="k">Avg render time</div><div class="v">${dur(d.avg_render_sec)}</div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin:14px 0 4px"><button class="btn bad sm" onclick="reapStuck()">Stop all stuck</button></div>
+    <table><thead><tr><th>Job</th><th>User</th><th>Status</th><th>Phase</th><th>Kind</th><th>Updated</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function jobAct(jid,act,msg){if(msg&&!danger(msg))return;try{await api('/api/admin/jobs/'+jid+'/'+act,{method:'POST'});loadJobs();}catch(e){alert(e.message);}}
+async function jobRefund(jid){const m=prompt('Refund how many minutes to this user? (blank = full job cost)','');if(m===null)return;const fd=new FormData();if(m.trim())fd.append('minutes',parseInt(m,10)||0);fd.append('reason','admin');try{const d=await api('/api/admin/jobs/'+jid+'/refund',{method:'POST',body:fd});alert('Refunded '+d.refunded_min+' min.');loadJobs();}catch(e){alert(e.message);}}
+async function reapStuck(){if(!danger('Stop ALL waiting/running jobs and refund them?'))return;try{const d=await api('/api/admin/jobs/reap_stuck',{method:'POST'});alert('Stopped '+d.reaped+' job(s).');loadJobs();}catch(e){alert(e.message);}}
+async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');el('modal').innerHTML=`<h2>Log · ${esc(jid)}</h2><div class="scroll" style="max-height:60vh"><pre class="mono" style="padding:12px;font-size:11.5px;white-space:pre-wrap">${esc(d.log)}</pre></div>`;el('overlay').classList.add('on');}catch(e){alert(e.message);}}
+
+/* ---------- REVENUE ---------- */
+async function loadRevenue(){
+  let d;try{d=await api('/api/admin/revenue');}catch(e){el('view').innerHTML=err(e);return;}
+  const w=d.windows;
+  const spark=d.series.length?`<div class="bars">${(()=>{const mx=Math.max(...d.series.map(x=>x.eur),1);return d.series.map(x=>`<i title="${x.d}: ${eur(x.eur)}" style="height:${Math.round(x.eur/mx*100)}%"></i>`).join('');})()}</div>`:'<div class="subtle">No sales yet.</div>';
+  const packs=d.per_pack.map(p=>`<tr><td>${esc(p.pack)}</td><td>${p.count}</td><td>${eur(p.eur)}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
+  const tops=d.top_spenders.map(t=>`<tr class="click" onclick="openUser(${t.uid})"><td>${esc(t.email)}</td><td>${eur(t.eur)}</td><td>${t.orders}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
+  const cat=d.catalog.map(c=>`<tr><td>${esc(c.id)}</td><td>${eur(c.eur)}</td><td>${c.credits}</td><td>${eur(c.per_credit)}</td></tr>`).join('');
+  el('view').innerHTML=`
+    <div class="grid g4">
+      <div class="card acc"><div class="k">Today</div><div class="v">${eur(w.today.eur)} <small>${w.today.count}×</small></div></div>
+      <div class="card"><div class="k">7 days</div><div class="v">${eur(w.week.eur)}</div></div>
+      <div class="card"><div class="k">30 days</div><div class="v">${eur(w.month.eur)}</div></div>
+      <div class="card"><div class="k">Total</div><div class="v">${eur(w.total.eur)} <small>${w.total.count}×</small></div></div>
+    </div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">AOV</div><div class="v">${eur(d.aov)}</div></div>
+      <div class="card"><div class="k">ARPPU</div><div class="v">${eur(d.arppu)}</div></div>
+      <div class="card"><div class="k">Buyers once / repeat</div><div class="v">${d.buyers.once} <small>/ ${d.buyers.repeat}</small></div></div>
+      <div class="card"><div class="k">Pre-v128 est.</div><div class="v">${eur(d.pre_v128_estimate.eur_est)} <small>${d.pre_v128_estimate.count}×</small></div></div>
+    </div>
+    <h3>Revenue trend (90d)</h3>${spark}
+    <div class="grid g3" style="margin-top:16px">
+      <div><h3>By pack</h3><table><thead><tr><th>Pack</th><th>Sold</th><th>EUR</th></tr></thead><tbody>${packs}</tbody></table></div>
+      <div><h3>Top spenders</h3><table><thead><tr><th>Email</th><th>LTV</th><th>Orders</th></tr></thead><tbody>${tops}</tbody></table></div>
+      <div><h3>Pricing catalog</h3><table><thead><tr><th>Pack</th><th>Price</th><th>Cr.</th><th>/cr</th></tr></thead><tbody>${cat}</tbody></table></div>
+    </div>
+    <h3>Export</h3><div class="row-actions"><button class="btn ghost sm" onclick="dl('purchases')">purchases.csv</button><button class="btn ghost sm" onclick="dl('ledger')">ledger.csv</button></div>
+    <div class="note">Revenue = real paid amounts from Stripe (purchases table, v128+). Pre-v128 is an estimate mapped from ledger seconds.</div>`;
+}
+function dl(t){const u='/api/admin/export/'+t+'.csv';fetch(u,{headers:hdr()}).then(r=>r.blob()).then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=t+'.csv';a.click();}).catch(e=>alert(e.message));}
+
+/* ---------- CREDITS ---------- */
+async function loadCredits(){
+  let d;try{d=await api('/api/admin/credits');}catch(e){el('view').innerHTML=err(e);return;}
+  const g=d.granted,c=d.consumed,a=d.aging_min;
+  el('view').innerHTML=`
+    <h3>Granted (minutes)</h3>
+    <div class="grid g4">
+      <div class="card acc"><div class="k">Paid (Kauf)</div><div class="v">${g.paid}</div></div>
+      <div class="card"><div class="k">Free total</div><div class="v">${g.free_total}</div></div>
+      <div class="card"><div class="k">Admin granted</div><div class="v">${g.admin}</div></div>
+      <div class="card"><div class="k">Refunds</div><div class="v">${g.refund}</div></div>
+    </div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">Welcome</div><div class="v">${g.welcome}</div></div>
+      <div class="card"><div class="k">Monthly free</div><div class="v">${g.monthly}</div></div>
+      <div class="card"><div class="k">Referral</div><div class="v">${g.referral}</div></div>
+      <div class="card"><div class="k">Reload bonus</div><div class="v">${g.reload_bonus}</div></div>
+    </div>
+    <h3>Consumed (minutes)</h3>
+    <div class="grid g4">
+      <div class="card"><div class="k">Render</div><div class="v">${c.render}</div></div>
+      <div class="card"><div class="k">Alpha export</div><div class="v">${c.alpha}</div></div>
+      <div class="card"><div class="k">Style learn</div><div class="v">${c.style_learn}</div></div>
+      <div class="card"><div class="k">Expired (breakage)</div><div class="v">${c.expired_breakage}</div></div>
+    </div>
+    <h3>Liability &amp; aging</h3>
+    <div class="grid g4">
+      <div class="card acc"><div class="k">Open liability</div><div class="v">${d.liability_min} <small>min</small></div></div>
+      <div class="card"><div class="k">Expires ≤30d</div><div class="v">${a.d0_30}</div></div>
+      <div class="card"><div class="k">30–90d</div><div class="v">${a.d30_90}</div></div>
+      <div class="card"><div class="k">90–180d</div><div class="v">${a.d90_180}</div></div>
+    </div>
+    <div class="note">All figures in minutes (1 credit = 1 min). Consumption/grants derived from the ledger grund taxonomy.</div>`;
 }
 
-async function loadJobs(){
-  const d = await api('/api/admin/jobs');
-  $('#jobRows').innerHTML = d.jobs.length ? d.jobs.map(j=>`<tr>
-    <td class="mono">${j.jid.slice(0,10)}</td><td>${j.email||'<span class="subtle">demo</span>'}</td>
-    <td>${j.status||''}${j.progress?` <span class="subtle">${Math.round(j.progress*100)}%</span>`:''}</td>
-    <td class="subtle">${j.phase||''}</td><td>${j.kind}</td>
-    <td>${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" onclick="killJob('${j.jid}')">Kill</button>`:''}</td>
-  </tr>`).join('') : `<tr><td colspan="6" class="subtle">No active jobs.</td></tr>`;
-}
-async function killJob(jid){
-  if(!confirm('Kill and refund job '+jid+'?'))return;
-  try{ await api('/api/admin/jobs/'+jid+'/kill',{method:'POST'}); loadJobs(); }
-  catch(e){ alert(e.message); }
-}
-async function reapStuck(){
-  if(!confirm('Stop ALL waiting/running jobs and refund them? Use this to clear jobs stuck after a restart.'))return;
-  try{ const d=await api('/api/admin/jobs/reap_stuck',{method:'POST'});
-    alert('Stopped '+d.reaped+' job(s).'); loadJobs(); }
-  catch(e){ alert(e.message); }
-}
-
-let _uT=null;
-function userSearchDebounced(){ clearTimeout(_uT); _uT=setTimeout(loadUsers,250); }
+/* ---------- USERS ---------- */
+let uState={q:'',flt:'',sort:'created_at',offset:0};
 async function loadUsers(){
-  const q = encodeURIComponent($('#uSearch').value.trim());
-  const d = await api('/api/admin/users?limit=80&q='+q);
-  $('#userRows').innerHTML = d.users.length ? d.users.map(u=>`<tr class="click" onclick="openUser(${u.id})">
-    <td>${u.email}</td>
-    <td>${u.verified?'<span class="tag ok">yes</span>':'<span class="tag no">no</span>'}</td>
+  el('view').innerHTML=`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input class="search" id="uq" placeholder="Search email…" value="${esc(uState.q)}" oninput="uSearch()">
+      <select class="search" id="uflt" onchange="uState.flt=this.value;uState.offset=0;fetchUsers()">
+        <option value="">all</option><option value="verified">verified</option><option value="unverified">unverified</option><option value="disabled">disabled</option></select>
+      <select class="search" id="usort" onchange="uState.sort=this.value;fetchUsers()">
+        <option value="created_at">newest</option><option value="balance">most credits</option><option value="email">email</option></select>
+      <span class="subtle" id="uCount"></span>
+    </div>
+    <table><thead><tr><th>Email</th><th>Status</th><th>Credits</th><th>Type</th><th>Joined</th></tr></thead><tbody id="uRows"></tbody></table>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+      <button class="btn ghost sm" onclick="uPage(-1)">◀ Prev</button>
+      <button class="btn ghost sm" onclick="uPage(1)">Next ▶</button>
+      <span class="subtle" id="uPageInfo"></span></div>`;
+  el('uflt').value=uState.flt; el('usort').value=uState.sort; fetchUsers();
+}
+let _ut=null;
+function uSearch(){clearTimeout(_ut);_ut=setTimeout(()=>{uState.q=el('uq').value;uState.offset=0;fetchUsers();},250);}
+function uPage(dir){uState.offset=Math.max(0,uState.offset+dir*50);fetchUsers();}
+async function fetchUsers(){
+  const p=new URLSearchParams({q:uState.q,flt:uState.flt,sort:uState.sort,limit:50,offset:uState.offset});
+  let d;try{d=await api('/api/admin/users?'+p);}catch(e){el('uRows').innerHTML='<tr><td colspan=5>'+esc(e.message)+'</td></tr>';return;}
+  el('uCount').textContent=d.total+' users';
+  el('uPageInfo').textContent=`${d.offset+1}–${d.offset+d.users.length} of ${d.total}`;
+  el('uRows').innerHTML=d.users.length?d.users.map(u=>`<tr class="click" onclick="openUser(${u.id})">
+    <td>${esc(u.email)}${u.disabled?' <span class="tag no">suspended</span>':''}</td>
+    <td>${u.verified?'<span class="tag ok">verified</span>':'<span class="tag no">unverified</span>'}</td>
     <td>${u.credits}</td>
     <td>${u.purchased?'<span class="tag buy">paid</span>':'<span class="tag">free</span>'}</td>
-    <td class="subtle">${fdate(u.created_at)}</td>
-  </tr>`).join('') : `<tr><td colspan="5" class="subtle">No users.</td></tr>`;
+    <td class="subtle">${fdate(u.created_at)}</td></tr>`).join(''):'<tr><td colspan=5 class="subtle">No users.</td></tr>';
 }
-
 async function openUser(uid){
-  let d; try{ d = await api('/api/admin/users/'+uid); }catch(e){ alert(e.message); return; }
+  let d;try{d=await api('/api/admin/users/'+uid);}catch(e){alert(e.message);return;}
   const u=d.user;
-  const led = d.ledger.map(l=>`<tr><td class="${l.delta_sec>=0?'pos':'neg'}">${l.delta_sec>=0?'+':''}${Math.round(l.delta_sec/60)}m</td>
-    <td>${l.grund}</td><td class="subtle">${fdate(l.created_at)}</td></tr>`).join('') || '<tr><td class="subtle" colspan="3">No entries.</td></tr>';
-  $('#modal').innerHTML = `
-    <h2>${u.email} ${u.is_owner?'<span class="tag buy">owner</span>':''}</h2>
-    <p class="subtle">#${u.id} · ${u.name||'(no name)'} · joined ${fdate(u.created_at)} ·
-      ${u.verified?'verified':'<span style="color:var(--bad)">unverified</span>'} ·
-      <b>${u.credits} credits</b></p>
+  const led=d.ledger.map(l=>`<tr><td class="${l.delta_sec>=0?'pos':'neg'}">${l.delta_sec>=0?'+':''}${Math.round(l.delta_sec/60)}m</td><td>${esc(l.grund)}</td><td class="subtle">${fdate(l.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">–</td></tr>';
+  const pur=d.purchases.map(p=>`<tr><td>${esc(p.pack)}</td><td>${eur(p.eur)}</td><td class="mono subtle">${esc((p.session_id||'').slice(0,14))}</td><td><button class="btn warn sm" onclick="refundSession('${esc(p.session_id)}')">Refund</button></td></tr>`).join('')||'<tr><td colspan=4 class="subtle">no purchases</td></tr>';
+  const cons=d.consents.map(c=>`${esc(c.kind)} (${fdate(c.created_at)})`).join(', ')||'none';
+  el('modal').innerHTML=`
+    <h2>${esc(u.email)} ${u.is_owner?'<span class="tag buy">owner</span>':''}${u.disabled?'<span class="tag no">suspended</span>':''}</h2>
+    <div class="kv" style="margin-top:8px">
+      <span class="kk">ID / name</span><span>#${u.id} · ${esc(u.name||'—')}</span>
+      <span class="kk">Status</span><span>${u.verified?'verified':'<b style="color:var(--bad)">unverified</b>'} · ${u.disposable?'<b style="color:var(--warn)">disposable email</b>':'normal email'}</span>
+      <span class="kk">Credits / LTV</span><span><b>${u.credits} cr</b> · ${eur(u.ltv_eur)} lifetime · ${u.orders} orders · ${u.render_count} renders</span>
+      <span class="kk">Sessions / joined</span><span>${u.active_sessions} active · joined ${fdate(u.created_at)}</span>
+      <span class="kk">Referral</span><span>code ${esc(u.ref_code||'—')} · invited by ${esc(u.referred_by_email||'—')}</span>
+      <span class="kk">Expiring</span><span>${u.expiring_credits} cr in ${u.expiring_days==null?'—':u.expiring_days+'d'}</span>
+      <span class="kk">Consents</span><span>${cons}</span>
+    </div>
     <div class="acts">
-      <input type="number" id="mDelta" placeholder="±min" title="minutes (60s=1 credit)">
-      <input type="text" class="reason" id="mReason" placeholder="reason">
+      <input type="number" id="mDelta" placeholder="±min"><input type="text" class="reason" id="mReason" placeholder="reason">
       <button class="btn sm" onclick="grantCredits(${uid})">Adjust credits</button>
-      ${u.verified?'':`<button class="btn ghost sm" onclick="uAct(${uid},'verify')">Mark verified</button>
-      <button class="btn ghost sm" onclick="uAct(${uid},'resend_verify')">Resend verify</button>`}
-      <button class="btn bad sm" onclick="delUser(${uid},'${u.email.replace(/'/g,"")}')">Delete</button>
+      ${u.verified?'':`<button class="btn ghost sm" onclick="uAct(${uid},'verify')">Verify</button><button class="btn ghost sm" onclick="uAct(${uid},'resend_verify')">Resend</button>`}
+      <button class="btn ghost sm" onclick="uAct(${uid},'reset')">Reset pw</button>
+      <button class="btn ghost sm" onclick="uAct(${uid},'revoke_sessions')">Revoke sessions</button>
+      <button class="btn ${u.disabled?'':'warn'} sm" onclick="disableUser(${uid},${u.disabled?0:1})">${u.disabled?'Unsuspend':'Suspend'}</button>
+      <button class="btn ghost sm" onclick="exportUser(${uid})">Export</button>
+      <button class="btn bad sm" onclick="delUser(${uid},'${esc(u.email).replace(/'/g,'')}')">Delete</button>
     </div>
     <p class="msg" id="mMsg"></p>
-    <div class="k subtle" style="text-transform:uppercase;font-size:11px;letter-spacing:.1em">Ledger (last 100)</div>
-    <div class="led-row"><table><tbody>${led}</tbody></table></div>`;
-  $('#overlay').classList.add('on');
+    <div class="grid g2">
+      <div><h3 style="margin-top:0">Ledger (100)</h3><div class="scroll"><table><tbody>${led}</tbody></table></div></div>
+      <div><h3 style="margin-top:0">Purchases</h3><div class="scroll"><table><tbody>${pur}</tbody></table></div></div>
+    </div>`;
+  el('overlay').classList.add('on');
 }
-function closeModal(){ $('#overlay').classList.remove('on'); if($('#t-users').classList.contains('hidden')===false)loadUsers(); }
-async function grantCredits(uid){
-  const v=parseInt($('#mDelta').value,10); if(!v){ $('#mMsg').textContent='Enter ± minutes.'; return; }
-  const fd=new FormData(); fd.append('delta_min',v); fd.append('reason',$('#mReason').value||'manual');
-  try{ const d=await api('/api/admin/users/'+uid+'/credits',{method:'POST',body:fd});
-    $('#mMsg').textContent='New balance: '+d.credits+' credits.'; }
-  catch(e){ $('#mMsg').textContent=e.message; }
-}
-async function uAct(uid,act){
-  try{ await api('/api/admin/users/'+uid+'/'+act,{method:'POST'}); openUser(uid); }
-  catch(e){ $('#mMsg').textContent=e.message; }
-}
-async function delUser(uid,email){
-  if(!confirm('DELETE account '+email+'? Purchases go to the archive, everything else is erased.'))return;
-  try{ await api('/api/admin/users/'+uid+'/delete',{method:'POST'}); closeModal(); loadUsers(); }
-  catch(e){ alert(e.message); }
+function closeModal(){el('overlay').classList.remove('on');if(active==='users')fetchUsers();}
+async function grantCredits(uid){const v=parseInt(el('mDelta').value,10);if(!v){el('mMsg').textContent='Enter ± minutes.';return;}if(v<0&&!danger('Deduct '+(-v)+' minutes from this user?'))return;const fd=new FormData();fd.append('delta_min',v);fd.append('reason',el('mReason').value||'manual');try{const d=await api('/api/admin/users/'+uid+'/credits',{method:'POST',body:fd});el('mMsg').textContent='New balance: '+d.credits+' credits.';}catch(e){el('mMsg').textContent=e.message;}}
+async function uAct(uid,act){try{const d=await api('/api/admin/users/'+uid+'/'+act,{method:'POST'});openUser(uid);}catch(e){el('mMsg').textContent=e.message;}}
+async function disableUser(uid,on){if(on&&!danger('Suspend this account? They will be logged out and cannot log in.'))return;const fd=new FormData();fd.append('on',on);try{await api('/api/admin/users/'+uid+'/disable',{method:'POST',body:fd});openUser(uid);}catch(e){el('mMsg').textContent=e.message;}}
+function exportUser(uid){fetch('/api/admin/users/'+uid+'/export',{headers:hdr()}).then(r=>r.json()).then(d=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download='user_'+uid+'.json';a.click();}).catch(e=>alert(e.message));}
+async function delUser(uid,email){if(!danger('DELETE account '+email+'? Purchases go to the 10y archive, everything else is erased.'))return;try{await api('/api/admin/users/'+uid+'/delete',{method:'POST'});closeModal();}catch(e){alert(e.message);}}
+async function refundSession(sid){if(!danger('Refund Stripe session '+sid+' AND claw back the credited minutes? This moves real money.'))return;const fd=new FormData();fd.append('session_id',sid);fd.append('clawback','1');try{const d=await api('/api/admin/refund',{method:'POST',body:fd});alert('Stripe: '+d.stripe+'\\nClawed back: '+d.clawed_back_min+' min');}catch(e){alert(e.message);}}
+
+/* ---------- ABUSE ---------- */
+async function loadAbuse(){
+  let d;try{d=await api('/api/admin/abuse');}catch(e){el('view').innerHTML=err(e);return;}
+  const disp=d.disposable_accounts.map(u=>`<tr class="click" onclick="openUser(${u.id})"><td>${esc(u.email)}</td></tr>`).join('')||'<tr><td class="subtle">none</td></tr>';
+  const unv=d.unverified_accounts.map(u=>`<tr class="click" onclick="openUser(${u.id})"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
+  const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
+  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(l.key)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
+  const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
+  el('view').innerHTML=`
+    <div class="grid g4">
+      <div class="card ${d.orphan_claims.credit?'':''}"><div class="k">Orphan bonus claims</div><div class="v">${d.orphan_claims.credit} <small>+ ${d.orphan_claims.referral} ref</small></div></div>
+      <div class="card"><div class="k">Disposable accounts</div><div class="v">${d.disposable_accounts.length}</div></div>
+      <div class="card"><div class="k">Unverified accounts</div><div class="v">${d.unverified_accounts.length}</div></div>
+      <div class="card"><div class="k">Pending resets</div><div class="v">${d.pending_resets}</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div><h3>Disposable-email accounts</h3><div class="scroll"><table><tbody>${disp}</tbody></table></div></div>
+      <div><h3>Unverified / stale</h3><div class="scroll"><table><tbody>${unv}</tbody></table></div></div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div><h3>Top referrers</h3><table><thead><tr><th>Referrer</th><th>Invited</th></tr></thead><tbody>${refs}</tbody></table></div>
+      <div><h3>Rate-limit lockouts</h3><table><thead><tr><th>bucket:ip</th><th>hits</th></tr></thead><tbody>${locks}</tbody></table></div>
+      <div><h3>Demo-IP abuse</h3><table><thead><tr><th>IP</th><th>24h</th></tr></thead><tbody>${demo}</tbody></table></div>
+    </div>
+    <div class="note">${esc(d.note)} Orphan claims = anti-farming hashes with no matching current account (delete+re-register attempts, correctly blocked).</div>`;
 }
 
-if(KEY) boot();
+/* ---------- SYSTEM ---------- */
+async function loadSystem(){
+  let d;try{d=await api('/api/admin/system');}catch(e){el('view').innerHTML=err(e);return;}
+  const k=d.keys,c=d.config,led=(x,w)=>`<span class="led ${x?'ok':(w?'warn':'bad')}"></span>`;
+  const cfg=Object.entries(c).map(([kk,v])=>`<tr><td class="subtle">${esc(kk)}</td><td class="mono">${esc(v)}</td></tr>`).join('');
+  el('view').innerHTML=`
+    <h3>Keys &amp; transport (presence only, never values)</h3>
+    <div class="health">
+      ${led(k.openai)}<span class="pill"><b>OpenAI</b> ${k.openai?'set':'MISSING'}</span>
+      ${led(k.stripe.ready&&k.stripe.mode==='live',k.stripe.mode==='test')}<span class="pill"><b>Stripe</b> ${k.stripe.mode}</span>
+      ${led(k.stripe.webhook_secret)}<span class="pill"><b>Webhook</b> ${k.stripe.webhook_secret?'set':'MISSING'}</span>
+      ${led(k.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${k.mail.transport} → ${esc(k.mail.admin_to)}</span>
+      ${led(k.admin_key)}<span class="pill"><b>Admin key</b> set</span>
+      ${led(k.ref_salt)}<span class="pill"><b>Ref salt</b> set</span>
+    </div>
+    <div class="grid g4" style="margin-top:12px">
+      <div class="card"><div class="k">Build</div><div class="v" style="font-size:16px">${esc(d.build)}</div></div>
+      <div class="card"><div class="k">Disk free</div><div class="v">${d.disk?d.disk.free_gb+'G':'?'} <small>${d.disk?d.disk.used_pct+'%':''}</small></div></div>
+      <div class="card"><div class="k">DB size</div><div class="v">${d.db_mb??'?'} <small>MB</small></div></div>
+      <div class="card"><div class="k">Last backup</div><div class="v" style="font-size:16px">${d.last_backup?fdate(d.last_backup):'none'}</div></div>
+    </div>
+    <div class="health" style="margin-top:12px">
+      ${led(d.heartbeats.watchdog)}<span class="pill"><b>Watchdog</b> ${d.heartbeats.watchdog?ago(d.heartbeats.watchdog):'—'}</span>
+      ${led(d.heartbeats.cleanup)}<span class="pill"><b>Cleanup</b> ${d.heartbeats.cleanup?ago(d.heartbeats.cleanup):'—'}</span>
+      <span class="pill"><b>Active alerts</b> ${d.alerts_active}</span>
+    </div>
+    <h3>Config (env/boot-time — display only)</h3>
+    <table><tbody>${cfg}</tbody></table>
+    <h3>Ops actions</h3>
+    <div class="row-actions">
+      <button class="btn ghost sm" onclick="sysAct('backup/run','Run a DB backup now?')">Backup now</button>
+      <button class="btn ghost sm" onclick="sysAct('mail/test','Send a test mail to the admin address?')">Send test mail</button>
+      <button class="btn warn sm" onclick="sysAct('cleanup/run','Run the retention cleanup sweep now? Deletes job dirs older than retention.')">Run cleanup</button>
+      <button class="btn warn sm" onclick="sysAct('expiry/run','Run the credit-expiry sweep now?')">Run expiry sweep</button>
+    </div>
+    <div class="note">Config values are set via env at boot — change them in .env + docker restart. The panel cannot live-toggle them.</div>`;
+}
+async function sysAct(path,msg){if(!danger(msg))return;try{const d=await api('/api/admin/'+path,{method:'POST'});alert('OK: '+JSON.stringify(d));if(path.startsWith('backup'))loadSystem();}catch(e){alert(e.message);}}
+
+/* ---------- COMPLIANCE ---------- */
+async function loadCompliance(){
+  let cons,arch;
+  try{cons=await api('/api/admin/compliance/consents');arch=await api('/api/admin/compliance/archive');}catch(e){el('view').innerHTML=err(e);return;}
+  const cr=cons.consents.map(c=>`<tr><td>${esc(c.email)}</td><td>${esc(c.kind)}</td><td class="subtle">${fdt(c.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">none</td></tr>';
+  const ar=arch.archive.map(a=>`<tr><td>${esc(a.user_email)}</td><td>${Math.round(a.delta_sec/60)}m</td><td>${esc(a.grund)}</td><td class="subtle">${fdate(a.archived_at)}</td></tr>`).join('')||'<tr><td colspan=4 class="subtle">none</td></tr>';
+  el('view').innerHTML=`
+    <h3>Withdrawal consent log (§356(4) BGB proof)</h3>
+    <div class="scroll" style="max-height:320px"><table><thead><tr><th>User</th><th>Kind</th><th>When</th></tr></thead><tbody>${cr}</tbody></table></div>
+    <h3>GoBD purchase archive (deleted accounts, 10y retention)</h3>
+    <div class="scroll" style="max-height:260px"><table><thead><tr><th>Email</th><th>Min</th><th>Grund</th><th>Archived</th></tr></thead><tbody>${ar}</tbody></table></div>
+    <h3>Accounting export</h3>
+    <div class="row-actions"><button class="btn ghost sm" onclick="dl('purchases')">purchases.csv</button><button class="btn ghost sm" onclick="dl('ledger')">ledger.csv</button><button class="btn ghost sm" onclick="dl('users')">users.csv</button></div>`;
+}
+
+/* ---------- CODES ---------- */
+async function loadCodes(){
+  let d;try{d=await api('/api/admin/codes');}catch(e){el('view').innerHTML=err(e);return;}
+  const rows=d.codes.map(c=>`<tr><td class="mono">${esc(c.code)}</td><td>${esc(c.name||'')}</td><td>${c.genutzt||0}/${c.limit||'-'}</td><td>${c.aktiv?'<span class="tag ok">active</span>':'<span class="tag no">blocked</span>'}</td>
+    <td><button class="btn ghost sm" onclick="codeAct('${c.aktiv?'block':'unblock'}','${esc(c.code)}')">${c.aktiv?'Block':'Unblock'}</button></td></tr>`).join('')||'<tr><td colspan=5 class="subtle">no codes</td></tr>';
+  el('view').innerHTML=`
+    <h3>Tester access codes</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <input class="search" id="cName" placeholder="Tester name">
+      <input class="search" id="cLimit" type="number" placeholder="video limit" value="5" style="width:120px">
+      <button class="btn sm" onclick="newCode()">Create code</button></div>
+    <table><thead><tr><th>Code</th><th>Name</th><th>Used</th><th>State</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="note">Access codes let testers use the app without an account or your OpenAI key exposure.</div>`;
+}
+async function newCode(){const fd=new FormData();fd.append('action','new');fd.append('name',el('cName').value||'Tester');fd.append('limit',parseInt(el('cLimit').value,10)||5);try{const d=await api('/api/admin/codes',{method:'POST',body:fd});alert('New code: '+d.code);loadCodes();}catch(e){alert(e.message);}}
+async function codeAct(action,code){const fd=new FormData();fd.append('action',action);fd.append('code',code);try{await api('/api/admin/codes',{method:'POST',body:fd});loadCodes();}catch(e){alert(e.message);}}
+
+function err(e){return '<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Error</b> '+esc(e.message)+'</div>';}
+const RENDER={live:loadLive,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,codes:loadCodes};
+if(KEY)boot();
 </script>
 </body>
 </html>
