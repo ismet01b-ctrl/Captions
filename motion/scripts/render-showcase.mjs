@@ -32,6 +32,7 @@ const composition = ({ showcase: 'MotionShowcase', kinetic: 'MotionKinetic', pro
 const style = arg(rest, 'style', 'editorial');
 const brand = arg(rest, 'brand', 'DouchkoVE');
 const format = arg(rest, 'format', '9:16');
+const customFile = arg(rest, 'custom-file', '');   // optional JSON of per-render overrides (Custom)
 const codec = arg(rest, 'codec', 'h264');
 const dims = ({ '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080] })[format] || [1080, 1920];
 mkdirSync(dirname(out), { recursive: true });
@@ -55,11 +56,13 @@ spec.canvas = { w: Number(process.argv[3]), h: Number(process.argv[4]) };
 spec.fps = 30;
 const out = { spec, styleId: process.argv[6] };
 if (story && story.length) out.story = story;
+const cf = process.argv[8];
+if (cf) { try { const c = JSON.parse(readFileSync(cf, 'utf8')); if (c && Object.keys(c).length) out.custom = c; } catch {} }
 writeFileSync(process.argv[7], JSON.stringify(out));
 process.stderr.write('shots=' + (story ? story.length : 0) + '\\n');
 `);
   execFileSync(esbuild, [genEntry, '--bundle', '--platform=node', '--format=esm', `--outfile=${genBundle}`, '--log-level=error']);
-  execFileSync('node', [genBundle, transcriptPath, String(dims[0]), String(dims[1]), brand, style, propsPath], { stdio: 'inherit' });
+  execFileSync('node', [genBundle, transcriptPath, String(dims[0]), String(dims[1]), brand, style, propsPath, customFile], { stdio: 'inherit' });
 
   // 2) Render the chosen composition.
   const browser = findBrowser(rest);

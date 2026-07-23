@@ -90,7 +90,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
   const th = applyTheme(themeFor(custom?.style ?? styleId), custom);
   const accent = custom?.accent ?? (th.id !== 'mono' && th.id !== 'soft' ? th.accent : '#ff7a2f');
   const lines = (custom?.text && custom.text.length ? custom.text : story.map(lineOf)).filter(Boolean);
-  const brand = (custom?.brand || lines.find((l) => /^made with /i.test(l))?.replace(/^made with /i, '') || 'Studio').trim();
+  const brand = (custom?.brand || lines.find((l) => /^made with /i.test(l))?.replace(/^made with /i, '') || 'DouchkoVE').trim();
   const prompt = lines[0] || PROMPT_DEFAULT;
   const head = (lines[1] || 'Premium studio').replace(/[.]+$/, '');
   const sub = lines[2] || 'crafted for creatives';

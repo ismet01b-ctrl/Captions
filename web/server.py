@@ -1956,10 +1956,96 @@ def _run_motion_auto(jid):
         _maybe_refund(jid)
 
 
+def _run_motion_showcase(jid):
+    """v117 Full-customizable Showcase: Video ODER Transkript-Text -> Storyboard
+    (buildShowcase) -> gewaehlte Komposition (showcase/kinetic/prompt) + Stil + Format
+    + ALLE Custom-Einstellungen -> eigenstaendiges MP4. render-showcase.mjs macht die
+    Arbeit; Python besitzt Queue/Credits/Library. Text ist verbatim (kein Halluzinieren)."""
+    j = JOBS[jid]
+    d = job_dir(jid)
+    out = os.path.join(d, 'fertig.mp4')
+    set_state(jid, status='laeuft', phase='Preparing your motion …', progress=0.08, log_tail=[])
+    wpath = os.path.join(d, 'words.json')
+    # 1) Woerter: aus dem Video transkribieren ODER aus eingegebenem Text synthetisieren.
+    if j.get('showcase_video'):
+        src = j['showcase_video']
+        apath = os.path.join(d, 'audio.m4a')
+        _br = max(24, min(64, int(24 * 8192 / max(float(j.get('dauer') or 1.0), 1.0))))
+        try:
+            subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', src, '-vn', '-ac', '1',
+                            '-ar', '16000', '-c:a', 'aac', '-b:a', f'{_br}k', apath],
+                           capture_output=True, text=True, timeout=180)
+        except Exception as e:
+            set_state(jid, status='fehler', progress=0, msg='Could not read the video audio.',
+                      detail=f'{type(e).__name__}: {e}'); _maybe_refund(jid); return
+        try:
+            words = _whisper_words(apath, j.get('language', 'auto'))
+        except Exception as e:
+            set_state(jid, status='fehler', progress=0,
+                      msg=f'Transcription failed: {str(e)[:180]}',
+                      detail=f'{type(e).__name__}: {e}'); _maybe_refund(jid); return
+        if not words:
+            set_state(jid, status='fehler', progress=0, msg='No speech found in the video.')
+            _maybe_refund(jid); return
+    else:
+        text = (j.get('transcript_text') or '').strip()
+        if not text:
+            set_state(jid, status='fehler', progress=0, msg='No text or video provided.')
+            _maybe_refund(jid); return
+        # synthetische Wort-Timings (0.32s/Wort + kleine Pause an Satzenden) fuer Voiceover-Sync.
+        words = []
+        _t = 0.0
+        for w in text.split():
+            words.append({'word': ' ' + w, 'start': round(_t, 2), 'end': round(_t + 0.3, 2)})
+            _t += 0.32
+            if w.endswith(('.', '!', '?')):
+                _t += 0.4
+    with open(wpath, 'w', encoding='utf-8') as f:
+        json.dump(words, f)
+    # 2) Custom-Overrides -> Datei (alle Einstell-Knoepfe).
+    custom = dict(j.get('custom') or {})
+    cpath = os.path.join(d, 'custom.json')
+    json.dump(custom, open(cpath, 'w', encoding='utf-8'))
+    set_state(jid, phase='Designing your motion like a senior designer …', progress=0.2)
+    comp = j.get('composition', 'showcase')
+    style = j.get('style', 'editorial')
+    fmt = j.get('format', '9:16')
+    brand = str(custom.get('brand') or 'DouchkoVE')
+    cmd = ['node', os.path.join('scripts', 'render-showcase.mjs'),
+           os.path.abspath(wpath), os.path.abspath(out),
+           '--composition=' + comp, '--style=' + style, '--format=' + fmt,
+           '--brand=' + brand, '--custom-file=' + os.path.abspath(cpath), '--log=error']
+    p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    JOBS[jid]['pid'] = p.pid
+    log = []
+    for line in p.stdout:
+        log.append(line.rstrip())
+        m = re.search(r'Rendered (\d+)/(\d+)', line)
+        if m:
+            fr, tot = int(m.group(1)), max(int(m.group(2)), 1)
+            set_state(jid, progress=0.25 + 0.7 * fr / tot, phase='Rendering your motion …')
+    p.wait()
+    if p.returncode == 0 and os.path.exists(out):
+        try:
+            subprocess.run(['ffmpeg', '-y', '-v', 'error', '-ss', '1.0', '-i', out,
+                            '-frames:v', '1', '-vf', 'scale=360:-2', os.path.join(d, 'poster.jpg')],
+                           check=False, timeout=30)
+        except Exception:
+            pass
+        set_state(jid, status='fertig', progress=1.0, phase='Done', video_url=f'/api/video/{jid}')
+    else:
+        set_state(jid, status='fehler', progress=0, msg='Motion render failed.',
+                  detail='\n'.join([x for x in log[-15:] if x.strip()]))
+        _maybe_refund(jid)
+
+
 def _run_motion(jid):
     """Motion-Graphics-Render (UI-Motion-Engine) statt Caption-Pipeline.
     Eine JSON treibt alles; gfx_engine wird als Subprocess aufgerufen."""
     j = JOBS[jid]
+    if j.get('showcase'):                     # v117: Full-customizable Showcase (Video/Text)
+        return _run_motion_showcase(jid)
     if j.get('auto_video'):                   # v108: Video hochladen -> KI-Auto-Overlay
         return _run_motion_auto(jid)
     if j.get('brief'):                        # v101p: Brief->Motion-Director
@@ -3212,6 +3298,120 @@ async def motion_auto(request: Request, video: UploadFile = File(...),
                  'name': 'AutoMotion.mp4', 'dauer': dur, 'accent': _acc,
                  'platform': _plat, 'logo_path': _logo_p, 'font_path': _font_p,
                  'cost_sec': _cost, 'status': 'wartet'}
+    set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
+    MQUEUE.put(jid)
+    return {'jid': jid, 'status_url': f'/api/status/{jid}'}
+
+
+def _sanitize_custom(raw):
+    """v117: nur erlaubte, validierte Einstell-Knoepfe durchlassen (kein beliebiges JSON)."""
+    try:
+        c = json.loads(raw or '{}')
+    except Exception:
+        return {}
+    if not isinstance(c, dict):
+        return {}
+    out = {}
+    def hexok(v):
+        return isinstance(v, str) and bool(re.match(r'^#[0-9a-fA-F]{6}$', v))
+    for k in ('accent', 'ink', 'sub', 'bg', 'bgDark'):
+        if hexok(c.get(k)):
+            out[k] = c[k]
+    if isinstance(c.get('style'), str) and c['style'] in ('editorial', 'bold', 'soft', 'mono'):
+        out['style'] = c['style']
+    if isinstance(c.get('font'), str) and 0 < len(c['font']) <= 160:
+        out['font'] = c['font']
+    if isinstance(c.get('brand'), str) and c['brand'].strip():
+        out['brand'] = c['brand'][:40]
+    if isinstance(c.get('upper'), bool):
+        out['upper'] = c['upper']
+    if isinstance(c.get('weight'), (int, float)):
+        out['weight'] = max(300, min(900, int(c['weight'])))
+    if isinstance(c.get('tracking'), str) and len(c['tracking']) <= 12:
+        out['tracking'] = c['tracking']
+    for k in ('grain', 'vignette', 'shutter', 'cameraMult', 'trans'):
+        if isinstance(c.get(k), (int, float)):
+            out[k] = max(0.0, min(3.0, float(c[k])))
+    if isinstance(c.get('text'), list):
+        _t = [str(x)[:80] for x in c['text'][:16] if isinstance(x, str) and x.strip()]
+        if _t:
+            out['text'] = _t
+    if isinstance(c.get('logo'), str) and c['logo'].startswith('data:') and len(c['logo']) < 2_000_000:
+        out['logo'] = c['logo']
+    return out
+
+
+@app.post('/api/motion/showcase')
+async def motion_showcase(request: Request,
+                          video: UploadFile = File(None),
+                          text: str = Form(''),
+                          composition: str = Form('showcase'),
+                          style: str = Form('editorial'),
+                          format: str = Form('9:16'),
+                          custom: str = Form('{}')):
+    """v117 Full-customizable: Video ODER Transkript-Text -> gewaehlte Komposition + Stil +
+    Format + alle Custom-Einstellungen -> eigenstaendiges Motion-Video. Kostet nach Laenge."""
+    u = _require_user(request)
+    if not MOTION_BRIEF_OK:
+        raise HTTPException(503, 'The motion engine is warming up on this server - try again shortly.')
+    comp = composition if composition in ('showcase', 'kinetic', 'prompt') else 'showcase'
+    style = style if style in ('editorial', 'bold', 'soft', 'mono') else 'editorial'
+    fmt = format if format in ('16:9', '9:16', '1:1') else '9:16'
+    cust = _sanitize_custom(custom)
+    jid = uuid.uuid4().hex[:12]
+    d = job_dir(jid)
+    os.makedirs(d, exist_ok=True)
+    job = {'kind': 'motion', 'showcase': True, 'user_id': u['id'], 'name': 'Motion.mp4',
+           'composition': comp, 'style': style, 'format': fmt, 'custom': cust, 'status': 'wartet'}
+    has_video = bool(video and getattr(video, 'filename', ''))
+    if has_video:
+        src = os.path.join(d, 'source.mp4')
+        cap = MOTION_AUTO_MAX_MB * 1024 * 1024
+        total = 0
+        try:
+            with open(src, 'wb') as f:
+                while True:
+                    chunk = await video.read(1 << 20)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > cap:
+                        raise HTTPException(413, f'Video too large (max {MOTION_AUTO_MAX_MB} MB).')
+                    f.write(chunk)
+        except HTTPException:
+            shutil.rmtree(d, ignore_errors=True); raise
+        if total == 0:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(400, 'Upload a video or enter text.')
+        try:
+            _pr = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                                  '-of', 'default=noprint_wrappers=1:nokey=1', src],
+                                 capture_output=True, text=True, timeout=30)
+            dur = float((_pr.stdout or '0').strip() or 0)
+        except Exception:
+            dur = 0.0
+        if dur <= 0:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(400, 'Could not read that video.')
+        if dur > MOTION_AUTO_MAX_SEC:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(413, 'Video too long (max 15 min).')
+        job['showcase_video'] = src
+        job['dauer'] = dur
+        _cost = cost_seconds(dur)
+    else:
+        txt = (text or '').strip()
+        if not txt:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(400, 'Upload a video or enter text.')
+        job['transcript_text'] = txt[:4000]
+        est = max(6.0, len(txt.split()) / 2.5)   # ~2.5 words/sec
+        _cost = cost_seconds(est)
+    if not _reserve_credits(u['id'], _cost, jid):
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(402, 'Not enough credits for this render.')
+    job['cost_sec'] = _cost
+    JOBS[jid] = job
     set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
     MQUEUE.put(jid)
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}

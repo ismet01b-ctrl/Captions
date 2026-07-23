@@ -2090,6 +2090,13 @@ def _scenario_logic(clip, transcript, tmp):
           and all(('applyTheme(themeFor(custom?.style ?? styleId), custom)' in _msrc(f))
                   for f in ['MotionShowcase.tsx', 'MotionKinetic.tsx', 'MotionPrompt.tsx'])
           and 'custom?.text' in _msh and 'custom?.accent' in _mpr and 'custom?.brand' in _mpr)
+    # v117b: Server-Verdrahtung — /api/motion/showcase (Video ODER Text) + Custom-Passthrough.
+    check('v117b: Server-Endpoint + Worker (Showcase, Video/Text, Custom)',
+          "@app.post('/api/motion/showcase')" in _srv_m and 'def _run_motion_showcase' in _srv_m
+          and 'def _sanitize_custom' in _srv_m
+          and "if j.get('showcase')" in _srv_m
+          and 'render-showcase.mjs' in _srv_m and "'--custom-file='" in _srv_m
+          and 'custom-file' in _mrbs)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
