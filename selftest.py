@@ -2095,10 +2095,15 @@ def _scenario_logic(clip, transcript, tmp):
           'gpt-4o' not in _rp and 'gpt-4o' not in _srv_m
           and 'gpt-4o' not in open(os.path.join(HERE, 'config.yaml'), encoding='utf-8').read()
           and "model='gpt-5'" in _rp)
-    check('v126-sec: Referral gehaertet (Unique-Index + atomare Buchung)',
+    check('v126-sec: Referral gehaertet (Unique-Index + atomare Buchung + Anti-Farming)',
           'ux_ledger_ref' in _srv_m and 'ux_users_refcode' in _srv_m
           and 'BEGIN IMMEDIATE' in _srv_m
-          and "INSERT OR IGNORE INTO ledger" in _srv_m)
+          and "INSERT OR IGNORE INTO ledger" in _srv_m
+          and 'referral_claims' in _srv_m and 'def _is_disposable_email' in _srv_m
+          and 'def _email_hash' in _srv_m
+          and 'INSERT OR IGNORE INTO referral_claims' in _srv_m
+          # referral_claims wird bei Konto-Loeschung NICHT mitgeloescht (Re-Arm-Schutz)
+          and 'DELETE FROM referral_claims' not in _srv_m)
     check('v125: Verfall verdrahtet (Sweep im Cleanup, /api/me, Billing-Hinweis)',
           'def _credit_expiry_sweep' in _srv_m and '_credit_expiry_sweep()' in _srv_m
           and 'def _fifo_remainders' in _srv_m and 'def _expire_credits' in _srv_m
@@ -3261,6 +3266,32 @@ def _scenario_security(tmp):
     check('v126-sec: doppeltes Verify bucht Referral nicht doppelt (idempotent)',
           gg1 is True and gg2 is False and rows_n == 1 and rows_w == 1
           and bw == SV.REFERRAL_SECONDS, f'n={rows_n} w={rows_w} bw={bw}')
+    # v126-sec (1): Wegwerf-Mail bekommt keinen Referral-Bonus.
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, "
+                "verified, referred_by) SELECT 'ring@mailinator.com','x','R',0,?,1,id "
+                "FROM users WHERE email='rw@test'", (int(_t.time()),))
+    con.commit()
+    _dsp = con.execute("SELECT id FROM users WHERE email='ring@mailinator.com'").fetchone()['id']
+    con.close()
+    gd = SV._grant_referral(_dsp)
+    check('v126-sec: Wegwerf-Domain bekommt keinen Referral-Bonus',
+          gd is False and SV._is_disposable_email('a@mailinator.com') is True
+          and SV._is_disposable_email('a@gmail.com') is False)
+    # v126-sec (2): Re-Arm-Schutz - Konto loeschen + gleiche Mail neu registrieren
+    # farmt den Bonus NICHT mehr (Anspruch-Hash ueberlebt die Loeschung).
+    con = SV._db()
+    con.execute("DELETE FROM users WHERE id = ?", (_n,))          # Konto "geloescht"
+    con.execute("DELETE FROM ledger WHERE user_id = ?", (_n,))
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, "
+                "verified, referred_by) SELECT 'rn@test','x','N2',0,?,1,id FROM users "
+                "WHERE email='rw@test'", (int(_t.time()),))
+    con.commit()
+    _n2 = con.execute("SELECT id FROM users WHERE email='rn@test'").fetchone()['id']
+    con.close()
+    gr = SV._grant_referral(_n2)
+    check('v126-sec: Re-Arm nach Konto-Loeschung wird geblockt (Hash ueberlebt)',
+          gr is False, f'grant nach re-register = {gr}')
     # v125 Credits-Verfall: FIFO pro Gutschrift, 180 Tage, idempotent, Warn-Info.
     con = SV._db()
     con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "

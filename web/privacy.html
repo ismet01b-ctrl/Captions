@@ -49,6 +49,11 @@ a:hover { text-decoration: underline; }
       (kept no longer than 14 days)</li>
     <li><strong>Payment data:</strong> handled by Stripe (Stripe Payments Europe,
       Ltd., Ireland). We only see your email and the amount paid.</li>
+    <li><strong>Referral fraud prevention:</strong> when a referral bonus is paid out,
+      we store a one-way salted hash of the invited email address (never the address
+      itself). This lets us grant the bonus only once per person and prevent abuse.
+      Legal basis: our legitimate interest in preventing fraud (Art. 6(1)(f) GDPR).
+      This pseudonymous hash is kept even after account deletion for the same reason.</li>
   </ul>
 
   <h2>What we do NOT do</h2>

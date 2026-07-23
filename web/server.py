@@ -256,6 +256,12 @@ def _init_users_db():
     con.execute("CREATE TABLE IF NOT EXISTS mail_log ("
                 "user_id INTEGER NOT NULL, key TEXT NOT NULL, sent_at INTEGER NOT NULL, "
                 "UNIQUE(user_id, key))")
+    # v126-sec: Referral-Anspruch pro E-Mail, PSEUDONYM (gesalzener Hash, KEINE
+    # Klartext-Mail). UEBERLEBT die Kontoloeschung bewusst - sonst liesse sich der
+    # Bonus per Loeschen+Neuregistrieren beliebig oft farmen. DSGVO: berechtigtes
+    # Interesse Betrugsabwehr (Art. 6(1)(f)), gehoert in die Datenschutzerklaerung.
+    con.execute("CREATE TABLE IF NOT EXISTS referral_claims ("
+                "email_hash TEXT PRIMARY KEY, claimed_at INTEGER NOT NULL)")
     con.commit()
     # v92-sec: Kauf-Gutschriften gegen Doppelbuchung absichern. Stripe kann
     # denselben Webhook mehrfach senden; ohne DB-Constraint konnten zwei
@@ -405,6 +411,53 @@ REFERRAL_SECONDS = 600          # 10 Minuten fuer jede Seite
 REFERRAL_CAP = 10               # max. belohnte Einladungen pro Konto
 _REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # ohne I/O/0/1 (Verwechslung)
 
+# v126-sec: bekannte Wegwerf-Mail-Domains. Der Referral-Bonus wird fuer diese
+# NICHT gutgeschrieben (Temp-Mail-Ringe). Kein Sign-up-Block - nur der Bonus.
+_DISPOSABLE_DOMAINS = frozenset({
+    'mailinator.com', 'guerrillamail.com', 'guerrillamail.info', 'guerrillamailblock.com',
+    'sharklasers.com', 'grr.la', '10minutemail.com', '10minutemail.net', 'tempmail.com',
+    'temp-mail.org', 'tempmail.net', 'tempr.email', 'throwawaymail.com', 'getnada.com',
+    'nada.email', 'yopmail.com', 'yopmail.net', 'trashmail.com', 'trashmail.de',
+    'dispostable.com', 'maildrop.cc', 'moakt.com', 'mohmal.com', 'fakeinbox.com',
+    'mailnesia.com', 'mintemail.com', 'spamgourmet.com', 'mytemp.email', 'emailondeck.com',
+    'inboxkitten.com', 'burnermail.io', 'anonaddy.me', 'mailsac.com', 'tmail.ws',
+    'wegwerfmail.de', 'wegwerfemail.de', 'byom.de', 'einrot.com', 'cool.fr.nf',
+    '33mail.com', 'mailcatch.com', 'spam4.me', 'temp-mail.io', 'luxusmail.org',
+})
+
+
+def _email_domain(email):
+    return str(email or '').strip().lower().rsplit('@', 1)[-1] if '@' in str(email or '') else ''
+
+
+def _is_disposable_email(email):
+    return _email_domain(email) in _DISPOSABLE_DOMAINS
+
+
+def _ref_salt():
+    """Stabiler Salt fuer den Referral-E-Mail-Hash. Aus DVE_REF_SALT, sonst einmal
+    persistent in DATA erzeugt - damit derselbe Hash ueber Neustarts hinweg gilt."""
+    s = os.environ.get('DVE_REF_SALT', '').strip()
+    if s:
+        return s
+    p = os.path.join(DATA, 'ref_salt')
+    try:
+        if os.path.exists(p):
+            return open(p, encoding='utf-8').read().strip()
+        os.makedirs(DATA, exist_ok=True)
+        s = secrets.token_hex(16)
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(s)
+        return s
+    except Exception:
+        return 'dve-static-ref-salt'          # Notnagel: immerhin konsistent im Prozess
+
+
+def _email_hash(email):
+    import hashlib
+    return hashlib.sha256((_ref_salt() + ':' + str(email or '').strip().lower())
+                          .encode('utf-8')).hexdigest()
+
 
 def _ensure_ref_code(uid):
     """Einladungscode lazy erzeugen (8 Zeichen, kollisionsfrei), einmal pro Konto."""
@@ -447,10 +500,23 @@ def _grant_referral(new_uid):
     try:
         con.isolation_level = None
         con.execute('BEGIN IMMEDIATE')            # Schreibsperre: kein TOCTOU
-        nu = con.execute("SELECT referred_by FROM users WHERE id = ?", (new_uid,)).fetchone()
+        nu = con.execute("SELECT referred_by, email FROM users WHERE id = ?",
+                         (new_uid,)).fetchone()
         ref_id = nu['referred_by'] if nu else None
         if not ref_id or ref_id == new_uid \
                 or not con.execute("SELECT id FROM users WHERE id = ?", (ref_id,)).fetchone():
+            con.execute('ROLLBACK')
+            return False
+        # v126-sec (1): Wegwerf-Mail bekommt keinen Referral-Bonus (Ring-Schutz).
+        if _is_disposable_email(nu['email']):
+            con.execute('ROLLBACK')
+            return False
+        # v126-sec (2): pro E-Mail nur EINMAL - der Anspruch ueberlebt eine
+        # Kontoloeschung (PSEUDONYM, gesalzener Hash). Loescht+neu registriert =
+        # kein neuer Bonus. INSERT OR IGNORE ist zugleich das Idempotenz-Gate.
+        claim = con.execute("INSERT OR IGNORE INTO referral_claims (email_hash, claimed_at) "
+                            "VALUES (?, ?)", (_email_hash(nu['email']), int(time.time())))
+        if claim.rowcount != 1:
             con.execute('ROLLBACK')
             return False
         now = int(time.time())

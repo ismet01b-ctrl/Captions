@@ -25,10 +25,15 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
     + `ux_users_refcode`; `_grant_referral` laeuft jetzt in EINER `BEGIN IMMEDIATE`-Transaktion
     mit `INSERT OR IGNORE` (doppeltes Verify bucht nicht mehr doppelt, Cap-Zaehlung atomar);
     `_ensure_ref_code` setzt via `UPDATE ... WHERE ref_code IS NULL` + Kollisions-Retry.
-  Selftest **704/704 gruen** (funktional: Pro-Konto-Referenzpfad, Override, Idempotenz des
-  doppelten Verify; plus Verdrahtung + GPT-5-Garantie). OFFEN (Ismet-Entscheidung): zwei
-  Referral-FARMING-Funde (Re-Arm via Konto-Loeschen, Temp-Mail-Ringe) sind Fraud/DSGVO-
-  Abwaegungen, bewusst NICHT still geaendert.
+  - **Referral Anti-Farming (Ismet: beide absichern):** (1) Re-Arm via Konto-Loeschen +
+    Neuregistrieren ist tot - neue Tabelle `referral_claims` speichert einen gesalzenen,
+    persistenten E-Mail-HASH (kein Klartext) der belohnten Konten, der die Loeschung bewusst
+    ueberlebt (DSGVO Art. 6(1)(f), steht jetzt in /privacy). INSERT OR IGNORE darauf ist zugleich
+    das Idempotenz-Gate. (2) Bekannte Wegwerf-Mail-Domains bekommen keinen Referral-Bonus
+    (`_is_disposable_email`, ~45 Domains). Kein Sign-up-Block, nur der Bonus.
+  Selftest **706/706 gruen** (funktional: Pro-Konto-Referenzpfad, Override, doppeltes Verify
+  idempotent, Wegwerf-Domain geblockt, Re-Arm nach Loeschung geblockt; plus Verdrahtung +
+  GPT-5-Garantie).
 - **v125 Echter 6-Monats-Credits-Verfall (live).** Das "Credits valid for 6 months" der
   Preisseite ist jetzt Code, nicht nur Text (Ismet: vor dem Launch implementieren, keine
   Bestandsguthaben betroffen). Modell: **FIFO pro Gutschrift**. Jede positive Ledger-Zeile
