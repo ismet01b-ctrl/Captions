@@ -1706,6 +1706,35 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div id="refList" style="margin-top:16px; display:flex; flex-direction:column; gap:8px;"></div>
           </div>
         </details>
+        <details style="margin-top:12px;">
+          <summary>Transcribe a video</summary>
+          <div style="margin-top:14px;">
+            <p class="hint">Upload a video or audio file and get its transcript, with real word
+              timings. Admin only. Uses Whisper on the server. No credits are charged.
+              Your text is transcribed exactly as spoken.</p>
+            <div style="display:flex; flex-direction:column; gap:10px; max-width:460px;">
+              <input type="file" id="trFile" accept="video/*,audio/*" style="color:var(--mut);">
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <label class="hint" style="margin:0;">Language</label>
+                <input type="text" id="trLang" value="auto" maxlength="4"
+                       style="width:90px;" title="auto or a 2-letter code (en, de, ...)">
+                <button class="btn" type="button" id="btnTranscribe" style="padding:9px 18px;">Transcribe</button>
+              </div>
+              <div id="trStatus" class="hint" style="display:none;"></div>
+            </div>
+            <div id="trResult" style="margin-top:14px; display:none;">
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                <button class="btn secondary" type="button" data-tr="txt" style="padding:7px 14px;">Download .txt</button>
+                <button class="btn secondary" type="button" data-tr="srt" style="padding:7px 14px;">Download .srt</button>
+                <button class="btn secondary" type="button" data-tr="vtt" style="padding:7px 14px;">Download .vtt</button>
+                <button class="btn secondary" type="button" data-tr="json" style="padding:7px 14px;">Download .json</button>
+                <button class="btn secondary" type="button" id="btnTrCopy" style="padding:7px 14px;">Copy text</button>
+              </div>
+              <textarea id="trText" readonly rows="10"
+                style="width:100%; resize:vertical; font-family:ui-monospace, Menlo, monospace; font-size:13px;"></textarea>
+            </div>
+          </div>
+        </details>
       </div>
 
       <div class="panel danger-zone">
@@ -3838,6 +3867,60 @@ if ($('#btnRefLearn')) $('#btnRefLearn').addEventListener('click', async () => {
     }
   } catch (e) { refSetStatus('✗ Connection error - upload interrupted. Try a shorter clip.', 'err'); }
   finally { btn.disabled = false; }
+});
+
+/* Admin-Werkzeug unter Reference: Video -> Transkript (txt/srt/vtt/json). */
+let TR = null;
+function trSetStatus(msg, kind) {
+  const st = $('#trStatus'); if (!st) return;
+  st.style.display = 'block'; st.style.whiteSpace = 'pre-wrap'; st.textContent = msg;
+  st.style.color = kind === 'err' ? '#ff8a7a' : kind === 'ok' ? '#6dd48a' : 'var(--mut)';
+}
+function trDownload(kind) {
+  if (!TR) return;
+  const base = (TR.filename || 'transcript').replace(/\.[^.]+$/, '');
+  const map = { txt: [TR.text || '', 'text/plain'], srt: [TR.srt || '', 'text/plain'],
+    vtt: [TR.vtt || '', 'text/vtt'], json: [JSON.stringify(TR.words || [], null, 2), 'application/json'] };
+  const [data, mime] = map[kind] || map.txt;
+  const blob = new Blob([data], { type: mime + ';charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = base + '.' + kind;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+if ($('#btnTranscribe')) $('#btnTranscribe').addEventListener('click', async () => {
+  const f = $('#trFile') && $('#trFile').files[0];
+  if (!f) { trSetStatus('Choose a video or audio file first.', 'err'); return; }
+  const btn = $('#btnTranscribe'); btn.disabled = true;
+  const res = $('#trResult'); if (res) res.style.display = 'none';
+  trSetStatus('Transcribing … larger videos take longer. Keep this open.', 'info');
+  try {
+    const fd = new FormData();
+    fd.append('datei', f);
+    fd.append('language', (($('#trLang') && $('#trLang').value) || 'auto').trim() || 'auto');
+    const r = await fetch('/api/reference/transcribe', { method: 'POST', body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.ok) {
+      TR = { text: d.text, srt: d.srt, vtt: d.vtt, words: d.words, filename: f.name };
+      const ta = $('#trText'); if (ta) ta.value = d.text || '';
+      if (res) res.style.display = 'block';
+      trSetStatus('✓ Done. ' + (d.word_count || 0) + ' words, language ' + (d.language || '?')
+        + (d.duration ? ', ' + d.duration + 's.' : '.'), 'ok');
+    } else {
+      let msg = d.detail || ('Failed (HTTP ' + r.status + ').');
+      if (r.status === 403) msg += '  This account is not the admin account.';
+      if (r.status === 400 && /OPENAI_API_KEY/.test(msg)) msg += '  Set it in the server environment.';
+      trSetStatus('✗ ' + msg, 'err');
+    }
+  } catch (e) { trSetStatus('✗ Connection error - upload interrupted. Try a shorter file.', 'err'); }
+  finally { btn.disabled = false; }
+});
+document.querySelectorAll('#trResult [data-tr]').forEach(b =>
+  b.addEventListener('click', () => trDownload(b.dataset.tr)));
+if ($('#btnTrCopy')) $('#btnTrCopy').addEventListener('click', () => {
+  const ta = $('#trText'); if (!ta) return;
+  navigator.clipboard.writeText(ta.value).then(() => trSetStatus('Copied to clipboard.', 'ok'))
+    .catch(() => { ta.select(); document.execCommand('copy'); trSetStatus('Copied.', 'ok'); });
 });
 
 function updateRing(rest, total) {

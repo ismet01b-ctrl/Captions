@@ -2038,6 +2038,15 @@ def _scenario_logic(clip, transcript, tmp):
           and 'senior designer' not in _srv_m
           and 'DVE_MOTION_TIMEOUT' in _srv_m and 'threading.Timer' in _srv_m
           and "msg='This render took too long" in _srv_m)
+    # v121: Admin-Transkript-Werkzeug in der (owner-gated) Reference-UI verdrahtet.
+    check('v121: UI — Transcribe-Werkzeug unter Reference (owner-gated + Downloads)',
+          'id="btnTranscribe"' in _ui_m and 'id="trFile"' in _ui_m
+          and "fetch('/api/reference/transcribe'" in _ui_m
+          and 'function trDownload' in _ui_m
+          and all(("data-tr=\"%s\"" % k) in _ui_m for k in ('txt', 'srt', 'vtt', 'json'))
+          # sitzt im refPanel, das refApplyOwner fuer Nicht-Owner versteckt
+          and _ui_m.find('id="trFile"') > _ui_m.find('id="refPanel"')
+          and _ui_m.find('id="trFile"') < _ui_m.find('class="panel danger-zone"'))
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -3144,6 +3153,24 @@ def _scenario_security(tmp):
           'OWNER_EMAIL' in _src and 'def _owner_ok' in _src
           and _src.count('if not _owner_ok(request):') >= 3
           and "'is_owner':" in _src and '/api/reference/learn' in _src)
+    # v121: Admin-Transkript-Werkzeug unter Reference (Video -> txt/srt/vtt/json), owner-gated.
+    _tw = [{'word': 'Hello', 'start': 0.0, 'end': 0.4}, {'word': 'there.', 'start': 0.4, 'end': 0.9},
+           {'word': 'This', 'start': 1.9, 'end': 2.1}, {'word': 'is', 'start': 2.1, 'end': 2.2},
+           {'word': 'verbatim.', 'start': 2.2, 'end': 2.9}]
+    _srt = SV._words_to_srt(_tw); _vtt = SV._words_to_srt(_tw, vtt=True)
+    _txt = SV._words_to_text(_tw)
+    check('v121: Transkript-Formatter (SRT/VTT echte Timings, TXT verbatim)',
+          '00:00:00,000 --> 00:00:00,900' in _srt and 'Hello there.' in _srt
+          and _vtt.startswith('WEBVTT') and '00:00:00.000 -->' in _vtt
+          and _txt == 'Hello there.\nThis is verbatim.'
+          and SV._words_to_text([]) == '' and SV._words_to_srt([]).strip() == '')
+    check('v121: Transkript-Endpoint owner-gated + kein Credit-Abzug',
+          "@app.post('/api/reference/transcribe')" in _src
+          and 'def reference_transcribe' in _src
+          and _src[_src.find('def reference_transcribe'):
+                   _src.find('def reference_transcribe') + 700].count('_owner_ok(request)') >= 1
+          and '_reserve_credits' not in
+              _src[_src.find('def reference_transcribe'):_src.find('@app.get(\'/admin/codes\')')])
     # 15c) v96s Regression: _owner_ok muss mit einer echten sqlite3.Row klappen
     # (Row hat KEIN .get() - genau das war die 500-Ursache). Mit einem dict waere
     # der Bug unentdeckt geblieben, darum bewusst eine Row.

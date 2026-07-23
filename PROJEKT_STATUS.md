@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v121 Admin-Transkript-Werkzeug unter Reference (live).** Ismet: „Bau eine Funktion ein,
+  die das Transkript von einem Video ausgibt, nur bei Admin-Berechtigung unter Reference."
+  Umgesetzt im bestehenden owner-gated Reference-Bereich (Create-Seite, `#refPanel`, sichtbar
+  nur fürs Besitzer-Konto): neues Aufklapp-Panel „Transcribe a video". Video/Audio hochladen →
+  Server zieht eine schlanke 16-kHz-Spur (ffmpeg) → Whisper (`whisper-1`, Wort-Timings über den
+  Server-`OPENAI_API_KEY`) → Ausgabe als **Klartext, .srt, .vtt und Wort-.json** (Downloads +
+  Copy). Text bleibt verbatim, **kein Credit-Abzug**. Endpoint `/api/reference/transcribe` ist
+  serverseitig `_owner_ok`-gated (403 für alle anderen); das UI-Panel steckt im refPanel, das
+  für Nicht-Owner versteckt bleibt. Neue Formatter `_words_to_srt/_vtt/_text/_words_to_cues`
+  (echte Timings, Cue-Umbruch an Satzende/Pause). Selftest **683/683 grün** (Formatter- +
+  Gating- + UI-Garantien). EHRLICH: hier ohne Key nur Formatter/Gating getestet — die echte
+  Transkription läuft erst live mit gesetztem `OPENAI_API_KEY`.
 - **v120 Ladescreen sachlich-professionell + „6%"-Hänger behoben (live).** Ismet: „Mach
   unnötige Beschreibungen und alle Gedankenstriche weg. Professionell, nicht möchtegern. Bleibt
   beim Rendern immer bei 6% stehen, fix das."

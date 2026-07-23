@@ -1803,6 +1803,63 @@ def _whisper_words(audio_path, language='auto'):
             for w in data.get('words', [])]
 
 
+def _ts_stamp(t, sep=','):
+    """Sekunden -> SRT/VTT-Zeitstempel HH:MM:SS,mmm (SRT) bzw. HH:MM:SS.mmm (VTT)."""
+    t = max(0.0, float(t)); ms = int(round((t - int(t)) * 1000)); s = int(t)
+    return f'{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}{sep}{ms:03d}'
+
+
+def _words_to_cues(words, max_words=9, max_gap=0.7, max_dur=6.0):
+    """Wortliste [{word,start,end}] -> Untertitel-Cues. Neue Zeile an Satzende,
+    langer Pause (>max_gap), nach max_words Woertern oder max_dur Sekunden."""
+    cues, cur = [], []
+    for w in words:
+        tok = (w.get('word') or '').strip()
+        if not tok:
+            continue
+        if cur:
+            gap = float(w.get('start', 0)) - float(cur[-1].get('end', 0))
+            dur = float(w.get('end', 0)) - float(cur[0].get('start', 0))
+            if len(cur) >= max_words or gap > max_gap or dur > max_dur:
+                cues.append(cur); cur = []
+        cur.append(w)
+        if tok.endswith(('.', '!', '?', '…')) and len(cur) >= 3:
+            cues.append(cur); cur = []
+    if cur:
+        cues.append(cur)
+    return [{'start': float(c[0].get('start', 0)), 'end': float(c[-1].get('end', 0)),
+             'text': ' '.join((x.get('word') or '').strip() for x in c).strip()}
+            for c in cues if c]
+
+
+def _words_to_srt(words, vtt=False):
+    """Wortliste -> SRT- bzw. WebVTT-Text (echte Timings)."""
+    sep = '.' if vtt else ','
+    cues = _words_to_cues(words)
+    out = ['WEBVTT', ''] if vtt else []
+    for i, c in enumerate(cues, 1):
+        if not vtt:
+            out.append(str(i))
+        out.append(f"{_ts_stamp(c['start'], sep)} --> {_ts_stamp(c['end'], sep)}")
+        out.append(c['text']); out.append('')
+    return '\n'.join(out).strip() + '\n'
+
+
+def _words_to_text(words):
+    """Wortliste -> Fliesstext, an Satzenden umgebrochen (lesbares Transkript)."""
+    line, paras = [], []
+    for w in words:
+        tok = (w.get('word') or '').strip()
+        if not tok:
+            continue
+        line.append(tok)
+        if tok.endswith(('.', '!', '?', '…')):
+            paras.append(' '.join(line)); line = []
+    if line:
+        paras.append(' '.join(line))
+    return '\n'.join(paras).strip()
+
+
 def _run_motion_showcase(jid):
     """v117 Full-customizable Showcase: Video ODER Transkript-Text -> Storyboard
     (buildShowcase) -> gewaehlte Komposition (showcase/kinetic/prompt) + Stil + Format
@@ -3932,6 +3989,71 @@ def reference_delete(request: Request, idx: int = Form(...)):
         except Exception:
             raise HTTPException(500, 'Could not save.')
     return {'refs': refs}
+
+
+@app.post('/api/reference/transcribe')
+async def reference_transcribe(request: Request, datei: UploadFile = File(...),
+                               language: str = Form('auto')):
+    """Admin/Owner-Werkzeug unter Reference: ein Video hochladen -> Whisper-Transkript
+    (whisper-1, Wort-Timings ueber den Server-OPENAI_API_KEY) als Klartext, SRT, WebVTT
+    und Wort-JSON zurueckgeben. NUR Besitzer-Konto (session-gated), kein Credit-Abzug."""
+    if not _owner_ok(request):
+        raise HTTPException(403, 'Access denied.')
+    ext = os.path.splitext(datei.filename or '')[1].lower() or '.mp4'
+    if ext not in ('.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi', '.m4a', '.mp3', '.wav', '.aac'):
+        raise HTTPException(400, 'Upload a video or audio file.')
+    if not os.environ.get('OPENAI_API_KEY'):
+        raise HTTPException(400, 'Server has no OPENAI_API_KEY set - transcription needs it.')
+    lang = (language or 'auto').strip().lower()
+    if not re.match(r'^[a-z]{2}$', lang):
+        lang = 'auto'
+    d = os.path.join(DATA, 'reftmp')
+    os.makedirs(d, exist_ok=True)
+    src = os.path.join(d, uuid.uuid4().hex[:10] + ext)
+    apath = src + '.m4a'
+    try:
+        groesse = 0
+        with open(src, 'wb') as f:
+            while True:
+                chunk = await datei.read(1 << 20)
+                if not chunk:
+                    break
+                groesse += len(chunk)
+                if groesse > 300 * 1024 * 1024:
+                    raise HTTPException(413, 'File too large (max 300 MB).')
+                f.write(chunk)
+        if groesse == 0:
+            raise HTTPException(400, 'Empty upload.')
+        # schlanke Mono-16kHz-Spur ziehen (Whisper-Limit 25 MB); Bitrate nach Laenge.
+        try:
+            _pr = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                                  '-of', 'default=noprint_wrappers=1:nokey=1', src],
+                                 capture_output=True, text=True, timeout=30)
+            dur = float((_pr.stdout or '0').strip() or 0)
+        except Exception:
+            dur = 0.0
+        _br = max(24, min(96, int(24 * 8192 / max(dur, 1.0)))) if dur else 64
+        _ar = subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', src, '-vn', '-ac', '1',
+                              '-ar', '16000', '-c:a', 'aac', '-b:a', f'{_br}k', apath],
+                             capture_output=True, text=True, timeout=300)
+        if not os.path.exists(apath) or os.path.getsize(apath) < 200:
+            raise HTTPException(400, 'No usable audio track in this file. '
+                                     + (_ar.stderr or '')[-200:])
+        words = _whisper_words(apath, lang)
+        if not words:
+            raise HTTPException(502, 'No speech found in this file.')
+        return {'ok': True, 'language': lang, 'duration': round(dur, 2),
+                'word_count': len(words), 'text': _words_to_text(words),
+                'srt': _words_to_srt(words, vtt=False),
+                'vtt': _words_to_srt(words, vtt=True), 'words': words}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f'{type(e).__name__}: {e}')
+    finally:
+        for _p in (src, apath):
+            try: os.remove(_p)
+            except OSError: pass
 
 
 @app.get('/admin/codes')
