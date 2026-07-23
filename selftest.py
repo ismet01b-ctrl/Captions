@@ -2077,6 +2077,13 @@ def _scenario_logic(clip, transcript, tmp):
           and 'def _hook_score' in _srv_m and "'hook_score':" in _srv_m
           and "'ref_code':" in _srv_m and "'style_prefs':" in _srv_m
           and 'uid=None' in _srv_m)                        # Korrekturen pro User markiert
+    check('v125: Verfall verdrahtet (Sweep im Cleanup, /api/me, Billing-Hinweis)',
+          'def _credit_expiry_sweep' in _srv_m and '_credit_expiry_sweep()' in _srv_m
+          and 'def _fifo_remainders' in _srv_m and 'def _expire_credits' in _srv_m
+          and 'CREDIT_VALIDITY_DAYS' in _srv_m and 'mail_log' in _srv_m
+          and "'expiring_credits':" in _srv_m
+          and 'id="billExpiry"' in _ui_m and 'u.expiring_credits' in _ui_m
+          and 'Expired credits' in _ui_m)
     check('v124: UI verdrahtet (Upsell ohne Preis, Low-Balance, Referral, Fortschritt)',
           '€' not in _ui_m[_ui_m.find('id="wmUpsell"'):_ui_m.find('id="wmUpsell"') + 900]
           and 'One purchase unlocks this video' in _ui_m
@@ -3194,6 +3201,40 @@ def _scenario_security(tmp):
           k1 is True and k2 is False
           and bl == 60 + 1200 + 120 and bh == 600 + 1200 and nb == 1,
           f'low={bl}s high={bh}s bonusrows={nb}')
+    # v125 Credits-Verfall: FIFO pro Gutschrift, 180 Tage, idempotent, Warn-Info.
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('exp@test','x','E',0,?,1)", (int(_t.time()),))
+    con.commit()
+    ide = con.execute("SELECT id FROM users WHERE email='exp@test'").fetchone()['id']
+    _now = int(_t.time())
+    _old = _now - int(200 * 86400)                     # 200 Tage alt -> abgelaufen
+    _mid = _now - int((SV.CREDIT_VALIDITY_DAYS - 10) * 86400)   # laeuft in ~10d ab
+    for delta, grund, ts in ((600, 'Kauf sessOLD', _old),
+                             (-240, 'Render jX (240s)', _old + 86400),
+                             (300, 'Kauf sessMID', _mid),
+                             (120, 'Kauf sessNEW', _now)):
+        con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                    "VALUES (?, ?, ?, ?)", (ide, delta, grund, ts))
+    con.execute("UPDATE users SET balance_sec = ? WHERE id = ?",
+                (600 - 240 + 300 + 120, ide))
+    con.commit(); con.close()
+    e1 = SV._expire_credits(ide)                       # 600 - 240 = 360 verfallen
+    e2 = SV._expire_credits(ide)                       # idempotent: nichts mehr
+    con = SV._db()
+    be_ = con.execute("SELECT balance_sec FROM users WHERE id=?", (ide,)).fetchone()['balance_sec']
+    ne_ = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id=? AND "
+                      "grund LIKE 'Expired credits %'", (ide,)).fetchone()['c']
+    con.close()
+    check('v125: Verfall FIFO (nur unverbrauchter Rest) + idempotent',
+          e1 == 360 and e2 == 0 and be_ == 300 + 120 and ne_ == 1,
+          f'e1={e1} e2={e2} bal={be_} rows={ne_}')
+    _ws, _wd = SV._expiring_info(ide, SV.CREDIT_WARN_DAYS)
+    check('v125: Warn-Info sieht den bald ablaufenden Rest (nicht den frischen)',
+          _ws == 300 and _wd is not None and 8 <= _wd <= 11, f'{_ws}s in {_wd}d')
+    m1 = SV._log_mail_once(ide, 'expwarn_test')
+    m2 = SV._log_mail_once(ide, 'expwarn_test')
+    check('v125: mail_log verhindert Doppelversand', m1 is True and m2 is False)
     # v124 Hook-Score-Port: Werte plausibel + Randfaelle stabil.
     _hs_moms = [{'i': 1, 'zeit': 0.8, 'power': 3, 'fx': 'zoom', 'anim': 'pop'},
                 {'i': 2, 'zeit': 5.0, 'power': 2, 'fx': 'behind'},

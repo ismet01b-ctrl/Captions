@@ -1613,6 +1613,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <span class="num" id="billCredits">–</span>
           <span class="unit">credits available</span>
         </div>
+        <!-- v125: ehrlicher Verfall-Hinweis. Erscheint nur, wenn wirklich etwas ablaeuft. -->
+        <p class="hint" id="billExpiry" style="display:none; color:#e8b25a; font-weight:600;"></p>
         <p class="hint" id="billHint" style="margin-bottom:0;">Billed per started minute of source video.</p>
       </div>
       <div class="panel">
@@ -3367,6 +3369,19 @@ async function renderPricingGrid() {
 async function renderBilling() {
   const c = Math.floor((State.balanceSec || 0) / 60);
   const bc = $('#billCredits'); if (bc) bc.textContent = String(c);
+  // v125: ehrlicher Verfall-Hinweis (nur wenn wirklich etwas ablaeuft, aus /api/me).
+  const be = $('#billExpiry');
+  if (be) {
+    be.style.display = 'none';
+    fetch('/api/me').then(r => r.json()).then(u => {
+      if (u && u.ok !== false && (u.expiring_credits || 0) > 0 && u.expiring_days != null) {
+        const n = u.expiring_credits, d = u.expiring_days;
+        be.textContent = n + ' credit' + (n !== 1 ? 's' : '') + ' expire'
+          + (n === 1 ? 's' : '') + (d <= 0 ? ' today.' : ' in ' + d + ' day' + (d !== 1 ? 's' : '') + '.');
+        be.style.display = 'block';
+      }
+    }).catch(() => {});
+  }
   await renderPricingGrid();
   await renderBillingHistory();
 }
@@ -3448,6 +3463,7 @@ function translateGrund(g) {
     .replace(/^Reload bonus .*/, 'Reload bonus')
     .replace(/^Referral welcome$/, 'Invite bonus')
     .replace(/^Referral for .*/, 'Invite reward')
+    .replace(/^Expired credits .*/, 'Expired credits')
     .replace(/^Render \S+ \(\d+s\)$/, 'Video render')
     .replace(/^Render /, 'Video render ');
 }

@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v125 Echter 6-Monats-Credits-Verfall (live).** Das "Credits valid for 6 months" der
+  Preisseite ist jetzt Code, nicht nur Text (Ismet: vor dem Launch implementieren, keine
+  Bestandsguthaben betroffen). Modell: **FIFO pro Gutschrift**. Jede positive Ledger-Zeile
+  (Kauf, Welcome, Monats-Gratis, Referral, Bonus) traegt ihr Datum; Verbrauch (negative
+  Zeilen, inklusive frueherer Verfaelle) zehrt die aelteste Gutschrift zuerst auf. Was nach
+  180 Tagen (DVE_CREDIT_DAYS) von einer Gutschrift uebrig ist, verfaellt mit eigenem
+  Ledger-Eintrag "Expired credits" (dadurch idempotent: der Eintrag zaehlt beim naechsten
+  Lauf als Verbrauch). Stuendlicher Sweep im Cleanup-Worker bucht Verfall und schickt
+  **einmalig** 14 Tage vorher eine ehrliche Warn-Mail (neue mail_log-Tabelle gegen
+  Doppelversand, nur verifizierte Konten). `/api/me` liefert expiring_credits/expiring_days,
+  Billing zeigt "N credits expire in D days" nur, wenn wirklich etwas ablaeuft.
+  Selftest **696/696 gruen** (funktional: FIFO-Verfall nur des unverbrauchten Rests,
+  Idempotenz, Warn-Fenster sieht Bald-Ablaufendes und nicht Frisches, mail_log-Einmaligkeit).
 - **v124 Monetarisierungs-Batch: Kaufmoment, Wiederkauf, Investment, Referral (live).**
   Ismet: Gewinn maximieren, aber ehrlich (keine Preis-Schreierei, keine Gedankenstriche,
   kein Supermacht-Ton). Vier Pakete:

@@ -252,6 +252,11 @@ def _init_users_db():
         con.execute("ALTER TABLE users ADD COLUMN ref_code TEXT")
         con.execute("ALTER TABLE users ADD COLUMN referred_by INTEGER")
         con.commit()
+    # v125: einmalige System-Mails (z.B. Verfall-Warnung) gegen Doppelversand.
+    con.execute("CREATE TABLE IF NOT EXISTS mail_log ("
+                "user_id INTEGER NOT NULL, key TEXT NOT NULL, sent_at INTEGER NOT NULL, "
+                "UNIQUE(user_id, key))")
+    con.commit()
     # v92-sec: Kauf-Gutschriften gegen Doppelbuchung absichern. Stripe kann
     # denselben Webhook mehrfach senden; ohne DB-Constraint konnten zwei
     # gleichzeitige Deliveries beide am Idempotenz-SELECT vorbei und doppelt
@@ -436,6 +441,127 @@ def _grant_referral(new_uid):
         return True
     finally:
         con.close()
+
+
+# v125 Credits-Verfall: das "6 Monate gueltig" der Preisseite ist jetzt CODE, nicht
+# nur Text. Modell: FIFO pro Gutschrift. Jede positive Ledger-Zeile ist eine
+# Gutschrift mit Datum; jeder Verbrauch (negative Zeilen, inklusive frueherer
+# Verfaelle) zehrt die aelteste Gutschrift zuerst auf. Was nach 180 Tagen von
+# einer Gutschrift uebrig ist, verfaellt mit eigenem Ledger-Eintrag. Dadurch ist
+# der Verfall idempotent: der Eintrag selbst zaehlt beim naechsten Lauf als
+# Verbrauch und stellt die alten Gutschriften auf 0.
+CREDIT_VALIDITY_DAYS = float(os.environ.get('DVE_CREDIT_DAYS', '180'))
+CREDIT_WARN_DAYS = 14
+
+
+def _fifo_remainders(uid):
+    """Ledger -> Liste der Gutschriften mit Restbetrag nach FIFO-Verbrauch:
+    [{'created_at': ts, 'left': sec}, ...] (nur left > 0)."""
+    con = _db()
+    try:
+        rows = con.execute("SELECT delta_sec, created_at FROM ledger "
+                           "WHERE user_id = ? ORDER BY created_at, id", (uid,)).fetchall()
+    finally:
+        con.close()
+    grants = [{'created_at': r['created_at'], 'left': r['delta_sec']}
+              for r in rows if r['delta_sec'] > 0]
+    consumed = sum(-r['delta_sec'] for r in rows if r['delta_sec'] < 0)
+    for g in grants:                                   # aelteste zuerst aufzehren
+        if consumed <= 0:
+            break
+        eat = min(g['left'], consumed)
+        g['left'] -= eat
+        consumed -= eat
+    return [g for g in grants if g['left'] > 0]
+
+
+def _expire_credits(uid):
+    """Abgelaufene Gutschrift-Reste verfallen lassen (ein negativer Ledger-
+    Eintrag pro Lauf). Gibt die verfallenen Sekunden zurueck, 0 wenn nichts."""
+    cutoff = time.time() - CREDIT_VALIDITY_DAYS * 86400
+    expired = sum(g['left'] for g in _fifo_remainders(uid)
+                  if g['created_at'] < cutoff)
+    if expired <= 0:
+        return 0
+    con = _db()
+    try:
+        bal = con.execute("SELECT balance_sec FROM users WHERE id = ?",
+                          (uid,)).fetchone()
+        if not bal:
+            return 0
+        expired = min(expired, bal['balance_sec'])     # Drift-Schutz
+        if expired <= 0:
+            return 0
+        con.execute("UPDATE users SET balance_sec = MAX(0, balance_sec - ?) "
+                    "WHERE id = ?", (expired, uid))
+        con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (uid, -expired, 'Expired credits '
+                     + time.strftime('%Y-%m-%d'), int(time.time())))
+        con.commit()
+        return expired
+    finally:
+        con.close()
+
+
+def _log_mail_once(uid, key):
+    """True genau beim ersten Mal pro (User, Schluessel), sonst False."""
+    con = _db()
+    try:
+        cur = con.execute("INSERT OR IGNORE INTO mail_log (user_id, key, sent_at) "
+                          "VALUES (?, ?, ?)", (uid, key, int(time.time())))
+        con.commit()
+        return cur.rowcount == 1
+    finally:
+        con.close()
+
+
+def _expiring_info(uid, window_days):
+    """(Sekunden, Tage bis zum fruehesten Verfall) fuer Reste, die innerhalb
+    von window_days ablaufen. (0, None) wenn nichts ansteht."""
+    now = time.time()
+    soon = [g for g in _fifo_remainders(uid)
+            if g['created_at'] + CREDIT_VALIDITY_DAYS * 86400 < now + window_days * 86400]
+    if not soon:
+        return 0, None
+    earliest = min(g['created_at'] for g in soon) + CREDIT_VALIDITY_DAYS * 86400
+    return sum(g['left'] for g in soon), max(0, int((earliest - now) / 86400))
+
+
+def _credit_expiry_sweep():
+    """Stuendlich im Cleanup: Verfall buchen + einmalige Warn-Mail 14 Tage
+    vorher (nur verifizierte Konten). Fehler bleiben leise."""
+    con = _db()
+    try:
+        users = con.execute("SELECT id, email, name, verified FROM users").fetchall()
+    finally:
+        con.close()
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    for u in users:
+        try:
+            exp = _expire_credits(u['id'])
+            if exp:
+                print(f'Verfall: {credits_of(exp)} Credits bei User {u["id"]}')
+            if not u['verified']:
+                continue
+            warn_sec, days = _expiring_info(u['id'], CREDIT_WARN_DAYS)
+            if warn_sec <= 0 or credits_of(warn_sec) <= 0:
+                continue
+            key = 'expwarn_' + time.strftime(
+                '%Y%m', time.localtime(time.time() + (days or 0) * 86400))
+            if not _log_mail_once(u['id'], key):
+                continue
+            n = credits_of(warn_sec)
+            _send_mail(u['email'], 'Some of your credits expire soon',
+                       f'Hi{" " + u["name"] if u["name"] else ""},\n\n'
+                       f'{n} credit{"s" if n != 1 else ""} in your DouchkoVE account '
+                       f'will expire in about {days} day{"s" if days != 1 else ""}. '
+                       f'Credits stay valid for six months after they are added.\n\n'
+                       f'Use them on your next video:\n{base}/app#create\n\n'
+                       f'DouchkoVE')
+            print(f'Verfall-Warnung an User {u["id"]}: {n} Credits, {days}d')
+        except Exception as e:
+            print(f'Verfall-Sweep-Fehler (User {u["id"]}): {type(e).__name__}: {e}')
 
 
 def _find_user_by_email(email):
@@ -2365,6 +2491,10 @@ def _cleanup_worker():
     while True:
         _backup_users_db()
         try:
+            _credit_expiry_sweep()           # v125: Verfall buchen + Warn-Mails
+        except Exception as e:
+            print(f'Verfall-Sweep uebersprungen: {type(e).__name__}: {e}')
+        try:
             cutoff = _t.time() - retention * 86400
             if os.path.isdir(JOBS_DIR):
                 for jid in os.listdir(JOBS_DIR):
@@ -2654,6 +2784,11 @@ def api_me(request: Request):
     # v124 Stil-Gedaechtnis: eigene Editor-Korrekturen, aus denen die Regie lernt.
     style_prefs = sum(1 for c in _load_corrections()
                       if c.get('user_id') == u['id'])
+    # v125: laeuft in den naechsten 30 Tagen etwas ab? (fuer den Billing-Hinweis)
+    try:
+        _exp_sec, _exp_days = _expiring_info(u['id'], 30)
+    except Exception:
+        _exp_sec, _exp_days = 0, None
     lt = time.localtime()
     days_in_month = [31, 29 if lt.tm_year % 4 == 0 else 28, 31, 30, 31, 30,
                      31, 31, 30, 31, 30, 31][lt.tm_mon - 1]
@@ -2668,6 +2803,8 @@ def api_me(request: Request):
             'ref_used': ref_used, 'ref_cap': REFERRAL_CAP,
             'ref_minutes': REFERRAL_SECONDS // 60,
             'style_prefs': style_prefs,                           # v124 Investment
+            'expiring_credits': credits_of(_exp_sec),             # v125 Verfall
+            'expiring_days': _exp_days,
             'free_reset_days': days_in_month - lt.tm_mday + 1}
 
 
