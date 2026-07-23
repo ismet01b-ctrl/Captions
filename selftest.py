@@ -2067,6 +2067,9 @@ def _scenario_logic(clip, transcript, tmp):
           and 'id="MotionPrompt"' in _mrt3b and 'promptDuration' in _mrt3b)
     check('v115: MotionPrompt markensicher (keine Fremd-Marke im Render)',
           not any(bad in _mpr for bad in ['Claude', 'Sonnet', 'Anthropic', 'claude']))
+    check('v115c: MotionPrompt Zoom-in→Reveal (Detail rein, dann aufdecken)',
+          'ZOOM-IN' in _mpr and _mpr.count('ZOOM-IN') >= 2      # Box + Website
+          and 'transformOrigin' in _mpr)
     # v116: Render-Bridge — Transkript → gewählte Komposition + Stil + Format, ein Befehl.
     _mrbs = open(os.path.join(HERE, 'motion', 'scripts', 'render-showcase.mjs'), encoding='utf-8').read()
     check('v116: render-showcase Bridge (Komposition/Stil/Format aus Transkript)',

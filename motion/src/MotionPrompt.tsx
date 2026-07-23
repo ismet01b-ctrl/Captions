@@ -178,13 +178,16 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
       {inOut(box[0], box[1], 0.18) > 0.01 && (() => {
         const app = inOut(box[0], box[1], 0.18);
         const p = seg(box[0], box[1]);
-        const typed = Math.max(0, Math.min(prompt.length, Math.round(((t - (box[0] + 0.3)) / (box[1] - box[0] - 1.0)) * prompt.length)));
+        const dur = box[1] - box[0];
+        const typed = Math.max(0, Math.min(prompt.length, Math.round(((t - (box[0] + 0.2)) / (dur - 1.4)) * prompt.length)));
         const caretOn = Math.floor(t * 1.8) % 2 === 0;
-        const sc = mix(0.9, 1.02, easeOutQuint(clamp01(p * 1.4)));           // gentle push-in
-        const tilt = mix(6, 0, easeOutQuint(clamp01(p * 1.6)));              // settles from a slight tilt
+        // ZOOM-IN → REVEAL: start pushed into the glowing top-left corner WHERE the text is being
+        // typed (you read a few words but not the whole box), then pull back to reveal the box.
+        const zr = easeInOutQuint(clamp01((p * dur) / 1.9));
+        const sc = mix(2.15, 1.0, zr);
         return (
-          <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app, perspective: `${1400 * S}px` }}>
-            <div style={{ transform: `scale(${sc.toFixed(3)}) rotateX(${tilt.toFixed(2)}deg)` }}>
+          <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app }}>
+            <div style={{ transformOrigin: '9% 30%', transform: `scale(${sc.toFixed(3)})` }}>
               <GlowEdge w={1520 * S} h={280 * S} r={40 * S} t={t} accent={accent} bw={bw}>
                 <div style={{ position: 'absolute', inset: 0, padding: `${46 * S}px ${52 * S}px` }}>
                   <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 56 * S, lineHeight: 1.25, color: '#f3f4f7' }}>
@@ -218,9 +221,10 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
         const p = seg(code[0], code[1]);
         const CODE = codeLines(head, sub);
         const scroll = p * CODE.length * 52 * S;
+        const czr = easeInOutQuint(clamp01((p * (code[1] - code[0])) / 1.3));   // zoom-out reveal of the code block
         return (
           <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'flex-start', paddingTop: H * 0.24, pointerEvents: 'none', perspective: `${820 * S}px`, opacity: app }}>
-            <div style={{ transformStyle: 'preserve-3d', transform: `rotateX(52deg)`, width: '70%',
+            <div style={{ transformStyle: 'preserve-3d', transform: `rotateX(52deg) scale(${mix(1.6, 1, czr).toFixed(3)})`, width: '70%',
               maskImage: 'linear-gradient(to bottom, transparent, #000 22%, #000 72%, transparent)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, #000 22%, #000 72%, transparent)' }}>
               {CODE.map((ln, i) => {
                 const appear = clamp01((p * CODE.length - i) * 2.5);
@@ -240,7 +244,9 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
       {/* ── WEBSITE REVEAL: landing panel rotating in from 3D, settling flat, glow orange→blue ── */}
       {seg(reveal[0], reveal[1]) > 0 && seg(reveal[0], reveal[1]) < 1.05 && (() => {
         const app = clamp01((t - reveal[0]) * 1.6);
-        const rotY = mix(30, 0, rp), rotX = mix(16, 0, rp), rScale = mix(0.84, 1, rp), rz = mix(-300, 0, rp);
+        // ZOOM-IN → REVEAL: start large + tilted (a glowing fragment, unclear what it is), then
+        // pull back and flatten to reveal the whole website.
+        const rotY = mix(34, 0, rp), rotX = mix(18, 0, rp), rScale = mix(1.55, 1, rp), rz = mix(-120, 0, rp);
         const camPush = mix(1.0, 1.03, easeInOutCubic(clamp01((seg(reveal[0], reveal[1]) - 0.6) / 0.4)));  // slow push after settle
         return (
           <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', perspective: `${1500 * S}px`, opacity: app }}>
