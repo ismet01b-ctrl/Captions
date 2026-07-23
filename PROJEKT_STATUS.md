@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v126 Kunden-Stil-Referenz + GPT-5-Restmigration + Referral-Haertung (live).** Ismet:
+  eine innovative, machbare Funktion vor dem Launch, nur noch GPT-5.
+  - **Kunden-Stil (die Innovation):** Jedes Konto lernt der Regie den EIGENEN Wunsch-Stil aus
+    Referenz-Videos an, nicht nur der Owner. `render._reference_store_path()` respektiert jetzt
+    `DVE_REFS_FILE`; der Server injiziert pro Render-Subprozess die PERSOENLICHE Referenz-Datei
+    des Kontos (`data/refs/user_<id>.json`), sodass Prompt-Block UND deterministische
+    Mess-Parameter aus dem persoenlichen Geschmack kommen statt aus dem Haus-Stil. Endpoints
+    `/api/style/{learn,list,delete}` (learn kostet 1 Credit, atomar reserviert + Refund bei
+    Fehlschlag, Cap 6/Konto, GPT-5-Vision via `analyze_reference_video(store_path=...)`).
+    Account-Panel "Your caption style", Landing-Bullet "Learns your style". Lernt den
+    editorialen Stil (Pacing/Betonung/Hook), NICHT Fonts oder Woerter. Persoenliche Referenzen
+    werden mit dem Konto geloescht. EHRLICH: die Verdrahtung ist end-to-end verifiziert
+    (Override, Pro-Konto-Trennung, Env-Injektion, Prompt+Params lesen die Datei); die echte
+    GPT-5-Vision-Analyse laeuft erst live mit Key.
+  - **GPT-5 ueberall:** letzte `gpt-4o`-Nennungen aus render.py/server.py/config.yaml raus
+    (waren nur noch Kommentare, alle Defaults liefen schon auf gpt-5). Der `_oai_json`-Kompat-
+    Helfer bleibt (erkennt gpt-5/o-Serie an max_completion_tokens).
+  - **Referral gehaertet (Fix aus adversarialem Review des live gepushten v124):** drei
+    bestaetigte Races behoben. Neue partielle Unique-Indizes `ux_ledger_ref` (Referral-Gruende)
+    + `ux_users_refcode`; `_grant_referral` laeuft jetzt in EINER `BEGIN IMMEDIATE`-Transaktion
+    mit `INSERT OR IGNORE` (doppeltes Verify bucht nicht mehr doppelt, Cap-Zaehlung atomar);
+    `_ensure_ref_code` setzt via `UPDATE ... WHERE ref_code IS NULL` + Kollisions-Retry.
+  Selftest **704/704 gruen** (funktional: Pro-Konto-Referenzpfad, Override, Idempotenz des
+  doppelten Verify; plus Verdrahtung + GPT-5-Garantie). OFFEN (Ismet-Entscheidung): zwei
+  Referral-FARMING-Funde (Re-Arm via Konto-Loeschen, Temp-Mail-Ringe) sind Fraud/DSGVO-
+  Abwaegungen, bewusst NICHT still geaendert.
 - **v125 Echter 6-Monats-Credits-Verfall (live).** Das "Credits valid for 6 months" der
   Preisseite ist jetzt Code, nicht nur Text (Ismet: vor dem Launch implementieren, keine
   Bestandsguthaben betroffen). Modell: **FIFO pro Gutschrift**. Jede positive Ledger-Zeile

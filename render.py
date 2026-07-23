@@ -1206,8 +1206,8 @@ Antworte NUR mit JSON: {"momente": [{"i": <Index>, "szene": "...", "lage": "..."
 def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     """v94: chat/completions-Body, modell-kompatibel. Neuere Modelle (gpt-5,
     o-Serie) verlangen max_completion_tokens und lehnen ein abweichendes
-    temperature ab; gpt-4o akzeptiert beides. Ohne das faellt ein neues Modell
-    still auf die Heuristik zurueck.
+    temperature ab; aeltere Chat-Modelle akzeptieren beides. Ohne das faellt
+    ein neues Modell still auf die Heuristik zurueck.
     v96t: json_mode=False fuer PROSA-Antworten (Stil-Lernen). Mit
     response_format=json_object verlangt OpenAI das Wort "json" im Prompt und
     erzwingt JSON - ein Prosa-Prompt scheitert dann mit 400."""
@@ -2850,14 +2850,17 @@ def _ref_audio_summary(video_path):
 
 
 def analyze_reference_video(video_path, name=None, model='gpt-5',
-                            n_frames=6, save=True):
+                            n_frames=6, save=True, store_path=None):
     """v96n: Lernt aus einem REFERENZ-Video mit High-End-Captions. Sampelt ein
-    paar Frames, laesst GPT-4o-Vision den STIL beschreiben (Pacing, Dichte,
+    paar Frames, laesst GPT-5 (Vision) den STIL beschreiben (Pacing, Dichte,
     betonte Woerter, Effekt-Wucht, Hook) und legt das als Stil-Referenz in
     regie_reference.json ab. WICHTIG/EHRLICH: die Regie-KI uebernimmt daraus
     EDITORIALE Entscheidungen (wo + wie stark), NICHT den exakten Look - Fonts,
     Animationen und Kamera kommen aus unserer Engine, nicht aus dem Referenz-
-    video. Gibt den Eintrag zurueck oder None."""
+    video. Gibt den Eintrag zurueck oder None.
+    v126: store_path speichert in eine EXPLIZITE Datei (persoenliche Kunden-
+    Referenzen) statt in den globalen Store - der Server ruft das in-process
+    auf, ein Env-Override waere dort nicht threadsicher."""
     key = os.environ.get('OPENAI_API_KEY')
     if not key or not os.path.exists(video_path):
         return None
@@ -2908,7 +2911,7 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
     if params:
         entry['params'] = params
     if save:
-        path = _reference_store_path()
+        path = store_path or _reference_store_path()
         try:
             refs = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else []
             if not isinstance(refs, list):
@@ -2917,6 +2920,7 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
             refs = []
         refs.append(entry)
         try:
+            os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
             json.dump(refs[-12:], open(path, 'w', encoding='utf-8'),
                       ensure_ascii=False, indent=2)   # max 12 Referenzen halten
         except Exception as e:
@@ -2929,7 +2933,15 @@ def _reference_store_path():
     """v96w: gelernte Stil-Referenzen liegen im PERSISTENTEN DATA-Ordner
     (DVE_DATA), NICHT im Git-Repo - sonst wuerde jeder Deploy (Docker-Rebuild)
     die Datei mit der Repo-Version ueberschreiben und das Gelernte waere weg.
-    Genau das war der Grund, warum die KI das Gelernte nicht anwandte."""
+    Genau das war der Grund, warum die KI das Gelernte nicht anwandte.
+    v126: DVE_REFS_FILE uebersteuert den Pfad. Der Server setzt die Variable
+    pro Render-Subprozess auf die PERSOENLICHE Referenz-Datei des Kunden -
+    damit werden Prompt-Block UND Mess-Parameter pro Konto, ohne dass die
+    Regie selbst etwas davon wissen muss. Ohne eigene Referenzen bleibt der
+    globale Haus-Stil aktiv."""
+    override = os.environ.get('DVE_REFS_FILE')
+    if override:
+        return override
     data = os.environ.get('DVE_DATA')
     if data:
         try:

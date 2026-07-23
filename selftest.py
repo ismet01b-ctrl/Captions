@@ -2077,6 +2077,28 @@ def _scenario_logic(clip, transcript, tmp):
           and 'def _hook_score' in _srv_m and "'hook_score':" in _srv_m
           and "'ref_code':" in _srv_m and "'style_prefs':" in _srv_m
           and 'uid=None' in _srv_m)                        # Korrekturen pro User markiert
+    # v126: Kunden-Stil-Referenz verdrahtet + GPT-5-Restmigration.
+    _rp = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v126: Server-Endpoints + Env-Injektion + Render-Override',
+          "@app.post('/api/style/learn')" in _srv_m and "@app.get('/api/style/list')" in _srv_m
+          and "@app.post('/api/style/delete')" in _srv_m
+          and 'def _user_refs_path' in _srv_m
+          and "env['DVE_REFS_FILE']" in _srv_m
+          and 'store_path=_user_refs_path' in _srv_m
+          and "DVE_REFS_FILE" in _rp and 'store_path' in _rp
+          and 'STYLE_LEARN_COST' in _srv_m and '_refund_credits(' in _srv_m)
+    check('v126: UI-Panel (Stil anlernen/liste/loeschen) verdrahtet',
+          'id="btnStyleLearn"' in _ui_m and 'id="stlFile"' in _ui_m
+          and "fetch('/api/style/learn'" in _ui_m and "fetch('/api/style/list'" in _ui_m
+          and 'function loadStyleList' in _ui_m and 'Your caption style' in _ui_m)
+    check('v126: GPT-5 ueberall (kein gpt-4o mehr im ausgelieferten Code/Config)',
+          'gpt-4o' not in _rp and 'gpt-4o' not in _srv_m
+          and 'gpt-4o' not in open(os.path.join(HERE, 'config.yaml'), encoding='utf-8').read()
+          and "model='gpt-5'" in _rp)
+    check('v126-sec: Referral gehaertet (Unique-Index + atomare Buchung)',
+          'ux_ledger_ref' in _srv_m and 'ux_users_refcode' in _srv_m
+          and 'BEGIN IMMEDIATE' in _srv_m
+          and "INSERT OR IGNORE INTO ledger" in _srv_m)
     check('v125: Verfall verdrahtet (Sweep im Cleanup, /api/me, Billing-Hinweis)',
           'def _credit_expiry_sweep' in _srv_m and '_credit_expiry_sweep()' in _srv_m
           and 'def _fifo_remainders' in _srv_m and 'def _expire_credits' in _srv_m
@@ -3201,6 +3223,44 @@ def _scenario_security(tmp):
           k1 is True and k2 is False
           and bl == 60 + 1200 + 120 and bh == 600 + 1200 and nb == 1,
           f'low={bl}s high={bh}s bonusrows={nb}')
+    # v126 Kunden-Stil: persoenliche Referenz-Datei + Loeschung mit dem Konto.
+    _urp = SV._user_refs_path(ida)
+    check('v126: persoenlicher Referenz-Pfad im refs-Ordner (pro Konto getrennt)',
+          _urp and _urp.endswith(f'user_{ida}.json')
+          and os.path.dirname(_urp).endswith('refs')
+          and SV._user_refs_path(idb) != _urp and SV._user_refs_path(None) is None)
+    os.makedirs(os.path.dirname(_urp), exist_ok=True)
+    json.dump([{'name': 'A', 'beispiel': 'dense punchy'}],
+              open(_urp, 'w', encoding='utf-8'))
+    check('v126: eigene Stile laden (nur Name + Beispiel)',
+          [r['name'] for r in SV._load_user_refs(ida)] == ['A']
+          and SV._load_user_refs(idb) == [])
+    check('v126: render.py nimmt DVE_REFS_FILE (persoenlich uebersteuert global)',
+          "os.environ.get('DVE_REFS_FILE')" in
+          open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+    # v126-sec: doppeltes Verify darf Referral NICHT doppelt buchen (Race-Fix).
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('rw@test','x','W',0,?,1)", (int(_t.time()),))
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, "
+                "verified, referred_by) SELECT 'rn@test','x','N',0,?,1,id FROM users "
+                "WHERE email='rw@test'", (int(_t.time()),))
+    con.commit()
+    _w = con.execute("SELECT id FROM users WHERE email='rw@test'").fetchone()['id']
+    _n = con.execute("SELECT id FROM users WHERE email='rn@test'").fetchone()['id']
+    con.close()
+    gg1 = SV._grant_referral(_n)
+    gg2 = SV._grant_referral(_n)                      # simuliert zweites Verify-Token
+    con = SV._db()
+    rows_n = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id=? AND "
+                         "grund='Referral welcome'", (_n,)).fetchone()['c']
+    rows_w = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id=? AND "
+                         "grund LIKE 'Referral for %'", (_w,)).fetchone()['c']
+    bw = con.execute("SELECT balance_sec FROM users WHERE id=?", (_w,)).fetchone()['balance_sec']
+    con.close()
+    check('v126-sec: doppeltes Verify bucht Referral nicht doppelt (idempotent)',
+          gg1 is True and gg2 is False and rows_n == 1 and rows_w == 1
+          and bw == SV.REFERRAL_SECONDS, f'n={rows_n} w={rows_w} bw={bw}')
     # v125 Credits-Verfall: FIFO pro Gutschrift, 180 Tage, idempotent, Warn-Info.
     con = SV._db()
     con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "

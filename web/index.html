@@ -1667,6 +1667,23 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </div>
       </div>
 
+      <!-- v126: Kunden-Stil. Jedes Konto lernt der Regie den eigenen Wunsch-Stil
+           aus Referenz-Videos an. Persoenliche Stile uebersteuern den Haus-Stil. -->
+      <div class="panel">
+        <h3>Your caption style</h3>
+        <p class="hint">Upload a video whose caption style you love. The director studies
+          its pacing, emphasis and hook behaviour, and your future renders follow it.
+          It learns the editorial style, not the fonts or words. Costs 1 credit per style.</p>
+        <div style="display:flex; flex-direction:column; gap:10px; max-width:460px; margin-top:10px;">
+          <input type="text" id="stlName" placeholder="Name this style (optional)" style="width:100%;">
+          <input type="file" id="stlFile" accept="video/*" style="color:var(--mut);">
+          <button class="btn" type="button" id="btnStyleLearn"
+                  style="align-self:flex-start; padding:9px 18px;">Learn this style · 1 credit</button>
+          <div id="stlStatus" class="hint" style="display:none;"></div>
+        </div>
+        <div id="stlList" style="margin-top:14px; display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+
       <!-- v124: Fortschritt sichtbar machen. Der Editor lernt aus den eigenen
            Edits, der Hook-Score gibt jedem Render eine Zahl. Beides Investment. -->
       <div class="panel">
@@ -3464,6 +3481,7 @@ function translateGrund(g) {
     .replace(/^Referral welcome$/, 'Invite bonus')
     .replace(/^Referral for .*/, 'Invite reward')
     .replace(/^Expired credits .*/, 'Expired credits')
+    .replace(/^Style learn .*/, 'Style learned')
     .replace(/^Render \S+ \(\d+s\)$/, 'Video render')
     .replace(/^Render /, 'Video render ');
 }
@@ -3611,6 +3629,7 @@ async function renderAccount() {
   }
   // v124 Fortschritt: Stil-Zaehler direkt, Score-Verlauf aus der Library.
   set('accStylePrefs', String(u.style_prefs || 0));
+  loadStyleList();                               // v126: eigene gelernte Stile
   fetch('/api/library').then(r => r.json()).then(d => {
     const scores = (d.items || []).map(it => it.hook_score || 0).filter(s => s > 0);
     set('accBestHook', scores.length ? Math.max(...scores) + '/100' : '–');
@@ -3623,6 +3642,70 @@ if ($('#btnRefCopy')) $('#btnRefCopy').addEventListener('click', () => {
   const rl = $('#refLink'); if (!rl || !rl.value) return;
   navigator.clipboard.writeText(rl.value).then(() => toast('Invite link copied.', 'ok'))
     .catch(() => { rl.select(); document.execCommand('copy'); toast('Copied.', 'ok'); });
+});
+
+/* v126: Kunden-Stil. Liste laden, Stil anlernen (1 Credit), Stil loeschen. */
+function stlSetStatus(msg, kind) {
+  const st = $('#stlStatus'); if (!st) return;
+  st.style.display = 'block'; st.textContent = msg;
+  st.style.color = kind === 'err' ? '#ff8a7a' : kind === 'ok' ? '#6dd48a' : 'var(--mut)';
+}
+function renderStyleList(refs) {
+  const box = $('#stlList'); if (!box) return;
+  box.innerHTML = '';
+  (refs || []).forEach((r, i) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'display:flex; gap:10px; align-items:flex-start; background:var(--surf2); border-radius:10px; padding:10px 12px;';
+    el.innerHTML = `<div style="flex:1; min-width:0;">
+        <b style="font-size:13.5px;">${escHtml(r.name || 'Style ' + (i + 1))}</b>
+        <p style="color:var(--mut); font-size:12.5px; margin-top:2px;">${escHtml(r.beispiel || '')}</p>
+      </div>
+      <button class="btn secondary" data-stl-del="${i}" style="padding:6px 12px;">Delete</button>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll('[data-stl-del]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      const fd = new FormData(); fd.append('idx', b.dataset.stlDel);
+      const r = await fetch('/api/style/delete', { method: 'POST', body: fd });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) renderStyleList(d.refs || []);
+    } catch (e) {} finally { b.disabled = false; }
+  }));
+}
+async function loadStyleList() {
+  try {
+    const r = await fetch('/api/style/list');
+    if (!r.ok) return;
+    const d = await r.json();
+    renderStyleList(d.refs || []);
+  } catch (e) {}
+}
+if ($('#btnStyleLearn')) $('#btnStyleLearn').addEventListener('click', async () => {
+  const f = $('#stlFile') && $('#stlFile').files[0];
+  if (!f) { stlSetStatus('Choose a reference video first.', 'err'); return; }
+  const btn = $('#btnStyleLearn'); btn.disabled = true;
+  stlSetStatus('Studying the style. This can take up to a minute, keep this open.', 'info');
+  try {
+    const fd = new FormData();
+    fd.append('datei', f);
+    fd.append('name', ($('#stlName') && $('#stlName').value) || '');
+    const r = await fetch('/api/style/learn', { method: 'POST', body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      stlSetStatus('Learned "' + ((d.entry && d.entry.name) || 'style') + '". '
+        + 'Your next renders will lean toward it.', 'ok');
+      renderStyleList(d.refs || []);
+      if ($('#stlFile')) $('#stlFile').value = '';
+      if ($('#stlName')) $('#stlName').value = '';
+      refreshBalanceInHeader();
+    } else if (r.status === 402) {
+      stlSetStatus('Learning a style costs 1 credit. Top up in Billing.', 'err');
+    } else {
+      stlSetStatus(d.detail || ('Failed (HTTP ' + r.status + ').'), 'err');
+    }
+  } catch (e) { stlSetStatus('Connection error. Try a shorter clip.', 'err'); }
+  finally { btn.disabled = false; }
 });
 /* v80y: Transkript-Editor */
 let transOrig = [];

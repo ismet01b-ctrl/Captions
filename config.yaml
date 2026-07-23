@@ -28,7 +28,7 @@ colors:
   adaptive: true
 keywords:
   ai: true
-  ai_model: gpt-5      # v94: staerkere Regie-KI (war hart gpt-4o). Urteilt
+  ai_model: gpt-5      # v94: staerkere Regie-KI (frueher aelteres Chat-Modell). Urteilt
                        # besser welcher Effekt HIER passt + Platzierung.
   auto: true
   emphasize_last: true

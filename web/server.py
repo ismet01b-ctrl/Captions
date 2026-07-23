@@ -268,6 +268,24 @@ def _init_users_db():
         con.commit()
     except sqlite3.IntegrityError as e:
         print(f'WARN: ux_ledger_kauf nicht angelegt (Altdaten-Duplikate?): {e}')
+    # v126-sec: dieselbe Doppelbuchungs-Sperre fuer Referral-Gutschriften. Die
+    # Gruende 'Referral welcome' (1x pro Geworbenem) und 'Referral for {uid}'
+    # (1x pro Werber+Geworbenem) sind je Paar eindeutig - der Index macht den
+    # SELECT-dann-INSERT-Pfad idempotent (Race beim doppelten Verify tot).
+    try:
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_ledger_ref "
+                    "ON ledger(user_id, grund) WHERE grund LIKE 'Referral %'")
+        con.commit()
+    except sqlite3.IntegrityError as e:
+        print(f'WARN: ux_ledger_ref nicht angelegt (Altdaten-Duplikate?): {e}')
+    # v126-sec: Einladungscodes eindeutig - schuetzt _ensure_ref_code beim
+    # gleichzeitigen ersten /api/me-Aufruf gegen Kollision.
+    try:
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_refcode "
+                    "ON users(ref_code) WHERE ref_code IS NOT NULL")
+        con.commit()
+    except sqlite3.IntegrityError as e:
+        print(f'WARN: ux_users_refcode nicht angelegt: {e}')
     con.close()
 
 
@@ -395,12 +413,23 @@ def _ensure_ref_code(uid):
         row = con.execute("SELECT ref_code FROM users WHERE id = ?", (uid,)).fetchone()
         if row and row['ref_code']:
             return row['ref_code']
+        # v126-sec: nur setzen, wenn noch leer (WHERE ref_code IS NULL). Bei einem
+        # parallelen Aufruf gewinnt genau einer; der andere liest danach den Wert.
+        # Kollisionen faengt ux_users_refcode (IntegrityError -> neuer Versuch).
         for _ in range(20):
             code = ''.join(secrets.choice(_REF_ALPHABET) for _ in range(8))
-            if not con.execute("SELECT id FROM users WHERE ref_code = ?", (code,)).fetchone():
-                con.execute("UPDATE users SET ref_code = ? WHERE id = ?", (code, uid))
+            try:
+                cur = con.execute("UPDATE users SET ref_code = ? "
+                                  "WHERE id = ? AND ref_code IS NULL", (code, uid))
                 con.commit()
+            except sqlite3.IntegrityError:
+                continue                          # Code kollidiert -> neuer Wuerfel
+            if cur.rowcount == 1:
                 return code
+            got = con.execute("SELECT ref_code FROM users WHERE id = ?",
+                              (uid,)).fetchone()
+            if got and got['ref_code']:
+                return got['ref_code']            # ein paralleler Aufruf war schneller
         return ''
     finally:
         con.close()
@@ -408,37 +437,48 @@ def _ensure_ref_code(uid):
 
 def _grant_referral(new_uid):
     """Bei der E-Mail-Bestaetigung des Geworbenen: beide Seiten gutschreiben.
-    Idempotent (Ledger-Eintraege), Werber-Deckel REFERRAL_CAP, kein Selbstwerben
-    (referred_by kann nie die eigene id sein, der Code existiert erst nach der
-    Registrierung). Gibt True zurueck, wenn frisch belohnt wurde."""
+    v126-sec: alles in EINER BEGIN-IMMEDIATE-Transaktion (Schreibsperre ab dem
+    ersten Zugriff), sodass Cap-Zaehlung und Buchung atomar sind; die
+    Gutschriften laufen ueber INSERT OR IGNORE gegen ux_ledger_ref, sodass ein
+    doppeltes Verify (zwei gueltige Token) NICHT doppelt bucht. Das Guthaben
+    wird nur erhoeht, wenn die Ledger-Zeile wirklich frisch entstand. Kein
+    Selbstwerben. Gibt True zurueck, wenn frisch belohnt wurde."""
     con = _db()
     try:
+        con.isolation_level = None
+        con.execute('BEGIN IMMEDIATE')            # Schreibsperre: kein TOCTOU
         nu = con.execute("SELECT referred_by FROM users WHERE id = ?", (new_uid,)).fetchone()
         ref_id = nu['referred_by'] if nu else None
-        if not ref_id or ref_id == new_uid:
+        if not ref_id or ref_id == new_uid \
+                or not con.execute("SELECT id FROM users WHERE id = ?", (ref_id,)).fetchone():
+            con.execute('ROLLBACK')
             return False
-        if not con.execute("SELECT id FROM users WHERE id = ?", (ref_id,)).fetchone():
-            return False
-        if con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
-                       (new_uid, 'Referral welcome')).fetchone():
-            return False                                          # schon belohnt
-        rewarded = con.execute(
-            "SELECT COUNT(*) c FROM ledger WHERE user_id = ? AND grund LIKE 'Referral for %'",
-            (ref_id,)).fetchone()['c']
         now = int(time.time())
+        # Geworbener: nur gutschreiben, wenn die 'Referral welcome'-Zeile frisch ist.
+        cur = con.execute("INSERT OR IGNORE INTO ledger (user_id, delta_sec, grund, created_at) "
+                          "VALUES (?, ?, 'Referral welcome', ?)",
+                          (new_uid, REFERRAL_SECONDS, now))
+        if cur.rowcount != 1:
+            con.execute('ROLLBACK')
+            return False                          # schon belohnt (idempotent)
         con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
                     (REFERRAL_SECONDS, new_uid))
-        con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
-                    "VALUES (?, ?, ?, ?)",
-                    (new_uid, REFERRAL_SECONDS, 'Referral welcome', now))
-        if rewarded < REFERRAL_CAP:                               # Werber-Deckel
-            con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
-                        (REFERRAL_SECONDS, ref_id))
-            con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
-                        "VALUES (?, ?, ?, ?)",
-                        (ref_id, REFERRAL_SECONDS, f'Referral for {new_uid}', now))
-        con.commit()
+        # Werber: unter dem Deckel, ebenfalls idempotent pro (Werber, Geworbener).
+        rewarded = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id = ? "
+                               "AND grund LIKE 'Referral for %'", (ref_id,)).fetchone()['c']
+        if rewarded < REFERRAL_CAP:
+            rc = con.execute("INSERT OR IGNORE INTO ledger (user_id, delta_sec, grund, created_at) "
+                             "VALUES (?, ?, ?, ?)",
+                             (ref_id, REFERRAL_SECONDS, f'Referral for {new_uid}', now))
+            if rc.rowcount == 1:
+                con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
+                            (REFERRAL_SECONDS, ref_id))
+        con.execute('COMMIT')
         return True
+    except Exception:
+        try: con.execute('ROLLBACK')
+        except Exception: pass
+        raise
     finally:
         con.close()
 
@@ -1386,8 +1426,8 @@ def _sanitize_overrides(ov):
             out.pop(k)
     # v96x QUALITAET: Die KI-Regie ist der Kern und NIE abschaltbar - kein
     # Override/Template darf keywords.ai/ai_model/ai_vision/ai_validate setzen.
-    # (Alte gespeicherte Presets pinnten sonst z.B. still ai_model='gpt-4o'
-    # gegen den neuen gpt-5-Default oder koennten die Regie ganz abschalten.)
+    # (Alte gespeicherte Presets pinnten sonst z.B. still ein veraltetes
+    # ai_model gegen den gpt-5-Default oder koennten die Regie ganz abschalten.)
     kwo = out.get('keywords')
     if isinstance(kwo, dict):
         _KW_OK = {'include', 'exclude', 'auto', 'emphasize_last',
@@ -1763,6 +1803,12 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
     cmd = [sys.executable, os.path.join(ROOT, 'render.py'), src,
            '--config', cfg_path, '--out', out] + (extra_args or [])
     env = dict(os.environ)
+    # v126 Kunden-Stil: hat das Konto eigene Stil-Referenzen, bekommt der Render-
+    # Subprozess deren Datei (DVE_REFS_FILE) - Prompt-Block und Mess-Parameter
+    # kommen dann aus dem PERSOENLICHEN Geschmack statt aus dem Haus-Stil.
+    _urp = _user_refs_path(j.get('user_id'))
+    if _urp and os.path.exists(_urp):
+        env['DVE_REFS_FILE'] = _urp
 
     # v88b: Transkript aus dem Cache holen, falls dasselbe Video (gleicher
     # Nutzer, gleiche Sprache) schon einmal transkribiert wurde. render.py
@@ -2920,9 +2966,17 @@ def _purge_user_db(uid):
     con.execute("DELETE FROM ledger WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM resets WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM verify_tokens WHERE user_id = ?", (uid,))
+    con.execute("DELETE FROM mail_log WHERE user_id = ?", (uid,))   # v125
     con.execute("DELETE FROM users WHERE id = ?", (uid,))
     con.commit()
     con.close()
+    # v126: persoenliche Stil-Referenzen gehoeren zum Konto -> mit loeschen.
+    try:
+        _urp = _user_refs_path(uid)
+        if _urp and os.path.exists(_urp):
+            os.remove(_urp)
+    except OSError:
+        pass
 
 
 @app.post('/api/delete_account')
@@ -4293,7 +4347,7 @@ def reference_list(request: Request):
 @app.post('/api/reference/learn')
 async def reference_learn(request: Request, datei: UploadFile = File(...),
                           name: str = Form('')):
-    """v96o: Referenz-Video hochladen -> GPT-4o-Vision beschreibt den Stil ->
+    """v96o: Referenz-Video hochladen -> GPT-5 (Vision) beschreibt den Stil ->
     als Stil-Referenz speichern. Nur Besitzer-Konto, da global wirksam."""
     if not _owner_ok(request):
         raise HTTPException(403, 'Access denied.')
@@ -4352,6 +4406,122 @@ def reference_delete(request: Request, idx: int = Form(...)):
         except Exception:
             raise HTTPException(500, 'Could not save.')
     return {'refs': refs}
+
+
+# ================================================================
+# v126 Kunden-Stil: jedes Konto kann der Regie den eigenen Wunsch-Stil aus
+# Referenz-Videos anlernen. Persoenliche Referenzen uebersteuern beim Render
+# den globalen Haus-Stil (DVE_REFS_FILE im Render-Subprozess). Lernen kostet
+# 1 Credit; schlaegt die Analyse fehl, gibt es ihn zurueck.
+# ================================================================
+STYLE_LEARN_COST = 60           # 1 Credit pro gelerntem Stil
+STYLE_MAX = 6                   # max. gespeicherte Stile pro Konto
+
+
+def _user_refs_path(uid):
+    """Persoenliche Stil-Referenz-Datei eines Kontos (None ohne uid)."""
+    if not uid:
+        return None
+    d = os.path.join(DATA, 'refs')
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, f'user_{int(uid)}.json')
+
+
+def _load_user_refs(uid):
+    p = _user_refs_path(uid)
+    try:
+        refs = json.load(open(p, encoding='utf-8')) if p and os.path.exists(p) else []
+        return refs if isinstance(refs, list) else []
+    except Exception:
+        return []
+
+
+@app.post('/api/style/learn')
+async def style_learn(request: Request, datei: UploadFile = File(...),
+                      name: str = Form('')):
+    """Kunden-Stil anlernen: Referenz-Video hochladen, GPT-5 (Vision)
+    beschreibt den Stil, Ergebnis landet in der PERSOENLICHEN Referenz-Datei.
+    Kostet 1 Credit (atomar reserviert, Refund bei Fehlschlag)."""
+    u = _require_user(request)
+    if not u['verified']:
+        raise HTTPException(403, 'Verify your email first.')
+    if len(_load_user_refs(u['id'])) >= STYLE_MAX:
+        raise HTTPException(409, f'You already have {STYLE_MAX} styles. '
+                                 'Delete one first.')
+    ext = os.path.splitext(datei.filename or '')[1].lower() or '.mp4'
+    if ext not in ('.mp4', '.mov', '.m4v', '.webm', '.mkv'):
+        raise HTTPException(400, 'Only video files (mp4, mov, webm, mkv).')
+    if not os.environ.get('OPENAI_API_KEY'):
+        raise HTTPException(503, 'Style learning is briefly unavailable. '
+                                 'Try again shortly.')
+    sid = uuid.uuid4().hex[:10]
+    if not _reserve_credits(u['id'], STYLE_LEARN_COST, f'style_{sid}',
+                            grund=f'Style learn style_{sid} ({STYLE_LEARN_COST}s)'):
+        raise HTTPException(402, 'Learning a style costs 1 credit.')
+    tmp = None
+    try:
+        d = os.path.join(DATA, 'reftmp')
+        os.makedirs(d, exist_ok=True)
+        tmp = os.path.join(d, sid + ext)
+        groesse = 0
+        with open(tmp, 'wb') as f:
+            while True:
+                chunk = await datei.read(1 << 20)
+                if not chunk:
+                    break
+                groesse += len(chunk)
+                if groesse > 200 * 1024 * 1024:
+                    raise HTTPException(413, 'Reference video too large (max 200 MB).')
+                f.write(chunk)
+        if groesse == 0:
+            raise HTTPException(400, 'Empty upload.')
+        import render as _R
+        entry = _R.analyze_reference_video(
+            tmp, name=(_safe_name(name) or _safe_name(datei.filename or 'Style')),
+            store_path=_user_refs_path(u['id']))
+        if not entry:
+            raise HTTPException(502, 'The analysis could not read this video. '
+                                     'Try a shorter mp4 with visible captions.')
+        return {'entry': {'name': entry.get('name', ''),
+                          'beispiel': entry.get('beispiel', '')},
+                'refs': _load_user_refs(u['id'])}
+    except HTTPException:
+        _refund_credits(u['id'], f'style_{sid}', STYLE_LEARN_COST)
+        raise
+    except Exception as e:
+        _refund_credits(u['id'], f'style_{sid}', STYLE_LEARN_COST)
+        raise HTTPException(500, f'{type(e).__name__}: {e}')
+    finally:
+        if tmp:
+            try: os.remove(tmp)
+            except OSError: pass
+
+
+@app.get('/api/style/list')
+def style_list(request: Request):
+    """Eigene gelernte Stile (nur Name + Kurzbeschreibung, keine Rohdaten)."""
+    u = _require_user(request)
+    return {'refs': [{'name': str(r.get('name', '')),
+                      'beispiel': str(r.get('beispiel', ''))[:240]}
+                     for r in _load_user_refs(u['id']) if isinstance(r, dict)],
+            'max': STYLE_MAX, 'cost_credits': STYLE_LEARN_COST // 60}
+
+
+@app.post('/api/style/delete')
+def style_delete(request: Request, idx: int = Form(...)):
+    """Einen eigenen Stil loeschen (Index in der eigenen Liste)."""
+    u = _require_user(request)
+    refs = _load_user_refs(u['id'])
+    if 0 <= idx < len(refs):
+        refs.pop(idx)
+        try:
+            json.dump(refs, open(_user_refs_path(u['id']), 'w', encoding='utf-8'),
+                      ensure_ascii=False, indent=2)
+        except Exception:
+            raise HTTPException(500, 'Could not save.')
+    return {'refs': [{'name': str(r.get('name', '')),
+                      'beispiel': str(r.get('beispiel', ''))[:240]}
+                     for r in refs if isinstance(r, dict)]}
 
 
 @app.post('/api/reference/transcribe')
