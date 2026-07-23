@@ -2065,6 +2065,13 @@ def _scenario_logic(clip, transcript, tmp):
           and 'id="MotionPrompt"' in _mrt3b and 'promptDuration' in _mrt3b)
     check('v115: MotionPrompt markensicher (keine Fremd-Marke im Render)',
           not any(bad in _mpr for bad in ['Claude', 'Sonnet', 'Anthropic', 'claude']))
+    # v116: Render-Bridge — Transkript → gewählte Komposition + Stil + Format, ein Befehl.
+    _mrbs = open(os.path.join(HERE, 'motion', 'scripts', 'render-showcase.mjs'), encoding='utf-8').read()
+    check('v116: render-showcase Bridge (Komposition/Stil/Format aus Transkript)',
+          'buildShowcase' in _mrbs
+          and all(c in _mrbs for c in ['MotionShowcase', 'MotionKinetic', 'MotionPrompt'])
+          and "--composition=" in _mrbs and "--style=" in _mrbs and "--format=" in _mrbs
+          and "'16:9'" in _mrbs and "'9:16'" in _mrbs and "'1:1'" in _mrbs)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
