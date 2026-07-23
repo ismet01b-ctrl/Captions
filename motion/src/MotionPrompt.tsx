@@ -1,18 +1,18 @@
-// MotionPrompt — a cinematic "prompt → code → website" build sequence, rebuilt faithfully from
-// the @mythiqmotion reference LOOK (dark stage + volumetric accent glow, a glowing-edge prompt
-// box that types a prompt with a trailing accent character, streaming glowing code in perspective,
-// then a website panel that rotates in from 3D and settles flat). This is the "dynamic, expensive"
-// typography treatment — glow, typewriter, depth — not flat text.
+// MotionPrompt — cinematic "assistant → code → website" build sequence, rebuilt faithfully from
+// the @mythiqmotion reference (the DETAILED pass): glowing outlined logo with a light-sweep, a row
+// of glowing action chips with a cursor that picks "Code", a glowing-edge prompt box that types
+// with a trailing accent, a DENSE syntax-highlighted code stream flowing up a converging 3D
+// perspective (with console logs), then a website panel that rotates in from 3D and settles flat
+// as the glow drifts orange→blue — all under a continuous cinematic camera (push-ins / drift).
 //
-// Branding is GENERIC on purpose: a neutral spark mark + the user's brand name (never a third
-// party's logo/wordmark). Prompt text + site copy come from the transcript/brand, so it stays
-// per-user and never invents words. Pure in `t` (seekable).
+// Branding is GENERIC (neutral spark + user's brand; no third-party logo/wordmark/model name).
+// Prompt + site copy come from the transcript. Pure in `t` (seekable).
 
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { SceneSpec } from './spec';
 import type { Shot } from './MotionShowcase';
-import { clamp01, easeOutQuint, easeInOutQuint, easeOutBack, mix } from './lib/easing';
+import { clamp01, easeOutQuint, easeInOutQuint, easeOutBack, easeInOutCubic, mix } from './lib/easing';
 import { themeFor } from './showcaseThemes';
 
 export type MotionPromptProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string };
@@ -20,44 +20,66 @@ export type MotionPromptProps = { readonly spec: SceneSpec; readonly story?: rea
 const FONT = `'Inter', system-ui, -apple-system, sans-serif`;
 const MONO = `'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', monospace`;
 const lineOf = (s: Shot): string => (s.accentText || [s.a, s.b].filter(Boolean).join(' ') || '').trim();
-
 const PROMPT_DEFAULT = 'I want a portfolio website for my studio';
-const CODE_LINES = [
-  '<section class="hero" data-reveal>',
-  '  <nav class="top"><a>Home</a><a>Work</a><a>About</a></nav>',
-  '  <h1 class="display">{{HEAD}}</h1>',
-  '  <p class="sub">{{SUB}}</p>',
-  '  <div class="cta"><button>Get in touch</button></div>',
-  '  <svg viewBox="0 0 100 20" class="spark">',
-  '    <path d="M0,10 Q25,0 50,15 T100,5" stroke="#ff7a2f"/>',
-  '  </svg>',
-  '</section>',
-  '.hero{display:grid;place-items:center;min-height:100vh}',
-  '.display{font-size:clamp(48px,8vw,120px);letter-spacing:-.03em}',
+
+// ── syntax-highlighted code stream content (dense, like the reference) ───────────────────────
+type Tok = { t: string; c: string };
+const C = { tag: '#5aa9ff', attr: '#7ee787', str: '#ffb457', txt: '#aeb4c2', kw: '#ff7b9c', num: '#f0a852', ok: '#3ddc84', warn: '#ffcf5a', dim: '#6b7280' };
+const codeLines = (head: string, sub: string): Tok[][] => [
+  [{ t: '<section ', c: C.tag }, { t: 'class', c: C.attr }, { t: '=', c: C.txt }, { t: '"hero"', c: C.str }, { t: ' data-reveal>', c: C.tag }],
+  [{ t: '  <nav ', c: C.tag }, { t: 'class', c: C.attr }, { t: '=', c: C.txt }, { t: '"top">', c: C.str }, { t: '<a>Work</a><a>About</a>', c: C.tag }],
+  [{ t: '  <h1 ', c: C.tag }, { t: 'class', c: C.attr }, { t: '=', c: C.txt }, { t: '"display">', c: C.str }, { t: head, c: C.txt }, { t: '</h1>', c: C.tag }],
+  [{ t: '  <p ', c: C.tag }, { t: 'class', c: C.attr }, { t: '=', c: C.txt }, { t: '"sub">', c: C.str }, { t: sub, c: C.txt }, { t: '</p>', c: C.tag }],
+  [{ t: '  <svg ', c: C.tag }, { t: 'viewBox', c: C.attr }, { t: '=', c: C.txt }, { t: '"0 0 100 20"', c: C.str }, { t: '>', c: C.tag }],
+  [{ t: '    <path ', c: C.tag }, { t: 'd', c: C.attr }, { t: '=', c: C.txt }, { t: '"M0,10 Q25,0 50,15 T100,5"', c: C.str }, { t: ' stroke', c: C.attr }, { t: '=', c: C.txt }, { t: '"#ff7a2f"', c: C.str }, { t: '/>', c: C.tag }],
+  [{ t: '</section>', c: C.tag }],
+  [{ t: '.hero', c: C.kw }, { t: '{', c: C.txt }, { t: 'display', c: C.attr }, { t: ':grid;', c: C.txt }, { t: 'place-items', c: C.attr }, { t: ':center', c: C.txt }, { t: '}', c: C.txt }],
+  [{ t: '.display', c: C.kw }, { t: '{', c: C.txt }, { t: 'font-size', c: C.attr }, { t: ':clamp(', c: C.txt }, { t: '48px,8vw,120px', c: C.num }, { t: ')}', c: C.txt }],
+  [{ t: 'const ', c: C.kw }, { t: 'app', c: C.txt }, { t: ' = ', c: C.txt }, { t: 'mount', c: C.attr }, { t: '(', c: C.txt }, { t: '"#root"', c: C.str }, { t: ')', c: C.txt }],
+  [{ t: '[SYS_INIT] ', c: C.dim }, { t: 'Loading motion vector array…', c: C.txt }],
+  [{ t: '[SUCCESS] ', c: C.ok }, { t: 'Graphics pipeline established at 120fps.', c: C.txt }],
+  [{ t: '[WARN] ', c: C.warn }, { t: 'Thread pool nearing optimal thresholds.', c: C.txt }],
+  [{ t: '</body></html>', c: '#ff7a2f' }],
 ];
 
-// A rounded panel with an animated glowing gradient edge (the reference's signature).
-const GlowEdge: React.FC<{ w: number; h: number; r: number; t: number; accent: string; bw: number; bg?: string; children?: React.ReactNode; style?: React.CSSProperties }>
-  = ({ w, h, r, t, accent, bw, bg = '#0c0d11', children, style }) => (
+// ── a rounded panel with an animated glowing gradient edge ───────────────────────────────────
+const GlowEdge: React.FC<{ w: number; h: number; r: number; t: number; accent: string; bw: number; bg?: string; children?: React.ReactNode }>
+  = ({ w, h, r, t, accent, bw, bg = '#0c0d11', children }) => (
   <div style={{
     position: 'relative', width: w, height: h, borderRadius: r, padding: bw,
-    background: `conic-gradient(from ${((t * 90) % 360).toFixed(1)}deg, ${accent}, #ff9a4d, ${accent}22, ${accent}, #ffb36b, ${accent})`,
-    boxShadow: `0 0 ${bw * 6}px ${accent}aa, 0 0 ${bw * 14}px ${accent}55, inset 0 0 ${bw}px ${accent}`,
-    ...style,
+    background: `conic-gradient(from ${((t * 80) % 360).toFixed(1)}deg, ${accent}, #ff9a4d, ${accent}22, ${accent}, #ffb36b, ${accent})`,
+    boxShadow: `0 0 ${bw * 6}px ${accent}aa, 0 0 ${bw * 16}px ${accent}55`,
   }}>
-    <div style={{ width: '100%', height: '100%', borderRadius: r - bw, background: bg, overflow: 'hidden', position: 'relative' }}>
-      {children}
-    </div>
+    <div style={{ width: '100%', height: '100%', borderRadius: r - bw, background: bg, overflow: 'hidden', position: 'relative' }}>{children}</div>
   </div>
 );
 
-const Spark: React.FC<{ size: number; color: string; glow?: number }> = ({ size, color, glow = 0 }) => (
+// glowing OUTLINE spark (stroked petals), optionally with a moving specular sweep
+const Spark: React.FC<{ size: number; color: string; glow?: number; fill?: boolean }> = ({ size, color, glow = 0, fill = true }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" style={{ filter: glow ? `drop-shadow(0 0 ${glow}px ${color})` : undefined }}>
     {Array.from({ length: 8 }, (_, i) => {
-      const a = (i / 8) * Math.PI * 2;
-      return <rect key={i} x={11.2} y={2.5} width={1.6} height={7} rx={0.8} fill={color}
-        transform={`rotate(${(a * 180 / Math.PI).toFixed(1)} 12 12)`} />;
+      const a = (i / 8) * 360;
+      return <rect key={i} x={11.1} y={2.3} width={1.8} height={7.4} rx={0.9}
+        fill={fill ? color : 'none'} stroke={fill ? 'none' : color} strokeWidth={fill ? 0 : 1.2}
+        transform={`rotate(${a} 12 12)`} />;
     })}
+  </svg>
+);
+
+const ChipIcon: React.FC<{ kind: string; s: number; color: string }> = ({ kind, s, color }) => {
+  const p: Record<string, string> = {
+    create: 'M4 14l7-7 4 4-7 7H4z M13 5l2-2 4 4-2 2',
+    write: 'M4 20l3-1 11-11-2-2L5 17z',
+    code: 'M9 8l-4 4 4 4M15 8l4 4-4 4',
+    plan: 'M4 6h16v14H4z M4 10h16M8 3v4M16 3v4',
+    learn: 'M3 8l9-4 9 4-9 4z M7 11v4c0 1 10 1 10 0v-4',
+  };
+  return <svg width={26 * s} height={26 * s} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={p[kind]} /></svg>;
+};
+
+const Cursor: React.FC<{ x: number; y: number; press: number; s: number }> = ({ x, y, press, s }) => (
+  <svg width={52 * s} height={52 * s} viewBox="0 0 54 54" style={{ position: 'absolute', left: x, top: y, transform: `scale(${1 - press * 0.16})`, transformOrigin: '30% 30%', filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.4))' }}>
+    <path d="M14 6 L14 40 L21 33 L26 45 L31 43 L26 31 L36 31 Z" fill="#fff" stroke="#111" strokeWidth="2.4" strokeLinejoin="round" />
   </svg>
 );
 
@@ -66,137 +88,188 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
   const t = useCurrentFrame() / fps;
   const S = H / 1080;
   const th = themeFor(styleId);
-  const accent = th.accent && th.id !== 'mono' ? th.accent : '#ff7a2f';   // cinematic warm glow
+  const accent = th.id !== 'mono' && th.id !== 'soft' ? th.accent : '#ff7a2f';
   const lines = story.map(lineOf).filter(Boolean);
   const brand = (lines.find((l) => /^made with /i.test(l))?.replace(/^made with /i, '') || 'Studio').trim();
   const prompt = lines[0] || PROMPT_DEFAULT;
   const head = (lines[1] || 'Premium studio').replace(/[.]+$/, '');
   const sub = lines[2] || 'crafted for creatives';
-
-  // ── timeline ────────────────────────────────────────────────────────────────
-  const T_INTRO = 2.2, T_TYPE = 3.4, T_CODE = 3.2, T_REVEAL = 3.6;
-  const introEnd = T_INTRO;
-  const typeStart = T_INTRO - 0.3, typeEnd = typeStart + T_TYPE;
-  const codeStart = typeEnd - 1.2, codeEnd = codeStart + T_CODE;
-  const revealStart = codeEnd - 0.6, revealEnd = revealStart + T_REVEAL;
-
-  // volumetric glow drifts
-  const gx = 50 + Math.sin(t * 0.5) * 18, gy = 34 + Math.cos(t * 0.4) * 12;
-
-  // intro logo
-  const introA = clamp01((t - 0.2) * 1.6) * (1 - clamp01((t - (introEnd - 0.2)) * 2.2));
-  const introS = 0.7 + 0.3 * easeOutBack(clamp01((t - 0.2) * 1.2));
-
-  // prompt box appear + type
-  const boxA = clamp01((t - (typeStart - 0.2)) * 2.2) * (1 - clamp01((t - (revealStart - 0.1)) * 1.8));
-  const boxLift = (1 - easeOutQuint(clamp01((t - (typeStart - 0.2)) / 0.6))) * 40 * S;
-  const typed = Math.max(0, Math.min(prompt.length, Math.round(((t - typeStart) / (typeEnd - typeStart)) * prompt.length)));
-  const caretOn = Math.floor(t * 1.8) % 2 === 0;
-
-  // website reveal 3D
-  const rp = easeInOutQuint(clamp01((t - revealStart) / (revealEnd - revealStart)));
-  const siteA = clamp01((t - revealStart) * 1.6);
-  const rotY = mix(28, 0, rp), rotX = mix(18, 0, rp), rScale = mix(0.86, 1, rp), rz = mix(-260, 0, rp);
-  // color drift orange → cool blue as it settles (like the reference)
-  const siteHue = rp; // 0 warm → 1 cool
-  const siteAccent = rp < 0.5 ? accent : '#4d8bff';
-
   const bw = Math.max(2, 3 * S);
 
+  // ── timeline ────────────────────────────────────────────────────────────────
+  const intro = [0.0, 1.9] as const;
+  const chips = [1.7, 3.7] as const;
+  const box = [3.5, 7.2] as const;
+  const code = [6.2, 9.3] as const;
+  const reveal = [8.6, 13.0] as const;
+
+  const seg = (a: number, b: number): number => clamp01((t - a) / (b - a));
+  const inOut = (a: number, b: number, fin = 0.25): number => {
+    const p = seg(a, b); return clamp01(p / (fin)) * (1 - clamp01((p - (1 - fin)) / fin));
+  };
+
+  // volumetric glow drift + orange→blue as the site settles
+  const rp = easeInOutQuint(seg(reveal[0] + 0.4, reveal[1] - 0.6));
+  const glowCol = rp > 0.55 ? '#3f6cff' : accent;
+  const gx = 50 + Math.sin(t * 0.5) * 16, gy = 30 + Math.cos(t * 0.4) * 10;
+
   return (
-    <AbsoluteFill style={{ background: '#07080b' }}>
-      {/* volumetric accent glow */}
-      <AbsoluteFill style={{ background: `radial-gradient(55% 45% at ${gx}% ${gy}%, ${(siteHue > 0.6 ? '#2b4a8f' : accent)}66 0%, transparent 60%)`, filter: `blur(${40 * S}px)` }} />
-      <AbsoluteFill style={{ background: `radial-gradient(40% 30% at ${100 - gx}% ${gy + 20}%, ${accent}33 0%, transparent 55%)`, filter: `blur(${60 * S}px)` }} />
+    <AbsoluteFill style={{ background: '#06070a' }}>
+      {/* volumetric accent glow (two layers) */}
+      <AbsoluteFill style={{ background: `radial-gradient(55% 45% at ${gx}% ${gy}%, ${glowCol}55 0%, transparent 60%)`, filter: `blur(${44 * S}px)` }} />
+      <AbsoluteFill style={{ background: `radial-gradient(38% 30% at ${100 - gx}% ${gy + 24}%, ${accent}2e 0%, transparent 55%)`, filter: `blur(${64 * S}px)` }} />
 
-      {/* INTRO — generic spark + brand wordmark, glowing */}
-      {introA > 0.01 && (
-        <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: introA }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 26 * S, transform: `scale(${introS.toFixed(3)})`, filter: `drop-shadow(0 0 ${26 * S}px ${accent}aa)` }}>
-            <Spark size={92 * S} color={accent} glow={20 * S} />
-            <div style={{ color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 96 * S, letterSpacing: '-0.02em' }}>{brand}</div>
-          </div>
-        </AbsoluteFill>
-      )}
+      {/* ── INTRO: glowing outline spark + light sweep + wordmark, slow push-in ── */}
+      {inOut(intro[0], intro[1], 0.28) > 0.01 && (() => {
+        const p = seg(intro[0], intro[1]);
+        const app = inOut(intro[0], intro[1], 0.28);
+        const sc = mix(0.82, 1.05, easeOutBack(clamp01(p * 1.3)));   // push-in
+        const sweep = clamp01((p - 0.15) * 2.2);                     // specular sweep across
+        return (
+          <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 28 * S, transform: `scale(${sc.toFixed(3)})`, position: 'relative' }}>
+              <div style={{ filter: `drop-shadow(0 0 ${24 * S}px ${accent})` }}><Spark size={104 * S} color={accent} glow={16 * S} fill={false} /></div>
+              <div style={{ color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 100 * S, letterSpacing: '-0.02em', position: 'relative', overflow: 'hidden' }}>
+                {brand}
+                {/* light sweep */}
+                <div style={{ position: 'absolute', top: 0, bottom: 0, width: 120 * S, left: `${(sweep * 140 - 20).toFixed(0)}%`,
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent)', filter: `blur(${6 * S}px)`, mixBlendMode: 'screen' }} />
+              </div>
+            </div>
+          </AbsoluteFill>
+        );
+      })()}
 
-      {/* PROMPT BOX — glowing edge, typewriter with trailing accent, controls */}
-      {boxA > 0.01 && (
-        <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: boxA }}>
-          <div style={{ transform: `translateY(${boxLift.toFixed(1)}px)` }}>
-            <GlowEdge w={1500 * S} h={280 * S} r={40 * S} t={t} accent={accent} bw={bw}>
-              <div style={{ position: 'absolute', inset: 0, padding: `${44 * S}px ${52 * S}px` }}>
-                <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 56 * S, lineHeight: 1.25, color: '#f3f4f7' }}>
-                  <span>{prompt.slice(0, Math.max(0, typed - 4))}</span>
-                  <span style={{ color: accent, textShadow: `0 0 ${20 * S}px ${accent}` }}>{prompt.slice(Math.max(0, typed - 4), typed)}</span>
-                  <span style={{ color: accent, opacity: caretOn ? 1 : 0.2, textShadow: `0 0 ${18 * S}px ${accent}` }}>▍</span>
-                </div>
-                {/* bottom control row */}
-                <div style={{ position: 'absolute', left: 46 * S, right: 46 * S, bottom: 40 * S, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ width: 62 * S, height: 62 * S, borderRadius: '50%', border: `${2 * S}px solid #3a3c44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c9ccd4', fontSize: 40 * S }}>+</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 26 * S }}>
-                    <div style={{ color: '#c9ccd4', fontFamily: FONT, fontSize: 32 * S }}>Pro ▾</div>
-                    <svg width={26 * S} height={34 * S} viewBox="0 0 24 32" fill="none" stroke="#c9ccd4" strokeWidth="2"><rect x="8" y="2" width="8" height="16" rx="4" /><path d="M5 14a7 7 0 0 0 14 0M12 21v6" strokeLinecap="round" /></svg>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 * S, height: 34 * S }}>
-                      {[10, 22, 14, 28, 12, 20].map((hh, i) => <div key={i} style={{ width: 3 * S, height: hh * S, background: '#c9ccd4', borderRadius: 2 }} />)}
-                    </div>
-                    <div style={{ width: 66 * S, height: 66 * S, borderRadius: '50%', background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 ${20 * S}px ${accent}aa` }}>
-                      <svg width={30 * S} height={30 * S} viewBox="0 0 24 24" fill="none" stroke="#0b0b0d" strokeWidth="3"><path d="M12 20V5M6 11l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      {/* ── CHIPS: glowing action pills, cursor moves to "Code" and presses ── */}
+      {inOut(chips[0], chips[1], 0.22) > 0.01 && (() => {
+        const app = inOut(chips[0], chips[1], 0.22);
+        const p = seg(chips[0], chips[1]);
+        const CH = [{ k: 'create', l: 'Create' }, { k: 'write', l: 'Write' }, { k: 'code', l: 'Code' }, { k: 'plan', l: 'Plan' }, { k: 'learn', l: 'Learn' }];
+        const camX = mix(30, -10, easeInOutCubic(clamp01(p * 1.2))) * S;   // slow lateral drift
+        const travel = easeInOutCubic(clamp01((p - 0.15) / 0.55));
+        const cx = mix(W * 0.8, W * 0.5 - 30 * S, travel);
+        const cy = mix(H * 0.78, H * 0.52, travel);
+        const press = clamp01((p - 0.62) / 0.14);
+        return (
+          <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app, transform: `translateX(${camX}px) scale(${mix(1.04, 1, clamp01(p * 1.4)).toFixed(3)})` }}>
+            <div style={{ display: 'flex', gap: 26 * S }}>
+              {CH.map((c, i) => {
+                const on = c.k === 'code';
+                const pop = easeOutBack(clamp01((p - 0.05 - i * 0.06) * 2.2));
+                const lit = on ? (0.5 + 0.5 * press) : 0.5;
+                return (
+                  <div key={c.k} style={{ transform: `scale(${(pop * (on ? 1 - press * 0.06 : 1)).toFixed(3)})`, opacity: clamp01(pop * 2),
+                    display: 'flex', alignItems: 'center', gap: 14 * S, padding: `${18 * S}px ${28 * S}px`, borderRadius: 22 * S,
+                    background: on ? `linear-gradient(180deg, ${accent}, #d95e1e)` : '#14161d',
+                    border: `${2 * S}px solid ${on ? accent : '#2a2d36'}`,
+                    boxShadow: `0 0 ${(on ? 26 : 10) * S}px ${accent}${on ? 'cc' : '44'}`, color: on ? '#0b0b0d' : '#e7e9ef' }}>
+                    <ChipIcon kind={c.k} s={S} color={on ? '#0b0b0d' : '#e7e9ef'} />
+                    <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 38 * S }}>{c.l}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <Cursor x={cx} y={cy} press={press} s={S} />
+          </AbsoluteFill>
+        );
+      })()}
+
+      {/* ── PROMPT BOX: glowing edge, typewriter with trailing accent, controls, push-in ── */}
+      {inOut(box[0], box[1], 0.18) > 0.01 && (() => {
+        const app = inOut(box[0], box[1], 0.18);
+        const p = seg(box[0], box[1]);
+        const typed = Math.max(0, Math.min(prompt.length, Math.round(((t - (box[0] + 0.3)) / (box[1] - box[0] - 1.0)) * prompt.length)));
+        const caretOn = Math.floor(t * 1.8) % 2 === 0;
+        const sc = mix(0.9, 1.02, easeOutQuint(clamp01(p * 1.4)));           // gentle push-in
+        const tilt = mix(6, 0, easeOutQuint(clamp01(p * 1.6)));              // settles from a slight tilt
+        return (
+          <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app, perspective: `${1400 * S}px` }}>
+            <div style={{ transform: `scale(${sc.toFixed(3)}) rotateX(${tilt.toFixed(2)}deg)` }}>
+              <GlowEdge w={1520 * S} h={280 * S} r={40 * S} t={t} accent={accent} bw={bw}>
+                <div style={{ position: 'absolute', inset: 0, padding: `${46 * S}px ${52 * S}px` }}>
+                  <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 56 * S, lineHeight: 1.25, color: '#f3f4f7' }}>
+                    <span>{prompt.slice(0, Math.max(0, typed - 4))}</span>
+                    <span style={{ color: accent, textShadow: `0 0 ${20 * S}px ${accent}` }}>{prompt.slice(Math.max(0, typed - 4), typed)}</span>
+                    <span style={{ color: accent, opacity: caretOn ? 1 : 0.2, textShadow: `0 0 ${18 * S}px ${accent}` }}>▍</span>
+                  </div>
+                  <div style={{ position: 'absolute', left: 46 * S, right: 46 * S, bottom: 40 * S, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ width: 62 * S, height: 62 * S, borderRadius: '50%', border: `${2 * S}px solid #3a3c44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c9ccd4', fontSize: 40 * S }}>+</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 26 * S }}>
+                      <div style={{ color: '#c9ccd4', fontFamily: FONT, fontSize: 32 * S }}>Pro ▾</div>
+                      <svg width={26 * S} height={34 * S} viewBox="0 0 24 32" fill="none" stroke="#c9ccd4" strokeWidth="2"><rect x="8" y="2" width="8" height="16" rx="4" /><path d="M5 14a7 7 0 0 0 14 0M12 21v6" strokeLinecap="round" /></svg>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 * S, height: 34 * S }}>
+                        {[10, 22, 14, 28, 12, 20].map((hh, i) => <div key={i} style={{ width: 3 * S, height: hh * S, background: '#c9ccd4', borderRadius: 2 }} />)}
+                      </div>
+                      <div style={{ width: 66 * S, height: 66 * S, borderRadius: '50%', background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 ${20 * S}px ${accent}aa` }}>
+                        <svg width={30 * S} height={30 * S} viewBox="0 0 24 24" fill="none" stroke="#0b0b0d" strokeWidth="3"><path d="M12 20V5M6 11l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </GlowEdge>
-          </div>
-        </AbsoluteFill>
-      )}
+              </GlowEdge>
+            </div>
+          </AbsoluteFill>
+        );
+      })()}
 
-      {/* CODE STREAM — glowing monospace flowing up in perspective */}
-      {t > codeStart && t < revealStart + 0.8 && (
-        <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'flex-start', paddingTop: H * 0.52, pointerEvents: 'none', perspective: `${900 * S}px`,
-          opacity: clamp01((t - codeStart) * 2) * (1 - clamp01((t - (revealStart + 0.2)) * 2)) }}>
-          <div style={{ transformStyle: 'preserve-3d', transform: `rotateX(42deg)`, maskImage: 'linear-gradient(to bottom, transparent, #000 40%, #000 70%, transparent)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, #000 40%, #000 70%, transparent)' }}>
-            {CODE_LINES.map((ln, i) => {
-              const appear = clamp01((t - codeStart - i * 0.18) * 3);
-              const scroll = (t - codeStart) * 70 * S;
-              const y = i * 46 * S - scroll;
-              const filled = ln.replace('{{HEAD}}', head).replace('{{SUB}}', sub);
-              return (
-                <div key={i} style={{ transform: `translateY(${y.toFixed(1)}px)`, opacity: appear * 0.9, color: accent,
-                  fontFamily: MONO, fontSize: 26 * S, whiteSpace: 'pre', textShadow: `0 0 ${10 * S}px ${accent}bb`, lineHeight: 1.4 }}>{filled}</div>
-              );
-            })}
-          </div>
-        </AbsoluteFill>
-      )}
+      {/* ── CODE STREAM: dense syntax-highlighted lines flowing up a converging perspective ── */}
+      {inOut(code[0], code[1], 0.2) > 0.01 && (() => {
+        const app = inOut(code[0], code[1], 0.2);
+        const p = seg(code[0], code[1]);
+        const CODE = codeLines(head, sub);
+        const scroll = p * CODE.length * 52 * S;
+        return (
+          <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'flex-start', paddingTop: H * 0.24, pointerEvents: 'none', perspective: `${820 * S}px`, opacity: app }}>
+            <div style={{ transformStyle: 'preserve-3d', transform: `rotateX(52deg)`, width: '70%',
+              maskImage: 'linear-gradient(to bottom, transparent, #000 22%, #000 72%, transparent)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, #000 22%, #000 72%, transparent)' }}>
+              {CODE.map((ln, i) => {
+                const appear = clamp01((p * CODE.length - i) * 2.5);
+                const y = i * 52 * S - scroll + H * 0.35;
+                if (appear <= 0) return null;
+                return (
+                  <div key={i} style={{ transform: `translateY(${y.toFixed(1)}px)`, opacity: appear * 0.95, fontFamily: MONO, fontSize: 27 * S, whiteSpace: 'pre', lineHeight: 1.5, textAlign: 'center' }}>
+                    {ln.map((tk, j) => <span key={j} style={{ color: tk.c, textShadow: `0 0 ${8 * S}px ${tk.c}88` }}>{tk.t}</span>)}
+                  </div>
+                );
+              })}
+            </div>
+          </AbsoluteFill>
+        );
+      })()}
 
-      {/* WEBSITE REVEAL — a landing panel rotating in from 3D, settling flat */}
-      {siteA > 0.01 && (
-        <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', perspective: `${1400 * S}px`, opacity: siteA }}>
-          <div style={{ transformStyle: 'preserve-3d', transform: `translateZ(${rz.toFixed(0)}px) rotateY(${rotY.toFixed(2)}deg) rotateX(${rotX.toFixed(2)}deg) scale(${rScale.toFixed(3)})` }}>
-            <GlowEdge w={1640 * S} h={860 * S} r={30 * S} t={t} accent={siteAccent} bw={bw} bg="#0a0c12" style={{ transition: 'none' }}>
-              <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(160deg, #0a0c12 0%, ${siteAccent}22 60%, ${siteAccent}44 100%)` }} />
-              {/* nav */}
-              <div style={{ position: 'absolute', top: 40 * S, left: 48 * S, right: 48 * S, display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#e8eaf0', fontFamily: FONT }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 40 * S }}>
-                  <Spark size={40 * S} color="#fff" />
-                  {['Home', 'Work', 'About', 'FAQ'].map((x) => <span key={x} style={{ fontSize: 26 * S, opacity: 0.85 }}>{x}</span>)}
+      {/* ── WEBSITE REVEAL: landing panel rotating in from 3D, settling flat, glow orange→blue ── */}
+      {seg(reveal[0], reveal[1]) > 0 && seg(reveal[0], reveal[1]) < 1.05 && (() => {
+        const app = clamp01((t - reveal[0]) * 1.6);
+        const rotY = mix(30, 0, rp), rotX = mix(16, 0, rp), rScale = mix(0.84, 1, rp), rz = mix(-300, 0, rp);
+        const camPush = mix(1.0, 1.03, easeInOutCubic(clamp01((seg(reveal[0], reveal[1]) - 0.6) / 0.4)));  // slow push after settle
+        return (
+          <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', perspective: `${1500 * S}px`, opacity: app }}>
+            <div style={{ transformStyle: 'preserve-3d', transform: `scale(${camPush.toFixed(3)}) translateZ(${rz.toFixed(0)}px) rotateY(${rotY.toFixed(2)}deg) rotateX(${rotX.toFixed(2)}deg) scale(${rScale.toFixed(3)})` }}>
+              <GlowEdge w={1660 * S} h={900 * S} r={30 * S} t={t} accent={glowCol} bw={bw} bg="#0a0c12">
+                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(160deg, #0a0c12 0%, ${glowCol}22 55%, ${glowCol}4a 100%)` }} />
+                <div style={{ position: 'absolute', top: 40 * S, left: 50 * S, right: 50 * S, display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#e8eaf0', fontFamily: FONT }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 40 * S }}>
+                    <Spark size={40 * S} color="#fff" />
+                    {['Home', 'Work', 'Portfolio', 'About', 'FAQ'].map((x) => <span key={x} style={{ fontSize: 26 * S, opacity: 0.85 }}>{x}</span>)}
+                  </div>
+                  <div style={{ background: '#fff', color: '#0a0c12', fontWeight: 600, fontSize: 26 * S, padding: `${12 * S}px ${26 * S}px`, borderRadius: 40 * S }}>Get in touch</div>
                 </div>
-                <div style={{ background: '#ffffff', color: '#0a0c12', fontWeight: 600, fontSize: 26 * S, padding: `${12 * S}px ${26 * S}px`, borderRadius: 40 * S }}>Get in touch</div>
-              </div>
-              {/* hero */}
-              <div style={{ position: 'absolute', left: 60 * S, top: 250 * S, right: 60 * S }}>
-                <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 24 * S, padding: `${8 * S}px ${18 * S}px`, borderRadius: 30 * S, marginBottom: 26 * S }}>No.1 Studio · 2026</div>
-                <div style={{ color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 96 * S, lineHeight: 1.05, letterSpacing: '-0.02em', maxWidth: '70%' }}>{head}</div>
-                <div style={{ color: '#c9ccd6', fontFamily: FONT, fontSize: 34 * S, marginTop: 20 * S }}>{sub}</div>
-                <div style={{ display: 'flex', gap: 20 * S, marginTop: 44 * S }}>
-                  <div style={{ background: '#fff', color: '#0a0c12', fontWeight: 600, fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S }}>Connect with us</div>
-                  <div style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S }}>Who is {brand}?</div>
+                <div style={{ position: 'absolute', left: 62 * S, top: 250 * S, right: 62 * S }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 * S, background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 24 * S, padding: `${8 * S}px ${18 * S}px`, borderRadius: 30 * S, marginBottom: 26 * S }}>
+                    <Spark size={22 * S} color="#fff" /> No.1 Studio · 2026
+                  </div>
+                  <div style={{ color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 100 * S, lineHeight: 1.04, letterSpacing: '-0.02em', maxWidth: '72%' }}>{head}</div>
+                  <div style={{ color: '#c9ccd6', fontFamily: FONT, fontSize: 34 * S, marginTop: 20 * S }}>{sub}</div>
+                  <div style={{ display: 'flex', gap: 20 * S, marginTop: 44 * S }}>
+                    <div style={{ background: '#fff', color: '#0a0c12', fontWeight: 600, fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S }}>Connect with us</div>
+                    <div style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S }}>Who is {brand}?</div>
+                  </div>
                 </div>
-              </div>
-            </GlowEdge>
-          </div>
-        </AbsoluteFill>
-      )}
+              </GlowEdge>
+            </div>
+          </AbsoluteFill>
+        );
+      })()}
     </AbsoluteFill>
   );
 };
@@ -204,4 +277,4 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
 export const MotionPrompt: React.FC<MotionPromptProps> = ({ spec, story, styleId }) =>
   <PromptBody spec={spec} story={story && story.length ? story : []} styleId={styleId} />;
 
-export const promptDuration = (): number => 13.2;
+export const promptDuration = (): number => 13.4;

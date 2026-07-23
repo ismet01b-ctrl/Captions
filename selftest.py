@@ -2058,9 +2058,11 @@ def _scenario_logic(clip, transcript, tmp):
     # v115: MotionPrompt — cinematischer Prompt→Code→Website-Build (glühend, 3D). Referenz-Look
     # 1:1, aber Marke GENERISCH (kein Fremd-Logo/Wortmarke). Prompt/Website-Text aus Transkript.
     _mpr = _msrc('MotionPrompt.tsx')
-    check('v115: MotionPrompt — Glüh-Box + Typewriter + Code-Stream + 3D-Website-Reveal',
+    check('v115: MotionPrompt — alle Beats (Intro-Sweep, Chips, Box, Code, 3D-Reveal)',
           'export const MotionPrompt' in _mpr and 'GlowEdge' in _mpr
           and 'WEBSITE REVEAL' in _mpr and 'CODE STREAM' in _mpr and 'typed' in _mpr
+          and 'CHIPS' in _mpr and 'ChipIcon' in _mpr and 'light sweep' in _mpr   # weggelassene Beats nachgebaut
+          and 'codeLines' in _mpr and 'C.tag' in _mpr                            # syntax-gefärbter Code
           and 'perspective' in _mpr and 'rotateY' in _mpr
           and 'id="MotionPrompt"' in _mrt3b and 'promptDuration' in _mrt3b)
     check('v115: MotionPrompt markensicher (keine Fremd-Marke im Render)',
