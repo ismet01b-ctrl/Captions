@@ -9,6 +9,7 @@ import { MotionApple } from './MotionApple';
 import { MotionSequence } from './MotionSequence';
 import { MotionShowcase, showcaseDuration, DEMO_STORY } from './MotionShowcase';
 import { MotionKinetic, kineticDuration } from './MotionKinetic';
+import { MotionPrompt, promptDuration } from './MotionPrompt';
 import { MotionOverlay, type MotionOverlayProps } from './MotionOverlay';
 import { demoProps } from './demo-spec';
 
@@ -42,6 +43,17 @@ const kineticMetadata: CalculateMetadataFunction<React.ComponentProps<typeof Mot
     height: spec.canvas.h,
     fps: spec.fps,
     durationInFrames: Math.max(1, Math.round(kineticDuration(story && story.length ? story : DEMO_STORY) * spec.fps)),
+  };
+};
+
+// Prompt — cinematic "prompt → code → website" build sequence.
+const promptMetadata: CalculateMetadataFunction<React.ComponentProps<typeof MotionPrompt>> = ({ props }) => {
+  const { spec } = props;
+  return {
+    width: spec.canvas.w,
+    height: spec.canvas.h,
+    fps: spec.fps,
+    durationInFrames: Math.max(1, Math.round(promptDuration() * spec.fps)),
   };
 };
 
@@ -126,6 +138,17 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={demoProps}
         calculateMetadata={kineticMetadata}
         durationInFrames={600}
+        fps={30}
+        width={1920}
+        height={1080}
+      />
+      {/* v115: MotionPrompt - cinematischer Prompt→Code→Website-Build (glühend, 3D). */}
+      <Composition
+        id="MotionPrompt"
+        component={MotionPrompt}
+        defaultProps={demoProps}
+        calculateMetadata={promptMetadata}
+        durationInFrames={396}
         fps={30}
         width={1920}
         height={1080}

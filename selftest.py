@@ -2055,6 +2055,16 @@ def _scenario_logic(clip, transcript, tmp):
           and 'GIANT WORD' in _mkn and 'LEFT STACK' in _mkn and 'SPLIT' in _mkn
           and 'lineOf' in _mkn                                    # Text weiterhin verbatim aus Story
           and 'id="MotionKinetic"' in _mrt3b and 'kineticDuration' in _mrt3b)
+    # v115: MotionPrompt — cinematischer Prompt→Code→Website-Build (glühend, 3D). Referenz-Look
+    # 1:1, aber Marke GENERISCH (kein Fremd-Logo/Wortmarke). Prompt/Website-Text aus Transkript.
+    _mpr = _msrc('MotionPrompt.tsx')
+    check('v115: MotionPrompt — Glüh-Box + Typewriter + Code-Stream + 3D-Website-Reveal',
+          'export const MotionPrompt' in _mpr and 'GlowEdge' in _mpr
+          and 'WEBSITE REVEAL' in _mpr and 'CODE STREAM' in _mpr and 'typed' in _mpr
+          and 'perspective' in _mpr and 'rotateY' in _mpr
+          and 'id="MotionPrompt"' in _mrt3b and 'promptDuration' in _mrt3b)
+    check('v115: MotionPrompt markensicher (keine Fremd-Marke im Render)',
+          not any(bad in _mpr for bad in ['Claude', 'Sonnet', 'Anthropic', 'claude']))
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
