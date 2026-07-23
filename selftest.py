@@ -1896,104 +1896,11 @@ def _scenario_logic(clip, transcript, tmp):
           and '/api/upload/finish/' in _ui_m
           and 'file.slice(offset, end)' in _ui_m)
 
-    # v101w: echtes 3D fuer die Motion-Graphics (Three.js via @remotion/three).
-    _mroot = os.path.join(HERE, 'motion')
-    _mpkg = open(os.path.join(_mroot, 'package.json'), encoding='utf-8').read()
-    _mrb = open(os.path.join(_mroot, 'scripts', 'render-brief.mjs'),
-                encoding='utf-8').read()
-    _mrt = open(os.path.join(_mroot, 'src', 'Root.tsx'), encoding='utf-8').read()
-    check('v101w: 3D-Stack vorhanden (Three.js, Motion3D-Composition, --gl=angle)',
-          '@remotion/three' in _mpkg and '"three"' in _mpkg
-          and os.path.exists(os.path.join(_mroot, 'src', 'Motion3D.tsx'))
-          and os.path.exists(os.path.join(_mroot, 'src', 'three', 'Scene3D.tsx'))
-          and 'id="Motion3D"' in _mrt
-          and "'Motion3D'" in _mrb and '--gl=angle' in _mrb)
-    # v109 (Pfeiler 3 nach Referenz): RED-GLASS-Promo - echtes Transmission-Glas (Blobs +
-    # Glas-Chips mit Icons + Hero-Orb + Ringe) auf hellem Studio-Env, Kamerafluss.
-    _msc3 = open(os.path.join(HERE, 'motion', 'src', 'three', 'Scene3D.tsx'),
-                 encoding='utf-8').read()
-    check('v109b: 3D-Promo = ECHTE Widget-Karten (Kalender/Akku/Uhr/Aktivitaet/App)',
-          'const WidgetCard' in _msc3 and 'const WIDGETS' in _msc3
-          and 'calendar:' in _msc3 and 'battery:' in _msc3 and 'clock:' in _msc3
-          and 'activity:' in _msc3 and 'appcard:' in _msc3
-          and 'widgetTex' in _msc3
-          # kein abstraktes Glas mehr (Ismet: "soll Bezug auf was Realem haben")
-          and 'meshPhysicalMaterial' not in _msc3 and 'const Blob' not in _msc3)
-    _m3d = open(os.path.join(HERE, 'motion', 'src', 'Motion3D.tsx'), encoding='utf-8').read()
-    check('v109b: helles Studio-Env + neutraler Hintergrund + DoF/Bloom',
-          'EquirectangularReflectionMapping' in _msc3 and 'scene.environment' in _msc3
-          and 'const studioEnv' in _msc3 and 'shadowTex' in _msc3
-          and 'EffectComposer' in _m3d)
-    # v107d: echtes GPU-Post via Render-Targets (Bloom + DoF + Vignette), laeuft auf
-    # software-GL (langsamer, aber es rendert - Ismet: "wir sollen es probieren").
-    _mpkg2 = open(os.path.join(HERE, 'motion', 'package.json'), encoding='utf-8').read()
-    check('v107d: echtes Bloom + DepthOfField + Vignette (EffectComposer)',
-          'EffectComposer' in _m3d and '<Bloom' in _m3d
-          and '<DepthOfField' in _m3d and '<Vignette' in _m3d
-          and '@react-three/postprocessing' in _mpkg2 and '"postprocessing"' in _mpkg2)
-
-    # v108 Full-customizable: Video hochladen -> KI entscheidet Motion-Graphics als Overlay.
+    # v111-v118: Motion-Studio (Showcase) ist seit v118 die EINZIGE Motion-Engine —
+    # alle Alt-Engines (brief/template/sequence/auto-overlay/3D) sind entfernt.
     _mov = os.path.join(HERE, 'motion', 'src')
-    _msrc = lambda p: open(os.path.join(_mov, p), encoding='utf-8').read()
-    _mo = _msrc('MotionOverlay.tsx'); _mad = _msrc('director/autoDirect.ts')
-    _mag = _msrc('director/autoGuards.ts'); _msp = _msrc('spec.ts')
-    _mrt3 = _msrc('Root.tsx')
-    check('v108: Overlay-Composition (Video + getimte Beats obendrauf)',
-          '<OffthreadVideo' in _mo and 'plan.beats.map' in _mo
-          and 'OverlayPlan' in _msp and 'OverlayBeat' in _msp
-          and 'id="MotionOverlay"' in _mrt3)
-    check('v108: KI-Regisseur (Senior-Brain) + Heuristik-Fallback',
-          'export function heuristicAuto' in _mad and 'async function gptAuto' in _mad
-          and 'SENIOR MOTION DESIGNER' in _mad and 'image_url' in _mad   # Vision
-          and "process.env['OPENAI_API_KEY']" in _mad)
-    check('v108: Qualitaets-Leitplanken (kein Overlap, Dichte, Snap auf Wort)',
-          'export function guardPlan' in _mag and 'de-overlap' in _mag
-          and 'density cap' in _mag and 'onsets' in _mag)
-    _mrb3 = open(os.path.join(HERE, 'motion', 'scripts', 'render-auto.mjs'), encoding='utf-8').read()
-    _mra = open(os.path.join(HERE, 'motion', 'src', 'director', 'run-auto.ts'), encoding='utf-8').read()
-    check('v108: Render-Bridge + Server + UI verdrahtet',
-          "'MotionOverlay'" in _mrb3 and 'JSON.stringify({ plan })' in _mra
-          and 'def _run_motion_auto' in _srv_m and "j.get('auto_video')" in _srv_m
-          and 'def _whisper_words' in _srv_m and 'render-auto.mjs' in _srv_m
-          and 'id="moTypeAuto"' in _ui_m and 'function motionAutoGo' in _ui_m
-          and "auto:['type','upload','render']" in _ui_m)
+    _msrc = lambda _p: open(os.path.join(_mov, _p), encoding='utf-8').read()
     _mgroot = os.path.join(HERE, 'motion')
-    # v108b: reine Grafik-Beats (kein Text) + 16:9/1:1 via Device-Stage.
-    check('v108b: reine Grafik-Beats (burst/sweep/pulse/brackets, kein Text)',
-          "'burst'" in _msp and "'sweep'" in _msp and "'pulse'" in _msp
-          and "beat.kind === 'burst'" in _mo and "beat.kind === 'sweep'" in _mo
-          and "beat.kind === 'pulse'" in _mo and 'GRAPHIC' in _mag
-          and 'burst' in _mad and 'PURE GRAPHIC' in _mad)
-    _mds = open(os.path.join(_mov, 'apple', 'DeviceStage.tsx'), encoding='utf-8').read()
-    _mapp = open(os.path.join(_mov, 'MotionApple.tsx'), encoding='utf-8').read()
-    _mseqf = open(os.path.join(_mov, 'MotionSequence.tsx'), encoding='utf-8').read()
-    check('v108b: 16:9/1:1 via Device-Stage (Hochkant-Mockup zentriert, nicht gestreckt)',
-          'export const stageDims' in _mds and 'DeviceStage' in _mapp and 'DeviceStage' in _mseqf
-          and 'vw?: number' in _msrc('apple/AppleScene.tsx')
-          and "cmd.append('--format=" in _srv_m
-          and 'id="moFormatSeq"' in _ui_m and "fd.append('format'" in _ui_m)
-
-    # v110: Transkript-Provenance — kein On-Screen-Text darf halluziniert sein. Jedes
-    # eingeblendete Wort MUSS wörtlich im Transkript stehen (oder der Markenname); sonst
-    # degradiert der Beat zu einem text-freien Grafik-Akzent. Timing bleibt am Wort-Onset
-    # (Voiceover-Sync). Beides deterministisch in autoGuards erzwungen.
-    check('v110: Transkript-Provenance-Zwang (kein halluzinierter Text, Voiceover-Sync)',
-          'function groundBeat' in _mag and 'opts.transcript' in _mag
-          and 'DEGRADE' in _mag and 'asGraphic' in _mag
-          and "b.value == null || !nums.has(b.value)" in _mag         # Zahlen müssen gesprochen sein
-          and "transcript: input.words.map((w) => w.word).join(' ')" in _mad
-          and 'NEVER invent text' in _mad)                            # Modell-Prompt schärft es zusätzlich
-
-    if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
-        try:
-            _tg = subprocess.run(['node', 'scripts/test-autoguards.mjs'], cwd=_mgroot,
-                                 capture_output=True, text=True, timeout=120)
-            check('v108: autoGuards Node-Unit-Test (kein Overlap/Junk/Dichte)',
-                  _tg.returncode == 0, (_tg.stdout + _tg.stderr)[-200:])
-        except Exception as _e:
-            check('v108: autoGuards Node-Unit-Test', False, str(_e))
-    else:
-        check('v108: autoGuards Node-Unit-Test (node fehlt -> skip)', True)
 
     # v111: MotionShowcase — 1:1-Nachbau des Referenz-Montage-Looks. Kamerageführte,
     # motion-geblurrte Übergänge (kein Blur-Dissolve), interaktive Momente, alle Shot-
@@ -2094,7 +2001,7 @@ def _scenario_logic(clip, transcript, tmp):
     check('v117b: Server-Endpoint + Worker (Showcase, Video/Text, Custom)',
           "@app.post('/api/motion/showcase')" in _srv_m and 'def _run_motion_showcase' in _srv_m
           and 'def _sanitize_custom' in _srv_m
-          and "if j.get('showcase')" in _srv_m
+          and 'return _run_motion_showcase(jid)' in _srv_m      # v118: einziger Motion-Pfad
           and 'render-showcase.mjs' in _srv_m and "'--custom-file='" in _srv_m
           and 'custom-file' in _mrbs)
     check('v117c: UI — Studio-Panel (alle Knöpfe) + verdrahtet',
@@ -2126,9 +2033,37 @@ def _scenario_logic(clip, transcript, tmp):
           'id="MotionShowcase"' in _mrt3b and 'showcaseMetadata' in _mrt3b
           and 'showcaseDuration(story, styleId)' in _mrt3b)
 
-    check('v101w: Server + UI reichen den 3D-Schalter durch',
-          "d3: str = Form('1')" in _srv_m and "cmd.append('--3d')" in _srv_m
-          and 'id="moBrief3d"' in _ui_m and "fd.append('d3'" in _ui_m)
+    # v118: Alt-Motion-Engines KOMPLETT entfernt — nur noch das Studio-Showcase. Server hat
+    # keine brief/template/sequence/auto-Endpoints/Worker mehr, die UI keinen Alt-Weg, und
+    # die Remotion-Registry nur die 3 Showcase-Kompositionen (keine gelöschten TS-Dateien).
+    check('v118: Server nur noch Showcase (Alt-Endpoints/Worker weg)',
+          '_run_motion_showcase' in _srv_m
+          and 'def _run_motion_brief' not in _srv_m and 'def _run_motion_auto' not in _srv_m
+          and "@app.post('/api/motion/brief')" not in _srv_m
+          and "@app.post('/api/motion/auto')" not in _srv_m
+          and "@app.post('/api/motion/render')" not in _srv_m
+          and "@app.post('/api/motion/preview')" not in _srv_m
+          and 'class _PreviewDaemon' not in _srv_m and 'gfx_engine.py' not in _srv_m
+          and 'MOTION_TEMPLATES' not in _srv_m)
+    check('v118: UI-Wizard nur noch Studio (keine Alt-Karten/Funktionen)',
+          'id="moTypeStudio"' in _ui_m
+          and 'id="moTypeBrief"' not in _ui_m and 'id="moTypeTemplate"' not in _ui_m
+          and 'id="moTypeSequence"' not in _ui_m and 'id="moTypeAuto"' not in _ui_m
+          and 'function motionTemplateGo' not in _ui_m and 'function motionBriefGo' not in _ui_m
+          and 'function motionSeqGo' not in _ui_m and 'function motionAutoGo' not in _ui_m
+          and 'function motionPreview' not in _ui_m and 'function motionRender' not in _ui_m
+          and "MO_ENGINE_STEPS = { studio:['type','studio'] }" in _ui_m
+          and 'function motionStudioGo' in _ui_m)
+    check('v118: Remotion-Registry nur 3 Showcase-Kompositionen (Alt-TS gelöscht)',
+          all(c in _mrt3b for c in ['id="MotionShowcase"', 'id="MotionKinetic"', 'id="MotionPrompt"'])
+          and all(c not in _mrt3b for c in ['MotionVideo', 'Motion3D', 'MotionApple',
+                                            'MotionSequence', 'MotionOverlay'])
+          and not any(os.path.exists(os.path.join(HERE, 'motion', 'src', f)) for f in
+                      ['MotionVideo.tsx', 'Motion3D.tsx', 'MotionApple.tsx',
+                       'MotionSequence.tsx', 'MotionOverlay.tsx', 'director/autoGuards.ts',
+                       'director/templates.ts', 'director/run.ts'])
+          and not os.path.exists(os.path.join(HERE, 'motion', 'scripts', 'render-brief.mjs'))
+          and not os.path.exists(os.path.join(HERE, 'motion', 'scripts', 'render-auto.mjs')))
 
     # v101x: Captions + Motion als getrennte Produkte (Einstieg waehlbar + gemerkt).
     _land = open(os.path.join(HERE, 'web', 'landing.html'), encoding='utf-8').read()
@@ -2143,175 +2078,6 @@ def _scenario_logic(clip, transcript, tmp):
           'id="captions"' in _land and 'id="motion"' in _land
           and '/app#create' in _land and '/app#motion' in _land
           and 'Motion Graphics' in _land)
-
-    # v101y: Motion als Schritt-fuer-Schritt-Wizard (wie Captions), Engine-adaptiv.
-    check('v101y: Motion-Wizard - Stepper, Type-Fork, adaptive Schritte',
-          'id="moStepper"' in _ui_m and 'id="moWizard"' in _ui_m
-          and 'function goMoStep' in _ui_m and 'function setMoEngine' in _ui_m
-          and 'MO_ENGINE_STEPS' in _ui_m
-          and "brief:['type','describe','render']" in _ui_m
-          and "template:['type','template','style','render']" in _ui_m
-          and 'id="moTypeBrief"' in _ui_m and 'id="moTypeTemplate"' in _ui_m
-          and 'data-key="render"' in _ui_m)
-
-    # v101z: Templates ueber Remotion statt alter Python-gfx-Engine.
-    _mtpl = open(os.path.join(HERE, 'motion', 'src', 'director', 'templates.ts'),
-                 encoding='utf-8').read()
-    _mrun = open(os.path.join(HERE, 'motion', 'src', 'director', 'run.ts'),
-                 encoding='utf-8').read()
-    check('v101z: Remotion-Template-Builder + CLI-Zweig vorhanden',
-          'export function templateSpec' in _mtpl and 'isTemplateId' in _mtpl
-          and "id: 'pills'" in _mtpl and "id: 'appcard'" in _mtpl
-          and "id: 'chat'" in _mtpl and "id: 'notify'" in _mtpl
-          and 'isTemplateId(tpl)' in _mrun and 'templateSpec(' in _mrun)
-    check('v101z: Server + UI fahren Templates ueber den Remotion-Brief-Endpunkt',
-          "template: str = Form('')" in _srv_m and "MOTION_TEMPLATES" in _srv_m
-          and "cmd.append('--template=" in _srv_m
-          and 'function motionTemplateGo' in _ui_m
-          and "fd.append('template'" in _ui_m
-          # alte gfx-Template-Bewerbung raus aus dem Wizard
-          and "moSeg('moStyle'" not in _ui_m
-          and 'const MO_TPLS=' in _ui_m)
-
-    # v102: Apple/iOS-Mockup-Look (Referenz-Stil) als eigene Remotion-Composition.
-    _mrb2 = open(os.path.join(HERE, 'motion', 'scripts', 'render-brief.mjs'),
-                 encoding='utf-8').read()
-    _mrt2 = open(os.path.join(HERE, 'motion', 'src', 'Root.tsx'), encoding='utf-8').read()
-    check('v102: UI-Mockup-Composition + Routing (alle Templates -> MotionApple)',
-          os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionApple.tsx'))
-          and os.path.exists(os.path.join(HERE, 'motion', 'src', 'apple', 'AppleScene.tsx'))
-          and 'id="MotionApple"' in _mrt2
-          and "isTemplate ? 'MotionApple'" in _mrb2)
-    # Alle 6 UI-Mockups verdrahtet; "Apple" wird auf der Seite NICHT erwaehnt.
-    check('v102: 6 UI-Mockups in Server + UI, kein "Apple" im Frontend',
-          all(x in _srv_m for x in ("'appcard'", "'search'", "'homescreen'", "'chat'", "'notify'"))
-          and "['appcard','App card'" in _ui_m and "['notify','Notification'" in _ui_m
-          # "Apple" wird als Design-Stil nirgends beworben (iOS/Safari-Technikhinweise ok)
-          and 'Apple' not in _ui_m and 'Apple' not in _land)
-
-    # v102e: Template-Text-Parsing pro Template korrekt (Search mehrwortig NICHT
-    # zerhackt etc.). Quelltext-Garantie + echter Node-Unit-Test wenn node da ist.
-    check('v102e: Parser pro Template (Search = ganzer Satz, Pills = Woerter)',
-          'export function parseTemplateText' in _mtpl
-          and "case 'search':" in _mtpl and 'title: safe' in _mtpl
-          and 'safe.split(/\\s+/)' in _mtpl)
-    _mroot2 = os.path.join(HERE, 'motion')
-    if shutil.which('node') and os.path.isdir(os.path.join(_mroot2, 'node_modules')):
-        try:
-            _tr = subprocess.run(['node', 'scripts/test-templates.mjs'], cwd=_mroot2,
-                                 capture_output=True, text=True, timeout=120)
-            check('v102e: parseTemplateText Node-Unit-Test (multiword/odd input)',
-                  _tr.returncode == 0, (_tr.stdout + _tr.stderr)[-200:])
-        except Exception as _e:
-            check('v102e: parseTemplateText Node-Unit-Test', False, str(_e))
-    else:
-        check('v102e: parseTemplateText Node-Unit-Test (node fehlt -> skip)', True)
-
-    # v103: Sequencer - mehrere Mockups zu EINEM Video verkettet, seamless Transitions.
-    check('v103: MotionSequence-Composition + Blur-Cross-Transition',
-          os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionSequence.tsx'))
-          and 'id="MotionSequence"' in _mrt2
-          and "isSequence ? 'MotionSequence'" in _mrb2
-          and 'export function sequenceSpec' in _mtpl
-          and 'SEQ_TRANSITION' in _mtpl)
-    check('v103: Director + Render-Bridge reichen die Sequenz durch',
-          "argVal('sequence')" in _mrun and 'sequenceSpec(seqItems' in _mrun
-          and "a.startsWith('--sequence=')" in _mrb2)
-    check('v103: Server nimmt Sequenz an und gibt sie an den Renderer',
-          "sequence: str = Form('')" in _srv_m
-          and "cmd.append('--sequence=" in _srv_m)
-    check('v103: UI - Sequence-Typ, Build-Schritt, Sende-Logik',
-          'id="moTypeSequence"' in _ui_m and 'function motionSeqGo' in _ui_m
-          and 'function renderSeqRows' in _ui_m
-          and "sequence:['type','build','render']" in _ui_m
-          and "fd.append('sequence'" in _ui_m)
-
-    # v103b: mehrere VERSCHIEDENE aufwaendige Transitions (auto-variiert, kein Repeat) +
-    # direktionale Motion-Blur + Sound-Verdrahtung (nur bei vorhandenem CC0-Asset).
-    _mtr = open(os.path.join(HERE, 'motion', 'src', 'lib', 'transitions.ts'),
-                encoding='utf-8').read()
-    _mseq = open(os.path.join(HERE, 'motion', 'src', 'MotionSequence.tsx'),
-                 encoding='utf-8').read()
-    check('v103b: Transition-Bibliothek - 6 Arten + Auto-Variety ohne Repeat',
-          all(("id: '" + t + "'") in _mtr for t in
-              ('push', 'panv', 'cover', 'dolly', 'swoosh', 'tilt'))
-          and 'export function pickTransitions' in _mtr
-          and 'export const SFX_KEYS' in _mtr
-          and 'pickTransitions(' in _mseq)
-    # Interaktive Kamera-Transitions: beide Szenen SCHARF (kein Blur-out), 3D-Schwenk
-    # (rotateX/rotateY) + Perspektive. Ismet: "nicht out in Blur, sondern reingeschoben".
-    check('v103b: Kamera-Transitions scharf (kein Blur) + 3D-Schwenk + Perspektive',
-          'feGaussianBlur' not in _mseq and 'blur(' not in _mseq
-          and 'blurX' not in _mtr
-          and 'rotateX' in _mtr and 'rotateY' in _mtr
-          and 'perspective(' in _mseq)
-    # Sound-Verdrahtung bleibt (mountet <Audio> NUR bei vorhandenem CC0-Asset), aber es
-    # werden KEINE synthetischen Sounds mehr ausgeliefert (Ismet: klangen grauenhaft) ->
-    # die Sequenz rendert stumm, bis ein echtes Pack in public/sfx liegt.
-    check('v103b: Sound-Verdrahtung dormant - kein synthetisches SFX ausgeliefert',
-          '<Audio' in _mseq and "staticFile(`sfx/" in _mseq
-          and 'spec.sfx' in _mseq
-          and "existsSync(join(process.cwd(), 'public', 'sfx'" in _mrun
-          and not os.path.isdir(os.path.join(HERE, 'motion', 'public', 'sfx'))
-          and not os.path.exists(os.path.join(HERE, 'motion', 'scripts', 'gen_sfx.py')))
-    if shutil.which('node') and os.path.isdir(os.path.join(_mroot2, 'node_modules')):
-        try:
-            _tr2 = subprocess.run(['node', 'scripts/test-transitions.mjs'], cwd=_mroot2,
-                                  capture_output=True, text=True, timeout=120)
-            check('v103b: Transition Node-Unit-Test (Identity-Enden, kein Repeat)',
-                  _tr2.returncode == 0, (_tr2.stdout + _tr2.stderr)[-200:])
-        except Exception as _e:
-            check('v103b: Transition Node-Unit-Test', False, str(_e))
-    else:
-        check('v103b: Transition Node-Unit-Test (node fehlt -> skip)', True)
-
-    # v104 (Pfeiler 2): eigenes Logo/Bild + eigene Schrift ueberall in die Mockups.
-    _mas = open(os.path.join(HERE, 'motion', 'src', 'apple', 'AppleScene.tsx'),
-                encoding='utf-8').read()
-    _mspec = open(os.path.join(HERE, 'motion', 'src', 'spec.ts'), encoding='utf-8').read()
-    check('v104: Logo/Font im Spec-Vertrag + Director liest --assets',
-          'logo?: string' in _mspec and 'font?:' in _mspec
-          and "argVal('assets')" in _mrun
-          and "family: 'DVEUserFont'" in _mrun)
-    check('v104: AppleScene rendert Logo (Img) + laedt User-Font (FontFace)',
-          'logo?: string' in _mas and '<Img src={logo}' in _mas
-          and 'ensureUserFont' in _mas and 'FontFace(font.family' in _mas
-          and 'fontStack(spec)' in _mas)
-    check('v104: Server nimmt Logo/Font-Uploads an (validiert) + reicht --assets durch',
-          'logo: UploadFile = File(None)' in _srv_m and 'font: UploadFile = File(None)' in _srv_m
-          and '_ASSET_CAP' in _srv_m and "cmd.append('--assets=" in _srv_m
-          and "a.startsWith('--assets=')" in _mrb2)
-    check('v104: UI - Brand-Upload (Logo/Font) in Template- + Sequence-Schritt',
-          'id="moLogo"' in _ui_m and 'id="moFont"' in _ui_m
-          and 'id="moLogoSeq"' in _ui_m and 'id="moFontSeq"' in _ui_m
-          and "fd.append('logo'" in _ui_m and "fd.append('font'" in _ui_m)
-
-    # v105: iOS-26 Liquid-Glass-Look fuer alle Mockups + INTERAKTIVE Transitions
-    # (Aktion loest den Uebergang aus: Suche druecken -> naechstes kommt).
-    check('v105: Liquid-Glass-System (Glas-Helper + farbiger Liquid-Hintergrund)',
-          'const glass = ' in _mas and 'backdropFilter' in _mas
-          and 'saturate(' in _mas and 'LiquidBg' in _mas
-          and 'hueFromAccent(accent)' in _mas)
-    check('v105: interaktive Transition - Press treibt den Uebergang',
-          'press?: number' in _mas and 'press={press}' in _mseq
-          and "clamp01((local - (durF - tf - pressLead))" in _mseq)
-    # Die Kern-Interaktion: bei Search klappt beim "Suchen druecken" der Vorschlags-
-    # Layer weg + Feld leuchtet im Akzent (submit = press).
-    check('v105: Search - "Suchen druecken" (Vorschlaege weg, Feld leuchtet)',
-          'const submit = clamp01(press)' in _mas
-          and 'opacity: 1 - submit' in _mas
-          and '<Ripple press={submit}' in _mas)
-
-    # v106: iOS-Dark-Mode-Re-Theme nach Ismets echten Screenshots (Statusbar 5G+Akku,
-    # dunkles Glas, WhatsApp-Style-Chat, dunkler Notification-Lockscreen).
-    check('v106: Dark-Mode-Tokens + Statusleiste (5G) + dunkles Glas',
-          "INK = '#f3f5fb'" in _mas and '>5G<' in _mas
-          and 'rgba(58,62,74' in _mas   # dunkle Glas-Fuellung statt weiss
-          and "background: '#0b141a'" in _mas)  # WhatsApp-Canvas
-    check('v106: WhatsApp-Style-Chat (gruene Bubbles, Ticks, Nav, Input-Bar)',
-          "OUT_BG = '#075e54'" in _mas and 'const Tick' in _mas
-          and "'#53bdeb'" in _mas and 'online' in _mas
-          and '#25d366' in _mas)
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
@@ -3449,25 +3215,13 @@ def _scenario_betrieb(tmp):
     check('Worker melden Fehl-Jobs an den Alarm',
           open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8')
           .read().count('_notify_job_fail(jid)') >= 2)
-    # 4) Warm-Preview-Daemon: rendert, ueberlebt kaputte Eingaben, bleibt warm
-    dm = SV._PreviewDaemon()
-    pd = tempfile.mkdtemp(prefix='dve_pv_')
-    out1 = os.path.join(pd, 'p1.png')
-    ok1 = dm.render({'style': 'studio', 'template': 'pills',
-                     'preview': 6.8}, out1)
-    check('Preview-Daemon rendert Standbild', ok1 and os.path.exists(out1))
-    ok2 = dm.render({'style': 'studio', 'template': 'pills',
-                     'preview': 'kaputt'}, os.path.join(pd, 'p2.png'))
-    check('Preview-Daemon meldet Fehler statt zu sterben',
-          ok2 is False and dm.p is not None and dm.p.poll() is None)
-    t0 = _t.time()
-    ok3 = dm.render({'style': 'dark', 'template': 'chat',
-                     'preview': 3.8}, os.path.join(pd, 'p3.png'))
-    dt = _t.time() - t0
-    check('Preview-Daemon warm deutlich unter Kaltstart (<2.5s)',
-          ok3 and dt < 2.5, f'{dt:.2f}s')
-    dm._kill()
-    shutil.rmtree(pd, ignore_errors=True)
+    # v118: der gfx_engine-Warm-Preview-Daemon ist mit den Alt-Motion-Engines entfernt —
+    # die einzige Motion-Engine (Studio-Showcase) rendert ueber Remotion, ohne Preview-Daemon.
+    check('v118: gfx-Preview-Daemon + Alt-Motion-Endpoints entfernt',
+          not hasattr(SV, '_PreviewDaemon')
+          and not hasattr(SV, 'motion_render') and not hasattr(SV, 'motion_brief')
+          and not hasattr(SV, 'motion_auto') and not hasattr(SV, '_run_motion_brief')
+          and not hasattr(SV, '_run_motion_auto'))
     shutil.rmtree(os.environ['DVE_DATA'], ignore_errors=True)
 
 

@@ -6,9 +6,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "remotion studio src/index.ts",
-    "render": "remotion render src/index.ts MotionVideo out/video.mp4 --props=src/demo-spec.json",
-    "render:prores": "remotion render src/index.ts MotionVideo out/video.mov --codec=prores --prores-profile=4444 --props=src/demo-spec.json",
-    "brief": "node scripts/render-brief.mjs",
+    "render": "remotion render src/index.ts MotionShowcase out/video.mp4 --props=src/demo-spec.json",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },

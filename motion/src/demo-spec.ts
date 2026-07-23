@@ -3,11 +3,10 @@
 // the typed export and the CLI render can never drift apart.
 
 import raw from './demo-spec.json';
-import { isSceneSpec } from './spec';
-import type { MotionProps } from './MotionVideo';
+import { isSceneSpec, type SceneSpec } from './spec';
 
 if (!isSceneSpec((raw as { spec: unknown }).spec)) {
   throw new Error('demo-spec.json is not a valid SceneSpec');
 }
 
-export const demoProps = raw as unknown as MotionProps;
+export const demoProps = raw as unknown as { spec: SceneSpec };

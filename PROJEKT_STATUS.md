@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v118 Alt-Motion-Engines komplett entfernt — nur noch das Studio-Showcase (live).**
+  Ismet: „Entferne alle andere mit Motion Design." Umgesetzt: der Motion-Wizard hat nur noch
+  EINEN Weg — das Full-customizable **Studio** (Showcase / Kinetic / Prompt, alle Knöpfe).
+  Alle vier Alt-Engines raus:
+  - **Server:** Endpoints `/api/motion/brief`, `/api/motion/auto`, `/api/motion/render`,
+    `/api/motion/preview`, `/api/motion/schema`, `/api/mov/{jid}` gelöscht; Worker
+    `_run_motion_brief`/`_run_motion_auto` weg; `_run_motion` ruft nur noch
+    `_run_motion_showcase`; der gfx_engine-Warm-Preview-Daemon (`_PreviewDaemon`) +
+    `_motion_sanitize` + `MOTION_TEMPLATES/TRANSITIONS/COST_*` entfernt. Kein `gfx_engine.py`-
+    Aufruf mehr aus dem Web (Datei bleibt auf Platte für den Desktop). Showcase-Helfer
+    (`_whisper_words`, `MOTION_AUTO_MAX_*`, `cost_seconds`, `MOTION_BRIEF_OK`-Gate) bleiben.
+  - **Motion-TS:** 27 Dateien gelöscht (MotionVideo/Motion3D/MotionApple/MotionSequence/
+    MotionOverlay, SceneRenderer, three/apple/blocks, director/{autoDirect,autoGuards,run,
+    run-auto,templates,heuristic,schema,vocabulary}, lib/{layout,overlap,motion,transitions},
+    render-brief.mjs, render-auto.mjs, 3 Alt-Tests). `Root.tsx` registriert nur noch
+    MotionShowcase/Kinetic/Prompt. `demo-spec.ts` Typ-Import von der gelöschten MotionVideo
+    inlined. `tsc --noEmit` clean.
+  - **UI:** 4 Typ-Karten + 6 tote Step-Views (upload/describe/template/style/build/render)
+    raus; Studio bekam eine eigene Ergebnis-Ansicht (Video + Download, vorher in der geteilten
+    render-Ansicht); tote JS-Funktionen (motionTemplateGo/BriefGo/SeqGo/AutoGo/Render/Preview/
+    Spec/moSync/moGallery/renderSeqRows/moSeg/hexToRgb) entfernt; `MO_ENGINE_STEPS` = nur
+    `studio`. JS syntaxgeprüft (node --check).
+  - **Selftest:** ~30 tote Alt-Engine-Checks (v101w/y/z, v102/e, v103/b, v104/5/6, v107d,
+    v108/b, v109b, v110, autoguards/templates/transitions-Node-Tests, PreviewDaemon) entfernt;
+    3 neue v118-Garantien (Server/UI/Registry sind wirklich alt-frei). **677/677 grün**, GUI-
+    Smoke grün, End-to-End-Render (SRT→1080×1920-MP4) grün. NUR Linux/CPU getestet.
 - **v117d Transkript-DATEI-Upload im Studio (live).** Ismet: „Ich will, dass man da die
   Videos/Transkript als Datei hochladen kann. Dieser soll dann automatisch passieren." Umgesetzt:
   im Studio dritter Eingabe-Modus „Transcript file" neben „Script / text" und „A video".

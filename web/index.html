@@ -1486,42 +1486,16 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
         <!-- STEP: TYPE -->
         <div class="mo-step-view active" data-key="type">
-          <h2 class="step-title">What do you want to make?</h2>
-          <p class="step-sub">Two ways to a clip. Pick one — switch back anytime.</p>
+          <h2 class="step-title">Motion Studio</h2>
+          <p class="step-sub">One studio, full control. Start from a video, a transcript file or your
+            own script — pick the composition &amp; style, then tune everything.</p>
           <div class="mo-type-cards">
-            <button class="mo-type-card" type="button" id="moTypeBrief">
-              <div class="tc-ic">🌀</div>
-              <h3>From a brief <span class="mo-hint">· AI</span></h3>
-              <p>Describe it in one line. Get high-end 3D motion graphics, composed
-                fresh every time. No settings needed.</p>
-              <span class="tc-go">Describe a clip →</span>
-            </button>
-            <button class="mo-type-card" type="button" id="moTypeTemplate">
-              <div class="tc-ic">🧩</div>
-              <h3>From a template</h3>
-              <p>Clean UI-style motion — pills, an app card, search, home screen,
-                chat, a notification. Pick one and add your text.</p>
-              <span class="tc-go">Pick a template →</span>
-            </button>
-            <button class="mo-type-card" type="button" id="moTypeSequence">
-              <div class="tc-ic">🎬</div>
-              <h3>Sequence</h3>
-              <p>Chain several scenes into one video with seamless transitions —
-                a full mini-promo, no editing.</p>
-              <span class="tc-go">Build a sequence →</span>
-            </button>
-            <button class="mo-type-card" type="button" id="moTypeAuto">
-              <div class="tc-ic">🎥</div>
-              <h3>From your video</h3>
-              <p>Upload a clip. An AI watches it and directs bespoke motion graphics
-                onto it — like a senior designer, matched to what you say and show.</p>
-              <span class="tc-go">Upload a video →</span>
-            </button>
             <button class="mo-type-card" type="button" id="moTypeStudio">
               <div class="tc-ic">🎛️</div>
               <h3>Studio — full control</h3>
-              <p>A video or your script → a standalone promo. Pick the composition &amp;
-                style, then tune everything: colors, type, motion, text, brand.</p>
+              <p>A video, a transcript file or your script → a standalone promo. Pick the
+                composition &amp; style, then tune everything: colors, type, motion, text, brand.
+                Your on-screen text stays exactly as written — never invented.</p>
               <span class="tc-go">Open the studio →</span>
             </button>
           </div>
@@ -1587,147 +1561,21 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <button class="btn" id="moStudioGo" type="button">Generate · by length</button>
           </div>
           <div id="moStudioStatus" class="mo-status" style="display:none;"></div>
-        </div>
-
-        <!-- STEP: UPLOAD (auto-overlay engine) -->
-        <div class="mo-step-view" data-key="upload">
-          <h2 class="step-title">Upload your video</h2>
-          <p class="step-sub">The AI transcribes it, watches the footage, and places motion
-            graphics where they add impact — dynamic, hand-made, never cluttered.</p>
-          <div class="panel">
-            <label class="brand-file" style="height:120px; font-size:15px;">
-              <input type="file" id="moAutoFile" accept="video/*">
-              <span data-brand="video">＋ Choose a video</span>
-            </label>
-            <label class="mo-lab" style="margin-top:16px;">Accent color</label>
-            <input type="color" class="mo-color" id="moAccentAuto" value="#e0483d">
-            <label class="mo-lab" style="margin-top:16px;">Platform safe-zone <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
-            <div class="seg" id="moAutoPlatform"></div>
-            <label class="mo-lab" style="margin-top:16px;">Your brand <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
-            <div class="brand-row">
-              <label class="brand-file"><input type="file" id="moLogoAuto" accept="image/*"><span data-brand="logo">＋ Logo</span></label>
-              <label class="brand-file"><input type="file" id="moFontAuto" accept=".ttf,.otf,.woff,.woff2"><span data-brand="font">＋ Font</span></label>
-            </div>
-          </div>
-          <div class="mo-nav">
-            <button class="btn secondary" data-mo-back type="button">Back</button>
-            <button class="btn" data-mo-next type="button">Continue →</button>
-          </div>
-        </div>
-
-        <!-- STEP: DESCRIBE (brief engine) -->
-        <div class="mo-step-view" data-key="describe">
-          <h2 class="step-title">Describe your clip</h2>
-          <p class="step-sub">One line. The AI directs the rest.</p>
-          <div class="panel" id="moBriefPanel">
-            <textarea class="mo-in" id="moBrief" rows="3"
-              placeholder="e.g. Bold intro for my fitness channel — energetic, futuristic"
-              style="resize:vertical; font-family:inherit;"></textarea>
-            <label class="mo-check" style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer; font-size:14px; color:var(--fg2);">
-              <input type="checkbox" id="moBriefNoText" checked style="width:16px; height:16px; accent-color:var(--acc2);">
-              Pure motion graphics <span class="mo-hint">— no text on screen</span>
-            </label>
-            <label class="mo-check" style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer; font-size:14px; color:var(--fg2);">
-              <input type="checkbox" id="moBrief3d" checked style="width:16px; height:16px; accent-color:var(--acc2);">
-              3D <span class="mo-hint">— real lit geometry, depth &amp; camera move</span>
-            </label>
-            <p class="mo-hint" style="margin-top:10px;">Every brief is composed fresh —
-              beat-snapped, safe-zone aware.</p>
-          </div>
-          <div class="mo-nav">
-            <button class="btn secondary" data-mo-back type="button">Back</button>
-            <button class="btn" data-mo-next type="button">Continue →</button>
-          </div>
-        </div>
-
-        <!-- STEP: TEMPLATE (template engine) -->
-        <div class="mo-step-view" data-key="template">
-          <h2 class="step-title">Pick a template</h2>
-          <p class="step-sub">Choose a base, then add your words.</p>
-          <div class="panel">
-            <div class="mo-gallery" id="moTemplate"></div>
-            <div id="moWordsWrap">
-              <label class="mo-lab" id="moWordsLab">Words / title</label>
-              <input class="mo-in" id="moWords" placeholder="Write, Create, Solve">
-            </div>
-          </div>
-          <div class="mo-nav">
-            <button class="btn secondary" data-mo-back type="button">Back</button>
-            <button class="btn" data-mo-next type="button">Continue →</button>
-          </div>
-        </div>
-
-        <!-- STEP: STYLE (template engine) -->
-        <div class="mo-step-view" data-key="style">
-          <h2 class="step-title">Style it</h2>
-          <p class="step-sub">Accent colour and format.</p>
-          <div class="panel">
-            <label class="mo-lab">Accent color</label>
-            <input type="color" class="mo-color" id="moAccent" value="#7c5cff">
-            <label class="mo-lab">Format</label>
-            <div class="seg" id="moFormat"></div>
-            <label class="mo-lab" style="margin-top:16px;">Your brand <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
-            <div class="brand-row">
-              <label class="brand-file"><input type="file" id="moLogo" accept="image/*"><span data-brand="logo">＋ Logo / image</span></label>
-              <label class="brand-file"><input type="file" id="moFont" accept=".ttf,.otf,.woff,.woff2"><span data-brand="font">＋ Font</span></label>
-            </div>
-            <p class="mo-hint">Your logo replaces the app icon; your font styles all text.</p>
-          </div>
-          <div class="mo-nav">
-            <button class="btn secondary" data-mo-back type="button">Back</button>
-            <button class="btn" data-mo-next type="button">Continue →</button>
-          </div>
-        </div>
-
-        <!-- STEP: BUILD (sequence engine) -->
-        <div class="mo-step-view" data-key="build">
-          <h2 class="step-title">Build your sequence</h2>
-          <p class="step-sub">Add scenes in order — they flow into one video with interactive camera transitions: one scene is shown, then the next is pushed in as the camera pans, tilts or swings. Leave it on <b>Auto</b> and the engine varies them so none repeat, or pin one per scene.</p>
-          <div class="panel">
-            <div id="moSeqRows"></div>
-            <button class="btn secondary" id="moSeqAdd" type="button" style="margin-top:10px;">+ Add scene</button>
-            <label class="mo-lab" style="margin-top:16px;">Accent color</label>
-            <input type="color" class="mo-color" id="moAccentSeq" value="#e0483d">
-            <label class="mo-lab" style="margin-top:16px;">Format</label>
-            <div class="seg" id="moFormatSeq"></div>
-            <label class="mo-lab" style="margin-top:16px;">Your brand <span style="color:var(--mut);font-weight:500;">(optional)</span></label>
-            <div class="brand-row">
-              <label class="brand-file"><input type="file" id="moLogoSeq" accept="image/*"><span data-brand="logo">＋ Logo / image</span></label>
-              <label class="brand-file"><input type="file" id="moFontSeq" accept=".ttf,.otf,.woff,.woff2"><span data-brand="font">＋ Font</span></label>
-            </div>
-            <p class="mo-hint">Your logo appears across the scenes; your font styles all text.</p>
-          </div>
-          <div class="mo-nav">
-            <button class="btn secondary" data-mo-back type="button">Back</button>
-            <button class="btn" data-mo-next type="button">Continue →</button>
-          </div>
-        </div>
-
-        <!-- STEP: GENERATE / RESULT -->
-        <div class="mo-step-view" data-key="render">
-          <h2 class="step-title">Generate</h2>
-          <div class="mo-preview" style="position:static;">
+          <!-- v118: eigene Ergebnis-Ansicht (Studio ist jetzt der einzige Weg). -->
+          <div class="mo-preview" id="moResult" style="position:static; display:none; margin-top:18px;">
             <div class="mo-frame" id="moFrame">
               <img id="moImg" alt="">
-              <video id="moVid" class="hidden" controls playsinline
-                     preload="metadata" loop></video>
+              <video id="moVid" class="hidden" controls playsinline preload="metadata" loop></video>
               <div class="mo-spin" id="moSpin"></div>
             </div>
-            <p class="mo-note" id="moNote">Your clip renders here — with motion + sound.</p>
+            <p class="mo-note" id="moNote">Your motion renders here.</p>
             <div id="moResultBar" class="mo-result hidden">
               <a class="btn secondary" id="moDl" download>Download MP4</a>
               <a class="btn secondary hidden" id="moDlMov" target="_blank" rel="noopener">MOV · Alpha</a>
-              <button class="btn secondary" id="moBackToEdit" type="button">Adjust &amp; re-render</button>
             </div>
           </div>
-          <div id="moBriefStatus" class="mo-status" style="display:none;"></div>
-          <div id="moStatus" class="mo-status" style="display:none;"></div>
-          <div class="mo-nav">
-            <button class="btn secondary" data-mo-back type="button">Back</button>
-            <button class="btn" id="moBriefGo" type="button" style="display:none;">Generate from brief · 1 credit</button>
-            <button class="btn" id="moRender" type="button" style="display:none;">Render clip · 1 credit</button>
-          </div>
         </div>
+
 
       </div>
     </div>
@@ -2883,132 +2731,36 @@ function pickTool(name) {
 }
 window.addEventListener('hashchange', routeFromHash);
 
-/* ===== Motion-Graphics-Editor (v-motion) ===== */
-const Motion = { ready:false, schema:null, sel:{template:'pills', style:'studio',
-  format:'9:16', accent:'#ff7a1a', motion:1.0, grain:6.0, exportFmt:'mp4'}, t:null };
-function hexToRgb(h){ const m=/^#?([0-9a-f]{6})$/i.exec(h); if(!m) return [255,122,26];
-  const n=parseInt(m[1],16); return [(n>>16)&255,(n>>8)&255,n&255]; }
-function moSeg(id, opts, key){
-  const el=$('#'+id); if(!el) return;
-  el.innerHTML='';
-  opts.forEach(([label,val])=>{
-    const b=document.createElement('button');
-    b.textContent=label; b.classList.toggle('on', Motion.sel[key]===val);
-    b.onclick=()=>{ Motion.sel[key]=val;
-      el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
-      b.classList.add('on'); moSync(); motionPreview(); };
-    el.appendChild(b);
-  });
-}
-/* Template-Galerie: Bild-Kacheln statt nackter Buttons - man waehlt ein
-   Beispiel, keinen Fachbegriff. */
-/* v101z: kuratiertes Remotion-Template-Set (ersetzt die alte Python-gfx-Engine). */
-const MO_TPLS=[
-  ['pills','Pills','Embossed keyword pills that pop in'],
-  ['appcard','App card','A store-style download card'],
-  ['search','Search bar','A query typing into a search field'],
-  ['homescreen','Home screen','An app grid springing in'],
-  ['chat','Chat','Message bubbles in a conversation'],
-  ['notify','Notification','A banner dropping from the top'],
-];
-function moGallery(){
-  const el=$('#moTemplate'); if(!el) return;
-  if(!MO_TPLS.some(t=>t[0]===Motion.sel.template)) Motion.sel.template='pills';
-  el.innerHTML='';
-  MO_TPLS.forEach(([val,label,hint])=>{
-    const c=document.createElement('div');
-    c.className='mo-tile mo-tile-txt'+(Motion.sel.template===val?' on':'');
-    c.innerHTML='<strong>'+label+'</strong><span>'+hint+'</span>';
-    c.onclick=()=>{ Motion.sel.template=val;
-      el.querySelectorAll('.mo-tile').forEach(x=>x.classList.remove('on'));
-      c.classList.add('on'); moSync(); };
-    el.appendChild(c);
-  });
-}
+/* ===== Motion-Studio (v118: nur noch das Full-customizable Showcase) ===== */
+const Motion = { ready:false };
 
 async function initMotion(){
   if(Motion.ready){ return; }
   Motion.ready=true;
-  moGallery();
-  moSeg('moFormat',[['9:16','9:16'],['1:1','1:1'],['16:9','16:9']],'format');
-  Motion.sel.accent=($('#moAccent')&&$('#moAccent').value)||'#7c5cff';
-  $('#moAccent').oninput=()=>{ Motion.sel.accent=$('#moAccent').value; };
-  $('#moRender').onclick=motionTemplateGo;
-  const _mbe=$('#moBackToEdit');
-  if(_mbe) _mbe.onclick=()=>{ moShowPreview(); goMoStep(1); };
-  const _bg=$('#moBriefGo'); if(_bg) _bg.onclick=motionBriefGo;
-  // Pfeiler 2: Brand-Uploads (Logo/Font) — Datei-Feedback im Label.
-  [['moLogo','logo'],['moFont','font'],['moLogoSeq','logo'],['moFontSeq','font']].forEach(([id,kind])=>{
-    const el=$('#'+id); if(!el) return;
-    el.onchange=()=>{ const lab=el.closest('.brand-file'); const sp=lab&&lab.querySelector('span');
-      const f=el.files&&el.files[0];
-      if(sp){ if(f){ sp.textContent=(f.name.length>16?f.name.slice(0,14)+'…':f.name); lab.classList.add('on'); }
-        else { sp.textContent=(kind==='logo'?'＋ Logo / image':'＋ Font'); lab.classList.remove('on'); } } };
-  });
-  // v101y: Wizard-Navigation (Schritt fuer Schritt wie Captions).
+  // v118: nur noch das Studio (Full-customizable Showcase). Der Renderer braucht Node +
+  // motion/node_modules auf dem Server (motion_brief-Flag) — sonst freundlich blocken.
   Motion.briefOk = !!(State.user && State.user.motion_brief);
-  const tb=$('#moTypeBrief'), tt=$('#moTypeTemplate'), ts=$('#moTypeSequence'), ta=$('#moTypeAuto');
-  if(tb) tb.onclick=()=>setMoEngine('brief');
-  if(tt) tt.onclick=()=>setMoEngine('template');
-  if(ts) ts.onclick=()=>setMoEngine('sequence');
-  if(ta) ta.onclick=()=>setMoEngine('auto');
   const tstudio=$('#moTypeStudio');
   if(tstudio){ tstudio.onclick=()=>setMoEngine('studio'); if(!Motion.briefOk) tstudio.setAttribute('disabled',''); }
   initStudio();
-  if(tb && !Motion.briefOk){
-    tb.setAttribute('disabled','');
-    const g=tb.querySelector('.tc-go'); if(g) g.textContent='Warming up — try again soon';
-  }
-  if(ts && !Motion.briefOk) ts.setAttribute('disabled','');
-  if(ta && !Motion.briefOk) ta.setAttribute('disabled','');
-  // auto-overlay: file feedback + platform seg + accent
-  const _av=$('#moAutoFile');
-  if(_av) _av.onchange=()=>{ const lab=_av.closest('.brand-file'); const sp=lab&&lab.querySelector('span'); const f=_av.files&&_av.files[0];
-    if(sp){ if(f){ sp.textContent='🎬 '+(f.name.length>22?f.name.slice(0,20)+'…':f.name); lab.classList.add('on'); } else { sp.textContent='＋ Choose a video'; lab.classList.remove('on'); } } };
-  [['moLogoAuto','logo'],['moFontAuto','font']].forEach(([id,kind])=>{ const el=$('#'+id); if(!el) return;
-    el.onchange=()=>{ const lab=el.closest('.brand-file'); const sp=lab&&lab.querySelector('span'); const f=el.files&&el.files[0];
-      if(sp){ if(f){ sp.textContent=(f.name.length>14?f.name.slice(0,12)+'…':f.name); lab.classList.add('on'); } else { sp.textContent=(kind==='logo'?'＋ Logo':'＋ Font'); lab.classList.remove('on'); } } }; });
-  const _apl=$('#moAutoPlatform');
-  if(_apl){ Motion.autoPlatform='';
-    [['','None'],['tiktok','TikTok'],['reels','Reels'],['shorts','Shorts']].forEach(([v,l])=>{
-      const b=document.createElement('button'); b.type='button'; b.className='seg-b'+(v===''?' on':''); b.textContent=l;
-      b.onclick=()=>{ Motion.autoPlatform=v; _apl.querySelectorAll('.seg-b').forEach(x=>x.classList.remove('on')); b.classList.add('on'); };
-      _apl.appendChild(b); }); }
-  const _aac=$('#moAccentAuto'); if(_aac){ _aac.oninput=()=>{ Motion.autoAccent=_aac.value; }; Motion.autoAccent=_aac.value||'#e0483d'; }
-  const _sa=$('#moSeqAdd'); if(_sa) _sa.onclick=()=>{ (State.seqRows=State.seqRows||[]).push({template:'pills',text:''}); renderSeqRows(); };
-  const _asq=$('#moAccentSeq'); if(_asq) _asq.oninput=()=>{ Motion.seqAccent=_asq.value; };
-  Motion.seqAccent = (_asq&&_asq.value)||'#e0483d';
-  const _fseq=$('#moFormatSeq');
-  if(_fseq){ Motion.seqFormat='9:16'; _fseq.innerHTML='';
-    [['9:16','9:16'],['1:1','1:1'],['16:9','16:9']].forEach(([l,v])=>{
-      const b=document.createElement('button'); b.textContent=l; b.classList.toggle('on', v==='9:16');
-      b.onclick=()=>{ Motion.seqFormat=v; _fseq.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); };
-      _fseq.appendChild(b); }); }
   document.querySelectorAll('#moWizard [data-mo-next]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx+1));
   document.querySelectorAll('#moWizard [data-mo-back]').forEach(b=>b.onclick=()=>goMoStep(Motion.stepIdx-1));
-  Motion.engine = Motion.briefOk ? 'brief' : 'template';
-  Motion.stepKeys = MO_ENGINE_STEPS[Motion.engine];
+  Motion.engine = 'studio';
+  Motion.stepKeys = MO_ENGINE_STEPS.studio;
   Motion.stepIdx = 0;
   renderMoStepper(); goMoStep(0);
-  moSync();
 }
 
-const MO_ENGINE_STEPS = { brief:['type','describe','render'],
-                          template:['type','template','style','render'],
-                          sequence:['type','build','render'],
-                          auto:['type','upload','render'],
-                          studio:['type','studio'] };
-const MO_STEP_LABELS = { type:'Type', describe:'Describe', template:'Template',
-                         style:'Style', build:'Build', upload:'Upload', render:'Generate',
-                         studio:'Studio' };
+const MO_ENGINE_STEPS = { studio:['type','studio'] };
+const MO_STEP_LABELS = { type:'Type', studio:'Studio' };
 function setMoEngine(eng){
-  if((eng==='brief'||eng==='sequence'||eng==='auto'||eng==='studio') && !Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
-  Motion.engine=eng; Motion.stepKeys=MO_ENGINE_STEPS[eng];
+  if(!Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
+  Motion.engine=eng; Motion.stepKeys=MO_ENGINE_STEPS[eng]||MO_ENGINE_STEPS.studio;
   renderMoStepper(); goMoStep(1);
 }
 function renderMoStepper(){
   const el=$('#moStepper'); if(!el) return;
-  const keys=Motion.stepKeys||MO_ENGINE_STEPS.template;
+  const keys=Motion.stepKeys||MO_ENGINE_STEPS.studio;
   el.innerHTML='';
   keys.forEach((k,i)=>{
     if(i>0){ const ln=document.createElement('div'); ln.className='mo-sline'; ln.dataset.i=i; el.appendChild(ln); }
@@ -3030,7 +2782,7 @@ function updateMoStepper(){
   });
 }
 function goMoStep(i){
-  const keys=Motion.stepKeys||MO_ENGINE_STEPS.template;
+  const keys=Motion.stepKeys||MO_ENGINE_STEPS.studio;
   i=Math.max(0, Math.min(keys.length-1, i));
   Motion.stepIdx=i; const key=keys[i];
   document.querySelectorAll('#moWizard .mo-step-view').forEach(v=>{
@@ -3038,83 +2790,7 @@ function goMoStep(i){
   });
   updateMoStepper();
   window.scrollTo({top:0, behavior:'smooth'});
-  if(key==='build') renderSeqRows();
-  if(key==='render'){
-    const bg=$('#moBriefGo'), rn=$('#moRender');
-    if(bg) bg.style.display=(Motion.engine==='brief')?'':'none';
-    if(rn){
-      rn.style.display=(Motion.engine==='template'||Motion.engine==='sequence'||Motion.engine==='auto')?'':'none';
-      if(Motion.engine==='sequence'){ rn.textContent='Generate sequence · 1 credit'; rn.onclick=motionSeqGo; }
-      else if(Motion.engine==='auto'){ rn.textContent='Generate from video · by length'; rn.onclick=motionAutoGo; }
-      else { rn.textContent='Generate template · 1 credit'; rn.onclick=motionTemplateGo; }
-    }
-  }
 }
-/* v103: Sequenz-Bau (mehrere Szenen -> ein Video). */
-const MO_SEQ_TPLS=[['pills','Pills'],['appcard','App card'],['search','Search bar'],
-  ['homescreen','Home screen'],['chat','Chat'],['notify','Notification']];
-// The transition PLAYED INTO a scene. '' = Auto (engine varies them so none repeat).
-const MO_SEQ_TRANS=[['','Auto'],['push','Camera pan'],['panv','Camera tilt'],
-  ['cover','Slide over'],['dolly','Dolly in'],['swoosh','3D swing'],['tilt','3D flip']];
-function renderSeqRows(){
-  const el=$('#moSeqRows'); if(!el) return;
-  if(!State.seqRows||!State.seqRows.length) State.seqRows=[
-    {template:'pills',text:'From your daily tools'},
-    {template:'appcard',text:'DouchkoVE, Productivity'},
-    {template:'notify',text:'DouchkoVE, Your clip is ready'}];
-  const opts=MO_SEQ_TPLS.map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('');
-  const tops=MO_SEQ_TRANS.map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('');
-  el.innerHTML='';
-  State.seqRows.forEach((r,i)=>{
-    const row=document.createElement('div'); row.className='seq-row';
-    // The first scene has no incoming boundary, so its transition slot is inert ("Start").
-    const trCell=i===0
-      ? '<select disabled title="The opening scene has no transition into it"><option>Start</option></select>'
-      : '<select data-i="'+i+'" data-k="transition" title="Transition into this scene">'+tops+'</select>';
-    row.innerHTML='<span class="seq-n">'+(i+1)+'</span>'
-      +'<select data-i="'+i+'" data-k="template">'+opts+'</select>'
-      +'<input type="text" data-i="'+i+'" data-k="text" placeholder="Text for this scene" value="'+(r.text||'').replace(/"/g,'&quot;')+'">'
-      +trCell
-      +'<button class="seq-del" data-i="'+i+'" title="Remove" type="button">✕</button>';
-    el.appendChild(row);
-    row.querySelector('[data-k=template]').value=r.template||'pills';
-    if(i>0) row.querySelector('[data-k=transition]').value=r.transition||'';
-  });
-  el.querySelectorAll('select[data-k],input[data-k]').forEach(x=>x.addEventListener(x.tagName==='INPUT'?'input':'change',()=>{
-    const i=parseInt(x.dataset.i); if(State.seqRows[i]) State.seqRows[i][x.dataset.k]=x.value; }));
-  el.querySelectorAll('.seq-del').forEach(b=>b.addEventListener('click',()=>{
-    if(State.seqRows.length<=2){ toast('A sequence needs at least 2 scenes.','err'); return; }
-    State.seqRows.splice(parseInt(b.dataset.i),1); renderSeqRows(); }));
-}
-async function motionSeqGo(){
-  const btn=$('#moRender'); const st=$('#moStatus');
-  const rows=(State.seqRows||[]).filter(r=>r.template);
-  if(rows.length<2){ toast('Add at least 2 scenes.','err'); return; }
-  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
-  const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
-  st.style.display='block'; st.textContent='Rendering your sequence …';
-  try{
-    const fd=new FormData();
-    fd.append('brief','sequence');
-    fd.append('sequence', JSON.stringify(rows.map((r,i)=>{
-      const o={template:r.template, text:r.text||''};
-      if(i>0 && r.transition) o.transition=r.transition;   // scene 0 has no incoming transition
-      return o;
-    })));
-    fd.append('accent', Motion.seqAccent||'#e0483d');
-    fd.append('format', Motion.seqFormat||'9:16');
-    const _lg=$('#moLogoSeq'), _ft=$('#moFontSeq');
-    if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
-    if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);
-    const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
-    if(r.status===402){ st.textContent='Not enough credits.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
-    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    if(!r.ok) throw 0;
-    const j=await r.json();
-    motionPoll(j.jid, st, btn, orig);
-  }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
-}
-
 /* v117: Studio — full-customizable Showcase (video OR script -> chosen composition + all settings). */
 const ST = { input:'text', comp:'showcase', style:'editorial', format:'9:16', font:'sans', inkTouched:false };
 const FONT_MAP = { sans:"'Inter', system-ui, -apple-system, sans-serif", mono:"ui-monospace, 'Menlo', monospace", serif:"Georgia, 'Times New Roman', serif" };
@@ -3162,6 +2838,7 @@ async function motionStudioGo(){
   fd.append('composition', ST.comp); fd.append('style', ST.style); fd.append('format', ST.format);
   fd.append('custom', JSON.stringify(_studioCustom()));
   moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
+  const _fr=$('#moFrame'); if(_fr) _fr.style.aspectRatio = ST.format==='1:1'?'1/1' : ST.format==='16:9'?'16/9' : '9/16';
   const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
   st.style.display='block'; st.textContent='Designing your motion …';
   try{
@@ -3175,167 +2852,18 @@ async function motionStudioGo(){
   }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
 }
 
-async function motionAutoGo(){
-  const btn=$('#moRender'); const st=$('#moStatus');
-  const fEl=$('#moAutoFile'); const file=fEl&&fEl.files&&fEl.files[0];
-  if(!file){ toast('Choose a video first.','err'); return; }
-  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
-  const orig=btn.textContent; btn.disabled=true; btn.textContent='Uploading …';
-  st.style.display='block'; st.textContent='Uploading your video …';
-  try{
-    const fd=new FormData();
-    fd.append('video', file);
-    fd.append('accent', Motion.autoAccent||'#e0483d');
-    if(Motion.autoPlatform) fd.append('platform', Motion.autoPlatform);
-    const _lg=$('#moLogoAuto'), _ft=$('#moFontAuto');
-    if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
-    if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);
-    const r=await fetch('/api/motion/auto',{method:'POST', body:fd});
-    if(r.status===402){ st.textContent='Not enough credits for this video.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); setTimeout(showPricing,300); return; }
-    if(r.status===413){ st.textContent='Video too large or too long.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    if(!r.ok) throw 0;
-    const j=await r.json();
-    st.textContent='Directing your motion …';
-    motionPoll(j.jid, st, btn, orig);
-  }catch(e){ st.style.display='block'; st.textContent='Could not start.'; btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
-}
-
-async function motionBriefGo(){
-  const btn=$('#moBriefGo'); const st=$('#moBriefStatus');
-  const brief=($('#moBrief').value||'').trim();
-  if(brief.length<4){ toast('Write a short brief first.','err'); return; }
-  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
-  const orig=btn.textContent; btn.disabled=true; btn.textContent='Directing …';
-  st.style.display='block'; st.textContent='Directing your motion …';
-  try{
-    const fd=new FormData(); fd.append('brief', brief);
-    const nt=$('#moBriefNoText'); fd.append('no_text', (nt && nt.checked) ? '1' : '0');
-    const d3=$('#moBrief3d'); fd.append('d3', (d3 && d3.checked) ? '1' : '0');
-    const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
-    if(r.status===402){ st.style.display='block'; st.textContent='Not enough credits.';
-      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on');
-      setTimeout(showPricing,300); return; }
-    if(r.status===503){ st.textContent='The director is warming up — try again shortly.';
-      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    if(!r.ok) throw 0;
-    const j=await r.json();
-    motionPoll(j.jid, st, btn, orig);       // v101o: zeigt den Clip inline
-  }catch(e){ st.style.display='block'; st.textContent='Could not start.';
-    btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
-}
-/* v101z: kuratiertes Remotion-Template rendern (ueber denselben Brief-Endpunkt). */
-async function motionTemplateGo(){
-  const btn=$('#moRender'); const st=$('#moStatus');
-  let text=($('#moWords').value||'').trim();
-  if(!text && Motion.sel.template==='homescreen') text='Home';   // Homescreen braucht keinen Text
-  if(text.length<1){ toast('Add your text first.','err'); return; }
-  moShowPreview(); const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
-  const orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering …';
-  st.style.display='block'; st.textContent='Rendering your template …';
-  try{
-    const fd=new FormData(); fd.append('brief', text);
-    fd.append('template', Motion.sel.template||'pills');
-    fd.append('accent', Motion.sel.accent||'#7c5cff');
-    fd.append('format', Motion.sel.format||'9:16');
-    const _lg=$('#moLogo'), _ft=$('#moFont');
-    if(_lg&&_lg.files[0]) fd.append('logo', _lg.files[0]);
-    if(_ft&&_ft.files[0]) fd.append('font', _ft.files[0]);
-    const r=await fetch('/api/motion/brief',{method:'POST', body:fd});
-    if(r.status===402){ st.textContent='Not enough credits.';
-      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on');
-      setTimeout(showPricing,300); return; }
-    if(r.status===503){ st.textContent='The motion engine is warming up — try again shortly.';
-      btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); return; }
-    if(!r.ok) throw 0;
-    const j=await r.json();
-    motionPoll(j.jid, st, btn, orig);
-  }catch(e){ st.style.display='block'; st.textContent='Could not start.';
-    btn.disabled=false; btn.textContent=orig; if(_sp)_sp.classList.remove('on'); }
-}
-/* Kontext-Sync: Felder/Hinweise passen sich dem Template an. */
-const MO_TPL_LABEL={
-  pills:      ['Keywords <span class="mo-hint">(comma-separated, up to 5)</span>','Write, Create, Solve, Ship, Grow'],
-  appcard:    ['App name, category','DouchkoVE, Productivity'],
-  search:     ['Search query','Ask anything'],
-  homescreen: ['Label <span class="mo-hint">(optional)</span>','Home'],
-  chat:       ['Contact, messages <span class="mo-hint">(comma-separated)</span>','Alex, Hey!, New drop is live, Check it now'],
-  notify:     ['Title, message','DouchkoVE, Your clip is ready'],
-};
-function moSync(){
-  const tpl=Motion.sel.template||'pills';
-  const [lab,ph]=MO_TPL_LABEL[tpl]||MO_TPL_LABEL.pills;
-  const wl=$('#moWordsLab'); if(wl&&lab) wl.innerHTML=lab;
-  const wi=$('#moWords'); if(wi&&ph) wi.placeholder=ph;
-}
-function motionSpec(){
-  const words=($('#moWords').value||'').split(',').map(s=>s.trim()).filter(Boolean).slice(0,3);
-  return { template:Motion.sel.template, style:Motion.sel.style,
-    export:Motion.sel.exportFmt,
-    pills:words.length?words:undefined,
-    cfg:{ format:Motion.sel.format, accent:hexToRgb(Motion.sel.accent),
-      motion:Motion.sel.motion, grain:Motion.sel.grain } };
-}
-function motionPreviewDebounced(){ clearTimeout(Motion.t);
-  Motion.t=setTimeout(motionPreview, 350); }
 function moShowPreview(){
-  // v101o: zurueck von Ergebnis-Video auf die Still-Vorschau
+  // v118: die Ergebnis-Ansicht einblenden + zuruecksetzen (Spinner laeuft bis fertig).
+  const res=$('#moResult'); if(res) res.style.display='';
   const vid=$('#moVid'), img=$('#moImg'), bar=$('#moResultBar'), note=$('#moNote');
   if(vid){ try{ vid.pause(); }catch(e){} vid.classList.add('hidden');
     vid.removeAttribute('src'); vid.load(); }
-  if(img) img.classList.remove('hidden');
+  if(img) img.classList.add('hidden');
   if(bar) bar.classList.add('hidden');
-  if(note) note.textContent='Live preview — a still from the clip. '+
-    'The rendered video adds motion + sound.';
+  if(note) note.textContent='Designing your motion — this renders like a senior designer, '+
+    'so give it a moment.';
 }
 
-async function motionPreview(){
-  moShowPreview();
-  const spin=$('#moSpin'); if(spin) spin.classList.add('on');
-  const _im=$('#moImg'); if(_im&&_im.src) _im.style.opacity='.45';
-  // Sequenz-Token: bei schnellen Klicks darf eine ALTE Antwort die neue
-  // nicht ueberschreiben (Race: Vorschau ohne Alpha ueberdeckte die mit)
-  Motion.seq=(Motion.seq||0)+1; const _my=Motion.seq;
-  try{
-    const r=await fetch('/api/motion/preview',{method:'POST',
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify(motionSpec())});
-    if(r.status===429){                        // Rate-Limit: kurz warten, retry
-      if(_my===Motion.seq) setTimeout(motionPreview, 1300);
-      if(_im) _im.style.opacity='1';
-      return;
-    }
-    if(!r.ok) throw 0;
-    const blob=await r.blob();
-    if(_my!==Motion.seq) return;               // veraltete Antwort verwerfen
-    const img=$('#moImg');
-    if(img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
-    img.onload=()=>{ img.style.opacity='1'; };
-    img.src=URL.createObjectURL(blob);
-    const fr=$('#moFrame'); if(fr){ const f=Motion.sel.format;
-      fr.style.aspectRatio = f==='1:1'?'1/1' : f==='16:9'?'16/9' : '9/16'; }
-  }catch(e){ if(_im) _im.style.opacity='1'; }
-  finally{ if(spin) spin.classList.remove('on'); }
-}
-async function motionRender(){
-  const btn=$('#moRender'); const st=$('#moStatus');
-  moShowPreview();                          // v101o: altes Ergebnis raus
-  const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
-  btn.disabled=true; const orig=btn.textContent; btn.textContent='Sending …';
-  const fd=new FormData();
-  fd.append('spec', JSON.stringify(motionSpec()));
-  const img=$('#moImage').files[0]; if(img) fd.append('image', img);
-  try{
-    const r=await fetch('/api/motion/render',{method:'POST', body:fd});
-    if(r.status===402){ st.style.display='block';
-      st.textContent='Not enough credits — top up in Billing.';
-      btn.disabled=false; btn.textContent=orig; return; }
-    if(!r.ok) throw 0;
-    const j=await r.json();
-    st.style.display='block'; st.textContent='Rendering …';
-    motionPoll(j.jid, st, btn, orig);
-  }catch(e){ st.style.display='block'; st.textContent='Could not start render.';
-    btn.disabled=false; btn.textContent=orig; }
-}
 async function motionPoll(jid, st, btn, orig){
   try{
     const r=await fetch('/api/status/'+jid); const s=await r.json();
