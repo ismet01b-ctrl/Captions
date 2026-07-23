@@ -50,10 +50,10 @@
   --fg:#f2f2f7;
   --mut:#b0b0bd;
   --mut2:#8686a0;
-  --acc:#7c5cff;              /* Violett - warmer als Systemblau */
-  --acc2:#9b7dff;
-  --acc-glow:rgba(124,92,255,0.4);
-  --acc-soft:rgba(124,92,255,0.10);
+  --acc:#ff7a1a;              /* Orange - Marken-Akzent (wie Landing) */
+  --acc2:#ff9d52;
+  --acc-glow:rgba(255,122,26,0.4);
+  --acc-soft:rgba(255,122,26,0.10);
   --pink:#ff6b9d;             /* Delight-Akzent */
   --gold:#ffb340;             /* Achievement */
   --green:#30d158;
@@ -79,8 +79,8 @@
 html { -webkit-text-size-adjust: 100%; }
 html, body { min-height: 100%; overscroll-behavior-y: none; }
 body {
-  background: radial-gradient(1200px 800px at 15% -10%, rgba(124,92,255,.10), transparent 60%),
-              radial-gradient(900px 600px at 100% 100%, rgba(255,107,157,.06), transparent 55%),
+  background: radial-gradient(1200px 800px at 15% -10%, rgba(255,122,26,.10), transparent 60%),
+              radial-gradient(900px 600px at 100% 100%, rgba(255,122,26,.05), transparent 55%),
               var(--bg);
   color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
@@ -673,7 +673,7 @@ body {
 /* Overlay */
 .overlay {
   position: fixed; inset: 0;
-  background: radial-gradient(1200px 800px at 30% 20%, rgba(124,92,255,.10), transparent 60%),
+  background: radial-gradient(1200px 800px at 30% 20%, rgba(255,122,26,.10), transparent 60%),
               rgba(11,11,14,.82);
   display: flex; align-items: center; justify-content: center;
   z-index: 100; padding: 20px;
@@ -814,7 +814,7 @@ body {
 
 /* Success-Card */
 .success-hero {
-  background: linear-gradient(135deg, rgba(124,92,255,.20), rgba(255,107,157,.14));
+  background: linear-gradient(135deg, rgba(255,122,26,.20), rgba(255,179,64,.14));
   border: 1px solid var(--line2);
   border-radius: var(--r-xl); padding: 40px 32px; text-align: center;
   margin-bottom: 16px; position: relative; overflow: hidden;
@@ -962,7 +962,7 @@ body {
   border-radius: 6px; cursor: pointer; color: var(--fg);
   border: 1px solid transparent; min-width: 14px;
 }
-.tw:hover { border-color: var(--acc); background: rgba(124,92,255,0.1); }
+.tw:hover { border-color: var(--acc); background: rgba(255,122,26,0.1); }
 .tw.edited { background: rgba(245,196,81,0.15); border-color: rgba(245,196,81,0.5); }
 .tw[contenteditable="true"] { outline: 2px solid var(--acc); background: var(--surf2); }
 
@@ -997,7 +997,7 @@ body {
   animation: twflash .6s ease;
 }
 @keyframes twflash {
-  0% { background: rgba(124,92,255,0.45); }
+  0% { background: rgba(255,122,26,0.45); }
   100% { background: rgba(245,196,81,0.15); }
 }
 .tx-words.loading { color: var(--mut); font-size: 14px; line-height: 1.6; }
@@ -1020,7 +1020,7 @@ body {
 #txCard[data-mode="kw"] .tx-words .tw { cursor: pointer; }
 /* markierte Wort-Chips */
 .tw.kw-on {
-  background: rgba(124,92,255,0.22); border-color: var(--acc);
+  background: rgba(255,122,26,0.22); border-color: var(--acc);
   color: var(--fg); font-weight: 700;
 }
 .tw.kw-on::after { content: ' ✨'; font-size: 11px; }
@@ -1032,7 +1032,7 @@ body {
   display: inline-block; padding: 1px 7px; border-radius: 6px;
   font-weight: 700; font-size: 11.5px; margin: 0 2px;
 }
-.tw-lgd.on { background: rgba(124,92,255,0.22); color: var(--acc2); }
+.tw-lgd.on { background: rgba(255,122,26,0.22); color: var(--acc2); }
 .tw-lgd.off { background: var(--surf2); color: var(--mut); }
 .tx-note {
   display: flex; gap: 9px; align-items: flex-start; margin-top: 12px;
@@ -1059,7 +1059,7 @@ body {
   transition: transform .15s, border-color .15s;
 }
 .p-card:hover { transform: translateY(-3px); border-color: var(--acc); }
-.p-card.pop { border-color: var(--acc); box-shadow: 0 0 0 2px rgba(124,92,255,0.25); }
+.p-card.pop { border-color: var(--acc); box-shadow: 0 0 0 2px rgba(255,122,26,0.25); }
 .p-card.best { border-color: #f5c451; box-shadow: 0 0 0 2px rgba(245,196,81,0.25); }
 .p-card .tag {
   position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
@@ -1100,7 +1100,7 @@ body {
 }
 .p-card.best .p-features li::before { background: #f5c451; }
 .p-card .hinweis { font-size: 12px; color: var(--acc2); font-weight: 700;
-  padding: 6px 10px; background: rgba(124,92,255,0.1); border-radius: 6px;
+  padding: 6px 10px; background: rgba(255,122,26,0.1); border-radius: 6px;
   display: inline-block; }
 .p-card.best .hinweis { color: #f5c451; background: rgba(245,196,81,0.1); }
 .p-card .kaufen {
@@ -1865,7 +1865,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
                 font-size:18px;">×</button>
         <h3 style="display:flex; align-items:center; gap:10px;">
           Get set up <span id="onboardPct" style="font-size:12px; font-weight:700;
-          color:var(--acc2); background:rgba(124,92,255,0.12); padding:3px 10px;
+          color:var(--acc2); background:rgba(255,122,26,0.12); padding:3px 10px;
           border-radius:999px;"></span>
         </h3>
         <div id="onboardSteps" style="display:flex; flex-direction:column; gap:8px;
@@ -2120,7 +2120,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div class="prog-box">
           <svg width="0" height="0" style="position:absolute;">
             <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#9b7dff"/>
+              <stop offset="0" stop-color="#ff7a1a"/><stop offset="1" stop-color="#ff9d52"/>
             </linearGradient></defs>
           </svg>
           <div class="prog-ring">
@@ -2457,7 +2457,7 @@ function toast(msg, kind='info', dur=4000) {
 
 function confetti(n=30) {
   const box = $('#confetti');
-  const colors = ['#7c5cff','#ff6b9d','#30d158','#ffb340','#9b7dff'];
+  const colors = ['#ff7a1a','#ff6b9d','#30d158','#ffb340','#ff9d52'];
   for (let i = 0; i < n; i++) {
     const el = document.createElement('span');
     el.style.left = Math.random() * 100 + 'vw';
