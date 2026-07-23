@@ -1495,15 +1495,15 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <!-- STEP: TYPE -->
         <div class="mo-step-view active" data-key="type">
           <h2 class="step-title">Motion Studio</h2>
-          <p class="step-sub">One studio, full control. Start from a video, a transcript file or your
-            own script — pick the composition &amp; style, then tune everything.</p>
+          <p class="step-sub">Full control. Start from a video, a transcript file or your own script,
+            then set the composition, style and every visual detail.</p>
           <div class="mo-type-cards">
             <button class="mo-type-card" type="button" id="moTypeStudio">
               <div class="tc-ic">🎛️</div>
-              <h3>Studio — full control</h3>
-              <p>A video, a transcript file or your script → a standalone promo. Pick the
-                composition &amp; style, then tune everything: colors, type, motion, text, brand.
-                Your on-screen text stays exactly as written — never invented.</p>
+              <h3>Studio</h3>
+              <p>A video, a transcript file or your script becomes a standalone promo. Set the
+                composition, style, colours, type, motion, text and brand. Your on-screen text
+                stays exactly as written.</p>
               <span class="tc-go">Open the studio →</span>
             </button>
           </div>
@@ -1560,9 +1560,9 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
             <label class="mo-lab" style="margin-top:16px;">Brand</label>
             <input class="mo-in" id="stBrand" value="DouchkoVE" style="font-family:inherit;">
-            <label class="mo-lab" style="margin-top:14px;">Override text <span style="color:var(--mut);font-weight:500;">(optional — one line per beat)</span></label>
+            <label class="mo-lab" style="margin-top:14px;">Override text <span style="color:var(--mut);font-weight:500;">(optional, one line per beat)</span></label>
             <textarea class="mo-in" id="stLines" rows="3" style="resize:vertical; font-family:inherit;"
-              placeholder="Leave empty to use the script/transcript. One line = one beat."></textarea>
+              placeholder="Leave empty to use the script or transcript. One line becomes one beat."></textarea>
           </div>
           <div class="mo-nav">
             <button class="btn secondary" data-mo-back type="button">Back</button>
@@ -2850,74 +2850,64 @@ function moUpload(url, fd, onUp){
   });
 }
 
-/* v119: dynamischer Ladescreen — Balken KRIECHT immer weiter (nie eingefroren) und
-   rotierende „Regisseur"-Zeilen halten den Screen lebendig, unabhaengig vom exakten %. */
-const MoLoad = { disp:0, target:0, phase:'', iv:null, miv:null, mi:0, on:false };
-const MO_MSGS = [
-  'Reading your words …', 'Directing the camera …', 'Placing every line …',
-  'Adding motion blur …', 'Timing it to your voice …', 'Polishing the transitions …',
-  'Colour-grading the frame …', 'Sweating the details …', 'Almost there …',
-];
+/* v120: sachlicher Ladescreen. Der Balken kriecht weich zum echten Serverwert (nie
+   eingefroren), aber ohne Floskeln oder Gedankenstriche. Nur Phase + Prozent. */
+const MoLoad = { disp:0, target:0, phase:'', iv:null, on:false };
 function moLoadStart(){
-  MoLoad.on=true; MoLoad.disp=0.02; MoLoad.target=0.03; MoLoad.mi=0; MoLoad.phase='Starting';
+  MoLoad.on=true; MoLoad.disp=0.01; MoLoad.target=0.02; MoLoad.phase='Preparing';
   const res=$('#moResult'); if(res) res.style.display='';
   const _fr=$('#moFrame'); if(_fr) _fr.classList.add('loading');
   const _sp=$('#moSpin'); if(_sp) _sp.classList.add('on');
-  const note=$('#moNote'); if(note) note.textContent=MO_MSGS[0];
+  const note=$('#moNote'); if(note) note.textContent='';
   moLoadRender();
-  clearInterval(MoLoad.iv);  MoLoad.iv=setInterval(moLoadTick, 340);
-  clearInterval(MoLoad.miv); MoLoad.miv=setInterval(()=>{
-    MoLoad.mi=(MoLoad.mi+1)%MO_MSGS.length; const n=$('#moNote');
-    if(n){ n.style.opacity='0'; setTimeout(()=>{ n.textContent=MO_MSGS[MoLoad.mi]; n.style.opacity='1'; }, 220); }
-  }, 2600);
+  clearInterval(MoLoad.iv); MoLoad.iv=setInterval(moLoadTick, 340);
 }
 function moLoadSet(target, phase){ if(target>MoLoad.target) MoLoad.target=target; if(phase) MoLoad.phase=phase; }
 function moLoadTick(){
-  // eased creep zum echten Ziel, aber lasse etwas Luft (fuehlt sich lebendig an statt „steht").
-  const head=Math.max(0, MoLoad.target-0.004);
-  const gap=head-MoLoad.disp;
-  if(gap>0.0004) MoLoad.disp+=Math.max(0.0007, gap*0.10);
+  // weicher Anlauf zum echten Ziel, minimale Restluft: bewegt sich, ohne zu luegen.
+  const head=Math.max(0, MoLoad.target-0.004), gap=head-MoLoad.disp;
+  if(gap>0.0004) MoLoad.disp+=Math.max(0.0006, gap*0.10);
   if(MoLoad.disp>head) MoLoad.disp=head;
   moLoadRender();
 }
 function moLoadRender(){
   const st=$('#moStudioStatus'); if(!st) return; st.style.display='block';
-  const pct=Math.max(2, Math.round(Math.min(MoLoad.disp,0.99)*100));
+  const pct=Math.max(1, Math.round(Math.min(MoLoad.disp,0.99)*100));
   st.innerHTML=`<div class="mo-bar live"><i style="width:${pct}%"></i></div>`+
-    `<span class="mo-phase">${MoLoad.phase||'Working'}</span> · ${pct}%`;
+    `<span class="mo-phase">${MoLoad.phase||'Working'}</span> &middot; ${pct}%`;
 }
-function moLoadStop(){ MoLoad.on=false; clearInterval(MoLoad.iv); clearInterval(MoLoad.miv);
+function moLoadStop(){ MoLoad.on=false; clearInterval(MoLoad.iv);
   const _fr=$('#moFrame'); if(_fr) _fr.classList.remove('loading');
   const _sp=$('#moSpin'); if(_sp) _sp.classList.remove('on'); }
 
 async function motionStudioGo(){
   const btn=$('#moStudioGo'), st=$('#moStudioStatus');
-  const fd=new FormData(); let isUpload=false, upLabel='Uploading …';
-  if(ST.input==='video'){ const f=$('#stVideo').files&&$('#stVideo').files[0]; if(!f){ toast('Choose a video first.','err'); return; } fd.append('video', f); isUpload=true; upLabel='Uploading your video …'; }
-  else if(ST.input==='tfile'){ const f=$('#stTFile').files&&$('#stTFile').files[0]; if(!f){ toast('Choose a transcript file first.','err'); return; } fd.append('transcript_file', f); isUpload=true; upLabel='Uploading your transcript …'; }
+  const fd=new FormData(); let isUpload=false, upLabel='Uploading';
+  if(ST.input==='video'){ const f=$('#stVideo').files&&$('#stVideo').files[0]; if(!f){ toast('Choose a video first.','err'); return; } fd.append('video', f); isUpload=true; upLabel='Uploading video'; }
+  else if(ST.input==='tfile'){ const f=$('#stTFile').files&&$('#stTFile').files[0]; if(!f){ toast('Choose a transcript file first.','err'); return; } fd.append('transcript_file', f); isUpload=true; upLabel='Uploading transcript'; }
   else { const txt=($('#stText').value||'').trim(); const ov=($('#stLines').value||'').trim();
     if(txt.length<3 && !ov){ toast('Add your script first.','err'); return; } fd.append('text', txt); }
   fd.append('composition', ST.comp); fd.append('style', ST.style); fd.append('format', ST.format);
   fd.append('custom', JSON.stringify(_studioCustom()));
   moShowPreview();
   const _fr=$('#moFrame'); if(_fr) _fr.style.aspectRatio = ST.format==='1:1'?'1/1' : ST.format==='16:9'?'16/9' : '9/16';
-  const orig=btn.textContent; btn.disabled=true; btn.textContent=isUpload?'Uploading …':'Rendering …';
+  const orig=btn.textContent; btn.disabled=true; btn.textContent=isUpload?'Uploading':'Rendering';
   moLoadStart();
   const fail=(msg,pricing)=>{ moLoadStop(); st.style.display='block'; st.textContent=msg;
     btn.disabled=false; btn.textContent=orig; if(pricing) setTimeout(showPricing,300); };
   try{
-    // 1) Upload MIT sichtbarem Fortschritt (Video/Transkript) -> 2%..16% des Balkens.
+    // Upload mit sichtbarem Fortschritt (Video/Transkript) -> 2%..16% des Balkens.
     const r=await moUpload('/api/motion/showcase', fd, (p)=>{
       moLoadSet(0.02+0.14*p, upLabel);
-      if(p>=1){ btn.textContent='Rendering …'; moLoadSet(0.17,'Received — queuing …'); }
+      if(p>=1){ btn.textContent='Rendering'; moLoadSet(0.17,'Queued'); }
     });
     if(r.status===402){ return fail('Not enough credits.', true); }
     if(r.status===413){ return fail((r.json().detail)||'File too large or too long.'); }
-    if(r.status===503){ return fail('The motion engine is warming up — try again shortly.'); }
+    if(r.status===503){ return fail('The motion engine is warming up. Try again shortly.'); }
     if(!r.ok){ return fail((r.json().detail)||'Could not start.'); }
-    moLoadSet(0.18, 'Queued …');
+    moLoadSet(0.18, 'Queued');
     motionPoll(r.json().jid, st, btn, orig);
-  }catch(e){ fail('Could not start — check your connection and try again.'); }
+  }catch(e){ fail('Could not start. Check your connection and try again.'); }
 }
 
 function moShowPreview(){
@@ -2953,8 +2943,7 @@ async function motionPoll(jid, st, btn, orig){
       }
       const note=$('#moNote');
       if(note) note.innerHTML='Saved to your <a data-nav="library" '+
-        'style="color:var(--acc2);cursor:pointer;">Library</a>. '+
-        'Tweak anything on the left and render again.';
+        'style="color:var(--acc2);cursor:pointer;">Library</a>.';
       st.style.display='none'; st.textContent='';
       btn.disabled=false; btn.textContent=orig;
       fetch('/api/me').then(x=>x.json()).then(d=>updateCreditHeader(d.balance_sec)).catch(()=>{});
@@ -2962,10 +2951,10 @@ async function motionPoll(jid, st, btn, orig){
     if(s.status==='fehler'){ moLoadStop();
       st.style.display='block'; st.textContent='Render failed: '+(s.msg||'');
       btn.disabled=false; btn.textContent=orig; return; }
-    // Der Balken KRIECHT selbst weiter (moLoadTick) — hier nur das echte Ziel + die
-    // Server-Phase nachfuehren, damit er nie einfriert und trotzdem ehrlich bleibt.
-    const pr=Math.max(s.progress||0, 0.06);
-    moLoadSet(pr, s.phase || MoLoad.phase);
+    // Kein kuenstlicher Sockel mehr (der zeigte faelschlich „6%" waehrend die Aufgabe noch
+    // in der Queue lag). Der Balken kriecht selbst weiter; wir fuehren nur das ECHTE Server-
+    // Ziel + die echte Phase nach. So haengt nichts bei 6%, sondern bewegt sich ehrlich.
+    moLoadSet(s.progress || 0, s.phase || MoLoad.phase);
     Motion.pollErrs=0;
   }catch(e){
     // nach ~30s ohne Server-Antwort aufgeben statt endlos zu pollen
@@ -2973,7 +2962,7 @@ async function motionPoll(jid, st, btn, orig){
     if(Motion.pollErrs>=20){
       Motion.pollErrs=0; moLoadStop();
       st.style.display='block';
-      st.textContent='Connection lost — the clip keeps rendering, check your Library in a minute.';
+      st.textContent='Connection lost. The clip keeps rendering, check your Library in a minute.';
       btn.disabled=false; btn.textContent=orig; return;
     }
   }

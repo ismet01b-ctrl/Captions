@@ -1811,7 +1811,7 @@ def _run_motion_showcase(jid):
     j = JOBS[jid]
     d = job_dir(jid)
     out = os.path.join(d, 'fertig.mp4')
-    set_state(jid, status='laeuft', phase='Preparing your motion …', progress=0.08, log_tail=[])
+    set_state(jid, status='laeuft', phase='Preparing', progress=0.08, log_tail=[])
     wpath = os.path.join(d, 'words.json')
     # 1) Woerter: aus HOCHGELADENEM Transkript (Datei), aus dem Video transkribieren, ODER
     #    aus eingegebenem Text synthetisieren.
@@ -1850,7 +1850,7 @@ def _run_motion_showcase(jid):
     custom = dict(j.get('custom') or {})
     cpath = os.path.join(d, 'custom.json')
     json.dump(custom, open(cpath, 'w', encoding='utf-8'))
-    set_state(jid, phase='Designing your motion like a senior designer …', progress=0.2)
+    set_state(jid, phase='Preparing', progress=0.2)
     comp = j.get('composition', 'showcase')
     style = j.get('style', 'editorial')
     fmt = j.get('format', '9:16')
@@ -1865,24 +1865,42 @@ def _run_motion_showcase(jid):
     p = subprocess.Popen(cmd, cwd=MOTION_DIR, env=dict(os.environ),
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     JOBS[jid]['pid'] = p.pid
+    # Harte Zeitgrenze: ein haengender Render darf NICHT die (einspurige) Motion-Queue
+    # blockieren (sonst haengen alle Folge-Jobs frueh fest). Timer killt den Prozess,
+    # die stdout-Schleife endet, returncode != 0 -> Fehler-Zweig + Erstattung.
+    _killed = {'v': False}
+    _to = float(os.environ.get('DVE_MOTION_TIMEOUT', '900'))     # 15 min pro Motion-Render
+    def _reap():
+        _killed['v'] = True
+        try:
+            p.kill()
+        except Exception:
+            pass
+    _timer = threading.Timer(_to, _reap); _timer.daemon = True; _timer.start()
     log = []
     for line in p.stdout:
         log.append(line.rstrip())
         mb = re.search(r'Bundl\w+ (\d+)%', line)                 # 0.20 -> 0.28 waehrend Bundling
         if mb:
             set_state(jid, progress=0.20 + 0.08 * int(mb.group(1)) / 100.0,
-                      phase='Preparing the render …')
+                      phase='Preparing')
             continue
         mr = re.search(r'Rendered (\d+)/(\d+)', line)            # 0.30 -> 0.90 Frames
         if mr:
             fr, tot = int(mr.group(1)), max(int(mr.group(2)), 1)
-            set_state(jid, progress=0.30 + 0.60 * fr / tot, phase='Rendering your motion …')
+            set_state(jid, progress=0.30 + 0.60 * fr / tot, phase='Rendering')
             continue
         me = re.search(r'Encoded (\d+)/(\d+)', line)             # 0.90 -> 0.98 Encoding
         if me:
             fr, tot = int(me.group(1)), max(int(me.group(2)), 1)
-            set_state(jid, progress=0.90 + 0.08 * fr / tot, phase='Encoding your video …')
+            set_state(jid, progress=0.90 + 0.08 * fr / tot, phase='Encoding')
     p.wait()
+    _timer.cancel()
+    if _killed['v']:
+        set_state(jid, status='fehler', progress=0,
+                  msg='This render took too long and was stopped. Your credits were refunded.',
+                  detail='\n'.join([x for x in log[-15:] if x.strip()]))
+        _maybe_refund(jid); return
     if p.returncode == 0 and os.path.exists(out):
         try:
             subprocess.run(['ffmpeg', '-y', '-v', 'error', '-ss', '1.0', '-i', out,
@@ -2979,7 +2997,7 @@ async def motion_showcase(request: Request,
         raise HTTPException(402, 'Not enough credits for this render.')
     job['cost_sec'] = _cost
     JOBS[jid] = job
-    set_state(jid, status='wartet', progress=0.0, phase='Queued …', kind='motion')
+    set_state(jid, status='wartet', progress=0.0, phase='Queued', kind='motion')
     MQUEUE.put(jid)
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 

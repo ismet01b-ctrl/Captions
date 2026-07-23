@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v120 Ladescreen sachlich-professionell + „6%"-Hänger behoben (live).** Ismet: „Mach
+  unnötige Beschreibungen und alle Gedankenstriche weg. Professionell, nicht möchtegern. Bleibt
+  beim Rendern immer bei 6% stehen, fix das."
+  - **Copy entschlackt:** rotierende „Regisseur"-Zeilen raus, Floskel „renders like a senior
+    designer" raus, ALLE Gedankenstriche (— / –) aus der Motion-Studio-UI + Ladescreen +
+    Server-Phasen entfernt. Ladescreen zeigt jetzt nur noch Phase + Prozent
+    (Preparing/Rendering/Encoding), sonst nichts.
+  - **„6%"-Hänger:** Ursache war ein künstlicher Frontend-Sockel `Math.max(progress, 0.06)` —
+    lag der Job noch in der (einspurigen) Queue, zeigte er stur 6%. Sockel raus: der Balken
+    spiegelt den ECHTEN Serverwert (der Creep verhindert 0%). Zusätzlich Backend gehärtet:
+    harte Render-Zeitgrenze (`DVE_MOTION_TIMEOUT`, 15 min) killt einen hängenden Render, damit
+    er die Queue nicht blockiert (Folge-Jobs hingen sonst früh fest) — mit Fehlermeldung +
+    Gutschrift. (Zusammen mit dem v-Fix `--log=info`, der die echten Fortschritts-Zeilen wieder
+    durchlässt.) Selftest **680/680 grün**, UI-JS `node --check` ok.
 - **v119 Sichtbarer Upload + dynamischer Ladescreen (live).** Ismet: „Mach es sichtbar, dass
   der Upload läuft. Mach es dynamisch, psychologisch den Ladescreen." Umgesetzt:
   - **Upload-Fortschritt:** Der Showcase-Call läuft jetzt über **XHR** statt `fetch`

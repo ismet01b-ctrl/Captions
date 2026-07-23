@@ -2019,13 +2019,25 @@ def _scenario_logic(clip, transcript, tmp):
     check('v117d: Transkript-Datei-Upload (UI: Segment + File-Input + verdrahtet)',
           'id="stTFile"' in _ui_m and "['tfile','Transcript file']" in _ui_m
           and "ST.input==='tfile'" in _ui_m and "fd.append('transcript_file'" in _ui_m)
-    # v119: sichtbarer Upload-Fortschritt (XHR) + dynamischer, kriechender Ladescreen.
-    check('v119: Upload-Progress (XHR) + dynamischer Ladescreen',
+    # v119/120: sichtbarer Upload-Fortschritt (XHR) + sachlicher, kriechender Ladescreen.
+    check('v119: Upload-Progress (XHR) + kriechender Ladescreen',
           'function moUpload' in _ui_m and 'xhr.upload.onprogress' in _ui_m
           and 'function moLoadStart' in _ui_m and 'function moLoadTick' in _ui_m
-          and 'MO_MSGS' in _ui_m and "_fr.classList.add('loading')" in _ui_m
+          and "_fr.classList.add('loading')" in _ui_m
           and '.mo-frame.loading::after' in _ui_m and '@keyframes moshim' in _ui_m
           and 'moUpload(' in _ui_m and 's.phase || MoLoad.phase' in _ui_m)
+    # v120: professionelle Copy — keine Floskeln, keine Gedankenstriche, kein Fake-6%-Sockel.
+    _mo_lo = _ui_m[_ui_m.find('function moUpload'):_ui_m.find('function motionPoll')]
+    check('v120: Ladescreen sachlich (keine Floskeln/Gedankenstriche, kein Fake-Sockel)',
+          'MO_MSGS' not in _ui_m and 'senior designer' not in _ui_m
+          and 'Math.max(s.progress||0, 0.06)' not in _ui_m
+          and 'moLoadSet(s.progress || 0' in _ui_m
+          and '—' not in _mo_lo and '–' not in _mo_lo)      # keine em/en-dashes im Loader
+    check('v120: Server-Phasen sachlich + Render-Timeout (Queue nicht blockierbar)',
+          "phase='Rendering')" in _srv_m and "phase='Encoding')" in _srv_m
+          and 'senior designer' not in _srv_m
+          and 'DVE_MOTION_TIMEOUT' in _srv_m and 'threading.Timer' in _srv_m
+          and "msg='This render took too long" in _srv_m)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
