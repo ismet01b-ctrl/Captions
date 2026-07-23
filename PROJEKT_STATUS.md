@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v117d Transkript-DATEI-Upload im Studio (live).** Ismet: „Ich will, dass man da die
+  Videos/Transkript als Datei hochladen kann. Dieser soll dann automatisch passieren." Umgesetzt:
+  im Studio dritter Eingabe-Modus „Transcript file" neben „Script / text" und „A video".
+  Akzeptiert `.txt/.srt/.vtt/.json`, wird automatisch geparst und verarbeitet — kein manuelles
+  Abtippen. Neuer Parser `_transcript_to_words(filename, raw)`: SRT/VTT-Cues und JSON
+  (`{word|text,start,end}` / `{"words":[…]}` / `{"segments":[…]}`) liefern ECHTE Wort-Timings
+  (Segmente werden auf Wort-Ebene über die Cue-Dauer verteilt → Voiceover-Sync); TXT/Fallback
+  bekommt synthetische Timings (0.32s/Wort). Text bleibt VERBATIM. Server: neuer Param
+  `transcript_file` an `/api/motion/showcase` (max 4 MB), Ergebnis → `job['prewords']`, Worker
+  nimmt vorhandene Wörter direkt (kein Whisper), Credits nach Transkript-Dauer/Wortzahl. Beweis:
+  SRT „Upload your transcript / fully automatic / text stays verbatim" → geparst → gerendert,
+  gültiges 1080×1920-MP4 (kinetic/bold). Selftest 713/713 (7 neue: SRT/JSON-word/JSON-segment/
+  TXT-Timings/leer-robust + 2 Verdrahtungs-Garantien). NUR Linux/CPU getestet.
 - **v117 Full-customizable Motion-Studio (live).** Neuer Weg im Motion-Wizard: „Studio — full
   control". Eingabe = Video ODER eigenes Skript/Transkript. Wählbar: Komposition (Card-Montage /
   Kinetik-Typo / Prompt-Build), Stil (editorial/bold/soft/mono), Format (9:16/1:1/16:9). Und ALLES

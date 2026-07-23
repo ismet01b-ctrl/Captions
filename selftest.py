@@ -2103,6 +2103,15 @@ def _scenario_logic(clip, transcript, tmp):
           and 'function motionStudioGo' in _ui_m and "fetch('/api/motion/showcase'" in _ui_m
           and all(x in _ui_m for x in ['id="stComp"', 'id="stStyle"', 'id="stFormat"',
                                         'id="stAccent"', 'id="stBrand"', 'id="stBlur"', 'id="stLines"']))
+    # v117d: Transkript-DATEI hochladen (.txt/.srt/.vtt/.json) -> automatisch verarbeitet.
+    check('v117d: Transkript-Datei-Upload (Server: Parser + Endpoint + Worker)',
+          'def _transcript_to_words' in _srv_m
+          and 'transcript_file: UploadFile = File(None)' in _srv_m
+          and "job['prewords']" in _srv_m and "if j.get('prewords')" in _srv_m
+          and 'def _synth_word_timings' in _srv_m)
+    check('v117d: Transkript-Datei-Upload (UI: Segment + File-Input + verdrahtet)',
+          'id="stTFile"' in _ui_m and "['tfile','Transcript file']" in _ui_m
+          and "ST.input==='tfile'" in _ui_m and "fd.append('transcript_file'" in _ui_m)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -3259,6 +3268,30 @@ def _scenario_security(tmp):
           and ovk['keywords']['include'] == ['Zins']
           and ovk['keywords']['min_gap_seconds'] == 8
           and 'effects' not in ovk and 'camera' not in ovk, str(ovk))
+    # v117d: Transkript-Datei-Parser — SRT/VTT/JSON echte Timings, TXT synthetisch, verbatim.
+    _srt = ("1\n00:00:00,000 --> 00:00:02,000\nHello there\n\n"
+            "2\n00:00:02,000 --> 00:00:04,000\nfully customizable\n")
+    _sw = SV._transcript_to_words('cap.srt', _srt.encode('utf-8'))
+    check('v117d: SRT -> Wortliste mit echten Timings (verbatim)',
+          [w['word'].strip() for w in _sw] == ['Hello', 'there', 'fully', 'customizable']
+          and _sw[0]['start'] == 0.0 and abs(_sw[-1]['end'] - 4.0) < 0.01,
+          str(_sw))
+    _jw = SV._transcript_to_words('cap.json', json.dumps(
+        [{'word': ' one', 'start': 0.0, 'end': 0.5}, {'text': 'two', 'start': 0.5, 'end': 1.0}]).encode())
+    check('v117d: JSON (word/text) -> normalisierte Wortliste',
+          [w['word'].strip() for w in _jw] == ['one', 'two'] and _jw[1]['end'] == 1.0)
+    _jseg = SV._transcript_to_words('seg.json', json.dumps(
+        {'segments': [{'text': 'alpha beta gamma', 'start': 0.0, 'end': 3.0}]}).encode())
+    check('v117d: JSON-Segmente auf Wort-Ebene aufgespalten (Timings verteilt)',
+          [w['word'].strip() for w in _jseg] == ['alpha', 'beta', 'gamma']
+          and abs(_jseg[1]['start'] - 1.0) < 0.01)
+    _tw = SV._transcript_to_words('plain.txt', b'Line one is here\nLine two follows')
+    check('v117d: TXT -> synthetische Timings, aufsteigend, verbatim',
+          len(_tw) == 7 and _tw[0]['word'].strip() == 'Line'
+          and all(_tw[i]['start'] <= _tw[i + 1]['start'] for i in range(len(_tw) - 1)))
+    check('v117d: leere/kaputte Transkript-Datei -> [] (kein Crash)',
+          SV._transcript_to_words('x.txt', b'') == []
+          and isinstance(SV._transcript_to_words('x.json', b'{bad'), list))
     # 4-6) Quelltext-Garantien (Signatur-Pflicht, Ownership, Login-Limit)
     _src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('Stripe-Webhook erzwingt Secret',

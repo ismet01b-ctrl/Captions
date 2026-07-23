@@ -1966,8 +1966,11 @@ def _run_motion_showcase(jid):
     out = os.path.join(d, 'fertig.mp4')
     set_state(jid, status='laeuft', phase='Preparing your motion …', progress=0.08, log_tail=[])
     wpath = os.path.join(d, 'words.json')
-    # 1) Woerter: aus dem Video transkribieren ODER aus eingegebenem Text synthetisieren.
-    if j.get('showcase_video'):
+    # 1) Woerter: aus HOCHGELADENEM Transkript (Datei), aus dem Video transkribieren, ODER
+    #    aus eingegebenem Text synthetisieren.
+    if j.get('prewords'):
+        words = j['prewords']
+    elif j.get('showcase_video'):
         src = j['showcase_video']
         apath = os.path.join(d, 'audio.m4a')
         _br = max(24, min(64, int(24 * 8192 / max(float(j.get('dauer') or 1.0), 1.0))))
@@ -1993,13 +1996,7 @@ def _run_motion_showcase(jid):
             set_state(jid, status='fehler', progress=0, msg='No text or video provided.')
             _maybe_refund(jid); return
         # synthetische Wort-Timings (0.32s/Wort + kleine Pause an Satzenden) fuer Voiceover-Sync.
-        words = []
-        _t = 0.0
-        for w in text.split():
-            words.append({'word': ' ' + w, 'start': round(_t, 2), 'end': round(_t + 0.3, 2)})
-            _t += 0.32
-            if w.endswith(('.', '!', '?')):
-                _t += 0.4
+        words = _synth_word_timings(text)
     with open(wpath, 'w', encoding='utf-8') as f:
         json.dump(words, f)
     # 2) Custom-Overrides -> Datei (alle Einstell-Knoepfe).
@@ -3303,6 +3300,115 @@ async def motion_auto(request: Request, video: UploadFile = File(...),
     return {'jid': jid, 'status_url': f'/api/status/{jid}'}
 
 
+def _synth_word_timings(text):
+    """Synthetische Wort-Timings (0.32s/Wort + Pause an Satzenden) fuer Voiceover-Sync."""
+    words, _t = [], 0.0
+    for w in str(text).split():
+        words.append({'word': ' ' + w, 'start': round(_t, 2), 'end': round(_t + 0.3, 2)})
+        _t += 0.32
+        if w.endswith(('.', '!', '?')):
+            _t += 0.4
+    return words
+
+
+def _srt_ts_sec(s):
+    """SRT/VTT-Zeitstempel (HH:MM:SS,mmm oder HH:MM:SS.mmm, Stunden optional) -> Sekunden."""
+    m = re.match(r'(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})', s.strip())
+    if not m:
+        return None
+    h = int(m.group(1) or 0)
+    return h * 3600 + int(m.group(2)) * 60 + int(m.group(3)) + int(m.group(4).ljust(3, '0')) / 1000.0
+
+
+def _transcript_to_words(filename, raw):
+    """v117d: Hochgeladenes Transkript (.json/.srt/.vtt/.txt) -> Wortliste
+    [{word,start,end}] fuer buildShowcase. Text bleibt VERBATIM (kein Halluzinieren).
+    JSON: Liste von {word|text,start,end} ODER {"words":[...]} ODER {"segments":[{text,start,end}]}.
+    SRT/VTT: Cues parsen, Woerter gleichmaessig ueber die Cue-Dauer verteilen.
+    TXT/Fallback: synthetische Timings. Gibt [] zurueck, wenn nichts Brauchbares drin ist."""
+    name = (filename or '').lower()
+    txt = raw.decode('utf-8', 'replace') if isinstance(raw, (bytes, bytearray)) else str(raw)
+    txt = txt.replace('\r\n', '\n').replace('\r', '\n').strip()
+    if not txt:
+        return []
+
+    def _norm_list(items):
+        out, prev = [], 0.0
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            w = it.get('word', it.get('text', ''))
+            if not isinstance(w, str) or not w.strip():
+                continue
+            try:
+                st = float(it.get('start', prev))
+                en = float(it.get('end', st + 0.3))
+            except (TypeError, ValueError):
+                st, en = prev, prev + 0.3
+            if en <= st:
+                en = st + 0.05
+            out.append({'word': (' ' + w.strip()) if not w.startswith(' ') else w,
+                        'start': round(st, 3), 'end': round(en, 3)})
+            prev = en
+        return out
+
+    # 1) JSON
+    if name.endswith('.json') or txt[:1] in ('{', '['):
+        try:
+            data = json.loads(txt)
+        except Exception:
+            data = None
+        if isinstance(data, dict):
+            data = data.get('words') or data.get('segments') or data.get('transcript') or data
+        if isinstance(data, list):
+            # Segmente (mehrere Woerter pro text) auf Wort-Ebene aufspalten.
+            words = []
+            for it in data:
+                if isinstance(it, dict) and isinstance(it.get('text'), str) and len(it['text'].split()) > 1 \
+                        and 'word' not in it:
+                    seg = it['text'].strip()
+                    try:
+                        st = float(it.get('start', 0.0)); en = float(it.get('end', st + 0.3))
+                    except (TypeError, ValueError):
+                        st, en = 0.0, 0.3
+                    toks = seg.split()
+                    step = (en - st) / max(1, len(toks))
+                    for k, tok in enumerate(toks):
+                        words.append({'word': ' ' + tok, 'start': round(st + k * step, 3),
+                                      'end': round(st + (k + 1) * step, 3)})
+                else:
+                    words.extend(_norm_list([it]))
+            if words:
+                return words
+        if isinstance(data, str) and data.strip():
+            return _synth_word_timings(data)
+        # kein brauchbares JSON -> als Klartext behandeln
+
+    # 2) SRT / VTT (Cue-Bloecke mit --> Zeitstempeln)
+    if '-->' in txt:
+        words = []
+        for m in re.finditer(r'([0-9:.,]+)\s*-->\s*([0-9:.,]+)([^\n]*)\n(.*?)(?=\n\s*\n|\Z)', txt, re.S):
+            st, en = _srt_ts_sec(m.group(1)), _srt_ts_sec(m.group(2))
+            if st is None or en is None or en <= st:
+                continue
+            body = re.sub(r'<[^>]+>', ' ', m.group(4))                 # VTT-Tags raus
+            body = re.sub(r'\{\\[^}]*\}', ' ', body)                   # ASS-Overrides raus
+            toks = body.split()
+            if not toks:
+                continue
+            step = (en - st) / len(toks)
+            for k, tok in enumerate(toks):
+                words.append({'word': ' ' + tok, 'start': round(st + k * step, 3),
+                              'end': round(st + (k + 1) * step, 3)})
+        if words:
+            return words
+
+    # 3) Klartext (Cue-Nummern/WEBVTT-Kopf entfernen), synthetische Timings
+    lines = [ln for ln in txt.split('\n')
+             if ln.strip() and not ln.strip().isdigit() and not ln.strip().upper().startswith('WEBVTT')]
+    return _synth_word_timings(' '.join(lines))
+
+
 def _sanitize_custom(raw):
     """v117: nur erlaubte, validierte Einstell-Knoepfe durchlassen (kein beliebiges JSON)."""
     try:
@@ -3344,6 +3450,7 @@ def _sanitize_custom(raw):
 @app.post('/api/motion/showcase')
 async def motion_showcase(request: Request,
                           video: UploadFile = File(None),
+                          transcript_file: UploadFile = File(None),
                           text: str = Form(''),
                           composition: str = Form('showcase'),
                           style: str = Form('editorial'),
@@ -3364,6 +3471,7 @@ async def motion_showcase(request: Request,
     job = {'kind': 'motion', 'showcase': True, 'user_id': u['id'], 'name': 'Motion.mp4',
            'composition': comp, 'style': style, 'format': fmt, 'custom': cust, 'status': 'wartet'}
     has_video = bool(video and getattr(video, 'filename', ''))
+    has_tfile = bool(transcript_file and getattr(transcript_file, 'filename', ''))
     if has_video:
         src = os.path.join(d, 'source.mp4')
         cap = MOTION_AUTO_MAX_MB * 1024 * 1024
@@ -3399,6 +3507,29 @@ async def motion_showcase(request: Request,
         job['showcase_video'] = src
         job['dauer'] = dur
         _cost = cost_seconds(dur)
+    elif has_tfile:
+        cap = 4 * 1024 * 1024                         # Transkript-Datei: max 4 MB
+        raw, total = b'', 0
+        while True:
+            chunk = await transcript_file.read(1 << 20)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > cap:
+                shutil.rmtree(d, ignore_errors=True)
+                raise HTTPException(413, 'Transcript file too large (max 4 MB).')
+            raw += chunk
+        try:
+            words = _transcript_to_words(getattr(transcript_file, 'filename', ''), raw)
+        except Exception:
+            words = []
+        if not words:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(400, 'Could not read any text from that transcript file.')
+        words = words[:4000]
+        job['prewords'] = words
+        est = max(6.0, (words[-1].get('end') or len(words) / 2.5))
+        _cost = cost_seconds(est)
     else:
         txt = (text or '').strip()
         if not txt:
