@@ -2068,6 +2068,24 @@ def _scenario_logic(clip, transcript, tmp):
           # Beweis „nur versteckt, nicht geloescht": die Motion-Engine ist weiterhin da
           and "@app.post('/api/motion/showcase')" in _srv_m
           and os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionShowcase.tsx')))
+    # v124 Monetarisierungs-Batch: Kaufmoment + Wiederkauf + Investment + Referral.
+    check('v124: Server verdrahtet (Referral, Reload-Bonus, Ablauf-Mail, Scores)',
+          'def _ensure_ref_code' in _srv_m and 'def _grant_referral' in _srv_m
+          and "ref: str = Form('')" in _srv_m and '_grant_referral(uid)' in _srv_m
+          and 'Reload bonus' in _srv_m and "balance_sec'] < 120" in _srv_m
+          and 'def _expiry_warn' in _srv_m and '_expiry_warn(jid, d, mtime, cutoff)' in _srv_m
+          and 'def _hook_score' in _srv_m and "'hook_score':" in _srv_m
+          and "'ref_code':" in _srv_m and "'style_prefs':" in _srv_m
+          and 'uid=None' in _srv_m)                        # Korrekturen pro User markiert
+    check('v124: UI verdrahtet (Upsell ohne Preis, Low-Balance, Referral, Fortschritt)',
+          '€' not in _ui_m[_ui_m.find('id="wmUpsell"'):_ui_m.find('id="wmUpsell"') + 900]
+          and 'One purchase unlocks this video' in _ui_m
+          and 'id="lowBalHint"' in _ui_m and 'balance_sec || 0) < 60' in _ui_m
+          and 'id="refLink"' in _ui_m and 'id="btnRefCopy"' in _ui_m
+          and "fd.append('ref', refc)" in _ui_m and "localStorage.setItem('dve_ref'" in _ui_m
+          and 'id="accBestHook"' in _ui_m and 'id="accStylePrefs"' in _ui_m
+          and 'Reload bonus' in _ui_m and 'Invite reward' in _ui_m
+          and 'it.hook_score' in _ui_m)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -3107,6 +3125,86 @@ def _scenario_security(tmp):
     check('v117d: leere/kaputte Transkript-Datei -> [] (kein Crash)',
           SV._transcript_to_words('x.txt', b'') == []
           and isinstance(SV._transcript_to_words('x.json', b'{bad'), list))
+    # v124 Referral: beide Seiten belohnt, idempotent, Werber-Deckel.
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('refa@test','x','A',0,?,1)", (int(_t.time()),))
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('refb@test','x','B',0,?,1)", (int(_t.time()),))
+    con.commit()
+    ida = con.execute("SELECT id FROM users WHERE email='refa@test'").fetchone()['id']
+    idb = con.execute("SELECT id FROM users WHERE email='refb@test'").fetchone()['id']
+    con.close()
+    code1 = SV._ensure_ref_code(ida)
+    code2 = SV._ensure_ref_code(ida)
+    check('v124: Referral-Code stabil + gueltiges Format',
+          code1 and code1 == code2 and len(code1) == 8
+          and all(ch in SV._REF_ALPHABET for ch in code1))
+    con = SV._db()
+    con.execute("UPDATE users SET referred_by = ? WHERE id = ?", (ida, idb))
+    con.commit(); con.close()
+    g1 = SV._grant_referral(idb)
+    g2 = SV._grant_referral(idb)
+    con = SV._db()
+    ba = con.execute("SELECT balance_sec FROM users WHERE id=?", (ida,)).fetchone()['balance_sec']
+    bb = con.execute("SELECT balance_sec FROM users WHERE id=?", (idb,)).fetchone()['balance_sec']
+    con.close()
+    check('v124: Referral belohnt beide Seiten genau einmal (idempotent)',
+          g1 is True and g2 is False
+          and ba == SV.REFERRAL_SECONDS and bb == SV.REFERRAL_SECONDS,
+          f'A={ba}s B={bb}s')
+    # Werber-Deckel: bei erreichtem Cap bekommt nur noch der Geworbene etwas.
+    con = SV._db()
+    for _i in range(SV.REFERRAL_CAP):
+        con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                    "VALUES (?, 0, ?, ?)", (ida, f'Referral for x{_i}', int(_t.time())))
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, "
+                "verified, referred_by) VALUES ('refc@test','x','C',0,?,1,?)",
+                (int(_t.time()), ida))
+    con.commit()
+    idc = con.execute("SELECT id FROM users WHERE email='refc@test'").fetchone()['id']
+    con.close()
+    SV._grant_referral(idc)
+    con = SV._db()
+    ba2 = con.execute("SELECT balance_sec FROM users WHERE id=?", (ida,)).fetchone()['balance_sec']
+    bc = con.execute("SELECT balance_sec FROM users WHERE id=?", (idc,)).fetchone()['balance_sec']
+    con.close()
+    check('v124: Werber-Deckel greift, Geworbener bekommt trotzdem',
+          ba2 == ba and bc == SV.REFERRAL_SECONDS, f'A={ba2}s C={bc}s')
+    # v124 Reload-Bonus: +10% nur bei fast leerem Konto, idempotent mit dem Kauf.
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('low@test','x','L',60,?,1)", (int(_t.time()),))
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('high@test','x','H',600,?,1)", (int(_t.time()),))
+    con.commit()
+    idl = con.execute("SELECT id FROM users WHERE email='low@test'").fetchone()['id']
+    idh = con.execute("SELECT id FROM users WHERE email='high@test'").fetchone()['id']
+    con.close()
+    k1 = SV._credit_purchase(idl, 1200, 'sess_low1')
+    k2 = SV._credit_purchase(idl, 1200, 'sess_low1')          # Stripe-Doppel
+    SV._credit_purchase(idh, 1200, 'sess_high1')
+    con = SV._db()
+    bl = con.execute("SELECT balance_sec FROM users WHERE id=?", (idl,)).fetchone()['balance_sec']
+    bh = con.execute("SELECT balance_sec FROM users WHERE id=?", (idh,)).fetchone()['balance_sec']
+    nb = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id=? AND "
+                     "grund LIKE 'Reload bonus %'", (idl,)).fetchone()['c']
+    con.close()
+    check('v124: Reload-Bonus nur bei fast leerem Konto, kein Doppel',
+          k1 is True and k2 is False
+          and bl == 60 + 1200 + 120 and bh == 600 + 1200 and nb == 1,
+          f'low={bl}s high={bh}s bonusrows={nb}')
+    # v124 Hook-Score-Port: Werte plausibel + Randfaelle stabil.
+    _hs_moms = [{'i': 1, 'zeit': 0.8, 'power': 3, 'fx': 'zoom', 'anim': 'pop'},
+                {'i': 2, 'zeit': 5.0, 'power': 2, 'fx': 'behind'},
+                {'i': 3, 'zeit': 20.0, 'power': 2, 'fx': 'ground', 'anim': 'welle'},
+                {'i': 4, 'zeit': 40.0, 'power': 1, 'fx': 'zoom'}]
+    _hs = SV._hook_score(_hs_moms, 60)
+    check('v124: Hook-Score serverseitig (frueher Hook + Peak > spaeter Einstieg)',
+          1 <= _hs <= 100 and _hs > SV._hook_score(
+              [{'i': 1, 'zeit': 30.0, 'power': 1, 'fx': 'zoom'}], 60)
+          and SV._hook_score([], 60) == 0
+          and SV._hook_score([{'aktiv': False}], 60) == 0, f'score={_hs}')
     # 4-6) Quelltext-Garantien (Signatur-Pflicht, Ownership, Login-Limit)
     _src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('Stripe-Webhook erzwingt Secret',
@@ -3124,13 +3222,16 @@ def _scenario_security(tmp):
     check('tcache-Pfad bleibt im tcache-Ordner (kein Traversal)',
           bool(tp) and os.path.dirname(os.path.abspath(tp)) == os.path.abspath(SV._TCACHE)
           and '..' not in os.path.basename(tp), tp)
-    # 8) Kauf idempotent + atomar (Webhook-Retry schreibt nicht doppelt)
+    # 8) Kauf idempotent + atomar (Webhook-Retry schreibt nicht doppelt).
+    # v124: bei fast leerem Konto kommt der Reload-Bonus (+10%) obendrauf,
+    # der Retry darf trotzdem WEDER Kauf NOCH Bonus doppelt schreiben.
     b0 = SV._find_user_by_id(uid)['balance_sec']
+    _bonus = 100 // 10 if b0 < 120 else 0
     r1 = SV._credit_purchase(uid, 100, 'sessAAA')
     r2 = SV._credit_purchase(uid, 100, 'sessAAA')
     b1 = SV._find_user_by_id(uid)['balance_sec']
     check('Kauf: idempotent (Retry schreibt nicht doppelt)',
-          r1 is True and r2 is False and b1 == b0 + 100,
+          r1 is True and r2 is False and b1 == b0 + 100 + _bonus,
           f'{b0} -> {b1}, r1={r1} r2={r2}')
     # 9) Reset-Token nur EINMAL einloesbar (atomar)
     con = SV._db()

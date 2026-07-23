@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v124 Monetarisierungs-Batch: Kaufmoment, Wiederkauf, Investment, Referral (live).**
+  Ismet: Gewinn maximieren, aber ehrlich (keine Preis-Schreierei, keine Gedankenstriche,
+  kein Supermacht-Ton). Vier Pakete:
+  - **Kaufmoment:** Wasserzeichen-Upsell am fertigen Video umgeschrieben (ohne Preisnennung,
+    Akzent-Rahmen, Button "Remove watermark"). Dazu Low-Balance-Hinweis nach dem Render,
+    wenn unter 1 Credit uebrig ist.
+  - **Wiederkauf:** (1) Ablauf-Mail 48h bevor ein fertiges Library-Video geloescht wird
+    (einmalig pro Job via State-Flag, nur verifizierte Konten, Service-Mail, nichts erfunden).
+    (2) Reload-Bonus: Nachkauf bei fast leerem Konto (< 2 Min Rest) bringt still +10%,
+    eigener Ledger-Eintrag "Reload bonus {session}", haengt am Kauf-Idempotenz-Pfad
+    (Stripe-Retry bucht weder Kauf noch Bonus doppelt).
+  - **Investment sichtbar:** Hook-Score jetzt SERVERSEITIG pro Video (`_hook_score`,
+    Python-Port der Client-Heuristik, aus der finalen Momente-Datei in den Job-State),
+    `/api/library` liefert hook_score + silent_score, Library-Karten zeigen den Score,
+    Account-Panel "Your progress" (Bestwert, Schnitt letzte 5, Stil-Zaehler). Editor-
+    Korrekturen tragen jetzt die user_id (Lernen bleibt global, Anzeige ist ehrlich pro User).
+  - **Referral:** Einladungscode pro Konto (8 Zeichen, Alphabet ohne I/O/0/1, lazy erzeugt),
+    Link `?ref=CODE` wird im Client gemerkt und bei der Registrierung mitgeschickt. Belohnung
+    10 Min fuer BEIDE Seiten erst nach E-Mail-Verify des Geworbenen (kein Wegwerf-Farming),
+    Werber-Deckel 10, alles idempotent ueber Ledger-Eintraege. Account-Panel "Invite a creator".
+  DB-Migration: users.ref_code + users.referred_by. Selftest **692/692 gruen** (funktional:
+  Referral beidseitig/einmalig/Deckel, Reload-Bonus nur bei leerem Konto + Stripe-Retry,
+  Hook-Score-Port; plus Verdrahtungs-Garantien). OFFEN: 6-Monats-Verfall existiert nur als
+  Marketing-Text, nicht im Code. Entscheidung Ismet: echt implementieren (kommt als v125,
+  Seite ist noch nicht veroeffentlicht, kein Eingriff in Bestandsguthaben).
 - **v123 Motion Design ausgeblendet — Fokus zurück auf Captions (live).** Ismet-Entscheidung
   nach 2 Tagen: die Motion-Qualität kommt (an echtem Material beurteilt) nicht an Tools wie
   Jitter ran; statt weiter zu kämpfen wird Motion für Kunden ausgeblendet. **Nichts gelöscht,

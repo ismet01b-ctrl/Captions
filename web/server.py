@@ -77,6 +77,39 @@ def cost_seconds(dur_sec):
     """Was ein Video kostet: pro angefangener Minute, mindestens 1 Credit."""
     return max(1, _math.ceil(float(dur_sec) / 60.0)) * 60
 
+
+def _hook_score(moms, dauer=0.0):
+    """v124: Server-Port der Client-Heuristik computeHookScore (index.html).
+    Inhaltlich synchron halten, damit Ergebnis-Kachel und Library-Verlauf
+    dieselbe Zahl zeigen. Bewertet: Hook-Abdeckung (erste 8s), klarer
+    Hoehepunkt, Dichte-Balance, Animations-Anteil, Effekt-Vielfalt."""
+    act = [m for m in (moms or [])
+           if isinstance(m, dict) and m.get('aktiv') is not False]
+    if not act:
+        return 0
+    try:
+        dur = float(dauer) if dauer else 0.0
+    except (TypeError, ValueError):
+        dur = 0.0
+    if dur <= 0:
+        dur = max(float(m.get('zeit') or 0) for m in act) + 5
+    score = 0.0
+    early = [m for m in act if float(m.get('zeit') or 0) <= 8]
+    if len(early) >= 1:
+        score += 20
+    if len(early) >= 2:
+        score += 10
+    if early and min(float(m.get('zeit') or 0) for m in early) <= 1.2:
+        score += 10
+    if any(int(m.get('power') or 2) >= 3 for m in act):
+        score += 15
+    per_min = len(act) / max(dur / 60.0, 0.2)
+    score += 25 if 3 <= per_min <= 9 else (
+        max(0.0, 25 - abs(per_min - 6) * 4) if per_min > 0 else 0)
+    score += round(sum(1 for m in act if m.get('anim')) / len(act) * 10)
+    score += min(len({m.get('fx') for m in act}), 5) * 2
+    return max(1, min(100, round(score)))
+
 os.makedirs(JOBS_DIR, exist_ok=True)
 os.makedirs(DATA, exist_ok=True)
 
@@ -213,6 +246,12 @@ def _init_users_db():
         con.execute("ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
         con.execute("UPDATE users SET verified = 1")
         con.commit()
+    # v124: Referral. ref_code = eigener Einladungscode (lazy erzeugt),
+    # referred_by = users.id des Werbers (gesetzt bei der Registrierung).
+    if 'ref_code' not in cols:
+        con.execute("ALTER TABLE users ADD COLUMN ref_code TEXT")
+        con.execute("ALTER TABLE users ADD COLUMN referred_by INTEGER")
+        con.commit()
     # v92-sec: Kauf-Gutschriften gegen Doppelbuchung absichern. Stripe kann
     # denselben Webhook mehrfach senden; ohne DB-Constraint konnten zwei
     # gleichzeitige Deliveries beide am Idempotenz-SELECT vorbei und doppelt
@@ -330,6 +369,69 @@ def _grant_welcome(uid):
             "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
             "VALUES (?, ?, ?, ?)",
             (uid, TRIAL_SECONDS, 'Welcome credit', int(time.time())))
+        con.commit()
+        return True
+    finally:
+        con.close()
+
+
+# v124 Referral: beide Seiten bekommen Minuten, der Bonus fliesst erst wenn der
+# Geworbene seine E-Mail bestaetigt (sonst liesse sich das mit Wegwerf-Adressen
+# farmen). Pro Werber ein Deckel, alles idempotent ueber Ledger-Eintraege.
+REFERRAL_SECONDS = 600          # 10 Minuten fuer jede Seite
+REFERRAL_CAP = 10               # max. belohnte Einladungen pro Konto
+_REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # ohne I/O/0/1 (Verwechslung)
+
+
+def _ensure_ref_code(uid):
+    """Einladungscode lazy erzeugen (8 Zeichen, kollisionsfrei), einmal pro Konto."""
+    con = _db()
+    try:
+        row = con.execute("SELECT ref_code FROM users WHERE id = ?", (uid,)).fetchone()
+        if row and row['ref_code']:
+            return row['ref_code']
+        for _ in range(20):
+            code = ''.join(secrets.choice(_REF_ALPHABET) for _ in range(8))
+            if not con.execute("SELECT id FROM users WHERE ref_code = ?", (code,)).fetchone():
+                con.execute("UPDATE users SET ref_code = ? WHERE id = ?", (code, uid))
+                con.commit()
+                return code
+        return ''
+    finally:
+        con.close()
+
+
+def _grant_referral(new_uid):
+    """Bei der E-Mail-Bestaetigung des Geworbenen: beide Seiten gutschreiben.
+    Idempotent (Ledger-Eintraege), Werber-Deckel REFERRAL_CAP, kein Selbstwerben
+    (referred_by kann nie die eigene id sein, der Code existiert erst nach der
+    Registrierung). Gibt True zurueck, wenn frisch belohnt wurde."""
+    con = _db()
+    try:
+        nu = con.execute("SELECT referred_by FROM users WHERE id = ?", (new_uid,)).fetchone()
+        ref_id = nu['referred_by'] if nu else None
+        if not ref_id or ref_id == new_uid:
+            return False
+        if not con.execute("SELECT id FROM users WHERE id = ?", (ref_id,)).fetchone():
+            return False
+        if con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
+                       (new_uid, 'Referral welcome')).fetchone():
+            return False                                          # schon belohnt
+        rewarded = con.execute(
+            "SELECT COUNT(*) c FROM ledger WHERE user_id = ? AND grund LIKE 'Referral for %'",
+            (ref_id,)).fetchone()['c']
+        now = int(time.time())
+        con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
+                    (REFERRAL_SECONDS, new_uid))
+        con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (new_uid, REFERRAL_SECONDS, 'Referral welcome', now))
+        if rewarded < REFERRAL_CAP:                               # Werber-Deckel
+            con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
+                        (REFERRAL_SECONDS, ref_id))
+            con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                        "VALUES (?, ?, ?, ?)",
+                        (ref_id, REFERRAL_SECONDS, f'Referral for {new_uid}', now))
         con.commit()
         return True
     finally:
@@ -774,8 +876,18 @@ def _credit_purchase(uid, sec, session_id):
         if cur.rowcount != 1:
             con.commit()
             return False                     # schon verbucht
+        # v124 Reload-Bonus: Wer nachkauft, waehrend das Konto praktisch leer ist
+        # (< 2 Minuten Rest), bekommt still 10% obendrauf. Belohnt genau das
+        # Verhalten "sofort nachladen statt abwandern"; haengt am selben
+        # Idempotenz-Pfad wie der Kauf (nur bei frisch verbuchter Kauf-Zeile).
+        _row = con.execute("SELECT balance_sec FROM users WHERE id = ?", (uid,)).fetchone()
+        _bonus = sec // 10 if (_row and _row['balance_sec'] < 120) else 0
         con.execute("UPDATE users SET balance_sec = MAX(0, balance_sec + ?) "
-                    "WHERE id = ?", (sec, uid))
+                    "WHERE id = ?", (sec + _bonus, uid))
+        if _bonus:
+            con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                        "VALUES (?, ?, ?, ?)",
+                        (uid, _bonus, f'Reload bonus {session_id}', int(time.time())))
         con.commit()
         try:
             _unlock_all_jobs(uid)            # v101: Kauf entfernt Wasserzeichen
@@ -2128,6 +2240,16 @@ def run_job(jid):
                           silent_hints=_sl.get('hinweise', [])[:3])
         except Exception:
             pass
+        # v124 Hook-Score in den Job-State: dieselbe Heuristik wie die Ergebnis-
+        # Kachel im Client, aus der finalen Momente-Datei. Damit hat die Library
+        # einen Verlauf (Bestwert, Trend) ohne N Zusatz-Requests.
+        try:
+            _mp = os.path.splitext(j.get('input', ''))[0] + '_momente.json'
+            if os.path.exists(_mp):
+                set_state(jid, hook_score=_hook_score(
+                    json.load(open(_mp, encoding='utf-8')), j.get('dauer', 0)))
+        except Exception:
+            pass
         set_state(jid, status='fertig', progress=1.0, phase='Done',
                   out='fertig.mp4')
     else:
@@ -2202,6 +2324,38 @@ def _mail_backup_offsite(dest):
         print(f'Backup-Mail fehlgeschlagen: {type(e).__name__}: {e}')
 
 
+def _expiry_warn(jid, d, mtime, cutoff):
+    """v124: Einmalige Erinnerung, bevor ein fertiges Library-Video geloescht
+    wird (< 48h Restzeit). Nur an verifizierte Konten, Flag im Job-State
+    verhindert Doppel-Mails. Mail-Fehler bleiben leise (Cleanup laeuft weiter)."""
+    if mtime >= cutoff + 48 * 3600:                    # noch > 48h Restzeit
+        return
+    j = JOBS.get(jid)
+    if not j or j.get('status') != 'fertig' or j.get('expiry_mail'):
+        return
+    uid = j.get('user_id')
+    if not uid or not os.path.exists(os.path.join(d, 'fertig.mp4')):
+        return
+    u = _find_user_by_id(uid)
+    if not u or not u['verified']:
+        return
+    set_state(jid, expiry_mail=True)                   # vor dem Senden: nie doppelt
+    hours = max(1, int((mtime + RETENTION_DAYS * 86400 - time.time()) / 3600))
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    name = j.get('name') or 'your video'
+    try:
+        _send_mail(u['email'], 'Your video will be deleted soon',
+                   f'Hi{" " + u["name"] if u["name"] else ""},\n\n'
+                   f'"{name}" in your DouchkoVE library will be deleted in about '
+                   f'{hours} hours. Files are removed automatically after '
+                   f'{RETENTION_DAYS:.0f} days.\n\n'
+                   f'Download it here while it lasts:\n{base}/app#library\n\n'
+                   f'DouchkoVE')
+        print(f'Ablauf-Mail: {jid} an User {uid} ({hours}h Rest)')
+    except Exception as e:
+        print(f'Ablauf-Mail fehlgeschlagen ({jid}): {type(e).__name__}: {e}')
+
+
 def _cleanup_worker():
     """v80g: Alte Job-Verzeichnisse loeschen. Standard 7 Tage, ueber
     DVE_RETENTION_DAYS ueberschreibbar. Laeuft stuendlich.
@@ -2226,6 +2380,13 @@ def _cleanup_worker():
                         JOBS.pop(jid, None)
                         print(f"Cleanup: Job {jid} nach {retention:.0f}d entfernt")
                         continue
+                    # v124 Ablauf-Mail: laeuft ein fertiges Video in < 48h ab,
+                    # einmalig erinnern (Service-Mail: die Datei wird real
+                    # geloescht). Rueckkehr-Trigger, nichts erfunden.
+                    try:
+                        _expiry_warn(jid, d, mtime, cutoff)
+                    except Exception:
+                        pass
                     # ProRes-MOVs sind ~90MB - frueher raus als die MP4s
                     # (Standard 48h, DVE_MOV_HOURS). Die MP4-Vorschau bleibt.
                     mov = os.path.join(d, 'fertig.mov')
@@ -2397,9 +2558,10 @@ def _rate_limit_ok(ip, window_sec=3600, max_attempts=5, bucket='reg'):
 @app.post('/api/register')
 def api_register(request: Request, response: Response,
                  email: str = Form(...), password: str = Form(...),
-                 name: str = Form('')):
+                 name: str = Form(''), ref: str = Form('')):
     """v80h: Neuer Account. v98: Willkommens-Guthaben kommt erst mit der
-    E-Mail-Bestaetigung (_grant_welcome) - nicht mehr hier."""
+    E-Mail-Bestaetigung (_grant_welcome), nicht mehr hier. v124: optionaler
+    Einladungscode (ref), Bonus fliesst erst nach der Bestaetigung."""
     # Rate-Limit gegen Spam
     ip = request.client.host if request.client else 'unknown'
     if not _rate_limit_ok(ip):
@@ -2416,6 +2578,18 @@ def api_register(request: Request, response: Response,
     uid, err = _create_user(email, password, name)
     if err:
         raise HTTPException(409, err)
+    # v124: Einladungscode zuordnen (still, ungueltige Codes brechen nichts).
+    _ref = re.sub(r'[^A-Z2-9]', '', (ref or '').strip().upper())[:8]
+    if _ref:
+        try:
+            con = _db()
+            r = con.execute("SELECT id FROM users WHERE ref_code = ?", (_ref,)).fetchone()
+            if r and r['id'] != uid:
+                con.execute("UPDATE users SET referred_by = ? WHERE id = ?", (r['id'], uid))
+                con.commit()
+            con.close()
+        except Exception:
+            pass
     _send_verify_mail(uid, email, name.strip())        # v80x
     tok, exp = _create_session(uid)
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
@@ -2473,7 +2647,13 @@ def api_me(request: Request):
     con = _db()
     rc = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id = ? AND "
                      "grund LIKE 'Render %'", (u['id'],)).fetchone()['c']
+    # v124 Referral-Stand: wie viele Einladungen wurden schon belohnt.
+    ref_used = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id = ? AND "
+                           "grund LIKE 'Referral for %'", (u['id'],)).fetchone()['c']
     con.close()
+    # v124 Stil-Gedaechtnis: eigene Editor-Korrekturen, aus denen die Regie lernt.
+    style_prefs = sum(1 for c in _load_corrections()
+                      if c.get('user_id') == u['id'])
     lt = time.localtime()
     days_in_month = [31, 29 if lt.tm_year % 4 == 0 else 28, 31, 30, 31, 30,
                      31, 31, 30, 31, 30, 31][lt.tm_mon - 1]
@@ -2484,6 +2664,10 @@ def api_me(request: Request):
             'renders': rc, 'purchased': _has_purchased(u['id']),
             'is_owner': str(u['email']).strip().lower() == OWNER_EMAIL,
             'motion_brief': MOTION_BRIEF_OK,   # v101p: Brief->Motion verfuegbar?
+            'ref_code': _ensure_ref_code(u['id']),                # v124 Referral
+            'ref_used': ref_used, 'ref_cap': REFERRAL_CAP,
+            'ref_minutes': REFERRAL_SECONDS // 60,
+            'style_prefs': style_prefs,                           # v124 Investment
             'free_reset_days': days_in_month - lt.tm_mday + 1}
 
 
@@ -2546,6 +2730,10 @@ def api_verify_email(token: str = Form(...)):
         raise HTTPException(400, 'This verification link is invalid or has '
                                  'expired. Request a new one in Account settings.')
     granted = _grant_welcome(uid)
+    try:
+        _grant_referral(uid)                 # v124: Einladungs-Bonus (beide Seiten)
+    except Exception as e:                   # darf die Bestaetigung nie reissen
+        print(f'Referral-Grant fehlgeschlagen: {e}')
     return {'ok': True, 'welcome_granted': granted}
 
 
@@ -3492,6 +3680,9 @@ def api_library(request: Request):
             # (sonst kann keine Ebene mehr gebaut werden)?
             'has_alpha': os.path.exists(os.path.join(d, 'fertig_captions.mov')),
             'can_alpha': bool(j.get('input')) and os.path.exists(j.get('input', '')),
+            # v124: Scores fuer den Verlauf im Konto (Bestwert, Trend).
+            'hook_score': int(j.get('hook_score') or 0),
+            'silent_score': int(j.get('silent_score') or 0),
         })
     items.sort(key=lambda x: x['created'], reverse=True)
     return {'items': items, 'retention_days': RETENTION_DAYS}
@@ -3781,11 +3972,13 @@ def _load_corrections():
     except Exception:
         return []
 
-def _capture_corrections(old_mom_path, edited):
+def _capture_corrections(old_mom_path, edited, uid=None):
     """Vergleicht die neuen (editierten) Momente mit dem vorherigen Stand und
     speichert JEDE Aenderung (Effekt getauscht, Animation weg/gesetzt, Moment
     deaktiviert) global. Beim naechsten Render zieht die KI-Wahl automatisch
-    dorthin nach (Phase 2 'aus Fehlern lernen', global)."""
+    dorthin nach (Phase 2 'aus Fehlern lernen', global). v124: Eintraege tragen
+    zusaetzlich die user_id, damit das Konto zeigen kann, wie viel die Regie
+    aus den EIGENEN Edits gelernt hat (das Lernen selbst bleibt global)."""
     if not os.path.exists(old_mom_path):
         return
     try:
@@ -3817,6 +4010,8 @@ def _capture_corrections(old_mom_path, edited):
             pass
         if rec:
             rec['phrase'] = phrase
+            if uid:
+                rec['user_id'] = uid
             corr.append(rec)
             changed += 1
     if changed:
@@ -3850,7 +4045,8 @@ async def save_and_render(request: Request, jid: str,
     # (KI-Original bzw. letzter Stand) - was der Nutzer aendert, wird global
     # gespeichert und beim naechsten Render automatisch beruecksichtigt.
     try:
-        _capture_corrections(mom_path, mom)
+        _u = _current_user(request)
+        _capture_corrections(mom_path, mom, uid=(_u['id'] if _u else None))
     except Exception as e:
         print(f"Korrektur-Erfassung uebersprungen ({type(e).__name__})")
     json.dump(mom, open(mom_path, 'w', encoding='utf-8'),

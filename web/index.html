@@ -1665,6 +1665,32 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </div>
       </div>
 
+      <!-- v124: Fortschritt sichtbar machen. Der Editor lernt aus den eigenen
+           Edits, der Hook-Score gibt jedem Render eine Zahl. Beides Investment. -->
+      <div class="panel">
+        <h3>Your progress</h3>
+        <div class="info-row"><span class="k">Best hook score</span><span class="v" id="accBestHook">–</span></div>
+        <div class="info-row"><span class="k">Average, last 5 videos</span><span class="v" id="accAvgHook">–</span></div>
+        <div class="info-row"><span class="k">Style preferences learned from your edits</span><span class="v" id="accStylePrefs">–</span></div>
+        <p class="hint" style="margin-top:10px;">Every edit in the moments editor teaches
+          the director your taste. Future renders lean toward it automatically.</p>
+      </div>
+
+      <!-- v124: Referral. Beide Seiten bekommen Minuten, sobald die geworbene
+           Person ihre E-Mail bestaetigt. -->
+      <div class="panel">
+        <h3>Invite a creator</h3>
+        <p class="hint">Share your link. When someone signs up with it and confirms
+          their email, you both get <span id="refMin">10</span> free minutes.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+          <input type="text" id="refLink" readonly style="flex:1; min-width:240px;"
+                 onclick="this.select()">
+          <button class="btn secondary" type="button" id="btnRefCopy" style="padding:9px 16px;">Copy link</button>
+        </div>
+        <p class="hint" style="margin-top:8px;"><span id="refUsed">0</span> of
+          <span id="refCap">10</span> invites rewarded.</p>
+      </div>
+
       <div class="panel">
         <h3>Transactions</h3>
         <div id="accTx" class="tx-list"><p class="hint">Loading …</p></div>
@@ -2145,19 +2171,25 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
              Momente-Editor oeffnete nach "Save & re-analyze" nie wieder. -->
         <p id="analyzeStatus" class="hidden" role="status" style="margin-top:12px;
            color:var(--acc2); font-size:13.5px; font-weight:600;"></p>
-        <!-- v98: Wasserzeichen-Upsell - der staerkste Kaufmoment ist das
-             fertige (gewasserzeichnete) Video. Nur fuer Nicht-Kaeufer. -->
+        <!-- v98/v124: Wasserzeichen-Upsell. Der staerkste Kaufmoment ist das fertige
+             (gewasserzeichnete) Video. Nur fuer Nicht-Kaeufer. Bewusst ohne Preis
+             und ohne grosse Toene: ein Satz, ein Knopf. -->
         <div id="wmUpsell" class="hidden" style="margin-top:14px; background:var(--surf);
-             border:1px solid var(--line); border-radius:14px; padding:14px 18px;
+             border:1px solid var(--acc2); border-radius:14px; padding:14px 18px;
              display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
           <div style="flex:1; min-width:220px;">
             <b style="font-size:14px;">Remove the watermark</b>
             <p style="color:var(--mut); font-size:13px; margin-top:2px;">
-              Your first purchase removes it from every future render - from €9,
-              one-time, no subscription.</p>
+              One purchase unlocks this video and every future render in clean HD.
+              No subscription.</p>
           </div>
-          <button class="btn" id="wmUpsellBtn" style="min-width:150px;">See packs</button>
+          <button class="btn" id="wmUpsellBtn" style="min-width:150px;">Remove watermark</button>
         </div>
+        <!-- v124: Low-Balance-Hinweis im richtigen Moment (nach dem Render), dezent. -->
+        <p id="lowBalHint" class="hidden" style="margin-top:12px; color:var(--mut);
+           font-size:13px;">Your credit balance is nearly empty.
+          <a data-nav="billing" style="color:var(--acc2); cursor:pointer;">Top up</a>
+          to keep rendering without interruption.</p>
         <p style="color:var(--mut); font-size:13px; margin-top:12px; line-height:1.5;">
           Saved to your <a data-nav="library" style="color:var(--acc2); cursor:pointer;">Library</a>.
           Not quite happy? "Edit moments" opens the editor with the big text moments, change text, swap effect, pick animation, then a re-render runs with your changes.
@@ -2626,6 +2658,14 @@ function greetingForHour() {
 
 /* v80h: Email + Passwort. Register/Login als Tabs im gleichen Formular. */
 let authMode = 'register';
+// v124 Referral: Einladungscode aus dem Link merken (?ref=CODE oder #ref=CODE),
+// damit er bei der Registrierung mitgeschickt wird, egal wie lange man vorher stoebert.
+(function () {
+  try {
+    const m = (location.search + ' ' + location.hash).match(/[?#&]ref=([A-Za-z0-9]{4,12})/);
+    if (m) localStorage.setItem('dve_ref', m[1].toUpperCase());
+  } catch (e) {}
+})();
 
 function setAuthMode(mode) {
   authMode = mode;
@@ -2674,7 +2714,14 @@ async function doAuth() {
   try {
     const fd = new FormData();
     fd.append('email', email); fd.append('password', pw);
-    if (authMode === 'register') fd.append('name', name);
+    if (authMode === 'register') {
+      fd.append('name', name);
+      // v124 Referral: Einladungscode aus dem Link (?ref= / #ref=), zwischengespeichert,
+      // damit er auch nach Navigation innerhalb der Seite noch zaehlt.
+      let refc = '';
+      try { refc = localStorage.getItem('dve_ref') || ''; } catch (e) {}
+      if (refc) fd.append('ref', refc);
+    }
     const r = await fetch('/api/' + authMode, { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok || d.ok === false) {
@@ -3398,6 +3445,9 @@ function translateGrund(g) {
     .replace(/^Welcome credit$/, 'Welcome credit')
     .replace(/^Monthly free credit .*/, 'Monthly free credit')
     .replace(/^Kauf .*/, 'Credit purchase')
+    .replace(/^Reload bonus .*/, 'Reload bonus')
+    .replace(/^Referral welcome$/, 'Invite bonus')
+    .replace(/^Referral for .*/, 'Invite reward')
     .replace(/^Render \S+ \(\d+s\)$/, 'Video render')
     .replace(/^Render /, 'Video render ');
 }
@@ -3443,7 +3493,7 @@ async function renderLibrary() {
       </div>
       <div class="lib-meta">
         <div class="lib-name" title="${(it.name || '').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">${escHtml(it.name || 'Video')}</div>
-        <div class="lib-sub">${durTxt} min · ${new Date(it.created * 1000).toLocaleDateString()}</div>
+        <div class="lib-sub">${durTxt} min · ${new Date(it.created * 1000).toLocaleDateString()}${it.hook_score ? ` · Hook ${it.hook_score}/100` : ''}</div>
         <div class="lib-count ${cd.warn ? 'warn' : 'ok'}">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
           ${cd.txt}
@@ -3535,7 +3585,29 @@ async function renderAccount() {
       set('accFree', `+3 credits in ${u.free_reset_days}d`);
     } else freeRow.style.display = 'none';
   }
+  // v124 Referral-Panel fuellen.
+  if (u.ref_code) {
+    const link = location.origin + '/app?ref=' + u.ref_code;
+    const rl = $('#refLink'); if (rl) rl.value = link;
+    set('refMin', String(u.ref_minutes || 10));
+    set('refUsed', String(u.ref_used || 0));
+    set('refCap', String(u.ref_cap || 10));
+  }
+  // v124 Fortschritt: Stil-Zaehler direkt, Score-Verlauf aus der Library.
+  set('accStylePrefs', String(u.style_prefs || 0));
+  fetch('/api/library').then(r => r.json()).then(d => {
+    const scores = (d.items || []).map(it => it.hook_score || 0).filter(s => s > 0);
+    set('accBestHook', scores.length ? Math.max(...scores) + '/100' : '–');
+    const last5 = scores.slice(0, 5);
+    set('accAvgHook', last5.length
+      ? Math.round(last5.reduce((a, b) => a + b, 0) / last5.length) + '/100' : '–');
+  }).catch(() => {});
 }
+if ($('#btnRefCopy')) $('#btnRefCopy').addEventListener('click', () => {
+  const rl = $('#refLink'); if (!rl || !rl.value) return;
+  navigator.clipboard.writeText(rl.value).then(() => toast('Invite link copied.', 'ok'))
+    .catch(() => { rl.select(); document.execCommand('copy'); toast('Copied.', 'ok'); });
+});
 /* v80y: Transkript-Editor */
 let transOrig = [];
 /* v101l: Transkript-Schritt im Wizard (VOR dem Render). Nutzt den Pre-Upload-
@@ -4468,12 +4540,17 @@ function renderSuccess() {
       kb.classList.remove('hidden');
     }
   }
-  // v98: Wasserzeichen-Upsell nur fuer Nicht-Kaeufer einblenden
-  const ups = $('#wmUpsell');
+  // v98: Wasserzeichen-Upsell nur fuer Nicht-Kaeufer einblenden.
+  // v124: dazu der Low-Balance-Hinweis, wenn nach diesem Render weniger als
+  // 1 Credit uebrig ist. Kaeufer sehen nur den Balance-Hinweis, nie den Upsell.
+  const ups = $('#wmUpsell'), lbh = $('#lowBalHint');
   if (ups) {
     ups.classList.add('hidden');
+    if (lbh) lbh.classList.add('hidden');
     fetch('/api/me').then(r => r.json()).then(u => {
-      if (u && u.ok !== false && u.purchased === false) ups.classList.remove('hidden');
+      if (!u || u.ok === false) return;
+      if (u.purchased === false) ups.classList.remove('hidden');
+      else if (lbh && (u.balance_sec || 0) < 60) lbh.classList.remove('hidden');
     }).catch(() => {});
   }
   loadDirectorReport();
