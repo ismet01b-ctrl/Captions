@@ -2783,7 +2783,7 @@ function enterApp(user) {
     if (mn) mn.style.display = 'none';
   }
   loadDefaults().then(rebuildAllWidgets).then(buildLooks).then(resumeActiveJob)
-    .then(() => routeFromHash());
+    .then(() => routeFromHash(true));
 }
 
 /* v84: Credit-Anzeige im Header. 1 Credit = 1 Minute. */
@@ -2802,7 +2802,7 @@ const MOTION_ENABLED = false;
 const PAGES = MOTION_ENABLED
   ? ['create', 'motion', 'library', 'billing', 'account']
   : ['create', 'library', 'billing', 'account'];
-function showSection(name) {
+function showSection(name, fromHistory) {
   if (!PAGES.includes(name)) name = 'create';
   PAGES.forEach(p => {
     const pg = document.getElementById('page-' + p);
@@ -2810,8 +2810,15 @@ function showSection(name) {
   });
   document.querySelectorAll('#topnav a').forEach(a =>
     a.classList.toggle('on', a.dataset.nav === name));
-  if (location.hash !== '#/' + name) {
-    try { history.replaceState(null, '', '#/' + name); } catch (e) {}
+  // v130x: echter Pfad statt Hash -> Adressleiste laedt normal neu, Links teilbar.
+  // fromHistory (Erst-Route / Back-Forward) ersetzt den Eintrag, Nutzer-Navigation
+  // legt einen neuen an (Zurueck-Button funktioniert).
+  const path = '/app/' + name;
+  if (location.pathname !== path) {
+    try {
+      if (fromHistory) history.replaceState(null, '', path);
+      else history.pushState(null, '', path);
+    } catch (e) {}
   }
   window.scrollTo(0, 0);
   // v101x: das zuletzt genutzte Tool merken - ein Captions- oder Motion-only-
@@ -2824,23 +2831,29 @@ function showSection(name) {
   if (name === 'billing') renderBilling();
   if (name === 'account') renderAccount();
 }
-function routeFromHash() {
-  // Deep-Link aus der Landing: /app#motion bzw. #/motion (beide Formen).
-  const raw = (location.hash || '').replace(/^#\/?/, '');
-  const m = raw.match(/^(\w+)/);
-  let target = (m && PAGES.includes(m[1])) ? m[1] : null;
+function routeFromHash(fromHistory) {
+  // v130x: Pfad-Routing hat Vorrang (/app/<name>), Hash bleibt als Legacy-
+  // Fallback (alte Landing-Links /app#create, /app#/motion funktionieren weiter).
+  let seg = (location.pathname || '').replace(/^\/app\/?/, '').split('/')[0];
+  if (!seg) {
+    const h = (location.hash || '').replace(/^#\/?/, '').match(/^(\w+)/);
+    seg = h ? h[1] : '';
+  }
+  let target = PAGES.includes(seg) ? seg : null;
   if (!target) {
     let pref = null;
     try { pref = localStorage.getItem('dve_tool'); } catch (e) {}
     if (pref === 'create' || pref === 'motion') target = pref;
   }
-  // v123: Motion aus -> keine Tool-Auswahl, immer direkt zu Captions (Create).
-  if (!MOTION_ENABLED) { showSection('create'); return; }
+  // v123: Motion aus -> kein Tool-Chooser. ABER einen expliziten Ziel-Bereich
+  // (Deep-Link / Reload auf /app/library etc.) trotzdem respektieren, sonst
+  // landet jeder Reload faelschlich auf Create (v130x-Fix).
+  if (!MOTION_ENABLED) { showSection(target || 'create', fromHistory); return; }
   // Erst-Besuch ohne Ziel/Vorliebe -> "Was willst du machen?"-Auswahl.
   let chosen = false;
   try { chosen = !!localStorage.getItem('dve_chosen'); } catch (e) {}
   if (!target && !chosen) { showToolChooser(); return; }
-  showSection(target || 'create');
+  showSection(target || 'create', fromHistory);
 }
 function showToolChooser() {
   if (!MOTION_ENABLED) { showSection('create'); return; }   // v123: keine Auswahl mehr noetig
@@ -2853,7 +2866,9 @@ function pickTool(name) {
   const el = $('#toolChooser'); if (el) el.classList.remove('show');
   showSection(name);
 }
-window.addEventListener('hashchange', routeFromHash);
+window.addEventListener('hashchange', () => routeFromHash());
+// v130x: Back/Forward zwischen Bereichen (Pfad-Routing).
+window.addEventListener('popstate', () => routeFromHash(true));
 
 /* ===== Motion-Studio (v118: nur noch das Full-customizable Showcase) ===== */
 const Motion = { ready:false };

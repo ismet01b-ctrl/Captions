@@ -3374,6 +3374,15 @@ def index():
     return _page('index.html')
 
 
+@app.get('/app/{rest:path}', response_class=HTMLResponse)
+def index_deep(rest: str):
+    """v130x: Deep-Link-Routing. Die SPA nutzt jetzt echte Pfade (/app/create,
+    /app/library, ...) statt nur Hash. Damit reagiert die Adressleiste normal
+    (Enter laedt neu) und Links sind teilbar. Jeder /app/<...>-Aufruf liefert
+    dieselbe SPA; der Client-Router liest den Pfad und zeigt den Bereich."""
+    return _page('index.html')
+
+
 @app.get('/imprint', response_class=HTMLResponse)
 def imprint():
     return _page('imprint.html')

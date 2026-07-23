@@ -2190,6 +2190,18 @@ def _scenario_logic(clip, transcript, tmp):
           and 'X-Admin-Key' in _adm
           and all(t in _adm for t in ("'revenue'", "'credits'", "'abuse'",
                                       "'system'", "'compliance'", "'codes'")))
+    # v130x: Pfad-Routing (/app/<name>) statt reinem Hash -> Adressleiste laedt
+    # normal neu, Deep-Links teilbar, Back/Forward funktioniert. Legacy-Hash bleibt.
+    _landhtml = open(os.path.join(HERE, 'web', 'landing.html'), encoding='utf-8').read()
+    check('v130x: SPA-Pfad-Routing (Reload/Deep-Link) verdrahtet',
+          "@app.get('/app/{rest:path}'" in _srv_m
+          and "history.pushState(null, '', path)" in _ui_m
+          and "location.pathname" in _ui_m and "'/app/' + name" in _ui_m
+          and "addEventListener('popstate'" in _ui_m
+          # Motion-aus-Kurzschluss respektiert jetzt ein explizites Ziel (Fix)
+          and "showSection(target || 'create', fromHistory)" in _ui_m
+          # Landing-Deep-Link auf Pfad-Form umgestellt
+          and '/app/create' in _landhtml and '/app#create' not in _landhtml)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -2248,7 +2260,7 @@ def _scenario_logic(clip, transcript, tmp):
     # v127: Landing ist Single-Product (Captions, Editorial-Redesign). Motion
     # bleibt fuer Kunden ausgeblendet -> nicht auf der Landing beworben.
     check('v127: Landing - Single-Product Captions, Deep-Link-CTA, Motion ausgeblendet',
-          'id="captions"' in _land and '/app#create' in _land
+          'id="captions"' in _land and '/app/create' in _land   # v130x: Pfad-Deep-Link
           and 'id="motion"' not in _land and '/app#motion' not in _land
           and 'Motion Graphics' not in _land)
 
