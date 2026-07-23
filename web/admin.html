@@ -102,7 +102,10 @@ tr.click{cursor:pointer}tr.click:hover{background:var(--surf)}
     </div>
 
     <div id="t-jobs" class="hidden">
-      <p class="subtle" style="margin-bottom:8px">In-flight and recently failed jobs. Kill stops a hung render and refunds it.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px">
+        <p class="subtle" style="margin:0">In-flight and recently failed jobs. Kill stops a hung render and refunds it. Stuck jobs also time out automatically.</p>
+        <button class="btn bad sm" onclick="reapStuck()">Stop all stuck</button>
+      </div>
       <table><thead><tr><th>Job</th><th>User</th><th>Status</th><th>Phase</th><th>Kind</th><th></th></tr></thead>
         <tbody id="jobRows"></tbody></table>
     </div>
@@ -188,6 +191,12 @@ async function loadJobs(){
 async function killJob(jid){
   if(!confirm('Kill and refund job '+jid+'?'))return;
   try{ await api('/api/admin/jobs/'+jid+'/kill',{method:'POST'}); loadJobs(); }
+  catch(e){ alert(e.message); }
+}
+async function reapStuck(){
+  if(!confirm('Stop ALL waiting/running jobs and refund them? Use this to clear jobs stuck after a restart.'))return;
+  try{ const d=await api('/api/admin/jobs/reap_stuck',{method:'POST'});
+    alert('Stopped '+d.reaped+' job(s).'); loadJobs(); }
   catch(e){ alert(e.message); }
 }
 

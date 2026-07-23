@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v129 Globaler Job-Timeout (haengende/Zombie-Jobs enden automatisch).** Ismet sah im Admin-Panel
+  mehrere Motion-Jobs ewig auf „Queued (restored after restart)" bzw. „laeuft" haengen. Ursache: der
+  alte 45-Min-Waechter beobachtete NUR `laeuft`, killte nur den Prozess und verliess sich darauf,
+  dass die Render-Schleife den Job auf Fehler setzt + erstattet - bei einem nach Neustart
+  wiederhergestellten Job laeuft aber KEINE Schleife mehr (Zombie), und `wartet`-Jobs wurden nie
+  getimt; der Timer lag zudem nur im RAM (Neustart nullte ihn). Neu: Fortschritt-Fingerabdruck
+  (status/progress/phase). Aendert sich ein Job DVE_JOB_TIMEOUT Sekunden (Default 40 Min) nicht,
+  wird er von `_reap_stuck_job` HART beendet: evtl. Prozess killen, Status auf `fehler`, Credits
+  erstattet - unabhaengig davon, ob noch ein Prozess lebt. Ein gesund hochzaehlender Render setzt die
+  Uhr zurueck, wird also nie faelschlich gekillt. Admin-Panel: „Stop all stuck" beendet alle
+  wartenden/laufenden Jobs auf einmal (`/api/admin/jobs/reap_stuck`). Selftest **721/721 gruen**
+  (funktional: Reaper beendet haengenden Job + erstattet, Zombie-sicher; plus Verdrahtung).
 - **v128 Admin-Panel Tier 1 (Betrieb/Nutzer/Umsatz) + Orange-Vereinheitlichung.** Ismet: eigenes
   Admin-Menue + Orange auf allen Seiten.
   - **Orange ueberall (v127a):** SPA (index.html) und Impressum/Datenschutz/AGB liefen noch auf dem

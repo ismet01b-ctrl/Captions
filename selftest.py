@@ -2163,6 +2163,12 @@ def _scenario_logic(clip, transcript, tmp):
           and 'INSERT OR IGNORE INTO purchases' in _srv_m
           and "'X-Admin-Key': KEY" in _adm and '/api/admin/overview' in _adm
           and 'noindex' in _adm)
+    check('v129: Job-Timeout-Reaper (wartet+laeuft, Fingerabdruck, aktiv beenden+erstatten)',
+          'def _reap_stuck_job' in _srv_m and 'JOB_STUCK_SECONDS' in _srv_m
+          and "if stt not in ('wartet', 'laeuft')" in _srv_m
+          and '_maybe_refund(jid)' in _srv_m
+          and "@app.post('/api/admin/jobs/reap_stuck')" in _srv_m
+          and 'Stop all stuck' in _adm)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -3248,6 +3254,22 @@ def _scenario_security(tmp):
           and _cr['balance_sec'] == 420 and bool(_uverified) is True,
           f"denied={_denied} eur={_ov['revenue']['total']['eur']} bal={_cr.get('balance_sec')}")
     del os.environ['DVE_ADMIN']
+    # v129: Haengender Job laeuft in den Timeout -> HART beendet (Status 'fehler')
+    # UND erstattet, auch ohne lebenden Prozess (Zombie-sicher).
+    _ruid, _ = SV._create_user('reap@test', 'x' * 8, 'Reap')
+    SV._adjust_balance(_ruid, 120, 'Kauf reaptest')          # 2 Credits
+    _rjid = 'reapjob01'
+    os.makedirs(SV.job_dir(_rjid), exist_ok=True)
+    _resv_ok = SV._reserve_credits(_ruid, 60, _rjid)          # -60 reserviert
+    SV.JOBS[_rjid] = {'id': _rjid, 'user_id': _ruid, 'dauer': 60,
+                      'status': 'laeuft', 'progress': 0.4}
+    _bal_pre = SV._find_user_by_id(_ruid)['balance_sec']       # 60
+    SV._reap_stuck_job(_rjid, 'selftest')
+    _bal_post = SV._find_user_by_id(_ruid)['balance_sec']      # 120 (erstattet)
+    check('v129: Job-Timeout beendet haengenden Job + erstattet (Zombie-sicher)',
+          _resv_ok is True and SV.JOBS[_rjid]['status'] == 'fehler'
+          and _bal_pre == 60 and _bal_post == 120,
+          f'pre={_bal_pre} post={_bal_post} st={SV.JOBS[_rjid]["status"]}')
     # 3) cfg_overrides-Whitelist + Deckel
     ov = SV._sanitize_overrides({'output': {'height': 4320, 'master': True},
                                  'effects': {'blender_samples': 99999, 'bg_blur': 0.5},

@@ -2861,47 +2861,82 @@ def _restore_jobs():
         print(f"Job-Restore: {restored} Jobs geladen, {requeued} neu eingereiht")
 
 
-def _watchdog_worker():
-    """Betriebs-Wachhund, alle 10 Minuten: (a) Platte knapp -> Mail,
-    (b) Job haengt seit >45 Min im Status 'laeuft' -> Render-Prozess KILLEN
-    (v98). Nur mailen reichte nicht: bei DVE_WORKERS=1 blockiert ein
-    haengender ffmpeg sonst ALLE weiteren Renders dauerhaft. Nach dem Kill
-    laeuft der normale Fehlerpfad (Status 'fehler' + automatische
-    Erstattung via _maybe_refund), der Worker lebt weiter."""
-    running_since = {}
-    while True:
-        time.sleep(600)
+# v129: Globaler Job-Timeout. Ein Job gilt als HAENGEND, wenn er im Status
+# 'wartet' ODER 'laeuft' steht und sich sein Fortschritt (status/progress/phase)
+# ueber JOB_STUCK Sekunden NICHT mehr aendert. Deckt drei Faelle, die der alte
+# 45-Min-Waechter NICHT abfing: (1) 'wartet'-Jobs wurden nie getimt, (2) ein nach
+# Neustart wiederhergestellter 'laeuft'-Job hat KEINEN lebenden Prozess mehr -
+# es lief also keine Fehler-Schleife, die ihn je beendet haette (Zombie), (3) der
+# Timer lag nur im RAM und wurde bei jedem Neustart genullt. Fortschritt-Finger-
+# abdruck statt reiner Laufzeit -> ein gesund rechnender Render (Progress zaehlt
+# hoch) wird nie faelschlich gekillt, ein eingefrorener schon.
+JOB_STUCK_SECONDS = float(os.environ.get('DVE_JOB_TIMEOUT', str(40 * 60)))
+
+
+def _reap_stuck_job(jid, why=''):
+    """Einen haengenden Job HART beenden: evtl. Prozess killen, Status auf
+    'fehler' setzen UND erstatten - unabhaengig davon, ob noch ein Prozess lebt
+    (Zombie-sicher). Idempotent: _maybe_refund erstattet nur eine offene, noch
+    nicht gelieferte Reservierung; ein zweites set_state('fehler') schadet nicht."""
+    j = JOBS.get(jid) or {}
+    pid = j.get('pid')
+    if pid:
         try:
-            free_gb = shutil.disk_usage(DATA).free / 1e9
-            if free_gb < 2.0:
-                _notify_admin('disk', 'Speicher knapp auf douchko.eu',
-                              f'Nur noch {free_gb:.1f} GB frei unter {DATA}.\n'
-                              f'Cleanup laeuft, reicht aber offenbar nicht.')
+            os.kill(int(pid), signal.SIGKILL)
+        except (OSError, ValueError):
+            pass
+    set_state(jid, status='fehler', progress=0, phase='Timed out',
+              msg='This render timed out and was stopped automatically. '
+                  'Your credits were refunded.', wd_fp=None, wd_since=None)
+    try:
+        _maybe_refund(jid)
+    except Exception as e:
+        print(f'Reap-Refund {jid}: {e}')
+    if why:
+        _notify_admin(f'timeout:{jid}', 'Job automatisch beendet (Timeout)', why)
+    return True
+
+
+def _watchdog_worker():
+    """Betriebs-Wachhund, alle 2 Minuten: (a) alle ~10 Min Platte knapp -> Mail,
+    (b) haengende Jobs (kein Fortschritt seit JOB_STUCK Sekunden) HART beenden +
+    erstatten (siehe _reap_stuck_job). In-Memory-Fingerabdruck je Job; sobald
+    sich Status/Progress/Phase aendert, laeuft die Uhr neu."""
+    stuck = {}            # jid -> (fingerprint, seit_ts)
+    disk_every = 5        # ~alle 10 Minuten (bei 120s Takt)
+    tick = 0
+    while True:
+        time.sleep(120)
+        tick += 1
+        try:
+            if tick % disk_every == 0:
+                free_gb = shutil.disk_usage(DATA).free / 1e9
+                if free_gb < 2.0:
+                    _notify_admin('disk', 'Speicher knapp auf douchko.eu',
+                                  f'Nur noch {free_gb:.1f} GB frei unter {DATA}.\n'
+                                  f'Cleanup laeuft, reicht aber offenbar nicht.')
             now = time.time()
             with LOCK:
-                items = [(jid, j.get('status'), j.get('pid'))
-                         for jid, j in JOBS.items()]
-            for jid, stt, pid in items:
-                if stt == 'laeuft':
-                    t0 = running_since.setdefault(jid, now)
-                    if now - t0 > 45 * 60:
-                        killed = False
-                        if pid:
-                            try:
-                                os.kill(int(pid), signal.SIGKILL)
-                                killed = True
-                            except (OSError, ValueError):
-                                pass
-                        running_since.pop(jid, None)
-                        _notify_admin(
-                            f'stuck:{jid}', 'Haengender Job gekillt',
-                            f'Job {jid} lief {(now - t0) / 60:.0f} Minuten - '
-                            f'Render-Prozess (PID {pid}) '
-                            f'{"gekillt" if killed else "nicht auffindbar"}. '
-                            f'Der Job endet als Fehler, Credits werden '
-                            f'automatisch erstattet, die Queue laeuft weiter.')
+                items = [(jid, j.get('status'), round(j.get('progress') or 0, 3),
+                          j.get('phase')) for jid, j in JOBS.items()]
+            live = set()
+            for jid, stt, prog, phase in items:
+                if stt not in ('wartet', 'laeuft'):
+                    continue
+                live.add(jid)
+                fp = (stt, prog, phase)
+                prev = stuck.get(jid)
+                if prev and prev[0] == fp:
+                    if now - prev[1] > JOB_STUCK_SECONDS:
+                        _reap_stuck_job(
+                            jid, f'Job {jid} ohne Fortschritt seit '
+                                 f'{(now - prev[1]) / 60:.0f} Min (Status {stt}, '
+                                 f'Phase „{phase}") -> beendet + erstattet.')
+                        stuck.pop(jid, None)
                 else:
-                    running_since.pop(jid, None)
+                    stuck[jid] = (fp, now)          # neu gesehen / Fortschritt -> Uhr neu
+            for jid in [k for k in stuck if k not in live]:
+                stuck.pop(jid, None)                # erledigte Jobs vergessen
         except Exception as e:
             print(f'Watchdog-Fehler: {e}')
 
@@ -4987,6 +5022,19 @@ def admin_kill_job(jid: str, request: Request):
     except Exception as e:
         print(f'Admin-Kill Refund {jid}: {e}')
     return {'ok': True, 'killed': killed}
+
+
+@app.post('/api/admin/jobs/reap_stuck')
+def admin_reap_stuck(request: Request):
+    """Alle aktuell wartenden/laufenden Jobs auf einmal hart beenden + erstatten
+    (Sammel-Stopp, z.B. um nach einem Neustart liegengebliebene Zombie-Jobs zu
+    raeumen). Gleiche Wirkung wie einzeln 'Kill', nur fuer alle."""
+    _require_admin(request)
+    jids = [jid for jid, j in list(JOBS.items())
+            if j.get('status') in ('wartet', 'laeuft')]
+    for jid in jids:
+        _reap_stuck_job(jid, f'Admin-Sammel-Stopp: Job {jid} beendet + erstattet.')
+    return {'ok': True, 'reaped': len(jids)}
 
 
 @app.get('/api/admin/users')
