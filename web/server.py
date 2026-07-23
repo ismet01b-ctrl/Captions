@@ -262,6 +262,22 @@ def _init_users_db():
     # Interesse Betrugsabwehr (Art. 6(1)(f)), gehoert in die Datenschutzerklaerung.
     con.execute("CREATE TABLE IF NOT EXISTS referral_claims ("
                 "email_hash TEXT PRIMARY KEY, claimed_at INTEGER NOT NULL)")
+    # v127-sec: Gratis-Kredit-Anspruch pro E-Mail (Welcome einmalig, Monats-
+    # Freikredit 1x/Monat), PSEUDONYM (gesalzener Hash). UEBERLEBT die
+    # Kontoloeschung bewusst - sonst laesst sich der Free-Tier per Loeschen+
+    # Neuregistrieren mit derselben Mail beliebig oft farmen. kind = 'welcome'
+    # oder 'monthly-YYYY-MM'. DSGVO: berechtigtes Interesse Betrugsabwehr
+    # (Art. 6(1)(f)), in der Datenschutzerklaerung genannt.
+    con.execute("CREATE TABLE IF NOT EXISTS credit_claims ("
+                "email_hash TEXT NOT NULL, kind TEXT NOT NULL, "
+                "claimed_at INTEGER NOT NULL, PRIMARY KEY (email_hash, kind))")
+    # v127-recht: Nachweis der Widerrufs-Einwilligung (§ 356 (4) BGB). Der
+    # Kunde bestaetigt beim Kauf ausdruecklich die sofortige Ausfuehrung UND die
+    # Kenntnis vom Erloeschen des Widerrufsrechts fuer verbrauchte Credits; hier
+    # mit Zeitstempel protokolliert (Beweislast).
+    con.execute("CREATE TABLE IF NOT EXISTS consents ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, "
+                "kind TEXT NOT NULL, created_at INTEGER NOT NULL)")
     con.commit()
     # v92-sec: Kauf-Gutschriften gegen Doppelbuchung absichern. Stripe kann
     # denselben Webhook mehrfach senden; ohne DB-Constraint konnten zwei
@@ -292,6 +308,18 @@ def _init_users_db():
         con.commit()
     except sqlite3.IntegrityError as e:
         print(f'WARN: ux_users_refcode nicht angelegt: {e}')
+    # v127-sec: Welcome- und Monats-Freikredit gegen Doppel-Gutschrift bei
+    # gleichzeitigen Requests (Doppel-Verify / zwei /api/me am Monatswechsel).
+    # Bisher hatten nur Kauf/Referral einen solchen Index - genau der Pfad,
+    # der hier fehlte. Partiell, damit Renders/Refunds unberuehrt bleiben.
+    try:
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_ledger_welcome "
+                    "ON ledger(user_id, grund) WHERE grund = 'Welcome credit'")
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_ledger_monthly "
+                    "ON ledger(user_id, grund) WHERE grund LIKE 'Monthly free credit %'")
+        con.commit()
+    except sqlite3.IntegrityError as e:
+        print(f'WARN: ux_ledger_welcome/monthly nicht angelegt (Altdaten-Duplikate?): {e}')
     con.close()
 
 
@@ -364,6 +392,11 @@ def _create_user(email, pw, name=''):
     # v98: Startguthaben erst NACH E-Mail-Bestaetigung (_grant_welcome) -
     # vorher liess sich Ismets OpenAI-Key per Massen-Registrierung farmen
     # (Wegwerf-Adressen, nie bestaetigt, sofort 120s Renderzeit).
+    # v127-sec: die Besitzer-Identitaet ist NICHT registrierbar. Sonst koennte
+    # jemand, solange OWNER_EMAIL noch kein Konto hat, sie einfach anlegen und
+    # bekaeme (via _owner_ok) die globale Stil-Referenz-Regie + Gratis-Whisper.
+    if email.strip().lower() == OWNER_EMAIL:
+        return None, 'This email is already registered.'
     con = _db()
     try:
         cur = con.execute(
@@ -381,24 +414,39 @@ def _create_user(email, pw, name=''):
 
 
 def _grant_welcome(uid):
-    """Willkommens-Guthaben bei der E-Mail-Bestaetigung, idempotent ueber
-    den Ledger-Eintrag (Verify-Link doppelt geklickt = kein Doppel-Grant)."""
+    """Willkommens-Guthaben bei der E-Mail-Bestaetigung. v127-sec: ATOMAR und
+    doppelt abgesichert:
+      1) credit_claims (E-Mail-Hash, ueberlebt Loeschung) -> pro Person nur
+         EINMAL, blockt Loeschen+Neuregistrieren-Farming.
+      2) partieller Unique-Index ux_ledger_welcome -> blockt den Doppel-Verify-
+         Race (zwei gueltige Token gleichzeitig eingeloest).
+    Beide Inserts + der Balance-Update haengen an EINER Transaktion; scheitert
+    einer, wird alles zurueckgerollt (kein halber Zustand)."""
     if TRIAL_SECONDS <= 0:
         return False
     con = _db()
     try:
-        row = con.execute(
-            "SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
-            (uid, 'Welcome credit')).fetchone()
-        if row:
+        con.isolation_level = None
+        con.execute('BEGIN IMMEDIATE')                # Schreibsperre gegen TOCTOU
+        urow = con.execute("SELECT email FROM users WHERE id = ?", (uid,)).fetchone()
+        if not urow:
+            con.execute('ROLLBACK')
             return False
-        con.execute("UPDATE users SET balance_sec = balance_sec + ? "
-                    "WHERE id = ?", (TRIAL_SECONDS, uid))
-        con.execute(
-            "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (uid, TRIAL_SECONDS, 'Welcome credit', int(time.time())))
-        con.commit()
+        claim = con.execute(
+            "INSERT OR IGNORE INTO credit_claims (email_hash, kind, claimed_at) "
+            "VALUES (?, 'welcome', ?)", (_email_hash(urow['email']), int(time.time())))
+        if claim.rowcount != 1:
+            con.execute('ROLLBACK')
+            return False                              # diese E-Mail hat's schon gehabt
+        led = con.execute(
+            "INSERT OR IGNORE INTO ledger (user_id, delta_sec, grund, created_at) "
+            "VALUES (?, ?, 'Welcome credit', ?)", (uid, TRIAL_SECONDS, int(time.time())))
+        if led.rowcount != 1:
+            con.execute('ROLLBACK')
+            return False                              # Konto hatte es schon (Re-Verify)
+        con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
+                    (TRIAL_SECONDS, uid))
+        con.execute('COMMIT')
         return True
     finally:
         con.close()
@@ -959,20 +1007,43 @@ def _has_purchased(user_id):
 
 def _grant_monthly_free(u):
     """v80y: 3 Min/Monat gratis fuer verifizierte Accounts (Konkurrenz-
-    Standard: dauerhafter Free-Tier statt einmaligem Trial). Idempotent
-    ueber Ledger-Eintrag pro Monat."""
+    Standard: dauerhafter Free-Tier statt einmaligem Trial).
+    v127-sec: ATOMAR + doppelt abgesichert wie _grant_welcome:
+      1) credit_claims kind='monthly-YYYY-MM' (E-Mail-Hash, ueberlebt Loeschung)
+         -> pro Person nur 1x/Monat, blockt Loeschen+Neuregistrieren-Farming.
+      2) partieller Unique-Index ux_ledger_monthly -> blockt den Race, wenn zwei
+         /api/me am Monatswechsel gleichzeitig laufen."""
     if not u or not u['verified']:
         return False
     stamp = time.strftime('%Y-%m')
     grund = f'Monthly free credit {stamp}'
     con = _db()
-    row = con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
-                      (u['id'], grund)).fetchone()
-    con.close()
-    if row:
-        return False
-    _adjust_balance(u['id'], 180, grund)
-    return True
+    try:
+        con.isolation_level = None
+        con.execute('BEGIN IMMEDIATE')
+        urow = con.execute("SELECT email FROM users WHERE id = ?", (u['id'],)).fetchone()
+        if not urow:
+            con.execute('ROLLBACK')
+            return False
+        claim = con.execute(
+            "INSERT OR IGNORE INTO credit_claims (email_hash, kind, claimed_at) "
+            "VALUES (?, ?, ?)", (_email_hash(urow['email']), f'monthly-{stamp}',
+                                 int(time.time())))
+        if claim.rowcount != 1:
+            con.execute('ROLLBACK')
+            return False                              # diese E-Mail hat diesen Monat schon
+        led = con.execute(
+            "INSERT OR IGNORE INTO ledger (user_id, delta_sec, grund, created_at) "
+            "VALUES (?, ?, ?, ?)", (u['id'], 180, grund, int(time.time())))
+        if led.rowcount != 1:
+            con.execute('ROLLBACK')
+            return False
+        con.execute("UPDATE users SET balance_sec = balance_sec + 180 WHERE id = ?",
+                    (u['id'],))
+        con.execute('COMMIT')
+        return True
+    finally:
+        con.close()
 
 
 def _render_charged(user_id, jid):
@@ -1013,23 +1084,35 @@ def _reserve_credits(uid, need, jid, grund=None):
         con.close()
 
 
-def _refund_credits(uid, jid, need):
-    """Reservierung zurueckbuchen. Idempotent ueber den 'Refund {jid}'-Ledger-
-    Eintrag - Stripe/Worker koennen mehrfach ausloesen."""
+def _refund_credits(uid, jid, need, resv_like=None):
+    """Reservierung zurueckbuchen UND die Reservierungs-Zeile entfernen.
+
+    v126-sec: frueher wurde nur eine Gegenbuchung 'Refund {jid}' eingefuegt und
+    die '-need'-Reservierung stehen gelassen. Dadurch meldete der Existenz-Check
+    (_render_charged / Alpha-Guard) den Job weiter als "schon bezahlt" - ein
+    Retry nach transientem Fehlschlag lieferte ein fertiges Video fuer netto 0
+    Credits. Jetzt loeschen wir die offene Reservierung selbst: der naechste
+    Versuch wird wieder normal abgerechnet, und das Ledger-Invariant
+    (Summe(delta) == balance_sec) bleibt erhalten (geloeschte -need + balance
+    +need = 0, exakt wie die alte Gegenbuchung). Idempotent ueber rowcount:
+    nur wenn WIRKLICH eine offene Reservierung verschwand, wird gutgeschrieben -
+    Watchdog + Worker duerfen mehrfach ausloesen. `resv_like` = LIKE-Muster der
+    Reservierungs-Zeile (Default Render; Alpha/Style geben ihres explizit)."""
     if not uid or need <= 0:
         return
+    like = resv_like or f'Render {jid} %'
     con = _db()
     try:
-        if con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
-                       (uid, f'Refund {jid}')).fetchone():
-            return
+        con.isolation_level = None
+        con.execute('BEGIN IMMEDIATE')                # Schreibsperre gegen TOCTOU
+        cur = con.execute("DELETE FROM ledger WHERE user_id = ? AND grund LIKE ?",
+                          (uid, like))
+        if cur.rowcount < 1:
+            con.execute('ROLLBACK')
+            return                                    # nichts offen -> schon erstattet
         con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
                     (need, uid))
-        con.execute(
-            "INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (uid, need, f'Refund {jid}', int(time.time())))
-        con.commit()
+        con.execute('COMMIT')
     finally:
         con.close()
 
@@ -1183,7 +1266,8 @@ def api_pricing():
 
 
 @app.post('/api/checkout')
-async def api_checkout(request: Request, pack: str = Form(...)):
+async def api_checkout(request: Request, pack: str = Form(...),
+                       consent: str = Form('')):
     """Erstellt eine Stripe-Checkout-Session und liefert die URL zurueck.
     Weiterleitung dorthin macht der Client (window.location)."""
     u = _require_user(request)
@@ -1193,6 +1277,21 @@ async def api_checkout(request: Request, pack: str = Form(...)):
                                  'Account settings.')
     if pack not in PACKS:
         raise HTTPException(400, 'Unknown pack.')
+    # v127-recht: Widerrufs-Einwilligung ist Pflicht vor dem Kauf (§ 356 (4) BGB).
+    # Der Client hakt die Bestaetigung aktiv an; ohne sie kein Checkout. Mit
+    # Zeitstempel protokolliert (Beweislast fuer die wirksame Verzichtserklaerung).
+    if str(consent).strip() not in ('1', 'true', 'on', 'yes'):
+        raise HTTPException(400, 'Please confirm the immediate-performance notice '
+                                 'before purchasing.')
+    try:
+        con = _db()
+        con.execute("INSERT INTO consents (user_id, kind, created_at) "
+                    "VALUES (?, 'withdrawal_immediate_performance', ?)",
+                    (u['id'], int(time.time())))
+        con.commit()
+        con.close()
+    except Exception as e:
+        print(f'WARN: Consent-Log fehlgeschlagen: {e}')
     st = _stripe()
     if not st:
         raise HTTPException(503, 'Payment is not configured yet. '
@@ -1276,9 +1375,13 @@ async def api_stripe_webhook(request: Request):
     meta = sess.get('metadata') or {}
     try:
         uid = int(meta.get('user_id'))
-        sec = int(meta.get('sekunden'))
         pack = meta.get('pack', '?')
         sess_id = sess.get('id', '')
+        # v127-sec: gutgeschriebene Sekunden aus dem SERVER-Katalog ableiten,
+        # nicht der Metadaten-Zahl vertrauen. So ist die Gutschrift fest an
+        # PACKS gekoppelt und nie von einer abweichenden 'sekunden'-Angabe
+        # entkoppelt. Unbekanntes Paket -> Fallback auf die Metadaten.
+        sec = int(PACKS[pack]['sekunden']) if pack in PACKS else int(meta.get('sekunden'))
     except Exception:
         raise HTTPException(400, 'Metadata incomplete.')
     # Atomar + idempotent (siehe _credit_purchase). Doppelte/erneute Webhooks
@@ -1343,6 +1446,29 @@ def q_put(jid, q=None):
     except Exception:
         pass
     (q if q is not None else QUEUE).put((prio, next(_QSEQ), jid))
+
+
+# v127-sec: Flooding-Schutz. Die Caption-Queue ist unbounded und wird von genau
+# EINEM Worker geleert; ohne Deckel kann ein Konto (Pre-Mode + Re-Render sind
+# gratis) sie mit hunderten Jobs fluten und alle anderen tagelang aushungern
+# plus die Platte fuellen. Wir begrenzen die gleichzeitig wartenden/laufenden
+# Caption-Jobs pro Konto - zielt nur auf Flooding, normale Nutzung (1-2 offen)
+# bleibt unberuehrt.
+CAPTION_INFLIGHT_CAP = int(os.environ.get('DVE_INFLIGHT_CAP', '3'))
+
+
+def _inflight_count(uid):
+    if not uid:
+        return 0
+    return sum(1 for j in list(JOBS.values())
+               if j.get('user_id') == uid and j.get('kind') != 'motion'
+               and j.get('status') in ('wartet', 'laeuft'))
+
+
+def _enqueue_guard(uid):
+    if uid and _inflight_count(uid) >= CAPTION_INFLIGHT_CAP:
+        raise HTTPException(429, 'You already have several renders in the queue. '
+                                 'Please wait for one to finish before starting more.')
 
 
 MQUEUE = Queue()          # Fast-Lane nur fuer Motion-Clips
@@ -2405,7 +2531,8 @@ def run_job(jid):
             uid = j.get('user_id')
             if uid:
                 _refund_credits(uid, f'Alpha {jid}',
-                                cost_seconds(j.get('dauer', 0)))
+                                cost_seconds(j.get('dauer', 0)),
+                                resv_like=f'Alpha {jid} %')
         return
     if mode == 'analyze':
         rc, log, out = _run_render(jid, extra_args=['--plan-only'],
@@ -2785,6 +2912,23 @@ def _page(name):
 _REG_ATTEMPTS = {}       # ip -> [timestamps]
 
 
+def _client_ip(request):
+    """v127-sec: echte Client-IP fuer Rate-Limits/Demo-Quota.
+    uvicorn laeuft mit --forwarded-allow-ips '*' und traut damit dem LINKSSTEN
+    X-Forwarded-For-Eintrag - der ist voll client-gesetzt und damit spoofbar
+    (jede Anfrage eine neue Fake-IP -> Login-Brute-Force und Demo-Quota liefen
+    ins Leere). Caddy ist der EINZIGE Proxy vor der App und haengt die real
+    gesehene Peer-IP RECHTS an die Kette. Wir nehmen deshalb den LETZTEN
+    Eintrag - den kann der Client nicht faelschen. Ohne XFF: direkte Peer-IP.
+    (Sollte spaeter ein CDN vor Caddy kommen, hier den vorletzten Hop nehmen.)"""
+    xff = request.headers.get('x-forwarded-for', '')
+    if xff:
+        parts = [p.strip() for p in xff.split(',') if p.strip()]
+        if parts:
+            return parts[-1]
+    return request.client.host if request.client else 'unknown'
+
+
 def _rate_limit_ok(ip, window_sec=3600, max_attempts=5, bucket='reg'):
     """Rate-Limit pro IP und Aktion (getrennte Buckets: reg/login/reset).
     Reicht fuer echte Nutzer, stoppt automatisierten Spam + Passwort-
@@ -2805,13 +2949,20 @@ def api_register(request: Request, response: Response,
     E-Mail-Bestaetigung (_grant_welcome), nicht mehr hier. v124: optionaler
     Einladungscode (ref), Bonus fliesst erst nach der Bestaetigung."""
     # Rate-Limit gegen Spam
-    ip = request.client.host if request.client else 'unknown'
+    ip = _client_ip(request)
     if not _rate_limit_ok(ip):
         raise HTTPException(429, 'Too many sign-up attempts. Please try again in an hour.')
     email = (email or '').strip().lower()
     name = (name or '').strip()
     if not _valid_email(email):
         raise HTTPException(400, 'Please enter a valid email address.')
+    # v127-sec: Wegwerf-Mail-Domains beim Sign-up abweisen. Bisher wurde nur der
+    # Referral-Bonus fuer solche Adressen verweigert; der Free-Tier (Welcome +
+    # Monats-Kredit) liess sich per Temp-Mail-Ring dennoch farmen. Bewusst nur
+    # bekannte Wegwerf-Domains - echte Anbieter bleiben unberuehrt.
+    if _is_disposable_email(email):
+        raise HTTPException(400, 'Please use a permanent email address '
+                                 '(disposable inboxes are not supported).')
     if not _valid_username(name):
         raise HTTPException(400, 'Please pick a username (3-24 characters, '
                                  'letters, numbers, spaces, . _ -).')
@@ -2848,7 +2999,7 @@ def api_login(request: Request, response: Response, email: str = Form(...),
     """v80h: Login. Gleiche Fehlermeldung fuer 'nicht vorhanden' und 'Passwort
     falsch', damit man E-Mails nicht enumerieren kann."""
     # v92 SECURITY: Rate-Limit gegen Passwort-Brute-Force (20 Versuche / 15 min / IP)
-    ip = request.client.host if request.client else 'unknown'
+    ip = _client_ip(request)
     if not _rate_limit_ok(ip, window_sec=900, max_attempts=20, bucket='login'):
         raise HTTPException(429, 'Too many login attempts. Please wait a few minutes.')
     email = (email or '').strip().lower()
@@ -2924,7 +3075,7 @@ def api_me(request: Request):
 def api_forgot_password(request: Request, email: str = Form(...)):
     """v80w: Reset-Link per Mail. Antwort immer identisch - kein
     E-Mail-Enumeration. Rate-Limit teilt sich den Topf mit Registrierung."""
-    ip = request.client.host if request.client else 'unknown'
+    ip = _client_ip(request)
     if not _rate_limit_ok(ip):
         raise HTTPException(429, 'Too many attempts. Please try again in an hour.')
     u = _find_user_by_email((email or '').strip().lower())
@@ -3557,6 +3708,13 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
     uid = None
     if u:
         uid = u['id']
+        # v127-sec: Flooding-Deckel - pro Konto nur wenige gleichzeitig
+        # wartende/laufende Jobs (Pre-Mode bucht nichts ab, waere sonst gratis
+        # unbegrenzt). Datei wieder wegraeumen, bevor wir ablehnen.
+        if _inflight_count(uid) >= CAPTION_INFLIGHT_CAP:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(429, 'You already have several videos in the queue. '
+                                     'Please wait for one to finish before uploading more.')
         need = cost_seconds(dur)
         if mode == 'pre':
             if u['balance_sec'] < need:
@@ -3616,7 +3774,7 @@ async def upload_init(request: Request, filename: str = Form(...),
     """Startet eine resumable Upload-Session. Prueft Auth + Endung + Groessen-Cap
     vorab und legt die (leere) Zieldatei an. Rueckgabe: upload_id + received=0."""
     if mode == 'demo':
-        ip = request.client.host if request.client else 'unknown'
+        ip = _client_ip(request)
         if not _demo_ok(ip):
             raise HTTPException(429, 'Demo limit reached for today. '
                                      'Create a free account to keep going.')
@@ -3706,7 +3864,7 @@ async def upload(request: Request, datei: UploadFile = File(...),
                  look: str = Form('creator'), code: str = Form(''),
                  mode: str = Form('full'), cfg_overrides: str = Form('{}')):
     if mode == 'demo':
-        ip = request.client.host if request.client else 'unknown'
+        ip = _client_ip(request)
         if not _demo_ok(ip):
             raise HTTPException(429, 'Demo limit reached for today. '
                                      'Create a free account to keep going.')
@@ -4292,6 +4450,15 @@ async def save_and_render(request: Request, jid: str,
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
+    # v127-sec: Re-Render ist "inklusive" (nicht erneut abgerechnet) - deshalb
+    # hier gegen Missbrauch absichern: nicht doppelt einreihen, waehrend schon
+    # ein Render laeuft, und pro Konto nicht die Queue fluten (freie Renders auf
+    # dem einzigen Worker). Sonst kann ein Kunde mit 1 bezahlten Job beliebig
+    # oft gratis schweres Compositing ausloesen.
+    if j.get('status') in ('wartet', 'laeuft'):
+        raise HTTPException(409, 'A render for this job is already running.')
+    _u0 = _current_user(request)
+    _enqueue_guard(_u0['id'] if _u0 else None)
     try:
         mom = json.loads(moments)
     except Exception:
@@ -4345,9 +4512,13 @@ def _owner_ok(request: Request):
         return False
     try:
         email = u['email']
+        verified = u['verified']
     except Exception:
         return False
-    return str(email or '').strip().lower() == OWNER_EMAIL
+    # v127-sec: zusaetzlich verifiziert verlangen (Belt-and-Suspenders neben dem
+    # Register-Block auf OWNER_EMAIL): Owner-Rechte nie an ein unbestaetigtes
+    # Konto, das nur die richtige Adresse behauptet.
+    return bool(verified) and str(email or '').strip().lower() == OWNER_EMAIL
 
 
 def _reference_file():
@@ -4552,10 +4723,12 @@ async def style_learn(request: Request, datei: UploadFile = File(...),
                           'beispiel': entry.get('beispiel', '')},
                 'refs': _load_user_refs(u['id'])}
     except HTTPException:
-        _refund_credits(u['id'], f'style_{sid}', STYLE_LEARN_COST)
+        _refund_credits(u['id'], f'style_{sid}', STYLE_LEARN_COST,
+                        resv_like=f'Style learn style_{sid} %')
         raise
     except Exception as e:
-        _refund_credits(u['id'], f'style_{sid}', STYLE_LEARN_COST)
+        _refund_credits(u['id'], f'style_{sid}', STYLE_LEARN_COST,
+                        resv_like=f'Style learn style_{sid} %')
         raise HTTPException(500, f'{type(e).__name__}: {e}')
     finally:
         if tmp:

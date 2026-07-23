@@ -2062,9 +2062,9 @@ def _scenario_logic(clip, transcript, tmp):
           'const MOTION_ENABLED = false' in _ui_m
           and "if (!MOTION_ENABLED) { showSection('create'); return; }" in _ui_m
           and 'a[data-nav="motion"]' in _ui_m
-          # Landing wirbt nicht mehr mit Motion (Sektion im Kommentar), Nav-Link weg
-          and '<!-- v123: Motion' in _land123
-          and '<a href="#motion">Motion</a>' not in _land123
+          # v127: Landing bewirbt Motion gar nicht mehr (Editorial-Redesign,
+          # Single-Product Captions) - kein Motion-Deep-Link/Nav/Sektion.
+          and '#motion' not in _land123
           # Beweis „nur versteckt, nicht geloescht": die Motion-Engine ist weiterhin da
           and "@app.post('/api/motion/showcase')" in _srv_m
           and os.path.exists(os.path.join(HERE, 'motion', 'src', 'MotionShowcase.tsx')))
@@ -2120,6 +2120,36 @@ def _scenario_logic(clip, transcript, tmp):
           and 'id="accBestHook"' in _ui_m and 'id="accStylePrefs"' in _ui_m
           and 'Reload bonus' in _ui_m and 'Invite reward' in _ui_m
           and 'it.hook_score' in _ui_m)
+    # v127-sec/recht: Launch-Audit-Fixes im ausgelieferten Code verankert.
+    _priv = open(os.path.join(HERE, 'web', 'privacy.html'), encoding='utf-8').read()
+    _impr = open(os.path.join(HERE, 'web', 'imprint.html'), encoding='utf-8').read()
+    _term = open(os.path.join(HERE, 'web', 'terms.html'), encoding='utf-8').read()
+    check('v127-sec: Credit-Fixes verdrahtet (Refund loescht Reservierung, Indizes, Caps)',
+          "resv_like or f'Render {jid} %'" in _srv_m
+          and 'DELETE FROM ledger WHERE user_id = ? AND grund LIKE ?' in _srv_m
+          and 'ux_ledger_welcome' in _srv_m and 'ux_ledger_monthly' in _srv_m
+          and 'credit_claims' in _srv_m and 'DELETE FROM credit_claims' not in _srv_m
+          and 'def _enqueue_guard' in _srv_m and 'def _inflight_count' in _srv_m
+          and 'A render for this job is already running.' in _srv_m)
+    check('v127-sec: Auth/Abuse-Fixes verdrahtet (XFF, Owner, Temp-Mail, Payment)',
+          'def _client_ip' in _srv_m and "request.headers.get('x-forwarded-for'" in _srv_m
+          and 'ip = _client_ip(request)' in _srv_m
+          and 'if email.strip().lower() == OWNER_EMAIL:' in _srv_m
+          and "u['verified']" in _srv_m
+          and 'if _is_disposable_email(email):' in _srv_m
+          and "PACKS[pack]['sekunden']" in _srv_m)
+    check('v127-recht: Widerrufs-Einwilligung im Kaufflow (Checkbox + Log + Belehrung)',
+          "consent: str = Form('')" in _srv_m and 'consents' in _srv_m
+          and 'withdrawal_immediate_performance' in _srv_m
+          and 'id="buyConsent"' in _ui_m and "fd.append('consent', '1')" in _ui_m
+          and 'Widerrufsbelehrung' in _term and 'Model withdrawal form' in _term)
+    check('v127-recht: Datenschutz/Impressum/AGB aktualisiert',
+          'Art. 6(1)(b) GDPR' in _priv and 'Standard Contractual' in _priv
+          and 'Art. 18 GDPR' in _priv and 'Art. 20 GDPR' in _priv
+          and '§ 5 DDG' in _impr and '§ 5 TMG' not in _impr
+          and '§ 18 (2) MStV' in _impr and '§ 55 RStV' not in _impr
+          and '§ 19 UStG' in _impr and '§ 19 UStG' in _term
+          and 'Prices include applicable VAT where required' not in _term)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,
@@ -2175,10 +2205,12 @@ def _scenario_logic(clip, transcript, tmp):
           and "localStorage.getItem('dve_chosen')" in _ui_m
           # routeFromHash akzeptiert #motion UND #/motion
           and ".replace(/^#\\/?/, '')" in _ui_m)
-    check('v101x: Landing - zwei getrennte Produkte mit eigenen Deep-Link-CTAs',
-          'id="captions"' in _land and 'id="motion"' in _land
-          and '/app#create' in _land and '/app#motion' in _land
-          and 'Motion Graphics' in _land)
+    # v127: Landing ist Single-Product (Captions, Editorial-Redesign). Motion
+    # bleibt fuer Kunden ausgeblendet -> nicht auf der Landing beworben.
+    check('v127: Landing - Single-Product Captions, Deep-Link-CTA, Motion ausgeblendet',
+          'id="captions"' in _land and '/app#create' in _land
+          and 'id="motion"' not in _land and '/app#motion' not in _land
+          and 'Motion Graphics' not in _land)
 
     # v91: ground_anchor - liegender Text auf B-Roll MIT sichtbarer Person
     # muss auf die klare Strasse (Person ausgespart), nicht auf die Person.
@@ -3106,6 +3138,68 @@ def _scenario_security(tmp):
     SV._refund_credits(uid, 'j0', 60)
     check('Credits: Refund idempotent (kein Doppel)',
           SV._find_user_by_id(uid)['balance_sec'] == 60)
+    # v127-sec: DIE Gratis-Render-Luecke. Nach Refund ist die Reservierung WEG,
+    # also meldet _render_charged False und ein Retry wird wieder abgerechnet.
+    # (Frueher blieb die '-need'-Zeile stehen -> _render_charged True -> fertiges
+    # Video fuer netto 0 Credits nach jedem transienten Fehlschlag.) j1 ist noch
+    # reserviert.
+    _charged_pre = SV._render_charged(uid, 'j1')            # reserviert -> True
+    SV._refund_credits(uid, 'j1', 60)                       # Fehlschlag -> erstattet
+    _charged_post = SV._render_charged(uid, 'j1')           # Reservierung weg -> False
+    _rereserve = SV._reserve_credits(uid, 60, 'j1')         # Retry bucht erneut ab
+    check('v127-sec: Gratis-Render-Luecke zu (Refund loescht Reservierung, Retry zahlt)',
+          _charged_pre is True and _charged_post is False and _rereserve is True,
+          f'pre={_charged_pre} post={_charged_post} re={_rereserve}')
+    # v127-sec: Free-Tier-Farming zu - der Welcome-Anspruch ueberlebt die
+    # Kontoloeschung (gesalzener E-Mail-Hash in credit_claims). Loeschen + mit
+    # DERSELBEN Mail neu registrieren gibt KEIN zweites Welcome-Guthaben.
+    _fuid, _ = SV._create_user('farm@test', 'x' * 8, 'FarmerA')
+    _fw1 = SV._grant_welcome(_fuid)
+    SV._purge_user_db(_fuid)                                # credit_claims BLEIBT
+    _fuid2, _ = SV._create_user('farm@test', 'x' * 8, 'FarmerB')
+    _fw2 = SV._grant_welcome(_fuid2)
+    check('v127-sec: Welcome-Farming zu (Hash ueberlebt Loeschung)',
+          _fw1 is True and _fw2 is False
+          and SV._find_user_by_id(_fuid2)['balance_sec'] == 0,
+          f'w1={_fw1} w2={_fw2}')
+    # v127-sec: Monats-Freikredit atomar + 1x/Monat (Doppel-Grant-Race zu).
+    con = SV._db()
+    con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
+                "VALUES ('mon@test','x','Mon',0,?,1)", (int(_t.time()),))
+    con.commit()
+    _muid = con.execute("SELECT id FROM users WHERE email='mon@test'").fetchone()['id']
+    con.close()
+    _mu = SV._find_user_by_id(_muid)
+    _m1 = SV._grant_monthly_free(_mu)
+    _m2 = SV._grant_monthly_free(_mu)
+    check('v127-sec: Monats-Freikredit 1x (atomar, kein Doppel)',
+          _m1 is True and _m2 is False
+          and SV._find_user_by_id(_muid)['balance_sec'] == 180, f'{_m1}/{_m2}')
+    # v127-sec: Partielle Unique-Indizes fuer Welcome/Monthly vorhanden (Race-Sperre).
+    con = SV._db()
+    _idx = {r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='index'").fetchall()}
+    con.close()
+    check('v127-sec: Unique-Indizes ux_ledger_welcome/monthly angelegt',
+          {'ux_ledger_welcome', 'ux_ledger_monthly'} <= _idx, str(sorted(_idx)))
+    # v127-sec: Wegwerf-Mail-Erkennung (Signup-Block nutzt genau die).
+    check('v127-sec: Wegwerf-Domain erkannt, echte Domain nicht',
+          SV._is_disposable_email('x@mailinator.com') is True
+          and SV._is_disposable_email('x@gmail.com') is False)
+    # v127-sec: echte Client-IP = rechter (Caddy) Hop, nicht der gespoofte linke.
+    class _RQip:
+        def __init__(self, xff, peer):
+            self.headers = {'x-forwarded-for': xff} if xff is not None else {}
+            self.client = type('C', (), {'host': peer})()
+    _ip_spoof = SV._client_ip(_RQip('1.2.3.4, 9.9.9.9', '10.0.0.1'))
+    _ip_direct = SV._client_ip(_RQip(None, '10.0.0.1'))
+    check('v127-sec: _client_ip nimmt rechten Hop (XFF-Spoof wirkungslos)',
+          _ip_spoof == '9.9.9.9' and _ip_direct == '10.0.0.1',
+          f'{_ip_spoof} / {_ip_direct}')
+    # v127-sec: Owner-Identitaet ist NICHT registrierbar (kein Squat auf Owner-Rechte).
+    _osq, _oerr = SV._create_user(SV.OWNER_EMAIL, 'x' * 8, 'Squatter')
+    check('v127-sec: OWNER_EMAIL nicht registrierbar',
+          _osq is None and bool(_oerr))
     # 3) cfg_overrides-Whitelist + Deckel
     ov = SV._sanitize_overrides({'output': {'height': 4320, 'master': True},
                                  'effects': {'blender_samples': 99999, 'bg_blur': 0.5},
@@ -3436,8 +3530,10 @@ def _scenario_security(tmp):
             self.cookies = {}
         # _owner_ok ruft _current_user(request); wir patchen das gleich
     _con = _sq3.connect(':memory:'); _con.row_factory = _sq3.Row
-    _row_owner = _con.execute("SELECT 'Ismet-01_b@HOTMAIL.de' AS email").fetchone()
-    _row_other = _con.execute("SELECT 'wer@anders.de' AS email").fetchone()
+    _row_owner = _con.execute("SELECT 'Ismet-01_b@HOTMAIL.de' AS email, 1 AS verified").fetchone()
+    _row_other = _con.execute("SELECT 'wer@anders.de' AS email, 1 AS verified").fetchone()
+    # v127-sec: Owner-Mail, aber NICHT verifiziert -> keine Owner-Rechte.
+    _row_owner_unv = _con.execute("SELECT 'Ismet-01_b@HOTMAIL.de' AS email, 0 AS verified").fetchone()
     _con.close()
     _old_cur = SV._current_user
     _old_owner_env = os.environ.get('DVE_OWNER')
@@ -3447,13 +3543,16 @@ def _scenario_security(tmp):
         r_ok = _Rq2(''); r_ok._row = _row_owner
         r_no = _Rq2(''); r_no._row = _row_other
         r_anon = _Rq2(''); r_anon._row = None
+        r_unv = _Rq2(''); r_unv._row = _row_owner_unv
         owner_true = SV._owner_ok(r_ok)
         owner_false = SV._owner_ok(r_no)
         anon_false = SV._owner_ok(r_anon)
+        unverified_false = SV._owner_ok(r_unv)
     finally:
         SV._current_user = _old_cur
-    check('Referenz-Stil: _owner_ok klappt mit sqlite3.Row (kein .get-500)',
-          owner_true is True and owner_false is False and anon_false is False)
+    check('Referenz-Stil: _owner_ok mit sqlite3.Row (kein .get-500) + verlangt verified',
+          owner_true is True and owner_false is False and anon_false is False
+          and unverified_false is False)
     # 16) v94: _video_hash kollidiert nicht bei gleichem Anfang/Ende, anderer
     # Mitte (der Bug, der einen deutschen Transkript-Cache an einen englischen
     # Clip servierte). Zwei Dateien: identischer Kopf+Fuss, verschiedene Mitte.

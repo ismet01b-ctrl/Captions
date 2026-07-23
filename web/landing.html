@@ -5,290 +5,257 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/favicon.png">
-<title>DouchkoVE | Auto captions for TikTok &amp; Reels. No subscription.</title>
-<meta name="description" content="Premium captions with an AI director that picks keywords, effects and camera moves for your video. 8 looks, 26 text animations, one-time credits instead of a subscription.">
+<title>DouchkoVE · Captions that look like you hired an editor. No subscription.</title>
+<meta name="description" content="An AI director places editorial captions, effects and camera moves that fit exactly what you say. One-time credits, no subscription. Learns your style.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0b0812; --surf: #14101c; --surf2: #1a1428; --line: #2a2438;
-  --fg: #f4f1ff; --mut: #a8a1c2; --acc: #7c5cff; --acc2: #9b7dff;
-  --gold: #f5c451; --pink: #ff6b9d;
+  --bg: #0a0a0b; --bg2: #121012; --panel: #161417;
+  --ink: #f6f4ef; --ink2: #c3bdb3; --mut: #8b857b;
+  --line: rgba(246,244,239,.12); --line-soft: rgba(246,244,239,.06);
+  --acc: #ff7a1a; --acc-soft: rgba(255,122,26,.12); --gold: #f2c14e;
+  --serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --max: 1140px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg); color: var(--fg);
-  line-height: 1.5; overflow-x: hidden; min-height: 100vh;
+  font-family: var(--sans); background: var(--bg); color: var(--ink);
+  line-height: 1.55; overflow-x: hidden; min-height: 100vh;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
 }
-.wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+::selection { background: var(--acc); color: var(--bg); }
+a { color: inherit; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 32px; }
 
+/* ---- shared type ---- */
+.kicker {
+  font-family: var(--mono); font-weight: 600; font-size: 12px;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--mut);
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.kicker::before { content: ''; width: 22px; height: 1px; background: var(--acc); display: inline-block; }
+.display {
+  font-family: var(--serif); font-weight: 500; letter-spacing: -0.015em;
+  line-height: 1.02; color: var(--ink);
+}
+.display em { font-style: italic; color: var(--acc); }
+.lead { font-family: var(--sans); color: var(--ink2); font-size: clamp(16px, 1.5vw, 19px); line-height: 1.65; }
+
+/* ---- nav ---- */
 nav {
   position: sticky; top: 0; z-index: 100;
-  background: rgba(11, 8, 18, 0.85); backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line);
-  padding: 16px 24px;
+  background: rgba(10,10,11,.72); backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--line-soft);
 }
-nav .inner { max-width: 1200px; margin: 0 auto;
+nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
   display: flex; align-items: center; justify-content: space-between; }
-.logo { font-weight: 900; font-size: 20px; letter-spacing: -0.5px;
-  display: inline-flex; align-items: center; }
-.logo img { height: 26px; width: auto; margin-right: 9px; }
-.logo .dot { color: var(--acc); }
-.logo .beta { font-weight: 800; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
-  color: var(--acc); background: rgba(124,92,255,0.14); border-radius: 6px;
-  padding: 2px 6px; vertical-align: middle; margin-left: 8px; }
-nav a { color: var(--mut); text-decoration: none; margin-left: 24px;
-  font-size: 14px; font-weight: 500; transition: color .15s; }
-nav a:hover { color: var(--fg); }
-nav .cta {
-  background: var(--acc); color: white; padding: 8px 16px;
-  border-radius: 8px; font-weight: 700; font-size: 14px;
-  margin-left: 20px; transition: transform .12s, box-shadow .15s;
+.logo { font-family: var(--serif); font-weight: 600; font-size: 22px; letter-spacing: -0.02em;
+  display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo img { height: 24px; width: auto; }
+.logo .beta { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--mut); border: 1px solid var(--line);
+  border-radius: 4px; padding: 2px 6px; vertical-align: middle; }
+.nav-links { display: flex; align-items: center; gap: 30px; }
+.nav-links a:not(.cta) { font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--mut); text-decoration: none; transition: color .18s; }
+.nav-links a:not(.cta):hover { color: var(--ink); }
+.cta {
+  font-family: var(--sans); background: var(--ink); color: var(--bg);
+  padding: 10px 20px; border-radius: 999px; font-weight: 600; font-size: 14px;
+  text-decoration: none; transition: transform .16s ease, background .18s;
+  display: inline-flex; align-items: center; gap: 8px;
 }
-nav .cta:hover { color: white; transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4); }
+.cta:hover { transform: translateY(-1px); background: var(--acc); }
+.cta.solid { background: var(--acc); color: var(--bg); }
+.cta.solid:hover { background: #ff8a34; }
 
-.hero {
-  padding: 100px 24px 80px; text-align: center; position: relative;
-  overflow: hidden;
+/* ---- hero ---- */
+.hero { padding: clamp(64px, 11vh, 130px) 32px clamp(48px, 8vh, 96px); }
+.hero-grid { max-width: var(--max); margin: 0 auto;
+  display: grid; grid-template-columns: 1.15fr .85fr; gap: 64px; align-items: center; }
+.hero h1 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.02em;
+  font-size: clamp(44px, 6.2vw, 86px); line-height: 0.98; margin: 22px 0 26px; }
+.hero h1 em { font-style: italic; color: var(--acc); }
+.hero .lead { max-width: 30em; }
+.hero-actions { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 36px; }
+.btn-primary {
+  font-family: var(--sans); background: var(--acc); color: var(--bg);
+  padding: 16px 28px; border-radius: 999px; font-weight: 600; font-size: 16px;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 10px;
+  transition: transform .16s ease, box-shadow .2s;
+  box-shadow: 0 10px 30px -12px rgba(255,122,26,.6);
 }
-.hero::before {
-  content: ''; position: absolute; top: -40%; left: 50%;
-  width: 900px; height: 900px; transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(124, 92, 255, 0.15), transparent 60%);
-  pointer-events: none;
-}
-.hero .badge {
-  display: inline-block; padding: 6px 14px; border-radius: 999px;
-  background: rgba(124, 92, 255, 0.15); color: var(--acc2);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
-  text-transform: uppercase; margin-bottom: 24px;
-  border: 1px solid rgba(124, 92, 255, 0.3);
-}
-.hero h1 {
-  font-size: clamp(36px, 6vw, 68px); font-weight: 900;
-  letter-spacing: -1.5px; line-height: 1.05;
-  max-width: 900px; margin: 0 auto 24px;
-  background: linear-gradient(135deg, #fff 30%, #b8a8ff 100%);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.hero h1 .accent { color: var(--gold); -webkit-text-fill-color: var(--gold); }
-.hero p.sub {
-  font-size: clamp(16px, 2vw, 20px); color: var(--mut);
-  max-width: 640px; margin: 0 auto 40px; line-height: 1.5;
-}
-.hero-cta {
-  display: inline-flex; align-items: center; gap: 10px;
-  background: var(--acc); color: white; padding: 16px 32px;
-  border-radius: 12px; font-weight: 800; font-size: 18px;
-  text-decoration: none; border: none; cursor: pointer;
-  transition: transform .12s, box-shadow .2s;
-  box-shadow: 0 8px 24px rgba(124, 92, 255, 0.35);
-}
-.hero-cta:hover { transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(124, 92, 255, 0.5); }
-.hero .small {
-  margin-top: 16px; color: var(--mut); font-size: 13px;
-}
-/* Two-product chooser + per-product sections (v101x) */
-.chooser { display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
-  max-width: 820px; margin: 34px auto 0; text-align: left; }
-.ch-card { display: block; background: var(--card, #14141c);
-  border: 1px solid var(--line, #26263a); border-radius: 18px; padding: 26px 24px;
-  text-decoration: none; color: inherit; transition: transform .15s, border-color .15s, box-shadow .15s; }
-.ch-card:hover { transform: translateY(-4px); border-color: var(--acc);
-  box-shadow: 0 20px 54px rgba(0,0,0,.45); }
-.ch-ic { font-size: 34px; margin-bottom: 12px; }
-.ch-card h3 { font-size: 21px; font-weight: 800; margin-bottom: 8px; }
-.ch-card p { color: var(--mut); font-size: 14.5px; line-height: 1.6; }
-.ch-go { display: inline-block; margin-top: 16px; color: var(--acc); font-weight: 800; }
-.prod-tag { display: inline-block; margin-bottom: 12px; padding: 6px 14px;
-  border-radius: 999px; font-weight: 800; font-size: 13px; letter-spacing: .02em;
-  background: rgba(124,92,255,.14); color: var(--acc); }
-.prod-tag.pinktag { background: rgba(255,90,120,.14); color: #ff6a86; }
-.prod-cta-wrap { text-align: center; margin-top: 34px; }
-.prod-cta-wrap .small { margin-top: 12px; color: var(--mut); font-size: 13px; }
-@media (max-width: 640px) { .chooser { grid-template-columns: 1fr; } }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -12px rgba(255,122,26,.75); }
+.link-quiet { font-family: var(--sans); color: var(--ink2); text-decoration: none;
+  font-size: 15px; font-weight: 500; border-bottom: 1px solid var(--line); padding-bottom: 3px;
+  transition: color .18s, border-color .18s; }
+.link-quiet:hover { color: var(--ink); border-color: var(--acc); }
+.hero-note { margin-top: 26px; font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--mut); line-height: 2; }
+.hero-note span { color: var(--ink2); }
+#liveStats { color: var(--gold); }
 
-.preview-strip {
-  padding: 20px 24px 60px;
-  display: flex; justify-content: center; gap: 12px;
-  flex-wrap: wrap; opacity: 0.9;
-}
-.chip {
-  padding: 8px 16px; border-radius: 999px;
-  background: var(--surf); border: 1px solid var(--line);
-  font-size: 13px; font-weight: 600; color: var(--mut);
-  display: inline-flex; align-items: center; gap: 6px;
-}
-.chip.g { border-color: rgba(245, 196, 81, 0.3); color: var(--gold); }
-.chip.p { border-color: rgba(255, 107, 157, 0.3); color: var(--pink); }
-.chip.a { border-color: rgba(124, 92, 255, 0.3); color: var(--acc2); }
-
-section { padding: 80px 24px; }
-section h2 {
-  font-size: clamp(28px, 4vw, 42px); font-weight: 900;
-  letter-spacing: -1px; margin-bottom: 12px; text-align: center;
-}
-section p.section-sub {
-  color: var(--mut); text-align: center; max-width: 640px;
-  margin: 0 auto 60px; font-size: 17px;
-}
-.features {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
-}
-.feat {
-  background: var(--surf); border: 1px solid var(--line);
-  border-radius: 16px; padding: 32px 28px;
-  transition: transform .15s, border-color .15s;
-}
-.feat:hover { transform: translateY(-4px); border-color: rgba(124, 92, 255, 0.4); }
-.feat .icon {
-  width: 44px; height: 44px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--acc), var(--acc2));
+/* caption specimen (a typographic illustration of what the tool outputs) */
+.specimen {
+  position: relative; aspect-ratio: 4/5; border-radius: 20px; overflow: hidden;
+  background: radial-gradient(120% 90% at 30% 10%, #23201d, #0c0b0c 70%);
+  border: 1px solid var(--line); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8);
   display: flex; align-items: center; justify-content: center;
-  margin-bottom: 20px;
 }
-.feat.gold .icon { background: linear-gradient(135deg, var(--gold), #d69a20); }
-.feat.pink .icon { background: linear-gradient(135deg, var(--pink), #d94578); }
-.feat h3 { font-size: 20px; font-weight: 800; margin-bottom: 10px;
-  letter-spacing: -0.3px; }
-.feat p { color: var(--mut); font-size: 15px; }
+.specimen::after { content: ''; position: absolute; inset: 0;
+  background: radial-gradient(90% 60% at 50% 120%, rgba(255,122,26,.14), transparent 60%); }
+.spec-cap { position: relative; text-align: center; padding: 0 26px; z-index: 1; }
+.spec-cap .l1 { font-family: var(--sans); font-weight: 700; font-size: 15px; letter-spacing: .02em;
+  color: var(--ink2); }
+.spec-cap .big { font-family: var(--sans); font-weight: 800; letter-spacing: -0.03em; line-height: .92;
+  font-size: clamp(40px, 9vw, 76px); margin: 8px 0; }
+.spec-cap .big .hit { color: var(--acc); display: inline-block; transform: rotate(-3deg); }
+.spec-cap .l3 { font-family: var(--sans); font-weight: 700; font-size: 18px; color: var(--ink); }
+.spec-tag { position: absolute; left: 16px; bottom: 16px; z-index: 1;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--mut); background: rgba(10,10,11,.55); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
 
-.how {
-  background: linear-gradient(180deg, transparent, var(--surf2));
-}
-.steps {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px; position: relative;
-}
-.step {
-  background: var(--surf); border: 1px solid var(--line);
-  border-radius: 16px; padding: 32px 24px; text-align: center;
-  position: relative;
-}
-.step .num {
-  width: 44px; height: 44px; border-radius: 50%;
-  background: var(--acc); color: white; font-weight: 900; font-size: 20px;
-  display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 20px;
-  box-shadow: 0 4px 12px rgba(124, 92, 255, 0.3);
-}
-.step h4 { font-size: 18px; font-weight: 800; margin-bottom: 8px; }
-.step p { color: var(--mut); font-size: 14px; }
+/* ---- index strip ---- */
+.index { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.index .wrap { display: flex; flex-wrap: wrap; gap: 8px 30px; padding-top: 22px; padding-bottom: 22px; }
+.index span { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--mut); display: inline-flex; align-items: center; gap: 8px; }
+.index span::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--acc); display: inline-block; }
 
-.value {
-  background: linear-gradient(135deg, rgba(124, 92, 255, 0.1), rgba(245, 196, 81, 0.05));
-  border: 1px solid var(--line); border-radius: 24px;
-  padding: 60px 40px; text-align: center;
-}
-.value h2 {
-  font-size: clamp(24px, 3.5vw, 36px); margin-bottom: 20px;
-}
-.value .quote {
-  font-size: 18px; color: var(--mut); font-style: italic;
-  max-width: 640px; margin: 0 auto 30px;
-}
-.value .stats {
-  display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
-  margin-top: 40px;
-}
-.stat .n {
-  font-size: 42px; font-weight: 900; color: var(--gold);
-  letter-spacing: -1px; line-height: 1;
-}
-.stat .l { color: var(--mut); font-size: 13px; margin-top: 6px;
-  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+/* ---- section frame ---- */
+section { padding: clamp(72px, 11vh, 120px) 0; }
+.sec-head { max-width: 720px; margin-bottom: 56px; }
+.sec-head h2 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.02em;
+  font-size: clamp(30px, 4.4vw, 52px); line-height: 1.04; margin: 18px 0 16px; }
+.sec-head h2 em { font-style: italic; color: var(--acc); }
+.sec-head p { font-family: var(--sans); color: var(--ink2); font-size: clamp(16px,1.6vw,18px); line-height: 1.65; }
 
-.bottom-cta {
-  text-align: center; padding: 100px 24px;
-}
-.bottom-cta h2 {
-  font-size: clamp(30px, 5vw, 52px); font-weight: 900;
-  letter-spacing: -1.5px; margin-bottom: 20px;
-}
-.bottom-cta p { color: var(--mut); font-size: 18px; margin-bottom: 32px; }
+/* editorial feature rows */
+.rows { border-top: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 64px 1fr; gap: 28px;
+  padding: 34px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.row .no { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--acc);
+  letter-spacing: .1em; padding-top: 6px; }
+.row .body { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 22px 48px; align-items: start; }
+.row h3 { font-family: var(--serif); font-weight: 500; font-size: clamp(21px, 2.4vw, 27px);
+  letter-spacing: -0.01em; line-height: 1.15; }
+.row p { font-family: var(--sans); color: var(--ink2); font-size: 15.5px; line-height: 1.65; }
+.row:hover h3 { color: var(--acc); transition: color .2s; }
 
-footer {
-  background: var(--surf); border-top: 1px solid var(--line);
-  padding: 40px 24px 30px;
-}
-footer .inner {
-  max-width: 1200px; margin: 0 auto;
-  display: flex; justify-content: space-between; align-items: center;
-  flex-wrap: wrap; gap: 20px;
-}
-footer .copy { color: var(--mut); font-size: 13px; }
-footer .links a {
-  color: var(--mut); text-decoration: none; margin-left: 20px;
-  font-size: 13px; transition: color .15s;
-}
-footer .links a:hover { color: var(--fg); }
+/* how it works */
+.how { background: var(--bg2); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-soft);
+  border: 1px solid var(--line-soft); border-radius: 18px; overflow: hidden; }
+.step { background: var(--bg2); padding: 40px 32px; }
+.step .snum { font-family: var(--serif); font-weight: 500; font-size: 40px; color: var(--acc);
+  line-height: 1; letter-spacing: -0.02em; }
+.step h4 { font-family: var(--sans); font-weight: 700; font-size: 18px; margin: 18px 0 8px; letter-spacing: -0.01em; }
+.step p { font-family: var(--sans); color: var(--ink2); font-size: 14.5px; line-height: 1.6; }
 
-@media (max-width: 640px) {
-  .hero { padding: 60px 20px 40px; }
-  nav a:not(.cta) { display: none; }
-  section { padding: 60px 20px; }
-  .value { padding: 40px 24px; }
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 24px; }
+.stat { border-left: 1px solid var(--line); padding-left: 22px; }
+.stat .n { font-family: var(--serif); font-weight: 500; font-size: clamp(42px,6vw,68px);
+  line-height: .9; letter-spacing: -0.03em; color: var(--ink); }
+.stat.acc .n { color: var(--acc); }
+.stat .l { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--mut); margin-top: 14px; }
+
+/* quote */
+.quote-wrap { max-width: 900px; }
+.quote-wrap blockquote { font-family: var(--serif); font-weight: 400; font-style: italic;
+  font-size: clamp(24px, 3.4vw, 40px); line-height: 1.25; letter-spacing: -0.015em; color: var(--ink); }
+.quote-wrap blockquote .mark { color: var(--acc); font-style: normal; }
+.quote-wrap .by { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--mut); margin-top: 28px; }
+
+/* pricing */
+.pay-once { font-family: var(--sans); font-size: 15.5px; color: var(--ink2); line-height: 1.6;
+  border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: 10px;
+  padding: 18px 22px; margin-bottom: 44px; max-width: 720px; }
+.pay-once strong { color: var(--ink); font-weight: 600; }
+.plans { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; align-items: stretch; }
+.plan { background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+  padding: 34px 30px; display: flex; flex-direction: column; position: relative;
+  transition: transform .18s ease, border-color .18s; }
+.plan:hover { transform: translateY(-4px); border-color: rgba(246,244,239,.24); }
+.plan.hot { border-color: var(--acc); }
+.plan .ptag { position: absolute; top: 20px; right: 22px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--acc); }
+.plan h3 { font-family: var(--serif); font-weight: 500; font-size: 24px; letter-spacing: -0.01em; }
+.plan .aud { font-family: var(--sans); color: var(--mut); font-size: 13.5px; margin: 6px 0 22px; min-height: 38px; }
+.plan .price { font-family: var(--serif); font-weight: 500; font-size: 54px; letter-spacing: -0.03em; line-height: 1; }
+.plan .per { font-family: var(--mono); color: var(--mut); font-size: 11.5px; letter-spacing: .06em; margin-top: 8px; }
+.plan .buy { margin-top: 26px; text-align: center; text-decoration: none;
+  font-family: var(--sans); font-weight: 600; font-size: 15px; padding: 13px 20px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink); transition: background .18s, color .18s, border-color .18s; }
+.plan .buy:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.plan.hot .buy { background: var(--acc); border-color: var(--acc); color: var(--bg); }
+.plan.hot .buy:hover { background: #ff8a34; }
+.plan .feats { list-style: none; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line-soft); }
+.plan .feats li { font-family: var(--sans); color: var(--ink2); font-size: 14px; padding: 7px 0 7px 26px; position: relative; }
+.plan .feats li::before { content: ''; position: absolute; left: 4px; top: 12px; width: 8px; height: 8px;
+  border-right: 1.6px solid var(--acc); border-bottom: 1.6px solid var(--acc); transform: rotate(45deg); }
+.pricing-foot { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--mut);
+  margin-top: 30px; text-transform: uppercase; }
+
+/* faq */
+.faq { max-width: 760px; margin: 80px auto 0; }
+.faq h3 { font-family: var(--serif); font-weight: 500; font-size: 28px; letter-spacing: -0.01em; margin-bottom: 8px; }
+.faq details { border-bottom: 1px solid var(--line); padding: 4px 0; }
+.faq summary { cursor: pointer; font-family: var(--sans); font-weight: 600; font-size: 16px;
+  padding: 18px 40px 18px 0; list-style: none; position: relative; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: '+'; position: absolute; right: 4px; top: 15px; color: var(--acc);
+  font-size: 22px; font-weight: 400; transition: transform .2s; }
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq details p { font-family: var(--sans); color: var(--ink2); font-size: 15px; line-height: 1.7; padding: 0 0 20px; }
+
+/* bottom cta */
+.bottom { text-align: center; padding: clamp(80px,14vh,150px) 32px; border-top: 1px solid var(--line-soft); }
+.bottom h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(34px,6vw,66px);
+  letter-spacing: -0.02em; line-height: 1.02; margin-bottom: 22px; }
+.bottom h2 em { font-style: italic; color: var(--acc); }
+.bottom p { font-family: var(--sans); color: var(--ink2); font-size: 17px; margin-bottom: 34px; }
+
+/* footer */
+footer { border-top: 1px solid var(--line-soft); padding: 46px 32px 40px; }
+footer .inner { max-width: var(--max); margin: 0 auto; display: flex; justify-content: space-between;
+  align-items: center; flex-wrap: wrap; gap: 20px; }
+footer .copy { font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; color: var(--mut); text-transform: uppercase; }
+footer .links { display: flex; flex-wrap: wrap; gap: 22px; }
+footer .links a { font-family: var(--sans); color: var(--mut); text-decoration: none; font-size: 14px; transition: color .18s; }
+footer .links a:hover { color: var(--ink); }
+
+/* reveal motion */
+[data-reveal] { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+[data-reveal].in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+  .btn-primary:hover, .cta:hover, .plan:hover { transform: none; }
+}
+
+/* responsive */
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+  .specimen { max-width: 420px; margin: 0 auto; }
+  .row .body { grid-template-columns: 1fr; gap: 10px; }
+  .steps { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2,1fr); gap: 34px 24px; }
+  .plans { grid-template-columns: 1fr; max-width: 460px; margin: 0 auto; }
+}
+@media (max-width: 620px) {
+  .wrap, nav .inner, .hero, .bottom, footer { padding-left: 22px; padding-right: 22px; }
+  .nav-links a:not(.cta) { display: none; }
+  .row { grid-template-columns: 40px 1fr; gap: 16px; }
   footer .inner { flex-direction: column; text-align: center; }
-  footer .links a { margin: 0 10px; }
-}
-
-/* Pricing */
-.pay-once {
-  max-width: 760px; margin: 0 auto 48px; text-align: center;
-  background: linear-gradient(135deg, rgba(245, 196, 81, 0.1), rgba(124, 92, 255, 0.08));
-  border: 1px solid rgba(245, 196, 81, 0.35); border-radius: 16px;
-  padding: 24px 28px; font-size: 16px; line-height: 1.6;
-}
-.pay-once strong { color: var(--gold); }
-.plans {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 24px; align-items: stretch; margin-top: 12px;
-}
-.plan {
-  background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
-  padding: 40px 28px 32px; text-align: center; position: relative;
-  display: flex; flex-direction: column;
-  transition: transform .15s, border-color .15s;
-}
-.plan:hover { transform: translateY(-4px); border-color: rgba(124, 92, 255, 0.4); }
-.plan.hot { border-color: var(--acc); box-shadow: 0 8px 32px rgba(124, 92, 255, 0.25); }
-.plan.best { border-color: rgba(245, 196, 81, 0.5); }
-.plan .tag {
-  position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
-  background: var(--acc); color: #fff; font-size: 11px; font-weight: 800;
-  letter-spacing: 1px; text-transform: uppercase; padding: 4px 14px;
-  border-radius: 999px; white-space: nowrap;
-}
-.plan.best .tag { background: var(--gold); color: var(--bg); }
-.plan h3 { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 12px; }
-.plan .price { font-size: 44px; font-weight: 900; letter-spacing: -1px; line-height: 1; }
-.plan .per { color: var(--mut); font-size: 13px; margin-top: 4px; }
-.plan .buy {
-  margin-top: 24px; display: block; background: var(--acc); color: #fff;
-  text-decoration: none; font-weight: 800; font-size: 15px;
-  padding: 13px 20px; border-radius: 10px;
-  transition: transform .12s, box-shadow .15s;
-}
-.plan .buy:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124, 92, 255, 0.4); }
-.pricing-foot { text-align: center; color: var(--mut); font-size: 14px; margin-top: 28px; }
-.plan .aud { color: var(--mut); font-size: 13px; margin: -6px 0 14px; }
-.plan .feats { list-style: none; margin-top: 22px; text-align: left; }
-.plan .feats li { color: var(--mut); font-size: 14px; padding: 5px 0 5px 24px; position: relative; }
-.plan .feats li::before { content: '✓'; position: absolute; left: 2px; color: var(--acc2); font-weight: 800; }
-.faq { max-width: 680px; margin: 64px auto 0; }
-.faq h3 { text-align: center; font-size: 22px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 20px; }
-.faq details { background: var(--surf); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; padding: 0 18px; }
-.faq summary { cursor: pointer; font-weight: 700; font-size: 15px; padding: 15px 0; list-style: none; position: relative; }
-.faq summary::after { content: '+'; position: absolute; right: 2px; color: var(--acc2); font-weight: 800; font-size: 18px; }
-.faq details[open] summary::after { content: '–'; }
-.faq details p { color: var(--mut); font-size: 14px; line-height: 1.6; padding: 0 0 16px; }
-@media (max-width: 640px) {
-  .pay-once { padding: 20px; font-size: 15px; }
-  .plan { padding: 36px 22px 26px; }
 }
 </style>
 </head>
@@ -296,241 +263,171 @@ footer .links a:hover { color: var(--fg); }
 
 <nav>
   <div class="inner">
-    <div class="logo"><img src="/logo_white.png" alt="">Douchko<span class="dot">·</span>VE<span class="beta">Beta</span></div>
-    <div>
-      <a href="#captions">Captions</a>
+    <a class="logo" href="/"><img src="/logo_white.png" alt="">DouchkoVE<span class="beta">Beta</span></a>
+    <div class="nav-links">
+      <a href="#captions">Product</a>
+      <a href="#how">How it works</a>
       <a href="#pricing">Pricing</a>
-      <a href="/app" class="cta">Get started</a>
+      <a href="/app" class="cta solid">Open the app</a>
     </div>
   </div>
 </nav>
 
-<section class="hero">
-  <span class="badge">Private Beta · v0.1</span>
-  <h1>Make your talking-head video<br><span class="accent">look professionally edited</span></h1>
-  <p class="sub">An AI director adds editorial captions, effects and camera moves that fit
-    exactly what you say. Upload, and get back a finished clip. No subscription, ever.</p>
-
-  <div class="chooser">
-    <a href="/app#create" class="ch-card">
-      <div class="ch-ic">✍️</div>
-      <h3>Auto-Captions</h3>
-      <p>Upload a talking-head video. An AI director finds your hook, picks from 26
-        animations and places every word like an editor would.</p>
-      <span class="ch-go">Caption my video →</span>
-    </a>
+<header class="hero">
+  <div class="hero-grid">
+    <div data-reveal>
+      <span class="kicker">Auto-captions · No subscription</span>
+      <h1>Captions that look like<br>you <em>hired an editor.</em></h1>
+      <p class="lead">Upload a talking-head video. An AI director reads what you say, finds the
+        hook, and places every word the way a good editor would: effects, emphasis and camera
+        moves that fit the moment. You get back a finished clip, not subtitles on top.</p>
+      <div class="hero-actions">
+        <a href="/app#create" class="btn-primary">Caption my video
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="/app" class="link-quiet">Try the 10-second demo, no account</a>
+      </div>
+      <div class="hero-note">
+        3 free minutes every month · <span>No card</span> · <span>No subscription, ever</span>
+        <div id="liveStats" style="display:none;"></div>
+      </div>
+    </div>
+    <div data-reveal>
+      <div class="specimen" aria-hidden="true">
+        <div class="spec-cap">
+          <div class="l1">this part right here is</div>
+          <div class="big">the <span class="hit">hook</span></div>
+          <div class="l3">and the AI knows it.</div>
+        </div>
+        <span class="spec-tag">Rendered output · not a template</span>
+      </div>
+    </div>
   </div>
+</header>
 
-  <div class="small" style="margin-top:16px;">
-    <a href="/app" style="color:var(--acc); font-weight:700; text-decoration:none;">
-      Or test captions on your own clip first · 10 second demo, no account →</a>
+<div class="index">
+  <div class="wrap">
+    <span>AI director</span>
+    <span>Scene analysis per moment</span>
+    <span>26 text animations</span>
+    <span>Beat-synced to music</span>
+    <span>Cut-out matting</span>
+    <span>17 languages</span>
+    <span>Vertical · wide · square</span>
   </div>
-  <div class="small">3 free minutes every month · No credit card required · No subscription, ever</div>
-  <div class="small" id="liveStats" style="display:none; margin-top:8px; color:var(--gold);
-       font-weight:700;"></div>
-</section>
-
-<script>
-fetch('/api/stats').then(r => r.json()).then(d => {
-  if (d && d.renders > 100) {
-    const el = document.getElementById('liveStats');
-    el.textContent = d.renders.toLocaleString() + ' videos rendered so far';
-    el.style.display = 'block';
-  }
-}).catch(() => {});
-</script>
-
-<div class="preview-strip wrap">
-  <span class="chip a">AI director</span>
-  <span class="chip g">Scene analysis per moment</span>
-  <span class="chip p">26 text animations</span>
-  <span class="chip">Beat-synced to music</span>
-  <span class="chip">Adaptive colors</span>
-  <span class="chip">Cut-out matting</span>
-  <span class="chip">Vertical, wide, square</span>
 </div>
 
 <section id="captions" class="wrap">
-  <span class="prod-tag">✍️ Auto-Captions</span>
-  <h2>Captions that look like you hired an editor</h2>
-  <p class="section-sub">Upload a talking-head video. The AI director reads your
-    transcript, finds the hook and places every word the way a good editor would —
-    it knows when silence works and when a word should hit hard.</p>
+  <div class="sec-head" data-reveal>
+    <span class="kicker">The product</span>
+    <h2>Not a subtitle plugin. An <em>editor</em> that gets what you mean.</h2>
+    <p>It reads your transcript, decides where words should hit hard and where silence works,
+      and renders a finished piece. Nothing is random, and nothing is a fixed template.</p>
+  </div>
 
-  <div class="features">
-    <div class="feat">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-        </svg>
+  <div class="rows">
+    <div class="row" data-reveal>
+      <div class="no">01</div>
+      <div class="body">
+        <h3>An AI director, not a template</h3>
+        <p>The AI chooses keywords, effects and camera moves from what you actually say: 8 looks,
+          26 text animations, beat-synced to your music. Every video is directed fresh.</p>
       </div>
-      <h3>An AI director, not a template</h3>
-      <p>The AI decides keywords, effects and camera moves from what you actually say.
-        Nothing is random. 8 looks, 26 text animations, beat-synced to your music.</p>
     </div>
-
-    <div class="feat gold">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
-        </svg>
+    <div class="row" data-reveal>
+      <div class="no">02</div>
+      <div class="body">
+        <h3>Fix the transcript before it renders</h3>
+        <p>Names, technical terms, brands: you see the full transcript first and correct any word.
+          It only renders once it reads right, so nothing lands on screen misspelled.</p>
       </div>
-      <h3>Fix the transcript before it renders</h3>
-      <p>Names, technical terms, brands: you see the full transcript before rendering
-        and can correct any word. It only renders once it reads right.</p>
     </div>
-
-    <div class="feat">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-        </svg>
+    <div class="row" data-reveal>
+      <div class="no">03</div>
+      <div class="body">
+        <h3>Sound, emphasis and a hook score</h3>
+        <p>Real licensed sounds instead of synthetic beeps, matching emphasis on the words that
+          matter, and a hook score that rates your opener before you post it.</p>
       </div>
-      <h3>Sound, emojis, hook score</h3>
-      <p>Real licensed sounds instead of synthetic beeps, matching emojis, a hook
-        score for your opener, and captions in 17 languages.</p>
     </div>
-
-    <div class="feat gold">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 7.7l5.4-.8z"/>
-        </svg>
+    <div class="row" data-reveal>
+      <div class="no">04</div>
+      <div class="body">
+        <h3>It learns your style</h3>
+        <p>Show it one video whose captions you love. It studies the pacing, emphasis and hook
+          behaviour, and your future renders follow that taste. Every edit teaches it more.</p>
       </div>
-      <h3>Learns your style</h3>
-      <p>Show it one video whose captions you love. It studies the pacing, emphasis
-        and hook behaviour, and your future renders follow that taste. Every edit
-        you make teaches it more.</p>
     </div>
   </div>
-  <div class="prod-cta-wrap">
-    <a href="/app#create" class="hero-cta">Caption my video
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+
+  <div style="margin-top:44px" data-reveal>
+    <a href="/app#create" class="btn-primary">Caption my video
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </a>
-    <div class="small">10 second demo, no account · watermark clears with your first purchase</div>
+    <span style="font-family:var(--mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--mut); margin-left:18px;">Watermark clears with your first purchase</span>
   </div>
 </section>
-
-<!-- v123: Motion Graphics ausgeblendet (Fokus auf Captions). Zum Wiederanschalten diesen
-     Kommentar entfernen und in web/index.html MOTION_ENABLED = true setzen.
-<section id="motion" class="wrap">
-  <span class="prod-tag pinktag">Tool 2 · 🌀 Motion Graphics</span>
-  <h2>3D motion graphics from a one-line brief</h2>
-  <p class="section-sub">No timeline, no After Effects. Describe the clip you want and
-    get a fresh, high-end motion-graphics piece — every one composed from scratch, never
-    a template.</p>
-
-  <div class="features">
-    <div class="feat pink">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-      </div>
-      <h3>Real 3D, not flat shapes</h3>
-      <p>Lit geometry with a metal surface, real depth, drifting camera and beat-reactive
-        motion. Rendered frame by frame on the server — no plugins on your side.</p>
-    </div>
-
-    <div class="feat pink">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <path d="M12 3v18M3 12h18"/>
-        </svg>
-      </div>
-      <h3>Type a brief, get a clip</h3>
-      <p>“Bold intro for my fitness channel.” That’s the whole workflow. Toggle pure
-        motion graphics with no text, or keep kinetic type — you decide.</p>
-    </div>
-
-    <div class="feat pink">
-      <div class="icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-          <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14"/>
-        </svg>
-      </div>
-      <h3>Drop it onto your footage</h3>
-      <p>Export as MP4, or as ProRes 4444 with a real alpha channel and drop the motion
-        straight onto your edit. One credit per clip, no subscription.</p>
-    </div>
-  </div>
-  <div class="prod-cta-wrap">
-    <a href="/app#motion" class="hero-cta">Create motion
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </a>
-  </div>
-</section>
--->
 
 <section id="how" class="how">
   <div class="wrap">
-    <h2>Three steps, done</h2>
-    <p class="section-sub">From upload to finished video in under 30 minutes, depending on length.</p>
-
-    <div class="steps">
+    <div class="sec-head" data-reveal>
+      <span class="kicker">How it works</span>
+      <h2>Three steps, done.</h2>
+      <p>From upload to a finished video in under 30 minutes, depending on length.</p>
+    </div>
+    <div class="steps" data-reveal>
       <div class="step">
-        <div class="num">1</div>
+        <div class="snum">01</div>
         <h4>Upload your video</h4>
-        <p>Vertical, wide or square. Up to 3 minutes. Any format.</p>
+        <p>Vertical, wide or square. Up to 3 minutes, any common format.</p>
       </div>
       <div class="step">
-        <div class="num">2</div>
+        <div class="snum">02</div>
         <h4>Pick a look</h4>
-        <p>8 looks: TikTok, Creator, Editorial, Poster, Retro, Elegant, Cinematic, Clean.
-          Or fine-tune everything yourself.</p>
+        <p>TikTok, Creator, Editorial, Poster, Retro, Elegant, Cinematic, Clean, or tune
+          everything yourself.</p>
       </div>
       <div class="step">
-        <div class="num">3</div>
+        <div class="snum">03</div>
         <h4>Let it render</h4>
-        <p>Check the transcript, tweak the moments editor if you want, render.
-          Download the finished MP4. We auto-delete it from the server after 7 days.</p>
+        <p>Check the transcript, tweak the moments editor if you want, render, download the MP4.
+          Files auto-delete after 7 days.</p>
       </div>
     </div>
   </div>
 </section>
 
 <section class="wrap">
-  <div class="value">
-    <h2>For creators who take this seriously</h2>
-    <p class="quote">"I didn't want a tool that sticks subtitles on top. I wanted an editor
-      that understands what I'm saying and turns it into something that looks like an
-      editorial piece."</p>
-
-    <div class="stats">
-      <div class="stat">
-        <div class="n">26</div>
-        <div class="l">Text animations</div>
-      </div>
-      <div class="stat">
-        <div class="n">8</div>
-        <div class="l">Looks</div>
-      </div>
-      <div class="stat">
-        <div class="n">17</div>
-        <div class="l">Languages</div>
-      </div>
-      <div class="stat">
-        <div class="n">0</div>
-        <div class="l">Subscription traps</div>
-      </div>
-    </div>
+  <div class="quote-wrap" data-reveal>
+    <span class="kicker">Why it exists</span>
+    <blockquote style="margin-top:24px;">I didn’t want a tool that sticks subtitles on top.
+      I wanted an editor that <span class="mark">understands what I’m saying</span> and turns it
+      into something that looks like an editorial piece.</blockquote>
+    <div class="by">The reason DouchkoVE was built</div>
+  </div>
+  <div class="stats" style="margin-top:72px" data-reveal>
+    <div class="stat acc"><div class="n">26</div><div class="l">Text animations</div></div>
+    <div class="stat"><div class="n">8</div><div class="l">Editorial looks</div></div>
+    <div class="stat"><div class="n">17</div><div class="l">Languages</div></div>
+    <div class="stat acc"><div class="n">0</div><div class="l">Subscription traps</div></div>
   </div>
 </section>
 
 <section id="pricing" class="wrap">
-  <h2>Pricing</h2>
-  <p class="section-sub">Buy credits, render videos, that's it.
-    1 credit = 1 minute of finished video (billed per started minute).</p>
+  <div class="sec-head" data-reveal>
+    <span class="kicker">Pricing</span>
+    <h2>Buy credits. Render videos. <em>That’s it.</em></h2>
+    <p>1 credit = 1 minute of finished video, billed per started minute.</p>
+  </div>
 
-  <div class="pay-once">
-    <strong>One-time purchase.</strong> No subscription, no auto-renewal, no surprise
-    charges. Your credits stay valid for <strong>6 months</strong>.
+  <div class="pay-once" data-reveal>
+    <strong>One-time purchase.</strong> No subscription, no auto-renewal, no surprise charges.
+    Your credits stay valid for <strong>6&nbsp;months</strong>, and we say it here and before you pay,
+    not in the fine print.
   </div>
 
   <div class="plans">
-    <div class="plan">
+    <div class="plan" data-reveal>
       <h3>Starter</h3>
       <p class="aud">For trying it on your first real videos</p>
       <div class="price">€9</div>
@@ -543,8 +440,8 @@ fetch('/api/stats').then(r => r.json()).then(d => {
         <li>Credits valid for 6 months</li>
       </ul>
     </div>
-    <div class="plan hot">
-      <span class="tag">Most popular</span>
+    <div class="plan hot" data-reveal>
+      <span class="ptag">Most popular</span>
       <h3>Creator</h3>
       <p class="aud">For creators who post every week</p>
       <div class="price">€19</div>
@@ -557,8 +454,8 @@ fetch('/api/stats').then(r => r.json()).then(d => {
         <li>Credits valid for 6 months</li>
       </ul>
     </div>
-    <div class="plan best">
-      <span class="tag">Best value</span>
+    <div class="plan" data-reveal>
+      <span class="ptag">Best value</span>
       <h3>Pro</h3>
       <p class="aud">For daily creators and small teams</p>
       <div class="price">€39</div>
@@ -572,57 +469,38 @@ fetch('/api/stats').then(r => r.json()).then(d => {
       </ul>
     </div>
   </div>
-
-  <p class="pricing-foot">You buy once and render whenever you want.
-    No countdown, no "pause plan", no cancellation maze.</p>
+  <p class="pricing-foot">Buy once, render whenever. No countdown, no “pause plan”, no cancellation maze.</p>
 
   <div class="faq">
     <h3>Common questions</h3>
-    <details>
-      <summary>What is a credit?</summary>
-      <p>1 credit renders 1 minute of finished video, billed per started minute.
-        A 90 second clip costs 2 credits.</p>
-    </details>
-    <details>
-      <summary>Do I need a subscription?</summary>
-      <p>No. You buy credits once. There is no plan, no renewal and nothing to cancel.</p>
-    </details>
-    <details>
-      <summary>Do credits expire?</summary>
-      <p>Yes, after 6 months. We say that here and before you pay, not in the fine print.</p>
-    </details>
-    <details>
-      <summary>Can I try it before paying?</summary>
-      <p>Yes. There is a 10 second demo without an account, and every confirmed
-        account gets 2 free credits plus 3 free minutes per month (watermarked
-        until your first purchase).</p>
-    </details>
-    <details>
-      <summary>What happens to my videos?</summary>
-      <p>They are private, and we delete them from the server automatically
-        after 7 days. Download your renders in time.</p>
-    </details>
+    <details><summary>What is a credit?</summary>
+      <p>1 credit renders 1 minute of finished video, billed per started minute. A 90-second clip costs 2 credits.</p></details>
+    <details><summary>Do I need a subscription?</summary>
+      <p>No. You buy credits once. There is no plan, no renewal and nothing to cancel.</p></details>
+    <details><summary>Do credits expire?</summary>
+      <p>Yes, after 6 months. We say so here and before you pay, and we remind you by email before anything expires.</p></details>
+    <details><summary>Can I try it before paying?</summary>
+      <p>Yes. There is a 10-second demo without an account, and every confirmed account gets free credits plus
+        3 free minutes per month (watermarked until your first purchase).</p></details>
+    <details><summary>What happens to my videos?</summary>
+      <p>They are private and deleted from the server automatically after 7 days. Download your renders in time.</p></details>
   </div>
-
 </section>
 
-<div class="bottom-cta wrap">
-  <h2>Give it a try</h2>
+<div class="bottom">
+  <span class="kicker" style="justify-content:center;">Early access</span>
+  <h2 style="margin-top:20px;">Make your next video<br>look <em>edited.</em></h2>
   <p>3 free minutes every month. No card, no subscription, no strings.</p>
-  <a href="/app" class="hero-cta">
-    Open the app
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M5 12h14M12 5l7 7-7 7"/>
-    </svg>
+  <a href="/app" class="btn-primary" style="font-size:17px;">Open the app
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
   </a>
 </div>
 
 <footer>
   <div class="inner">
-    <div class="copy">© 2026 DouchkoVE · v0.1 Early Access</div>
+    <div class="copy">© 2026 DouchkoVE · Early Access</div>
     <div class="links">
-      <a href="#features">Features</a>
+      <a href="#captions">Product</a>
       <a href="#pricing">Pricing</a>
       <a href="/imprint">Imprint</a>
       <a href="/terms">Terms</a>
@@ -632,5 +510,25 @@ fetch('/api/stats').then(r => r.json()).then(d => {
   </div>
 </footer>
 
+<script>
+// Live render count (only shown once it is meaningfully high).
+fetch('/api/stats').then(r => r.json()).then(d => {
+  if (d && d.renders > 100) {
+    const el = document.getElementById('liveStats');
+    el.textContent = d.renders.toLocaleString() + ' videos rendered so far';
+    el.style.display = 'block';
+  }
+}).catch(() => {});
+
+// Scroll reveal: subtle, respects reduced-motion (handled in CSS).
+(function () {
+  const els = document.querySelectorAll('[data-reveal]');
+  if (!('IntersectionObserver' in window)) { els.forEach(e => e.classList.add('in')); return; }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+  els.forEach(e => io.observe(e));
+})();
+</script>
 </body>
 </html>

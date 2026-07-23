@@ -1621,7 +1621,15 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <h3>Top up</h3>
         <p class="hint">The bigger the pack, the cheaper each credit. Credits stay valid for 6 months.</p>
         <div id="pricingGrid" class="pricing-grid"></div>
-        <p style="margin-top:18px; color:var(--mut); font-size:12.5px;">
+        <label style="display:flex; gap:10px; align-items:flex-start; margin-top:18px;
+               color:var(--mut); font-size:12.5px; cursor:pointer;">
+          <input type="checkbox" id="buyConsent" style="margin-top:2px; flex:0 0 auto;">
+          <span>I expressly request that the service begins immediately, and I acknowledge
+            that I lose my right of withdrawal for credits that are then consumed
+            (§ 356 (4) BGB). The unused portion stays refundable within 14 days.
+            See the <a href="/terms" target="_blank" style="color:var(--acc2);">withdrawal notice</a>.</span>
+        </label>
+        <p style="margin-top:12px; color:var(--mut); font-size:12.5px;">
           Secure payment via Stripe · Card or SEPA debit · Receipt by email.
           By purchasing you agree to our <a href="/terms" target="_blank" style="color:var(--acc2);">Terms</a>.
           Refund of unused credits within 14 days.
@@ -3405,10 +3413,17 @@ async function renderBilling() {
 
 async function startCheckout(btn) {
   const pack = btn.dataset.pack;
+  // v127-recht: Widerrufs-Einwilligung muss aktiv angehakt sein.
+  const consent = document.getElementById('buyConsent');
+  if (!consent || !consent.checked) {
+    toast('Please confirm the withdrawal notice before purchasing.', 'info');
+    if (consent) consent.focus();
+    return;
+  }
   const original = btn.textContent;
   btn.disabled = true; btn.textContent = 'Connecting …';
   try {
-    const fd = new FormData(); fd.append('pack', pack);
+    const fd = new FormData(); fd.append('pack', pack); fd.append('consent', '1');
     const r = await fetch('/api/checkout', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok) {

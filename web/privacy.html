@@ -34,8 +34,10 @@ a:hover { text-decoration: underline; }
 
   <div class="hi">
     <p><strong>Summary:</strong> You upload a video, we add captions, you download it.
-      Everything is auto-deleted after 7 days. No tracking, no data sharing
-      except one processing step with our AI provider.</p>
+      Your videos and transcripts are auto-deleted after 7 days. Your account and
+      purchase history stay until you delete your account. We do not run advertising
+      trackers. Besides our AI provider (captioning), your data is handled by Stripe
+      (payments) and our hosting provider netcup, as described below.</p>
   </div>
 
   <h2>Controller</h2>
@@ -43,17 +45,23 @@ a:hover { text-decoration: underline; }
 
   <h2>What data we process</h2>
   <ul>
-    <li><strong>Your video:</strong> uploaded by you for processing</li>
-    <li><strong>Your account email &amp; password (hashed):</strong> for login and billing</li>
+    <li><strong>Your video:</strong> uploaded by you for processing.
+      Legal basis: performance of our contract with you (Art. 6(1)(b) GDPR).</li>
+    <li><strong>Your account email &amp; password (hashed):</strong> for login and billing.
+      Legal basis: performance of our contract with you (Art. 6(1)(b) GDPR).</li>
     <li><strong>Server logs:</strong> IP address and timestamps for operations
-      (kept no longer than 14 days)</li>
+      (kept no longer than 14 days). Legal basis: our legitimate interest in the
+      security and stable operation of the service (Art. 6(1)(f) GDPR).</li>
     <li><strong>Payment data:</strong> handled by Stripe (Stripe Payments Europe,
-      Ltd., Ireland). We only see your email and the amount paid.</li>
-    <li><strong>Referral fraud prevention:</strong> when a referral bonus is paid out,
-      we store a one-way salted hash of the invited email address (never the address
-      itself). This lets us grant the bonus only once per person and prevent abuse.
-      Legal basis: our legitimate interest in preventing fraud (Art. 6(1)(f) GDPR).
-      This pseudonymous hash is kept even after account deletion for the same reason.</li>
+      Ltd., Ireland). We only see your email and the amount paid.
+      Legal basis: performance of our contract with you (Art. 6(1)(b) GDPR).</li>
+    <li><strong>Fraud prevention (referral &amp; free credits):</strong> when a
+      referral bonus or a free credit (welcome / monthly free minutes) is granted,
+      we store a one-way salted hash of the email address (never the address
+      itself). This lets us grant each free benefit only once per person and prevent
+      abuse such as delete-and-re-register farming. Legal basis: our legitimate
+      interest in preventing fraud (Art. 6(1)(f) GDPR). This pseudonymous hash is
+      kept even after account deletion for the same reason.</li>
   </ul>
 
   <h2>What we do NOT do</h2>
@@ -74,6 +82,10 @@ a:hover { text-decoration: underline; }
   <p>The provider is contractually bound <strong>not to use API data for model training</strong>
     and to delete it after 30 days. Details:
     <a href="https://openai.com/policies/eu-privacy-policy" target="_blank">privacy policy</a>.</p>
+  <p>A data processing agreement (Art. 28 GDPR) is in place with the provider. As the
+    provider is located in the USA, the transfer is based on the EU Standard Contractual
+    Clauses and, where applicable, the provider's certification under the EU-US Data
+    Privacy Framework (Art. 44 to 46 GDPR).</p>
 
   <h2>Retention</h2>
   <ul>
@@ -83,7 +95,8 @@ a:hover { text-decoration: underline; }
   </ul>
 
   <h2>Your rights</h2>
-  <p>You have the right to access, correct, delete, and object.
+  <p>You have the right to access, rectification, erasure, restriction of processing
+    (Art. 18 GDPR), data portability (Art. 20 GDPR), and to object.
     Contact: <a href="mailto:Ismet@douchkove.com">Ismet@douchkove.com</a>.
     Right to complain to the responsible supervisory authority.</p>
 

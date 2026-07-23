@@ -3,6 +3,58 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v127 Launch-Audit-Fixes (Credits/Auth/Missbrauch/Recht) + Landing-Redesign.** Ismet vor
+  dem Launch: "Keine Bugs wegen Credits, die verloren gehen, kein Hack, rechtssicher?" Dazu ein
+  adversarialer Audit ueber 6 Achsen (Credits, Auth, Injection/XSS, Payment, Missbrauch, Recht),
+  jeder Fund von einem zweiten Agenten gegengeprueft. Ergebnis: **Injection/XSS/SQL = 0 Funde,
+  Stripe-Webhook signaturgeprueft + nicht faelschbar**, aber 18 bestaetigte Punkte (5 hoch, 10
+  mittel, 5 niedrig). EHRLICH: alle hier nur unter Linux/CPU mit isolierter Test-DB verifiziert.
+  - **CREDIT-VERLUST (die zwei hoch):** Ein fehlgeschlagener + erstatteter Render lieferte den
+    Retry GRATIS aus (netto 0 Credits) - `_render_charged` prueft nur die Existenz der
+    Reservierungs-Zeile, die der alte Refund stehen liess. Gleiche Luecke beim Alpha-Export.
+    Fix: `_refund_credits` LOESCHT jetzt die Reservierung (idempotent ueber rowcount) statt eine
+    Gegenbuchung zu setzen; das Ledger-Invariant (Summe==balance) bleibt exakt gleich, aber der
+    Retry wird wieder normal abgerechnet. `resv_like`-Muster fuer Render/Alpha/Style.
+  - **DOPPEL-GUTSCHRIFT (mittel/niedrig):** Monats-Freikredit und Welcome hatten - anders als
+    Kauf/Referral - keinen Unique-Index, zwei parallele Requests konnten doppelt gutschreiben.
+    Fix: partielle Unique-Indizes `ux_ledger_welcome`/`ux_ledger_monthly`, beide Grants laufen in
+    EINER `BEGIN IMMEDIATE`-Transaktion mit `INSERT OR IGNORE`.
+  - **FREE-TIER-FARMING (mittel, Ismet-Wahl "Mail-Hash speichern"):** Konto loeschen + mit
+    derselben Mail neu = Freikredite erneut. Neue Tabelle `credit_claims` (gesalzener E-Mail-HASH,
+    kein Klartext, kind=welcome/monthly-YYYY-MM) ueberlebt die Loeschung bewusst -> pro Person
+    genau 1x. Zusaetzlich Wegwerf-Mail-Domains beim Sign-up abgewiesen (`_is_disposable_email`,
+    vorher nur der Referral-Bonus). DSGVO Art. 6(1)(f), steht in /privacy.
+  - **RATE-LIMIT-SPOOF (mittel):** `X-Forwarded-For` war client-spoofbar (uvicorn traut dem
+    linken Hop), also Login-Brute-Force + Gratis-Demo-Quota aushebelbar. Fix: `_client_ip` nimmt
+    den RECHTEN (von Caddy angehaengten, echten) Hop; alle Rate-Limit-/Demo-Pfade nutzen ihn.
+  - **QUEUE-/RE-RENDER-FLOODING (mittel):** ein Konto konnte die unbounded Queue (ein Worker)
+    mit Gratis-Jobs (Pre-Mode/Re-Render) fluten und alle aushungern. Fix: `_enqueue_guard`
+    (max. 3 gleichzeitig wartende/laufende Jobs pro Konto, DVE_INFLIGHT_CAP) an Upload + Re-Render;
+    Re-Render lehnt zusaetzlich ab, wenn schon einer laeuft.
+  - **OWNER-SQUAT (niedrig):** Owner-Rechte (globale Stil-Regie, Gratis-Whisper) hingen nur an
+    einer evtl. unregistrierten Mail. Fix: `OWNER_EMAIL` ist nicht mehr registrierbar; `_owner_ok`
+    verlangt zusaetzlich `verified`.
+  - **PAYMENT-HAERTUNG (niedrig):** Webhook schreibt Sekunden jetzt aus dem SERVER-Katalog
+    `PACKS[pack]` gut statt der Metadaten-Zahl zu vertrauen (an den Katalog gekoppelt).
+  - **RECHT:** Datenschutz - Rechtsgrundlagen pro Zweck (Art. 6(1)(b)/(f)), US-Transfer-Mechanismus
+    (SCC/DPF + Art.-28-DPA) ergaenzt, Zusammenfassung entschaerft (7-Tage-Loeschung nur fuer
+    Videos), Rechte-Liste um Art. 18/20 vervollstaendigt. AGB - Widerrufs-Einwilligung wird jetzt
+    aktiv erfasst: Pflicht-Checkbox im Kauf (sofortige Ausfuehrung + Verzicht bewusst, § 356(4)
+    BGB), server-seitig mit Zeitstempel in `consents` protokolliert; volle Widerrufsbelehrung +
+    Muster-Widerrufsformular; §3 Credit-Verfall bei Loeschung um den 14-Tage-Refund-Vorbehalt
+    ergaenzt. Impressum - TMG->DDG, RStV->MStV, Kleinunternehmer § 19 UStG (keine USt-IdNr).
+  - **Landing-Redesign (Ismet: "sieht komplett nach KI aus"):** neue Editorial-Landing mit dem
+    ui-ux-pro-max-Skill (Exaggerated Minimalism) - Newsreader-Serif-Headlines, Mono-Labels,
+    warmes Schwarz + ein Orange, nummerierte Feature-Zeilen, Scroll-Reveal (respektiert
+    prefers-reduced-motion). Motion bleibt fuer Kunden ausgeblendet (Single-Product Captions).
+    ALLE Gedankenstriche raus (harte Ismet-Regel). Auf Desktop + Mobil gerendert + freigegeben.
+  - **Offen fuer Ismet (nicht code-loesbar):** Stripe Live-Keys + Webhook-Secret scharfstellen;
+    OpenAI-DPA/AVV formal unterschreiben (der Privacy-Text nennt den Mechanismus bereits);
+    optional DVE_REF_SALT setzen; UptimeRobot auf /api/health.
+  Selftest **717/717 gruen** (funktional: Gratis-Render-Luecke zu / Refund loescht Reservierung /
+  Retry zahlt, Welcome-Farming nach Loeschung geblockt, Monats-Kredit 1x atomar, Unique-Indizes
+  da, XFF-Spoof wirkungslos, OWNER_EMAIL nicht registrierbar, Wegwerf-Domain erkannt; plus
+  Verdrahtungs-/Recht-Text-Garantien). render.py unveraendert.
 - **v126 Kunden-Stil-Referenz + GPT-5-Restmigration + Referral-Haertung (live).** Ismet:
   eine innovative, machbare Funktion vor dem Launch, nur noch GPT-5.
   - **Kunden-Stil (die Innovation):** Jedes Konto lernt der Regie den EIGENEN Wunsch-Stil aus
