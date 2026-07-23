@@ -20,13 +20,13 @@ import { clamp01, easeOutQuint, easeInOutCubic, easeInOutQuint, easeOutBack, mix
 import { springStep } from './lib/spring';
 import { hash01 } from './lib/rng';
 import { FONT_FAMILY } from './fonts';
-import { themeFor, type Theme } from './showcaseThemes';
+import { themeFor, applyTheme, type Theme, type Custom } from './showcaseThemes';
 
 const FONT = `'${FONT_FAMILY}', system-ui, -apple-system, "SF Pro Display", sans-serif`;
 
 // The storyboard can come from props (per-user, generated from a transcript by the director) —
 // falling back to the built-in demo storyboard when none is supplied.
-export type MotionShowcaseProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string };
+export type MotionShowcaseProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string; readonly custom?: Custom };
 
 // ───────────────────────────────────────────────────────────────────────────── storyboard
 // Each shot names an archetype + its (transcript-sourced) copy + how long it holds. The
@@ -526,14 +526,18 @@ const SHOT_RENDER: Record<ShotKind, React.FC<ShotCtx>> = {
 
 // ───────────────────────────────────────────────────────────────────────────── composition
 
-const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: string | undefined }> = ({ spec, story, styleId }) => {
+const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: string | undefined; custom: Custom | undefined }> = ({ spec, story, styleId, custom }) => {
   const { fps, width: W, height: H } = useVideoConfig();
   const frame = useCurrentFrame();
   const t = frame / fps;
   const S = H / 1080; // everything is authored against a 1080-tall canvas
-  const th = themeFor(styleId);
+  const th = applyTheme(themeFor(custom?.style ?? styleId), custom);
   TH = th;                                   // publish the active theme to all shot components
   const accent = th.accent;
+  // full customization: on-screen lines can be overridden per shot (keeps each archetype).
+  if (custom?.text && custom.text.length) {
+    story = story.map((s, i) => (custom.text![i] != null ? { ...s, accentText: custom.text![i] } : s));
+  }
 
   // lay shots on an overlapping timeline: each starts TRANS before the previous ends.
   const tf = TH.trans;
@@ -608,8 +612,8 @@ const ShowcaseBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId:
   );
 };
 
-export const MotionShowcase: React.FC<MotionShowcaseProps> = ({ spec, story, styleId }) =>
-  <ShowcaseBody spec={spec} story={story && story.length ? story : STORY} styleId={styleId} />;
+export const MotionShowcase: React.FC<MotionShowcaseProps> = ({ spec, story, styleId, custom }) =>
+  <ShowcaseBody spec={spec} story={story && story.length ? story : STORY} styleId={styleId} custom={custom} />;
 
 /** Total storyboard length in seconds (drives calculateMetadata for this composition).
  *  Transition length is theme-dependent (hard-cut styles are shorter). */

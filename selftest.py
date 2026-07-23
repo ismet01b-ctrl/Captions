@@ -2084,6 +2084,12 @@ def _scenario_logic(clip, transcript, tmp):
           and all(c in _mrbs for c in ['MotionShowcase', 'MotionKinetic', 'MotionPrompt'])
           and "--composition=" in _mrbs and "--style=" in _mrbs and "--format=" in _mrbs
           and "'16:9'" in _mrbs and "'9:16'" in _mrbs and "'1:1'" in _mrbs)
+    # v117: Full-Customization — jeder visuelle Knopf überschreibbar; zieht durch ALLE Kompositionen.
+    check('v117: Custom-Override-Schicht (applyTheme) in allen 3 Kompositionen',
+          'export interface Custom' in _mth and 'export function applyTheme' in _mth
+          and all(('applyTheme(themeFor(custom?.style ?? styleId), custom)' in _msrc(f))
+                  for f in ['MotionShowcase.tsx', 'MotionKinetic.tsx', 'MotionPrompt.tsx'])
+          and 'custom?.text' in _msh and 'custom?.accent' in _mpr and 'custom?.brand' in _mpr)
     if shutil.which('node') and os.path.isdir(os.path.join(_mgroot, 'node_modules')):
         try:
             _ts = subprocess.run(['node', 'scripts/test-showcase.mjs'], cwd=_mgroot,

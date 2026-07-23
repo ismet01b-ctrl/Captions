@@ -14,9 +14,9 @@ import type { Shot } from './MotionShowcase';
 import { clamp01, easeOutQuint, easeInOutQuint, easeOutBack, mix } from './lib/easing';
 import { springStep } from './lib/spring';
 import { hash01, mulberry32 } from './lib/rng';
-import { themeFor, type Theme } from './showcaseThemes';
+import { themeFor, applyTheme, type Theme, type Custom } from './showcaseThemes';
 
-export type MotionKineticProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string };
+export type MotionKineticProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string; readonly custom?: Custom };
 
 const HOLD = 2.2;   // seconds a phrase holds
 const CUT = 0.28;   // typographic hand-off window (short — these are cuts/whips, not glides)
@@ -141,12 +141,12 @@ const TypeScene: React.FC<Ctx> = ({ text, t, hold, W, H, S, th, seed }) => {
   );
 };
 
-const KineticBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: string | undefined }> = ({ spec, story, styleId }) => {
+const KineticBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: string | undefined; custom: Custom | undefined }> = ({ spec, story, styleId, custom }) => {
   const { fps, width: W, height: H } = useVideoConfig();
   const t = useCurrentFrame() / fps;
   const S = H / 1080;
-  const th = themeFor(styleId);
-  const phrases = story.map(lineOf).filter(Boolean);
+  const th = applyTheme(themeFor(custom?.style ?? styleId), custom);
+  const phrases = (custom?.text && custom.text.length ? custom.text : story.map(lineOf)).filter(Boolean);
 
   const starts: number[] = [];
   let cur = 0;
@@ -180,8 +180,8 @@ const KineticBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: 
   );
 };
 
-export const MotionKinetic: React.FC<MotionKineticProps> = ({ spec, story, styleId }) =>
-  <KineticBody spec={spec} story={story && story.length ? story : []} styleId={styleId} />;
+export const MotionKinetic: React.FC<MotionKineticProps> = ({ spec, story, styleId, custom }) =>
+  <KineticBody spec={spec} story={story && story.length ? story : []} styleId={styleId} custom={custom} />;
 
 export const kineticDuration = (story: readonly Shot[]): number => {
   const n = story.map(lineOf).filter(Boolean).length;

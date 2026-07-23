@@ -79,3 +79,54 @@ export const THEMES: Record<string, Theme> = {
 
 export const themeFor = (styleId?: string): Theme => THEMES[styleId ?? 'editorial'] ?? THEMES['editorial']!;
 export const STYLE_IDS = Object.keys(THEMES);
+
+// ── Full customization ───────────────────────────────────────────────────────
+// Every visual knob is overridable. `Custom` carries per-render overrides the UI produces; the
+// compositions resolve their theme via applyTheme(themeFor(style), custom), so ANY setting the
+// user changes flows through everything. `text`/`brand`/`logo` override content; the rest override
+// the look + motion character. Undefined fields fall back to the chosen style's defaults.
+export interface Custom {
+  readonly style?: string;
+  readonly accent?: string;
+  readonly ink?: string;
+  readonly sub?: string;
+  readonly bg?: string;
+  readonly bgDark?: string;
+  readonly font?: string;
+  readonly upper?: boolean;
+  readonly weight?: number;
+  readonly tracking?: string;
+  readonly grain?: number;
+  readonly vignette?: number;
+  readonly shutter?: number;      // motion-blur amount
+  readonly cameraMult?: number;   // camera-move intensity
+  readonly trans?: number;        // transition length
+  readonly brand?: string;
+  readonly logo?: string;         // data URI
+  readonly text?: readonly string[]; // override the on-screen lines
+}
+
+const ov = <T,>(v: T | undefined, base: T): T => (v === undefined ? base : v);
+
+/** Resolve the effective theme: the chosen style's defaults with the user's overrides on top. */
+export function applyTheme(base: Theme, c?: Custom): Theme {
+  if (!c) return base;
+  return {
+    ...base,
+    accent: ov(c.accent, base.accent),
+    ink: ov(c.ink, base.ink),
+    sub: ov(c.sub, base.sub),
+    bg: ov(c.bg, base.bg),
+    bgDark: ov(c.bgDark, base.bgDark),
+    font: ov(c.font, base.font),
+    upper: ov(c.upper, base.upper),
+    weight: ov(c.weight, base.weight),
+    tracking: ov(c.tracking, base.tracking),
+    grain: ov(c.grain, base.grain),
+    vignette: ov(c.vignette, base.vignette),
+    shutter: ov(c.shutter, base.shutter),
+    cameraMult: ov(c.cameraMult, base.cameraMult),
+    trans: ov(c.trans, base.trans),
+    card: base.card,
+  };
+}

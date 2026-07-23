@@ -13,9 +13,9 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { SceneSpec } from './spec';
 import type { Shot } from './MotionShowcase';
 import { clamp01, easeOutQuint, easeInOutQuint, easeOutBack, easeInOutCubic, mix } from './lib/easing';
-import { themeFor } from './showcaseThemes';
+import { themeFor, applyTheme, type Custom } from './showcaseThemes';
 
-export type MotionPromptProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string };
+export type MotionPromptProps = { readonly spec: SceneSpec; readonly story?: readonly Shot[]; readonly styleId?: string; readonly custom?: Custom };
 
 const FONT = `'Inter', system-ui, -apple-system, sans-serif`;
 const MONO = `'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', monospace`;
@@ -47,7 +47,7 @@ const GlowEdge: React.FC<{ w: number; h: number; r: number; t: number; accent: s
   = ({ w, h, r, t, accent, bw, bg = '#0c0d11', children }) => (
   <div style={{
     position: 'relative', width: w, height: h, borderRadius: r, padding: bw,
-    background: `conic-gradient(from ${((t * 80) % 360).toFixed(1)}deg, ${accent}, #ff9a4d, ${accent}22, ${accent}, #ffb36b, ${accent})`,
+    background: `conic-gradient(from ${((t * 80) % 360).toFixed(1)}deg, ${accent}, ${accent}dd, ${accent}22, ${accent}, ${accent}cc, ${accent})`,
     boxShadow: `0 0 ${bw * 6}px ${accent}aa, 0 0 ${bw * 16}px ${accent}55`,
   }}>
     <div style={{ width: '100%', height: '100%', borderRadius: r - bw, background: bg, overflow: 'hidden', position: 'relative' }}>{children}</div>
@@ -83,14 +83,14 @@ const Cursor: React.FC<{ x: number; y: number; press: number; s: number }> = ({ 
   </svg>
 );
 
-const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: string | undefined }> = ({ spec, story, styleId }) => {
+const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: string | undefined; custom: Custom | undefined }> = ({ spec, story, styleId, custom }) => {
   const { fps, width: W, height: H } = useVideoConfig();
   const t = useCurrentFrame() / fps;
   const S = H / 1080;
-  const th = themeFor(styleId);
-  const accent = th.id !== 'mono' && th.id !== 'soft' ? th.accent : '#ff7a2f';
-  const lines = story.map(lineOf).filter(Boolean);
-  const brand = (lines.find((l) => /^made with /i.test(l))?.replace(/^made with /i, '') || 'Studio').trim();
+  const th = applyTheme(themeFor(custom?.style ?? styleId), custom);
+  const accent = custom?.accent ?? (th.id !== 'mono' && th.id !== 'soft' ? th.accent : '#ff7a2f');
+  const lines = (custom?.text && custom.text.length ? custom.text : story.map(lineOf)).filter(Boolean);
+  const brand = (custom?.brand || lines.find((l) => /^made with /i.test(l))?.replace(/^made with /i, '') || 'Studio').trim();
   const prompt = lines[0] || PROMPT_DEFAULT;
   const head = (lines[1] || 'Premium studio').replace(/[.]+$/, '');
   const sub = lines[2] || 'crafted for creatives';
@@ -129,7 +129,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
           <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', opacity: app }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 28 * S, transform: `scale(${sc.toFixed(3)})`, position: 'relative' }}>
               <div style={{ filter: `drop-shadow(0 0 ${24 * S}px ${accent})` }}><Spark size={104 * S} color={accent} glow={16 * S} fill={false} /></div>
-              <div style={{ color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 100 * S, letterSpacing: '-0.02em', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ color: '#fff', fontFamily: th.font, fontWeight: 600, fontSize: 100 * S, letterSpacing: '-0.02em', position: 'relative', overflow: 'hidden' }}>
                 {brand}
                 {/* light sweep */}
                 <div style={{ position: 'absolute', top: 0, bottom: 0, width: 120 * S, left: `${(sweep * 140 - 20).toFixed(0)}%`,
@@ -164,7 +164,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
                     border: `${2 * S}px solid ${on ? accent : '#2a2d36'}`,
                     boxShadow: `0 0 ${(on ? 26 : 10) * S}px ${accent}${on ? 'cc' : '44'}`, color: on ? '#0b0b0d' : '#e7e9ef' }}>
                     <ChipIcon kind={c.k} s={S} color={on ? '#0b0b0d' : '#e7e9ef'} />
-                    <span style={{ fontFamily: FONT, fontWeight: 600, fontSize: 38 * S }}>{c.l}</span>
+                    <span style={{ fontFamily: th.font, fontWeight: 600, fontSize: 38 * S }}>{c.l}</span>
                   </div>
                 );
               })}
@@ -211,7 +211,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
             <div style={{ position: 'relative', transformOrigin: origin, transform: `scale(${sc.toFixed(3)})` }}>
               <GlowEdge w={1520 * S} h={280 * S} r={40 * S} t={t} accent={accent} bw={bw}>
                 <div style={{ position: 'absolute', inset: 0, padding: `${46 * S}px ${52 * S}px` }}>
-                  <div style={{ fontFamily: FONT, fontWeight: 500, fontSize: 56 * S, lineHeight: 1.25, color: '#f3f4f7' }}>
+                  <div style={{ fontFamily: th.font, fontWeight: 500, fontSize: 56 * S, lineHeight: 1.25, color: '#f3f4f7' }}>
                     <span>{prompt.slice(0, Math.max(0, typed - 4))}</span>
                     <span style={{ color: accent, textShadow: `0 0 ${20 * S}px ${accent}` }}>{prompt.slice(Math.max(0, typed - 4), typed)}</span>
                     <span style={{ color: accent, opacity: caretOn ? 1 : 0.2, textShadow: `0 0 ${18 * S}px ${accent}` }}>▍</span>
@@ -219,7 +219,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
                   <div style={{ position: 'absolute', left: 46 * S, right: 46 * S, bottom: 40 * S, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ width: 62 * S, height: 62 * S, borderRadius: '50%', border: `${2 * S}px solid #3a3c44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c9ccd4', fontSize: 40 * S }}>+</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 26 * S }}>
-                      <div style={{ color: '#c9ccd4', fontFamily: FONT, fontSize: 32 * S }}>Pro ▾</div>
+                      <div style={{ color: '#c9ccd4', fontFamily: th.font, fontSize: 32 * S }}>Pro ▾</div>
                       <svg width={26 * S} height={34 * S} viewBox="0 0 24 32" fill="none" stroke="#c9ccd4" strokeWidth="2"><rect x="8" y="2" width="8" height="16" rx="4" /><path d="M5 14a7 7 0 0 0 14 0M12 21v6" strokeLinecap="round" /></svg>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 3 * S, height: 34 * S }}>
                         {[10, 22, 14, 28, 12, 20].map((hh, i) => <div key={i} style={{ width: 3 * S, height: hh * S, background: '#c9ccd4', borderRadius: 2 }} />)}
@@ -290,7 +290,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
             <div style={{ transformStyle: 'preserve-3d', transform: `scale(${camPush.toFixed(3)}) translateZ(${rz.toFixed(0)}px) rotateY(${rotY.toFixed(2)}deg) rotateX(${rotX.toFixed(2)}deg) scale(${rScale.toFixed(3)})` }}>
               <GlowEdge w={1660 * S} h={900 * S} r={30 * S} t={t} accent={glowCol} bw={bw} bg="#0a0c12">
                 <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(160deg, #0a0c12 0%, ${glowCol}22 55%, ${glowCol}4a 100%)` }} />
-                <div style={{ position: 'absolute', top: 40 * S, left: 50 * S, right: 50 * S, display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#e8eaf0', fontFamily: FONT }}>
+                <div style={{ position: 'absolute', top: 40 * S, left: 50 * S, right: 50 * S, display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#e8eaf0', fontFamily: th.font }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 40 * S }}>
                     <Spark size={40 * S} color="#fff" />
                     {['Home', 'Work', 'Portfolio', 'About', 'FAQ'].map((x) => <span key={x} style={{ fontSize: 26 * S, opacity: 0.85 }}>{x}</span>)}
@@ -301,8 +301,8 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 * S, background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 24 * S, padding: `${8 * S}px ${18 * S}px`, borderRadius: 30 * S, marginBottom: 26 * S }}>
                     <Spark size={22 * S} color="#fff" /> No.1 Studio · 2026
                   </div>
-                  <div style={{ color: '#fff', fontFamily: FONT, fontWeight: 600, fontSize: 100 * S, lineHeight: 1.04, letterSpacing: '-0.02em', maxWidth: '72%' }}>{head}</div>
-                  <div style={{ color: '#c9ccd6', fontFamily: FONT, fontSize: 34 * S, marginTop: 20 * S }}>{sub}</div>
+                  <div style={{ color: '#fff', fontFamily: th.font, fontWeight: 600, fontSize: 100 * S, lineHeight: 1.04, letterSpacing: '-0.02em', maxWidth: '72%' }}>{head}</div>
+                  <div style={{ color: '#c9ccd6', fontFamily: th.font, fontSize: 34 * S, marginTop: 20 * S }}>{sub}</div>
                   <div style={{ display: 'flex', gap: 20 * S, marginTop: 44 * S }}>
                     <div style={{ background: '#fff', color: '#0a0c12', fontWeight: 600, fontSize: 26 * S, padding: `${14 * S}px ${28 * S}px`, borderRadius: 40 * S,
                       transform: `scale(${(1 - ctaPress * 0.08).toFixed(3)})`, boxShadow: ctaPress > 0.3 ? `0 0 ${24 * S}px #ffffffaa` : 'none' }}>Connect with us</div>
@@ -326,7 +326,7 @@ const PromptBody: React.FC<{ spec: SceneSpec; story: readonly Shot[]; styleId: s
   );
 };
 
-export const MotionPrompt: React.FC<MotionPromptProps> = ({ spec, story, styleId }) =>
-  <PromptBody spec={spec} story={story && story.length ? story : []} styleId={styleId} />;
+export const MotionPrompt: React.FC<MotionPromptProps> = ({ spec, story, styleId, custom }) =>
+  <PromptBody spec={spec} story={story && story.length ? story : []} styleId={styleId} custom={custom} />;
 
 export const promptDuration = (): number => 14.4;
