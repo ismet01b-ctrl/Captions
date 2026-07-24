@@ -851,18 +851,21 @@ def _mail_from_bare(frm):
     return m.group(1) if m else frm
 
 
-def _send_mail(to, subject, body, reply_to=None):
+def _send_mail(to, subject, body, reply_to=None, html=None):
     """Mail-Versand. Bevorzugt Resend (HTTP/443, von Hostern nie geblockt),
     faellt auf SMTP zurueck. Wirft bei Fehler.
     v133c: KEIN Standard-Reply-To mehr - der noreply-Absender ist ein reines
     Versand-Postfach, Antworten darauf laufen ins Leere (so gewollt). reply_to
-    wird NUR pro Aufruf gesetzt, aktuell fuer die Support-Ticket-Mail an den
-    Betreiber (Reply-To = Kundenadresse, damit man direkt antworten kann)."""
+    wird NUR pro Aufruf gesetzt (Support-Ticket-Mail an den Betreiber).
+    v133d: html optional - dann geht eine gestaltete HTML-Mail raus, body bleibt
+    die Plaintext-Alternative (Fallback fuer Clients ohne HTML)."""
     resend_key = os.environ.get('RESEND_API_KEY', '').strip()
     if resend_key:
         import requests as _rq
         payload = {'from': _mail_from('onboarding@resend.dev'),
                    'to': [to], 'subject': subject, 'text': body}
+        if html:
+            payload['html'] = html
         if reply_to:
             payload['reply_to'] = reply_to
         r = _rq.post('https://api.resend.com/emails',
@@ -873,6 +876,7 @@ def _send_mail(to, subject, body, reply_to=None):
         return
     import smtplib
     from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
     host = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
     port = int(os.environ.get('SMTP_PORT', '587'))
     user = os.environ.get('SMTP_USER', '').strip()
@@ -881,7 +885,12 @@ def _send_mail(to, subject, body, reply_to=None):
         raise RuntimeError('SMTP not configured')
     frm = _mail_from(user)
     sender = _mail_from_bare(frm)
-    msg = MIMEText(body, 'plain', 'utf-8')
+    if html:
+        msg = MIMEMultipart('alternative')
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))   # Fallback zuerst
+        msg.attach(MIMEText(html, 'html', 'utf-8'))
+    else:
+        msg = MIMEText(body, 'plain', 'utf-8')
     msg['Subject'] = subject
     msg['From'] = frm
     msg['To'] = to
@@ -904,6 +913,74 @@ def _send_mail(to, subject, body, reply_to=None):
             s.quit()
         except Exception:
             pass
+
+
+def _esc_html(s):
+    return (str(s).replace('&', '&amp;').replace('<', '&lt;')
+            .replace('>', '&gt;').replace('"', '&quot;'))
+
+
+def _email_html(heading, paragraphs, cta_text=None, cta_url=None, steps=None):
+    """v133d: gebrandetes, tabellenbasiertes HTML-Mail-Template (Inline-CSS,
+    Gmail/Outlook/Apple-Mail-sicher). Heller Body, dunkles Logo, oranger Akzent
+    und CTA - der DouchkoVE-Look. Ehrlich, ohne erfundene Zahlen. Rueckgabe ist
+    reines HTML; die Plaintext-Alternative bleibt der body im Aufrufer.
+    heading/paragraphs/steps/cta_text muessen bereits HTML-sicher sein."""
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    acc = '#ff7a1a'
+    p_html = ''.join(
+        f'<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#3f3f46;">{p}</p>'
+        for p in paragraphs)
+    steps_html = ''
+    if steps:
+        rows = ''
+        for i, s in enumerate(steps, 1):
+            rows += (
+                '<tr>'
+                f'<td valign="top" style="padding:0 12px 12px 0;">'
+                f'<div style="width:26px;height:26px;border-radius:50%;background:{acc};'
+                'color:#ffffff;font-weight:700;font-size:14px;text-align:center;'
+                f'line-height:26px;">{i}</div></td>'
+                f'<td valign="top" style="padding:2px 0 12px;font-size:15px;'
+                f'line-height:1.5;color:#3f3f46;">{s}</td></tr>')
+        steps_html = ('<table role="presentation" cellpadding="0" cellspacing="0" '
+                      f'style="margin:4px 0 20px;">{rows}</table>')
+    cta_html = ''
+    if cta_text and cta_url:
+        cta_html = (
+            '<table role="presentation" cellpadding="0" cellspacing="0" '
+            'style="margin:6px 0 6px;"><tr>'
+            f'<td style="border-radius:10px;background:{acc};">'
+            f'<a href="{cta_url}" style="display:inline-block;padding:13px 30px;'
+            'font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;'
+            f'font-family:Arial,Helvetica,sans-serif;">{cta_text}</a>'
+            '</td></tr></table>')
+    return (
+        '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '</head><body style="margin:0;padding:0;background:#f4f4f5;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background:#f4f4f5;padding:28px 12px;"><tr><td align="center">'
+        '<table role="presentation" width="600" cellpadding="0" cellspacing="0" '
+        'style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;'
+        'overflow:hidden;border:1px solid #e4e4e7;">'
+        '<tr><td style="padding:30px 32px 0;text-align:center;">'
+        f'<img src="{base}/logo_dark.png" width="120" alt="DouchkoVE" '
+        'style="height:auto;max-width:120px;display:inline-block;"></td></tr>'
+        f'<tr><td style="padding:0 32px;"><div style="height:3px;width:44px;'
+        f'background:{acc};border-radius:2px;margin:18px auto 0;"></div></td></tr>'
+        '<tr><td style="padding:22px 32px 6px;font-family:Arial,Helvetica,sans-serif;">'
+        f'<h1 style="margin:0 0 16px;font-size:23px;line-height:1.25;color:#18181b;'
+        f'font-weight:800;">{heading}</h1>{p_html}{steps_html}{cta_html}</td></tr>'
+        '<tr><td style="padding:10px 32px 30px;font-family:Arial,Helvetica,sans-serif;">'
+        '<div style="border-top:1px solid #e4e4e7;padding-top:16px;">'
+        '<p style="margin:0 0 6px;font-size:13px;color:#71717a;">Need help? '
+        f'Contact us at <a href="mailto:{SUPPORT_EMAIL}" style="color:{acc};'
+        f'text-decoration:none;">{SUPPORT_EMAIL}</a>.</p>'
+        '<p style="margin:0;font-size:12px;color:#a1a1aa;">DouchkoVE · Premium '
+        'captions and motion, finished after your edit · '
+        f'<a href="{base}" style="color:#a1a1aa;">douchko.eu</a></p>'
+        '</div></td></tr></table></td></tr></table></body></html>')
 
 
 def _create_reset(uid):
@@ -930,21 +1007,35 @@ def _send_verify_mail(uid, email, name=''):
     con.close()
     base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
     hallo = f'Hi {name},' if name else 'Hi,'
+    link = f'{base}/app?verify={tok}'
     cr = TRIAL_SECONDS // 60
     free_line = (f'Once confirmed, your {cr} free credits are ready to use.\n\n'
                  if cr > 0 else '')
+    free_html = (f'Once confirmed, your {cr} free credits are ready to use.'
+                 if cr > 0 else '')
+    ename = _esc_html(name)
+    hi = f'Hi {ename},' if name else 'Hi,'
     try:
         _send_mail(
             email, 'Confirm your email for DouchkoVE',
             f'{hallo}\n\n'
             f'Thanks for signing up for DouchkoVE. Please confirm your email '
             f'address to activate your account:\n\n'
-            f'{base}/app?verify={tok}\n\n'
+            f'{link}\n\n'
             f'{free_line}'
             f'This link is valid for 48 hours. If you did not create this '
             f'account, you can safely ignore this email.\n\n'
             f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
-            f'The DouchkoVE Team')
+            f'The DouchkoVE Team',
+            html=_email_html(
+                'Confirm your email',
+                [hi,
+                 'Thanks for signing up for DouchkoVE. Confirm your email '
+                 'address to activate your account.']
+                + ([free_html] if free_html else [])
+                + ['This link is valid for 48 hours. If you did not create '
+                   'this account, you can ignore this email.'],
+                cta_text='Confirm email', cta_url=link))
         return True
     except Exception as e:
         print(f'Verify-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -967,6 +1058,10 @@ def _send_welcome_mail(uid):
     cr = TRIAL_SECONDS // 60
     free_line = (f'Your {cr} free credits are ready to use. One credit equals '
                  f'one minute of finished video.\n\n' if cr > 0 else '')
+    ename = _esc_html(name)
+    hi = f'Hi {ename},' if name else 'Hi,'
+    free_html = (f'Your {cr} free credits are ready to use. One credit equals '
+                 f'one minute of finished video.' if cr > 0 else '')
     try:
         _send_mail(
             u['email'], 'Welcome to DouchkoVE',
@@ -979,7 +1074,18 @@ def _send_welcome_mail(uid):
             f'Credits are one time purchases and stay valid for 6 months. '
             f'There is no subscription and nothing renews automatically.\n\n'
             f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
-            f'The DouchkoVE Team')
+            f'The DouchkoVE Team',
+            html=_email_html(
+                'Welcome to DouchkoVE',
+                [hi, 'Your account is ready.']
+                + ([free_html] if free_html else [])
+                + ['Credits are one time purchases and stay valid for 6 months. '
+                   'There is no subscription and nothing renews automatically.',
+                   'Here is how to get started:'],
+                cta_text='Open DouchkoVE', cta_url=f'{base}/app/create',
+                steps=['Upload a talking head clip (vertical works best).',
+                       'Let the AI pick the key moments.',
+                       'Hit render and download your finished video.']))
         return True
     except Exception as e:
         print(f'Welcome-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -999,18 +1105,30 @@ def _send_purchase_mail(uid, sec, session_id):
     name = (u['name'] or '').strip()
     hallo = f'Hi {name},' if name else 'Hi,'
     months = max(1, round(CREDIT_VALIDITY_DAYS / 30))
+    ename = _esc_html(name)
+    hi = f'Hi {ename},' if name else 'Hi,'
+    n = sec // 60
     try:
         _send_mail(
-            u['email'], f'{sec // 60} credits added to your account',
+            u['email'], f'{n} credits added to your account',
             f'{hallo}\n\n'
-            f'Thank you for your purchase. {sec // 60} credits have been added '
+            f'Thank you for your purchase. {n} credits have been added '
             f'to your account, and the watermark has been removed from your '
             f'finished videos.\n\n'
             f'Your credits are valid for {months} months. There is no '
             f'subscription and nothing renews automatically.\n\n'
             f'Open the app: {base}/app/create\n\n'
             f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
-            f'The DouchkoVE Team')
+            f'The DouchkoVE Team',
+            html=_email_html(
+                'Payment received',
+                [hi,
+                 f'Thank you for your purchase. <b>{n} credits</b> have been '
+                 'added to your account, and the watermark has been removed '
+                 'from your finished videos.',
+                 f'Your credits are valid for {months} months. There is no '
+                 'subscription and nothing renews automatically.'],
+                cta_text='Open DouchkoVE', cta_url=f'{base}/app/create'))
         return True
     except Exception as e:
         print(f'Kauf-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -1373,7 +1491,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v133c-support'
+DVE_BUILD = 'v133d-htmlmail'
 
 
 @app.middleware('http')

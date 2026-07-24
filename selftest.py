@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v133c-support'" in _srv_m)
+          and "DVE_BUILD = 'v133d-htmlmail'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3816,14 +3816,14 @@ def _scenario_betrieb(tmp):
     check('Health-Endpoint meldet ok (Server+DB)', SV.health() == {'ok': True})
     # 2) Admin-Alarm: pro Schluessel max. 1 Mail/Stunde, Mail-Fehler leise
     sent = []
-    SV._send_mail = lambda to, s, b: sent.append((to, s))
+    SV._send_mail = lambda to, s, b, reply_to=None, html=None: sent.append((to, s, html))
     SV._ADMIN_NOTIFIED.clear()
     a = SV._notify_admin('k1', 'T', 'x')
     b = SV._notify_admin('k1', 'T', 'x')
     c = SV._notify_admin('k2', 'T', 'x')
     check('Admin-Alarm gedrosselt (1 Mail/h pro Schluessel)',
           a and not b and c and len(sent) == 2
-          and all(to == SV.ADMIN_MAIL for to, _ in sent))
+          and all(m[0] == SV.ADMIN_MAIL for m in sent))
     # v132: Regressionsschutz gegen den "in .env gesetzt, aber kommt nicht im
     # Container an"-Fehler. Jede Variable, die server.py aus der Umgebung liest
     # UND in .env.example dokumentiert ist, MUSS in docker-compose.yml an den
@@ -3931,7 +3931,7 @@ def _scenario_betrieb(tmp):
     # v133c: noreply ist reines Versand-Postfach (KEIN globales Reply-To), aber
     # _send_mail kann pro Aufruf ein Reply-To setzen (fuer die Ticket-Mail).
     check('v133c: _send_mail hat optionalen reply_to, kein globales Reply-To',
-          'def _send_mail(to, subject, body, reply_to=None)' in _full
+          'def _send_mail(to, subject, body, reply_to=None' in _full
           and "payload['reply_to'] = reply_to" in _full
           and "msg['Reply-To'] = reply_to" in _full
           and "= SUPPORT_EMAIL" not in _full.split('def _send_mail')[1].split('def ')[0])
@@ -3981,6 +3981,36 @@ def _scenario_betrieb(tmp):
               and _st == 'closed')
     finally:
         SV._send_mail = _real_sm
+    # v133d: gebrandete HTML-Mails. Willkommens-Mail wird jetzt MIT html
+    # verschickt; Template ehrlich (keine erfundenen Zahlen), gebrandet,
+    # tabellenbasiert, ohne Gedankenstriche.
+    _hcap = []
+    _rsm = SV._send_mail
+    SV._send_mail = lambda to, s, b, reply_to=None, html=None: _hcap.append({'to': to, 'sub': s, 'text': b, 'html': html})
+    try:
+        _huid, _ = SV._create_user('v133d@test', 'x' * 8, 'HtmlTester')
+        SV._send_welcome_mail(_huid)
+    finally:
+        SV._send_mail = _rsm
+    _wm = _hcap[-1] if _hcap else {}
+    _h = _wm.get('html') or ''
+    check('v133d: Willkommens-Mail als gebrandetes HTML (Logo, Akzent, CTA, Text-Fallback)',
+          bool(_h) and '<!DOCTYPE html>' in _h and '<table' in _h
+          and '/logo_dark.png' in _h and '#ff7a1a' in _h
+          and 'Open DouchkoVE' in _h and bool(_wm.get('text'))
+          and '—' not in _h and '–' not in _h)
+    # Ehrlichkeit: keine erfundenen Reichweiten-/Ranking-Zahlen im Template.
+    _tpl_src = _insp.getsource(SV._email_html).lower()
+    check('v133d: HTML-Template ohne erfundene Zahlen (kein 10M/No.1)',
+          '10m+' not in _h.lower() and 'no.1' not in _h.lower()
+          and 'no. 1' not in _h.lower()
+          and 'reply_to' not in _tpl_src)          # Template setzt kein Reply-To
+    # _send_mail reicht html an Resend UND SMTP (multipart/alternative) durch.
+    _smf = _full.split('def _send_mail')[1].split('\ndef ')[0]
+    check('v133d: _send_mail unterstuetzt html (Resend + SMTP multipart)',
+          "payload['html'] = html" in _smf
+          and "MIMEMultipart('alternative')" in _smf
+          and "def _send_mail(to, subject, body, reply_to=None, html=None)" in _full)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}
@@ -4070,7 +4100,7 @@ def _scenario_v98(tmp):
           and led == 0 and usr == 0, f'{len(arch)}/{led}/{usr}')
     # 6) v130: Fertig-Mail DEAKTIVIERT (Ismet) -> nach dem Render keine Mail.
     sent = []
-    SV._send_mail = lambda to, s, b: sent.append(to)
+    SV._send_mail = lambda to, s, b, reply_to=None, html=None: sent.append(to)
     con = SV._db()
     con.execute("UPDATE users SET verified=1 WHERE id=?", (uid_free,))
     con.commit(); con.close()

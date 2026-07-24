@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v133d Gebrandete HTML-Mails (Vorbild OpusClip, aber ehrlich).** Ismet zeigte die OpusClip-
+  Willkommensmail (gestaltetes HTML), unsere war reiner Text. Neu: `_email_html()` - ein
+  tabellenbasiertes, inline-gestyltes Mail-Template (Gmail/Outlook/Apple-Mail-sicher), heller Body,
+  schwarzes DouchkoVE-Logo (live von `/logo_dark.png`), oranger Akzent + CTA-Button, Footer mit
+  Support-Kontakt. `_send_mail(..., html=...)` schickt jetzt eine HTML-Mail MIT Plaintext-Alternative
+  (Resend `html`-Feld bzw. SMTP `multipart/alternative`). Verify-, Willkommens- und Kauf-Mail nutzen
+  es (CTA "Confirm email" / "Open DouchkoVE"). BEWUSST ehrlich: KEINE erfundenen Zahlen wie "10M+"
+  oder "No.1" (Ismets Regel: nicht als Supermacht darstellen), keine Gedankenstriche. Beweis: 3 neue
+  Tests (HTML gebrandet + Text-Fallback, keine Fake-Zahlen, Resend+SMTP-multipart), Selftest 752/752
+  gruen. Optik hier nur als HTML-Vorschau gerendert; final sieht Ismet es im echten Postfach.
 - **v133c Support-Ticketsystem + noreply ist reines Versand-Postfach.** Ismet: bei noreply soll nichts
   ankommen, Support laeuft ueber ein Ticketsystem auf der Seite -> an seine Mail. Umgesetzt: (a) das
   globale Reply-To (v133b) ENTFERNT - `_send_mail(..., reply_to=None)` setzt Reply-To nur noch pro
