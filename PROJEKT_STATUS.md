@@ -3,6 +3,14 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v135 USt-IdNr DE463613884 ueberall verankert.** Ismet hat eine USt-IdNr -> damit ist sie im
+  Impressum PFLICHT (§5 DDG "soweit vorhanden"); die alte Aussage "no VAT identification number is
+  shown" dort war ab jetzt falsch und ist ersetzt. Rechnungs-Footer: `DVE_TAX_ID`-Default =
+  DE463613884, Label-Logik (DE+9 Ziffern -> 'USt-IdNr.', sonst 'Steuernummer'), erfuellt §14 UStG
+  (Steuernummer ODER USt-IdNr). In CLAUDE.md als Steuer-Identitaet festgeschrieben (nie vergessen,
+  NIEMALS USt ausweisen). Beweis: v135-Test (Footer-Default + Impressum + alte Aussage weg),
+  Selftest 754/754 gruen. Parallel laeuft ein adversarial verifizierter Vollaudit
+  (Bezahltechnik/Preis-Konsistenz/Verbraucherrecht/Rechnungsrecht/DSGVO); Befunde folgen als v135a.
 - **v134 Rechnungen ueber Stripe (§19 UStG).** Ismet: in Deutschland muss eine Rechnung raus, Weg mit
   den wenigsten Fehlerquellen. Entscheidung: Stripe Post-Payment-Invoices statt Eigenbau (lueckenlose
   Nummern, garantierte Erstellung/Zustellung/Archiv bei Stripe, 0,4% Gebuehr = ~4 Cent pro 9-EUR-Kauf).

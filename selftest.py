@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v134-invoice'" in _srv_m)
+          and "DVE_BUILD = 'v135-vatid'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4036,6 +4036,22 @@ def _scenario_betrieb(tmp):
           and SV.PACKS['starter']['name'] in _inv['invoice_data']['description']
           and 'invoice_creation=_invoice_creation(pack, p)' in
           open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read())
+    # v135: USt-IdNr DE463613884 ist Ismets echte Kennung. Default im
+    # Rechnungs-Footer (Label 'USt-IdNr.' bei DE+9 Ziffern) + Pflicht im
+    # Impressum (§5 DDG, da vorhanden) - die alte 'keine USt-IdNr'-Aussage
+    # dort waere jetzt falsch und muss weg.
+    _tx0 = os.environ.get('DVE_TAX_ID')
+    try:
+        os.environ.pop('DVE_TAX_ID', None)
+        _invd = SV._invoice_creation('starter', SV.PACKS['starter'])
+    finally:
+        if _tx0 is not None:
+            os.environ['DVE_TAX_ID'] = _tx0
+    _impr = open(os.path.join(HERE, 'web', 'imprint.html'), encoding='utf-8').read()
+    check('v135: USt-IdNr im Rechnungs-Footer (Default) + im Impressum, alte Aussage weg',
+          'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
+          and 'DE463613884' in _impr
+          and 'no VAT identification number' not in _impr)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}

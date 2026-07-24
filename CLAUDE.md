@@ -126,6 +126,9 @@ Nur OpenAI Whisper API (`whisper-1`) — beste Qualität für Namen/Fachbegriffe
 Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 
 ## Web-Produkt: Geschäftsmodell & Sicherheit
+- **Steuer-Identität (NIE vergessen): Kleinunternehmer §19 UStG, USt-IdNr
+  `DE463613884`.** Steht im Impressum (§5 DDG Pflicht, da vorhanden) und im
+  Stripe-Rechnungs-Footer (`DVE_TAX_ID`-Default). NIEMALS USt ausweisen.
 - **Preise: Einmalkauf-Credits 9€/20, 19€/60, 39€/150, 6 Monate gültig.
   KEIN Abo — das ist das Alleinstellungsmerkmal** (Abo-Frust ist die Beschwerde
   Nr. 1 bei ALLER Konkurrenz). 1 Credit = 1 Min fertiges Video (pro angef. Min);

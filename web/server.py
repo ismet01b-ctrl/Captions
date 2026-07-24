@@ -1493,7 +1493,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v134-invoice'
+DVE_BUILD = 'v135-vatid'
 
 
 @app.middleware('http')
@@ -1536,9 +1536,12 @@ def _invoice_creation(pack_id, p):
     footer = ('Gemäß §19 UStG wird keine Umsatzsteuer berechnet. / '
               'No VAT is charged in accordance with §19 UStG '
               '(German small business scheme).')
-    tax_id = os.environ.get('DVE_TAX_ID', '').strip()
+    # v135: Ismets USt-IdNr als fester Default (Pflichtangabe §14 UStG:
+    # Steuernummer ODER USt-IdNr; sie steht auch oeffentlich im Impressum).
+    tax_id = os.environ.get('DVE_TAX_ID', 'DE463613884').strip()
     if tax_id:
-        footer += f' Steuernummer: {tax_id}'
+        label = 'USt-IdNr.' if re.match(r'(?i)^DE\d{9}$', tax_id) else 'Steuernummer'
+        footer += f' {label}: {tax_id}'
     return {
         'enabled': True,
         'invoice_data': {
