@@ -1603,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v138-txvisible'
+DVE_BUILD = 'v138a-jobsort'
 
 
 @app.middleware('http')
@@ -5900,8 +5900,9 @@ def admin_jobs(request: Request):
                     'started_at': int(started) if started else None,
                     'updated_at': updated, 'at_risk': at_risk,
                     'wm': bool(j.get('wm')), 'alpha': j.get('alpha')})
-    order = {'laeuft': 0, 'wartet': 1, 'fehler': 2}
-    out.sort(key=lambda x: (order.get(x['status'], 3), -(x['updated_at'] or 0)))
+    # v138a: schlicht NEUESTE ZUERST (Ismets Wunsch). Die alte Status-
+    # Gruppierung schob z.B. 'vorbereitet'-Jobs ans Ende der Liste.
+    out.sort(key=lambda x: -(x['updated_at'] or 0))
     avg = round(sum(durations) / len(durations)) if durations else None
     return {'jobs': out, 'distribution': dist, 'avg_render_sec': avg,
             'queue': {'caption': QUEUE.qsize(), 'motion': MQUEUE.qsize(),

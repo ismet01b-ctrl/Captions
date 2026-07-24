@@ -3,6 +3,9 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v138a Admin-Jobs: neueste zuerst.** Ismets Wunsch - die alte Status-Gruppierung (laufend >
+  wartend > Fehler > Rest) schob z.B. den frischen 'vorbereitet'-Job ans Listenende. Jetzt rein
+  chronologisch nach letzter Aktivitaet. Selftest gruen.
 - **v138 Transkript-Editor: Endlos-'Listening ...' behoben.** Ismets Live-Befund: 'Review your
   words' laedt ewig. Ursache: Schlug die Vorab-Transkription (pre-Mode, --transcribe-only) fehl,
   entstand nie eine _transcript2.json -> /api/transcript/{jid} antwortete fuer immer 404 ('noch

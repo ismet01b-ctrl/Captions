@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v138-txvisible'" in _srv_m)
+          and "DVE_BUILD = 'v138a-jobsort'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4319,6 +4319,12 @@ def _scenario_betrieb(tmp):
           and 'tx_failed=_txfail' in _srv138
           and 'd.failed' in _idx138 and 'txGiveUp' in _idx138
           and 'txTries > 96' in _idx138)
+    # v138a: Admin-Jobs schlicht neueste zuerst (keine Status-Gruppierung mehr).
+    _srvJs = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _jsblk = _srvJs.split('def admin_jobs')[1].split('\ndef ')[0]
+    check('v138a: Admin-Jobs sortiert neueste zuerst',
+          "out.sort(key=lambda x: -(x['updated_at'] or 0))" in _jsblk
+          and "order.get(x['status']" not in _jsblk)
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA
