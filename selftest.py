@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v133a-mailfix'" in _srv_m)
+          and "DVE_BUILD = 'v133b-mailcopy'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3909,6 +3909,22 @@ def _scenario_betrieb(tmp):
             os.environ.pop('MAIL_FROM', None)
         else:
             os.environ['MAIL_FROM'] = _mf0
+    # v133b: Reply-To gesetzt (Antworten kommen an, kein Widerspruch zu noreply)
+    # + Copy im Standard-Ton (kein "reply to me / straight to my inbox / Ismet
+    # here"), Support-Adresse als Kontakt. Pruefung gegen den DATEITEXT, weil
+    # _send_mail in diesem Testblock durch ein Capture-Lambda ersetzt wurde
+    # (inspect.getsource wuerde sonst das Lambda lesen).
+    _full = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _fulll = _full.lower()
+    check('v133b: Reply-To auf Support + Standard-Ton (kein "reply to me")',
+          "payload['reply_to'] = SUPPORT_EMAIL" in _full
+          and "msg['Reply-To'] = SUPPORT_EMAIL" in _full
+          and 'reply to this email' not in _fulll
+          and 'straight in my inbox' not in _fulll
+          and 'straight to me' not in _fulll
+          and 'ismet here' not in _fulll
+          and 'contact us at {support_email}' in _fulll
+          and SV.SUPPORT_EMAIL and '@' in SV.SUPPORT_EMAIL)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}

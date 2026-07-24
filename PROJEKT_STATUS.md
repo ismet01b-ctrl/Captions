@@ -3,6 +3,14 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v133b Mail-Ton wie etablierte Anbieter + Reply-To.** Ismet-Befund: Absender ist `noreply`, aber der
+  Text sagte "antworte hier drauf" (Widerspruch), und der Ton war zu persoenlich ("Ismet here, straight
+  to my inbox"). Fix: (a) `Reply-To` auf `DVE_SUPPORT_MAIL` (Default `Ismet@douchkove.com`) in BEIDEN
+  Versandwegen (Resend `reply_to` + SMTP-Header) -> Antworten landen wirklich im Support-Postfach,
+  Versand bleibt ueber die verifizierte Sende-Domain. (b) Verify/Welcome/Kauf-Mails neu getextet im
+  neutralen Standard-Ton ("The DouchkoVE Team", Kontakt via Support-Adresse, kein "reply to me"), ohne
+  Gedankenstriche. Beweis: v133b-Test (Reply-To == Support, Copy ohne "reply to me"-Phrasen),
+  Selftest gruen.
 - **v133a Mail-Absender-Fix (Resend 422 "Invalid from field").** Live-Befund von Ismet: Test-Mail im
   Admin schlug mit Resend 422 fehl. ZWEI echte Bugs in `_send_mail`: (1) docker-compose reicht ein
   leeres `MAIL_FROM` als '' durch -> `os.environ.get`-Default griff nie -> Absender wurde

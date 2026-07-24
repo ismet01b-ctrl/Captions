@@ -66,6 +66,10 @@ RETENTION_DAYS = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '').strip()
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '').strip()
 GOOGLE_OK = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+# v133b: Support-Adresse fuer Kunden. Der Versand laeuft ueber die verifizierte
+# Sende-Domain (noreply@douchko.eu), aber ein Reply-To zeigt auf DIESES Postfach,
+# damit Antworten wirklich ankommen. Steht auch als Kontakt in den Mails.
+SUPPORT_EMAIL = os.environ.get('DVE_SUPPORT_MAIL', 'Ismet@douchkove.com').strip()
 
 
 # v84: Credits statt roher Minuten. Intern bleibt alles Sekunden (bewaehrt),
@@ -844,11 +848,13 @@ def _send_mail(to, subject, body):
     resend_key = os.environ.get('RESEND_API_KEY', '').strip()
     if resend_key:
         import requests as _rq
+        payload = {'from': _mail_from('onboarding@resend.dev'),
+                   'to': [to], 'subject': subject, 'text': body}
+        if SUPPORT_EMAIL:
+            payload['reply_to'] = SUPPORT_EMAIL        # v133b: Antworten kommen an
         r = _rq.post('https://api.resend.com/emails',
                      headers={'Authorization': f'Bearer {resend_key}'},
-                     json={'from': _mail_from('onboarding@resend.dev'),
-                           'to': [to], 'subject': subject, 'text': body},
-                     timeout=20)
+                     json=payload, timeout=20)
         if r.status_code >= 300:
             raise RuntimeError(f'Resend {r.status_code}: {r.text[:200]}')
         return
@@ -866,6 +872,8 @@ def _send_mail(to, subject, body):
     msg['Subject'] = subject
     msg['From'] = frm
     msg['To'] = to
+    if SUPPORT_EMAIL:
+        msg['Reply-To'] = SUPPORT_EMAIL                # v133b: Antworten kommen an
     # v81c: IPv4 erzwingen. Docker-Container ohne IPv6-Route scheitern an
     # Gmails AAAA-Records mit 'Errno 101 Network is unreachable'.
     import socket
@@ -908,27 +916,22 @@ def _send_verify_mail(uid, email, name=''):
     con.commit()
     con.close()
     base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
-    hallo = f'Hey {name},' if name else 'Hey,'
-    subject = (f'Welcome to DouchkoVE, {name}!' if name
-               else 'Welcome to DouchkoVE!')
+    hallo = f'Hi {name},' if name else 'Hi,'
+    cr = TRIAL_SECONDS // 60
+    free_line = (f'Once confirmed, your {cr} free credits are ready to use.\n\n'
+                 if cr > 0 else '')
     try:
         _send_mail(
-            email, subject,
+            email, 'Confirm your email for DouchkoVE',
             f'{hallo}\n\n'
-            f"Ismet here, the person behind DouchkoVE. Thank you so much for "
-            f"signing up, it genuinely means a lot while we're still in beta.\n\n"
-            f'Just one quick step: tap the link below to confirm your email. '
-            f'Then your account is fully set up and your free credits are ready '
-            f'to use.\n\n'
+            f'Thanks for signing up for DouchkoVE. Please confirm your email '
+            f'address to activate your account:\n\n'
             f'{base}/app?verify={tok}\n\n'
-            f"Once you're in, drop a talking-head video and let the AI direction "
-            f"do its thing. Heads-up: we're in beta and every video is rendered "
-            f"on our own server, so it takes a few minutes for now. That will get "
-            f"much faster once we leave beta.\n\n"
-            f'If anything feels off or you have an idea, just reply to this '
-            f'email, it comes straight to me.\n\n'
-            f'The link is valid for 48 hours.\n\n'
-            f'Talk soon,\nIsmet from DouchkoVE')
+            f'{free_line}'
+            f'This link is valid for 48 hours. If you did not create this '
+            f'account, you can safely ignore this email.\n\n'
+            f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
+            f'The DouchkoVE Team')
         return True
     except Exception as e:
         print(f'Verify-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -947,24 +950,23 @@ def _send_welcome_mail(uid):
         return False                                   # schon geschickt
     base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
     name = (u['name'] or '').strip()
-    hallo = f'Hey {name},' if name else 'Hey,'
+    hallo = f'Hi {name},' if name else 'Hi,'
     cr = TRIAL_SECONDS // 60
-    free_line = (f'Your {cr} free credits are ready, 1 credit equals 1 minute '
-                 f'of finished video.\n\n' if cr > 0 else '')
+    free_line = (f'Your {cr} free credits are ready to use. One credit equals '
+                 f'one minute of finished video.\n\n' if cr > 0 else '')
     try:
         _send_mail(
-            u['email'], 'Your DouchkoVE account is ready',
+            u['email'], 'Welcome to DouchkoVE',
             f'{hallo}\n\n'
-            f'your account is all set. {free_line}'
+            f'Your account is ready. {free_line}'
             f'Getting started:\n'
             f'1. Open the app: {base}/app/create\n'
-            f'2. Upload a talking head clip, vertical works best\n'
-            f'3. Let the AI direction pick the moments, then hit render\n\n'
-            f'No subscription here. If you ever need more, credits come in '
-            f'one time packs and stay valid for 6 months.\n\n'
-            f'Questions or ideas? Just reply to this email, it lands straight '
-            f'in my inbox.\n\n'
-            f'Ismet from DouchkoVE')
+            f'2. Upload a talking head clip (vertical works best)\n'
+            f'3. Let the AI pick the key moments, then render\n\n'
+            f'Credits are one time purchases and stay valid for 6 months. '
+            f'There is no subscription and nothing renews automatically.\n\n'
+            f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
+            f'The DouchkoVE Team')
         return True
     except Exception as e:
         print(f'Welcome-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -982,19 +984,20 @@ def _send_purchase_mail(uid, sec, session_id):
         return False
     base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
     name = (u['name'] or '').strip()
-    hallo = f'Hey {name},' if name else 'Hey,'
+    hallo = f'Hi {name},' if name else 'Hi,'
     months = max(1, round(CREDIT_VALIDITY_DAYS / 30))
     try:
         _send_mail(
             u['email'], f'{sec // 60} credits added to your account',
             f'{hallo}\n\n'
-            f'thank you for your purchase! {sec // 60} credits were just added '
-            f'to your account, and the watermark is now removed from your '
+            f'Thank you for your purchase. {sec // 60} credits have been added '
+            f'to your account, and the watermark has been removed from your '
             f'finished videos.\n\n'
-            f'Your credits stay valid for {months} months. No subscription, '
-            f'nothing renews on its own.\n\n'
-            f'Jump back in: {base}/app/create\n\n'
-            f'Thanks for supporting DouchkoVE,\nIsmet')
+            f'Your credits are valid for {months} months. There is no '
+            f'subscription and nothing renews automatically.\n\n'
+            f'Open the app: {base}/app/create\n\n'
+            f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
+            f'The DouchkoVE Team')
         return True
     except Exception as e:
         print(f'Kauf-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -1357,7 +1360,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v133a-mailfix'
+DVE_BUILD = 'v133b-mailcopy'
 
 
 @app.middleware('http')
