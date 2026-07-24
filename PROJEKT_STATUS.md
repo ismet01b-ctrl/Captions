@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v132 "Mit Google anmelden" (OAuth 2.0), optional + inert per Default.** Ismet wollte Google-
+  Registrierung. Autorisierungs-Code-Flow: `/api/auth/google/start` (state-Cookie gegen CSRF, ref-Code
+  wird mitgereicht) leitet zur Google-Zustimmung; `/api/auth/google/callback` tauscht den Code
+  server-zu-server (Client-Secret ueber TLS) gegen den id_token, prueft `aud`/`iss`/`exp`/
+  `email_verified` und loggt ein. `_upsert_google_user`: findet ueber stabile `google_sub`, sonst ueber
+  E-Mail (verknuepft ein bestehendes Passwort-Konto, kein Duplikat), sonst neu = SOFORT verified=1
+  (Google hat die Mail bestaetigt) + Willkommens-Guthaben. Neue Konten sind passwortlos (unnutzbarer
+  Zufalls-Hash), Passwort-Reset kann spaeter trotzdem eins setzen. Gesperrte Konten (`disabled`) kommen
+  auch ueber Google nicht rein. Frontend: "Continue with Google"-Button auf der Auth-Seite, versteckt
+  bis `/api/authinfo` `{google:true}` meldet; OAuth-Fehler landen als `?autherror=`-Toast. WICHTIG:
+  KOMPLETT aus, solange `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` fehlen - kein Button, Endpoints
+  redirecten nur. Passwort-Login voellig unberuehrt. Migration: `users.google_sub` + partieller
+  Unique-Index. Beweis: 8 neue Tests (Anlage/Verknuepfung/Idempotenz/Sperre/authinfo/inert/JWT/
+  Username), Selftest 740/740 gruen. NOCH NICHT auf echtem Google-Client verifiziert (hier ohne Keys
+  getestet) - Ismet legt den OAuth-Client in der Google Cloud an, dann live pruefen.
 - **v131 Betriebs-Post mit EINEM Regler (`DVE_ALERTS`).** Ismet: nicht jede Kleinigkeit als Mail
   bekommen. Drei Stufen: `all` (alles, inkl. taegliche Backup-Mail = frueheres Verhalten),
   `important` (Default: NUR echte Stoerungen - Job-Fehler, Platte knapp, Timeout; keine Routine-Post),

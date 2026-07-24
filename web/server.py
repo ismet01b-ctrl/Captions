@@ -35,7 +35,7 @@ from queue import Queue
 
 import yaml
 from fastapi import Cookie, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -59,6 +59,13 @@ MAX_SECONDS = int(os.environ.get('DVE_MAX_SECONDS', '180'))
 SESSION_DAYS = 30
 TRIAL_SECONDS = int(os.environ.get('DVE_TRIAL_SECONDS', '120'))  # 2 Min gratis
 RETENTION_DAYS = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
+# v132: "Mit Google anmelden" (OAuth). KOMPLETT inert, solange die beiden Keys
+# fehlen - kein Button, kein Endpoint-Effekt. Erst wenn du in der Google Cloud
+# eine OAuth-Client-ID anlegst und beide Werte in die .env setzt, erscheint der
+# Button. Aendert am Passwort-Login NICHTS.
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '').strip()
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '').strip()
+GOOGLE_OK = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
 
 # v84: Credits statt roher Minuten. Intern bleibt alles Sekunden (bewaehrt),
@@ -256,6 +263,14 @@ def _init_users_db():
     # sich nicht mehr einloggen und bestehende Sessions gelten als tot.
     if 'disabled' not in cols:
         con.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+        con.commit()
+    # v132: Google-OAuth. google_sub = stabile Google-Nutzer-ID (kommt aus dem
+    # id_token, aendert sich nie, auch wenn der Nutzer die E-Mail umbenennt).
+    # Ein Konto kann Passwort UND Google haben (per E-Mail verknuepft).
+    if 'google_sub' not in cols:
+        con.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_gsub "
+                    "ON users(google_sub) WHERE google_sub IS NOT NULL")
         con.commit()
     # v125: einmalige System-Mails (z.B. Verfall-Warnung) gegen Doppelversand.
     con.execute("CREATE TABLE IF NOT EXISTS mail_log ("
@@ -1257,7 +1272,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v131-alerts'
+DVE_BUILD = 'v132-google'
 
 
 @app.middleware('http')
@@ -3109,6 +3124,195 @@ def api_logout(request: Request, response: Response):
     _kill_session(request.cookies.get('dve_session'))
     response.delete_cookie('dve_session', path='/')
     return {'ok': True}
+
+
+# ------------------------------------------------- v132: Google-OAuth-Login
+# Autorisierungs-Code-Flow. Der id_token wird server-zu-server (mit dem
+# Client-Secret ueber TLS) direkt bei Google abgeholt - der Kanal ist damit
+# authentisch. Zusaetzlich pruefen wir aud/iss/exp und email_verified als
+# Guertel-und-Hosentraeger. Alles inert, solange GOOGLE_OK False ist.
+_GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+_GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+_GOOGLE_ISS = ('accounts.google.com', 'https://accounts.google.com')
+
+
+def _google_redirect_uri():
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    return base + '/api/auth/google/callback'
+
+
+def _decode_jwt_payload(token):
+    """Nur den Payload-Teil eines JWT dekodieren (KEINE Signaturpruefung -
+    die entfaellt hier bewusst, weil der Token gerade eben ueber den mit dem
+    Client-Secret authentisierten TLS-Kanal direkt von Google kam)."""
+    import base64
+    try:
+        p = token.split('.')[1]
+        p += '=' * (-len(p) % 4)                       # Base64url-Padding
+        return json.loads(base64.urlsafe_b64decode(p.encode()))
+    except Exception:
+        return None
+
+
+def _upsert_google_user(sub, email, name, ref=''):
+    """Google-Nutzer finden oder anlegen. Reihenfolge: erst ueber die stabile
+    google_sub, dann ueber die E-Mail (verknuepft ein bestehendes Passwort-
+    Konto). Neu angelegte Konten sind SOFORT verified=1 (Google hat die Mail
+    bestaetigt) und bekommen das Willkommens-Guthaben. Rueckgabe: (uid, is_new)."""
+    email = (email or '').strip().lower()
+    con = _db()
+    try:
+        row = con.execute("SELECT id, disabled FROM users WHERE google_sub = ?",
+                          (sub,)).fetchone()
+        if not row:
+            row = con.execute("SELECT id, disabled FROM users WHERE email = ?",
+                              (email,)).fetchone()
+            if row:
+                con.execute("UPDATE users SET google_sub = ? WHERE id = ?",
+                            (sub, row['id']))
+                con.commit()
+        if row:
+            if _row_get(row, 'disabled'):
+                con.close()
+                return None, False                     # gesperrt -> kein Login
+            return row['id'], False
+        # Neu anlegen: passwortlos (unnutzbarer Zufalls-Hash), verified, gsub.
+        uname = _google_username(name, email)
+        pw_hash = _hash_pw(secrets.token_urlsafe(24))
+        cur = con.execute(
+            "INSERT INTO users (email, pw_hash, name, balance_sec, created_at, "
+            "verified, google_sub) VALUES (?, ?, ?, 0, ?, 1, ?)",
+            (email, pw_hash, uname, int(time.time()), sub))
+        uid = cur.lastrowid
+        # Referral zuordnen (still; ungueltige Codes brechen nichts).
+        _ref = re.sub(r'[^A-Z2-9]', '', (ref or '').strip().upper())[:8]
+        if _ref:
+            r = con.execute("SELECT id FROM users WHERE ref_code = ?", (_ref,)).fetchone()
+            if r and r['id'] != uid:
+                con.execute("UPDATE users SET referred_by = ? WHERE id = ?",
+                            (r['id'], uid))
+        con.commit()
+        return uid, True
+    except sqlite3.IntegrityError:
+        # Race: parallel angelegt -> jetzt sicher vorhanden.
+        row = con.execute("SELECT id FROM users WHERE google_sub = ? OR email = ?",
+                          (sub, email)).fetchone()
+        return (row['id'] if row else None), False
+    finally:
+        con.close()
+
+
+def _google_username(name, email):
+    """Anzeigename aus Google ableiten und an unsere Regeln anpassen (3-24,
+    erlaubte Zeichen). Faellt auf den E-Mail-Localpart zurueck."""
+    cand = (name or '').strip() or (email.split('@')[0] if '@' in email else 'user')
+    cand = re.sub(r'[^A-Za-z0-9 ._-]', '', cand).strip()
+    cand = re.sub(r'^[^A-Za-z0-9]+', '', cand)[:24].strip()
+    if len(cand) < 3:
+        cand = (cand + 'user')[:24]
+    return cand or 'user'
+
+
+@app.get('/api/authinfo')
+def api_authinfo():
+    """Oeffentlich: sagt dem Frontend, ob der Google-Button gezeigt werden
+    soll. Gibt NIE Secrets zurueck, nur das Ja/Nein."""
+    return {'google': GOOGLE_OK}
+
+
+@app.get('/api/auth/google/start')
+def auth_google_start(request: Request, ref: str = ''):
+    """Schritt 1: zu Googles Zustimmungs-Seite umleiten. state-Cookie gegen
+    CSRF; optionaler ref-Code wird ueber ein kurzes Cookie durchgereicht."""
+    if not GOOGLE_OK:
+        return RedirectResponse('/app?autherror=disabled', status_code=302)
+    ip = _client_ip(request)
+    if not _rate_limit_ok(ip, window_sec=900, max_attempts=30, bucket='goauth'):
+        return RedirectResponse('/app?autherror=rate', status_code=302)
+    state = secrets.token_urlsafe(24)
+    from urllib.parse import urlencode
+    url = _GOOGLE_AUTH_URL + '?' + urlencode({
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': _google_redirect_uri(),
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'online',
+        'prompt': 'select_account',
+    })
+    resp = RedirectResponse(url, status_code=302)
+    # 10-Min-Cookies, httponly, gleiche Herkunft (lax reicht - Google leitet per GET zurueck).
+    resp.set_cookie('dve_oauth_state', state, max_age=600, httponly=True,
+                    samesite='lax', secure=True, path='/')
+    _refc = re.sub(r'[^A-Za-z2-9]', '', (ref or '').strip().upper())[:8]
+    if _refc:
+        resp.set_cookie('dve_oauth_ref', _refc, max_age=600, httponly=True,
+                        samesite='lax', secure=True, path='/')
+    return resp
+
+
+@app.get('/api/auth/google/callback')
+def auth_google_callback(request: Request, code: str = '', state: str = '',
+                         error: str = ''):
+    """Schritt 2: Code gegen Tokens tauschen, id_token pruefen, ein-/ausloggen."""
+    if not GOOGLE_OK:
+        return RedirectResponse('/app?autherror=disabled', status_code=302)
+    if error or not code:
+        return RedirectResponse('/app?autherror=cancel', status_code=302)
+    # CSRF: state aus dem Cookie muss zum zurueckgegebenen state passen.
+    cookie_state = request.cookies.get('dve_oauth_state', '')
+    if not cookie_state or not state or not hmac.compare_digest(cookie_state, state):
+        return RedirectResponse('/app?autherror=state', status_code=302)
+    ref = request.cookies.get('dve_oauth_ref', '')
+    try:
+        import requests as _rq
+        tok = _rq.post(_GOOGLE_TOKEN_URL, data={
+            'code': code,
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'redirect_uri': _google_redirect_uri(),
+            'grant_type': 'authorization_code',
+        }, timeout=15)
+        if tok.status_code != 200:
+            print(f'Google-Token-Tausch fehlgeschlagen: {tok.status_code} {tok.text[:200]}')
+            return RedirectResponse('/app?autherror=token', status_code=302)
+        idt = tok.json().get('id_token', '')
+        claims = _decode_jwt_payload(idt) or {}
+    except Exception as e:
+        print(f'Google-Callback-Fehler: {type(e).__name__}: {e}')
+        return RedirectResponse('/app?autherror=token', status_code=302)
+    # Belt-and-suspenders: Zielgruppe, Aussteller, Ablauf, Mail-Bestaetigung.
+    if claims.get('aud') != GOOGLE_CLIENT_ID:
+        return RedirectResponse('/app?autherror=aud', status_code=302)
+    if str(claims.get('iss', '')) not in _GOOGLE_ISS:
+        return RedirectResponse('/app?autherror=iss', status_code=302)
+    try:
+        if int(claims.get('exp', 0)) < int(time.time()):
+            return RedirectResponse('/app?autherror=exp', status_code=302)
+    except (TypeError, ValueError):
+        return RedirectResponse('/app?autherror=exp', status_code=302)
+    sub = str(claims.get('sub', '')).strip()
+    email = str(claims.get('email', '')).strip().lower()
+    ev = claims.get('email_verified')
+    email_ok = (ev is True) or (str(ev).lower() == 'true')
+    if not sub or not email or not email_ok or not _valid_email(email):
+        return RedirectResponse('/app?autherror=email', status_code=302)
+    name = claims.get('given_name') or claims.get('name') or ''
+    uid, is_new = _upsert_google_user(sub, email, name, ref)
+    if not uid:
+        return RedirectResponse('/app?autherror=disabled', status_code=302)
+    if is_new:
+        try:
+            _grant_welcome(uid)                        # Mail ist Google-bestaetigt
+        except Exception as e:
+            print(f'Welcome-Credit (Google) {uid}: {e}')
+    tok2, _exp = _create_session(uid)
+    resp = RedirectResponse('/app/create', status_code=302)
+    resp.set_cookie('dve_session', tok2, httponly=True, samesite='lax',
+                    secure=True, max_age=SESSION_DAYS * 86400, path='/')
+    resp.delete_cookie('dve_oauth_state', path='/')
+    resp.delete_cookie('dve_oauth_ref', path='/')
+    return resp
 
 
 @app.get('/api/me')
@@ -5404,6 +5608,8 @@ def admin_system(request: Request):
             'public_url': os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu'),
             'owner_email': OWNER_EMAIL,
             'motion_available': bool(MOTION_BRIEF_OK),
+            'google_login': GOOGLE_OK,                 # v132
+            'alerts_level': ALERT_LEVEL,               # v131
         },
     }
 

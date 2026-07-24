@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v131-alerts'" in _srv_m)
+          and "DVE_BUILD = 'v132-google'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3252,6 +3252,48 @@ def _scenario_security(tmp):
     _osq, _oerr = SV._create_user(SV.OWNER_EMAIL, 'x' * 8, 'Squatter')
     check('v127-sec: OWNER_EMAIL nicht registrierbar',
           _osq is None and bool(_oerr))
+    # v132 Google-Login: upsert legt verifiziertes, passwortloses Konto an,
+    # verknuepft ueber E-Mail ein bestehendes Konto, ist idempotent ueber sub,
+    # und ein gesperrtes Konto meldet keinen Login.
+    _gu1, _new1 = SV._upsert_google_user('gsub_aaa', 'goog1@test', 'Goog One')
+    _gu2, _new2 = SV._upsert_google_user('gsub_aaa', 'goog1@test', 'Goog One')
+    _grow = SV._find_user_by_id(_gu1)
+    check('v132: Google-User angelegt, verified, passwortlos, sub gesetzt',
+          _gu1 and _new1 and (not _new2) and _gu1 == _gu2
+          and _grow['verified'] == 1 and SV._row_get(_grow, 'google_sub') == 'gsub_aaa')
+    check('v132: Passwort-Login auf Google-Konto unmoeglich (Zufalls-Hash)',
+          not SV._verify_pw('x' * 8, _grow['pw_hash']))
+    # Bestehendes Passwort-Konto wird per E-Mail verknuepft, kein Duplikat.
+    _puid, _ = SV._create_user('link@test', 'p' * 8, 'Linker')
+    _luid, _lnew = SV._upsert_google_user('gsub_bbb', 'link@test', 'Linker')
+    _lrow = SV._find_user_by_id(_puid)
+    check('v132: Google verknuepft vorhandenes Konto per E-Mail (kein Duplikat)',
+          _luid == _puid and (not _lnew)
+          and SV._row_get(_lrow, 'google_sub') == 'gsub_bbb'
+          and SV._verify_pw('p' * 8, _lrow['pw_hash']))     # Passwort bleibt gueltig
+    # Gesperrtes Konto: kein Login ueber Google.
+    _dcon = SV._db()
+    _dcon.execute("UPDATE users SET disabled = 1 WHERE id = ?", (_gu1,))
+    _dcon.commit(); _dcon.close()
+    _dis, _ = SV._upsert_google_user('gsub_aaa', 'goog1@test', 'Goog One')
+    check('v132: gesperrtes Konto -> kein Google-Login', _dis is None)
+    # authinfo verraet nur Ja/Nein, nie Secrets; Feature ist per Default aus.
+    _ai = SV.api_authinfo()
+    check('v132: /api/authinfo nur Flag, keine Secrets',
+          set(_ai.keys()) == {'google'} and _ai['google'] == SV.GOOGLE_OK)
+    check('v132: Endpoints inert ohne Keys (GOOGLE_OK aus -> Redirect)',
+          (not SV.GOOGLE_OK)
+          and SV.auth_google_start(_RQip(None, '10.0.0.9')).status_code == 302)
+    # JWT-Payload-Dekodierung robust (kein Absturz bei Muell).
+    import base64 as _b64
+    _pl = _b64.urlsafe_b64encode(b'{"sub":"s","email":"a@b.c"}').decode().rstrip('=')
+    check('v132: _decode_jwt_payload liest Payload, schluckt Muell',
+          (SV._decode_jwt_payload('h.' + _pl + '.sig') or {}).get('email') == 'a@b.c'
+          and SV._decode_jwt_payload('garbage') is None)
+    # Username-Ableitung: Sonderzeichen weg, Mindestlaenge, Fallback.
+    check('v132: Google-Username saeubert + Mindestlaenge',
+          SV._valid_username(SV._google_username('Jörg!! <b>', 'j@x.de'))
+          and SV._valid_username(SV._google_username('', 'ab@x.de')))
     # v128 Admin-Panel: alle Endpoints haengen am Server-Key DVE_ADMIN, nicht an
     # der Owner-Session. Falscher Key -> 403. Danach Overview/Users/Credits echt.
     os.environ['DVE_ADMIN'] = 'testkey_admin'

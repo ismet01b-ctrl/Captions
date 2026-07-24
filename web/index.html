@@ -1383,6 +1383,29 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         Forgot password?
       </button>
     </form>
+
+    <!-- v132: "Mit Google anmelden". Standardmaessig versteckt; wird nur
+         eingeblendet, wenn der Server GOOGLE_OK meldet (/api/authinfo). -->
+    <div id="googleAuth" style="display:none; max-width:340px; margin:14px auto 0;">
+      <div style="display:flex; align-items:center; gap:10px; color:var(--mut2);
+           font-size:12px; margin-bottom:12px;">
+        <span style="flex:1; height:1px; background:var(--surf2);"></span>
+        or
+        <span style="flex:1; height:1px; background:var(--surf2);"></span>
+      </div>
+      <a id="btnGoogle" href="/api/auth/google/start" class="btn secondary wide"
+         style="display:flex; align-items:center; justify-content:center; gap:10px;
+                text-decoration:none;">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        <span>Continue with Google</span>
+      </a>
+    </div>
+
     <div class="err hidden" id="loginErr" role="alert"></div>
 
     <!-- v89: Anonyme 10s-Demo - der Beweis mit dem eigenen Video -->
@@ -3281,10 +3304,46 @@ async function handleVerifyLink() {
   } catch (e) { toast('Connection error.', 'err'); }
 }
 
+/* v132: Google-Login-Button einblenden, wenn der Server ihn anbietet, und
+   den ref-Code an den Start-Link haengen. Fehler aus dem OAuth-Rueckweg
+   (?autherror=...) als Toast zeigen. */
+function setupGoogleAuth() {
+  const box = $('#googleAuth'), btn = $('#btnGoogle');
+  const errMap = {
+    disabled: 'Google sign-in is not available right now.',
+    cancel: 'Google sign-in was cancelled.',
+    rate: 'Too many attempts. Please wait a few minutes.',
+    state: 'Sign-in expired. Please try again.',
+    token: 'Could not reach Google. Please try again.',
+    aud: 'Google sign-in failed. Please try again.',
+    iss: 'Google sign-in failed. Please try again.',
+    exp: 'Sign-in expired. Please try again.',
+    email: 'Your Google email is not verified. Use email and password instead.',
+  };
+  try {
+    const p = new URLSearchParams(location.search);
+    const e = p.get('autherror');
+    if (e) {
+      toast(errMap[e] || 'Google sign-in failed. Please try again.', 'err', 6000);
+      p.delete('autherror');
+      const qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    }
+  } catch (e) {}
+  fetch('/api/authinfo').then(r => r.json()).then(d => {
+    if (!d.google || !box || !btn) return;
+    let ref = '';
+    try { ref = localStorage.getItem('dve_ref') || ''; } catch (e) {}
+    btn.href = '/api/auth/google/start' + (ref ? '?ref=' + encodeURIComponent(ref) : '');
+    box.style.display = 'block';
+  }).catch(() => {});
+}
+
 /* Auto-Login beim Seiten-Laden (Session-Cookie) */
 (async () => {
   await handleVerifyLink();
   if (handleResetLink()) return;
+  setupGoogleAuth();
   try {
     const r = await fetch('/api/me');
     const d = await r.json();
