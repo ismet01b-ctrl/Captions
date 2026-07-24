@@ -1785,7 +1785,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
       <div class="panel">
         <h3>Security</h3>
-        <p class="hint">Change your password.</p>
+        <p class="hint" id="secHint">Change your password.</p>
         <form id="pwForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
           <input type="password" id="pwOld" placeholder="Current password" required autocomplete="current-password">
           <input type="password" id="pwNew" placeholder="New password (min. 8 chars)" required autocomplete="new-password" minlength="8">
@@ -1875,6 +1875,9 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             </p>
             <form id="delForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
               <input type="password" id="delPw" placeholder="Confirm with your password" required>
+              <!-- v137a: Google-Konten haben kein Passwort - E-Mail als Bestaetigung -->
+              <input type="email" id="delMail" placeholder="Type your account email to confirm"
+                     style="display:none; text-transform:none;" autocomplete="off">
               <button class="btn" type="submit" id="btnDel" style="align-self:flex-start; background:#e0503a; color:white; padding:9px 18px;">Delete my account permanently</button>
             </form>
           </div>
@@ -2843,6 +2846,17 @@ function enterApp(user) {
   State.verified = user.verified !== false;
   State.balanceSec = user.balance_sec || 0;
   updateEngagementUI(user);
+  // v137a: Google-Konto -> kein Passwort vorhanden. Loeschen bestaetigt per
+  // E-Mail-Eingabe, Passwort-aendern-Block bekommt den ehrlichen Hinweis.
+  if (user.google) {
+    const dp = $('#delPw'), dm = $('#delMail');
+    if (dp) { dp.style.display = 'none'; dp.required = false; }
+    if (dm) dm.style.display = 'block';
+    const sh = $('#secHint');
+    if (sh) sh.textContent = 'You sign in with Google, so there is no password '
+      + 'to change here. To add one, use "Forgot password?" on the sign-in screen.';
+    const pf = $('#pwForm'); if (pf) pf.style.display = 'none';
+  }
   $('#loginView').classList.add('hidden');
   $('#appView').classList.add('show');
   $('#topName').textContent = State.codeName || 'Account';
@@ -4105,10 +4119,12 @@ if ($('#supportForm')) $('#supportForm').addEventListener('submit', async () => 
 });
 if ($('#delForm')) $('#delForm').addEventListener('submit', async () => {
   if (!confirm('This will PERMANENTLY delete your account, credits, and history. Continue?')) return;
-  const pw = $('#delPw').value;
+  const isGoogle = $('#delMail') && $('#delMail').style.display !== 'none';
   const btn = $('#btnDel'); btn.disabled = true;
   try {
-    const fd = new FormData(); fd.append('password', pw);
+    const fd = new FormData();
+    if (isGoogle) fd.append('confirm_email', $('#delMail').value.trim());
+    else fd.append('password', $('#delPw').value);
     const r = await fetch('/api/delete_account', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok) { toast(d.detail || 'Failed to delete.', 'err'); return; }

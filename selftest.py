@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v137-polish'" in _srv_m)
+          and "DVE_BUILD = 'v137a-googledel'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4246,6 +4246,34 @@ def _scenario_betrieb(tmp):
     check('v137: Factory-Reset nur mit RESET-Bestaetigung (sonst 400, nichts weg)',
           _fr_block and _still > 0
           and "'RESET'" in _srv137.split('def admin_factory_reset')[1].split('\ndef ')[0])
+    # v137a: Google-Konten (kein Passwort) loeschen per E-Mail-Bestaetigung.
+    _gd_uid, _ = SV._upsert_google_user('gsub_del137', 'gdel137@test', 'GDel')
+    class _DelReq:
+        def __init__(self):
+            self.cookies = {}
+            self.headers = {}
+            self.client = type('C', (), {'host': '10.0.0.7'})()
+    _origru137 = SV._require_user
+    SV._require_user = lambda req: SV._find_user_by_id(_gd_uid)
+    try:
+        _gd_block = False
+        try:
+            SV.api_delete_account(_DelReq(), SV.Response(),
+                                  password='', confirm_email='falsch@test')
+        except SV.HTTPException as _e:
+            _gd_block = (_e.status_code == 401)
+        _gd_ok = SV.api_delete_account(_DelReq(), SV.Response(),
+                                       password='', confirm_email='GDEL137@test')
+    finally:
+        SV._require_user = _origru137
+    check('v137a: Google-Konto loescht per E-Mail-Bestaetigung (falsch=401, case-insensitiv ok)',
+          _gd_block and _gd_ok.get('ok')
+          and SV._find_user_by_id(_gd_uid) is None
+          and "confirm_email: str = Form('')" in open(
+              os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+          and "'google': bool(_row_get(u, 'google_sub'))" in open(
+              os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+          and 'delMail' in _idx137 and 'user.google' in _idx137)
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA

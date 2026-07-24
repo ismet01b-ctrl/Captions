@@ -3,6 +3,15 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v137a Google-Konten koennen sich jetzt loeschen.** Ismets Fund: Konto-Loeschung verlangte
+  IMMER das Passwort - Google-Konten haben aber nie eins gesehen (Zufalls-Hash bei der Anlage),
+  Loeschung war fuer sie unmoeglich (DSGVO-Problem!). Fix: `/api/delete_account` akzeptiert fuer
+  Konten mit `google_sub` alternativ die eigene E-Mail-Adresse als Bestaetigung (case-insensitiv,
+  falsche Eingabe = 401); Passwort-Konten bestaetigen unveraendert per Passwort. `/api/me` liefert
+  `google`-Flag; das Frontend tauscht im Danger-Bereich das Passwort-Feld gegen das E-Mail-Feld und
+  der 'Change password'-Block zeigt Google-Nutzern den ehrlichen Hinweis (Passwort nachtraeglich
+  setzbar via 'Forgot password'). Beweis: funktionaler Test (falsch=401, richtig=geloescht),
+  Selftest gruen.
 - **v137 UI-Politur + Kauf-Mail aufgeraeumt + Factory-Reset.** Ismets Live-Feedback nach dem
   Testkauf (der KOMPLETT durchlief: Zahlung, Credits, Mail): (a) **UI:** Support-Textarea und
   Datei-Auswahl-Buttons waren Browser-Default-weiss -> dunkel gestylt (Textarea wie Inputs,

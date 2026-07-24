@@ -1603,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v137-polish'
+DVE_BUILD = 'v137a-googledel'
 
 
 @app.middleware('http')
@@ -3801,6 +3801,7 @@ def api_me(request: Request):
             'username': u['name'], 'credits': credits_of(u['balance_sec']),
             'created_at': int(u['created_at']),
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified']),
+            'google': bool(_row_get(u, 'google_sub')),    # v137a
             'renders': rc, 'purchased': _has_purchased(u['id']),
             'is_owner': str(u['email']).strip().lower() == OWNER_EMAIL,
             'motion_brief': MOTION_BRIEF_OK,   # v101p: Brief->Motion verfuegbar?
@@ -4007,13 +4008,23 @@ def _purge_user_db(uid):
 
 @app.post('/api/delete_account')
 def api_delete_account(request: Request, response: Response,
-                       password: str = Form(...)):
+                       password: str = Form(''), confirm_email: str = Form('')):
     """v80m: DSGVO - Nutzer kann sein Konto komplett loeschen.
-    Passwort-Bestaetigung noetig. Alle Sessions, Ledger-Eintraege,
-    Templates werden ebenfalls entfernt."""
+    v137a: Google-Konten haben nie ein Passwort gesehen (Zufalls-Hash bei der
+    Anlage) - sie bestaetigen stattdessen durch Eintippen der eigenen
+    E-Mail-Adresse. Passwort-Konten bestaetigen weiter mit Passwort."""
     u = _require_user(request)
-    if not _verify_pw(password, u['pw_hash']):
-        raise HTTPException(401, 'Password is wrong.')
+    is_google = bool(_row_get(u, 'google_sub'))
+    ok = False
+    if password:
+        ok = _verify_pw(password, u['pw_hash'])
+    elif is_google and confirm_email:
+        ok = (confirm_email.strip().lower()
+              == str(u['email']).strip().lower())
+    if not ok:
+        raise HTTPException(401, 'Please type your account email to confirm.'
+                            if is_google and not password
+                            else 'Password is wrong.')
     uid = u['id']
     # v92-sec (DSGVO Art. 17): WIRKLICH alles loeschen. Frueher blieben die
     # gerenderten Videos, die Original-Uploads (Gesicht/Stimme!), Transkripte
