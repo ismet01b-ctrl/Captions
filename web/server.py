@@ -69,7 +69,10 @@ GOOGLE_OK = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 # v133c: Support-Postfach. HIERHIN gehen die Support-Ticket-Meldungen (mit
 # Reply-To = Kundenadresse). noreply@douchko.eu verschickt nur, nimmt aber
 # KEINE Antworten mehr an (kein globales Reply-To). Steht als Kontakt in Mails.
-SUPPORT_EMAIL = os.environ.get('DVE_SUPPORT_MAIL', 'Ismet@douchkove.com').strip()
+# 'or'-Fallback: docker-compose reicht bei fehlender .env-Zeile einen LEEREN
+# String durch, der einen get-Default schlagen wuerde (gleiche Falle wie
+# DVE_TAX_ID in v135a - live stand 'email .' in der Kauf-Mail).
+SUPPORT_EMAIL = (os.environ.get('DVE_SUPPORT_MAIL') or 'Ismet@douchkove.com').strip()
 
 
 # v84: Credits statt roher Minuten. Intern bleibt alles Sekunden (bewaehrt),
@@ -940,7 +943,8 @@ def _esc_html(s):
             .replace('>', '&gt;').replace('"', '&quot;'))
 
 
-def _email_html(heading, paragraphs, cta_text=None, cta_url=None, steps=None):
+def _email_html(heading, paragraphs, cta_text=None, cta_url=None, steps=None,
+                fine_print=None):
     """v133d: gebrandetes, tabellenbasiertes HTML-Mail-Template (Inline-CSS,
     Gmail/Outlook/Apple-Mail-sicher). Heller Body, dunkles Logo, oranger Akzent
     und CTA - der DouchkoVE-Look. Ehrlich, ohne erfundene Zahlen. Rueckgabe ist
@@ -975,6 +979,15 @@ def _email_html(heading, paragraphs, cta_text=None, cta_url=None, steps=None):
             'font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;'
             f'font-family:Arial,Helvetica,sans-serif;">{cta_text}</a>'
             '</td></tr></table>')
+    # v137: Kleingedrucktes (Pflicht-Rechtstext) unauffaellig UNTER dem CTA -
+    # nicht mitten im Inhalt, aber auf dem dauerhaften Datentraeger (Mail).
+    fine_html = ''
+    if fine_print:
+        fp = ''.join(
+            f'<p style="margin:0 0 7px;font-size:10.5px;line-height:1.5;'
+            f'color:#a1a1aa;">{p}</p>' for p in fine_print)
+        fine_html = ('<div style="border-top:1px solid #e4e4e7;margin-top:20px;'
+                     f'padding-top:12px;">{fp}</div>')
     return (
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -991,7 +1004,8 @@ def _email_html(heading, paragraphs, cta_text=None, cta_url=None, steps=None):
         f'background:{acc};border-radius:2px;margin:18px auto 0;"></div></td></tr>'
         '<tr><td style="padding:22px 32px 6px;font-family:Arial,Helvetica,sans-serif;">'
         f'<h1 style="margin:0 0 16px;font-size:23px;line-height:1.25;color:#18181b;'
-        f'font-weight:800;">{heading}</h1>{p_html}{steps_html}{cta_html}</td></tr>'
+        f'font-weight:800;">{heading}</h1>{p_html}{steps_html}{cta_html}'
+        f'{fine_html}</td></tr>'
         '<tr><td style="padding:10px 32px 30px;font-family:Arial,Helvetica,sans-serif;">'
         '<div style="border-top:1px solid #e4e4e7;padding-top:16px;">'
         '<p style="margin:0 0 6px;font-size:13px;color:#71717a;">Need help? '
@@ -1112,13 +1126,16 @@ def _send_welcome_mail(uid):
         return False
 
 
-def _send_purchase_mail(uid, sec, session_id, cents=None, pack=None):
+def _send_purchase_mail(uid, sec, session_id, cents=None, pack=None,
+                        invoice_url=None):
     """v133: Kaufbestaetigung nach frisch verbuchtem Stripe-Kauf. Idempotent
-    pro Session (mail_log). Die formale Zahlungsquittung schickt Stripe.
-    v135a (§312f BGB): Die Mail ist jetzt die VERTRAGSBESTAETIGUNG auf einem
-    dauerhaften Datentraeger: Bestellung + Preis, Bestaetigung der
-    Zustimmung zur sofortigen Ausfuehrung (§356 Abs. 4, mit Zeitstempel),
-    Widerrufsbelehrung in Kurzform + Muster-Widerrufsformular, AGB-Link."""
+    pro Session (mail_log).
+    v137: Aufgeraeumt nach Ismets Feedback. Hauptteil = nur das Wichtige
+    (Danke, Bestellung, Preis, Gueltigkeit, RECHNUNGS-LINK, CTA). Die
+    Pflicht-Rechtstexte (§312f Vertragsbestaetigung: Consent-Zeitstempel,
+    Widerrufsbelehrung, Musterformular) stehen als Kleingedrucktes UNTEN -
+    ganz weglassen geht nicht, sonst laeuft die Widerrufsfrist bis zu 12
+    Monate weiter (Art. 246a EGBGB, dauerhafter Datentraeger = diese Mail)."""
     u = _find_user_by_id(uid)
     if not u:
         return False
@@ -1135,9 +1152,14 @@ def _send_purchase_mail(uid, sec, session_id, cents=None, pack=None):
     order = (f'DouchkoVE {pname} Pack, {n} credits'
              if pname else f'{n} credits')
     price = (f'{int(cents) / 100:.2f} EUR (no VAT, §19 UStG)'
-             if cents is not None else 'see your Stripe invoice')
-    # §356(4)-Consent-Zeitstempel aus dem Kauf-Protokoll (bester = juengster).
-    consent_line = ''
+             if cents is not None else 'see your invoice')
+    inv_txt = (f'Your invoice: {invoice_url}' if invoice_url
+               else 'Your invoice arrives by email shortly.')
+    inv_html = (f'Your invoice: <a href="{invoice_url}" '
+                f'style="color:#ff7a1a;">view and download (PDF)</a>'
+                if invoice_url else 'Your invoice arrives by email shortly.')
+    # §356(4)-Consent-Zeitstempel aus dem Kauf-Protokoll (juengster Eintrag).
+    consent_ts = ''
     try:
         con = _db()
         _c = con.execute(
@@ -1145,24 +1167,20 @@ def _send_purchase_mail(uid, sec, session_id, cents=None, pack=None):
             "kind = 'withdrawal_immediate_performance'", (uid,)).fetchone()
         con.close()
         if _c and _c['t']:
-            _ts = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(_c['t']))
-            consent_line = (
-                'During checkout you expressly requested immediate delivery '
-                'of the digital service and acknowledged that your right of '
-                'withdrawal expires once credits are used. We recorded this '
-                f'consent on {_ts}.')
+            consent_ts = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(_c['t']))
     except Exception:
         pass
-    withdrawal = (
-        'Right of withdrawal: You may withdraw from this contract within 14 '
-        'days without giving reasons, as long as the credits are unused. To '
-        f'withdraw, email {SUPPORT_EMAIL}. Full terms: {base}/terms')
-    model_form = (
-        'Model withdrawal form (only if you wish to withdraw): To DouchkoVE, '
-        'Ismet Beyazkus, Hinter den Gaerten 4, 52388 Noervenich, Germany, '
-        f'{SUPPORT_EMAIL}: I hereby give notice that I withdraw from my '
-        'contract for the following purchase: [order], ordered on [date]. '
-        '[Name], [address], [date], [signature only if on paper].')
+    legal = (
+        'Right of withdrawal (Widerrufsbelehrung): You may withdraw from this '
+        'purchase within 14 days without giving reasons; unused credits are '
+        'then refunded. The right expires for credits already used, because '
+        'you expressly requested immediate performance during checkout'
+        + (f' (recorded {consent_ts})' if consent_ts else '') + '. '
+        f'To withdraw, email {SUPPORT_EMAIL}. '
+        'Model withdrawal form: To DouchkoVE, Ismet Beyazkus, Hinter den '
+        f'Gaerten 4, 52388 Noervenich, Germany, {SUPPORT_EMAIL}: I hereby '
+        'withdraw from my contract for the purchase of [order], ordered on '
+        f'[date]. [Name], [address], [date]. Full terms: {base}/terms')
     try:
         _send_mail(
             u['email'], f'{n} credits added to your account',
@@ -1172,14 +1190,13 @@ def _send_purchase_mail(uid, sec, session_id, cents=None, pack=None):
             f'finished videos.\n\n'
             f'Your order: {order}\n'
             f'Price: {price}\n'
-            f'Validity: {months} months from purchase. There is no '
-            f'subscription and nothing renews automatically.\n\n'
-            + (consent_line + '\n\n' if consent_line else '')
-            + f'{withdrawal}\n\n{model_form}\n\n'
-            f'Your invoice arrives in a separate email.\n\n'
+            f'Validity: {months} months from purchase. No subscription, '
+            f'nothing renews automatically.\n\n'
+            f'{inv_txt}\n\n'
             f'Open the app: {base}/app/create\n\n'
             f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
-            f'The DouchkoVE Team',
+            f'The DouchkoVE Team\n\n'
+            f'----\n{legal}',
             html=_email_html(
                 'Payment received',
                 [hi,
@@ -1189,13 +1206,10 @@ def _send_purchase_mail(uid, sec, session_id, cents=None, pack=None):
                  f'Your order: <b>{_esc_html(order)}</b><br>'
                  f'Price: {_esc_html(price)}<br>'
                  f'Validity: {months} months from purchase. No subscription, '
-                 'nothing renews automatically.']
-                + ([_esc_html(consent_line)] if consent_line else [])
-                + [_esc_html(withdrawal),
-                   f'<span style="font-size:12px;color:#a1a1aa;">'
-                   f'{_esc_html(model_form)}</span>',
-                   'Your invoice arrives in a separate email.'],
-                cta_text='Open DouchkoVE', cta_url=f'{base}/app/create'))
+                 'nothing renews automatically.',
+                 inv_html],
+                cta_text='Open DouchkoVE', cta_url=f'{base}/app/create',
+                fine_print=[_esc_html(legal)]))
         return True
     except Exception as e:
         print(f'Kauf-Mail fehlgeschlagen: {type(e).__name__}: {e}')
@@ -1589,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v136-graphs'
+DVE_BUILD = 'v137-polish'
 
 
 @app.middleware('http')
@@ -1834,8 +1848,22 @@ async def api_stripe_webhook(request: Request):
     # einen evtl. fehlenden purchases-Beleg nach.
     if not _credit_purchase(uid, sec, sess_id, pack=pack, cents=_cents):
         return {'ok': True, 'idempotent': True}
+    # v137: Rechnungs-Link direkt in unsere Kauf-Mail (Stripe mailt die
+    # Rechnung wegen der Finalisierungs-Nachfrist erst ~1h spaeter). Ist die
+    # Rechnung noch Entwurf, gibt es noch keine URL - dann sagt die Mail
+    # ehrlich 'arrives shortly'. Darf den Kauf nie reissen.
+    inv_url = None
     try:
-        _send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack)  # v133
+        inv_id = sess.get('invoice')
+        if inv_id:
+            _inv = st.Invoice.retrieve(inv_id)
+            inv_url = (_inv.get('hosted_invoice_url') if isinstance(_inv, dict)
+                       else getattr(_inv, 'hosted_invoice_url', None))
+    except Exception as e:
+        print(f'Invoice-URL nicht abrufbar: {e}')
+    try:
+        _send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack,
+                            invoice_url=inv_url)       # v133/v137
     except Exception as e:                             # darf den Kauf nie reissen
         print(f'Kauf-Mail fehlgeschlagen: {e}')
     print(f"Kauf verbucht: user={uid} pack={pack} +{sec // 60} Min")
@@ -2592,7 +2620,7 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
 
 
 # ---------------------------------------------------------- Admin-Alarm
-ADMIN_MAIL = os.environ.get('DVE_ADMIN_MAIL', 'ismet.01.b@gmail.com')
+ADMIN_MAIL = (os.environ.get('DVE_ADMIN_MAIL') or 'ismet.01.b@gmail.com').strip()
 _ADMIN_NOTIFIED = {}
 
 # v131: EIN Regler gegen Postfach-Spam. Ismet will nicht jede Kleinigkeit
@@ -6216,6 +6244,50 @@ def admin_tickets(request: Request, status: str = 'all', limit: int = 200):
                          'status': r['status'], 'created_at': r['created_at'],
                          'updated_at': r['updated_at']} for r in rows],
             'open_count': open_count}
+
+
+@app.post('/api/admin/factory_reset')
+def admin_factory_reset(request: Request, confirm: str = Form('')):
+    """v137: Kompletter Neustart auf null fuer die Zeit VOR dem Launch -
+    loescht ALLE Kunden-/Testdaten (Users, Credits, Kaeufe, Tickets, Consents,
+    Jobs, Caches). Nur mit confirm='RESET'. Zahlungsbelege bleiben vollstaendig
+    im Stripe-Dashboard erhalten (dort liegt die steuerliche Wahrheit)."""
+    _require_admin(request)
+    if (confirm or '').strip() != 'RESET':
+        raise HTTPException(400, "Type RESET to confirm the full wipe.")
+    con = _db()
+    tables = ['sessions', 'ledger', 'ledger_archive', 'purchases', 'tickets',
+              'consents', 'resets', 'verify_tokens', 'mail_log',
+              'credit_claims', 'referral_claims', 'users']
+    counts = {}
+    for t in tables:
+        try:
+            counts[t] = con.execute(f"SELECT COUNT(*) c FROM {t}").fetchone()['c']
+            con.execute(f"DELETE FROM {t}")             # feste Liste, kein User-Input
+        except sqlite3.OperationalError:
+            counts[t] = None
+    con.commit()
+    con.close()
+    # Jobs (Speicher + Platte) und Transkript-Cache leeren
+    for jid in list(JOBS.keys()):
+        shutil.rmtree(job_dir(jid), ignore_errors=True)
+        JOBS.pop(jid, None)
+    try:
+        for fn in os.listdir(JOBS_DIR):
+            shutil.rmtree(os.path.join(JOBS_DIR, fn), ignore_errors=True)
+    except OSError:
+        pass
+    try:
+        for fn in os.listdir(_TCACHE):
+            try:
+                os.remove(os.path.join(_TCACHE, fn))
+            except OSError:
+                pass
+    except OSError:
+        pass
+    _ADMIN_NOTIFIED.clear()
+    print(f'FACTORY RESET durch Admin: {counts}')
+    return {'ok': True, 'wiped': counts}
 
 
 @app.post('/api/admin/tickets/{tid}/status')

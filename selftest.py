@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v136-graphs'" in _srv_m)
+          and "DVE_BUILD = 'v137-polish'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3887,7 +3887,7 @@ def _scenario_betrieb(tmp):
     _srv133 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('v133: Mails verdrahtet (Verify + Google + Webhook) + Copy ohne Gedankenstriche',
           _srv133.count('_send_welcome_mail(uid)') >= 2
-          and '_send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack)' in _srv133
+          and '_send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack,' in _srv133
           and '—' not in _wm_src and '–' not in _wm_src)
     # v133a: Absender-Feld robust. Leeres MAIL_FROM (docker-compose reicht ''
     # durch) -> Default, nackte Adresse -> verpackt, fertiges 'Name <adr>' ->
@@ -4146,9 +4146,10 @@ def _scenario_betrieb(tmp):
           'per started minute' in _trmA and '1 credit per clip' in _trmA
           and 'ec.europa.eu' not in _trmA
           and 'remain refundable on request' in _trmA)
-    check('v135a: Danger-Zone-Text stimmt mit AGB ueberein + Rechtslinks vor Login',
+    # v137: Ismet will den Refund-Hinweis dort nicht (nicht Pflicht an der
+    # Stelle) - wichtig bleibt nur: KEINE falsche 'no refunds'-Behauptung.
+    check('v135a: Danger-Zone ohne falsche Refund-Behauptung + Rechtslinks vor Login',
           'Refunds are not possible' not in _idxA
-          and 'remain refundable' in _idxA
           and _idxA.count('href="/imprint"') >= 2)
     check('v135a: Privacy kennt Resend + Google-Login + Tickets + Consent + GoBD-Ausnahme',
           'Resend' in _prvA and 'Sign in with Google' in _prvA
@@ -4198,6 +4199,53 @@ def _scenario_betrieb(tmp):
                    'render_min', 'credits_bought_min', 'credits_spent_min'))
           and _tsr['labels'][-1] == _today_utc
           and sum(_tsr['revenue_eur']) >= 0)
+    # ================= v137: UI-Politur + Kauf-Mail + Reset =================
+    _idx137 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _srv137 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _cmp137 = open(os.path.join(HERE, 'docker-compose.yml'), encoding='utf-8').read()
+    check('v137: Account-UI dunkel (Textarea + Datei-Auswahl gestylt), Danger-Zone kurz',
+          '#page-account textarea' in _idx137
+          and 'file-selector-button' in _idx137
+          and 'Contact us BEFORE deleting' not in _idx137)
+    check('v137: SUPPORT/ADMIN-Mail Leerstring-Falle zu (or-Fallback + compose-Default)',
+          "os.environ.get('DVE_SUPPORT_MAIL') or" in _srv137
+          and "os.environ.get('DVE_ADMIN_MAIL') or" in _srv137
+          and 'DVE_SUPPORT_MAIL: ${DVE_SUPPORT_MAIL:-Ismet@douchkove.com}' in _cmp137
+          and 'DVE_ADMIN_MAIL: ${DVE_ADMIN_MAIL:-ismet.01.b@gmail.com}' in _cmp137)
+    # Kauf-Mail: Rechnungs-Link im Hauptteil, Rechtstext als Kleingedrucktes,
+    # Webhook holt die hosted_invoice_url. Funktional mit invoice_url pruefen.
+    _cap137 = []
+    _rsm137 = SV._send_mail
+    SV._send_mail = lambda to, s, b, reply_to=None, html=None: _cap137.append((b, html))
+    try:
+        _u137, _ = SV._create_user('v137mail@test', 'x' * 8, 'Polish')
+        SV._send_purchase_mail(_u137, 1200, 'sess_v137', cents=900, pack='starter',
+                               invoice_url='https://invoice.stripe.com/i/test123')
+    finally:
+        SV._send_mail = _rsm137
+    _b137, _h137 = (_cap137[0] if _cap137 else ('', ''))
+    check('v137: Kauf-Mail mit Rechnungs-Link, Rechtstext klein unten, Webhook holt URL',
+          'https://invoice.stripe.com/i/test123' in _b137
+          and _b137.index('Your invoice:') < _b137.index('----')
+          and _b137.rstrip().index('Widerrufsbelehrung') > _b137.index('The DouchkoVE Team')
+          and 'fine_print=' in _srv137 and 'hosted_invoice_url' in _srv137
+          and 'view and download (PDF)' in (_h137 or ''))
+    # Factory-Reset: RESET-Pflicht (falscher Confirm -> 400, nichts geloescht).
+    class _FrReq:
+        def __init__(self, key):
+            self.headers = {'x-admin-key': key}
+    os.environ['DVE_ADMIN'] = 'testkey_admin'
+    _fr_block = False
+    try:
+        SV.admin_factory_reset(_FrReq('testkey_admin'), confirm='nope')
+    except SV.HTTPException as _e:
+        _fr_block = (_e.status_code == 400)
+    _conF = SV._db()
+    _still = _conF.execute("SELECT COUNT(*) c FROM users").fetchone()['c']
+    _conF.close()
+    check('v137: Factory-Reset nur mit RESET-Bestaetigung (sonst 400, nichts weg)',
+          _fr_block and _still > 0
+          and "'RESET'" in _srv137.split('def admin_factory_reset')[1].split('\ndef ')[0])
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA

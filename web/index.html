@@ -955,6 +955,31 @@ body {
   outline: none; border-color: var(--acc);
 }
 #page-account input::placeholder { color: var(--mut); }
+/* v137: Restliche Browser-Default-Elemente (waren weiss/hell):
+   Textarea (Support) + Datei-Auswahl (Style-Upload, Transcribe). */
+#page-account textarea {
+  width: 100%; padding: 12px 14px;
+  background: var(--surf2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 10px;
+  font-size: 15px; font-family: inherit; text-transform: none;
+  resize: vertical; min-height: 110px;
+}
+#page-account textarea:focus { outline: none; border-color: var(--acc); }
+#page-account textarea::placeholder { color: var(--mut); }
+#page-account input[type=file] {
+  width: 100%; color: var(--mut); font-size: 13px;
+  background: var(--surf2); border: 1px dashed var(--line);
+  border-radius: 10px; padding: 10px 12px; cursor: pointer;
+}
+#page-account input[type=file]::file-selector-button {
+  background: var(--surf); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 14px; margin-right: 12px; font-size: 13px;
+  font-weight: 600; cursor: pointer; font-family: inherit;
+}
+#page-account input[type=file]::file-selector-button:hover {
+  border-color: var(--acc); color: var(--acc);
+}
 
 /* v80y: Transcript-Editor */
 .tw {
@@ -1847,8 +1872,6 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <p class="hint">
               Permanently deletes your account, all library videos, saved setups, and any
               remaining credit. <b style="color:var(--fg);">This cannot be undone.</b>
-              Unused credits from purchases within the last 14 days remain refundable.
-              Contact us BEFORE deleting if you want a refund; older credits are forfeited.
             </p>
             <form id="delForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
               <input type="password" id="delPw" placeholder="Confirm with your password" required>

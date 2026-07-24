@@ -510,12 +510,24 @@ async function loadSystem(){
     <div class="row-actions">
       <button class="btn ghost sm" onclick="sysAct('backup/run','Run a DB backup now?')">Backup now</button>
       <button class="btn ghost sm" onclick="sysAct('mail/test','Send a test mail to the admin address?')">Send test mail</button>
+      <button class="btn bad sm" onclick="factoryReset()">Factory reset (wipe ALL data)</button>
       <button class="btn warn sm" onclick="sysAct('cleanup/run','Run the retention cleanup sweep now? Deletes job dirs older than retention.')">Run cleanup</button>
       <button class="btn warn sm" onclick="sysAct('expiry/run','Run the credit-expiry sweep now?')">Run expiry sweep</button>
     </div>
     <div class="note">Config values are set via env at boot — change them in .env + docker restart. The panel cannot live-toggle them.</div>`;
 }
 async function sysAct(path,msg){if(!danger(msg))return;try{const d=await api('/api/admin/'+path,{method:'POST'});alert('OK: '+JSON.stringify(d));if(path.startsWith('backup'))loadSystem();}catch(e){alert(e.message);}}
+/* v137: kompletter Neustart auf null (vor dem Launch). Loescht ALLES lokale;
+   Stripe-Belege bleiben im Stripe-Dashboard. Tipp-Bestaetigung 'RESET'. */
+async function factoryReset(){
+  const t=prompt('This wipes ALL users, credits, purchases, tickets, jobs and caches. Stripe records stay in Stripe. Type RESET to confirm.');
+  if(t===null)return;
+  if(t.trim()!=='RESET'){alert('Not confirmed. Nothing was deleted.');return;}
+  try{const fd=new FormData();fd.append('confirm','RESET');
+    const d=await api('/api/admin/factory_reset',{method:'POST',body:fd});
+    alert('Fresh start. Wiped: '+JSON.stringify(d.wiped));go('live');
+  }catch(e){alert(e.message);}
+}
 
 /* ---------- COMPLIANCE ---------- */
 async function loadCompliance(){

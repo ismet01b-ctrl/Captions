@@ -29,8 +29,8 @@ services:
       # Betrifft u.a. Owner-Panel (DVE_OWNER), Mail-Alarme, Alert-Regler und
       # jetzt "Mit Google anmelden".
       DVE_OWNER: ${DVE_OWNER:-}
-      DVE_ADMIN_MAIL: ${DVE_ADMIN_MAIL:-}
-      DVE_SUPPORT_MAIL: ${DVE_SUPPORT_MAIL:-}
+      DVE_ADMIN_MAIL: ${DVE_ADMIN_MAIL:-ismet.01.b@gmail.com}
+      DVE_SUPPORT_MAIL: ${DVE_SUPPORT_MAIL:-Ismet@douchkove.com}
       DVE_TAX_ID: ${DVE_TAX_ID:-DE463613884}
       DVE_ALERTS: ${DVE_ALERTS:-important}
       DVE_RETENTION_DAYS: ${DVE_RETENTION_DAYS:-7}

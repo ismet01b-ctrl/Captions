@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v137 UI-Politur + Kauf-Mail aufgeraeumt + Factory-Reset.** Ismets Live-Feedback nach dem
+  Testkauf (der KOMPLETT durchlief: Zahlung, Credits, Mail): (a) **UI:** Support-Textarea und
+  Datei-Auswahl-Buttons waren Browser-Default-weiss -> dunkel gestylt (Textarea wie Inputs,
+  input[type=file] mit ::file-selector-button im Card-Look). (b) **Danger-Zone:** Refund-Hinweis
+  raus (an der Stelle keine Pflicht; Belehrung steht in AGB + Kauf-Mail; wichtig war nur, dass die
+  alte FALSCHE 'no refunds'-Aussage weg ist). (c) **Kauf-Mail:** Hauptteil nur noch das Wichtige
+  (Danke, Bestellung, Preis, Gueltigkeit, RECHNUNGS-LINK, CTA); Pflicht-Rechtstexte (§312f:
+  Consent-Zeitstempel, Widerrufsbelehrung, Musterformular) als Kleingedrucktes unten - ganz
+  weglassen ginge nicht (Widerrufsfrist liefe sonst bis 12 Monate). Der Webhook holt jetzt die
+  hosted_invoice_url der Stripe-Rechnung und verlinkt sie direkt (Stripe mailt selbst erst nach
+  der 1h-Finalisierungs-Nachfrist). (d) **Leerstring-Falle Nr. 3:** DVE_SUPPORT_MAIL/DVE_ADMIN_MAIL
+  kamen als '' im Container an -> in der Live-Mail stand 'email .' - or-Fallback + compose-Defaults.
+  (e) **Factory-Reset:** POST /api/admin/factory_reset (confirm='RESET') + Knopf im System-Tab -
+  wischt ALLE lokalen Kunden-/Testdaten (Users, Ledger, purchases, Tickets, Consents, Claims, Jobs,
+  Caches) fuer den frischen Launch; Stripe-Dashboard behaelt alle Zahlungsbelege. Beweis: 4 neue
+  Tests + node--check, Selftest gruen.
 - **v136 Admin-Panel: dynamische Grafen.** Ismet: leicht ablesbare, dynamische Diagramme wo passend.
   Neuer Endpoint `GET /api/admin/timeseries?days=N` (7-180, admin-gated): LUECKENLOSE Tages-Reihen
   (0-Werte fuer leere Tage, UTC-Tagesgrenzen, heute = letzter Balken) fuer Umsatz, Kaeufe, Signups,
