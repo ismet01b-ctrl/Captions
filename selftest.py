@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v137c-brandhome'" in _srv_m)
+          and "DVE_BUILD = 'v138-txvisible'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4289,6 +4289,36 @@ def _scenario_betrieb(tmp):
           'id="brandHome"' in _idx137c
           and "closest('#brandHome')" in _idx137c
           and _idx137c.count("showSection('create')") >= 2)
+    # v138: gescheiterte Vorab-Transkription ist SICHTBAR - Endpoint meldet
+    # failed:true (kein Ewig-404), UI hat Fehlerpfad + 4-Minuten-Timeout.
+    _tj = 'txf138'
+    SV.JOBS[_tj] = {'input': '/tmp/nonexistent_v138/quelle.mp4', 'mode': 'pre',
+                    'status': 'vorbereitet', 'tx_failed': True, 'user_id': None,
+                    'code': 'x'}
+    class _TxReq:
+        cookies = {}
+        headers = {}
+    _origok = SV._job_owner_ok
+    SV._job_owner_ok = lambda jid, req: True
+    try:
+        _txr = SV.get_transcript(_tj, _TxReq())
+        SV.JOBS[_tj]['tx_failed'] = False
+        SV.JOBS[_tj]['status'] = 'laeuft'
+        _tx404 = False
+        try:
+            SV.get_transcript(_tj, _TxReq())
+        except SV.HTTPException as _e:
+            _tx404 = (_e.status_code == 404)
+    finally:
+        SV._job_owner_ok = _origok
+        SV.JOBS.pop(_tj, None)
+    _idx138 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _srv138 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v138: Transkript-Fehlschlag sichtbar (failed:true, 404 nur bei Arbeit, UI-Timeout)',
+          _txr.get('failed') is True and _tx404
+          and 'tx_failed=_txfail' in _srv138
+          and 'd.failed' in _idx138 and 'txGiveUp' in _idx138
+          and 'txTries > 96' in _idx138)
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA

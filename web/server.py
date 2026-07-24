@@ -1603,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v137c-brandhome'
+DVE_BUILD = 'v138-txvisible'
 
 
 @app.middleware('http')
@@ -2993,8 +2993,16 @@ def run_job(jid):
         # transkribiert dann einfach selbst.
         rc, log, out = _run_render(jid, extra_args=['--transcribe-only'],
                                    out_name='plan.mp4', progress_start=0.10)
+        # v138: Fehlschlag SICHTBAR machen. Vorher blieb bei rc!=0 einfach die
+        # Transkript-Datei aus -> /api/transcript lieferte ewig 404 und der
+        # Editor zeigte fuer immer 'Listening ...'. Jetzt traegt der Job ein
+        # tx_failed-Flag (+ letzte Log-Zeilen fuer die Admin-Diagnose).
+        _txfail = (rc != 0)
         set_state(jid, status='vorbereitet', progress=1.0,
-                  phase='Transcript ready' if rc == 0 else 'Prepared')
+                  phase='Transcript ready' if rc == 0 else 'Prepared',
+                  tx_failed=_txfail,
+                  tx_error=('\n'.join([x for x in (log or [])[-8:] if x.strip()])
+                            if _txfail else None))
         # Hat der User waehrenddessen schon Render gedrueckt? Dann direkt
         # weiter. dict.pop ist unter dem GIL atomar - entweder holt der
         # Worker den Auftrag oder /api/render_start, nie beide.
@@ -5047,6 +5055,15 @@ def get_transcript(jid: str, request: Request):
         raise HTTPException(404, 'Unknown job.')
     tp = os.path.splitext(j['input'])[0] + '_transcript2.json'
     if not os.path.exists(tp):
+        # v138: Fertig-ohne-Datei ODER explizites tx_failed = die Vorab-
+        # Transkription ist GESCHEITERT -> das dem Client sagen (failed:true),
+        # statt ewig 404 (= 'poll weiter'). 404 nur solange wirklich noch
+        # gearbeitet wird. Nicht fatal: der volle Render transkribiert selbst.
+        still_working = (j.get('mode') == 'pre'
+                         and j.get('status') in ('wartet', 'laeuft'))
+        if j.get('tx_failed') or (not still_working
+                                  and j.get('status') == 'vorbereitet'):
+            return {'words': [], 'failed': True}
         raise HTTPException(404, 'Transcript not ready yet.')
     return {'words': json.load(open(tp, encoding='utf-8'))}
 

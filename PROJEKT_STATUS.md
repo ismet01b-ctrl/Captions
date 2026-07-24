@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v138 Transkript-Editor: Endlos-'Listening ...' behoben.** Ismets Live-Befund: 'Review your
+  words' laedt ewig. Ursache: Schlug die Vorab-Transkription (pre-Mode, --transcribe-only) fehl,
+  entstand nie eine _transcript2.json -> /api/transcript/{jid} antwortete fuer immer 404 ('noch
+  nicht fertig') und die UI pollte endlos ohne Fehleranzeige. Fix: (a) run_job markiert den
+  Fehlschlag jetzt am Job (tx_failed + letzte Log-Zeilen als tx_error fuer die Admin-Diagnose),
+  (b) /api/transcript liefert failed:true wenn der Pre-Job fertig ist aber keine Datei hat (404
+  NUR noch solange wirklich gearbeitet wird), (c) UI: failed -> ehrliche Meldung ('wird beim
+  Render transkribiert, einfach weitermachen') + eigener 4-Minuten-Timeout. Der Flow war nie
+  blockiert (Weiter-Button ging immer; der volle Render transkribiert selbst) - es SAH nur kaputt
+  aus. Die LIVE-URSACHE des Fehlschlags selbst steht im Job-Log (Admin -> Jobs -> Log) - offen,
+  bis Ismet das Log liefert. Verdacht: v135b-Image-Rebuild hat ungepinnte Deps (opencv etc.)
+  aktualisiert. Beweis: funktionaler Endpoint-Test (failed:true vs 404) + UI-Checks, Selftest gruen.
 - **v137c Header-Logo -> Hauptseite.** Ismet: Klick aufs Logo oben links soll von ueberall zur
   Hauptseite fuehren (Create), NICHT zur Landing. Umgesetzt als SPA-Navigation (`showSection('create')`,
   kein Reload, URL wird /app/create), Maus + Tastatur (role=link, tabindex, Enter/Space), Cursor-

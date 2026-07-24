@@ -3882,10 +3882,22 @@ async function loadTranscriptStep() {
     $('#txCount').textContent = '';
     return;
   }
+  // v138: nie mehr endlos 'Listening ...'. Der Server meldet Fehlschlag jetzt
+  // explizit (failed:true), und nach 4 Minuten ohne Ergebnis brechen wir
+  // selbst ab - der volle Render transkribiert sowieso noch einmal selbst.
+  let txTries = 0;
+  const txGiveUp = () => {
+    box.className = 'tx-words loading';
+    box.textContent = 'We could not pre-transcribe this video. No problem: '
+      + 'the transcript is created during the render, and you can fine-tune '
+      + 'wording afterwards in the moments editor. Just continue.';
+    $('#txCount').textContent = '';
+  };
   const tryLoad = async () => {
     try {
       const r = await fetch('/api/transcript/' + jid);
       if (r.status === 404) {                 // noch am Transkribieren
+        if (++txTries > 96) { txGiveUp(); return; }
         box.className = 'tx-words loading';
         box.innerHTML = '<span class="tx-dot"></span>Listening to your video '
           + 'and writing down every word …';
@@ -3895,6 +3907,7 @@ async function loadTranscriptStep() {
       const d = await r.json();
       if (!r.ok) { box.className = 'tx-words loading';
         box.textContent = d.detail || 'Transcript not ready.'; return; }
+      if (d.failed) { txGiveUp(); return; }
       txWords = d.words.map(w => (w.word || ''));
       txOrig = txWords.slice();
       txMarks = {};
