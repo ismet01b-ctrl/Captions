@@ -3,6 +3,10 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v137c Header-Logo -> Hauptseite.** Ismet: Klick aufs Logo oben links soll von ueberall zur
+  Hauptseite fuehren (Create), NICHT zur Landing. Umgesetzt als SPA-Navigation (`showSection('create')`,
+  kein Reload, URL wird /app/create), Maus + Tastatur (role=link, tabindex, Enter/Space), Cursor-
+  Pointer + Title. Selftest gruen.
 - **v137b Transaktions-Labels sauber (Session-ID-Leak zu).** Ismets Screenshot: 'Reload bonus
   cs_live_...' stand ROH in der Account-Transaktionsliste - die Account-Seite hatte eine eigene
   Halb-Uebersetzung, die den Reload-Bonus (und Alpha/Admin/Refund) nicht kannte. Fix: EINE zentrale

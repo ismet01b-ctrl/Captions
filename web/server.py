@@ -1603,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v137b-txlabels'
+DVE_BUILD = 'v137c-brandhome'
 
 
 @app.middleware('http')

@@ -1520,7 +1520,10 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
   </div>
   <header class="header">
-    <div class="brand"><img class="brand-logo" src="/logo_white.png" alt="">DouchkoVE<sup class="brand-beta">Beta</sup></div>
+    <!-- v137c: Logo/Brand klickbar - fuehrt IMMER zur Hauptseite (Create),
+         nie zur Landing. SPA-Navigation, kein Reload. -->
+    <div class="brand" id="brandHome" role="link" tabindex="0" style="cursor:pointer;"
+         title="Go to start"><img class="brand-logo" src="/logo_white.png" alt="">DouchkoVE<sup class="brand-beta">Beta</sup></div>
     <nav class="topnav" id="topnav" aria-label="Sections">
       <a data-nav="create" class="on">Create</a>
       <a data-nav="motion">Motion</a>
@@ -3221,6 +3224,17 @@ document.addEventListener('click', async (e) => {
   if (nav && $('#appView').classList.contains('show')) {
     e.preventDefault();
     showSection(nav.dataset.nav);
+  }
+  // v137c: Klick aufs Logo -> immer zur Hauptseite (Create), egal wo man ist.
+  if (e.target.closest('#brandHome') && $('#appView').classList.contains('show')) {
+    e.preventDefault();
+    showSection('create');
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.target && e.target.id === 'brandHome' && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    if ($('#appView').classList.contains('show')) showSection('create');
   }
 });
 

@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v137b-txlabels'" in _srv_m)
+          and "DVE_BUILD = 'v137c-brandhome'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4283,6 +4283,12 @@ def _scenario_betrieb(tmp):
           and "'Editor layer render'" in _idxTx
           and "/^Refund .*/" in _idxTx
           and "if (/pack|stripe|kauf|purchase/i.test(g))" not in _idxTx)
+    # v137c: Logo im App-Header fuehrt immer zur Hauptseite (Create), SPA-intern.
+    _idx137c = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v137c: Header-Logo klickbar -> Create (Maus + Tastatur, kein Landing-Link)',
+          'id="brandHome"' in _idx137c
+          and "closest('#brandHome')" in _idx137c
+          and _idx137c.count("showSection('create')") >= 2)
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA
