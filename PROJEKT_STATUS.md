@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v133 Standard-Mail-Strecke ("wie alle anderen Firmen").** Ismet: Mail-Ablauf wie branchenueblich.
+  Neu: (a) **Willkommens-Mail** genau EINMAL pro Konto, sobald es aktiv ist - nach E-Mail-Bestaetigung
+  bzw. bei Google-Signup sofort (da ist die Mail schon bestaetigt, deshalb kommt dort bewusst KEINE
+  Verify-Mail - das ist korrekt so). Inhalt: Gratis-Credits, 3 Schritte zum ersten Render, kein Abo.
+  (b) **Kaufbestaetigung** nach frisch verbuchtem Stripe-Kauf: Credits gutgeschrieben, Wasserzeichen
+  weg, Gueltigkeit; idempotent pro Stripe-Session ueber mail_log (doppelte Webhooks -> keine zweite
+  Mail). Beide Mails scheitern leise (reissen nie Verify/Kauf), laufen ueber mail_log-Schluessel
+  'welcome' bzw. 'kauf:<session>'. Render-fertig-Mail bleibt AUS (Ismets Wunsch, v130). Beweis: 3 neue
+  Tests (Einmaligkeit, Session-Idempotenz + neue Session -> neue Mail, Verdrahtung + Copy ohne
+  Gedankenstriche), Selftest 744/744 gruen.
 - **v132 "Mit Google anmelden" (OAuth 2.0), optional + inert per Default.** Ismet wollte Google-
   Registrierung. Autorisierungs-Code-Flow: `/api/auth/google/start` (state-Cookie gegen CSRF, ref-Code
   wird mitgereicht) leitet zur Google-Zustimmung; `/api/auth/google/callback` tauscht den Code

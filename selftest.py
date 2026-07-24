@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v132-google'" in _srv_m)
+          and "DVE_BUILD = 'v133-mails'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3862,6 +3862,32 @@ def _scenario_betrieb(tmp):
     check('v131: Offsite-Backup-Mail ist DVE_ALERTS-gated',
           "ALERT_LEVEL != 'all'" in open(
               os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read())
+    # v133: Standard-Mail-Strecke wie ueberall ueblich. Willkommens-Mail genau
+    # EINMAL pro Konto, sobald es aktiv ist; Kaufbestaetigung genau EINMAL pro
+    # Stripe-Session (neue Session -> neue Mail).
+    _wuid, _ = SV._create_user('v133mail@test', 'x' * 8, 'MailTester')
+    _wn0 = len(sent)
+    _w1 = SV._send_welcome_mail(_wuid)
+    _w2 = SV._send_welcome_mail(_wuid)
+    check('v133: Willkommens-Mail einmalig pro Konto',
+          _w1 and (not _w2) and len(sent) == _wn0 + 1
+          and sent[-1][0] == 'v133mail@test')
+    _pn0 = len(sent)
+    _p1 = SV._send_purchase_mail(_wuid, 1200, 'sess_v133_a')
+    _p2 = SV._send_purchase_mail(_wuid, 1200, 'sess_v133_a')
+    _p3 = SV._send_purchase_mail(_wuid, 3600, 'sess_v133_b')
+    check('v133: Kauf-Mail idempotent pro Session, neue Session -> neue Mail',
+          _p1 and (not _p2) and _p3 and len(sent) == _pn0 + 2
+          and '20 credits' in sent[-2][1] and '60 credits' in sent[-1][1])
+    # Verdrahtung: Verify-Endpoint, Google-Signup und Stripe-Webhook loesen
+    # die Mails aus; Copy ohne Gedankenstriche (Ismets Regel).
+    import inspect as _insp
+    _wm_src = _insp.getsource(SV._send_welcome_mail) + _insp.getsource(SV._send_purchase_mail)
+    _srv133 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v133: Mails verdrahtet (Verify + Google + Webhook) + Copy ohne Gedankenstriche',
+          _srv133.count('_send_welcome_mail(uid)') >= 2
+          and '_send_purchase_mail(uid, sec, sess_id)' in _srv133
+          and '—' not in _wm_src and '–' not in _wm_src)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}

@@ -916,6 +916,72 @@ def _send_verify_mail(uid, email, name=''):
         return False
 
 
+def _send_welcome_mail(uid):
+    """v133: Willkommens-Mail, sobald das Konto AKTIV ist. Branchen-Standard:
+    Verify-Mail beim Registrieren, Willkommens-Mail nach der Bestaetigung
+    (bei Google-Signup sofort, da ist die Mail schon bestaetigt). Genau EINMAL
+    pro Konto (mail_log-Schluessel 'welcome'); Fehler nie fatal."""
+    u = _find_user_by_id(uid)
+    if not u:
+        return False
+    if not _log_mail_once(uid, 'welcome'):
+        return False                                   # schon geschickt
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    name = (u['name'] or '').strip()
+    hallo = f'Hey {name},' if name else 'Hey,'
+    cr = TRIAL_SECONDS // 60
+    free_line = (f'Your {cr} free credits are ready, 1 credit equals 1 minute '
+                 f'of finished video.\n\n' if cr > 0 else '')
+    try:
+        _send_mail(
+            u['email'], 'Your DouchkoVE account is ready',
+            f'{hallo}\n\n'
+            f'your account is all set. {free_line}'
+            f'Getting started:\n'
+            f'1. Open the app: {base}/app/create\n'
+            f'2. Upload a talking head clip, vertical works best\n'
+            f'3. Let the AI direction pick the moments, then hit render\n\n'
+            f'No subscription here. If you ever need more, credits come in '
+            f'one time packs and stay valid for 6 months.\n\n'
+            f'Questions or ideas? Just reply to this email, it lands straight '
+            f'in my inbox.\n\n'
+            f'Ismet from DouchkoVE')
+        return True
+    except Exception as e:
+        print(f'Welcome-Mail fehlgeschlagen: {type(e).__name__}: {e}')
+        return False
+
+
+def _send_purchase_mail(uid, sec, session_id):
+    """v133: Kaufbestaetigung nach frisch verbuchtem Stripe-Kauf. Idempotent
+    pro Session (mail_log). Die formale Zahlungsquittung schickt Stripe;
+    das hier bestaetigt, dass die Credits WIRKLICH auf dem Konto sind."""
+    u = _find_user_by_id(uid)
+    if not u:
+        return False
+    if not _log_mail_once(uid, f'kauf:{str(session_id)[:48]}'):
+        return False
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    name = (u['name'] or '').strip()
+    hallo = f'Hey {name},' if name else 'Hey,'
+    months = max(1, round(CREDIT_VALIDITY_DAYS / 30))
+    try:
+        _send_mail(
+            u['email'], f'{sec // 60} credits added to your account',
+            f'{hallo}\n\n'
+            f'thank you for your purchase! {sec // 60} credits were just added '
+            f'to your account, and the watermark is now removed from your '
+            f'finished videos.\n\n'
+            f'Your credits stay valid for {months} months. No subscription, '
+            f'nothing renews on its own.\n\n'
+            f'Jump back in: {base}/app/create\n\n'
+            f'Thanks for supporting DouchkoVE,\nIsmet')
+        return True
+    except Exception as e:
+        print(f'Kauf-Mail fehlgeschlagen: {type(e).__name__}: {e}')
+        return False
+
+
 def _consume_verify(token):
     if not token:
         return None
@@ -1272,7 +1338,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v132-google'
+DVE_BUILD = 'v133-mails'
 
 
 @app.middleware('http')
@@ -1439,6 +1505,10 @@ async def api_stripe_webhook(request: Request):
         con.commit(); con.close()
     except Exception as e:
         print(f'WARN: purchases-Log fehlgeschlagen: {e}')
+    try:
+        _send_purchase_mail(uid, sec, sess_id)         # v133: Kaufbestaetigung
+    except Exception as e:                             # darf den Kauf nie reissen
+        print(f'Kauf-Mail fehlgeschlagen: {e}')
     print(f"Kauf verbucht: user={uid} pack={pack} +{sec // 60} Min")
     return {'ok': True, 'gutgeschrieben_sek': sec}
 
@@ -3306,6 +3376,10 @@ def auth_google_callback(request: Request, code: str = '', state: str = '',
             _grant_welcome(uid)                        # Mail ist Google-bestaetigt
         except Exception as e:
             print(f'Welcome-Credit (Google) {uid}: {e}')
+        try:
+            _send_welcome_mail(uid)                    # v133: sofort aktiv
+        except Exception as e:
+            print(f'Welcome-Mail (Google) {uid}: {e}')
     tok2, _exp = _create_session(uid)
     resp = RedirectResponse('/app/create', status_code=302)
     resp.set_cookie('dve_session', tok2, httponly=True, samesite='lax',
@@ -3422,6 +3496,10 @@ def api_verify_email(token: str = Form(...)):
         _grant_referral(uid)                 # v124: Einladungs-Bonus (beide Seiten)
     except Exception as e:                   # darf die Bestaetigung nie reissen
         print(f'Referral-Grant fehlgeschlagen: {e}')
+    try:
+        _send_welcome_mail(uid)              # v133: Konto ist jetzt aktiv
+    except Exception as e:
+        print(f'Welcome-Mail (Verify) fehlgeschlagen: {e}')
     return {'ok': True, 'welcome_granted': granted}
 
 
