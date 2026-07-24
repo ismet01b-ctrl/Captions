@@ -3,6 +3,14 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v131 Betriebs-Post mit EINEM Regler (`DVE_ALERTS`).** Ismet: nicht jede Kleinigkeit als Mail
+  bekommen. Drei Stufen: `all` (alles, inkl. taegliche Backup-Mail = frueheres Verhalten),
+  `important` (Default: NUR echte Stoerungen - Job-Fehler, Platte knapp, Timeout; keine Routine-Post),
+  `off` (gar keine Betriebs-Mails). `_notify_admin(..., routine=False)` filtert davor, Routine-Post
+  (Offsite-Backup-Mail) haengt jetzt an der Stufe `all`. WICHTIG: Kunden-Mails (Verify/Reset/Kauf)
+  sind UNBERUEHRT, und das lokale rotierende DB-Backup auf der Platte laeuft immer weiter - nur der
+  taegliche Mail-Versand des Snapshots ist ausgeschaltet, solange nicht `all`. Beweis: 2 neue Tests
+  (Stufen-Filter + Backup-Gate), Selftest 732/732 gruen.
 - **v130 Admin-Panel Vollausbau (dynamisch, 9 Tabs) + Suspend + Heartbeats.** Ismet: Admin-Menue
   dynamischer + alle Infos, die ein Admin-Menue braucht. Grundlage: Inventar-Workflow (5 Agenten
   kartierten 142 echte Datenpunkte im Code, ein Design-Agent synthetisierte die Spezifikation), danach

@@ -1257,7 +1257,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v130-admin'
+DVE_BUILD = 'v131-alerts'
 
 
 @app.middleware('http')
@@ -2181,12 +2181,29 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
 ADMIN_MAIL = os.environ.get('DVE_ADMIN_MAIL', 'ismet.01.b@gmail.com')
 _ADMIN_NOTIFIED = {}
 
+# v131: EIN Regler gegen Postfach-Spam. Ismet will nicht jede Kleinigkeit
+# als Mail. Stufen (DVE_ALERTS):
+#   all       - alles, inkl. taegliche Backup-Mail (frueheres Verhalten).
+#   important - NUR echte Stoerungen (Job-Fehler, Platte knapp, Timeout).
+#               Routine-Post (taegliches Offsite-Backup) wird NICHT gemailt. (Default)
+#   off       - gar keine Betriebs-Mails.
+# Kunden-Mails (Verify, Reset, Kauf) sind davon UNBERUEHRT.
+ALERT_LEVEL = os.environ.get('DVE_ALERTS', 'important').strip().lower()
+if ALERT_LEVEL not in ('all', 'important', 'off'):
+    ALERT_LEVEL = 'important'
 
-def _notify_admin(key, subject, body):
+
+def _notify_admin(key, subject, body, routine=False):
     """Stoerungs-Mail an Ismet ueber den vorhandenen SMTP-Weg. Pro
     Stoerungs-Schluessel max. 1 Mail/Stunde (kein Postfach-Spam, wenn
     z.B. die Platte voll bleibt). Scheitert leise - ein kaputter
-    Mail-Weg darf nie den Betrieb reissen."""
+    Mail-Weg darf nie den Betrieb reissen.
+    v131: durch DVE_ALERTS gefiltert. routine=True (z.B. taegliches Backup)
+    geht NUR bei DVE_ALERTS=all raus; echte Stoerungen bei 'all'/'important'."""
+    if ALERT_LEVEL == 'off':
+        return False
+    if routine and ALERT_LEVEL != 'all':
+        return False
     now = time.time()
     if now - _ADMIN_NOTIFIED.get(key, 0) < 3600:
         return False
@@ -2680,7 +2697,11 @@ def _mail_backup_offsite(dest):
     """v98: Der Snapshot lag bisher auf DERSELBEN Platte wie die DB -
     stirbt der Server, ist das Credit-Ledger zahlender Kunden weg. Taeglich
     geht das gzip-te Backup per Mail an ADMIN_MAIL (Postfach = Offsite).
-    Nur bis 8 MB (Gmail-Limit 25 MB, die DB ist winzig); scheitert leise."""
+    Nur bis 8 MB (Gmail-Limit 25 MB, die DB ist winzig); scheitert leise.
+    v131: Routine-Post - nur bei DVE_ALERTS=all. Das lokale, rotierende
+    Backup auf der Platte bleibt IMMER (siehe _backup_users_db)."""
+    if ALERT_LEVEL != 'all':
+        return
     try:
         import gzip
         raw = open(dest, 'rb').read()

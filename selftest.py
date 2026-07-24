@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v130-admin'" in _srv_m)
+          and "DVE_BUILD = 'v131-alerts'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3782,6 +3782,29 @@ def _scenario_betrieb(tmp):
     check('Admin-Alarm gedrosselt (1 Mail/h pro Schluessel)',
           a and not b and c and len(sent) == 2
           and all(to == SV.ADMIN_MAIL for to, _ in sent))
+    # v131: DVE_ALERTS filtert Betriebs-Post. Routine (Backup) nur bei 'all';
+    # echte Stoerungen bei 'important'; 'off' schweigt komplett.
+    _lvl0 = SV.ALERT_LEVEL
+    try:
+        SV._ADMIN_NOTIFIED.clear(); n = len(sent)
+        SV.ALERT_LEVEL = 'important'
+        r_imp = SV._notify_admin('kr', 'T', 'x', routine=True)
+        i_imp = SV._notify_admin('ki', 'T', 'x')
+        SV._ADMIN_NOTIFIED.clear()
+        SV.ALERT_LEVEL = 'off'
+        i_off = SV._notify_admin('ko', 'T', 'x')
+        SV._ADMIN_NOTIFIED.clear()
+        SV.ALERT_LEVEL = 'all'
+        r_all = SV._notify_admin('kr2', 'T', 'x', routine=True)
+        check('v131: DVE_ALERTS filtert (important: Stoerung ja/Routine nein; '
+              'off: nichts; all: Routine ja)',
+              (not r_imp) and i_imp and (not i_off) and r_all)
+    finally:
+        SV.ALERT_LEVEL = _lvl0
+    # Offsite-Backup ist Routine-Post und haengt am Regler
+    check('v131: Offsite-Backup-Mail ist DVE_ALERTS-gated',
+          "ALERT_LEVEL != 'all'" in open(
+              os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read())
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}
