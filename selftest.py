@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v135b-payfix'" in _srv_m)
+          and "DVE_BUILD = 'v135c-paymethods'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4170,6 +4170,13 @@ def _scenario_betrieb(tmp):
           and 'inv_fallback' in _coA
           and 'Checkout fehlgeschlagen:' in _coA
           and 'stripe>=10' in _reqA)
+    # v135c: keine festen payment_method_types mehr - Stripe zeigt, was im
+    # Dashboard aktiviert ist (Live-Fehler: sepa_debit war nicht aktiviert und
+    # riss die ganze Session). Async-Webhook-Pfad bleibt fuer spaeteres SEPA.
+    _co135c = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v135c: Checkout ohne feste payment_method_types (Dashboard entscheidet)',
+          'payment_method_types=' not in _co135c.split('def _mk_session')[1].split('\ndef ')[0]
+          and 'async_payment_succeeded' in _co135c)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}

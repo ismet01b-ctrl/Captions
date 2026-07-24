@@ -1589,7 +1589,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v135b-payfix'
+DVE_BUILD = 'v135c-paymethods'
 
 
 @app.middleware('http')
@@ -1693,7 +1693,12 @@ async def api_checkout(request: Request, pack: str = Form(...),
     def _mk_session(with_invoice):
         kwargs = dict(
             mode='payment',
-            payment_method_types=['card', 'sepa_debit'],
+            # v135c: KEINE festen payment_method_types mehr. Der Live-Fehler
+            # war 'sepa_debit is invalid' - im Stripe-Konto nicht aktiviert,
+            # Stripe lehnte damit die GANZE Session ab. Ohne die Vorgabe zeigt
+            # Stripe automatisch alle im Dashboard aktivierten Zahlarten
+            # (Karte jetzt; SEPA/weitere sobald dort freigeschaltet, ohne
+            # Code-Aenderung). Der Webhook kann async-Zahlarten schon (v92).
             line_items=[{
                 'quantity': 1,
                 'price_data': {

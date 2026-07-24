@@ -3,6 +3,14 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v135c Checkout-Fix Teil 2: echte Ursache war sepa_debit.** Dank v135b-Logging zeigte das
+  Stripe-Log den wirklichen Fehler: 'The payment method type provided: sepa_debit is invalid'
+  (SEPA-Lastschrift ist in Ismets Live-Konto nicht aktiviert; die harte Vorgabe
+  `payment_method_types=['card','sepa_debit']` riss damit die GANZE Session). Fix: keine festen
+  payment_method_types mehr - Stripe zeigt automatisch alle im Dashboard aktivierten Zahlarten
+  (Karte sofort; SEPA/Klarna/etc. sobald dort freigeschaltet, ohne Code-Aenderung). Der
+  async_payment-Webhook-Pfad (v92) bleibt fuer spaeteres SEPA erhalten. Die v135b-Fixes
+  (stripe>=10, Rechnungs-Fallback, Fehler-Logging) waren trotzdem richtig und bleiben.
 - **v135b Checkout-Fix: InvalidRequestError beim Kaufen.** Live-Befund von Ismet direkt nach dem
   v134-Deploy. Ursache (sehr wahrscheinlich): `stripe` war in requirements.txt UNGEPINNT und die im
   Docker-Layer eingefrorene Alt-Version kennt den `invoice_creation`-Parameter nicht -> Stripe lehnt
