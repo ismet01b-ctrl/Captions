@@ -1117,6 +1117,7 @@ def _send_purchase_mail(uid, sec, session_id):
             f'finished videos.\n\n'
             f'Your credits are valid for {months} months. There is no '
             f'subscription and nothing renews automatically.\n\n'
+            f'Your invoice arrives in a separate email.\n\n'
             f'Open the app: {base}/app/create\n\n'
             f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
             f'The DouchkoVE Team',
@@ -1127,7 +1128,8 @@ def _send_purchase_mail(uid, sec, session_id):
                  'added to your account, and the watermark has been removed '
                  'from your finished videos.',
                  f'Your credits are valid for {months} months. There is no '
-                 'subscription and nothing renews automatically.'],
+                 'subscription and nothing renews automatically.',
+                 'Your invoice arrives in a separate email.'],
                 cta_text='Open DouchkoVE', cta_url=f'{base}/app/create'))
         return True
     except Exception as e:
@@ -1491,7 +1493,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v133d-htmlmail'
+DVE_BUILD = 'v134-invoice'
 
 
 @app.middleware('http')
@@ -1520,6 +1522,32 @@ def api_pricing():
             'trial_credits': credits_of(TRIAL_SECONDS),
             'credit_minutes': 1,
             'stripe_ready': _stripe() is not None}
+
+
+def _invoice_creation(pack_id, p):
+    """v134: Stripe erstellt fuer jeden Kauf automatisch eine Rechnung
+    (Post-Payment-Invoice, 0,4% Gebuehr) und mailt sie dem Kunden. Recht:
+    Kleinunternehmer §19 UStG -> NIEMALS USt ausweisen, stattdessen der
+    Pflichthinweis im Footer. Alle Pakete liegen unter 250 EUR =
+    Kleinbetragsrechnung (§33 UStDV), vereinfachte Pflichtangaben, keine
+    Kundenanschrift noetig. Steuernummer optional ueber DVE_TAX_ID.
+    Firmenname/Anschrift im Rechnungskopf kommen aus den Stripe-
+    Unternehmensdaten (Dashboard, einmalig pflegen)."""
+    footer = ('Gemäß §19 UStG wird keine Umsatzsteuer berechnet. / '
+              'No VAT is charged in accordance with §19 UStG '
+              '(German small business scheme).')
+    tax_id = os.environ.get('DVE_TAX_ID', '').strip()
+    if tax_id:
+        footer += f' Steuernummer: {tax_id}'
+    return {
+        'enabled': True,
+        'invoice_data': {
+            'description': (f"DouchkoVE {p['name']} Pack, "
+                            f"{p['minuten']} minutes of video credit"),
+            'footer': footer,
+            'metadata': {'pack': pack_id},
+        },
+    }
 
 
 @app.post('/api/checkout')
@@ -1577,6 +1605,7 @@ async def api_checkout(request: Request, pack: str = Form(...),
                 'sekunden': str(p['sekunden']),
             },
             customer_email=u['email'],
+            invoice_creation=_invoice_creation(pack, p),   # v134: Rechnung (§19)
             success_url=f'{base}/app?bezahlt=1&pack={pack}',
             cancel_url=f'{base}/app?bezahlt=0',
             allow_promotion_codes=True,

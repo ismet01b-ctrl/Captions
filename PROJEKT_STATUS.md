@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v134 Rechnungen ueber Stripe (§19 UStG).** Ismet: in Deutschland muss eine Rechnung raus, Weg mit
+  den wenigsten Fehlerquellen. Entscheidung: Stripe Post-Payment-Invoices statt Eigenbau (lueckenlose
+  Nummern, garantierte Erstellung/Zustellung/Archiv bei Stripe, 0,4% Gebuehr = ~4 Cent pro 9-EUR-Kauf).
+  `_invoice_creation()` haengt an jeder Checkout-Session: Kleinunternehmer-Pflichthinweis §19 UStG im
+  Footer (DE+EN), NIE USt ausgewiesen, Steuernummer optional via `DVE_TAX_ID` (.env + compose).
+  Alle Pakete < 250 EUR = Kleinbetragsrechnung §33 UStDV (vereinfachte Pflichtangaben, keine
+  Kundenanschrift noetig). Kauf-Mail sagt jetzt "Your invoice arrives in a separate email". OFFEN bei
+  Ismet (Stripe-Dashboard, einmalig): Unternehmensdaten (Name/Anschrift) pflegen, Rechnungs-Mails an
+  Kunden aktivieren, Nummernkreis "fortlaufend pro Konto". Beweis: v134-Test (Footer/§19/keine
+  USt/Steuernummer/Verdrahtung), Selftest gruen. Live-Wirkung erst nach echtem Testkauf sichtbar.
 - **v133d Gebrandete HTML-Mails (Vorbild OpusClip, aber ehrlich).** Ismet zeigte die OpusClip-
   Willkommensmail (gestaltetes HTML), unsere war reiner Text. Neu: `_email_html()` - ein
   tabellenbasiertes, inline-gestyltes Mail-Template (Gmail/Outlook/Apple-Mail-sicher), heller Body,

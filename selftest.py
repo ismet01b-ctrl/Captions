@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v133d-htmlmail'" in _srv_m)
+          and "DVE_BUILD = 'v134-invoice'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4011,6 +4011,31 @@ def _scenario_betrieb(tmp):
           "payload['html'] = html" in _smf
           and "MIMEMultipart('alternative')" in _smf
           and "def _send_mail(to, subject, body, reply_to=None, html=None)" in _full)
+    # v134: Stripe-Rechnung pro Kauf. Kleinunternehmer §19 -> Pflichthinweis im
+    # Footer, NIE eine USt/Prozentangabe; Steuernummer haengt an, wenn gesetzt;
+    # Checkout uebergibt invoice_creation.
+    _tax0 = os.environ.get('DVE_TAX_ID')
+    try:
+        os.environ['DVE_TAX_ID'] = ''
+        _inv = SV._invoice_creation('starter', SV.PACKS['starter'])
+        os.environ['DVE_TAX_ID'] = '12/345/67890'
+        _inv2 = SV._invoice_creation('starter', SV.PACKS['starter'])
+    finally:
+        if _tax0 is None:
+            os.environ.pop('DVE_TAX_ID', None)
+        else:
+            os.environ['DVE_TAX_ID'] = _tax0
+    _foot = _inv['invoice_data']['footer']
+    check('v134: Rechnung aktiv, §19-Hinweis im Footer, keine USt, Steuernummer optional',
+          _inv['enabled'] is True
+          and '§19 UStG' in _foot and 'keine Umsatzsteuer' in _foot
+          and 'No VAT' in _foot
+          and '19%' not in _foot and '7%' not in _foot
+          and 'Steuernummer' not in _foot
+          and 'Steuernummer: 12/345/67890' in _inv2['invoice_data']['footer']
+          and SV.PACKS['starter']['name'] in _inv['invoice_data']['description']
+          and 'invoice_creation=_invoice_creation(pack, p)' in
+          open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read())
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}
