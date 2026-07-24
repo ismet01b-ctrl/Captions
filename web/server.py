@@ -1603,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v138b-keycheck'
+DVE_BUILD = 'v139-pure'
 
 
 @app.middleware('http')

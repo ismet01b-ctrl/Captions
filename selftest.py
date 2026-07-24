@@ -342,8 +342,11 @@ def _scenario_logic(clip, transcript, tmp):
     check('Baseline-Grid: cascade & outline auf einer Linie',
           abs(_anchor('cascade') - _anchor('outline')) < 1e-6,
           f"{_anchor('cascade')} vs {_anchor('outline')}")
-    check('Baseline-Grid: Anker im unteren Drittel',
-          abs(_anchor('cascade') - 1080 * 0.40) < 1e-6)
+    # v139: 16:9 sitzt jetzt im echten Lower Third (0.78H, Title-Safe) statt
+    # auf dem alten Einheits-Anker 0.40H (obere Bildhaelfte).
+    check('Baseline-Grid: 16:9-Anker im Lower Third (0.78H)',
+          abs(_anchor('cascade') - 1080 * 0.78) < 1e-6,
+          f"{_anchor('cascade')} vs {1080 * 0.78}")
 
     # v86: Hochformat rastet die Text-Hoehe auf ein Baseline-Raster (H*0.025),
     # damit Gesichts-Jitter den Text nicht kontinuierlich verschiebt.
@@ -2183,7 +2186,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v138b-keycheck'" in _srv_m)
+          and "DVE_BUILD = 'v139-pure'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4341,6 +4344,23 @@ def _scenario_betrieb(tmp):
           and "_openai_health()" in _srvOH
           and _srvOH.count("'openai': _openai_health(),") == 2
           and 'KEY INVALID' in _admOH)
+    # v139: Captions pur + formatgerechte Platzierung.
+    # (a) Auto-Akzente per Default AUS - kein Motion-Badge mehr ohne Zutun.
+    # (b) Akzent-RENDERING haengt an der Datei (Editor-gesetzt), nicht am auto-Flag.
+    # (c) Anker formatabhaengig: 16:9 Lower Third (0.78), 4:3 0.75, 1:1 0.72;
+    #     der alte Einheits-Anker 0.40H (obere Bildhaelfte!) ist weg.
+    import yaml as _yaml139
+    _cfg139 = _yaml139.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _r139 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v139: Auto-Akzente default AUS, Editor-Akzente rendern dateibasiert',
+          _cfg139['accents']['auto'] is False
+          and "if os.path.exists(_acc_path):\n        try:\n            accents_render" in _r139
+          and _r139.count(".get('auto', False):") == 1)   # nur noch die Erzeugung
+    check('v139: Caption-Anker formatgerecht (16:9=0.78 Lower Third, 4:3=0.75, 1:1=0.72)',
+          'Z_MAIN = H * 0.78' in _r139 and 'Z_MAIN = H * 0.75' in _r139
+          and 'Z_MAIN = H * 0.72' in _r139
+          and 'Z_MAIN = H * 0.40' not in _r139
+          and '_ar >= 1.45' in _r139)
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA

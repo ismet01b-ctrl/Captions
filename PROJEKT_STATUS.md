@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v139 Captions pur + formatgerechte Platzierung (Senior-Editor-Standard).** Ismets Screenshot
+  zeigte einen 'CAPTIONS'-Motion-Pill im generierten Video = die v101s-AUTO-Akzente. (a) Auto-
+  Akzente per Default AUS (`config.yaml accents.auto: false`) - keine KI-/Heuristik-Badges mehr
+  ohne Zutun; das Akzent-RENDERING haengt jetzt an der _accents.json-Datei statt am auto-Flag,
+  damit bewusst im Momente-Editor gesetzte Akzente ('+ Add accent') weiter funktionieren.
+  (b) Platzierung: Vorher sassen ALLE Nicht-Hochformate auf einem festen 0.40H-Anker = obere
+  Bildhaelfte, mitten im Gesicht. Jetzt formatgerecht nach recherchierten Editor-Standards
+  (SMPTE/Netflix Title-Safe, TikTok/Reels-Safe-Zones): 16:9+ = Lower Third (Block-Mitte 0.78H,
+  Unterkante bleibt im 90%-Title-Safe), 4:3 = 0.75H, 1:1/4:5 = 0.72H; Hochformat behaelt die
+  gesichtsbewusste v_zone (untere Mittel-Zone, Plattform-Maske). Beweis: 16:9-Testrender
+  vorher/nachher (Frames an Ismet geschickt: Text unten statt Bildmitte, Pill weg; der Pill im
+  ersten Proof kam aus einer ALTEN _accents.json neben dem Testclip = bestaetigt die neue
+  Datei-Logik). Volle Regression: Logik 783/783 + Renders 7/1/5/2 gruen (16:9-Anker-Test auf
+  0.78H umgestellt). Wie immer: synthetisch/CPU - Echtwirkung prueft Ismet live.
 - **v138b OpenAI-Ampel prueft den Key ECHT.** Live-Ursache des Transkript-Fehlschlags gefunden:
   render.py bekam 401 von OpenAI ('KI-Zugang ungueltig') - der Key im Container ist ungueltig/
   beschaedigt. Die Health-Ampel war trotzdem gruen, weil sie nur 'Wert vorhanden' prueft. Neu:

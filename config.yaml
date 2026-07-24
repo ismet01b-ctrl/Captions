@@ -36,12 +36,12 @@ keywords:
   include: []
   exclude: []
   ai_vision: true
-# v101s AUTO-AKZENTE: dezente Motion-Graphics-Akzente (Counter/Chip/Badge/Pop) auf
-# dem Transkript. KI (ai_model) schlaegt vor, ohne Key greift die Heuristik. intensity
-# (0..2) dosiert die Dichte; das persoenliche Stil-Profil ueberschreibt sie pro Konto.
-# Wiring in Editor + Compositing folgt in den naechsten Etappen - hier vorbereitet.
+# v139 AKZENTE: Motion-Graphics-Akzente (Counter/Chip/Badge/Pop) kommen NICHT
+# mehr automatisch ins Video (Ismets Ansage: Captions pur). auto:false =
+# keine KI-/Heuristik-Vorschlaege mehr. Gerendert wird NUR, was der Nutzer im
+# Momente-Editor selbst anlegt (_accents.json via '+ Add accent').
 accents:
-  auto: true
+  auto: false
   ai_model: gpt-5
   intensity: 1.0
 effects:

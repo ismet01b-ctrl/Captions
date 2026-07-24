@@ -5351,12 +5351,24 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         return side, cx
 
     portrait = W / H < 0.8    # 9:16 und aehnliche Hochformate
-    # v86: Baseline-Zonen fuer Querformat. Vorher sassen cascade (0.39),
-    # outline (0.398) und stack (0.435) auf drei knapp verschiedenen Hoehen -
-    # aufeinanderfolgende Momente unterschiedlichen Typs huepften minimal. Jetzt
-    # teilen sie sich EINEN Unteres-Drittel-Anker. 'behind' bleibt oben (naeher
-    # am Kopf), 'ground' bleibt die Bodenebene fuer B-Roll.
-    Z_MAIN = H * 0.40         # gemeinsamer Anker: cascade / outline / stack
+    # v139: FORMATGERECHTE Anker (Senior-Editor-Standard). Vorher sassen ALLE
+    # Nicht-Hochformate auf einem festen 0.40H-Anker = obere Bildhaelfte,
+    # mitten im Gesicht. Jetzt:
+    #  - 16:9 und breiter: klassisches Lower Third im Title-Safe (SMPTE/
+    #    Netflix: Text innerhalb des 90%-Rahmens; Block-MITTE ~0.78 haelt auch
+    #    3-zeilige Stacks ueber der 0.90-Kante).
+    #  - 4:3 / leicht quer: ~0.75.
+    #  - 1:1 / 4:5 Feed: ~0.72 (Feed-UI unten, Text bleibt frei).
+    #  - Hochformat behaelt die gesichtsbewusste v_zone (TikTok/Reels: untere
+    #    Mittel-Zone, ueber der Bottom-UI der Plattform-Maske).
+    # 'behind' bleibt oben (naeher am Kopf), 'ground' bleibt die Bodenebene.
+    _ar = W / max(1.0, float(H))
+    if _ar >= 1.45:
+        Z_MAIN = H * 0.78     # 16:9+: Lower Third
+    elif _ar >= 1.05:
+        Z_MAIN = H * 0.75     # 4:3 / leicht quer
+    else:
+        Z_MAIN = H * 0.72     # 1:1 / 4:5
     Z_BEHIND = H * 0.34       # Text hinter der Person, sitzt hoeher
     safe_z = portrait and cfg['effects'].get('safe_zone', True)
     # v101d: plattform-genaue UI-Maske. Jeder Feed legt Button-Spalte und
@@ -8174,15 +8186,18 @@ def main():
     accents_render = []
     acc_style = accent_style((cfg.get('accents') or {}).get('profile'))
     _pz_for_accents = None
-    if (cfg.get('accents') or {}).get('auto', False):
-        _acc_path = os.path.splitext(args.input)[0] + '_accents.json'
-        if os.path.exists(_acc_path):
-            try:
-                accents_render = sanitize_accents(
-                    json.load(open(_acc_path, encoding='utf-8')), words,
-                    (cfg.get('accents') or {}).get('profile'))
-            except Exception:
-                accents_render = []
+    # v139: Rendern haengt NUR noch an der Datei (= bewusst im Editor gesetzt
+    # oder von der Auto-Regie erzeugt, falls accents.auto an ist). Vorher hing
+    # auch das Rendern am auto-Flag - Editor-Akzente waeren bei auto:false
+    # stumm verpufft.
+    _acc_path = os.path.splitext(args.input)[0] + '_accents.json'
+    if os.path.exists(_acc_path):
+        try:
+            accents_render = sanitize_accents(
+                json.load(open(_acc_path, encoding='utf-8')), words,
+                (cfg.get('accents') or {}).get('profile'))
+        except Exception:
+            accents_render = []
         _plat_a = str(cfg.get('output', {}).get('platform', 'generic')).lower()
         try:
             _pz_for_accents = platform_safe_zones(_plat_a, W, H)
