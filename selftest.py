@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v133-mails'" in _srv_m)
+          and "DVE_BUILD = 'v133a-mailfix'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3888,6 +3888,27 @@ def _scenario_betrieb(tmp):
           _srv133.count('_send_welcome_mail(uid)') >= 2
           and '_send_purchase_mail(uid, sec, sess_id)' in _srv133
           and '—' not in _wm_src and '–' not in _wm_src)
+    # v133a: Absender-Feld robust. Leeres MAIL_FROM (docker-compose reicht ''
+    # durch) -> Default, nackte Adresse -> verpackt, fertiges 'Name <adr>' ->
+    # unveraendert (frueher: 'DouchkoVE <>' bzw. Doppel-Verpackung -> Resend 422).
+    _mf0 = os.environ.get('MAIL_FROM')
+    try:
+        os.environ['MAIL_FROM'] = ''
+        _f_empty = SV._mail_from('onboarding@resend.dev')
+        os.environ['MAIL_FROM'] = 'noreply@douchko.eu'
+        _f_bare = SV._mail_from('x@y.z')
+        os.environ['MAIL_FROM'] = 'DouchkoVE <noreply@douchko.eu>'
+        _f_full = SV._mail_from('x@y.z')
+        check('v133a: MAIL_FROM robust (leer/nackt/fertig -> immer gueltig)',
+              _f_empty == 'DouchkoVE <onboarding@resend.dev>'
+              and _f_bare == 'DouchkoVE <noreply@douchko.eu>'
+              and _f_full == 'DouchkoVE <noreply@douchko.eu>'
+              and SV._mail_from_bare(_f_full) == 'noreply@douchko.eu')
+    finally:
+        if _mf0 is None:
+            os.environ.pop('MAIL_FROM', None)
+        else:
+            os.environ['MAIL_FROM'] = _mf0
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}

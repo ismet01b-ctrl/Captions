@@ -3,6 +3,14 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v133a Mail-Absender-Fix (Resend 422 "Invalid from field").** Live-Befund von Ismet: Test-Mail im
+  Admin schlug mit Resend 422 fehl. ZWEI echte Bugs in `_send_mail`: (1) docker-compose reicht ein
+  leeres `MAIL_FROM` als '' durch -> `os.environ.get`-Default griff nie -> Absender wurde
+  'DouchkoVE <>' (ungueltig). (2) Steht MAIL_FROM im von .env.example EMPFOHLENEN Format
+  'DouchkoVE <adresse>', wurde es doppelt verpackt ('DouchkoVE <DouchkoVE <adresse>>', ebenfalls
+  ungueltig). Neu: `_mail_from()` normalisiert alle drei Faelle (leer -> Default, nackte Adresse ->
+  verpackt, fertiges Format -> unveraendert), `_mail_from_bare()` liefert die nackte Adresse fuer den
+  SMTP-Envelope. Beweis: v133a-Test mit allen drei Faellen, Selftest 745/745 gruen.
 - **v133 Standard-Mail-Strecke ("wie alle anderen Firmen").** Ismet: Mail-Ablauf wie branchenueblich.
   Neu: (a) **Willkommens-Mail** genau EINMAL pro Konto, sobald es aktiv ist - nach E-Mail-Bestaetigung
   bzw. bei Google-Signup sofort (da ist die Mail schon bestaetigt, deshalb kommt dort bewusst KEINE

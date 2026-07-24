@@ -820,17 +820,35 @@ def _adjust_balance(uid, delta_sec, grund):
 
 
 # ---------------------------------------------------------------- Mail (v80w)
+def _mail_from(default_addr):
+    """v133a: Absender ROBUST bauen. MAIL_FROM darf fehlen, leer sein (docker-
+    compose reicht dann '' durch, was frueher 'DouchkoVE <>' ergab -> Resend
+    422), eine nackte Adresse sein ODER schon im 'Name <adresse>'-Format
+    stehen (so empfiehlt es .env.example; frueher wurde das doppelt verpackt).
+    Ergebnis ist immer ein gueltiges 'Name <adresse>'."""
+    raw = (os.environ.get('MAIL_FROM') or '').strip() or default_addr
+    if '<' in raw:
+        return raw                                     # schon fertig formatiert
+    return f'DouchkoVE <{raw}>'
+
+
+def _mail_from_bare(frm):
+    """Nackte Adresse aus 'Name <adresse>' (fuer den SMTP-Envelope)."""
+    m = re.search(r'<([^>]+)>', frm)
+    return m.group(1) if m else frm
+
+
 def _send_mail(to, subject, body):
     """Mail-Versand. Bevorzugt Resend (HTTP/443, von Hostern nie geblockt),
     faellt auf SMTP zurueck. Wirft bei Fehler."""
     resend_key = os.environ.get('RESEND_API_KEY', '').strip()
     if resend_key:
         import requests as _rq
-        sender = os.environ.get('MAIL_FROM', 'onboarding@resend.dev')
         r = _rq.post('https://api.resend.com/emails',
                      headers={'Authorization': f'Bearer {resend_key}'},
-                     json={'from': f'DouchkoVE <{sender}>', 'to': [to],
-                           'subject': subject, 'text': body}, timeout=20)
+                     json={'from': _mail_from('onboarding@resend.dev'),
+                           'to': [to], 'subject': subject, 'text': body},
+                     timeout=20)
         if r.status_code >= 300:
             raise RuntimeError(f'Resend {r.status_code}: {r.text[:200]}')
         return
@@ -840,12 +858,13 @@ def _send_mail(to, subject, body):
     port = int(os.environ.get('SMTP_PORT', '587'))
     user = os.environ.get('SMTP_USER', '').strip()
     pw = os.environ.get('SMTP_PASS', '').replace(' ', '').strip()
-    sender = os.environ.get('MAIL_FROM', user)
     if not user or not pw:
         raise RuntimeError('SMTP not configured')
+    frm = _mail_from(user)
+    sender = _mail_from_bare(frm)
     msg = MIMEText(body, 'plain', 'utf-8')
     msg['Subject'] = subject
-    msg['From'] = f'DouchkoVE <{sender}>'
+    msg['From'] = frm
     msg['To'] = to
     # v81c: IPv4 erzwingen. Docker-Container ohne IPv6-Route scheitern an
     # Gmails AAAA-Records mit 'Errno 101 Network is unreachable'.
@@ -1338,7 +1357,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v133-mails'
+DVE_BUILD = 'v133a-mailfix'
 
 
 @app.middleware('http')
