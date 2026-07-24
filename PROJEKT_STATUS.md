@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v136 Admin-Panel: dynamische Grafen.** Ismet: leicht ablesbare, dynamische Diagramme wo passend.
+  Neuer Endpoint `GET /api/admin/timeseries?days=N` (7-180, admin-gated): LUECKENLOSE Tages-Reihen
+  (0-Werte fuer leere Tage, UTC-Tagesgrenzen, heute = letzter Balken) fuer Umsatz, Kaeufe, Signups,
+  Renders, Render-Minuten, Credits gekauft/verbraucht. Frontend: reines SVG ohne Framework
+  (CSP-sicher): `barChart()` (Tages-Balken, Hover = Datum+Wert, heutiger Balken voll orange, Peak+
+  Summe oben, Datums-Achse) + `hbars()` (horizontale Verteilungsbalken mit Label/Wert). Eingebaut:
+  Live-Tab (Umsatz/Signups/Renders/Verbrauch je Tag, aktualisiert mit dem 15s-Poll, Zeitreihe
+  60s-gecacht), Jobs-Tab (Status-Verteilung als Farb-Balken, live 5s), Revenue-Tab (90-Tage-Umsatz
+  ersetzt die Mini-Sparkline; Paket-Anteile als Balken), Credits-Tab (gekauft vs. verbraucht je Tag,
+  Granted-Mix, Verbrauchs-Mix, Liability-Aging rot/gelb/gruen). Beweis: 2 neue Tests (Endpoint
+  funktional: 403/lueckenlos/heute-am-Ende; Frontend verdrahtet) + node--check der Admin-JS,
+  Selftest gruen. Optik verifiziert Ismet im Browser.
 - **v135c Checkout-Fix Teil 2: echte Ursache war sepa_debit.** Dank v135b-Logging zeigte das
   Stripe-Log den wirklichen Fehler: 'The payment method type provided: sepa_debit is invalid'
   (SEPA-Lastschrift ist in Ismets Live-Konto nicht aktiviert; die harte Vorgabe

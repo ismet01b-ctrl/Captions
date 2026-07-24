@@ -69,6 +69,21 @@ select.search{cursor:pointer}
 .hidden{display:none}
 .bars{display:flex;align-items:flex-end;gap:2px;height:46px;margin-top:8px}
 .bars i{flex:1;background:var(--acc);border-radius:2px 2px 0 0;min-height:2px;opacity:.85}
+/* v136: dynamische Grafen (reines SVG, kein Framework) */
+.chart{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:13px 16px 9px}
+.chart .ct{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.chart .ct b{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut2);font-weight:700}
+.chart .ct span{font-size:12px;color:var(--mut)}
+.chart svg{display:block;width:100%}
+.chart .cx{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:3px}
+.chart rect{transition:opacity .15s}
+.chart rect:hover{opacity:1 !important}
+.hbars{display:flex;flex-direction:column;gap:7px;margin-top:6px}
+.hb{display:grid;grid-template-columns:120px 1fr 64px;gap:10px;align-items:center;font-size:12.5px}
+.hb .hl{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb .ht{height:14px;background:var(--surf2);border-radius:7px;overflow:hidden}
+.hb .ht i{display:block;height:100%;background:var(--acc);border-radius:7px;min-width:2px;transition:width .4s}
+.hb .hv{text-align:right;color:var(--fg);font-weight:700;font-size:12px}
 .row-actions{display:flex;gap:5px;flex-wrap:wrap}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:12.5px}
 .kv .kk{color:var(--mut2)}
@@ -123,6 +138,44 @@ function saveKey(){KEY=el('keyIn').value.trim();if(!KEY)return;sessionStorage.se
 function logout(m){KEY='';sessionStorage.removeItem('dve_admin_key');stopPoll();el('app').classList.add('hidden');el('gate').classList.remove('hidden');if(m)el('gateMsg').textContent=m;}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fdt(ts){if(!ts)return '–';const d=new Date(ts*1000);return d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
+/* v136: dynamische Grafen. Reines SVG, kein Framework (CSP-sicher).
+   barChart: Tages-Balken, Hover zeigt Datum+Wert, letzter Balken (heute)
+   voll orange, Summen/Max oben rechts. hbars: horizontale Verteilung. */
+function sdt(d){return d?d.slice(8,10)+'.'+d.slice(5,7):'';}
+function barChart(title,labels,values,fmt,height){
+  fmt=fmt||(v=>String(v)); height=height||96;
+  const n=values.length;
+  if(!n||values.every(v=>!v))
+    return `<div class="chart"><div class="ct"><b>${title}</b><span>no data yet</span></div>
+      <div class="subtle" style="padding:16px 0 12px">Nothing in this period.</div></div>`;
+  const mx=Math.max(...values,1e-9);
+  const W=1000,H=height,gap=Math.min(6,Math.max(1.2,W/n*0.18)),bw=(W-gap*(n-1))/n;
+  let bars='';
+  for(let i=0;i<n;i++){
+    const h=values[i]>0?Math.max(2.5,values[i]/mx*(H-6)):1.2;
+    const x=i*(bw+gap),y=H-h,last=i===n-1;
+    bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--acc)" opacity="${last?1:(values[i]>0?0.55:0.16)}"><title>${labels[i]}: ${fmt(values[i])}</title></rect>`;
+  }
+  const total=Math.round(values.reduce((a,b)=>a+b,0)*100)/100;
+  const mid=labels[Math.floor(n/2)]||'';
+  return `<div class="chart"><div class="ct"><b>${title}</b><span>peak ${fmt(Math.round(mx*100)/100)} · total ${fmt(total)}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">
+      <line x1="0" y1="0.5" x2="${W}" y2="0.5" stroke="var(--line)" stroke-dasharray="3 5"/>${bars}</svg>
+    <div class="cx"><span>${sdt(labels[0])}</span><span>${sdt(mid)}</span><span>${sdt(labels[n-1])} · today</span></div></div>`;
+}
+function hbars(items,fmt){
+  fmt=fmt||(v=>String(v));
+  if(!items.length||items.every(i=>!i.v))return '<div class="subtle">none yet</div>';
+  const mx=Math.max(...items.map(i=>i.v),1e-9);
+  return `<div class="hbars">${items.map(i=>`<div class="hb"><span class="hl" title="${esc(i.l)}">${esc(i.l)}</span><span class="ht"><i style="width:${Math.max(2,Math.round(i.v/mx*100))}%${i.c?';background:'+i.c:''}"></i></span><span class="hv">${fmt(i.v)}</span></div>`).join('')}</div>`;
+}
+let TS_CACHE={};
+async function tseries(days){
+  const k=String(days), now=Date.now();
+  if(TS_CACHE[k]&&now-TS_CACHE[k].t<60000)return TS_CACHE[k].d;   // 60s-Cache
+  const d=await api('/api/admin/timeseries?days='+days);
+  TS_CACHE[k]={t:now,d};return d;
+}
 function fdate(ts){return ts?new Date(ts*1000).toLocaleDateString():'–';}
 function ago(ts){if(!ts)return 'never';const s=Math.max(0,Math.floor((serverNow||Date.now()/1000)-ts));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 function dur(s){if(s==null)return '–';s=Math.round(s);if(s<60)return s+'s';const m=Math.floor(s/60);return m+'m '+(s%60)+'s';}
@@ -151,7 +204,7 @@ function danger(msg){return confirm('⚠ '+msg);}
 
 /* ---------- LIVE ---------- */
 async function loadLive(silent){
-  let d;try{d=await api('/api/admin/overview');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/overview'),tseries(30).catch(()=>null)]);}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
   lastLoad.live=Date.now()/1000; serverNow=d.now;
   el('buildLine').textContent='build '+d.build;
   const r=d.revenue,s=d.system,st=s.stripe;
@@ -184,7 +237,16 @@ async function loadLive(silent){
       ${led(s.heartbeats.watchdog)}<span class="pill"><b>Watchdog</b> ${s.heartbeats.watchdog?ago(s.heartbeats.watchdog):'—'}</span>
       ${led(s.heartbeats.cleanup)}<span class="pill"><b>Cleanup</b> ${s.heartbeats.cleanup?ago(s.heartbeats.cleanup):'—'}</span>
       ${led(s.motion,true)}<span class="pill"><b>Motion</b> ${s.motion?'available':'off'}</span>
-    </div>`;
+    </div>
+    ${ts?`<h3>Last 30 days</h3>
+    <div class="grid g2">
+      ${barChart('Revenue per day',ts.labels,ts.revenue_eur,v=>eur(v))}
+      ${barChart('Signups per day',ts.labels,ts.signups)}
+    </div>
+    <div class="grid g2" style="margin-top:11px">
+      ${barChart('Renders per day',ts.labels,ts.renders)}
+      ${barChart('Credits spent per day (min)',ts.labels,ts.credits_spent_min)}
+    </div>`:''}`;
 }
 
 /* ---------- JOBS ---------- */
@@ -192,7 +254,8 @@ async function loadJobs(silent){
   let d;try{d=await api('/api/admin/jobs');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
   lastLoad.jobs=Date.now()/1000;
   const q=d.queue, dist=d.distribution||{};
-  const distTxt=Object.entries(dist).map(([k,v])=>`${k} ${v}`).join(' · ')||'none';
+  const DCOL={laeuft:'var(--info)',wartet:'var(--warn)',fertig:'var(--ok)',fehler:'var(--bad)'};
+  const distBars=hbars(Object.entries(dist).map(([k,v])=>({l:k,v,c:DCOL[k]||'var(--acc)'})));
   const rows=d.jobs.length?d.jobs.map(j=>`<tr>
     <td class="mono">${esc((j.jid||'').slice(0,10))}</td>
     <td>${j.email?esc(j.email):'<span class="subtle">demo</span>'}</td>
@@ -210,9 +273,9 @@ async function loadJobs(silent){
     </div></td></tr>`).join(''):`<tr><td colspan="7" class="subtle">No jobs.</td></tr>`;
   el('view').innerHTML=`
     <div class="grid g4">
-      <div class="card"><div class="k">Status distribution</div><div class="v" style="font-size:15px;font-weight:700">${esc(distTxt)}</div></div>
-      <div class="card"><div class="k">Caption / Motion queue</div><div class="v">${q.caption} <small>/ ${q.motion}</small></div></div>
-      <div class="card"><div class="k">Waiting paid / free</div><div class="v">${q.paid_waiting} <small>/ ${q.free_waiting}</small></div></div>
+      <div class="card" style="grid-column:span 2"><div class="k">Status distribution (live)</div>${distBars}</div>
+      <div class="card"><div class="k">Caption / Motion queue</div><div class="v">${q.caption} <small>/ ${q.motion}</small></div>
+        <div class="subtle" style="margin-top:4px">waiting paid ${q.paid_waiting} · free ${q.free_waiting}</div></div>
       <div class="card"><div class="k">Avg render time</div><div class="v">${dur(d.avg_render_sec)}</div></div>
     </div>
     <div style="display:flex;justify-content:flex-end;margin:14px 0 4px"><button class="btn bad sm" onclick="reapStuck()">Stop all stuck</button></div>
@@ -225,9 +288,10 @@ async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');
 
 /* ---------- REVENUE ---------- */
 async function loadRevenue(){
-  let d;try{d=await api('/api/admin/revenue');}catch(e){el('view').innerHTML=err(e);return;}
+  let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/revenue'),tseries(90).catch(()=>null)]);}catch(e){el('view').innerHTML=err(e);return;}
   const w=d.windows;
-  const spark=d.series.length?`<div class="bars">${(()=>{const mx=Math.max(...d.series.map(x=>x.eur),1);return d.series.map(x=>`<i title="${x.d}: ${eur(x.eur)}" style="height:${Math.round(x.eur/mx*100)}%"></i>`).join('');})()}</div>`:'<div class="subtle">No sales yet.</div>';
+  const chart=ts?barChart('Revenue per day (90d)',ts.labels,ts.revenue_eur,v=>eur(v),120):'<div class="subtle">No sales yet.</div>';
+  const packShare=hbars(d.per_pack.map(p=>({l:p.pack,v:p.eur})),v=>eur(v));
   const packs=d.per_pack.map(p=>`<tr><td>${esc(p.pack)}</td><td>${p.count}</td><td>${eur(p.eur)}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
   const tops=d.top_spenders.map(t=>`<tr class="click" onclick="openUser(${t.uid})"><td>${esc(t.email)}</td><td>${eur(t.eur)}</td><td>${t.orders}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
   const cat=d.catalog.map(c=>`<tr><td>${esc(c.id)}</td><td>${eur(c.eur)}</td><td>${c.credits}</td><td>${eur(c.per_credit)}</td></tr>`).join('');
@@ -244,9 +308,9 @@ async function loadRevenue(){
       <div class="card"><div class="k">Buyers once / repeat</div><div class="v">${d.buyers.once} <small>/ ${d.buyers.repeat}</small></div></div>
       <div class="card"><div class="k">Pre-v128 est.</div><div class="v">${eur(d.pre_v128_estimate.eur_est)} <small>${d.pre_v128_estimate.count}×</small></div></div>
     </div>
-    <h3>Revenue trend (90d)</h3>${spark}
+    <h3>Revenue trend</h3>${chart}
     <div class="grid g3" style="margin-top:16px">
-      <div><h3>By pack</h3><table><thead><tr><th>Pack</th><th>Sold</th><th>EUR</th></tr></thead><tbody>${packs}</tbody></table></div>
+      <div><h3>By pack</h3>${packShare}<table><thead><tr><th>Pack</th><th>Sold</th><th>EUR</th></tr></thead><tbody>${packs}</tbody></table></div>
       <div><h3>Top spenders</h3><table><thead><tr><th>Email</th><th>LTV</th><th>Orders</th></tr></thead><tbody>${tops}</tbody></table></div>
       <div><h3>Pricing catalog</h3><table><thead><tr><th>Pack</th><th>Price</th><th>Cr.</th><th>/cr</th></tr></thead><tbody>${cat}</tbody></table></div>
     </div>
@@ -257,9 +321,30 @@ function dl(t){const u='/api/admin/export/'+t+'.csv';fetch(u,{headers:hdr()}).th
 
 /* ---------- CREDITS ---------- */
 async function loadCredits(){
-  let d;try{d=await api('/api/admin/credits');}catch(e){el('view').innerHTML=err(e);return;}
+  let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/credits'),tseries(30).catch(()=>null)]);}catch(e){el('view').innerHTML=err(e);return;}
   const g=d.granted,c=d.consumed,a=d.aging_min;
+  const mix=hbars([
+    {l:'Paid (Kauf)',v:g.paid,c:'var(--acc)'},{l:'Welcome',v:g.welcome},
+    {l:'Monthly free',v:g.monthly},{l:'Referral',v:g.referral},
+    {l:'Reload bonus',v:g.reload_bonus},{l:'Admin granted',v:g.admin},
+    {l:'Refunds',v:g.refund}],v=>v+' min');
+  const use=hbars([
+    {l:'Render',v:c.render,c:'var(--info)'},{l:'Alpha export',v:c.alpha},
+    {l:'Style learn',v:c.style_learn},{l:'Expired (breakage)',v:c.expired_breakage,c:'var(--warn)'},
+    {l:'Admin clawback',v:c.admin_clawback}],v=>v+' min');
+  const aging=hbars([
+    {l:'expires ≤30d',v:a.d0_30,c:'var(--bad)'},{l:'30–90d',v:a.d30_90,c:'var(--warn)'},
+    {l:'90–180d',v:a.d90_180,c:'var(--ok)'}],v=>v+' min');
   el('view').innerHTML=`
+    ${ts?`<div class="grid g2" style="margin-bottom:14px">
+      ${barChart('Credits bought per day (min)',ts.labels,ts.credits_bought_min,v=>v+' min')}
+      ${barChart('Credits spent per day (min)',ts.labels,ts.credits_spent_min,v=>v+' min')}
+    </div>`:''}
+    <div class="grid g3">
+      <div class="card"><div class="k">Granted mix (minutes)</div>${mix}</div>
+      <div class="card"><div class="k">Consumption (minutes)</div>${use}</div>
+      <div class="card"><div class="k">Liability aging · ${d.liability_min} min open</div>${aging}</div>
+    </div>
     <h3>Granted (minutes)</h3>
     <div class="grid g4">
       <div class="card acc"><div class="k">Paid (Kauf)</div><div class="v">${g.paid}</div></div>

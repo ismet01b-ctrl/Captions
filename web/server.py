@@ -1589,7 +1589,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v135c-paymethods'
+DVE_BUILD = 'v136-graphs'
 
 
 @app.middleware('http')
@@ -5998,6 +5998,63 @@ def admin_revenue(request: Request, days: int = 90):
             'buyers': {'once': once, 'repeat': repeat}, 'series': ser,
             'top_spenders': tops, 'catalog': catalog, 'stripe': _stripe_health(),
             'pre_v128_estimate': {'count': pre_n, 'eur_est': round(pre_cent / 100.0, 2)}}
+
+
+@app.get('/api/admin/timeseries')
+def admin_timeseries(request: Request, days: int = 30):
+    """v136: Tages-Zeitreihen fuer die Admin-Grafen. Alle Reihen sind auf
+    LUECKENLOSE Tage aufgefuellt (0 fuer leere Tage), damit die Balken-Achse
+    ehrlich ist - eine Reihe nur aus Verkaufstagen wuerde Flauten verstecken."""
+    _require_admin(request)
+    days = max(7, min(180, days))
+    now = int(time.time()); day = 86400
+    start_day = now - (days - 1) * day
+    # Tagesgrenze auf UTC-Mitternacht des Starttags ziehen (timegm = TZ-fest,
+    # strftime('unixepoch') in SQLite gruppiert ebenfalls nach UTC)
+    import calendar as _cal
+    start = int(_cal.timegm(time.strptime(
+        time.strftime('%Y-%m-%d', time.gmtime(start_day)), '%Y-%m-%d')))
+    labels = [time.strftime('%Y-%m-%d', time.gmtime(start_day + i * day))
+              for i in range(days)]
+    con = _db()
+
+    def daily(sql, args):
+        return {r['d']: r for r in con.execute(sql, args).fetchall()}
+    rev = daily("SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') d, "
+                "COALESCE(SUM(cents),0) cents, COUNT(*) c FROM purchases "
+                "WHERE created_at >= ? GROUP BY d", (start,))
+    sig = daily("SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') d, "
+                "COUNT(*) c FROM users WHERE created_at >= ? GROUP BY d", (start,))
+    ren = daily("SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') d, "
+                "COUNT(*) c, COALESCE(SUM(-delta_sec),0) s FROM ledger "
+                "WHERE created_at >= ? AND grund LIKE 'Render %' AND delta_sec < 0 "
+                "GROUP BY d", (start,))
+    bought = daily("SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') d, "
+                   "COALESCE(SUM(delta_sec),0) s FROM ledger WHERE created_at >= ? "
+                   "AND grund LIKE 'Kauf %' AND delta_sec > 0 GROUP BY d", (start,))
+    spent = daily("SELECT strftime('%Y-%m-%d', created_at, 'unixepoch') d, "
+                  "COALESCE(SUM(-delta_sec),0) s FROM ledger WHERE created_at >= ? "
+                  "AND delta_sec < 0 AND (grund LIKE 'Render %' OR grund LIKE "
+                  "'Alpha %' OR grund LIKE 'Style learn %') GROUP BY d", (start,))
+    con.close()
+
+    def series(src, field, scale=1.0):
+        out = []
+        for lb in labels:
+            r = src.get(lb)
+            v = (r[field] if r else 0) / scale
+            out.append(round(v, 2) if scale != 1.0 else int(v))
+        return out
+    return {
+        'days': days, 'labels': labels,
+        'revenue_eur': series(rev, 'cents', 100.0),
+        'purchases': series(rev, 'c'),
+        'signups': series(sig, 'c'),
+        'renders': series(ren, 'c'),
+        'render_min': series(ren, 's', 60.0),
+        'credits_bought_min': series(bought, 's', 60.0),
+        'credits_spent_min': series(spent, 's', 60.0),
+    }
 
 
 @app.get('/api/admin/credits')

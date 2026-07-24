@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v135c-paymethods'" in _srv_m)
+          and "DVE_BUILD = 'v136-graphs'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4177,6 +4177,35 @@ def _scenario_betrieb(tmp):
     check('v135c: Checkout ohne feste payment_method_types (Dashboard entscheidet)',
           'payment_method_types=' not in _co135c.split('def _mk_session')[1].split('\ndef ')[0]
           and 'async_payment_succeeded' in _co135c)
+    # v136: Admin-Zeitreihen fuer die Grafen. Admin-gated, LUECKENLOS auf
+    # days Tage aufgefuellt (0-Werte), alle Reihen gleich lang, letzte
+    # Position = heute (UTC). Frontend hat SVG-Chart-Helfer + nutzt sie.
+    class _TsReq:
+        def __init__(self, key):
+            self.headers = {'x-admin-key': key}
+    os.environ['DVE_ADMIN'] = 'testkey_admin'
+    _denied136 = False
+    try:
+        SV.admin_timeseries(_TsReq('wrong'), days=14)
+    except SV.HTTPException as _e:
+        _denied136 = (_e.status_code == 403)
+    _tsr = SV.admin_timeseries(_TsReq('testkey_admin'), days=14)
+    _today_utc = _t.strftime('%Y-%m-%d', _t.gmtime())
+    check('v136: Timeseries admin-gated + lueckenlos + heute am Ende',
+          _denied136 and _tsr['days'] == 14 and len(_tsr['labels']) == 14
+          and all(len(_tsr[k]) == 14 for k in
+                  ('revenue_eur', 'purchases', 'signups', 'renders',
+                   'render_min', 'credits_bought_min', 'credits_spent_min'))
+          and _tsr['labels'][-1] == _today_utc
+          and sum(_tsr['revenue_eur']) >= 0)
+    _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
+          'function barChart' in _admA and 'function hbars' in _admA
+          and "tseries(30)" in _admA and "tseries(90)" in _admA
+          and 'Revenue per day' in _admA and 'Signups per day' in _admA
+          and 'Credits spent per day' in _admA
+          and 'Status distribution (live)' in _admA
+          and "api('/api/admin/timeseries?days='+days)" in _admA)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}
