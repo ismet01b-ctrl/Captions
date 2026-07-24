@@ -3824,6 +3824,21 @@ def _scenario_betrieb(tmp):
     check('Admin-Alarm gedrosselt (1 Mail/h pro Schluessel)',
           a and not b and c and len(sent) == 2
           and all(to == SV.ADMIN_MAIL for to, _ in sent))
+    # v132: Regressionsschutz gegen den "in .env gesetzt, aber kommt nicht im
+    # Container an"-Fehler. Jede Variable, die server.py aus der Umgebung liest
+    # UND in .env.example dokumentiert ist, MUSS in docker-compose.yml an den
+    # app-Dienst durchgereicht werden. (GOOGLE_* fehlten -> Login blieb aus.)
+    _compose = open(os.path.join(HERE, 'docker-compose.yml'), encoding='utf-8').read()
+    _srvtext = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _envex = open(os.path.join(HERE, '.env.example'), encoding='utf-8').read()
+    _read_env = set(re.findall(r"os\.environ\.get\('([A-Z][A-Z0-9_]+)'", _srvtext))
+    _documented = set(re.findall(r'^([A-Z][A-Z0-9_]+)=', _envex, re.M))
+    _skip = {'DVE_DATA'}                    # Volume-Pfad, absichtlich nicht durchgereicht
+    _must_pass = (_read_env & _documented) - _skip
+    _missing = sorted(v for v in _must_pass if (v + ':') not in _compose)
+    check('v132: alle dokumentierten .env-Variablen werden an den Container '
+          'durchgereicht (docker-compose)', not _missing,
+          f'fehlt in docker-compose.yml: {_missing}')
     # v131: DVE_ALERTS filtert Betriebs-Post. Routine (Backup) nur bei 'all';
     # echte Stoerungen bei 'important'; 'off' schweigt komplett.
     _lvl0 = SV.ALERT_LEVEL

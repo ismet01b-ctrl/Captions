@@ -24,6 +24,21 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # v132: bisher fehlten diese Durchreichungen - .env-Werte kamen NICHT im
+      # Container an (Compose gibt nur explizit gelistete Variablen weiter).
+      # Betrifft u.a. Owner-Panel (DVE_OWNER), Mail-Alarme, Alert-Regler und
+      # jetzt "Mit Google anmelden".
+      DVE_OWNER: ${DVE_OWNER:-}
+      DVE_ADMIN_MAIL: ${DVE_ADMIN_MAIL:-}
+      DVE_ALERTS: ${DVE_ALERTS:-important}
+      DVE_RETENTION_DAYS: ${DVE_RETENTION_DAYS:-7}
+      DVE_CREDIT_DAYS: ${DVE_CREDIT_DAYS:-180}
+      DVE_INFLIGHT_CAP: ${DVE_INFLIGHT_CAP:-3}
+      DVE_JOB_TIMEOUT: ${DVE_JOB_TIMEOUT:-2400}
+      DVE_MOTION_CONCURRENCY: ${DVE_MOTION_CONCURRENCY:-2}
+      DVE_REF_SALT: ${DVE_REF_SALT:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     volumes:
       - dve-data:/data
     expose:
