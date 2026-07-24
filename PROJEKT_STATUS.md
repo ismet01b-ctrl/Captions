@@ -3,6 +3,12 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v137b Transaktions-Labels sauber (Session-ID-Leak zu).** Ismets Screenshot: 'Reload bonus
+  cs_live_...' stand ROH in der Account-Transaktionsliste - die Account-Seite hatte eine eigene
+  Halb-Uebersetzung, die den Reload-Bonus (und Alpha/Admin/Refund) nicht kannte. Fix: EINE zentrale
+  `translateGrund()` fuer beide Listen, vervollstaendigt um 'Reload bonus (+10%)', 'Editor layer
+  render', 'Account adjustment', 'Refund'. Inhaltlich war alles korrekt (Reload-Bonus = +10% bei
+  Nachkauf unter 2 Credits Rest, bewusstes v124-Feature). Selftest gruen.
 - **v137a Google-Konten koennen sich jetzt loeschen.** Ismets Fund: Konto-Loeschung verlangte
   IMMER das Passwort - Google-Konten haben aber nie eins gesehen (Zufalls-Hash bei der Anlage),
   Loeschung war fuer sie unmoeglich (DSGVO-Problem!). Fix: `/api/delete_account` akzeptiert fuer

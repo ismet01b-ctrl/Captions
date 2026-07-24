@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v137a-googledel'" in _srv_m)
+          and "DVE_BUILD = 'v137b-txlabels'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4274,6 +4274,15 @@ def _scenario_betrieb(tmp):
           and "'google': bool(_row_get(u, 'google_sub'))" in open(
               os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
           and 'delMail' in _idx137 and 'user.google' in _idx137)
+    # v137b: Transaktions-Labels vollstaendig - keine rohen Ledger-Grunds
+    # (Stripe-Session-IDs!) mehr in der Kundenansicht.
+    _idxTx = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v137b: Account-Transaktionen nutzen translateGrund (keine Session-ID-Leaks)',
+          'escHtml(translateGrund(' in _idxTx
+          and "Reload bonus (+10%)" in _idxTx
+          and "'Editor layer render'" in _idxTx
+          and "/^Refund .*/" in _idxTx
+          and "if (/pack|stripe|kauf|purchase/i.test(g))" not in _idxTx)
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA

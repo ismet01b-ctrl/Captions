@@ -3623,11 +3623,14 @@ function translateGrund(g) {
     .replace(/^Welcome credit$/, 'Welcome credit')
     .replace(/^Monthly free credit .*/, 'Monthly free credit')
     .replace(/^Kauf .*/, 'Credit purchase')
-    .replace(/^Reload bonus .*/, 'Reload bonus')
+    .replace(/^Reload bonus .*/, 'Reload bonus (+10%)')
     .replace(/^Referral welcome$/, 'Invite bonus')
     .replace(/^Referral for .*/, 'Invite reward')
     .replace(/^Expired credits .*/, 'Expired credits')
     .replace(/^Style learn .*/, 'Style learned')
+    .replace(/^Alpha .*/, 'Editor layer render')
+    .replace(/^Admin adjust.*/, 'Account adjustment')
+    .replace(/^Refund .*/, 'Refund')
     .replace(/^Render \S+ \(\d+s\)$/, 'Video render')
     .replace(/^Render /, 'Video render ');
 }
@@ -3713,15 +3716,10 @@ async function renderTransactions() {
   if (!d.items || !d.items.length) {
     box.innerHTML = '<p class="hint">No transactions yet.</p>'; return;
   }
-  const label = (g) => {
-    g = g || '';
-    if (g.startsWith('Render ')) return 'Video render';
-    if (g.startsWith('Refund')) return 'Refund (failed render)';
-    if (g.startsWith('Welcome')) return 'Welcome credits';
-    if (/pack|stripe|kauf|purchase/i.test(g)) return 'Credit purchase';
-    if (/gratis|free/i.test(g)) return 'Free monthly credits';
-    return escHtml(g);
-  };
+  // v137b: EINE zentrale Uebersetzung (translateGrund) statt zweiter
+  // Halb-Liste - vorher leakte 'Reload bonus cs_live_...' die Stripe-
+  // Session-ID roh in die Kundenansicht.
+  const label = (g) => escHtml(translateGrund(g || '') || '');
   box.innerHTML = d.items.map(it => {
     const c = it.delta_sec / 60;
     const amt = (c > 0 ? '+' : '') + (Math.round(c * 10) / 10) + ' credits';
