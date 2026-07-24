@@ -227,7 +227,7 @@ async function loadLive(silent){
     </div>
     <h3>System health</h3>
     <div class="health">
-      ${led(s.openai)}<span class="pill"><b>OpenAI</b> ${s.openai?'set':'MISSING'}</span>
+      ${led(s.openai.set&&s.openai.valid!==false,s.openai.set&&s.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!s.openai.set?'MISSING':(s.openai.valid===false?'KEY INVALID':'ok')}</span>
       ${led(st.ready&&st.mode==='live',st.mode==='test')}<span class="pill"><b>Stripe</b> ${st.mode}${st.ready?'':' (off)'}</span>
       ${led(st.webhook_secret)}<span class="pill"><b>Webhook</b> ${st.webhook_secret?'set':'MISSING'}</span>
       ${led(s.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${s.mail.transport}</span>
@@ -486,7 +486,7 @@ async function loadSystem(){
   el('view').innerHTML=`
     <h3>Keys &amp; transport (presence only, never values)</h3>
     <div class="health">
-      ${led(k.openai)}<span class="pill"><b>OpenAI</b> ${k.openai?'set':'MISSING'}</span>
+      ${led(k.openai.set&&k.openai.valid!==false,k.openai.set&&k.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!k.openai.set?'MISSING':(k.openai.valid===false?'KEY INVALID':'ok')}</span>
       ${led(k.stripe.ready&&k.stripe.mode==='live',k.stripe.mode==='test')}<span class="pill"><b>Stripe</b> ${k.stripe.mode}</span>
       ${led(k.stripe.webhook_secret)}<span class="pill"><b>Webhook</b> ${k.stripe.webhook_secret?'set':'MISSING'}</span>
       ${led(k.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${k.mail.transport} → ${esc(k.mail.admin_to)}</span>

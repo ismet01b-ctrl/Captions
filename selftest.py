@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v138a-jobsort'" in _srv_m)
+          and "DVE_BUILD = 'v138b-keycheck'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4325,6 +4325,22 @@ def _scenario_betrieb(tmp):
     check('v138a: Admin-Jobs sortiert neueste zuerst',
           "out.sort(key=lambda x: -(x['updated_at'] or 0))" in _jsblk
           and "order.get(x['status']" not in _jsblk)
+    # v138b: OpenAI-Ampel prueft den Key ECHT (401 live, Ampel war gruen).
+    # Ohne Key (Testumgebung): set=False, KEIN Netz-Call. Mit Key: /v1/models,
+    # 10 Min gecacht; UI kennt KEY INVALID.
+    _k0 = os.environ.pop('OPENAI_API_KEY', None)
+    try:
+        _oh = SV._openai_health()
+    finally:
+        if _k0 is not None:
+            os.environ['OPENAI_API_KEY'] = _k0
+    _srvOH = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _admOH = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v138b: OpenAI-Health echt (kein Key -> set:False ohne Netz; UI zeigt KEY INVALID)',
+          _oh == {'set': False, 'valid': None}
+          and "_openai_health()" in _srvOH
+          and _srvOH.count("'openai': _openai_health(),") == 2
+          and 'KEY INVALID' in _admOH)
     _admA = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA

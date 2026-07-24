@@ -3,6 +3,12 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v138b OpenAI-Ampel prueft den Key ECHT.** Live-Ursache des Transkript-Fehlschlags gefunden:
+  render.py bekam 401 von OpenAI ('KI-Zugang ungueltig') - der Key im Container ist ungueltig/
+  beschaedigt. Die Health-Ampel war trotzdem gruen, weil sie nur 'Wert vorhanden' prueft. Neu:
+  `_openai_health()` macht einen leichten /v1/models-Call (10 Min gecacht; Netzfehler -> unklar,
+  nicht falsch-rot; ohne Key kein Netz-Call), beide Admin-Ansichten zeigen jetzt ok / KEY INVALID /
+  MISSING. Der Key selbst muss von Ismet erneuert werden (.env auf dem Server). Selftest gruen.
 - **v138a Admin-Jobs: neueste zuerst.** Ismets Wunsch - die alte Status-Gruppierung (laufend >
   wartend > Fehler > Rest) schob z.B. den frischen 'vorbereitet'-Job ans Listenende. Jetzt rein
   chronologisch nach letzter Aktivitaet. Selftest gruen.

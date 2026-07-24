@@ -1603,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v138a-jobsort'
+DVE_BUILD = 'v138b-keycheck'
 
 
 @app.middleware('http')
@@ -2617,6 +2617,29 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
         except Exception:
             pass
     return p.returncode, log, out
+
+
+# v138b: ECHTE OpenAI-Key-Pruefung fuer die Health-Ampel. Die alte Ampel war
+# gruen, sobald irgendein Wert gesetzt war - live war der Key aber 401
+# (Whisper lehnte ab) und niemand sah es. Leichter /v1/models-Call, 10 Min
+# gecacht; Netzfehler ergeben None (unklar), nicht falsches Rot.
+_OPENAI_CHECK = {'t': 0.0, 'ok': None}
+
+
+def _openai_health():
+    key = os.environ.get('OPENAI_API_KEY', '').strip()
+    if not key:
+        return {'set': False, 'valid': None}
+    now = time.time()
+    if now - _OPENAI_CHECK['t'] > 600:
+        try:
+            import requests as _rq
+            r = _rq.get('https://api.openai.com/v1/models',
+                        headers={'Authorization': f'Bearer {key}'}, timeout=6)
+            _OPENAI_CHECK.update(t=now, ok=(r.status_code == 200))
+        except Exception:
+            _OPENAI_CHECK.update(t=now, ok=None)
+    return {'set': True, 'valid': _OPENAI_CHECK['ok']}
 
 
 # ---------------------------------------------------------- Admin-Alarm
@@ -5851,7 +5874,7 @@ def admin_overview(request: Request):
         'tickets_open': tickets_open,                  # v133c
         'system': {'disk': _disk_info(), 'db_mb': _db_size_mb(),
                    'last_backup': _last_backup_ts(),
-                   'openai': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
+                   'openai': _openai_health(),
                    'stripe': stripe, 'mail': _mail_health(),
                    'motion': bool(MOTION_BRIEF_OK),
                    'retention_days': RETENTION_DAYS,
@@ -6213,7 +6236,7 @@ def admin_system(request: Request):
     hb = dict(_HEARTBEAT)
     return {
         'build': DVE_BUILD,
-        'keys': {'openai': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
+        'keys': {'openai': _openai_health(),
                  'stripe': _stripe_health(), 'mail': _mail_health(),
                  'admin_key': bool(os.environ.get('DVE_ADMIN', '').strip()),
                  'ref_salt': bool(os.environ.get('DVE_REF_SALT', '').strip())
