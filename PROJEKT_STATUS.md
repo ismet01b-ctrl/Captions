@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v140 Senior-Editor-Batch: Kontrast-Garantie, Tempo-Kurve, Stille vor der Pointe.** Aus der
+  Produktanalyse (Code gelesen, nicht geraten) kamen drei echte Luecken, alle drei gebaut:
+  - **(1) Kontrast-Garantie (war ein echter Fehler).** `scene_palette_sampler` nahm den Szenen-
+    Farbton, hob den Text aber IMMER auf V=246 (fast weiss); nirgends wurde gemessen, wie hell der
+    Untergrund ist. Auf hellem Grund (Fenster, weisse Wand, Himmel, Schnee) stand damit Weiss auf
+    Weiss. Neu: `region_luminance()` misst konservativ (65. Perzentil = helle Haelfte),
+    `fit_caption_color()` waehlt die erste Helligkeit, die den WCAG-Mindestkontrast schafft - erst
+    hell (Standard-Look bleibt), sonst DERSELBE Farbton in dunkel. `effects.caption_contrast: 2.2`
+    (0 = Alt-Verhalten). BEWEIS: Hell-Clip vorher/nachher gerendert, Kontrast 1.2 -> 12.6,
+    Vergleichsbild an Ismet.
+  - **(2) Tempo-Kurve.** `words_per_group` war EIN Wert fuers ganze Video = konstantes Timing, der
+    deutlichste Maschinen-Verraeter. Neu: Blockgroesse folgt dem echten Sprechtempo (ab 3.2 Woerter/s
+    ein Wort mehr gegen Flackern, unter 1.8 eins weniger fuer Gewicht), Merge-Schwelle ebenso, und
+    ein power-3-Wort steht ALLEIN (auch gegen den Merge-Pass). `effects.pace_adaptive`.
+    WICHTIG (gemessen, nicht behauptet): erst mit +2 Woertern gebaut, das kostete Caption-Abdeckung
+    (18/20 -> 14/20 Frames), weil groessere Bloecke haeufiger eine B-Roll-Grenze ueberspannen und
+    dann ganz wegfallen. Auf +1 entschaerft -> 16/20. Der Rest ist die gewollte Folge groesserer
+    Bloecke. Beide build_groups-Aufrufer laufen jetzt ueber EINE Quelle (`groups_for`), sonst zeigen
+    die Flow-Indizes auf den falschen Chunk.
+  - **(3) Stille vor dem Einschlag.** Vor einem power-3-Moment verschwindet der Text kurz, das Bild
+    atmet, dann schlaegt das Wort ein. ERSTE FASSUNG WAR FALSCH: sie schnitt Text auch mitten im
+    Satz ab (saehe nach Bug aus, nicht nach Regie) und liess den Alpha-Test auffliegen. Jetzt greift
+    sie NUR, wenn der Sprecher wirklich eine Pause macht (>= 0.15s), und ist nie laenger als diese
+    Pause. `effects.punch_silence: 0.34`.
+  Beweis: 14 neue Tests (u.a. WCAG-Formel, Weiss-auf-Weiss ausgeschlossen, Pointe isoliert,
+  Rueckwaertskompatibilitaet ohne Flags, funktionale Luecke vor der Pointe), Logik 797/797 +
+  Renders 7/1/5/2 gruen. Wie immer synthetisch/CPU - die Wirkung auf echtem Material sieht Ismet live.
 - **v139 Captions pur + formatgerechte Platzierung (Senior-Editor-Standard).** Ismets Screenshot
   zeigte einen 'CAPTIONS'-Motion-Pill im generierten Video = die v101s-AUTO-Akzente. (a) Auto-
   Akzente per Default AUS (`config.yaml accents.auto: false`) - keine KI-/Heuristik-Badges mehr

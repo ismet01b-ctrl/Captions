@@ -1039,7 +1039,59 @@ def refine_word_times(words, voice_wav):
     avg = float(np.mean(np.abs(shifts))) * 1000 if shifts else 0.0
     return words, avg
 
-def scene_palette_sampler(video_path, cut_times=None):
+def _rel_lum(rgb):
+    """WCAG-Relativluminanz (0..1) eines sRGB-Tripels."""
+    c = np.asarray(rgb, dtype=np.float32) / 255.0
+    lin = np.where(c <= 0.03928, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return float(0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2])
+
+
+def contrast_ratio(rgb, lum_bg):
+    """WCAG-Kontrastverhaeltnis zwischen einer Farbe und einer Untergrund-
+    Luminanz. 1.0 = identisch, 21.0 = Schwarz auf Weiss."""
+    la = _rel_lum(rgb)
+    hi, lo = max(la, lum_bg), min(la, lum_bg)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+# v140: Reihenfolge der Helligkeits-Kandidaten. Erst die hellen Werte (der
+# Standard-Look bleibt, wo er lesbar ist), dann die dunklen. Mittelwerte sind
+# bewusst hinten - gegen einen hellen Untergrund helfen sie physikalisch nicht.
+_CAP_VALUES = (246, 232, 214, 34, 22, 52, 84, 120, 160)
+
+
+def fit_caption_color(hue, sat, bg_lum, min_ratio=2.2):
+    """Waehlt die Helligkeit des Caption-Tons so, dass gegen den gemessenen
+    Untergrund mindestens min_ratio Kontrast steht. Farbton und Saettigung
+    bleiben unangetastet, damit die Handschrift erhalten bleibt: auf dunklem
+    Grund heller Text wie bisher, auf hellem Grund (Fenster, weisse Wand,
+    Himmel, Schnee) derselbe Ton in dunkel. Schafft kein Kandidat die Schwelle
+    (mittelgrauer Untergrund), gewinnt der kontraststaerkste - nie schlechter
+    als vorher."""
+    best, best_r = None, -1.0
+    for v in _CAP_VALUES:
+        rgb = cv2.cvtColor(np.uint8([[[int(hue), int(sat), int(v)]]]),
+                           cv2.COLOR_HSV2RGB)[0, 0]
+        rgb = tuple(int(c) for c in rgb)
+        r = contrast_ratio(rgb, bg_lum)
+        if r >= min_ratio:
+            return rgb
+        if r > best_r:
+            best, best_r = rgb, r
+    return best
+
+
+def region_luminance(bgr_region):
+    """Konservative Untergrund-Luminanz einer Bildregion: das 65. Perzentil,
+    also die hellere Haelfte. Ein grosses helles Fenster hinter dem Sprecher
+    darf nicht vom dunklen Rest weggemittelt werden."""
+    rgb = bgr_region[:, :, ::-1].reshape(-1, 3).astype(np.float32) / 255.0
+    lin = np.where(rgb <= 0.03928, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    lum = 0.2126 * lin[:, 0] + 0.7152 * lin[:, 1] + 0.0722 * lin[:, 2]
+    return float(np.percentile(lum, 65))
+
+
+def scene_palette_sampler(video_path, cut_times=None, min_contrast=2.2):
     """Liefert palette_at(t, region): tastet den Frame zum Zeitpunkt t per ffmpeg ab
     (robust bei HEVC/VFR, wo cv2-Seeks scheitern) und leitet Caption-Farben ab,
     die sich der Umgebung anpassen (Referenz-Look): Text = dominanter Szenenton,
@@ -1088,10 +1140,20 @@ def scene_palette_sampler(video_path, cut_times=None):
             hue = float(np.median(src[:, 0]))
             sat = float(np.median(src[:, 1])) / 255.0
             t_sat = int(255 * min(0.08 + sat * 0.16, 0.22))
-            text = cv2.cvtColor(np.uint8([[[hue, t_sat, 246]]]),
-                                cv2.COLOR_HSV2RGB)[0, 0]
-            accent = cv2.cvtColor(np.uint8([[[hue, int(255 * 0.55), 255]]]),
-                                  cv2.COLOR_HSV2RGB)[0, 0]
+            # v140 KONTRAST-GARANTIE: Der Farbton folgt weiter der Szene, die
+            # HELLIGKEIT wird jetzt gegen den gemessenen Untergrund geprueft.
+            # Vorher stand der Text IMMER auf V=246 (fast weiss) - auf hellem
+            # Grund war das Weiss auf Weiss, der deutlichste Amateur-Marker.
+            if min_contrast and min_contrast > 1.0:
+                bg_lum = region_luminance(small)
+                text = fit_caption_color(hue, t_sat, bg_lum, min_contrast)
+                accent = fit_caption_color(hue, int(255 * 0.55), bg_lum,
+                                           min_contrast)
+            else:
+                text = cv2.cvtColor(np.uint8([[[hue, t_sat, 246]]]),
+                                    cv2.COLOR_HSV2RGB)[0, 0]
+                accent = cv2.cvtColor(np.uint8([[[hue, int(255 * 0.55), 255]]]),
+                                      cv2.COLOR_HSV2RGB)[0, 0]
             out = (tuple(int(c) for c in text), tuple(int(c) for c in accent))
         except Exception:
             out = None                        # Aufrufer faellt auf Config-Farben zurueck
@@ -4459,15 +4521,74 @@ def detect_keywords(words, cfg, cli_keywords):
             kw.add(len(words) - 2)
     return kw
 
-def build_groups(words, max_words=3, min_hold=0.0, hard_max=5):
+def speech_rate_at(words, i, win=5):
+    """Sprechtempo (Woerter/Sekunde) im Fenster um Wort i. 0.0 = unbrauchbar."""
+    if not words:
+        return 0.0
+    a = max(0, i - win // 2)
+    b = min(len(words), a + win)
+    a = max(0, b - win)
+    try:
+        span = float(words[b - 1]['end']) - float(words[a]['start'])
+    except (KeyError, TypeError, ValueError):
+        return 0.0
+    if span <= 0.05:
+        return 0.0
+    return (b - a) / span
+
+
+def build_groups(words, max_words=3, min_hold=0.0, hard_max=5,
+                 adaptive=False, power_at=None):
     """Wortgruppen wie ein Cutter: nie ueber Satzgrenzen hinweg. Whisper liefert
-    auf Wort-Ebene keine Satzzeichen, also zaehlen Sprechpausen als Grenze."""
+    auf Wort-Ebene keine Satzzeichen, also zaehlen Sprechpausen als Grenze.
+
+    v140 TEMPO-KURVE (adaptive=True): Ein Cutter haelt das Tempo nicht konstant,
+    er formt eine Kurve. Zwei Kopplungen bilden das ab:
+      (a) Sprechtempo: schnell gesprochene Passagen bekommen groessere Bloecke
+          (sonst flackert der Text), langsam-betonte kleinere (mehr Gewicht).
+      (b) Pointe: ein power-3-Wort steht ALLEIN. Kein Mitlaeufer davor, keiner
+          dahinter - genau so setzt ein Editor die Schlusspointe.
+    power_at = {wort_index: power}. Ohne die Flags bleibt das Verhalten exakt
+    wie vorher (Rueckwaertskompatibilitaet fuer Tests und Alt-Aufrufer)."""
     groups, cur = [], []
+    punch_groups = set()
+
+    def _is_punch(idx):
+        if not power_at:
+            return False
+        try:
+            return int(power_at.get(idx, 2) or 2) >= 3
+        except (TypeError, ValueError):
+            return False
+
     for i, w in enumerate(words):
+        lim = max_words
+        if adaptive:
+            # Schwellen bewusst konservativ: normale Konversation (rund 2.3
+            # bis 2.9 Woerter/s) bleibt beim Standard-Tempo. Nur wirklich
+            # schnelle (ab 180 wpm) bzw. betont langsame Passagen verschieben
+            # die Blockgroesse, sonst waere es kein Akzent, sondern ein neuer
+            # Default.
+            # Bewusst nur EIN Wort Abweichung nach oben oder unten. Groessere
+            # Bloecke ueberspannen sonst haeufiger eine B-Roll-Grenze und
+            # fallen dann komplett weg - die Kurve darf die Abdeckung nicht
+            # kosten. Ein Wort reicht, damit der Unterschied traegt.
+            wps = speech_rate_at(words, i)
+            if wps >= 3.2:
+                lim = min(hard_max, max_words + 1)
+            elif 0.0 < wps <= 1.8:
+                lim = max(1, max_words - 1)
+        # Pointe isolieren: laufende Gruppe VOR dem Einschlag schliessen.
+        if adaptive and _is_punch(i) and cur:
+            groups.append(cur); cur = []
         cur.append(i)
+        if adaptive and _is_punch(i):
+            punch_groups.add(len(groups))
+            groups.append(cur); cur = []
+            continue
         pause = (i + 1 < len(words)
                  and words[i + 1]['start'] - w['end'] > 0.35)
-        if (len(cur) == max_words or pause
+        if (len(cur) >= lim or pause
                 or w['word'].rstrip().endswith(('.', ',', '?', '!'))):
             groups.append(cur); cur = []
     if cur: groups.append(cur)
@@ -4483,13 +4604,55 @@ def build_groups(words, max_words=3, min_hold=0.0, hard_max=5):
                 dauer = pw['end'] - words[prev[0]]['start']
                 luecke = words[g[0]]['start'] - pw['end']
                 satzende = pw['word'].rstrip().endswith(('.', '!', '?'))
-                if (dauer < min_hold and not satzende and luecke <= 0.35
+                # v140: Die Pointe bleibt allein - sie darf weder einen Vorlaeufer
+                # anziehen noch selbst angehaengt werden.
+                punch_here = (adaptive
+                              and (any(_is_punch(x) for x in prev)
+                                   or any(_is_punch(x) for x in g)))
+                # v140: Bei langsamer, betonter Rede laenger stehen lassen
+                # (weniger Merges), bei schnellem Sprechen frueher zusammen-
+                # ziehen - das ist die zweite Haelfte der Tempo-Kurve.
+                hold = min_hold
+                if adaptive:
+                    wps = speech_rate_at(words, prev[0])
+                    if 0.0 < wps <= 1.8:
+                        hold = min_hold * 1.25
+                    elif wps >= 3.6:
+                        hold = min_hold * 0.8
+                if (dauer < hold and not satzende and not punch_here
+                        and luecke <= 0.35
                         and len(prev) + len(g) <= hard_max):
                     merged[-1] = prev + g
                     continue
             merged.append(list(g))
         groups = merged
     return groups
+
+def pace_power_map(fx_map):
+    """{wort_index: power} fuer die Tempo-Kurve, aus der Regie-Map."""
+    out = {}
+    for i, v in (fx_map or {}).items():
+        if not isinstance(v, dict):
+            continue
+        try:
+            out[int(i)] = int(v.get('power', 2) or 2)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def groups_for(words, cfg, fx_map=None):
+    """EINE Quelle fuer die Chunk-Bildung. build_plans und der Flow-Cache
+    muessen exakt dieselben Gruppen sehen, sonst zeigen die Flow-Indizes auf
+    den falschen Chunk."""
+    eff = (cfg or {}).get('effects', {})
+    return list(build_groups(
+        words, eff.get('words_per_group', 3),
+        min_hold=float(eff.get('chunk_hold_min', 0.65)),
+        hard_max=int(eff.get('words_per_group_max', 5)),
+        adaptive=bool(eff.get('pace_adaptive', True)),
+        power_at=pace_power_map(fx_map)))
+
 
 def music_beats(voice_wav, n_frames, fps):
     """Musik-Beat-Erkennung (Kick + Snare). Rueckgabe: (beat_env, bpm, conf).
@@ -5499,9 +5662,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     # bei jeder Zahl - und genau das soll es NICHT.
     zahl_gap = float(cfg['effects'].get('zahl_gap', 15))
     prev_was_keyword = False
-    groups = list(build_groups(words, cfg['effects'].get('words_per_group', 3),
-                               min_hold=float(cfg['effects'].get('chunk_hold_min', 0.65)),
-                               hard_max=int(cfg['effects'].get('words_per_group_max', 5))))
+    groups = groups_for(words, cfg, fx_map)      # v140: Tempo-Kurve
     # v101n: mehrere erzwungene Woerter in EINER Phrase -> Phrase auftrennen,
     # damit jedes markierte Wort ein eigenes Highlight bekommt.
     groups = split_forced_groups(groups, fx_map)
@@ -6293,6 +6454,45 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 n_snap += 1
         if n_snap:
             print(f"  Beat-Grid: {n_snap} Moment(e) rasten auf den Takt")
+
+    # v140 STILLE VOR DEM EINSCHLAG. Die teuerste Sekunde im professionellen
+    # Schnitt ist die leere: kurz vor der Pointe verschwindet der Text, das
+    # Bild atmet, dann schlaegt das Wort ein. Wirkt hochwertiger als jede
+    # zusaetzliche Animation und ist der klarste Senior-Editor-Marker.
+    # Laeuft NACH Schnitt-Disziplin und Beat-Grid, damit der endgueltige
+    # Einsatz der Pointe feststeht. Der Vorlaeufer wird nur gekuerzt, wenn er
+    # danach noch MIN_SHOWN_SIL steht - lieber keine Stille als ein Blitz.
+    _sil = float(cfg['effects'].get('punch_silence', 0.34))
+    if _sil > 0:
+        MIN_SHOWN_SIL = 0.34      # so lange muss der Vorlaeufer noch stehen
+        MIN_GAP_SIL = 0.15        # so viel Luft muss der Sprecher lassen
+        n_sil = 0
+        for p in plans:
+            if (int(p.get('power', 2)) < 3 or 'kw_i' not in p
+                    or p.get('broll') or p.get('start') is None):
+                continue
+            i = p.get('kw_i')
+            pst = p['start']
+            if not isinstance(i, int) or i <= 0 or i >= len(words):
+                continue
+            # NUR wo der Sprecher wirklich Luft laesst. Text mitten im Satz
+            # wegzunehmen saehe nach Fehler aus, nicht nach Regie - die Leere
+            # faellt genau in die Sprechpause vor der Pointe.
+            gap = float(words[i].get('start', 0)) - float(words[i - 1].get('end', 0))
+            if gap < MIN_GAP_SIL:
+                continue
+            lead = min(_sil, gap)
+            for q in plans:
+                qs, qe = q.get('start'), q.get('end')
+                if qs is None or qe is None or qs >= pst:
+                    continue
+                if qe > pst - lead:
+                    neu = pst - lead
+                    if neu >= qs + MIN_SHOWN_SIL:
+                        q['end'] = neu
+                        n_sil += 1
+        if n_sil:
+            print(f"  Stille vor dem Einschlag: {n_sil} Moment(e) enden frueher")
 
     # v101d: Safe-Zone-Kontrolle. Die Constraints (v_zone/clamp_cx) halten Text
     # schon in der Flaeche; hier melden wir nur die Faelle, wo ein Sprite dafuer
@@ -8105,7 +8305,9 @@ def main():
         S.set_base_colors((250, 249, 246), (208, 204, 196))
         print("Farbwelt: Elegantes Weiss (Softweiss + warmer Grau-Akzent)")
     elif cfg.get('colors', {}).get('adaptive', True):
-        palette_at = scene_palette_sampler(args.input, cut_times)
+        palette_at = scene_palette_sampler(
+            args.input, cut_times,
+            min_contrast=float(cfg['effects'].get('caption_contrast', 2.2)))
         print("Adaptive Farben: Captions greifen die Szenen-Toene auf (pro Shot)")
     # v96b: Erzaehler-/Voiceover-Modus. Kaum Gesicht im Bild -> Captions NICHT
     # an einer (kaum vorhandenen) Person ausrichten, sondern zentriert-editorial
@@ -8117,9 +8319,7 @@ def main():
     # Video, gecacht neben dem Input (_flow3.json). Fallback: Heuristik.
     flow_map = None
     if cfg['effects'].get('caption_flow', True) and cfg['keywords'].get('ai', True):
-        _fgroups = list(build_groups(words, cfg['effects'].get('words_per_group', 3),
-                                     min_hold=float(cfg['effects'].get('chunk_hold_min', 0.65)),
-                                     hard_max=int(cfg['effects'].get('words_per_group_max', 5))))
+        _fgroups = groups_for(words, cfg, fx_map)    # v140: identisch zu build_plans
         flow_path = os.path.splitext(args.input)[0] + '_flow3.json'
         if os.path.exists(flow_path):
             try:

@@ -48,6 +48,17 @@ effects:
   words_per_group: 3
   words_per_group_max: 5
   chunk_hold_min: 0.65
+  # v140 TEMPO-KURVE: Chunk-Groesse folgt dem echten Sprechtempo (schnell =
+  # groessere Bloecke gegen Flackern, langsam-betont = kleinere), und ein
+  # power-3-Wort steht allein. false = konstantes Tempo wie vor v140.
+  pace_adaptive: true
+  # v140 KONTRAST-GARANTIE: Mindest-Kontrast (WCAG-Verhaeltnis) zwischen
+  # Caption-Ton und gemessenem Untergrund. Reicht Hell nicht, kippt derselbe
+  # Farbton nach Dunkel. 0 = aus (Alt-Verhalten, immer fast weiss).
+  caption_contrast: 2.2
+  # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
+  # power-3-Moment. 0 = aus.
+  punch_silence: 0.34
   zahl_gap: 15
   beat_sync: 0.7
   person_shadow: 0.5

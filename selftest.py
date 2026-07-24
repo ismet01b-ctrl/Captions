@@ -2186,7 +2186,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v139-pure'" in _srv_m)
+          and "DVE_BUILD = 'v140-senior'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -5078,6 +5078,90 @@ def _scenario_premium(tmp):
     check('Pacing: Standzeit steht in der config.yaml',
           'chunk_hold_min' in open(os.path.join(HERE, 'config.yaml'),
                                    encoding='utf-8').read())
+
+    # ================== v140: Senior-Editor-Batch ==================
+    import numpy as _np140
+    import yaml as _yaml140
+    _rsrc140 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _cfgsrc140 = open(os.path.join(HERE, 'config.yaml'), encoding='utf-8').read()
+    # (1) TEMPO-KURVE. Schnell gesprochene Passagen bekommen groessere Bloecke,
+    # langsame kleinere, und die Pointe (power 3) steht ALLEIN.
+    _fast = [{'word': f'w{i}', 'start': i * 0.22, 'end': i * 0.22 + 0.18}
+             for i in range(12)]                       # ~4.5 Woerter/s
+    _slow = [{'word': f'w{i}', 'start': i * 0.75, 'end': i * 0.75 + 0.60}
+             for i in range(12)]                       # ~1.3 Woerter/s
+    _gf = R.build_groups(_fast, 3, min_hold=0.0, hard_max=5, adaptive=True)
+    _gs = R.build_groups(_slow, 3, min_hold=0.0, hard_max=5, adaptive=True)
+    _mx = lambda gs: max(len(g) for g in gs)
+    check('v140 Tempo: schnelle Rede bekommt groessere Bloecke als langsame',
+          _mx(_gf) > _mx(_gs), f'schnell max {_mx(_gf)} vs langsam max {_mx(_gs)}')
+    check('v140 Tempo: langsame Rede unter dem Standard-Limit',
+          _mx(_gs) <= 2, f'max {_mx(_gs)}')
+    check('v140 Tempo: Wortlimit (hard_max) bleibt unverletzt',
+          _mx(_gf) <= 5, f'max {_mx(_gf)}')
+    # Pointe isoliert: power-3 auf Wort 5, egal wo im Chunk es laege.
+    _gp = R.build_groups(_fast, 3, min_hold=0.65, hard_max=5, adaptive=True,
+                         power_at={5: 3})
+    _solo = [g for g in _gp if 5 in g]
+    check('v140 Tempo: power-3-Pointe steht allein (auch gegen den Merge-Pass)',
+          len(_solo) == 1 and _solo[0] == [5], str(_solo))
+    # Rueckwaertskompatibel: ohne die Flags exakt das alte Verhalten.
+    check('v140 Tempo: ohne adaptive identisch zum Alt-Verhalten',
+          R.build_groups(_fast, 3, min_hold=0.65, hard_max=5)
+          == R.build_groups(_fast, 3, min_hold=0.65, hard_max=5, adaptive=False))
+    check('v140 Tempo: build_plans und Flow-Cache teilen EINE Chunk-Quelle',
+          _rsrc140.count('groups_for(words, cfg, fx_map)') == 2
+          and 'def groups_for' in _rsrc140)
+
+    # (2) KONTRAST-GARANTIE. Auf hellem Grund darf der Text nicht fast weiss
+    # bleiben; auf dunklem Grund bleibt der Standard-Look erhalten.
+    _hell = R.fit_caption_color(20, 40, R._rel_lum((245, 245, 245)), 2.2)
+    _dunkel = R.fit_caption_color(20, 40, R._rel_lum((18, 18, 20)), 2.2)
+    check('v140 Kontrast: heller Untergrund kippt den Text auf dunkel',
+          R._rel_lum(_hell) < 0.25 and R.contrast_ratio(_hell, R._rel_lum((245, 245, 245))) >= 2.2,
+          f'{_hell} ratio {R.contrast_ratio(_hell, R._rel_lum((245,245,245))):.2f}')
+    check('v140 Kontrast: dunkler Untergrund behaelt den hellen Standard-Look',
+          R._rel_lum(_dunkel) > 0.7, str(_dunkel))
+    check('v140 Kontrast: Weiss auf Weiss ist ausgeschlossen',
+          all(R.contrast_ratio(
+              R.fit_caption_color(h, 40, R._rel_lum((250, 250, 250)), 2.2),
+              R._rel_lum((250, 250, 250))) >= 2.2 for h in (0, 40, 90, 150)))
+    check('v140 Kontrast: WCAG-Formel korrekt (Schwarz auf Weiss = 21)',
+          abs(R.contrast_ratio((0, 0, 0), R._rel_lum((255, 255, 255))) - 21.0) < 0.1)
+    check('v140 Kontrast: Untergrund konservativ gemessen (helle Haelfte zaehlt)',
+          R.region_luminance(_np140.concatenate([
+              _np140.zeros((10, 10, 3), _np140.uint8),
+              _np140.full((10, 10, 3), 255, _np140.uint8)], axis=0)) > 0.5)
+    check('v140 Kontrast: abschaltbar + in der config.yaml',
+          'caption_contrast' in _cfgsrc140
+          and 'min_contrast=2.2' in _rsrc140)
+
+    # (3) STILLE VOR DEM EINSCHLAG. Sie faellt NUR in eine echte Sprechpause -
+    # Text mitten im Satz abzuschneiden saehe nach Fehler aus. Die Leere ist
+    # ausserdem nie laenger als die Pause selbst.
+    check('v140 Stille: nur bei echter Sprechpause, nie laenger als die Pause',
+          'MIN_GAP_SIL' in _rsrc140
+          and 'lead = min(_sil, gap)' in _rsrc140
+          and 'MIN_SHOWN_SIL' in _rsrc140
+          and 'punch_silence' in _cfgsrc140)
+    # Funktional: Pause vorhanden -> Vorlaeufer wird gekuerzt; ohne Pause nicht.
+    _slw = ([{'word': f'a{i}', 'start': i * 0.30, 'end': i * 0.30 + 0.26}
+             for i in range(6)]
+            + [{'word': 'PUNCH', 'start': 2.60, 'end': 2.95}])   # 0.86s Pause
+    _cfg_sil = _yaml140.safe_load(
+        open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _S_sil = R.Sprites(_cfg_sil, 1080, 1920)
+    _plans_sil = R.build_plans(_slw, {6}, _cfg_sil, _S_sil, 1080, 1920,
+                               lambda s, e: True,
+                               {6: {'fx': 'outline', 'power': 3, 'n': 1}})
+    _pun = [p for p in _plans_sil if p.get('kw_i') == 6]
+    _vor = [p for p in _plans_sil if p.get('start') is not None
+            and p.get('end') is not None and p['start'] < (_pun[0]['start'] if _pun else 0)]
+    check('v140 Stille: vor der Pointe entsteht wirklich eine Luecke',
+          bool(_pun) and bool(_vor)
+          and max(p['end'] for p in _vor) <= _pun[0]['start'] - 0.30 + 1e-6,
+          f"Ende {max((p['end'] for p in _vor), default=0):.2f} vs Pointe {_pun[0]['start']:.2f}"
+          if _pun and _vor else 'kein Paar')
 
     # 2) Variable-Font-Achse: echte Gewichte, nicht dick gerechnet
     vf = R.var_font_for(os.path.join(HERE, 'fonts', 'archivo.ttf'))
