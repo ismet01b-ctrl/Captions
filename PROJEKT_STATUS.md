@@ -3,6 +3,37 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v135a Bezahl-Vollaudit umgesetzt: 35 adversarial bestaetigte Befunde gefixt.** Workflow-Audit
+  (5 Spezialisten: Zahlungstechnik, Preis-Konsistenz, Verbraucherrecht, Rechnungsrecht, DSGVO;
+  40 Roh-Befunde, jeder von einem Gegenpruefer attackiert, 35 bestaetigt, 5 widerlegt). Die Fixes:
+  - **HIGH Bezahl-Bypass zu:** Der Editor-Pfad (Upload 'pre' -> Analyse -> Momente speichern) queued
+    den Voll-Render OHNE Reservierung; die post-hoc-Abbuchung clampte bei 0 -> Gratis-Videos moeglich,
+    Ledger-Invariante kaputt. Jetzt reserviert `save_and_render` exakt wie `render_start` (idempotent,
+    Re-Render bleibt inklusive), und der run_job-Fallback bucht race-sicher + alarmiert bei Unterdeckung.
+  - **Geld-Pfade:** Worker-Catch-All erstattet jetzt (`_maybe_refund`); `admin_refund` bucht bei
+    Stripe-Fehler NICHTS mehr (Retry bleibt moeglich statt Selbst-Sperre), holt den Reload-Bonus mit
+    zurueck und clawbackt atomar (BEGIN IMMEDIATE); 100%-Promo-Codes (`no_payment_required`) werden
+    gutgeschrieben; `charge.refunded` loest Admin-Alarm aus; `_credit_purchase` schreibt den
+    purchases-Beleg atomar mit der Kauf-Zeile (Retries tragen fehlende Belege nach) und blockt
+    Kaeufe fuer geloeschte Konten (Alarm statt Buchung ins Leere); Verfalls-Sweep in EINER Transaktion;
+    Consent-Log fail-closed (503 statt Kauf ohne §356(4)-Beweis).
+  - **Motion ehrlich:** Pauschale 1 Credit pro Clip (MP4), wie ueberall beworben (vorher Code: pro
+    angefangener Minute, bis 15 Cr) - Kulanz-Richtung, nie teurer als beworben. Toter 'MOV Alpha'-
+    Button entfernt (Feature existiert seit v118 nicht). CLAUDE.md-Fakt korrigiert.
+  - **§312f BGB:** Kauf-Mail ist jetzt echte Vertragsbestaetigung (Bestellung + Preis + Consent-
+    Zeitstempel + Widerrufsbelehrung + Muster-Widerrufsformular + AGB-Link).
+  - **Texte konsistent:** Danger-Zone sagt nicht mehr 'Refunds are not possible' (widersprach AGB);
+    AGB nennen Minuten-Rundung, Extras (Alpha-Layer erneut pro angef. Min, Motion 1 Cr, Style-Learn
+    1 Cr), Free-Tier; abgeschalteter EU-ODR-Link raus; Rechtslinks + AGB-Hinweis auch VOR dem Login;
+    'Cheapest'-Doppelclaim entschaerft. Editor-Layer-Button zeigt Preis (1 cr/min).
+  - **DSGVO:** privacy.html kennt jetzt Resend (USA, SCC/DPF), Google-Login, Support-Tickets,
+    Consent-Log (+Frist), die 10-Jahre-GoBD-Ausnahme nach Loeschung und die OAuth-Kurzzeit-Cookies;
+    Hosting-Absatz nennt alle Drittland-Schritte. Loeschung entfernt jetzt auch Tickets und
+    archiviert den Rest-Saldo (Berechnungsgrundlage fuer nachtraeglichen Widerruf).
+  - **Steuer:** DVE_TAX_ID-Leerstring-Falle zu (or-Fallback + compose-Default DE463613884).
+  Beweis: 13 neue v135a-Garantien + 2 bestehende Tests an neues Verhalten angepasst,
+  Selftest 767/767 gruen. Uebrig als bewusstes Restrisiko: 6-Monats-Verfall bezahlter Credits
+  (AGB-Klauselrisiko §307 BGB, bewusste Geschaeftsentscheidung, transparent kommuniziert).
 - **v135 USt-IdNr DE463613884 ueberall verankert.** Ismet hat eine USt-IdNr -> damit ist sie im
   Impressum PFLICHT (§5 DDG "soweit vorhanden"); die alte Aussage "no VAT identification number is
   shown" dort war ab jetzt falsch und ist ersetzt. Rechnungs-Footer: `DVE_TAX_ID`-Default =

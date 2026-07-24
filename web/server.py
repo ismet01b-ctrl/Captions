@@ -671,20 +671,40 @@ def _fifo_remainders(uid):
 
 def _expire_credits(uid):
     """Abgelaufene Gutschrift-Reste verfallen lassen (ein negativer Ledger-
-    Eintrag pro Lauf). Gibt die verfallenen Sekunden zurueck, 0 wenn nichts."""
+    Eintrag pro Lauf). Gibt die verfallenen Sekunden zurueck, 0 wenn nichts.
+    v135a: ALLES in EINER Transaktion (BEGIN IMMEDIATE) - vorher liefen
+    FIFO-Snapshot und Buchung in getrennten Verbindungen, ein Render/Kauf
+    dazwischen konnte zu viel oder zu wenig verfallen lassen."""
     cutoff = time.time() - CREDIT_VALIDITY_DAYS * 86400
-    expired = sum(g['left'] for g in _fifo_remainders(uid)
-                  if g['created_at'] < cutoff)
-    if expired <= 0:
-        return 0
     con = _db()
     try:
+        con.isolation_level = None
+        con.execute('BEGIN IMMEDIATE')
+        rows = con.execute("SELECT delta_sec, created_at FROM ledger "
+                           "WHERE user_id = ? ORDER BY created_at, id",
+                           (uid,)).fetchall()
+        grants = [{'created_at': r['created_at'], 'left': r['delta_sec']}
+                  for r in rows if r['delta_sec'] > 0]
+        consumed = sum(-r['delta_sec'] for r in rows if r['delta_sec'] < 0)
+        for g in grants:
+            if consumed <= 0:
+                break
+            eat = min(g['left'], consumed)
+            g['left'] -= eat
+            consumed -= eat
+        expired = sum(g['left'] for g in grants
+                      if g['left'] > 0 and g['created_at'] < cutoff)
+        if expired <= 0:
+            con.execute('ROLLBACK')
+            return 0
         bal = con.execute("SELECT balance_sec FROM users WHERE id = ?",
                           (uid,)).fetchone()
         if not bal:
+            con.execute('ROLLBACK')
             return 0
         expired = min(expired, bal['balance_sec'])     # Drift-Schutz
         if expired <= 0:
+            con.execute('ROLLBACK')
             return 0
         con.execute("UPDATE users SET balance_sec = MAX(0, balance_sec - ?) "
                     "WHERE id = ?", (expired, uid))
@@ -692,7 +712,7 @@ def _expire_credits(uid):
                     "VALUES (?, ?, ?, ?)",
                     (uid, -expired, 'Expired credits '
                      + time.strftime('%Y-%m-%d'), int(time.time())))
-        con.commit()
+        con.execute('COMMIT')
         return expired
     finally:
         con.close()
@@ -1092,10 +1112,13 @@ def _send_welcome_mail(uid):
         return False
 
 
-def _send_purchase_mail(uid, sec, session_id):
+def _send_purchase_mail(uid, sec, session_id, cents=None, pack=None):
     """v133: Kaufbestaetigung nach frisch verbuchtem Stripe-Kauf. Idempotent
-    pro Session (mail_log). Die formale Zahlungsquittung schickt Stripe;
-    das hier bestaetigt, dass die Credits WIRKLICH auf dem Konto sind."""
+    pro Session (mail_log). Die formale Zahlungsquittung schickt Stripe.
+    v135a (§312f BGB): Die Mail ist jetzt die VERTRAGSBESTAETIGUNG auf einem
+    dauerhaften Datentraeger: Bestellung + Preis, Bestaetigung der
+    Zustimmung zur sofortigen Ausfuehrung (§356 Abs. 4, mit Zeitstempel),
+    Widerrufsbelehrung in Kurzform + Muster-Widerrufsformular, AGB-Link."""
     u = _find_user_by_id(uid)
     if not u:
         return False
@@ -1108,6 +1131,38 @@ def _send_purchase_mail(uid, sec, session_id):
     ename = _esc_html(name)
     hi = f'Hi {ename},' if name else 'Hi,'
     n = sec // 60
+    pname = PACKS.get(pack, {}).get('name', '') if pack else ''
+    order = (f'DouchkoVE {pname} Pack, {n} credits'
+             if pname else f'{n} credits')
+    price = (f'{int(cents) / 100:.2f} EUR (no VAT, §19 UStG)'
+             if cents is not None else 'see your Stripe invoice')
+    # §356(4)-Consent-Zeitstempel aus dem Kauf-Protokoll (bester = juengster).
+    consent_line = ''
+    try:
+        con = _db()
+        _c = con.execute(
+            "SELECT MAX(created_at) t FROM consents WHERE user_id = ? AND "
+            "kind = 'withdrawal_immediate_performance'", (uid,)).fetchone()
+        con.close()
+        if _c and _c['t']:
+            _ts = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(_c['t']))
+            consent_line = (
+                'During checkout you expressly requested immediate delivery '
+                'of the digital service and acknowledged that your right of '
+                'withdrawal expires once credits are used. We recorded this '
+                f'consent on {_ts}.')
+    except Exception:
+        pass
+    withdrawal = (
+        'Right of withdrawal: You may withdraw from this contract within 14 '
+        'days without giving reasons, as long as the credits are unused. To '
+        f'withdraw, email {SUPPORT_EMAIL}. Full terms: {base}/terms')
+    model_form = (
+        'Model withdrawal form (only if you wish to withdraw): To DouchkoVE, '
+        'Ismet Beyazkus, Hinter den Gaerten 4, 52388 Noervenich, Germany, '
+        f'{SUPPORT_EMAIL}: I hereby give notice that I withdraw from my '
+        'contract for the following purchase: [order], ordered on [date]. '
+        '[Name], [address], [date], [signature only if on paper].')
     try:
         _send_mail(
             u['email'], f'{n} credits added to your account',
@@ -1115,8 +1170,12 @@ def _send_purchase_mail(uid, sec, session_id):
             f'Thank you for your purchase. {n} credits have been added '
             f'to your account, and the watermark has been removed from your '
             f'finished videos.\n\n'
-            f'Your credits are valid for {months} months. There is no '
+            f'Your order: {order}\n'
+            f'Price: {price}\n'
+            f'Validity: {months} months from purchase. There is no '
             f'subscription and nothing renews automatically.\n\n'
+            + (consent_line + '\n\n' if consent_line else '')
+            + f'{withdrawal}\n\n{model_form}\n\n'
             f'Your invoice arrives in a separate email.\n\n'
             f'Open the app: {base}/app/create\n\n'
             f'Need help? Contact us at {SUPPORT_EMAIL}.\n\n'
@@ -1127,9 +1186,15 @@ def _send_purchase_mail(uid, sec, session_id):
                  f'Thank you for your purchase. <b>{n} credits</b> have been '
                  'added to your account, and the watermark has been removed '
                  'from your finished videos.',
-                 f'Your credits are valid for {months} months. There is no '
-                 'subscription and nothing renews automatically.',
-                 'Your invoice arrives in a separate email.'],
+                 f'Your order: <b>{_esc_html(order)}</b><br>'
+                 f'Price: {_esc_html(price)}<br>'
+                 f'Validity: {months} months from purchase. No subscription, '
+                 'nothing renews automatically.']
+                + ([_esc_html(consent_line)] if consent_line else [])
+                + [_esc_html(withdrawal),
+                   f'<span style="font-size:12px;color:#a1a1aa;">'
+                   f'{_esc_html(model_form)}</span>',
+                   'Your invoice arrives in a separate email.'],
                 cta_text='Open DouchkoVE', cta_url=f'{base}/app/create'))
         return True
     except Exception as e:
@@ -1220,7 +1285,7 @@ PACKS = {
         'preis_cent': 1900,
         'minuten': 60,
         'sekunden': 60 * 60,
-        'beschreibung_en': 'Weekly posting schedule. Cheapest per-credit price under €0.35.',
+        'beschreibung_en': 'Weekly posting schedule. Under €0.35 per credit.',
         'hinweis_en': 'Save 30% vs Starter · Most popular',
         'empfohlen': True,
         'features_en': ['60 credits (1 credit = 1 minute of video)',
@@ -1435,19 +1500,44 @@ def _unlock_all_jobs(uid):
     return n
 
 
-def _credit_purchase(uid, sec, session_id):
+def _credit_purchase(uid, sec, session_id, pack=None, cents=None):
     """v92-sec: Kauf ATOMAR + idempotent gutschreiben. Der 'INSERT OR IGNORE'
     prallt am partiellen UNIQUE-Index (user_id, 'Kauf {id}') ab, wenn dieselbe
     Stripe-Session schon verbucht ist - auch bei zwei gleichzeitigen Webhooks.
     Nur wenn wirklich eine neue Zeile entstand, wird das Guthaben erhoeht.
-    Gibt True zurueck, wenn frisch gutgeschrieben wurde."""
+    Gibt True zurueck, wenn frisch gutgeschrieben wurde.
+    v135a: (a) purchases-Beleg liegt jetzt in DERSELBEN Transaktion wie die
+    Kauf-Zeile (kein Beleg-Verlust bei Fehler dazwischen). (b) Existiert das
+    Konto nicht mehr (geloescht, Webhook kommt spaeter), wird NICHTS verbucht,
+    ein Admin-Alarm geht raus (Geld kassiert -> manuell in Stripe erstatten)."""
     con = _db()
     try:
+        # v135a: Geister-Konto zuerst pruefen - Geld ohne Konto ist ein Fall
+        # fuer manuellen Stripe-Refund, nicht fuer eine Buchung ins Leere.
+        if not con.execute("SELECT 1 FROM users WHERE id = ?", (uid,)).fetchone():
+            con.rollback()
+            try:
+                _notify_admin(f'ghostbuy:{session_id}',
+                              'Kauf fuer geloeschtes Konto eingegangen',
+                              f'Stripe-Session {session_id}: Konto {uid} '
+                              f'existiert nicht mehr. Zahlung manuell im '
+                              f'Stripe-Dashboard erstatten.')
+            except Exception:
+                pass
+            return False
         cur = con.execute(
             "INSERT OR IGNORE INTO ledger (user_id, delta_sec, grund, created_at) "
             "VALUES (?, ?, ?, ?)",
             (uid, sec, f'Kauf {session_id}', int(time.time())))
         if cur.rowcount != 1:
+            # v135a: Beleg nachziehen, falls er beim Erstlauf verloren ging
+            # (Stripe-Retries erreichen diesen Zweig).
+            if cents is not None:
+                con.execute("INSERT OR IGNORE INTO purchases "
+                            "(session_id, user_id, pack, cents, sekunden, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?)",
+                            (session_id, uid, pack or '?', int(cents), sec,
+                             int(time.time())))
             con.commit()
             return False                     # schon verbucht
         # v124 Reload-Bonus: Wer nachkauft, waehrend das Konto praktisch leer ist
@@ -1462,6 +1552,12 @@ def _credit_purchase(uid, sec, session_id):
             con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
                         "VALUES (?, ?, ?, ?)",
                         (uid, _bonus, f'Reload bonus {session_id}', int(time.time())))
+        if cents is not None:                # v135a: Beleg atomar mit dem Kauf
+            con.execute("INSERT OR IGNORE INTO purchases "
+                        "(session_id, user_id, pack, cents, sekunden, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (session_id, uid, pack or '?', int(cents), sec,
+                         int(time.time())))
         con.commit()
         try:
             _unlock_all_jobs(uid)            # v101: Kauf entfernt Wasserzeichen
@@ -1493,7 +1589,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v135-vatid'
+DVE_BUILD = 'v135a-audit'
 
 
 @app.middleware('http')
@@ -1538,7 +1634,9 @@ def _invoice_creation(pack_id, p):
               '(German small business scheme).')
     # v135: Ismets USt-IdNr als fester Default (Pflichtangabe §14 UStG:
     # Steuernummer ODER USt-IdNr; sie steht auch oeffentlich im Impressum).
-    tax_id = os.environ.get('DVE_TAX_ID', 'DE463613884').strip()
+    # 'or'-Fallback statt get-Default: docker-compose reicht bei fehlender
+    # .env-Zeile einen LEEREN String durch, der den get-Default schlagen wuerde.
+    tax_id = (os.environ.get('DVE_TAX_ID') or 'DE463613884').strip()
     if tax_id:
         label = 'USt-IdNr.' if re.match(r'(?i)^DE\d{9}$', tax_id) else 'Steuernummer'
         footer += f' {label}: {tax_id}'
@@ -1579,7 +1677,12 @@ async def api_checkout(request: Request, pack: str = Form(...),
         con.commit()
         con.close()
     except Exception as e:
-        print(f'WARN: Consent-Log fehlgeschlagen: {e}')
+        # v135a: FAIL-CLOSED. Ohne protokollierten Consent fehlt der Beweis
+        # fuer den Widerrufsverzicht (§356 Abs. 4 BGB) - ein Kauf ohne Beweis
+        # ist schlechter als ein um Sekunden verzoegerter Kauf.
+        print(f'Consent-Log fehlgeschlagen: {e}')
+        raise HTTPException(503, 'Could not record your purchase confirmation. '
+                                 'Please try again in a moment.')
     st = _stripe()
     if not st:
         raise HTTPException(503, 'Payment is not configured yet. '
@@ -1655,11 +1758,28 @@ async def api_stripe_webhook(request: Request):
     # 'async_payment_succeeded'. Frueher wurde bei 'completed' bedingungslos
     # gutgeschrieben -> SEPA-Nutzer haetten Credits VOR (evtl. scheiterndem)
     # Geldeingang bekommen. Jetzt: nur gutschreiben, wenn wirklich bezahlt.
+    # v135a: Stripe-seitige Erstattung (z.B. im Dashboard ausgeloest) sichtbar
+    # machen - sonst weicht die interne Buchhaltung still von Stripe ab.
+    if ev_type == 'charge.refunded':
+        ch = event.get('data', {}).get('object', {}) or {}
+        try:
+            _notify_admin(f"stref:{ch.get('id', '?')}",
+                          'Stripe-Erstattung eingegangen',
+                          f"Charge {ch.get('id')} ueber "
+                          f"{int(ch.get('amount_refunded', 0)) / 100:.2f} EUR "
+                          f"wurde (teil)erstattet. Credits ggf. im Admin-Panel "
+                          f"zurueckbuchen (Users -> Kauf -> Refund).")
+        except Exception:
+            pass
+        return {'ok': True, 'noted': 'refund'}
     if ev_type not in ('checkout.session.completed',
                        'checkout.session.async_payment_succeeded'):
         return {'ok': True, 'ignored': ev_type}
     sess = event.get('data', {}).get('object', {})
-    if sess.get('payment_status') != 'paid':
+    # v135a: 'no_payment_required' ist bei 100%-Promo-Codes der finale Status -
+    # die signierte Session ist genauso vertrauenswuerdig wie 'paid'. Frueher
+    # bekam ein Gratis-Code-Kaeufer nie seine Credits.
+    if sess.get('payment_status') not in ('paid', 'no_payment_required'):
         return {'ok': True, 'pending': sess.get('payment_status')}
     meta = sess.get('metadata') or {}
     try:
@@ -1673,25 +1793,21 @@ async def api_stripe_webhook(request: Request):
         sec = int(PACKS[pack]['sekunden']) if pack in PACKS else int(meta.get('sekunden'))
     except Exception:
         raise HTTPException(400, 'Metadata incomplete.')
-    # Atomar + idempotent (siehe _credit_purchase). Doppelte/erneute Webhooks
-    # fuer dieselbe Session koennen nicht doppelt gutschreiben.
-    if not _credit_purchase(uid, sec, sess_id):
-        return {'ok': True, 'idempotent': True}
-    # v128 Admin: echten Zahlbetrag protokollieren (amount_total = inkl. Rabatt;
-    # Fallback Katalogpreis). Idempotent ueber session_id. Darf den Kauf nie reissen.
+    # v128/v135a: echter Zahlbetrag (amount_total = inkl. Rabatt; Fallback
+    # Katalogpreis) - wandert jetzt IN die Kauf-Transaktion (_credit_purchase),
+    # damit Kauf-Zeile und Beleg nie auseinanderfallen.
     try:
         _cents = int(sess.get('amount_total') if sess.get('amount_total') is not None
                      else PACKS.get(pack, {}).get('preis_cent', 0))
-        con = _db()
-        con.execute("INSERT OR IGNORE INTO purchases "
-                    "(session_id, user_id, pack, cents, sekunden, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (sess_id, uid, pack, _cents, sec, int(time.time())))
-        con.commit(); con.close()
-    except Exception as e:
-        print(f'WARN: purchases-Log fehlgeschlagen: {e}')
+    except Exception:
+        _cents = PACKS.get(pack, {}).get('preis_cent', 0)
+    # Atomar + idempotent (siehe _credit_purchase). Doppelte/erneute Webhooks
+    # fuer dieselbe Session koennen nicht doppelt gutschreiben; Retries ziehen
+    # einen evtl. fehlenden purchases-Beleg nach.
+    if not _credit_purchase(uid, sec, sess_id, pack=pack, cents=_cents):
+        return {'ok': True, 'idempotent': True}
     try:
-        _send_purchase_mail(uid, sec, sess_id)         # v133: Kaufbestaetigung
+        _send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack)  # v133
     except Exception as e:                             # darf den Kauf nie reissen
         print(f'Kauf-Mail fehlgeschlagen: {e}')
     print(f"Kauf verbucht: user={uid} pack={pack} +{sec // 60} Min")
@@ -2515,6 +2631,12 @@ def worker():
         except Exception as e:
             set_state(jid, status='fehler',
                       msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
+            # v135a: auch der Catch-All erstattet - vorher blieb bei einem
+            # unerwarteten Crash die Reservierung stehen (bezahlt, kein Video).
+            try:
+                _maybe_refund(jid)
+            except Exception as e2:
+                print(f'Catch-All-Refund {jid}: {e2}')
         finally:
             _notify_job_fail(jid)
             _notify_job_done(jid)
@@ -2531,6 +2653,10 @@ def motion_worker():
         except Exception as e:
             set_state(jid, status='fehler',
                       msg=f'Unerwarteter Fehler: {type(e).__name__}: {e}')
+            try:
+                _maybe_refund(jid)                     # v135a: siehe worker()
+            except Exception as e2:
+                print(f'Catch-All-Refund {jid}: {e2}')
         finally:
             _notify_job_fail(jid)
             _notify_job_done(jid)
@@ -2900,8 +3026,21 @@ def run_job(jid):
         uid = j.get('user_id')
         if uid and not _render_charged(uid, jid):
             verbrauch = cost_seconds(j.get('dauer', 0))
-            _adjust_balance(uid, -verbrauch,
-                            f'Render {jid} ({verbrauch}s)')
+            # v135a: race-sicher reservieren (WHERE balance >= need) statt
+            # MAX(0)-Clamp. Nach den Reservierungs-Fixes in render_start und
+            # save_and_render sollte dieser Pfad nie mehr feuern - wenn doch
+            # und die Deckung fehlt: Rest ehrlich buchen + Admin-Alarm statt
+            # stiller Gratis-Auslieferung mit kaputter Ledger-Invariante.
+            if not _reserve_credits(uid, verbrauch, jid):
+                _u = _find_user_by_id(uid)
+                _rest = max(0, int(_u['balance_sec'])) if _u else 0
+                teil = min(verbrauch, _rest)
+                if teil > 0:
+                    _adjust_balance(uid, -teil, f'Render {jid} ({teil}s)')
+                _notify_admin(f'undercharge:{jid}',
+                              'Render ohne volle Deckung durchgelaufen',
+                              f'Job {jid}: {verbrauch}s faellig, nur {_rest}s '
+                              f'auf Konto {uid}. Reservierungs-Pfad pruefen.')
         if os.path.exists(os.path.join(job_dir(jid), 'master_clean.mp4')):
             set_state(jid, wm=True)          # v101: freischaltbar nach Kauf
         if os.path.exists(os.path.join(job_dir(jid), 'fertig_kontakt.jpg')):
@@ -3778,11 +3917,26 @@ def _purge_user_db(uid):
         "SELECT ?, delta_sec, grund, created_at, ? FROM ledger "
         "WHERE user_id = ? AND grund LIKE 'Kauf %'",
         (_mail['email'] if _mail else f'user#{uid}', int(time.time()), uid))
+    # v135a: Rest-Saldo als eigene Archiv-Zeile sichern. Die AGB versprechen
+    # eine Erstattung ungenutzter Credits aus Kaeufen < 14 Tage - ohne diese
+    # Zeile waere nach der Loeschung die Berechnungsgrundlage weg.
+    _balrow = con.execute("SELECT balance_sec FROM users WHERE id = ?",
+                          (uid,)).fetchone()
+    if _balrow and _balrow['balance_sec'] > 0:
+        con.execute(
+            "INSERT INTO ledger_archive (user_email, delta_sec, grund, "
+            "created_at, archived_at) VALUES (?, ?, ?, ?, ?)",
+            (_mail['email'] if _mail else f'user#{uid}',
+             _balrow['balance_sec'], 'Saldo bei Loeschung',
+             int(time.time()), int(time.time())))
     con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM ledger WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM resets WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM verify_tokens WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM mail_log WHERE user_id = ?", (uid,))   # v125
+    # v135a: Support-Tickets enthalten Klartext-Mail + Nachrichten - 'Deletion
+    # is permanent' gilt auch fuer sie.
+    con.execute("DELETE FROM tickets WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM users WHERE id = ?", (uid,))
     con.commit()
     con.close()
@@ -4202,7 +4356,7 @@ async def motion_showcase(request: Request,
                           format: str = Form('9:16'),
                           custom: str = Form('{}')):
     """v117 Full-customizable: Video ODER Transkript-Text -> gewaehlte Komposition + Stil +
-    Format + alle Custom-Einstellungen -> eigenstaendiges Motion-Video. Kostet nach Laenge."""
+    Format + alle Custom-Einstellungen -> eigenstaendiges Motion-Video. v135a: Pauschale 1 Credit pro Clip (MP4), wie beworben."""
     u = _require_user(request)
     if not MOTION_BRIEF_OK:
         raise HTTPException(503, 'The motion engine is warming up on this server - try again shortly.')
@@ -4251,7 +4405,7 @@ async def motion_showcase(request: Request,
             raise HTTPException(413, 'Video too long (max 15 min).')
         job['showcase_video'] = src
         job['dauer'] = dur
-        _cost = cost_seconds(dur)
+        _cost = 60                    # v135a: Pauschale 1 Credit pro Motion-Clip
     elif has_tfile:
         cap = 4 * 1024 * 1024                         # Transkript-Datei: max 4 MB
         raw, total = b'', 0
@@ -4274,7 +4428,7 @@ async def motion_showcase(request: Request,
         words = words[:4000]
         job['prewords'] = words
         est = max(6.0, (words[-1].get('end') or len(words) / 2.5))
-        _cost = cost_seconds(est)
+        _cost = 60                    # v135a: Pauschale 1 Credit pro Motion-Clip
     else:
         txt = (text or '').strip()
         if not txt:
@@ -4282,7 +4436,7 @@ async def motion_showcase(request: Request,
             raise HTTPException(400, 'Upload a video or enter text.')
         job['transcript_text'] = txt[:4000]
         est = max(6.0, len(txt.split()) / 2.5)   # ~2.5 words/sec
-        _cost = cost_seconds(est)
+        _cost = 60                    # v135a: Pauschale 1 Credit pro Motion-Clip
     if not _reserve_credits(u['id'], _cost, jid):
         shutil.rmtree(d, ignore_errors=True)
         raise HTTPException(402, 'Not enough credits for this render.')
@@ -5093,6 +5247,24 @@ async def save_and_render(request: Request, jid: str,
                           ensure_ascii=False, indent=1)
         except Exception:
             print('Akzent-Edit ignoriert (JSON ungueltig)')
+    # v135a AUDIT-FIX (HIGH): Dieser Pfad war der Bezahl-Bypass. Der Editor-
+    # Roundtrip (Upload 'pre' -> Analyse -> Momente speichern) queued den
+    # Voll-Render, ohne je zu reservieren - die post-hoc-Abbuchung clampte
+    # bei 0, zwei parallele Pre-Uploads ergaben ein Gratis-Video. Jetzt:
+    # exakt derselbe Abbuch-Punkt wie in render_start, idempotent ueber die
+    # 'Render {jid}'-Ledger-Zeile (Re-Render nach Edit bleibt inklusive).
+    _uid = j.get('user_id')
+    if _uid:
+        _need = cost_seconds(j.get('dauer', 0))
+        if not _render_charged(_uid, jid) and not _reserve_credits(_uid, _need, jid):
+            _uu = _find_user_by_id(_uid)
+            _have = credits_of(_uu['balance_sec'] if _uu else 0)
+            _fehlt = credits_of(_need) - _have
+            raise HTTPException(
+                402,
+                f"Not enough credits (video costs {credits_of(_need)} "
+                f"credit{'s' if credits_of(_need) != 1 else ''}, you have "
+                f"{_have}). Missing {max(1, _fehlt)} - please top up.")
     # Voll-Render mit den neuen Momenten
     j['mode'] = 'full'
     j['status'] = 'wartet'
@@ -6093,6 +6265,13 @@ def admin_refund(request: Request, session_id: str = Form(...), clawback: str = 
         return {'ok': True, 'already_refunded': True,
                 'stripe': 'skipped (already refunded)', 'clawed_back_min': 0}
     uid = p['user_id']; sek = p['sekunden']
+    # v135a: der 10%-Reload-Bonus dieses Kaufs gehoert mit zurueckgeholt.
+    con = _db()
+    _bon = con.execute("SELECT COALESCE(SUM(delta_sec),0) s FROM ledger WHERE "
+                       "user_id = ? AND grund = ?",
+                       (uid, f'Reload bonus {session_id}')).fetchone()['s']
+    con.close()
+    claw_base = sek + max(0, int(_bon or 0))
     stripe_result = 'skipped (no stripe configured)'
     st = _stripe()
     if st:
@@ -6106,15 +6285,35 @@ def admin_refund(request: Request, session_id: str = Form(...), clawback: str = 
             else:
                 stripe_result = 'no payment_intent on session'
         except Exception as e:
-            stripe_result = f'stripe error: {type(e).__name__}: {e}'
-    # v130-fix: Clawback auf das AKTUELLE Guthaben deckeln, damit die Ledger-Zeile
-    # exakt der Balance-Bewegung entspricht (_adjust_balance clampt die Balance bei
-    # 0, nicht die Ledger-Zeile) -> Invariant sum(delta)==balance_sec bleibt heil.
+            # v135a: bei Stripe-Fehler NICHTS buchen. Frueher wurde die
+            # 'Refund %'-Zeile trotzdem geschrieben -> der Idempotenz-Check
+            # sperrte jeden Retry und das echte Geld war per API nie mehr
+            # erstattbar. Jetzt: sauberer Fehler, Retry bleibt moeglich.
+            raise HTTPException(502, f'Stripe refund failed: {type(e).__name__}: '
+                                     f'{e}. Nothing was booked - retry is safe.')
+    # v135a: Clawback ATOMAR (BEGIN IMMEDIATE) - kein TOCTOU zwischen Lesen
+    # der Balance und Buchen; Ledger-Zeile entspricht exakt der Bewegung.
     do_claw = str(clawback).strip() in ('1', 'true', 'on', 'yes')
-    cur = _find_user_by_id(uid)
-    claw_sec = min(sek, cur['balance_sec']) if (do_claw and cur) else 0
-    _adjust_balance(uid, -claw_sec,
-                    f'Refund {session_id} admin' + (' clawback' if claw_sec else ' (money only)'))
+    claw_sec = 0
+    con = _db()
+    try:
+        con.isolation_level = None
+        con.execute('BEGIN IMMEDIATE')
+        cur = con.execute("SELECT balance_sec FROM users WHERE id = ?",
+                          (uid,)).fetchone()
+        if do_claw and cur:
+            claw_sec = min(claw_base, max(0, cur['balance_sec']))
+        con.execute("UPDATE users SET balance_sec = balance_sec - ? WHERE id = ?",
+                    (claw_sec, uid))
+        con.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (uid, -claw_sec,
+                     f'Refund {session_id} admin'
+                     + (' clawback' if claw_sec else ' (money only)'),
+                     int(time.time())))
+        con.execute('COMMIT')
+    finally:
+        con.close()
     return {'ok': True, 'stripe': stripe_result, 'clawed_back_min': claw_sec // 60}
 
 

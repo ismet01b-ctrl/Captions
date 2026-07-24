@@ -132,7 +132,9 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - **Preise: Einmalkauf-Credits 9€/20, 19€/60, 39€/150, 6 Monate gültig.
   KEIN Abo — das ist das Alleinstellungsmerkmal** (Abo-Frust ist die Beschwerde
   Nr. 1 bei ALLER Konkurrenz). 1 Credit = 1 Min fertiges Video (pro angef. Min);
-  Motion-Clip 1 Cr (MP4) / 2 Cr (ProRes-Alpha). Free 3 Min/Monat + Wasserzeichen
+  Motion-Clip pauschal 1 Cr (MP4; Motion-ProRes-Alpha existiert seit v118 nicht
+  mehr). Caption-Alpha-Layer = eigener Render, kostet erneut pro angef. Min.
+  Free 3 Min/Monat + Wasserzeichen
   bis zum ersten Kauf. Willkommens-Guthaben (120s) erst NACH E-Mail-Verify.
 - **Bewusst NICHT bauen** (Fokus, aus Konkurrenz-Analyse): kein Abo/Hybrid,
   kein AI-B-Roll, kein Clipping/Avatare, kein Sprachen-Wettlauf, kein

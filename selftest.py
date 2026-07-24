@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v135-vatid'" in _srv_m)
+          and "DVE_BUILD = 'v135a-audit'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3709,9 +3709,10 @@ def _scenario_security(tmp):
     check('Security-Header (CSP/XFO/nosniff) aktiv',
           'Content-Security-Policy' in _src and 'X-Frame-Options' in _src
           and 'X-Content-Type-Options' in _src)
-    # 14) SEPA: Guthaben nur bei wirklich bezahltem Status
-    check('Webhook schreibt nur bei payment_status paid gut',
-          "sess.get('payment_status') != 'paid'" in _src
+    # 14) SEPA: Guthaben nur bei final bezahltem Status. v135a: auch
+    # 'no_payment_required' (100%-Promo-Code) ist final - pending/unpaid nie.
+    check('Webhook schreibt nur bei finalem payment_status gut',
+          "not in ('paid', 'no_payment_required')" in _src
           and 'async_payment_succeeded' in _src)
     # 15) Login gleicht Timing an (Dummy-Hash bei unbekannter Mail)
     check('Login: Timing-Angleich gegen Mail-Enumeration',
@@ -3886,7 +3887,7 @@ def _scenario_betrieb(tmp):
     _srv133 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('v133: Mails verdrahtet (Verify + Google + Webhook) + Copy ohne Gedankenstriche',
           _srv133.count('_send_welcome_mail(uid)') >= 2
-          and '_send_purchase_mail(uid, sec, sess_id)' in _srv133
+          and '_send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack)' in _srv133
           and '—' not in _wm_src and '–' not in _wm_src)
     # v133a: Absender-Feld robust. Leeres MAIL_FROM (docker-compose reicht ''
     # durch) -> Default, nackte Adresse -> verpackt, fertiges 'Name <adr>' ->
@@ -4052,6 +4053,110 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ================= v135a: Audit-Fixes (Bezahl-Vollaudit) =================
+    _srvA = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _idxA = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _trmA = open(os.path.join(HERE, 'web', 'terms.html'), encoding='utf-8').read()
+    _prvA = open(os.path.join(HERE, 'web', 'privacy.html'), encoding='utf-8').read()
+    _cmpA = open(os.path.join(HERE, 'docker-compose.yml'), encoding='utf-8').read()
+    # HIGH-Fix Pre-Flow-Bypass: save_and_render reserviert, run_job-Fallback
+    # ist race-sicher + alarmiert statt still gratis zu liefern.
+    _sarA = _srvA.split('def save_and_render')[1].split('\ndef ')[0] \
+        if 'def save_and_render' in _srvA else ''
+    check('v135a: Editor-Pfad reserviert Credits (Bypass zu) + run_job-Fallback alarmiert',
+          '_reserve_credits(_uid, _need, jid)' in _sarA
+          and 'undercharge:' in _srvA
+          and _srvA.count('Catch-All-Refund') == 2)
+    # Webhook: 100%-Promo zaehlt als bezahlt; Stripe-Refund-Event alarmiert.
+    check("v135a: Webhook akzeptiert no_payment_required + meldet charge.refunded",
+          "('paid', 'no_payment_required')" in _srvA
+          and "ev_type == 'charge.refunded'" in _srvA)
+    # Kauf: Beleg atomar + Geister-Konto geblockt (funktional).
+    _g1, _ = SV._create_user('v135a@test', 'x' * 8, 'AuditKauf')
+    _k1 = SV._credit_purchase(_g1, 1200, 'sess_v135a', pack='starter', cents=900)
+    _k2 = SV._credit_purchase(_g1, 1200, 'sess_v135a', pack='starter', cents=900)
+    _conA = SV._db()
+    _prow = _conA.execute("SELECT pack, cents, sekunden FROM purchases WHERE "
+                          "session_id = 'sess_v135a'").fetchone()
+    _conA.close()
+    _kg = SV._credit_purchase(999999901, 1200, 'sess_ghost_v135a',
+                              pack='starter', cents=900)
+    _conA = SV._db()
+    _gled = _conA.execute("SELECT COUNT(*) c FROM ledger WHERE user_id = 999999901"
+                          ).fetchone()['c']
+    _conA.close()
+    check('v135a: purchases-Beleg atomar mit Kauf + Geister-Konto bucht nichts',
+          _k1 and (not _k2) and _prow and _prow['cents'] == 900
+          and _prow['sekunden'] == 1200
+          and (_kg is False) and _gled == 0)
+    # Kauf-Mail = Vertragsbestaetigung (§312f): Widerruf + Muster + Preis drin.
+    _m0 = len(sent)
+    SV._send_purchase_mail(_g1, 1200, 'sess_v135a_mail', cents=900, pack='starter')
+    _mail_txt = ''
+    _real_sm2 = SV._send_mail
+    _cap312 = []
+    SV._send_mail = lambda to, s, b, reply_to=None, html=None: _cap312.append(b)
+    try:
+        SV._send_purchase_mail(_g1, 1200, 'sess_v135a_mail2', cents=900, pack='starter')
+    finally:
+        SV._send_mail = _real_sm2
+    _mail_txt = _cap312[0] if _cap312 else ''
+    check('v135a: Kauf-Mail ist Vertragsbestaetigung (Widerruf + Musterformular + Preis, §312f)',
+          'Right of withdrawal' in _mail_txt
+          and 'Model withdrawal form' in _mail_txt
+          and '9.00 EUR' in _mail_txt and '§19 UStG' in _mail_txt)
+    # admin_refund: Stripe-Fehler bucht nichts (Quelle) + Reload-Bonus im Clawback.
+    check('v135a: admin_refund fail-safe (kein Buchen bei Stripe-Fehler) + Bonus-Clawback',
+          'Nothing was booked - retry is safe' in _srvA
+          and 'Reload bonus {session_id}' in _srvA.split('def admin_refund')[1].split('\ndef ')[0])
+    # Verfalls-Sweep atomar (eine Transaktion).
+    check('v135a: _expire_credits in EINER Transaktion (BEGIN IMMEDIATE)',
+          'BEGIN IMMEDIATE' in _srvA.split('def _expire_credits')[1].split('\ndef ')[0])
+    # Consent fail-closed vor dem Checkout.
+    check('v135a: Consent-Log fail-closed (503 statt stillem Weiterlauf)',
+          'Could not record your purchase confirmation' in _srvA)
+    # Motion: Pauschale 1 Credit pro Clip, wie beworben; toter Alpha-Button weg.
+    check('v135a: Motion pauschal 1 Credit pro Clip + toter MOV-Alpha-Button entfernt',
+          _srvA.count('Pauschale 1 Credit pro Motion-Clip') == 3
+          and 'moDlMov' not in _idxA
+          and '1 credit per clip (MP4)' in _idxA)
+    # Konto-Loeschung: Tickets weg + Saldo-Archiv-Zeile (funktional).
+    _d1, _ = SV._create_user('v135adel@test', 'x' * 8, 'DelAudit')
+    _conA = SV._db()
+    _conA.execute("UPDATE users SET balance_sec = 120 WHERE id = ?", (_d1,))
+    _conA.execute("INSERT INTO ledger (user_id, delta_sec, grund, created_at) "
+                  "VALUES (?, 120, 'Kauf sess_del135a', ?)", (_d1, int(_t.time())))
+    _conA.execute("INSERT INTO tickets (user_id, email, subject, body, status, "
+                  "created_at, updated_at) VALUES (?, 'v135adel@test', 's', 'b', "
+                  "'open', ?, ?)", (_d1, int(_t.time()), int(_t.time())))
+    _conA.commit(); _conA.close()
+    SV._purge_user_db(_d1)
+    _conA = SV._db()
+    _tleft = _conA.execute("SELECT COUNT(*) c FROM tickets WHERE user_id = ?",
+                           (_d1,)).fetchone()['c']
+    _saldo = _conA.execute("SELECT COUNT(*) c FROM ledger_archive WHERE "
+                           "user_email = 'v135adel@test' AND grund = 'Saldo bei Loeschung' "
+                           "AND delta_sec = 120").fetchone()['c']
+    _conA.close()
+    check('v135a: Loeschung entfernt Tickets + archiviert Rest-Saldo (Widerrufs-Basis)',
+          _tleft == 0 and _saldo == 1)
+    # Rechtstexte: AGB praezisiert, ODR raus, Danger-Zone ehrlich, Login-Links,
+    # Privacy kennt Resend/Google/Tickets/Consent/10-Jahre-Ausnahme.
+    check('v135a: AGB nennen Minuten-Rundung + Extras + Free-Tier, ODR-Link raus',
+          'per started minute' in _trmA and '1 credit per clip' in _trmA
+          and 'ec.europa.eu' not in _trmA
+          and 'remain refundable on request' in _trmA)
+    check('v135a: Danger-Zone-Text stimmt mit AGB ueberein + Rechtslinks vor Login',
+          'Refunds are not possible' not in _idxA
+          and 'remain refundable' in _idxA
+          and _idxA.count('href="/imprint"') >= 2)
+    check('v135a: Privacy kennt Resend + Google-Login + Tickets + Consent + GoBD-Ausnahme',
+          'Resend' in _prvA and 'Sign in with Google' in _prvA
+          and 'Support requests' in _prvA
+          and '10 years after account deletion' in _prvA
+          and '356' in _prvA)
+    check('v135a: DVE_TAX_ID-Default auch in docker-compose (Leerstring-Falle zu)',
+          'DVE_TAX_ID: ${DVE_TAX_ID:-DE463613884}' in _cmpA)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}
@@ -4136,8 +4241,12 @@ def _scenario_v98(tmp):
     usr = con.execute("SELECT COUNT(*) c FROM users WHERE id=?",
                       (uid,)).fetchone()['c']
     con.close()
-    check('Loeschung: Kauf archiviert (GoBD), Ledger+User weg',
-          len(arch) == 1 and arch[0]['grund'] == 'Kauf test'
+    # v135a: zusaetzlich zur Kauf-Zeile wird der Rest-Saldo archiviert
+    # (Berechnungsgrundlage fuer nachtraeglichen Widerruf) - beide pruefen.
+    _kaufz = [a for a in arch if a['grund'] == 'Kauf test']
+    _saldoz = [a for a in arch if a['grund'] == 'Saldo bei Loeschung']
+    check('Loeschung: Kauf archiviert (GoBD) + Saldo-Zeile, Ledger+User weg',
+          len(_kaufz) == 1 and len(arch) == len(_kaufz) + len(_saldoz)
           and led == 0 and usr == 0, f'{len(arch)}/{led}/{usr}')
     # 6) v130: Fertig-Mail DEAKTIVIERT (Ismet) -> nach dem Render keine Mail.
     sent = []
