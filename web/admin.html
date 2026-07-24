@@ -108,7 +108,8 @@ let KEY = sessionStorage.getItem('dve_admin_key') || '';
 let POLL=null, TICK=null, paused=false, active='live', lastLoad={}, serverNow=0;
 const AUTO={live:15000, jobs:5000};
 const TABS=[['live','Live'],['jobs','Jobs'],['revenue','Revenue'],['credits','Credits'],
-  ['users','Users'],['abuse','Abuse'],['system','System'],['compliance','Compliance'],['codes','Codes']];
+  ['users','Users'],['support','Support'],['abuse','Abuse'],['system','System'],
+  ['compliance','Compliance'],['codes','Codes']];
 const $=s=>document.querySelector(s), el=id=>document.getElementById(id);
 function hdr(){return {'X-Admin-Key':KEY};}
 async function api(path,opts={}){
@@ -463,8 +464,26 @@ async function loadCodes(){
 async function newCode(){const fd=new FormData();fd.append('action','new');fd.append('name',el('cName').value||'Tester');fd.append('limit',parseInt(el('cLimit').value,10)||5);try{const d=await api('/api/admin/codes',{method:'POST',body:fd});alert('New code: '+d.code);loadCodes();}catch(e){alert(e.message);}}
 async function codeAct(action,code){const fd=new FormData();fd.append('action',action);fd.append('code',code);try{await api('/api/admin/codes',{method:'POST',body:fd});loadCodes();}catch(e){alert(e.message);}}
 
+/* ---------- SUPPORT ---------- */
+async function loadSupport(){
+  let d;try{d=await api('/api/admin/tickets?status=all');}catch(e){el('view').innerHTML=err(e);return;}
+  const rows=d.tickets.map(t=>`<tr>
+    <td class="mono">#${t.id}</td>
+    <td>${esc(t.email)}</td>
+    <td><b>${esc(t.subject)}</b><div class="subtle" style="white-space:pre-wrap;max-width:560px;margin-top:4px">${esc(t.body)}</div></td>
+    <td>${t.status==='open'?'<span class="tag no">open</span>':'<span class="tag ok">closed</span>'}</td>
+    <td class="subtle">${fdt(t.created_at)}</td>
+    <td><button class="btn ghost sm" onclick="ticketAct(${t.id},'${t.status==='open'?'closed':'open'}')">${t.status==='open'?'Close':'Reopen'}</button></td>
+  </tr>`).join('')||'<tr><td colspan=6 class="subtle">no tickets</td></tr>';
+  el('view').innerHTML=`
+    <h3>Support tickets <span class="subtle">(${d.open_count} open)</span></h3>
+    <div class="note">To reply, answer the notification email in your inbox (its Reply-To is the customer's address). Close a ticket once it is handled.</div>
+    <table><thead><tr><th>#</th><th>Email</th><th>Message</th><th>Status</th><th>When</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function ticketAct(id,status){const fd=new FormData();fd.append('status',status);try{await api('/api/admin/tickets/'+id+'/status',{method:'POST',body:fd});loadSupport();}catch(e){alert(e.message);}}
+
 function err(e){return '<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Error</b> '+esc(e.message)+'</div>';}
-const RENDER={live:loadLive,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,codes:loadCodes};
+const RENDER={live:loadLive,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,codes:loadCodes};
 if(KEY)boot();
 </script>
 </body>

@@ -1756,6 +1756,20 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </form>
       </div>
 
+      <!-- v133c: Support-Ticket. Kein Reply-an-noreply mehr; hier laeuft der Kontakt. -->
+      <div class="panel">
+        <h3>Support</h3>
+        <p class="hint">Have a question or ran into a problem? Send us a message
+          and we will reply to your account email.</p>
+        <form id="supportForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:520px;">
+          <input type="text" id="supSubject" placeholder="Subject (optional)" maxlength="200" style="text-transform:none;">
+          <textarea id="supMessage" placeholder="How can we help?" rows="5" maxlength="5000"
+                    required style="text-transform:none; resize:vertical; width:100%;"></textarea>
+          <button class="btn" type="submit" id="btnSupport" style="align-self:flex-start; padding:9px 18px;">Send message</button>
+        </form>
+        <p class="hint" id="supDone" style="display:none; color:var(--acc2); margin-top:8px;"></p>
+      </div>
+
       <div class="panel hidden" id="refPanel">
         <details>
           <summary>Reference styles</summary>
@@ -4035,6 +4049,24 @@ if ($('#pwForm')) $('#pwForm').addEventListener('submit', async () => {
     if (!r.ok) { toast(d.detail || 'Failed to change password.', 'err'); return; }
     toast('Password changed.', 'ok');
     $('#pwOld').value = ''; $('#pwNew').value = '';
+  } catch (e) { toast('Connection error.', 'err'); }
+  finally { btn.disabled = false; }
+});
+if ($('#supportForm')) $('#supportForm').addEventListener('submit', async () => {
+  const subject = $('#supSubject').value.trim();
+  const message = $('#supMessage').value.trim();
+  if (message.length < 3) { toast('Please write a short message.', 'err'); return; }
+  const btn = $('#btnSupport'); btn.disabled = true;
+  try {
+    const fd = new FormData(); fd.append('subject', subject); fd.append('message', message);
+    const r = await fetch('/api/support', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { toast(d.detail || 'Could not send your message.', 'err'); return; }
+    $('#supSubject').value = ''; $('#supMessage').value = '';
+    const done = $('#supDone');
+    done.textContent = 'Thanks! Your message (#' + d.ticket + ') was sent. We will reply to your account email.';
+    done.style.display = 'block';
+    toast('Message sent.', 'ok');
   } catch (e) { toast('Connection error.', 'err'); }
   finally { btn.disabled = false; }
 });

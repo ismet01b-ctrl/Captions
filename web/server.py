@@ -66,9 +66,9 @@ RETENTION_DAYS = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '').strip()
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '').strip()
 GOOGLE_OK = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
-# v133b: Support-Adresse fuer Kunden. Der Versand laeuft ueber die verifizierte
-# Sende-Domain (noreply@douchko.eu), aber ein Reply-To zeigt auf DIESES Postfach,
-# damit Antworten wirklich ankommen. Steht auch als Kontakt in den Mails.
+# v133c: Support-Postfach. HIERHIN gehen die Support-Ticket-Meldungen (mit
+# Reply-To = Kundenadresse). noreply@douchko.eu verschickt nur, nimmt aber
+# KEINE Antworten mehr an (kein globales Reply-To). Steht als Kontakt in Mails.
 SUPPORT_EMAIL = os.environ.get('DVE_SUPPORT_MAIL', 'Ismet@douchkove.com').strip()
 
 
@@ -280,6 +280,15 @@ def _init_users_db():
     con.execute("CREATE TABLE IF NOT EXISTS mail_log ("
                 "user_id INTEGER NOT NULL, key TEXT NOT NULL, sent_at INTEGER NOT NULL, "
                 "UNIQUE(user_id, key))")
+    # v133c: Support-Ticketsystem. Kunde schickt ueber das Formular ein Ticket;
+    # es landet hier UND als Mail beim Betreiber (Reply-To = Kunde). Status
+    # open/closed, im Admin-Panel sichtbar.
+    con.execute("CREATE TABLE IF NOT EXISTS tickets ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, "
+                "email TEXT NOT NULL, subject TEXT NOT NULL, body TEXT NOT NULL, "
+                "status TEXT NOT NULL DEFAULT 'open', "
+                "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_tickets_status ON tickets(status, created_at)")
     # v126-sec: Referral-Anspruch pro E-Mail, PSEUDONYM (gesalzener Hash, KEINE
     # Klartext-Mail). UEBERLEBT die Kontoloeschung bewusst - sonst liesse sich der
     # Bonus per Loeschen+Neuregistrieren beliebig oft farmen. DSGVO: berechtigtes
@@ -842,16 +851,20 @@ def _mail_from_bare(frm):
     return m.group(1) if m else frm
 
 
-def _send_mail(to, subject, body):
+def _send_mail(to, subject, body, reply_to=None):
     """Mail-Versand. Bevorzugt Resend (HTTP/443, von Hostern nie geblockt),
-    faellt auf SMTP zurueck. Wirft bei Fehler."""
+    faellt auf SMTP zurueck. Wirft bei Fehler.
+    v133c: KEIN Standard-Reply-To mehr - der noreply-Absender ist ein reines
+    Versand-Postfach, Antworten darauf laufen ins Leere (so gewollt). reply_to
+    wird NUR pro Aufruf gesetzt, aktuell fuer die Support-Ticket-Mail an den
+    Betreiber (Reply-To = Kundenadresse, damit man direkt antworten kann)."""
     resend_key = os.environ.get('RESEND_API_KEY', '').strip()
     if resend_key:
         import requests as _rq
         payload = {'from': _mail_from('onboarding@resend.dev'),
                    'to': [to], 'subject': subject, 'text': body}
-        if SUPPORT_EMAIL:
-            payload['reply_to'] = SUPPORT_EMAIL        # v133b: Antworten kommen an
+        if reply_to:
+            payload['reply_to'] = reply_to
         r = _rq.post('https://api.resend.com/emails',
                      headers={'Authorization': f'Bearer {resend_key}'},
                      json=payload, timeout=20)
@@ -872,8 +885,8 @@ def _send_mail(to, subject, body):
     msg['Subject'] = subject
     msg['From'] = frm
     msg['To'] = to
-    if SUPPORT_EMAIL:
-        msg['Reply-To'] = SUPPORT_EMAIL                # v133b: Antworten kommen an
+    if reply_to:
+        msg['Reply-To'] = reply_to                    # v133c: nur pro Aufruf
     # v81c: IPv4 erzwingen. Docker-Container ohne IPv6-Route scheitern an
     # Gmails AAAA-Records mit 'Errno 101 Network is unreachable'.
     import socket
@@ -1360,7 +1373,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v133b-mailcopy'
+DVE_BUILD = 'v133c-support'
 
 
 @app.middleware('http')
@@ -3536,6 +3549,54 @@ def api_resend_verification(request: Request):
     return {'ok': True, 'msg': 'Verification email sent.'}
 
 
+@app.post('/api/support')
+def api_support(request: Request, subject: str = Form(''),
+                message: str = Form(...)):
+    """v133c: Support-Ticket aus dem Formular. Legt das Ticket an, mailt es an
+    den Betreiber (Reply-To = Kundenadresse -> direkt aus dem Postfach
+    antworten) und schickt dem Kunden eine Eingangsbestaetigung ueber noreply.
+    Nur eingeloggt; rate-limitiert gegen Spam."""
+    u = _require_user(request)
+    ip = _client_ip(request)
+    if not _rate_limit_ok(ip, window_sec=3600, max_attempts=10, bucket='support'):
+        raise HTTPException(429, 'Too many messages. Please try again later.')
+    subject = (subject or '').strip()[:200] or '(no subject)'
+    message = (message or '').strip()[:5000]
+    if len(message) < 3:
+        raise HTTPException(400, 'Please write a short message.')
+    now = int(time.time())
+    con = _db()
+    cur = con.execute(
+        "INSERT INTO tickets (user_id, email, subject, body, status, "
+        "created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?)",
+        (u['id'], u['email'], subject, message, now, now))
+    tid = cur.lastrowid
+    con.commit(); con.close()
+    # An den Betreiber: Reply-To = Kunde, damit man direkt antworten kann.
+    try:
+        _send_mail(SUPPORT_EMAIL or ADMIN_MAIL,
+                   f'[Support #{tid}] {subject}',
+                   f'New support ticket #{tid}\n\n'
+                   f'From: {u["email"]} (user id {u["id"]}, {u["name"] or "no name"})\n\n'
+                   f'{message}\n\n'
+                   f'--\nReply to this email to answer the customer directly.',
+                   reply_to=u['email'])
+    except Exception as e:
+        print(f'Support-Mail an Betreiber fehlgeschlagen: {e}')
+    # An den Kunden: Eingangsbestaetigung ueber noreply (kein Reply-To).
+    try:
+        hallo = f'Hi {u["name"]},' if (u['name'] or '').strip() else 'Hi,'
+        _send_mail(u['email'], f'We received your message (#{tid})',
+                   f'{hallo}\n\n'
+                   f'Thanks for reaching out. We received your message and will '
+                   f'get back to you by email as soon as possible.\n\n'
+                   f'Your message:\n{message}\n\n'
+                   f'The DouchkoVE Team')
+    except Exception as e:
+        print(f'Support-Bestaetigung an Kunde fehlgeschlagen: {e}')
+    return {'ok': True, 'ticket': tid}
+
+
 @app.post('/api/change_password')
 def api_change_password(request: Request, old: str = Form(...),
                         new: str = Form(...)):
@@ -5359,6 +5420,7 @@ def admin_overview(request: Request):
                                   (now,)).fetchone()['c']
     rr = con.execute("SELECT COUNT(*) c, COALESCE(SUM(-delta_sec),0) s FROM ledger "
                      "WHERE grund LIKE 'Render %'").fetchone()
+    tickets_open = con.execute("SELECT COUNT(*) c FROM tickets WHERE status='open'").fetchone()['c']
     con.close()
     purchasers = len(_admin_purchaser_ids())
 
@@ -5380,6 +5442,7 @@ def admin_overview(request: Request):
                  'failed': _jstat('fehler'), 'queue': QUEUE.qsize(),
                  'motion_queue': MQUEUE.qsize()},
         'alerts_active': len(_ADMIN_NOTIFIED),
+        'tickets_open': tickets_open,                  # v133c
         'system': {'disk': _disk_info(), 'db_mb': _db_size_mb(),
                    'last_backup': _last_backup_ts(),
                    'openai': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
@@ -5722,6 +5785,45 @@ def admin_alerts(request: Request):
              for k, ts in sorted(_ADMIN_NOTIFIED.items(), key=lambda x: -x[1])][:40]
     return {'alerts': items,
             'note': 'In-memory notification throttle state; resets on restart.'}
+
+
+@app.get('/api/admin/tickets')
+def admin_tickets(request: Request, status: str = 'all', limit: int = 200):
+    """v133c: Support-Tickets sichten. status = all/open/closed."""
+    _require_admin(request)
+    limit = max(1, min(500, limit))
+    con = _db()
+    where = ''
+    params = []
+    if status in ('open', 'closed'):
+        where = 'WHERE status = ?'
+        params.append(status)
+    rows = con.execute(
+        f"SELECT id, user_id, email, subject, body, status, created_at, updated_at "
+        f"FROM tickets {where} ORDER BY (status='open') DESC, created_at DESC "
+        f"LIMIT ?", (*params, limit)).fetchall()
+    open_count = con.execute("SELECT COUNT(*) c FROM tickets WHERE status='open'").fetchone()['c']
+    con.close()
+    return {'tickets': [{'id': r['id'], 'uid': r['user_id'], 'email': r['email'],
+                         'subject': r['subject'], 'body': r['body'],
+                         'status': r['status'], 'created_at': r['created_at'],
+                         'updated_at': r['updated_at']} for r in rows],
+            'open_count': open_count}
+
+
+@app.post('/api/admin/tickets/{tid}/status')
+def admin_ticket_status(tid: int, request: Request, status: str = Form(...)):
+    """v133c: Ticket auf open/closed setzen."""
+    _require_admin(request)
+    if status not in ('open', 'closed'):
+        raise HTTPException(400, 'status must be open or closed')
+    con = _db()
+    cur = con.execute("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
+                      (status, int(time.time()), tid))
+    con.commit(); con.close()
+    if cur.rowcount != 1:
+        raise HTTPException(404, 'Ticket not found')
+    return {'ok': True, 'id': tid, 'status': status}
 
 
 @app.get('/api/admin/compliance/consents')

@@ -3,6 +3,17 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v133c Support-Ticketsystem + noreply ist reines Versand-Postfach.** Ismet: bei noreply soll nichts
+  ankommen, Support laeuft ueber ein Ticketsystem auf der Seite -> an seine Mail. Umgesetzt: (a) das
+  globale Reply-To (v133b) ENTFERNT - `_send_mail(..., reply_to=None)` setzt Reply-To nur noch pro
+  Aufruf; Bestaetigungs-/Willkommens-/Kauf-Mails haben keins mehr (Antwort an noreply laeuft ins
+  Leere). (b) Neues Ticketsystem: Tabelle `tickets`, `POST /api/support` (eingeloggt, rate-limitiert)
+  legt Ticket an, mailt es an `DVE_SUPPORT_MAIL` MIT Reply-To=Kundenadresse (Betreiber antwortet direkt
+  aus dem Postfach) und schickt dem Kunden eine Eingangsbestaetigung ueber noreply. (c) Frontend:
+  Support-Formular in der Account-Seite (Betreff + Nachricht -> Ticketnummer). (d) Admin: neuer
+  Support-Tab (Liste, open/closed, Schliessen/Wieder-oeffnen) + offene Tickets in der Live-Uebersicht.
+  Beweis: v133c-Tests (reply_to optional/kein globales, Ticket end-to-end mit 2 Mails inkl.
+  Reply-To=Kunde, Admin sieht+schliesst), Selftest 749/749 gruen.
 - **v133b Mail-Ton wie etablierte Anbieter + Reply-To.** Ismet-Befund: Absender ist `noreply`, aber der
   Text sagte "antworte hier drauf" (Widerspruch), und der Ton war zu persoenlich ("Ismet here, straight
   to my inbox"). Fix: (a) `Reply-To` auf `DVE_SUPPORT_MAIL` (Default `Ismet@douchkove.com`) in BEIDEN

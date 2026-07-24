@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v133b-mailcopy'" in _srv_m)
+          and "DVE_BUILD = 'v133c-support'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3916,15 +3916,71 @@ def _scenario_betrieb(tmp):
     # (inspect.getsource wuerde sonst das Lambda lesen).
     _full = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     _fulll = _full.lower()
-    check('v133b: Reply-To auf Support + Standard-Ton (kein "reply to me")',
-          "payload['reply_to'] = SUPPORT_EMAIL" in _full
-          and "msg['Reply-To'] = SUPPORT_EMAIL" in _full
-          and 'reply to this email' not in _fulll
-          and 'straight in my inbox' not in _fulll
-          and 'straight to me' not in _fulll
-          and 'ismet here' not in _fulll
-          and 'contact us at {support_email}' in _fulll
+    # Nur die KUNDEN-Mails pruefen (die Betreiber-Ticket-Mail darf "reply to this
+    # email" sagen, die geht an Ismet). Diese drei sind nicht gemockt.
+    _custmail = (_insp.getsource(SV._send_verify_mail)
+                 + _insp.getsource(SV._send_welcome_mail)
+                 + _insp.getsource(SV._send_purchase_mail)).lower()
+    check('v133b: Standard-Ton (kein "reply to me"), Support-Kontakt in Copy',
+          'reply to this email' not in _custmail
+          and 'straight in my inbox' not in _custmail
+          and 'straight to me' not in _custmail
+          and 'ismet here' not in _custmail
+          and 'contact us at {support_email}' in _custmail
           and SV.SUPPORT_EMAIL and '@' in SV.SUPPORT_EMAIL)
+    # v133c: noreply ist reines Versand-Postfach (KEIN globales Reply-To), aber
+    # _send_mail kann pro Aufruf ein Reply-To setzen (fuer die Ticket-Mail).
+    check('v133c: _send_mail hat optionalen reply_to, kein globales Reply-To',
+          'def _send_mail(to, subject, body, reply_to=None)' in _full
+          and "payload['reply_to'] = reply_to" in _full
+          and "msg['Reply-To'] = reply_to" in _full
+          and "= SUPPORT_EMAIL" not in _full.split('def _send_mail')[1].split('def ')[0])
+    # v133c: Support-Ticket end-to-end (DB + Betreiber-Mail mit Reply-To=Kunde +
+    # Kunden-Bestaetigung ueber noreply). _send_mail wird hier gecaptured.
+    _tsent = []
+    _real_sm = SV._send_mail
+    SV._send_mail = lambda to, s, b, reply_to=None: _tsent.append((to, s, reply_to))
+    try:
+        _tuid, _ = SV._create_user('ticket@test', 'x' * 8, 'Ticketer')
+        class _TReq:
+            def __init__(self, uid):
+                self.cookies = {}
+                self.headers = {}
+                self.client = type('C', (), {'host': '10.0.0.5'})()
+                self._uid = uid
+        _origru = SV._require_user
+        SV._require_user = lambda req: SV._find_user_by_id(req._uid)
+        try:
+            _res = SV.api_support(_TReq(_tuid), subject='Help', message='It broke')
+        finally:
+            SV._require_user = _origru
+        con = SV._db()
+        trow = con.execute("SELECT email, subject, body, status FROM tickets WHERE id=?",
+                           (_res['ticket'],)).fetchone()
+        con.close()
+        _to_owner = [m for m in _tsent if m[2] == 'ticket@test']   # Reply-To=Kunde
+        _to_cust = [m for m in _tsent if m[0] == 'ticket@test' and m[2] is None]
+        check('v133c: Support-Ticket angelegt + 2 Mails (Betreiber Reply-To=Kunde, Kunde noreply)',
+              _res.get('ok') and _res.get('ticket')
+              and trow and trow['status'] == 'open' and trow['body'] == 'It broke'
+              and len(_to_owner) == 1 and _to_owner[0][0] == SV.SUPPORT_EMAIL
+              and len(_to_cust) == 1)
+        # Admin: Ticket sichtbar + schliessbar
+        os.environ['DVE_ADMIN'] = 'testkey_admin'
+        class _AdmReq:
+            def __init__(self, key):
+                self.headers = {'x-admin-key': key}
+        _tk = SV.admin_tickets(_AdmReq('testkey_admin'))
+        SV.admin_ticket_status(_res['ticket'], _AdmReq('testkey_admin'), status='closed')
+        con = SV._db()
+        _st = con.execute("SELECT status FROM tickets WHERE id=?", (_res['ticket'],)).fetchone()['status']
+        con.close()
+        check('v133c: Admin sieht + schliesst Tickets',
+              _tk['open_count'] >= 1
+              and any(t['id'] == _res['ticket'] for t in _tk['tickets'])
+              and _st == 'closed')
+    finally:
+        SV._send_mail = _real_sm
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}
