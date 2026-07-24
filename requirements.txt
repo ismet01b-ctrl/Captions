@@ -10,4 +10,6 @@ onnxruntime
 requests
 PyYAML
 bcrypt
-stripe
+# v135b: >=10 pinnen - die ungepinnte, im Docker-Layer eingefrorene Alt-Version
+# kannte 'invoice_creation' nicht -> InvalidRequestError beim Checkout.
+stripe>=10

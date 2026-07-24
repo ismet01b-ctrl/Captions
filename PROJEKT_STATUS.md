@@ -3,6 +3,15 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v135b Checkout-Fix: InvalidRequestError beim Kaufen.** Live-Befund von Ismet direkt nach dem
+  v134-Deploy. Ursache (sehr wahrscheinlich): `stripe` war in requirements.txt UNGEPINNT und die im
+  Docker-Layer eingefrorene Alt-Version kennt den `invoice_creation`-Parameter nicht -> Stripe lehnt
+  die ganze Checkout-Session ab. Fix dreifach: (1) `stripe>=10` gepinnt (erzwingt Layer-Rebuild),
+  (2) Fallback im Checkout: lehnt Stripe `invoice_creation` ab, laeuft der Kauf einmal OHNE
+  automatische Rechnung weiter + Admin-Alarm (der KAUF geht immer vor der Rechnung; Rechnung dann
+  manuell im Dashboard), (3) die echte Stripe-Fehlermeldung wird jetzt ins Server-Log gedruckt
+  (vorher nur der Klassenname zum Kunden). Beweis: v135b-Garantie, Selftest gruen. Echte
+  Verifikation = Ismets Testkauf nach dem Deploy.
 - **v135a Bezahl-Vollaudit umgesetzt: 35 adversarial bestaetigte Befunde gefixt.** Workflow-Audit
   (5 Spezialisten: Zahlungstechnik, Preis-Konsistenz, Verbraucherrecht, Rechnungsrecht, DSGVO;
   40 Roh-Befunde, jeder von einem Gegenpruefer attackiert, 35 bestaetigt, 5 widerlegt). Die Fixes:

@@ -2183,7 +2183,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v135a-audit'" in _srv_m)
+          and "DVE_BUILD = 'v135b-payfix'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4035,7 +4035,7 @@ def _scenario_betrieb(tmp):
           and 'Steuernummer' not in _foot
           and 'Steuernummer: 12/345/67890' in _inv2['invoice_data']['footer']
           and SV.PACKS['starter']['name'] in _inv['invoice_data']['description']
-          and 'invoice_creation=_invoice_creation(pack, p)' in
+          and "kwargs['invoice_creation'] = _invoice_creation(pack, p)" in
           open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read())
     # v135: USt-IdNr DE463613884 ist Ismets echte Kennung. Default im
     # Rechnungs-Footer (Label 'USt-IdNr.' bei DE+9 Ziffern) + Pflicht im
@@ -4157,6 +4157,19 @@ def _scenario_betrieb(tmp):
           and '356' in _prvA)
     check('v135a: DVE_TAX_ID-Default auch in docker-compose (Leerstring-Falle zu)',
           'DVE_TAX_ID: ${DVE_TAX_ID:-DE463613884}' in _cmpA)
+    # v135b: Kauf geht vor Rechnung. Lehnt Stripe invoice_creation ab (alte
+    # Lib/API-Version), laeuft der Checkout einmal OHNE Rechnung + Alarm.
+    # stripe-Paket gepinnt, damit der Docker-Layer die Alt-Version nicht einfriert.
+    _reqA = open(os.path.join(HERE, 'requirements.txt'), encoding='utf-8').read()
+    _coA = _srvA if 'def _mk_session' in _srvA else open(
+        os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v135b: Checkout-Fallback ohne Rechnung + Fehler-Log + stripe>=10 gepinnt',
+          'def _mk_session' in _coA
+          and "kwargs['invoice_creation']" in _coA
+          and '_mk_session(False)' in _coA
+          and 'inv_fallback' in _coA
+          and 'Checkout fehlgeschlagen:' in _coA
+          and 'stripe>=10' in _reqA)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}

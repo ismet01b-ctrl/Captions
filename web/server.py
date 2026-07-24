@@ -1589,7 +1589,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v135a-audit'
+DVE_BUILD = 'v135b-payfix'
 
 
 @app.middleware('http')
@@ -1689,8 +1689,9 @@ async def api_checkout(request: Request, pack: str = Form(...),
                                  'Please try again later.')
     p = PACKS[pack]
     base = os.environ.get('DVE_PUBLIC_URL', '').rstrip('/') or str(request.base_url).rstrip('/')
-    try:
-        session = st.checkout.Session.create(
+
+    def _mk_session(with_invoice):
+        kwargs = dict(
             mode='payment',
             payment_method_types=['card', 'sepa_debit'],
             line_items=[{
@@ -1711,14 +1712,36 @@ async def api_checkout(request: Request, pack: str = Form(...),
                 'sekunden': str(p['sekunden']),
             },
             customer_email=u['email'],
-            invoice_creation=_invoice_creation(pack, p),   # v134: Rechnung (§19)
             success_url=f'{base}/app?bezahlt=1&pack={pack}',
             cancel_url=f'{base}/app?bezahlt=0',
             allow_promotion_codes=True,
         )
+        if with_invoice:
+            kwargs['invoice_creation'] = _invoice_creation(pack, p)  # v134: §19
+        return st.checkout.Session.create(**kwargs)
+
+    try:
+        try:
+            session = _mk_session(True)
+        except Exception as e:
+            # v135b: Der KAUF geht immer vor der Rechnung. Lehnt Stripe die
+            # Session wegen invoice_creation ab (alte Lib/API-Version kennt den
+            # Parameter nicht -> InvalidRequestError), einmal OHNE Rechnung
+            # retryen + Alarm; Rechnung dann manuell im Dashboard nachziehen.
+            if type(e).__name__ == 'InvalidRequestError' and 'invoice' in str(e).lower():
+                print(f'Checkout: invoice_creation abgelehnt ({e}) - retry ohne Rechnung')
+                _notify_admin('inv_fallback', 'Stripe-Rechnung im Checkout abgelehnt',
+                              f'invoice_creation wurde von Stripe abgelehnt: {e}\n'
+                              f'Kauf laeuft OHNE automatische Rechnung weiter - '
+                              f'Stripe-Lib/API-Version pruefen, Rechnung manuell '
+                              f'im Dashboard erstellen.')
+                session = _mk_session(False)
+            else:
+                raise
         return {'ok': True, 'url': session.url}
     except Exception as e:
         cls = type(e).__name__
+        print(f'Checkout fehlgeschlagen: {cls}: {e}')      # v135b: echte Ursache ins Log
         if cls == 'AuthenticationError':
             msg = 'Payment provider rejected our credentials. Server-side config issue, support has been notified.'
         elif cls == 'APIConnectionError':
