@@ -3,6 +3,16 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v158 Der Preis am Render-Button kennt 4K.** Ismets Befund: "wenn 4k
+  angewaehlt ist, steht immer noch 1 credit". Der Preis wurde EINMAL beim
+  Datei-Auswaehlen gerechnet (`Math.ceil(dur/60)`) und kannte die
+  Aufloesungswahl gar nicht - der Server bucht aber das Doppelte ab.
+  Neu: `updateRenderCost()` laeuft bei jeder Aenderung der Aufloesung.
+  Sie kennt auch die QUELLE: der Server berechnet 4K nur ab 1440p kurzer
+  Kante, also darf der Button bei einer kleineren Quelle auch nicht das
+  Doppelte anzeigen. Dann steht dort der einfache Satz plus ein Hinweis in
+  Akzentfarbe, warum 4K hier nicht greift. Client- und Server-Grenze sind
+  im Selftest gegeneinander geprueft.
 - **v157 4K als dritte Aufloesungsstufe** (Ismets Wunsch: "Mach die 4k neben
   dem 1080p"). Statt eines eigenen Quality-Feldes steht 4K jetzt in
   derselben Zeile wie 720p und 1080p, beschriftet mit dem Aufpreis.

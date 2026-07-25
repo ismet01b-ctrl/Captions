@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v157-4k-stufe'
+DVE_BUILD = 'v158-preis'
 
 
 @app.middleware('http')

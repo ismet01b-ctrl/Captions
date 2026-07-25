@@ -2135,6 +2135,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               4K doubles the credit cost and only applies if your source is at least 1440p -
               we never upscale.</div>
             <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K &middot; 2&times; credits:2160"></div>
+            <div id="uhdNote" class="setting-desc" style="display:none; margin-top:8px; color:var(--acc);"></div>
           </div>
         </div>
       </div>
@@ -2436,6 +2437,7 @@ const State = {
   code: null, codeName: '', codeRest: null, codeLimit: null,
   file: null, look: 'creator',
   cfg: null, cfgBase: null,
+  srcShort: 0, srcDur: 0,   // v158: Quell-Kurzkante + Dauer fuer den Preis
   jid: null, moments: null, history: null,
   currentStep: 1, renderStart: 0,
 };
@@ -2598,6 +2600,30 @@ function getDeep(obj, path, def) {
   }
   return o;
 }
+// v158: Preis am Render-Button. Muss den 4K-Faktor kennen UND wissen, ob
+// die Quelle 4K ueberhaupt hergibt - der Server berechnet das Doppelte nur
+// dann (UHD_MIN_KURZE_KANTE = 1440). Wird bei jeder Aenderung der Aufloesung
+// neu gerufen, nicht nur einmal beim Datei-Auswaehlen.
+function updateRenderCost() {
+  const bc = $('#btnRenderCost');
+  if (!bc || !State.srcDur) return;
+  let h = 1080;
+  try { h = parseInt(getDeep(State.cfg, 'output.height', 1080), 10) || 1080; }
+  catch (e) {}
+  const wantUhd = h >= 2160;
+  const canUhd = (State.srcShort || 0) >= 1440;
+  const cr = Math.max(1, Math.ceil(State.srcDur / 60)) * (wantUhd && canUhd ? 2 : 1);
+  bc.textContent = ` · ${cr} credit${cr !== 1 ? 's' : ''}`;
+  const note = $('#uhdNote');
+  if (note) {
+    note.textContent = (wantUhd && !canUhd)
+      ? `Your source is ${State.srcShort || '?'}p on the short edge - 4K needs at least 1440p. `
+        + 'This renders in 1080p and costs the normal rate.'
+      : '';
+    note.style.display = note.textContent ? 'block' : 'none';
+  }
+}
+
 function diffCfg(base, cur) {
   const out = {};
   for (const k of Object.keys(cur)) {
@@ -2661,6 +2687,8 @@ function buildWidgets() {
       const raw = b.dataset.val;
       const v = raw === 'true' ? true : raw === 'false' ? false : (isNaN(+raw) ? raw : +raw);
       setDeep(State.cfg, cfg, v);
+      // v158: die Aufloesung entscheidet ueber den Preis - Button mitziehen.
+      if (cfg === 'output.height') updateRenderCost();
     }));
   });
   $$('input[type=checkbox][data-cfg]').forEach(inp => {
@@ -4426,11 +4454,12 @@ function setFile(f) {
       const meta = $('#fileInfo').querySelector('.fi-meta');
       if (meta) meta.textContent = `${(f.size / 1048576).toFixed(1)} MB · ${dstr} · ready`;
       // v98: Kosten VOR dem Klick zeigen - keine Abbuchungs-Ueberraschung
-      const bc = $('#btnRenderCost');
-      if (bc) {
-        const cr = Math.max(1, Math.ceil(dur / 60));
-        bc.textContent = ` · ${cr} credit${cr !== 1 ? 's' : ''}`;
-      }
+      // v158: die kurze Kante merken. Ohne sie kann der Button nicht wissen,
+      // ob 4K ueberhaupt greift - und zeigte bei angehaktem 4K weiter
+      // 1 credit, obwohl der Server das Doppelte abbucht (Ismets Befund).
+      State.srcShort = Math.min(v.videoWidth || 0, v.videoHeight || 0);
+      State.srcDur = dur;
+      updateRenderCost();
       // Warnung wenn Guthaben nicht reicht
       if (State.balanceSec != null && dur > State.balanceSec) {
         const shortMin = Math.ceil((dur - State.balanceSec) / 60);

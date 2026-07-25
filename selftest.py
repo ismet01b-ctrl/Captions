@@ -2645,7 +2645,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v157-4k-stufe'" in _srv_m)
+          and "DVE_BUILD = 'v158-preis'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4780,6 +4780,27 @@ def _scenario_betrieb(tmp):
     check('v157: die Hoehen-Stufe kommt durch die Whitelist',
           SV._sanitize_overrides({'output': {'height': 2160}})
           == {'output': {'height': 2160}})
+
+    # ============ v158: der Preis am Button kennt 4K ========================
+    # Ismets Befund: "wenn 4k angewaehlt ist, steht immer noch 1 credit".
+    # Der Preis wurde nur EINMAL beim Datei-Auswaehlen gerechnet und kannte
+    # die Aufloesungswahl gar nicht.
+    _ui158 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v158: der Preis wird bei jeder Aufloesungs-Aenderung neu gerechnet',
+          'function updateRenderCost' in _ui158
+          and "if (cfg === 'output.height') updateRenderCost();" in _ui158)
+    check('v158: der Preis kennt den 4K-Faktor',
+          'wantUhd && canUhd ? 2 : 1' in _ui158)
+    # Und er darf NICHT das Doppelte zeigen, wenn die Quelle zu klein ist -
+    # der Server berechnet dann auch nur den einfachen Satz.
+    check('v158: zu kleine Quelle zeigt den einfachen Satz plus Hinweis',
+          "(State.srcShort || 0) >= 1440" in _ui158
+          and 'uhdNote' in _ui158
+          and '4K needs at least 1440p' in _ui158)
+    check('v158: die Client-Grenze passt zur Server-Grenze',
+          SV.UHD_MIN_KURZE_KANTE == 1440
+          and '>= 1440' in _ui158,
+          f'Server {SV.UHD_MIN_KURZE_KANTE}')
 
     # ============ v155: Buendigkeit ist NICHT die Bildseite =================
     import yaml as _y155
