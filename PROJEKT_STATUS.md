@@ -3,6 +3,37 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v169 Drei Befunde aus Ismets ECHTEM Video behoben** (erste Abnahme am
+  fertigen Produkt-Render, 15s-Testclip; "behind me" hat er ausdruecklich
+  als gut abgenommen).
+  1. AKTIONSWORT NIE HINTER DER PERSON - IN ALLEN PFADEN. "EXPLODE" stand
+     hinter dem Sprecher, der Koerper verdeckte die Punchline (4s im Video).
+     Der Riegel existierte im Cache-Pfad (parse_regie) und im Ansage-Pfad -
+     kam die Animation aber aus der Auto-Wahl in build_plans oder der
+     KI-Frischwahl, lief er ins Leere. Derselbe Fehlertyp wie v159: ein
+     Schutz, der nicht an der immer laufenden Stelle haengt, ist keiner.
+     Jetzt in build_plans: sichtbare Anim + fx 'behind' -> 'outline'.
+     Die ausdrueckliche Ansage ("behind me", intent) bleibt Gesetz.
+  2. KEIN EIN-WORT-REST NACH EINER SPRECHPAUSE. Ein einzelnes "is" stand
+     3.5 s nach dem Keyword allein unten im Bild wie ein Bug (14s im
+     Video). Ursache: die Satz-Fortsetzung (satz_offen) kannte keine
+     Pausen-Grenze. Jetzt: eine Pause ueber 1.2 s beendet den sichtbaren
+     Satz, und ein Ein-Wort-Haeppchen (<=4 Zeichen) traegt als eigener
+     Moment nichts - Stille ist besser. Testbau mit Bedacht: unter 0.35 s
+     schluckt die Keyword-Phrase die Woerter selbst, die ERSTE Folgegruppe
+     frisst die Atempause (gewollt, seit v-alt) - der Test prueft die
+     zweite.
+  3. DIE KLEINE COLLAGE-SPALTE DOCKT AN DER TREPPE AN. Bei seite 'rechts'
+     stand sie an der fernen Spiegel-Aussenkante: zwischen Treppe ("can
+     push them") und Spalte ("and i just") klaffte ein Loch von ~0.15
+     Spiegelbreiten, die Spalte wirkte verwaist und hing an Ismets hellem
+     Fenster (8s im Video). Jetzt startet sie an der Treppen-Innenkante
+     (gemessene Luecke danach: -0.016 W, also buendig).
+  ABNAHME-NOTIZEN zum selben Video, KEIN Fehler: die Caption-Luecke bei
+  11-14s ist eine echte Sprechpause (gemessen -64 dB gegen -20 dB beim
+  Sprechen). Seiten-Abwechslung rechts/links/rechts/links vorhanden.
+  NICHT LIVE VERIFIZIERT: die drei Fixes sind am Selftest belegt, das
+  Ergebnis am echten Clip sieht Ismet nach dem Deploy.
 - **v168 Die Seite ist eine Entscheidung, kein Wuerfelwurf.** Ismets Befund,
   dritter Anlauf: "die captions sind immer auf der linken seite, egal was
   passiert" - und die Anweisung, bei Unsicherheit zu FRAGEN statt zu raten.

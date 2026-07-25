@@ -6686,9 +6686,14 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             if _breit:
                 continue                       # kommt unten als eigener Block
             if it['role'] == 'accent' or not it.get('gross'):
-                # kleine Spalte an der Aussenkante
+                # kleine Spalte NEBEN der Treppe. Bis v168 stand sie bei
+                # 'rechts' an der fernen Spiegel-Aussenkante - zwischen
+                # Treppe und Spalte klaffte ein Loch von ~0.15 Spiegel-
+                # breiten, die Spalte wirkte verwaist und hing an Ismets
+                # hellem Fenster (gemessen an seinem Video, 8s). Jetzt
+                # startet sie direkt an der Treppen-Innenkante.
                 if _re:
-                    it['cx'] = x0 + max_w - it['adv'] / 2.0
+                    it['cx'] = x0 + max_w * 0.80 - it['adv'] / 2.0
                 else:
                     it['cx'] = _lx + it['adv'] / 2.0
                 it['cy'] = _ly + _h / 2.0
@@ -7902,13 +7907,24 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # abgeschnitten, als haette man vergessen weiterzumachen. Solche
         # Fortsetzungen laufen darum als ruhige Caption weiter, bis der Satz
         # (Punkt/Frage/Ausruf) abgeschlossen ist.
+        # v169: eine echte SPRECHPAUSE beendet den sichtbaren Satz. Ohne
+        # diese Grenze hielt die Fortsetzung ein einzelnes "is" am Leben,
+        # das 3.5 s nach dem Keyword-Moment allein unten im Bild stand wie
+        # ein Rest (Ismets Video, 14s). Und ein Ein-Wort-Haeppchen traegt
+        # als eigener Moment ohnehin nichts - Stille ist besser.
+        _pause_davor = (words[g[0]]['start'] - words[g[0] - 1]['end']
+                        if g[0] > 0 else 0.0)
+        _winzig = (len(g) == 1
+                   and len(clean(words[g[0]].get('word', ''))) <= 4)
         satz_offen = (prev_was_keyword_sentence
                       and hat_interpunktion
                       and not is_kw_group
                       and not in_intro
                       and not broll
                       and forts_count < 2
-                      and start - last_kw_end < 4.0)
+                      and start - last_kw_end < 4.0
+                      and _pause_davor < 1.2
+                      and not _winzig)
         if satz_offen:
             # kein neuer Moment - nur weiterlesen lassen
             fx_map.pop(g[0], None)
@@ -8049,6 +8065,18 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     # der Rotation, statt den Moment still stehen zu lassen.
                     _auto_anim = rot_anim.next()
                 p['anim'] = _auto_anim
+                # v169: BEWEGUNG MUSS MAN SEHEN - in ALLEN Pfaden. Der
+                # Riegel existierte im Cache- und im Ansage-Pfad; kam die
+                # Animation aber aus der Auto-Wahl hier (oder aus der
+                # KI-Frischwahl), stand ein "EXPLODE" hinter der Person und
+                # der Koerper verdeckte die Punchline (Ismets Video, 4s).
+                # Eine ausdrueckliche Ansage ("behind me") bleibt Gesetz.
+                if (_auto_anim in _VISIBLE_ANIM and fx == 'behind'
+                        and not (isinstance(info, dict) and info.get('intent'))):
+                    fx = 'outline'
+                    p['tpl'] = 'outline'
+                    print(f"  Visibility: '{txt}' moves ({_auto_anim}) "
+                          f"-> in front, not behind the person")
                 # Auto-Wahl zurueck in fx_map schreiben, damit der Momente-Editor
                 # sie anzeigt (sonst steht dort "keine", obwohl das Video animiert).
                 if _auto_anim and isinstance(fx_map, dict):

@@ -149,6 +149,9 @@ Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
   aufeinanderfolgenden Zielen am selben Ort nur die ersten zwei Momente
   durch. Sonst nagelt ein über das halbe Video gehaltener Arm alle Captions
   auf eine Seite (Ismets Befund, am Bild belegt).
+- **Sichtbare Anim schlägt `behind` in ALLEN Pfaden (v169).** Der Riegel
+  sitzt in `build_plans` (Auto-Wahl), nicht nur in parse_regie/Ansage-Pfad —
+  v159-Lehre. Nur `intent` (wörtliche Ansage) darf `behind` behalten.
 - **Blick ist Abweichung, nicht Haltung (v166).** `_blick_targets` filtert
   gegen den Median der Kopfdrehungen. Eine absolute Schwelle macht aus einer
   seitlich stehenden Kamera ein Dauer-Ziel und nagelt alle Captions auf eine
@@ -397,7 +400,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1038/1038 grün (Stand v168)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1043/1043 grün (Stand v169)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

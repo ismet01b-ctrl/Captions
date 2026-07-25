@@ -5179,6 +5179,100 @@ def _scenario_betrieb(tmp):
           '_blick_targets(blick_cands' in open(os.path.join(HERE, 'render.py'),
                                                encoding='utf-8').read())
 
+    # ======= v169: drei Befunde aus Ismets echtem Video ===================
+    # (1) Aktionswort nie hinter der Person - in ALLEN Pfaden (v159-Lehre).
+    _r169 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _cfg169 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _W169, _H169 = 1920, 1080
+    _S169 = R.Sprites(_cfg169, _W169, _H169)
+    _w169 = [{'word': 'they', 'start': 1.0, 'end': 1.3},
+             {'word': 'EXPLODE', 'start': 1.4, 'end': 1.9}]
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl169 = R.build_plans(_w169, {1}, _cfg169, _S169, _W169, _H169,
+                               lambda s_, e_: True,
+                               {1: {'fx': 'behind', 'power': 3, 'n': 1}},
+                               face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                        _H169 * 0.40,
+                                                        _W169 * 0.10))
+    _kw169 = [p for p in _pl169 if 'kw_i' in p]
+    check('v169: ein explodierendes Wort steht VORN, nicht hinter der Person',
+          _kw169 and _kw169[0]['tpl'] == 'outline'
+          and _kw169[0].get('anim') in R._VISIBLE_ANIM,
+          f"tpl={_kw169[0]['tpl'] if _kw169 else '?'} "
+          f"anim={_kw169[0].get('anim') if _kw169 else '?'}")
+    # Die ausdrueckliche Ansage bleibt Gesetz: intent-behind wird NICHT
+    # umgezogen, auch wenn eine sichtbare Anim daran haengt.
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl169b = R.build_plans(_w169, {1}, _cfg169, _S169, _W169, _H169,
+                                lambda s_, e_: True,
+                                {1: {'fx': 'behind', 'power': 3, 'n': 1,
+                                     'intent': True}},
+                                face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                         _H169 * 0.40,
+                                                         _W169 * 0.10))
+    _kw169b = [p for p in _pl169b if 'kw_i' in p]
+    check('v169: die Ansage "behind" bleibt trotz Anim Gesetz',
+          _kw169b and _kw169b[0]['tpl'] == 'behind')
+
+    # (2) Kein Ein-Wort-Rest nach einer Sprechpause. "And the one THING"
+    # (Keyword, Satz offen), dann 3.5 s Pause, dann ein einzelnes "is".
+    _w169c = ([{'word': w, 'start': 1.0 + i * 0.35, 'end': 1.25 + i * 0.35}
+               for i, w in enumerate(['And', 'the', 'one', 'THING'])]
+              + [{'word': 'is', 'start': 6.0, 'end': 6.2}])
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl169c = R.build_plans(_w169c, {3}, _cfg169, _S169, _W169, _H169,
+                                lambda s_, e_: True,
+                                {3: {'fx': 'outline', 'power': 3, 'n': 1}},
+                                face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                         _H169 * 0.40,
+                                                         _W169 * 0.08))
+    _lone = [p for p in _pl169c if p.get('front')
+             and len(p['front']) == 1 and p['start'] > 5.0]
+    check('v169: ein einzelnes Wort nach einer Sprechpause faellt weg',
+          not _lone)
+    # Ohne Pause laeuft die Satz-Fortsetzung weiter wie bisher.
+    # Aufbau mit Bedacht: unter 0.35 s schluckt die Keyword-Phrase die
+    # Woerter selbst, die ERSTE Folgegruppe frisst die Atempause (gewollt,
+    # seit v-alt), und ueber 1.2 s greift die neue Pausen-Grenze. Also zwei
+    # Folgegruppen mit moderaten Abstaenden - die zweite muss laufen.
+    _w169d = ([{'word': w, 'start': 1.0 + i * 0.35, 'end': 1.25 + i * 0.35}
+               for i, w in enumerate(['And', 'the', 'one', 'THING'])]
+              + [{'word': w, 'start': 3.05 + i * 0.3, 'end': 3.25 + i * 0.3}
+                 for i, w in enumerate(['is', 'really'])]
+              + [{'word': w, 'start': 4.35 + i * 0.3, 'end': 4.55 + i * 0.3}
+                 for i, w in enumerate(['quite', 'simple.'])])
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl169d = R.build_plans(_w169d, {3}, _cfg169, _S169, _W169, _H169,
+                                lambda s_, e_: True,
+                                {3: {'fx': 'outline', 'power': 3, 'n': 1}},
+                                face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                         _H169 * 0.40,
+                                                         _W169 * 0.08))
+    check('v169: ohne Pause laeuft die Satz-Fortsetzung weiter',
+          any(p.get('front') and p['start'] > 4.0 for p in _pl169d))
+
+    # (3) Die kleine Collage-Spalte dockt an der Treppe an, statt an der
+    # fernen Aussenkante zu haengen (Loch von ~0.15 Spiegelbreiten).
+    _wc169 = [{'word': w, 'start': 1.0 + i * 0.3, 'end': 1.2 + i * 0.3}
+              for i, w in enumerate(['and', 'i', 'just', 'can', 'push',
+                                     'them', 'anywhere.'])]
+    _it169, _th169, _ = R.compose_flow(list(range(7)), _wc169, _S169,
+                                       _W169, _H169, portrait=False,
+                                       layout='collage', seite='rechts')
+    _klein = [it for it in _it169
+              if it.get('role') in ('norm', 'accent') and not it.get('gross')]
+    _gross169 = [it for it in _it169 if it.get('gross')]
+    if _klein and _gross169:
+        _kl_l = min(it['cx'] - it['adv'] / 2.0 for it in _klein)
+        _gr_r = max(it['cx'] + it['adv'] / 2.0 for it in _gross169)
+        check('v169: kleine Spalte sitzt NEBEN der Treppe, kein Loch',
+              _kl_l - _gr_r < _W169 * 0.10,
+              f"Luecke {(_kl_l - _gr_r) / _W169:.3f} W")
+    else:
+        check('v169: kleine Spalte sitzt NEBEN der Treppe, kein Loch',
+              False, 'Collage ohne kleine/grosse Woerter')
+
     # ======= v168: die Seite ist eine Entscheidung, kein Wuerfelwurf ======
     # Ismets Befund, dritter Anlauf: "die captions sind immer auf der linken
     # seite, egal was passiert". Am eigenen Render nachgemessen, ZWEI
