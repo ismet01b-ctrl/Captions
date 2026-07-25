@@ -2928,6 +2928,286 @@ Lieber kein Effekt als ein falscher Sound auf einem harmlosen Wort.
 Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Effekt>", "power": <1-3>, "anim": "<optional>", "emoji": "<optional>"}]}"""
 
 
+def measure_reference_video(video_path, max_frames=160):
+    """v144: MISST den Stil eines Referenzvideos aus den Pixeln - deterministisch,
+    ohne KI, ohne API-Key.
+
+    Warum das die KI ersetzt und nicht ergaenzt: bis v143 lief das Stil-Lernen
+    ueber eine Prosa-Beschreibung von GPT-5 Vision, aus der eine zweite Anfrage
+    sechs Zahlen SCHAETZTE. Groesse, Position, Hierarchie, Schrift, Glow und
+    Timing kamen darin gar nicht vor - und geschaetzte Zahlen aus 6 Frames mit
+    'detail: low' sind ohnehin keine Messung. Alles Folgende ist dagegen direkt
+    aus dem Bild gerechnet und reproduzierbar.
+
+    Rueckgabe: dict mit Messwerten (Anteile von Breite/Hoehe, damit sie auf
+    jedes Zielformat uebertragbar sind) oder {} wenn nichts messbar war.
+    """
+    if not os.path.exists(video_path):
+        return {}
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return {}
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    frames = []
+    while len(frames) < max_frames:
+        ok, f = cap.read()
+        if not ok:
+            break
+        frames.append(f)
+    cap.release()
+    if len(frames) < 8 or W < 16 or H < 16:
+        return {}
+
+    # DAUER-ELEMENTE (Plattform-Wasserzeichen, Sender-Logo) zeitlich finden
+    # statt an einer geratenen Stelle auszuschneiden: was in fast JEDEM Frame
+    # an derselben Stelle hell ist, ist kein Caption-Text. Funktioniert damit
+    # fuer TikTok, Reels, Shorts und jedes Kanal-Logo gleichermassen.
+    _sum = np.zeros((H, W), dtype=np.float32)
+    for f in frames[::max(1, len(frames) // 40)]:
+        hsv = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
+        _sum += (((hsv[..., 2] >= 244) & (hsv[..., 1] <= 26))
+                 | ((hsv[..., 2] >= 195) & (hsv[..., 1] >= 140))).astype(np.float32)
+    _n = max(1, len(frames[::max(1, len(frames) // 40)]))
+    dauerhaft = (_sum / _n > 0.85).astype(np.uint8)
+    if dauerhaft.sum() > W * H * 0.06:        # zu viel -> unbrauchbar, verwerfen
+        dauerhaft = None
+
+    def maske(f):
+        """Textpixel: sehr helles Weiss ODER kraeftig gesaettigter Akzent.
+        Beides mit hoher Schwelle, damit heller Hintergrund nicht mitkommt."""
+        hsv = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
+        v = hsv[..., 2].astype(np.int16)
+        s = hsv[..., 1].astype(np.int16)
+        weiss = (v >= 244) & (s <= 26)
+        bunt = (v >= 195) & (s >= 140)
+        m = (weiss | bunt).astype(np.uint8)
+        if dauerhaft is not None:
+            m = m & (1 - dauerhaft)       # Wasserzeichen/Logo raus
+        return m, bunt.astype(np.uint8)
+
+    def _strich(bild, x, y, bw, bh):
+        """Mediane Strichbreite im Teil, als Anteil seiner Hoehe. Buchstaben
+        haben duenne, gleichmaessige Striche; eine helle Wand ist massiv."""
+        aus = bild[y:y + bh, x:x + bw]
+        laeufe = []
+        for zy in range(0, bh, max(1, bh // 6)):
+            run = 0
+            for v in aus[min(zy, bh - 1)]:
+                if v: run += 1
+                elif run: laeufe.append(run); run = 0
+            if run: laeufe.append(run)
+        return (float(np.median(laeufe)) / float(bh)) if laeufe else 9.9
+
+    def teile(m, min_flaeche=30):
+        """Echte TEXTteile. Eine reine Helligkeitsschwelle reicht nicht: in
+        einem warm ausgeleuchteten Raum sind Lampe und helle Wand ebenfalls
+        hell und wenig gesaettigt. Gemessen am Referenzvideo lieferte die
+        nackte Schwelle eine Zone bis 0.857 H und ein Groessenverhaeltnis von
+        4.66 statt 2.4 - also unbrauchbar.
+        Zwei zusaetzliche Merkmale trennen Schrift von Flaeche:
+          FUELLGRAD  - Buchstaben fuellen ihr Rechteck nur zu 20-72 %,
+                       eine Wand zu ueber 90 %.
+          STRICHBREITE - Buchstabenstriche sind duenn und gleichmaessig
+                       (6-40 % der Zeichenhoehe), eine Flaeche ist massiv.
+        Das ist der Kern der Stroke-Width-Idee, auf das noetige reduziert."""
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 7), np.uint8))
+        n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
+        out = []
+        for i in range(1, n):
+            x, y, bw, bh, a = st[i]
+            if a < min_flaeche or bh < H * 0.010 or bh > H * 0.20:
+                continue
+            if bw > W * 0.98 or bw < 3:
+                continue
+            fuell = a / float(max(bw * bh, 1))
+            if not (0.14 <= fuell <= 0.74):
+                continue
+            if not (0.06 <= _strich(m, x, y, bw, bh) <= 0.40):
+                continue
+            out.append((x, y, bw, bh, a))
+        # ZEILEN-BINDUNG. Schrift steht in Zeilen: jeder Buchstabe hat einen
+        # Nachbarn auf derselben Grundlinie und in aehnlicher Groesse. Ein
+        # Glanzpunkt auf der Wange, ein Lampenreflex oder eine Hemdfalte steht
+        # allein. Am Referenzvideo waren genau das die Fehltreffer, die die
+        # Zone bis 0.857 H zogen. Isolierte Teile fliegen deshalb raus.
+        fest = []
+        for i, (x, y, bw, bh, a) in enumerate(out):
+            mi = y + bh / 2.0
+            nachbar = False
+            for j, (x2, y2, bw2, bh2, a2) in enumerate(out):
+                if i == j:
+                    continue
+                if abs((y2 + bh2 / 2.0) - mi) > max(bh, bh2) * 0.55:
+                    continue
+                if not (0.45 <= bh2 / float(max(bh, 1)) <= 2.2):
+                    continue
+                luecke = max(x, x2) - min(x + bw, x2 + bw2)
+                if luecke <= max(bh, bh2) * 1.6:
+                    nachbar = True
+                    break
+            if nachbar:
+                fest.append((x, y, bw, bh, a))
+        return fest
+
+    hoehen, zone_y, zone_x, flaechen = [], [], [], []
+    akz_px, akz_anteil = [], []
+    for f in frames:
+        m, bunt = maske(f)
+        ts = teile(m)
+        if not ts:
+            flaechen.append(0)
+            continue
+        # NUR die akzeptierten Teile zaehlen - sonst faerbt der Hintergrund
+        # jede Folgemessung ein (Zone, Groesse, Farbe, Takt).
+        nur = np.zeros_like(m)
+        for (x, y, bw, bh, a) in ts:
+            nur[y:y + bh, x:x + bw] |= m[y:y + bh, x:x + bw]
+            # KERN statt Kasten. Der Aussenschein macht ein Teil messbar
+            # groesser: gemessen wuchs die Versalhoehe des Referenzvideos
+            # dadurch von 0.085 auf 0.130 H. Fuer die Groesse zaehlt deshalb
+            # nur der harte Buchstabenkern (hoehere Schwelle im Kasten).
+            _k = _kern_hoehe(f, x, y, bw, bh)
+            hoehen.append((_k if _k else bh) / float(H))
+        flaechen.append(int(nur.sum()))
+        zone_y.append((min(t[1] for t in ts) / H,
+                       max(t[1] + t[3] for t in ts) / H))
+        zone_x.append((min(t[0] for t in ts) / W,
+                       max(t[0] + t[2] for t in ts) / W))
+        b_nur = (bunt.astype(bool)) & (nur.astype(bool))
+        if nur.sum() > 0:
+            akz_anteil.append(float(b_nur.sum()) / float(nur.sum()))
+        px = f[b_nur]
+        if len(px) > 60:
+            akz_px.append(np.percentile(px, 75, axis=0))
+    if len(hoehen) < 12 or not zone_y:
+        return {}
+
+    res = {'quelle': os.path.basename(video_path),
+           'format': round(W / float(H), 3)}
+    # --- Groessen. Das groesste Textteil ist das Schluesselwort, das Feld der
+    # kleinen Teile der Fliesstext. Perzentile statt max/min: ein einzelner
+    # Ausreisser (Glanzpunkt, Logo-Rest) soll die Skala nicht bestimmen.
+    hh = np.array(hoehen, dtype=np.float32)
+    res['key_hoehe'] = round(float(np.percentile(hh, 96)), 4)
+    res['klein_hoehe'] = round(float(np.percentile(hh, 35)), 4)
+    if res['klein_hoehe'] > 0.002:
+        res['verhaeltnis'] = round(res['key_hoehe'] / res['klein_hoehe'], 2)
+    # --- Zone: wo im Bild steht der Text ueberhaupt
+    zy = np.array(zone_y, dtype=np.float32)
+    zx = np.array(zone_x, dtype=np.float32)
+    res['zone_y'] = [round(float(np.percentile(zy[:, 0], 10)), 3),
+                     round(float(np.percentile(zy[:, 1], 90)), 3)]
+    res['zone_x'] = [round(float(np.percentile(zx[:, 0], 10)), 3),
+                     round(float(np.percentile(zx[:, 1], 90)), 3)]
+    res['zone_mitte_y'] = round(float(np.mean(res['zone_y'])), 3)
+    # --- Ausrichtung: streuen die LINKEN Kanten weniger als die Mitten?
+    l_streu = float(np.std(zx[:, 0]))
+    m_streu = float(np.std((zx[:, 0] + zx[:, 1]) / 2.0))
+    res['ausrichtung'] = ('links' if l_streu + 0.01 < m_streu
+                          else ('mitte' if m_streu + 0.01 < l_streu else 'frei'))
+    # --- Akzentfarbe
+    if akz_px:
+        b, g, r = np.mean(np.array(akz_px), axis=0)
+        res['akzent_hex'] = '#%02x%02x%02x' % (int(r), int(g), int(b))
+        res['akzent_anteil'] = round(float(np.mean(akz_anteil)), 3)
+    # --- Wort-Takt: wann waechst die Textflaeche sprunghaft?
+    fl = np.array(flaechen, dtype=np.float32)
+    ein = []
+    for i in range(1, len(fl)):
+        if fl[i - 1] > 40 and fl[i] > fl[i - 1] * 1.16 and fl[i] - fl[i - 1] > 220:
+            ein.append(i / fps)
+    if len(ein) >= 3:
+        d = np.diff(np.array(ein))
+        d = d[d > 0.04]                      # Buchstaben-Reveal rausrechnen
+        if len(d):
+            res['wort_takt'] = round(float(np.median(d)), 3)
+        fein = np.diff(np.array(ein))
+        fein = fein[fein <= 0.12]
+        if len(fein) >= 2:
+            res['buchstaben_takt'] = round(float(np.median(fein)), 3)
+    # --- Glow: Helligkeitsabfall um den Text herum
+    res.update(_ref_glow(frames, W, H, maske, teile))
+    # --- Strichstaerke der Referenzschrift (fuer die Font-Wahl)
+    st = _ref_strichstaerke(frames, maske, H, teile)
+    if st:
+        res['stamm_versal'] = st
+    return res
+
+
+def _kern_hoehe(f, x, y, bw, bh):
+    """Hoehe des harten Buchstabenkerns in einem Textkasten - ohne Glow.
+    Rueckgabe in Pixeln oder None."""
+    aus = f[y:y + bh, x:x + bw]
+    if aus.size == 0:
+        return None
+    hsv = cv2.cvtColor(aus, cv2.COLOR_BGR2HSV)
+    v = hsv[..., 2].astype(np.int16)
+    s = hsv[..., 1].astype(np.int16)
+    kern = ((v >= 250) & (s <= 18)) | ((v >= 215) & (s >= 165))
+    zeilen = np.where(kern.sum(axis=1) > max(1, bw * 0.04))[0]
+    if len(zeilen) < 2:
+        return None
+    return int(zeilen.max() - zeilen.min() + 1)
+
+
+def _ref_glow(frames, W, H, maske, teile=None):
+    """Misst den Aussenschein: mittlere Helligkeitsanhebung in 2-12 px Abstand
+    vom Text gegenueber dem Bildhintergrund. Trennt Glow (positiv, richtungslos)
+    von Schatten/Kontur (negativ)."""
+    werte = []
+    for f in frames[::max(1, len(frames) // 12)]:
+        m, _ = maske(f)
+        if teile is not None:
+            ts = teile(m)
+            nur = np.zeros_like(m)
+            for (x, y, bw, bh, a) in ts:
+                nur[y:y + bh, x:x + bw] |= m[y:y + bh, x:x + bw]
+            m = nur
+        if m.sum() < 150:
+            continue
+        g = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        nah = cv2.dilate(m, np.ones((9, 9), np.uint8)) - cv2.dilate(m, np.ones((3, 3), np.uint8))
+        fern = cv2.dilate(m, np.ones((41, 41), np.uint8)) - cv2.dilate(m, np.ones((25, 25), np.uint8))
+        if nah.sum() < 60 or fern.sum() < 60:
+            continue
+        werte.append(float(g[nah > 0].mean() - g[fern > 0].mean()))
+    if not werte:
+        return {}
+    d = float(np.median(werte))
+    return {'glow_db': round(d, 1),
+            'glow': bool(d > 6.0),
+            'kontur': bool(d < -6.0)}
+
+
+def _ref_strichstaerke(frames, maske, H, teile=None):
+    """Stammbreite geteilt durch Zeichenhoehe des GROESSTEN Textteils - das ist
+    der Wert, an dem sich unsere Schriftwahl orientiert. Gemessen auf 20 % der
+    Zeichenhoehe, also oberhalb von Querbalken."""
+    q = []
+    for f in frames[::max(1, len(frames) // 20)]:
+        m, _ = maske(f)
+        best = None
+        for (x, y, bw, bh, a) in (teile(m) if teile is not None else []):
+            if bh < H * 0.02 or a < 120:
+                continue
+            if best is None or bh > best[3]:
+                best = (x, y, bw, bh)
+        if best is None:
+            continue
+        x, y, bw, bh = best
+        zeile = m[int(y + bh * 0.20), x:x + bw]
+        laeufe, run = [], 0
+        for v in zeile:
+            if v: run += 1
+            elif run: laeufe.append(run); run = 0
+        if run: laeufe.append(run)
+        if laeufe:
+            q.append(float(np.median(laeufe)) / float(bh))
+    return round(float(np.median(q)), 3) if len(q) >= 3 else None
+
+
 STYLE_LEARN_PROMPT = (
     "Du siehst mehrere Frames aus EINEM kurzen Video mit hochwertigen Captions. "
     "Analysiere DETAILLIERT den Caption- und Schnitt-STIL als Vorbild fuer eine "
