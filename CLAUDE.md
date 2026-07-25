@@ -246,7 +246,10 @@ Muster, Tremor statt Weißrauschen. Keine Anim darf mechanisch/synthetisch/
 (hoch 1080x1920, quer 1920x1080). `output.quality: 4k` hebt es auf 2160.
 Es wird **nie hochskaliert** — `H = min(H, src_h)`. 4K kostet im Web-Produkt
 den doppelten Credit-Satz und wird nur berechnet, wenn die Quelle mindestens
-1440p kurze Kante hat (`_will_uhd`). Der gezahlte Betrag steht als `cost_sec`
+1440p kurze Kante hat (`_will_uhd`). **`_will_uhd` muss BEIDE Wege kennen** —
+`quality: 4k` und `height >= 2160` (die UI schickt seit v157 die Hoehe).
+Wird 4K abgelehnt, muss auch die HOEHE zurueckfallen, sonst rechnet die
+Engine gross und der Kunde zahlt den einfachen Satz. Der gezahlte Betrag steht als `cost_sec`
 am Job; Erstattungen gehen ueber `_job_cost(j)`, nie ueber `cost_seconds(dauer)`.
 
 ## Sprache der Ausgaben (v148)

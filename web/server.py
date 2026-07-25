@@ -135,10 +135,15 @@ def _will_uhd(overrides, pfad):
     Doppelte kosten. Der Wunsch allein reicht nicht - eine 1080p-Quelle
     bleibt 1080p, egal was angehakt ist."""
     try:
-        q = str(((overrides or {}).get('output') or {}).get('quality', '')).lower()
+        o = ((overrides or {}).get('output') or {})
+        q = str(o.get('quality', '')).lower()
+        h = int(o.get('height') or 0)
     except Exception:
         return False
-    if q not in ('4k', 'uhd'):
+    # v157: die UI schickt 4K jetzt als HOEHE (eine Stufe neben 720p/1080p),
+    # nicht mehr als eigenes Quality-Feld. Beide Wege muessen zaehlen - sonst
+    # wuerde 4K gerendert, aber nur der einfache Satz berechnet.
+    if q not in ('4k', 'uhd') and h < 2160:
         return False
     return _quelle_kurze_kante(pfad) >= UHD_MIN_KURZE_KANTE
 
@@ -1704,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v156-tendenz'
+DVE_BUILD = 'v157-4k-stufe'
 
 
 @app.middleware('http')
@@ -4942,8 +4947,15 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
     _vh = await _aio.to_thread(_video_hash, src)
     if not _will_uhd(overrides, src) and isinstance(overrides.get('output'), dict):
         # Wunsch war 4K, die Quelle gibt es nicht her: Stufe wieder rausnehmen,
-        # damit der Render gar nicht erst gross rechnet.
+        # damit der Render gar nicht erst gross rechnet. Auch die Hoehe, sonst
+        # rechnete die Engine weiter auf 2160 und der Kunde zahlte den
+        # einfachen Satz fuer die vierfache Rechenzeit.
         overrides['output'].pop('quality', None)
+        try:
+            if int(overrides['output'].get('height') or 0) > 1080:
+                overrides['output']['height'] = 1080
+        except Exception:
+            overrides['output'].pop('height', None)
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': (code or '').strip(),
                  'user_id': uid, 'vhash': _vh, 'mode': mode,
                  'cfg_overrides': overrides, 'status': 'wartet', 'progress': 0.0,
@@ -5155,6 +5167,11 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
     _uhd2 = _will_uhd(overrides, j.get('input') or '')
     if not _uhd2 and isinstance(overrides.get('output'), dict):
         overrides['output'].pop('quality', None)
+        try:
+            if int(overrides['output'].get('height') or 0) > 1080:
+                overrides['output']['height'] = 1080
+        except Exception:
+            overrides['output'].pop('height', None)
     j['uhd'] = bool(_uhd2)
     j['cost_sec'] = cost_seconds(j.get('dauer', 0), uhd=_uhd2)
     if u and mode == 'full':

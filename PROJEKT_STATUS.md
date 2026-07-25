@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v157 4K als dritte Aufloesungsstufe** (Ismets Wunsch: "Mach die 4k neben
+  dem 1080p"). Statt eines eigenen Quality-Feldes steht 4K jetzt in
+  derselben Zeile wie 720p und 1080p, beschriftet mit dem Aufpreis.
+  DABEI EIN LOCH GESCHLOSSEN: die UI schickt damit die HOEHE (2160) statt
+  `quality: 4k`. `_will_uhd` prueft nur auf `quality` - 4K waere gerendert,
+  aber nur der einfache Satz berechnet worden. Beide Wege zaehlen jetzt.
+  Zweitens: wenn die Quelle 4K nicht hergibt, wurde bisher nur `quality`
+  aus den Overrides entfernt. Die HOEHE blieb auf 2160 stehen, die Engine
+  haette weiter gross gerechnet und der Kunde den einfachen Satz gezahlt.
+  Jetzt faellt auch die Hoehe auf 1080 zurueck.
+  Die Abbuchung selbst wurde gegengeprueft: 90 s kosten normal 2 Credits,
+  in 4K 4 Credits.
 - **v156 Gemessene Buendigkeit ist eine Tendenz, keine Schablone.** Ismets
   Einwand auf v155: "Das Video war aber auch nicht so, dass da staendig die
   Captions auf der linken Seite waren." Stimmt. Auch ein Vorbild, dessen

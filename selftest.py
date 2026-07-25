@@ -2645,7 +2645,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v156-tendenz'" in _srv_m)
+          and "DVE_BUILD = 'v157-4k-stufe'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4745,6 +4745,42 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ============ v157: 4K als Aufloesungsstufe, echte Abbuchung ===========
+    # Die UI zeigt 4K jetzt als dritte Stufe NEBEN 720p/1080p, nicht mehr als
+    # eigenes Quality-Feld. Damit schickt der Client die HOEHE - der Server
+    # muss das als 4K-Wunsch erkennen, sonst wuerde 4K gerendert und nur der
+    # einfache Satz berechnet.
+    _uhd157 = os.path.join(tmp, 'st_uhd157.mp4')
+    _hd157 = os.path.join(tmp, 'st_hd157.mp4')
+    for _pth, _sz in ((_uhd157, '2560x1440'), (_hd157, '640x360')):
+        if not os.path.exists(_pth):
+            subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i',
+                            f'testsrc=size={_sz}:rate=10:duration=1',
+                            '-pix_fmt', 'yuv420p', _pth], check=True,
+                           capture_output=True)
+    check('v157: 4K als HOEHE wird als 4K erkannt',
+          SV._will_uhd({'output': {'height': 2160}}, _uhd157) is True
+          and SV._will_uhd({'output': {'height': 1080}}, _uhd157) is False)
+    check('v157: 4K kostet wirklich das Doppelte',
+          SV.credits_of(SV.cost_seconds(90, uhd=True))
+          == 2 * SV.credits_of(SV.cost_seconds(90))
+          and SV.credits_of(SV.cost_seconds(90, uhd=True)) == 4,
+          f'90s: {SV.credits_of(SV.cost_seconds(90))} -> '
+          f'{SV.credits_of(SV.cost_seconds(90, uhd=True))} Credits')
+    check('v157: eine zu kleine Quelle kostet NICHT das Doppelte',
+          SV._will_uhd({'output': {'height': 2160}}, _hd157) is False)
+    # Und dann darf die Engine auch nicht auf 2160 weiterrechnen.
+    _srv157 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v157: abgelehntes 4K wird auch aus der Hoehe zurueckgesetzt',
+          _srv157.count("overrides['output']['height'] = 1080") == 2)
+    _ui157 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v157: 4K steht als dritte Stufe neben 720p und 1080p',
+          '720p:720,1080p:1080,4K &middot; 2&times; credits:2160' in _ui157
+          and 'data-cfg="output.quality"' not in _ui157)
+    check('v157: die Hoehen-Stufe kommt durch die Whitelist',
+          SV._sanitize_overrides({'output': {'height': 2160}})
+          == {'output': {'height': 2160}})
+
     # ============ v155: Buendigkeit ist NICHT die Bildseite =================
     import yaml as _y155
     import render as R
@@ -5268,8 +5304,10 @@ def _scenario_betrieb(tmp):
           and SV._sanitize_overrides({'output': {'quality': '4k'}})
           == {'output': {'quality': '4k'}})
     _ui149 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
-    check('v149: die UI nennt Aufpreis und Upscale-Grenze beim Namen',
-          'data-cfg="output.quality"' in _ui149
+    # v157: 4K steht als HOEHEN-Stufe in derselben Zeile wie 720p/1080p
+    # (Ismets Wunsch), nicht mehr als eigenes Quality-Feld.
+    check('v149/v157: die UI nennt Aufpreis und Upscale-Grenze beim Namen',
+          'data-cfg="output.height"' in _ui149
           and '2&times; credits' in _ui149
           and 'we never upscale' in _ui149
           and 'at least 1440p' in _ui149)
@@ -5914,8 +5952,12 @@ def _scenario_v98(tmp):
     _idx = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     check('Frontend: #analyzeStatus existiert im DOM (Fix-transcript-Crash)',
           'id="analyzeStatus"' in _idx and "$('#btnAnalyze')" not in _idx)
-    check('Frontend: keine 4K-Kachel mehr (Server cappt 1080p)',
-          '2160' not in _idx)
+    # v157: 4K ist zurueck - als dritte Stufe neben 720p/1080p, mit
+    # verdoppeltem Credit-Satz und nur ab 1440p Quelle. Die alte Aussage
+    # "Server cappt auf 1080p" gilt seit v149 nicht mehr.
+    check('v157: 4K ist eine ehrliche Stufe (Aufpreis + Quellen-Grenze genannt)',
+          '4K &middot; 2&times; credits:2160' in _idx
+          and 'we never upscale' in _idx and 'at least 1440p' in _idx)
     check('Frontend: Billing-Historie eigene Funktion + SRT-Buttons',
           'renderBillingHistory' in _idx and '/api/subtitles/' in _idx
           and 'wmUpsell' in _idx)
