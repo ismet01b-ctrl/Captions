@@ -5179,6 +5179,55 @@ def _scenario_betrieb(tmp):
           '_blick_targets(blick_cands' in open(os.path.join(HERE, 'render.py'),
                                                encoding='utf-8').read())
 
+    # ======= v168: die Seite ist eine Entscheidung, kein Wuerfelwurf ======
+    # Ismets Befund, dritter Anlauf: "die captions sind immer auf der linken
+    # seite, egal was passiert". Am eigenen Render nachgemessen, ZWEI
+    # Ursachen: (1) der Seiten-Wurf pro Chunk (~40-45 % rechts, erster Chunk
+    # IMMER links, lange Links-Ketten normal), (2) der 0.55-Tiebreaker
+    # verlor gegen die 1.6-Unruhe-Karte - die ruhigste Stelle im Bild
+    # (Ismets Betonwand links) gewann jedes Mal.
+    _cfg168 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _W168, _H168 = 1920, 1080
+    _S168 = R.Sprites(_cfg168, _W168, _H168)
+    _w168 = [{'word': _w, 'start': 0.8 + _i * 0.42, 'end': 1.1 + _i * 0.42}
+             for _i, _w in enumerate(['ja', 'gut', 'so', 'ist', 'es', 'ok',
+                                      'nun', 'na', 'da', 'wo', 'wie', 'was',
+                                      'er', 'sie', 'wir', 'ihr', 'du', 'ich',
+                                      'mal', 'oft', 'nie', 'hier', 'dort',
+                                      'auch'])]
+    # Unruhe-Karte wie in Ismets Video: links spiegelglatt, rechts unruhig.
+    # Vorher zog GENAU DAS jeden Block nach links.
+    _karte168 = np.zeros((16, 12), np.float32)
+    _karte168[:, 6:] = 0.85
+
+    def _seiten168():
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            pl = R.build_plans(_w168, set(), _cfg168, _S168, _W168, _H168,
+                               lambda s_, e_: True, {},
+                               face_pos=lambda s_, e_: (_W168 * 0.5,
+                                                        _H168 * 0.40,
+                                                        _W168 * 0.055),
+                               space_at=lambda t_: _karte168)
+        return [sum(i['cx'] for i in q['front']) / len(q['front']) / _W168
+                for q in pl if q.get('front')]
+
+    _sx168 = _seiten168()
+    check('v168: es gibt genug Bloecke fuer eine Seiten-Messung',
+          len(_sx168) >= 4, f"{len(_sx168)} Bloecke")
+    check('v168: BEIDE Seiten kommen vor, trotz ruhiger linker Bildhaelfte',
+          any(_x < 0.47 for _x in _sx168) and any(_x > 0.53 for _x in _sx168),
+          f"x = {[round(_x, 3) for _x in _sx168]}")
+    _folge = ['L' if _x < 0.5 else 'R' for _x in _sx168]
+    _run = _mx = 1
+    for _i in range(1, len(_folge)):
+        _run = _run + 1 if _folge[_i] == _folge[_i - 1] else 1
+        _mx = max(_mx, _run)
+    check('v168: keine lange Einseiten-Kette mehr',
+          _mx <= 3, f"Folge {''.join(_folge)}")
+    check('v168: der Wechsel ist deterministisch (Re-Render = gleiches Bild)',
+          _sx168 == _seiten168())
+
     # ======= v167: eine gehaltene Geste ist EINE Ansage ===================
     # Ismets Befund (am Bild belegt): der Sprecher haelt den Arm ueber viele
     # Momente in dieselbe Richtung -> jeder Moment bekam dasselbe Ziel, alle
@@ -5386,9 +5435,13 @@ def _scenario_betrieb(tmp):
                                       encoding='utf-8').read())
     # Der Tiebreaker prueft die MOTIV-Kosten, nicht die Gesamtkosten. Mit den
     # Gesamtkosten war er nie erfuellt, sobald eine Raum-Karte existiert.
+    # v168: _motiv traegt jetzt die ECHTEN Gesichts-/Atemluft-Kosten (fuer
+    # die Seiten-Entscheidung), nicht mehr nur einen Zaehler. Die Invariante
+    # dahinter bleibt dieselbe: die Unruhe-Karte darf NIE hinein.
     check('v155: der Seiten-Tiebreaker prueft nur das Motiv',
           'if wunsch_x is not None and _motiv <= 0.0:' in _r155
-          and '_motiv += 1.0' in _r155
+          and '_motiv += 2.5 + 8.0' in _r155
+          and '_motiv += 1.2 *' in _r155
           and '_motiv = k' not in _r155)
     _ui155 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     check('v155: der UI-Regler steuert die Bildseite, nicht die Buendigkeit',
@@ -5525,7 +5578,7 @@ def _scenario_betrieb(tmp):
     # Zwischensumme (inkl. Unruhe-Karte) war die Bedingung nie erfuellt.
     check('v153/v155: das Motiv schlaegt die Wunschseite (Rangfolge)',
           'if wunsch_x is not None and _motiv <= 0.0:' in _r153
-          and '_motiv += 1.0' in _r153 and '_motiv = k' not in _r153)
+          and '_motiv = k' not in _r153)
     check('v153: ein Seitenwechsel durchbricht die Hysterese',
           "spot_state.get('seite') != _seite" in _r153)
     # Schrift eine Stufe kleiner (Ismets Befund am fertigen Video).

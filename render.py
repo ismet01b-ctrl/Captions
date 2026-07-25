@@ -7561,8 +7561,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         gy, gx = (karte.shape if karte is not None else (0, 0))
 
         def kosten(x, y):
+            """Rueckgabe (gesamt, motiv). motiv = nur Gesicht + Atemluft -
+            der Anteil, der eine Seiten-Entscheidung stoppen darf."""
             k = 0.0
-            _motiv = 0.0                      # nur Gesicht/Unruhe, ohne Wuensche
+            _motiv = 0.0                      # nur Gesicht/Atemluft, ohne Wuensche
             for (a, b, c, d) in kaesten:      # Ueberlappung mit einem Gesicht
                 ux = max(0.0, min(x + bw, c) - max(x, a))
                 uy = max(0.0, min(y + bh, d) - max(y, b))
@@ -7573,7 +7575,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     # der Block blieb dadurch am Gesicht kleben, statt
                     # auszuweichen.
                     k += 2.5 + 8.0 * (ux * uy) / max(bw * bh, 1.0)
-                    _motiv += 1.0
+                    _motiv += 2.5 + 8.0 * (ux * uy) / max(bw * bh, 1.0)
                 elif uy > 0:
                     # v143b: ATEMLUFT. Nicht-Ueberlappen reicht nicht - ein
                     # Cutter laesst Abstand. Ohne diesen Term blieb ein klein
@@ -7584,7 +7586,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     _soll = W * 0.06
                     if _luft < _soll:
                         k += 1.2 * (1.0 - _luft / _soll)
-                        _motiv += 1.0
+                        _motiv += 1.2 * (1.0 - _luft / _soll)
             if karte is not None and gy and gx:
                 i0 = int(max(0, min(gy - 1, y / H * gy)))
                 i1 = int(max(i0 + 1, min(gy, (y + bh) / H * gy)))
@@ -7616,7 +7618,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # Liegt eine gemessene Zeige-Geste vor, wuerden sie nur gegen
                 # sie ziehen - der Rest der Kosten (Gesicht, Atemluft, Unruhe)
                 # bleibt in Kraft.
-                return k
+                return k, _motiv
             if wunsch_y is not None:          # Template-Wunschzone, weich
                 k += 1.1 * abs((y + bh / 2.0) - wunsch_y) / max(H, 1)
             # Wunsch-SEITE, nur als TIEBREAKER. Sie darf ausschliesslich
@@ -7633,26 +7635,70 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 k += 0.55 * abs((x + bw / 2.0) - wunsch_x) / max(W, 1)
             else:
                 k += 0.35 * abs((x + bw / 2.0) - W / 2.0) / max(W, 1)
-            return k
+            return k, _motiv
 
         schritte_x = 9 if not portrait else 7
         kx = [x_lo + (x_hi - x_lo) * i / (schritte_x - 1.0)
               for i in range(schritte_x)] if x_hi > x_lo else [x_lo]
         ky = [y_lo + (y_hi - y_lo) * i / 8.0 for i in range(9)] \
             if y_hi > y_lo else [y_lo]
-        best, best_k = (kx[0], ky[0]), 1e9
+        best, best_k, best_m = (kx[0], ky[0]), 1e9, 1e9
         for x in kx:
             for y in ky:
-                k = kosten(x, y)
+                k, m = kosten(x, y)
                 if k < best_k:
-                    best, best_k = (x, y), k
+                    best, best_k, best_m = (x, y), k, m
+        # v168: die SEITE ist eine Regie-Entscheidung, kein Kostengewicht.
+        # Als Tiebreaker (0.55) verlor sie gegen die Unruhe-Karte (1.6):
+        # steht der Sprecher rechts der Mitte und ist die Wand links ruhig,
+        # ist die ruhigste Stelle IMMER links - jeder Block landete dort,
+        # egal welche Seite die Regie wollte (am eigenen Render gemessen:
+        # wx=0.7 W, Ergebnis 0.098 W; Ismets Befund "immer links").
+        # Ein einzelner Toleranzwert kann das nicht trennen: Unruhe (bis
+        # ~1.4) darf die Regie NICHT stoppen, Atemluft/Gesicht (ab ~1.1)
+        # SCHON - die Bereiche ueberlappen. Deshalb entscheidet der
+        # MOTIV-Anteil allein: die Wunschseite gilt, wenn ihre beste Stelle
+        # genauso gesichtsfrei ist wie die beste Stelle insgesamt. Die
+        # Unruhe-Karte waehlt nur noch die Position INNERHALB der Seite.
+        # Steht die Person auf der Wunschseite, ist deren Motiv-Anteil
+        # hoeher und die Seite faellt zurueck - das Ausweichen (v143)
+        # bleibt unangetastet.
+        if wunsch_x is not None and ziel is None and sprecher is None:
+            kx_s = [x for x in kx
+                    if abs((x + bw / 2.0) - wunsch_x) <= W * 0.22]
+            # Die Seiten-Suche bleibt in der WUNSCHZONE (Hoehe). Ohne diese
+            # Grenze wich sie auf eine Zeile UEBER dem Kopf aus - motivfrei,
+            # aber ein Lower-Third-Block stand ploetzlich am oberen Rand,
+            # nur um die Seite zu behaupten (gemessen: sm=0.00 direkt neben
+            # einem Gesicht, weil y einfach darueber lag).
+            ky_s = ([y for y in ky
+                     if abs((y + bh / 2.0) - wunsch_y) <= H * 0.18]
+                    if wunsch_y is not None else list(ky)) or list(ky)
+            if kx_s:
+                # Rangfolge innerhalb der Seite: (1) Motiv-Freiheit,
+                # (2) Naehe zur Wunschmitte in 4 %-Schritten, (3) Kosten
+                # (Wunschzone, Unruhe). Sonst schiebt die Unruhe-Karte den
+                # Block wieder an die ruhige Fensterkante zur Bildmitte und
+                # die "rechte" Seite sitzt bei 0.505 W - sah aus wie mittig.
+                best_s, best_sk, best_sm, best_sd = None, 1e9, 1e9, 1e9
+                for x in kx_s:
+                    for y in ky_s:
+                        k, m = kosten(x, y)
+                        d = round(abs((x + bw / 2.0) - wunsch_x)
+                                  / max(W * 0.04, 1.0))
+                        if (round(m, 2), d, k) \
+                                < (round(best_sm, 2), best_sd, best_sk):
+                            best_s, best_sk = (x, y), k
+                            best_sm, best_sd = m, d
+                if best_s is not None and best_sm <= best_m + 0.05:
+                    best, best_k = best_s, best_sk
 
         # Hysterese: alte Stelle behalten, solange sie nicht klar schlechter ist.
         alt = spot_state['xy']
         if alt is not None and not kalt:
             ax = min(max(alt[0], x_lo), x_hi)
             ay = min(max(alt[1], y_lo), y_hi)
-            if kosten(ax, ay) <= best_k + 0.16:
+            if kosten(ax, ay)[0] <= best_k + 0.16:
                 best = (ax, ay)
         gr = max(VZ_GRID, 1.0)
         best = (round(best[0] / gr) * gr, round(best[1] / gr) * gr)
@@ -8433,7 +8479,26 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             elif _sw in ('mitte', 'center', 'centre'):
                 _seite = 'mitte'
             else:
-                _seite = 'rechts' if _mix01(g[0] * 11) >= 0.55 else 'links'
+                # v168 ECHTER WECHSEL statt Wuerfeln (Ismets Befund, dritter
+                # Anlauf: "die captions sind immer auf der linken seite,
+                # egal was passiert"). Der alte Wurf _mix01(g0*11) >= 0.55
+                # war pro Chunk unabhaengig: nur ~40-45 % rechts, der erste
+                # Chunk IMMER links (_mix01(0) = 0.0), und auf typischen
+                # Chunk-Ketten gemessen 3 von 12 rechts - lange Links-Ketten
+                # waren der Normalfall, keine Ausnahme. Ein Wuerfel pro
+                # Block garantiert keine Abwechslung.
+                # Jetzt traegt spot_state die Seite: jeder neue Block
+                # WECHSELT, rund jeder vierte bleibt deterministisch stehen
+                # (Naturlichkeit, kein Pingpong-Metronom). Startseite haengt
+                # am Video-Seed, nicht fest an links. Re-Render ergibt
+                # dasselbe Bild.
+                _lauf = spot_state.get('seite_lauf')
+                if _lauf is None:
+                    _lauf = 'rechts' if _mix01(_seed ^ 0x9E37) >= 0.5 else 'links'
+                elif _mix01(g[0] * 11 + 7) >= 0.28:
+                    _lauf = 'links' if _lauf == 'rechts' else 'rechts'
+                spot_state['seite_lauf'] = _lauf
+                _seite = _lauf
             # Die gemessene Buendigkeit gilt fuer den SATZ, nicht fuer die
             # Bildseite. 'mitte' ist die einzige, die beides festlegt - ein
             # zentrierter Satz an der Bildkante saehe nach Fehler aus.
@@ -8591,6 +8656,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                             wunsch_x=_wx,
                             ziel=(_zl[:2] if _zl is not None else None),
                             sprecher=(_spx if _zl is None else None))
+            if os.environ.get('DVE_DBG_SPOT'):
+                print('DBGSPOT t=%.2f g0=%s seite=%s wx=%s kalt=%s bl=%.3f br=%.3f -> sx=%.3f'
+                      % (start, g[0] if g else -1, _seite, _wx, _kalt,
+                         _bl / W, _br / W, _sx / W))
             _dx = _sx - _bl
             for it in items:
                 it['cx'] += _dx

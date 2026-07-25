@@ -3,6 +3,49 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v168 Die Seite ist eine Entscheidung, kein Wuerfelwurf.** Ismets Befund,
+  dritter Anlauf: "die captions sind immer auf der linken seite, egal was
+  passiert" - und die Anweisung, bei Unsicherheit zu FRAGEN statt zu raten.
+  Diesmal am eigenen Render nachgemessen (Selftest-Clip, Querformat,
+  DBG-Instrumentierung in spot()). DREI Ursachen, alle belegt:
+  1. DER SEITEN-WURF. `_mix01(g0*11) >= 0.55` wuerfelte pro Chunk
+     unabhaengig: nur ~40-45 % rechts, der erste Chunk IMMER links
+     (_mix01(0) = 0.0), auf typischen Chunk-Ketten gemessen 3 von 12
+     rechts. Lange Links-Ketten waren der Normalfall. Jetzt traegt
+     spot_state die Seite: jeder Block WECHSELT, rund jeder vierte bleibt
+     deterministisch stehen, die Startseite haengt am Video-Seed.
+     Re-Render ergibt dasselbe Bild.
+  2. DER TIEBREAKER VERLOR GEGEN DIE UNRUHE-KARTE. Wunschseite 0.55,
+     Unruhe 1.6: steht der Sprecher rechts der Mitte und ist die Wand links
+     ruhig (exakt Ismets Testbild: Betonwand links, Fenster rechts), ist
+     die ruhigste Stelle IMMER links - gemessen wx=0.7 W, Ergebnis
+     0.098 W. Ein einzelner Toleranzwert kann das nicht trennen: Unruhe
+     (bis ~1.4) darf die Regie nicht stoppen, Atemluft/Gesicht (ab ~1.1)
+     schon - die Bereiche ueberlappen. Deshalb entscheidet jetzt der
+     MOTIV-Anteil (nur Gesicht + Atemluft) allein: die Wunschseite gilt,
+     wenn ihre beste Stelle genauso gesichtsfrei ist wie die beste Stelle
+     insgesamt. Die Unruhe-Karte waehlt nur noch die Position INNERHALB
+     der Seite. Das Ausweichen vor der Person (v143) bleibt dadurch
+     unangetastet - steht sie auf der Wunschseite, faellt die Seite zurueck.
+  3. ZWEI FALLEN BEIM UMBAU, beide vom Selftest gefangen: (a) die
+     Seiten-Suche wich auf eine Zeile UEBER dem Kopf aus (motivfrei, aber
+     ein Lower-Third-Block stand am oberen Rand, nur um die Seite zu
+     behaupten) -> die Suche bleibt jetzt in der Wunschzonen-Hoehe
+     (+-0.18 H). (b) Innerhalb der Seite zog die Unruhe den Block an die
+     Fensterkante zur Bildmitte ("rechts" sass bei 0.505 W, sah aus wie
+     mittig) -> Rangfolge Motiv, dann Naehe zur Wunschmitte, dann Kosten.
+  BEWEIS am echten Render (Selftest-Clip, 960x540): vorher Tinten-
+  Schwerpunkte 0.51/0.50/0.50/0.29/0.27/0.27 (zweite Haelfte klebt links),
+  nachher 0.52/0.50/0.49/0.68/0.72/0.71 (wechselt). Frame-Streifen an
+  Ismet geliefert. Neuer Selftest: beide Seiten kommen vor trotz ruhiger
+  linker Bildhaelfte, keine Einseiten-Kette ueber 3, deterministisch,
+  v143-Ausweichen unveraendert gruen.
+  TESTKORREKTUR: die v155/v153-Quelltext-Checks pinnten `_motiv += 1.0`
+  woertlich; _motiv traegt jetzt die echten Gesichts-/Atemluft-Kosten.
+  Die Invariante dahinter (Unruhe nie im Motiv) prueft der Test weiter.
+  EINSCHRAENKUNG: verifiziert am Selftest-Clip; Ismets Testclip aus dem
+  Screenshot lag hier nicht vor. Die Ketten-Statistik haengt von den
+  echten Chunk-Indizes ab.
 - **v167 Eine gehaltene Geste ist EINE Ansage.** Ismets Befund nach v166:
   "immernoch" links, mit Screenshot. Der Screenshot zeigt die Ursache: der
   Sprecher haelt den Arm ueber viele Momente in dieselbe Richtung, und die

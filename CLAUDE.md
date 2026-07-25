@@ -224,6 +224,21 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Seite als Entscheidung (v168) — NACH v153 lesen
+"Immer links, egal was" hatte drei gemessene Ursachen: (1) der Seiten-Wurf
+pro Chunk (~40-45 % rechts, erster Chunk immer links, lange Ketten normal) →
+jetzt **echter Wechsel mit Zustand** (`spot_state['seite_lauf']`, jeder
+vierte bleibt, Start am Video-Seed); (2) der 0.55-Tiebreaker verlor gegen
+die 1.6-Unruhe-Karte — die ruhigste Bildhälfte gewann IMMER → jetzt
+entscheidet der **Motiv-Anteil allein** (nur Gesicht + Atemluft): die
+Wunschseite gilt, wenn sie genauso gesichtsfrei ist wie die beste Stelle;
+Unruhe wählt nur noch die Position INNERHALB der Seite; (3) die
+Seiten-Suche muss in der **Wunschzonen-Höhe** bleiben (±0.18 H) und
+innerhalb der Seite gilt Motiv → Nähe zur Wunschmitte → Kosten. Sonst
+erkauft sie sich die Seite mit einer falschen Höhe oder klebt an der
+Fensterkante zur Mitte. Das v143-Ausweichen bleibt unberührt: steht die
+Person auf der Wunschseite, fällt die Seite zurück.
+
 ### Seite + Streuung (v153)
 `_mix01` ist der **32-Bit-Finalizer**, nicht eine einzelne Multiplikation mit
 `& 1023` — die lief fuer kleine Vielfache als lineare Rampe, jeder
@@ -382,7 +397,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1034/1034 grün (Stand v167)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1038/1038 grün (Stand v168)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
