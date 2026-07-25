@@ -96,6 +96,11 @@ effects:
   # kleben, auch wenn die Kamera schwenkt. GPT-5-Vision sagt EINMAL, WAS
   # gemeint ist; wohin es wandert, misst Optical Flow jeden Frame.
   caption_objekt: true
+  # v162 ZWEI-SPRECHER-REGIE: sind mehrere Personen im Bild, springt die
+  # Caption auf die Seite dessen, der gerade redet. Zuordnung ueber die
+  # Mundbewegung im Face-Track (die Kamera nutzt sie schon seit v96).
+  # Bei EINER Person wirkungslos - dort ist "der Sprecher" keine Information.
+  caption_sprecher: true
   # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
   # power-3-Moment. 0 = aus.
   punch_silence: 0.34

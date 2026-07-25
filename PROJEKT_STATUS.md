@@ -3,6 +3,44 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v162 ZWEI-SPRECHER-REGIE: der Text folgt dem, der gerade redet.** Sind
+  mehrere Personen im Bild, springt die Caption auf die Seite des aktiven
+  Sprechers. In einem Interview sah man dem Bild bisher nie an, wem der Satz
+  gehoert.
+  Das Zuordnungs-Signal lag seit v96 fertig da: `track_faces` waehlt ueber
+  die MUNDBEWEGUNG das aktive Gesicht (`_active_index`), und `face_pos`
+  liefert genau dessen Position. Genutzt hat das bisher nur die KAMERA - die
+  Captions sassen unabhaengig davon in der breitesten Luecke.
+  DER ENTSCHEIDENDE PUNKT: die Sprecher-Naehe ist KEIN Tiebreaker. Die
+  vorhandene Wunschseite (`wunsch_x`) wirkt nur an Stellen ohne
+  Motiv-Beruehrung - neben zwei Personen ist praktisch JEDE Stelle beruehrt,
+  der Sprecherwechsel waere folgenlos geblieben. Das ist derselbe Fehler wie
+  in v153, nur an anderer Stelle. Die Sprecher-Naehe ist deshalb ein eigener
+  Kosten-Term mit Gewicht 1.3, der immer wirkt. Er liegt unter der
+  Gesichtssperre (ab 2.5): der Text landet NEBEN dem Sprecher, nie auf ihm.
+  ZWEITE STELLE: `_free_x_multi` (Keyword-Sprites im Querformat) waehlte die
+  BREITESTE passende Luecke. Bei zwei Personen ist die fast immer dieselbe,
+  egal wer redet. Jetzt gewinnt die NAECHSTE Luecke am Sprecher, und der
+  Mittelpunkt wird darin zu ihm hin gezogen. Passt nirgends etwas hinein,
+  bleibt die alte Regel - eine zu enge Luecke neben dem Sprecher wuerde ihn
+  anschneiden.
+  EINRASTEN STATT MITTELN: `face_pos` ist ueber 41 Frames geglaettet und
+  liegt beim Sprecherwechsel eine Weile ZWISCHEN beiden Personen. Ohne das
+  Einrasten auf das naechstgelegene ERKANNTE Gesicht landet der Text genau
+  in der Mitte, wo niemand sitzt. Dazu eine Hysterese: gewechselt wird erst,
+  wenn das andere Gesicht deutlich naeher ist, sonst flackert der Text bei
+  jedem Erkennungs-Zittern hin und her. Ein echter Sprecherwechsel BRICHT
+  die Hysterese der Platzierung (wie ein Seitenwechsel: das ist Regie, kein
+  Zittern).
+  BEI EINER PERSON passiert nichts. Dort ist "der Sprecher" keine
+  Information, und die vorhandene Ausweich-Logik ist die bessere Wahl.
+  BEWEIS (Selftest, 1920x1080, Personen bei 0.24 W und 0.74 W): redet die
+  linke Person -> Blockmitten 0.255 / 0.247 W. Redet die rechte -> 0.747 /
+  0.753 W. Abgeschaltet: identische Positionen fuer beide Sprecher.
+  Abschaltbar ueber `effects.caption_sprecher`.
+  NUR AUF SYNTHETIK GEPRUEFT: die Sprecher-Zuordnung selbst (Mundbewegung im
+  echten Gespraech, schnelle Wechsel, Zwischenrufe) ist hier mit gesetzten
+  Positionen getestet, nicht an echtem Interview-Material.
 - **v161 OBJEKT-ANKER: die Caption dockt am Gegenstand an.** Sagt jemand
   "dieses Glas hier", setzt sich der Text NEBEN das Glas und bleibt daran
   kleben, auch wenn die Kamera schwenkt.

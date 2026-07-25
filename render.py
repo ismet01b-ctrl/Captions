@@ -1685,13 +1685,20 @@ def _active_index(faces, tids, track_motion):
     return int(max(range(len(faces)), key=lambda j: faces[j][2]))   # sonst groesstes
 
 
-def _free_x_multi(faces, W, sprite_w, toggle):
+def _free_x_multi(faces, W, sprite_w, toggle, ziel_x=None):
     """v96: Text-Mittelpunkt im Querformat, der KEIN Gesicht ueberdeckt - auch
     wenn mehrere Personen im Bild sind. Sucht die breiteste freie Luecke (links
     der linkesten Person, zwischen zwei Personen, rechts der rechtesten) und legt
     den Text dorthin, sofern der Sprite hineinpasst. Findet sich keine Luecke,
     kommt der Text auf die Seite mit dem meisten Rand. Rein & testbar.
-    faces = Liste (cx, w) in Bild-Pixeln. Rueckgabe: (side -1/1, cx)."""
+    faces = Liste (cx, w) in Bild-Pixeln. Rueckgabe: (side -1/1, cx).
+
+    v162: ziel_x = x-Position des AKTIVEN Sprechers. Ist sie gesetzt, gewinnt
+    nicht mehr die BREITESTE passende Luecke, sondern die NAECHSTE an ihm.
+    Bei zwei Personen ist die breiteste Luecke fast immer dieselbe, egal wer
+    gerade redet - der Text blieb dadurch stur auf einer Seite kleben. Ist
+    keine Luecke breit genug, bleibt die alte Regel (breiteste), denn eine
+    zu enge Luecke neben dem Sprecher schneidet ihn an."""
     m = W * 0.045
     half = sprite_w / 2.0
     if not faces:
@@ -1713,7 +1720,13 @@ def _free_x_multi(faces, W, sprite_w, toggle):
         gaps.append((cursor, W - m))
     # Luecken, in die der Text passt - die breiteste gewinnt
     fit = [(a, b) for a, b in gaps if (b - a) >= sprite_w]
-    if fit:
+    if fit and ziel_x is not None:
+        # Naechste passende Luecke am Sprecher. Der Mittelpunkt wird in die
+        # Luecke hinein zum Sprecher gezogen, damit der Text auch WIRKLICH
+        # neben ihm sitzt und nicht in der Luecken-Mitte weit weg.
+        a, b = min(fit, key=lambda g: abs((g[0] + g[1]) / 2.0 - ziel_x))
+        cx = min(max(float(ziel_x), a + half), b - half)
+    elif fit:
         a, b = max(fit, key=lambda g: g[1] - g[0])
         cx = (a + b) / 2.0
     elif gaps:
@@ -7163,6 +7176,44 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     breathing = cfg['effects'].get('breathing', True)
     left_x, right_x = int(W * 0.224), int(W * 0.766)
 
+    # v162 ZWEI-SPRECHER-REGIE
+    # face_pos liefert bereits die Position des AKTIVEN Sprechers (track_faces
+    # waehlt sie ueber die Mundbewegung, _active_index). Genutzt hat das
+    # bisher nur die Kamera - die Captions sassen unabhaengig davon in der
+    # breitesten Luecke. In einem Interview sah man dem Bild damit nie an,
+    # wem der Satz gehoert.
+    _spr_state = {}
+
+    def sprecher_at(start, end):
+        """x-Position des gerade sprechenden Gesichts, oder None.
+
+        Nur bei MEHREREN Personen im Bild: bei einer Person ist "der
+        Sprecher" keine Information, und die vorhandene Ausweich-Logik ist
+        die bessere Wahl."""
+        if not cfg['effects'].get('caption_sprecher', True):
+            return None
+        if face_pos is None or faces_at is None:
+            return None
+        fs = faces_at(start, end)
+        if len(fs) < 2:
+            _spr_state.pop('x', None)
+            return None
+        roh = float(face_pos(start, end)[0])
+        # Auf das naechstgelegene ERKANNTE Gesicht einrasten. face_pos ist
+        # ueber 41 Frames geglaettet und liegt beim Sprecherwechsel eine
+        # Weile ZWISCHEN beiden Personen - ohne das Einrasten landet der
+        # Text dort, also genau in der Mitte, wo niemand sitzt.
+        ziel = min(fs, key=lambda f: abs(f[0] - roh))[0]
+        alt = _spr_state.get('x')
+        # Hysterese: erst wechseln, wenn das neue Gesicht deutlich naeher
+        # dran ist. Sonst flackert der Text bei jedem Erkennungs-Zittern
+        # zwischen zwei Personen hin und her.
+        if alt is not None and abs(ziel - alt) > W * 0.02:
+            if abs(roh - alt) <= abs(roh - ziel) + W * 0.04:
+                ziel = alt
+        _spr_state['x'] = float(ziel)
+        return float(ziel)
+
     def pick_side(start, end, toggle):
         """Waehlt die freie Seite neben der Person und die Text-Position dort.
         Rueckgabe: (side -1/1, cx) - side -1 = links, 1 = rechts. Hochformat: zentriert."""
@@ -7174,17 +7225,27 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         if _zl is not None:
             _zx = min(max(float(_zl[0]), W * 0.15), W * 0.85)
             return (-1 if _zx < W / 2 else 1), _zx
+        # v162 ZWEI-SPRECHER-REGIE. Sind mehrere Personen im Bild, springt
+        # der Text auf die Seite dessen, der GERADE REDET. Auch im
+        # Hochformat - dort stand er bisher immer mittig, und in einem
+        # Interview sah man dem Bild nie an, wem der Satz gehoert.
+        _sp = sprecher_at(start, end)
+        if _sp is not None and portrait:
+            return (-1 if _sp < W / 2 else 1), _sp
         if portrait:
             return 0, W / 2
         if face_pos is None:
             cx = left_x if toggle % 2 == 0 else right_x
             return (-1 if cx < W / 2 else 1), cx
-        # v96: Sind MEHRERE Gesichter im Bild, den Text in die breiteste Luecke
+        # v96: Sind MEHRERE Gesichter im Bild, den Text in die freie Luecke
         # legen, die KEINES der Gesichter ueberdeckt (Multi-Face-Safe-Zone).
+        # v162: bei bekanntem Sprecher die Luecke NEBEN IHM statt der
+        # breitesten - die breiteste ist bei zwei Personen fast immer
+        # dieselbe, egal wer redet.
         if faces_at is not None:
             _fs = faces_at(start, end)
             if len(_fs) >= 2:
-                return _free_x_multi(_fs, W, W * 0.42, toggle)
+                return _free_x_multi(_fs, W, W * 0.42, toggle, ziel_x=_sp)
         fx_x, _, fw = face_pos(start, end)
         person_half = max(fw * 2.1, W * 0.10)
         if abs(fx_x - W / 2) < W * 0.09:
@@ -7357,7 +7418,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         return breit
 
     def spot(start, end, bw, bh, wunsch_y=None, kalt=False, wunsch_x=None,
-             ziel=None):
+             ziel=None, sprecher=None):
         """Freie Stelle fuer einen Textblock (bw x bh). Rueckgabe (x0, y0)."""
         rand_x = W * 0.05 + 8                 # 5 % Title-Safe (SMPTE/EBU)
         oben = (_pz['top'] if _pz is not None else H * 0.05)
@@ -7448,6 +7509,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if ziel is not None:
                 k += 2.2 * (abs((x + bw / 2.0) - ziel[0]) / max(W, 1)
                             + abs((y + bh / 2.0) - ziel[1]) / max(H, 1))
+            # v162 SPRECHER-NAEHE. Bewusst KEIN Tiebreaker: die Wunschseite
+            # (wunsch_x) wirkt nur an Stellen ohne Motiv-Beruehrung, und
+            # neben zwei Personen ist praktisch jede Stelle beruehrt - der
+            # Sprecherwechsel waere damit folgenlos geblieben (derselbe
+            # Fehler wie in v153). Das Gewicht liegt unter der
+            # Gesichtssperre (ab 2.5), der Text landet also NEBEN dem
+            # Sprecher, nie auf ihm.
+            if sprecher is not None:
+                k += 1.3 * abs((x + bw / 2.0) - sprecher) / max(W, 1)
             if ziel is not None:
                 # Wunschzone und Wunschseite sind Vorgaben fuer den Normalfall.
                 # Liegt eine gemessene Zeige-Geste vor, wuerden sie nur gegen
@@ -8411,14 +8481,23 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # Zittern. Ohne 'kalt' haette die Hysterese den Block an der alten
             # Stelle festgehalten und die Geste waere folgenlos geblieben.
             _zl = ziel_at(start, end)
+            # v162: bei mehreren Personen zieht die Wunschseite zum aktiven
+            # Sprecher statt zur deterministischen Wechsel-Seite. Ein
+            # SPRECHERWECHSEL muss die Hysterese brechen - genau wie ein
+            # Seitenwechsel, aus demselben Grund: er ist Regie, kein Zittern.
+            _spx = sprecher_at(start, end)
             _kalt = (_shot_neu(start) or (spot_state.get('seite') != _seite)
-                     or (_zl is not None) != bool(spot_state.get('zeig')))
+                     or (_zl is not None) != bool(spot_state.get('zeig'))
+                     or (_spx is not None
+                         and abs(_spx - (spot_state.get('spr') or _spx)) > W * 0.02))
             spot_state['seite'] = _seite
             spot_state['zeig'] = _zl is not None
+            spot_state['spr'] = _spx
             _sx, _sy = spot(start, end, _br - _bl, tot_h,
                             wunsch_y=_wunsch, kalt=_kalt,
                             wunsch_x=_wx,
-                            ziel=(_zl[:2] if _zl is not None else None))
+                            ziel=(_zl[:2] if _zl is not None else None),
+                            sprecher=(_spx if _zl is None else None))
             _dx = _sx - _bl
             for it in items:
                 it['cx'] += _dx

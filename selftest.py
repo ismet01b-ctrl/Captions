@@ -5109,6 +5109,106 @@ def _scenario_betrieb(tmp):
     check('v161: auf B-Roll gibt es keinen Objekt-Anker',
           "and not broll:" in _rsrc161 and "p['_ank0'] = (" in _rsrc161)
 
+    # ======= v162: ZWEI-SPRECHER-REGIE - der Text folgt dem Redner ========
+    _cfg162 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    check('v162: die Zwei-Sprecher-Regie ist abschaltbar',
+          _cfg162['effects'].get('caption_sprecher') is True)
+
+    # (1) LUECKENWAHL. Bei zwei Personen ist die BREITESTE Luecke fast immer
+    # dieselbe, egal wer redet - genau daran klebte der Text vorher fest.
+    _W162 = 1920.0
+    _paar = [(_W162 * 0.22, _W162 * 0.055), (_W162 * 0.72, _W162 * 0.055)]
+    _breit = R._free_x_multi(_paar, _W162, _W162 * 0.20, 0)[1]
+    _bei_l = R._free_x_multi(_paar, _W162, _W162 * 0.20, 0,
+                             ziel_x=_W162 * 0.22)[1]
+    _bei_r = R._free_x_multi(_paar, _W162, _W162 * 0.20, 0,
+                             ziel_x=_W162 * 0.72)[1]
+    check('v162: ohne Sprecher bleibt die alte breiteste-Luecke-Regel',
+          abs(_breit - R._free_x_multi(_paar, _W162, _W162 * 0.20, 1)[1]) < 1.0)
+    check('v162: mit Sprecher links wandert der Text nach links',
+          _bei_l < _breit and _bei_l < _W162 * 0.50,
+          f"links {_bei_l / _W162:.3f} vs. breiteste {_breit / _W162:.3f}")
+    check('v162: mit Sprecher rechts wandert der Text nach rechts',
+          _bei_r > _W162 * 0.50 and _bei_r > _bei_l,
+          f"rechts {_bei_r / _W162:.3f}")
+    check('v162: der Text deckt KEIN Gesicht zu',
+          all(min(abs(_c - _f[0]) for _f in _paar) > _f[1]
+              for _c in (_bei_l, _bei_r) for _f in _paar[:1]),
+          f"links {_bei_l / _W162:.3f} rechts {_bei_r / _W162:.3f}")
+    # Passt nirgends etwas hin, bleibt die alte Regel - eine zu enge Luecke
+    # neben dem Sprecher schneidet ihn an.
+    check('v162: ohne passende Luecke gilt weiter die breiteste',
+          R._free_x_multi(_paar, _W162, _W162 * 0.95, 0,
+                          ziel_x=_W162 * 0.22)[1]
+          == R._free_x_multi(_paar, _W162, _W162 * 0.95, 0)[1])
+
+    # (2) DER TEXT FOLGT DEM SPRECHER durch den ganzen Plan-Bau.
+    _Ws, _Hs = 1920, 1080                       # Querformat = Interview-Fall
+    _Ss = R.Sprites(_cfg162, _Ws, _Hs)
+    _ws162 = [{'word': _w, 'start': 1.0 + _i * 0.45, 'end': 1.35 + _i * 0.45}
+              for _i, _w in enumerate(['ja', 'nun', 'so', 'ist', 'es', 'ok'])]
+    _zwei = [(_Ws * 0.24, _Ws * 0.05), (_Ws * 0.74, _Ws * 0.05)]
+
+    def _mit_sprecher(sx):
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            pl = R.build_plans(_ws162, set(), _cfg162, _Ss, _Ws, _Hs,
+                               lambda s_, e_: True, {},
+                               face_pos=lambda s_, e_: (sx, _Hs * 0.42,
+                                                        _Ws * 0.05),
+                               faces_at=lambda s_, e_: _zwei)
+        return [sum(i['cx'] for i in q['front']) / len(q['front']) / _Ws
+                for q in pl if q.get('front')]
+
+    _links162 = _mit_sprecher(_Ws * 0.24)
+    _rechts162 = _mit_sprecher(_Ws * 0.74)
+    check('v162: die Zwei-Sprecher-Regie liefert Bloecke',
+          len(_links162) >= 2 and len(_links162) == len(_rechts162))
+    check('v162: redet die linke Person, steht der Text links',
+          max(_links162) < 0.50,
+          f"x = {[round(_x, 3) for _x in _links162]}")
+    check('v162: redet die rechte Person, steht der Text rechts',
+          min(_rechts162) > 0.50,
+          f"x = {[round(_x, 3) for _x in _rechts162]}")
+    check('v162: der Sprecherwechsel verschiebt den Text deutlich',
+          min(_rechts162) - max(_links162) > 0.15,
+          f"links {[round(_x, 3) for _x in _links162]} "
+          f"rechts {[round(_x, 3) for _x in _rechts162]}")
+
+    # (3) BEI EINER PERSON aendert sich NICHTS. "Der Sprecher" ist dort keine
+    # Information, und die vorhandene Ausweich-Logik ist die bessere Wahl.
+    def _eine_person(faces):
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            pl = R.build_plans(_ws162, set(), _cfg162, _Ss, _Ws, _Hs,
+                               lambda s_, e_: True, {},
+                               face_pos=lambda s_, e_: (_Ws * 0.30, _Hs * 0.42,
+                                                        _Ws * 0.05),
+                               faces_at=(lambda s_, e_: faces) if faces
+                               else None)
+        return [sum(i['cx'] for i in q['front']) / len(q['front']) / _Ws
+                for q in pl if q.get('front')]
+
+    check('v162: eine einzelne Person aendert nichts an der Platzierung',
+          _eine_person([(_Ws * 0.30, _Ws * 0.05)]) == _eine_person(None))
+    # Abschalten muss auch wirklich abschalten.
+    _cfg_aus = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                    encoding='utf-8'))
+    _cfg_aus['effects']['caption_sprecher'] = False
+    _S_aus = R.Sprites(_cfg_aus, _Ws, _Hs)
+
+    def _aus(sx):
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            pl = R.build_plans(_ws162, set(), _cfg_aus, _S_aus, _Ws, _Hs,
+                               lambda s_, e_: True, {},
+                               face_pos=lambda s_, e_: (sx, _Hs * 0.42,
+                                                        _Ws * 0.05),
+                               faces_at=lambda s_, e_: _zwei)
+        return [sum(i['cx'] for i in q['front']) / len(q['front']) / _Ws
+                for q in pl if q.get('front')]
+
+    check('v162: abgeschaltet folgt der Text dem Sprecher NICHT',
+          _aus(_Ws * 0.24) == _aus(_Ws * 0.74))
+
     check('v160: die Zeige-Regie ist abschaltbar',
           'caption_zeige' in open(os.path.join(HERE, 'config.yaml'),
                                   encoding='utf-8').read())

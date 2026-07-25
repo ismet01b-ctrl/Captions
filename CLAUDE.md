@@ -20,7 +20,8 @@ Regie-Kontaktbogen (`/api/contact/{jid}`), Caption-Alpha-Export
 Hand-Kontakt (MediaPipe `models/hand.task`, Feder-Impuls + Occlusion),
 Depth-Bullet-Time (2.5D-Dolly in der Pause vor power-3),
 Zeige-Regie (Caption landet, wohin der Sprecher zeigt oder schaut),
-Objekt-Anker (Caption dockt am genannten Gegenstand an und bleibt daran). NICHT gebaut
+Objekt-Anker (Caption dockt am genannten Gegenstand an und bleibt daran),
+Zwei-Sprecher-Regie (Caption springt auf die Seite des aktiven Redners). NICHT gebaut
 (bewusst): Tiefen-Fokuszug, persistente Welt-Anker (SLAM),
 Hook-A/B-Varianten.
 
@@ -148,6 +149,20 @@ Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
   Rest der Kosten bleibt. Ein Ziel bricht die Hysterese (`kalt`).
 - **Grenze:** ein breiter Block hat im Title-Safe kaum Spielraum (0.773 W bei
   0.84 W nutzbar). Die Regie wirkt, wo Platz ist.
+
+### Zwei-Sprecher-Regie (v162) — "Der Text folgt dem Redner"
+`sprecher_at()` liefert die x-Position des aktiven Gesichts, aber **nur bei
+mehreren Personen**. Das Signal ist alt (`_active_index`, Mundbewegung, v96);
+neu ist, dass die Captions es lesen und nicht nur die Kamera.
+- **Kein Tiebreaker.** `wunsch_x` wirkt nur ohne Motiv-Berührung, und neben
+  zwei Personen ist fast jede Stelle berührt. Deshalb eigener Kosten-Term
+  (Gewicht 1.3), der immer wirkt, aber unter der Gesichtssperre (2.5) bleibt.
+- **`_free_x_multi` nimmt die Lücke NEBEN dem Sprecher**, nicht die breiteste.
+  Passt keine, gilt wieder die breiteste (sonst wird der Sprecher angeschnitten).
+- **Auf das erkannte Gesicht einrasten.** `face_pos` ist über 41 Frames
+  geglättet und liegt beim Wechsel zwischen beiden Personen — ohne Einrasten
+  landet der Text in der Mitte, wo niemand sitzt. Hysterese gegen Flackern,
+  aber ein echter Sprecherwechsel bricht die Platzierungs-Hysterese.
 
 ### Objekt-Anker (v161) — "Captions kleben am Gegenstand"
 `ai_objekt_anker()` fragt GPT-5-Vision **einmal pro Moment** nach einem
@@ -359,7 +374,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1008/1008 grün (Stand v161)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1020/1020 grün (Stand v162)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
