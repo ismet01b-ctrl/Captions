@@ -5814,14 +5814,26 @@ _FLOW_CONN = {'im', 'in', 'am', 'an', 'auf', 'aus', 'bei', 'der', 'die', 'das',
 
 
 def _mix01(n):
-    """Deterministische 0..1-Streuung aus einer ganzen Zahl (Knuth-Multiplikation).
+    """Deterministische 0..1-Streuung aus einer ganzen Zahl.
     Gleiche Eingabe -> gleiche Ausgabe, also reproduzierbar ueber Re-Renders,
-    aber ohne sichtbares Muster. Dieselbe Quelle wie die Anim-Staffelung."""
-    return (((int(n) + 3) * 2654435761) & 1023) / 1023.0
+    aber ohne sichtbares Muster.
+    v153: die alte Fassung nahm nur die unteren 10 Bit einer einzelnen
+    Knuth-Multiplikation. Fuer kleine Vielfache lief sie dadurch FAST LINEAR:
+    gemessen ergab n*11 fuer 0,3,6,9,12,15 die Folge 0.27, 0.22, 0.18, 0.13,
+    0.09, 0.04 - eine fallende Rampe, kein Zufall. Der Seitenwechsel fiel
+    deshalb IMMER auf dieselbe Seite. Jetzt der uebliche 32-Bit-Finalizer
+    (drei Shift-Multiply-Runden), der die hohen Bits nach unten mischt."""
+    x = (int(n) * 2654435761) & 0xFFFFFFFF
+    x ^= x >> 15
+    x = (x * 2246822519) & 0xFFFFFFFF
+    x ^= x >> 13
+    x = (x * 3266489917) & 0xFFFFFFFF
+    x ^= x >> 16
+    return (x & 0xFFFF) / 65535.0
 
 
 def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
-                 colw=None, layout='flow', punch=False):
+                 colw=None, layout='flow', punch=False, seite='links'):
     """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
     Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
       - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
@@ -5898,13 +5910,18 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     _skal = float(_ef.get('caption_scale') or 1.0)
     _skal = max(0.60, min(2.80, _skal))
     _hier = float(_ef.get('caption_hierarchie') or 0) or None
+    # v153: eine Stufe kleiner (Ismets Befund am fertigen Video). 0.098 ->
+    # 0.088 em ergibt bei cap/em 0.70 eine Versalhoehe von 0.062 H statt
+    # 0.069 H. sz_n geht ueber die Hierarchie automatisch mit - wuerde nur
+    # das Schluesselwort schrumpfen, flachte der Kontrast wieder ab (der
+    # Fehler aus v143b).
     pf = 1.35 if not portrait else 1.0
-    sz_k = int(H * 0.098 * pf * _skal)
+    sz_k = int(H * 0.088 * pf * _skal)
     if _hier:
         _hier = max(1.4, min(5.0, _hier))
         sz_n = int(sz_k * 0.70 / (0.52 * _hier))
     else:
-        sz_n = int(H * 0.045 * pf * _skal)
+        sz_n = int(H * 0.040 * pf * _skal)
     sz_a = int(sz_n * 1.244)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
@@ -5968,7 +5985,11 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # es weiterhin, ein langes Wort schrumpft also von selbst
             # zurueck. Nur am SATZENDE, sonst waere jedes Video wieder
             # gleichfoermig - nur eben laut.
-            _kf = 1.60 if punch else 1.0
+            # v153: Punch-Faktor von 1.60 auf 1.95. Die Grundschrift ist eine
+            # Stufe kleiner geworden (0.098 -> 0.088 em); mit dem alten Faktor
+            # erreichte das Schlusswort die Bildbreite nicht mehr und der
+            # Randabfall lief ins Leere (gemessen 0.96 W statt 1.07 W).
+            _kf = 1.95 if punch else 1.0
             # Beim Knall darf die Zeile ueber den normalen Satzspiegel
             # hinaus - im Vorbild laeuft das Schlusswort ueber die volle
             # Breite. 0.89 W und nicht mehr: der Block SETZT bei x0 = 0.07 W
@@ -6107,6 +6128,11 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         # wird dadurch zu einem Bild statt zu drei linksbuendigen Zeilen -
         # und genau dieses Zeilenraster war die Ursache dafuer, dass alle
         # unsere Videos gleich aussehen.
+        # v153 SEITE. Bis v152 sass der Satzspiegel IMMER links - ueber ein
+        # ganzes Video klebte damit jede Caption an derselben Kante. Bei
+        # 'rechts' wird die Collage gespiegelt: die kleine Spalte steht
+        # rechts aussen, die grosse Treppe laeuft nach links weg.
+        _re = (seite == 'rechts')
         _lx = x0
         _rx = int(x0 + max_w * 0.26)
         _ly, _ry = 0, 0
@@ -6116,15 +6142,22 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             if _breit:
                 continue                       # kommt unten als eigener Block
             if it['role'] == 'accent' or not it.get('gross'):
-                # kleine Spalte links
-                it['cx'] = _lx + it['adv'] / 2.0
+                # kleine Spalte an der Aussenkante
+                if _re:
+                    it['cx'] = x0 + max_w - it['adv'] / 2.0
+                else:
+                    it['cx'] = _lx + it['adv'] / 2.0
                 it['cy'] = _ly + _h / 2.0
                 _ly += _h
             else:
-                # grosse Treppe rechts, mit deterministischem Seitenversatz -
-                # eine exakt buendige Kante saehe wieder nach Raster aus.
+                # grosse Treppe nach innen, mit deterministischem
+                # Seitenversatz - eine exakt buendige Kante saehe wieder nach
+                # Raster aus.
                 _off = int(max_w * 0.06 * _mix01(it['i'] * 13))
-                it['cx'] = _rx + _off + it['adv'] / 2.0
+                if _re:
+                    it['cx'] = (x0 + max_w * 0.74) - _off - it['adv'] / 2.0
+                else:
+                    it['cx'] = _rx + _off + it['adv'] / 2.0
                 it['cy'] = _ry + _h / 2.0
                 _ry += _h
             # Der Satzspiegel ist bindend: was rechts herausragen wuerde,
@@ -6133,13 +6166,16 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             _rand = x0 + max_w
             if it['cx'] + it['adv'] / 2.0 > _rand:
                 it['cx'] = _rand - it['adv'] / 2.0
+            if it['cx'] - it['adv'] / 2.0 < x0:
+                it['cx'] = x0 + it['adv'] / 2.0
         y = max(_ly, _ry)
         # Schluesselwort / Punchline: eigener Block unter der Collage, ueber
         # die volle Spalte. Im Vorbild ist das der Knall am Satzende.
         for it in items:
             if it['role'] in ('key', 'punch'):
                 _h = int(_rsz(it) * 1.16)
-                it['cx'] = x0 + it['adv'] / 2.0
+                it['cx'] = ((x0 + max_w - it['adv'] / 2.0) if _re
+                            else (x0 + it['adv'] / 2.0))
                 it['cy'] = y + _h / 2.0
                 y += _h
         total_h = max(y, 1)
@@ -6148,7 +6184,10 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     y = 0
     for row in rows:
         line_h = int(max(_rsz(it) for it in row) * 1.20)
-        x = x0
+        # v153: Zeilen koennen an der RECHTEN Kante ausgerichtet werden.
+        # Der Satzspiegel bleibt derselbe, nur die buendige Kante wechselt.
+        _rw = sum(it['adv'] for it in row) + space * (len(row) - 1)
+        x = (x0 + max_w - _rw) if seite == 'rechts' else x0
         for it in row:
             it['cx'] = x + it['adv'] / 2.0
             it['cy'] = y + line_h / 2.0           # in der Zeilen-Mitte
@@ -6734,7 +6773,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     #   5. RASTER: Ergebnis rastet auf VZ_GRID ein, damit Rundungsrauschen
     #      keine Ein-Pixel-Wanderung erzeugt.
     # ================================================================
-    spot_state = {'xy': None, 'letzte_zeit': -1e9}
+    spot_state = {'xy': None, 'letzte_zeit': -1e9, 'seite': None}
     _cuts_sorted = sorted(float(c) for c in (cut_times or []))
 
     def _shot_neu(t):
@@ -6799,7 +6838,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             return None
         return breit
 
-    def spot(start, end, bw, bh, wunsch_y=None, kalt=False):
+    def spot(start, end, bw, bh, wunsch_y=None, kalt=False, wunsch_x=None):
         """Freie Stelle fuer einen Textblock (bw x bh). Rueckgabe (x0, y0)."""
         rand_x = W * 0.05 + 8                 # 5 % Title-Safe (SMPTE/EBU)
         oben = (_pz['top'] if _pz is not None else H * 0.05)
@@ -6850,6 +6889,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
 
         def kosten(x, y):
             k = 0.0
+            _motiv = 0.0                      # nur Gesicht/Unruhe, ohne Wuensche
             for (a, b, c, d) in kaesten:      # Ueberlappung mit einem Gesicht
                 ux = max(0.0, min(x + bw, c) - max(x, a))
                 uy = max(0.0, min(y + bh, d) - max(y, b))
@@ -6876,9 +6916,26 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 j0 = int(max(0, min(gx - 1, x / W * gx)))
                 j1 = int(max(j0 + 1, min(gx, (x + bw) / W * gx)))
                 k += 1.6 * float(karte[i0:i1, j0:j1].mean())
+            _motiv = k                        # alles bis hier ist das MOTIV
             if wunsch_y is not None:          # Template-Wunschzone, weich
                 k += 1.1 * abs((y + bh / 2.0) - wunsch_y) / max(H, 1)
-            k += 0.35 * abs((x + bw / 2.0) - W / 2.0) / max(W, 1)
+            # v153: Wunsch-SEITE. Ohne sie zog die Mitten-Anziehung jeden
+            # Block wieder in dieselbe Zone - die rechtsbuendige Ausrichtung
+            # war im fertigen Bild nicht zu sehen, weil der ganze Block
+            # anschliessend doch wieder links sass.
+            # v153 Wunsch-SEITE, aber nur als TIEBREAKER. Sie darf
+            # ausschliesslich zwischen Stellen entscheiden, die das Motiv
+            # ohnehin freilaesst. Ein blosser Kosten-Term reicht dafuer
+            # NICHT: mit Gewicht 1.3 und selbst mit 0.55 blieb der Block im
+            # Querformat links stehen, egal ob die Person links oder rechts
+            # stand (Selftest v143 gemessen, beide Male x = 0.155 W). Die
+            # Seite ist ein Wunsch, das Gesicht eine Sperre - diese
+            # Rangfolge darf nie kippen, deshalb wird der Wunsch bei jeder
+            # Beruehrung fallengelassen.
+            if wunsch_x is not None and _motiv <= 0.0:
+                k += 0.55 * abs((x + bw / 2.0) - wunsch_x) / max(W, 1)
+            else:
+                k += 0.35 * abs((x + bw / 2.0) - W / 2.0) / max(W, 1)
             return k
 
         schritte_x = 9 if not portrait else 7
@@ -7603,6 +7660,9 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # sichtbares Muster - und die Collage braucht genug Woerter,
             # sonst hat sie nichts zu verteilen. 'clean' bleibt aussen vor,
             # dort ist Schlichtheit das gewollte Ergebnis.
+            # v153: der Nutzer kann die Anordnung festlegen. 'auto' laesst
+            # die Regie wechseln (Standard), 'rows'/'collage' erzwingen eine.
+            _lm = str(cfg['effects'].get('caption_layout') or 'auto').lower()
             _lay = 'flow'
             _cw150 = _freie_breite(start, end)
             # Bei verengter Spalte (Nahaufnahme, Person fuellt das Bild)
@@ -7613,10 +7673,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # 2 bis 4 (words_per_group). Mit der Schwelle 4 lief die Collage
             # im echten Render gemessen KEIN EINZIGES Mal an - der Beweis-
             # Streifen zeigte acht Mal dasselbe Zeilenraster.
-            if len(g) >= 3 and str(cfg.get('look', '')).lower() != 'clean' \
+            if _lm != 'rows' and len(g) >= 3 \
+                    and str(cfg.get('look', '')).lower() != 'clean' \
                     and cfg['effects'].get('caption_collage', True) \
                     and not _cw150 \
-                    and _mix01(g[0] * 3) >= 0.42:
+                    and (_lm == 'collage' or _mix01(g[0] * 3) >= 0.42):
                 _lay = 'collage'
             # v152 SATZWEISE COLLAGE. Im Vorbild bleibt der GANZE SATZ stehen
             # und waechst ueber rund zwei Sekunden zu einem Bild; bei uns
@@ -7626,6 +7687,20 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # Dichte, Tempo-Kurve und Pointen-Isolierung, und daran zu drehen
             # haette Nebenwirkungen bis in die Kamera. Geschluckte Woerter
             # laufen ueber 'used', denselben Weg, den Phrasen schon nutzen.
+            # v153 SEITENWECHSEL. Ismets Befund: "Captions sind immer auf
+            # einer Seite." Das stimmte - x0 war fest W*0.07, jede Caption
+            # klebte an der linken Kante. Die Seite wechselt jetzt
+            # deterministisch aus dem ersten Wort-Index; hat der Nutzer (oder
+            # eine gemessene Referenz) eine Ausrichtung vorgegeben, gilt die.
+            _al = str(cfg['effects'].get('caption_align') or 'auto').lower()
+            if _al in ('links', 'left'):
+                _seite = 'links'
+            elif _al in ('rechts', 'right'):
+                _seite = 'rechts'
+            elif _al in ('mitte', 'center', 'centre'):
+                _seite = 'mitte'
+            else:
+                _seite = 'rechts' if _mix01(g[0] * 11) >= 0.55 else 'links'
             _g_vor, _g_kurz = list(g), None
             if _lay == 'collage' \
                     and cfg['effects'].get('caption_satz_collage', True) \
@@ -7661,7 +7736,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait, loud=loud,
                                                   flow_sel=(flow_map or {}).get(g[0]),
                                                   colw=_cw150,
-                                                  layout=_lay, punch=_punch)
+                                                  layout=_lay, punch=_punch,
+                                                  seite=_seite)
             # Die Collage baut in die HOEHE. Wird sie zu hoch, passt sie an
             # keinem Kopf mehr vorbei und die Platzierungs-Regie muesste sie
             # in den Bildrand druecken - dann ist das gewohnte Zeilenraster
@@ -7681,13 +7757,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 items, tot_h, anchor_i = compose_flow(
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
-                    colw=_cw150, layout='collage', punch=_punch)
+                    colw=_cw150, layout='collage', punch=_punch,
+                    seite=_seite)
             if _lay == 'collage' and tot_h > H * 0.40:
                 _lay = 'flow'
                 items, tot_h, anchor_i = compose_flow(
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
-                    colw=_cw150, layout='flow', punch=_punch)
+                    colw=_cw150, layout='flow', punch=_punch,
+                    seite=_seite)
             # v143: Position kommt aus der Platzierungs-Regie statt aus einer
             # Konstanten. Wunschzone = wo der Block AM LIEBSTEN sitzt; spot()
             # weicht davon ab, wenn dort ein Gesicht oder ein unruhiger
@@ -7724,8 +7802,26 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             _cz = cfg['effects'].get('caption_zone')
             _wunsch = (H * float(_cz) if _cz
                        else H * (0.25 if portrait else 0.72))
+            # Wunsch-x aus der gewaehlten Seite. 'mitte' bleibt mittig,
+            # links/rechts ziehen den Block an die jeweilige Kante - die
+            # Gesichts- und Unruhe-Kosten koennen ihn davon abbringen.
+            _wx = None
+            if _seite == 'links':
+                _wx = W * 0.30
+            elif _seite == 'rechts':
+                _wx = W * 0.70
+            elif _seite == 'mitte':
+                _wx = W * 0.50
+            # Ein SEITENWECHSEL muss die Hysterese durchbrechen. Sie ist
+            # dafuer da, Zittern durch schwankende Gesichtserkennung zu
+            # verhindern (v143) - ein bewusster Wechsel der Seite ist aber
+            # kein Zittern, sondern die Regie. Ohne dieses 'kalt' blieb der
+            # Block gemessen bei JEDEM Chunk links, obwohl die Seite wechselte.
+            _kalt = _shot_neu(start) or (spot_state.get('seite') != _seite)
+            spot_state['seite'] = _seite
             _sx, _sy = spot(start, end, _br - _bl, tot_h,
-                            wunsch_y=_wunsch, kalt=_shot_neu(start))
+                            wunsch_y=_wunsch, kalt=_kalt,
+                            wunsch_x=_wx)
             _dx = _sx - _bl
             for it in items:
                 it['cx'] += _dx

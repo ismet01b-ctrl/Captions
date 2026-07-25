@@ -2049,6 +2049,36 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="setting-desc">Each tile shows the font exactly as it will look in the video.</div>
             <div class="fontgrid" id="fontGrid" role="radiogroup" aria-label="Font"></div>
           </div>
+          <!-- v153: Caption-Regler. Ismets Befund: die Captions sassen immer
+               auf derselben Seite und waren ihm zu gross. Beides ist jetzt
+               einstellbar, Standard bleibt die automatische Regie. -->
+          <div class="setting"><div class="setting-label">Caption layout</div>
+            <div class="setting-desc">Auto varies it across the video: some lines
+              are set as rows, others as a collage with each word in its own size.
+              Pick one to keep it the same throughout.</div>
+            <div class="seg" data-cfg="effects.caption_layout" data-opts="Auto:auto,Rows:rows,Collage:collage"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Which side</div>
+            <div class="setting-desc">Auto alternates between left and right so the
+              captions do not stick to one edge for the whole video.</div>
+            <div class="seg" data-cfg="effects.caption_align" data-opts="Auto:auto,Left:links,Right:rechts,Center:mitte"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Caption size</div>
+            <div class="setting-desc">Scales the whole caption block. 100 % is the
+              house size; a learned style reference can push this on its own.</div>
+            <div class="slider" data-cfg="effects.caption_scale" data-min="60" data-max="180" data-scale="100" data-suffix=" %"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Size contrast</div>
+            <div class="setting-desc">How much bigger the key word stands next to the
+              small text. Low is calm, high is editorial.</div>
+            <div class="slider" data-cfg="effects.caption_hierarchie" data-min="140" data-max="500" data-scale="100" data-suffix="x"></div>
+          </div>
+          <div class="setting"><div class="setting-label">Let the last word run off the edge</div>
+            <div class="setting-desc">At the end of a sentence a short key word may be
+              cropped by both frame edges, the way high-end edits do it. Long words are
+              never cropped.</div>
+            <div class="seg" data-cfg="effects.caption_bleed" data-opts="On:true,Off:false"></div>
+          </div>
           <div class="setting"><div class="setting-label">Caption color world</div>
             <div class="setting-desc">Auto = sampled from the scene per moment (premium standard).
               Black = elegant dark look on bright footage. White = high-end on dark footage.</div>

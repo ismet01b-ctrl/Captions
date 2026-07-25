@@ -70,6 +70,12 @@ effects:
   # Flaeche verteilt, so wie in den Vorbildern. Deterministisch gewaehlt,
   # nicht zufaellig. 'clean' bleibt davon unberuehrt.
   caption_collage: true
+  # v153: Anordnung. 'auto' laesst die Regie zwischen Zeilensatz und Collage
+  # wechseln (empfohlen), 'rows' oder 'collage' erzwingen eine davon.
+  caption_layout: auto
+  # v153: Seite des Satzspiegels. 'auto' wechselt deterministisch zwischen
+  # links und rechts; links/rechts/mitte legen ihn fest.
+  caption_align: auto
   # v152: die Collage haelt den GANZEN SATZ stehen (wie in den Vorbildern),
   # statt ihn chunkweise auszutauschen. Die Chunk-Bildung selbst bleibt
   # unangetastet - geschluckt wird nur fuer die Darstellung.

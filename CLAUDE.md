@@ -126,6 +126,15 @@ schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
 Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
 zwischen Regie und Zittern.
 
+### Seite + Streuung (v153)
+`_mix01` ist der **32-Bit-Finalizer**, nicht eine einzelne Multiplikation mit
+`& 1023` — die lief fuer kleine Vielfache als lineare Rampe, jeder
+"deterministische Wechsel" fiel damit immer gleich aus.
+Die **Wunschseite ist ein Tiebreaker, keine Kraft**: `wunsch_x` wirkt nur an
+Stellen ohne Motiv-Beruehrung. Als Kosten-Term uebertoente sie das
+Gesichts-Ausweichen — zweimal gemessen, zweimal falsch. Ein Seitenwechsel
+setzt die Hysterese zurueck (sie ist gegen Zittern da, nicht gegen Regie).
+
 ### Randabfall + satzweise Collage (v152)
 Der Anschnitt am Satzende gilt nur bis **5 Zeichen** — bei 7 frisst er die
 Randglyphen und das Wort ist unlesbar (am Render gemessen). Das
@@ -272,7 +281,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **927/927 grün (Stand v152)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **941/941 grün (Stand v153)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

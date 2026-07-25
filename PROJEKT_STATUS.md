@@ -3,6 +3,49 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v153 Seitenwechsel, kleinere Schrift, Nutzer-Regler.** Ismets Befund:
+  "Captions sind immer auf einer Seite" und "mach die Schrift etwas kleiner".
+  - **DIE STREUFUNKTION WAR KAPUTT.** `_mix01` nahm nur die unteren 10 Bit
+    EINER Knuth-Multiplikation. Fuer kleine Vielfache lief sie dadurch fast
+    linear: gemessen ergab n*11 fuer 0,3,6,9,12,15 die Folge 0.27, 0.22,
+    0.18, 0.13, 0.09, 0.04 - eine fallende Rampe, kein Zufall. Der
+    Seitenwechsel fiel deshalb IMMER auf dieselbe Seite. Jetzt der uebliche
+    32-Bit-Finalizer mit drei Shift-Multiply-Runden. Das betraf auch die
+    Layout-Wahl aus v150, dort war es nur zufaellig brauchbar.
+  - **SEITE.** Der Satzspiegel sass fest bei x0 = 0.07 W. Jetzt wechselt die
+    Seite deterministisch; Zeilen koennen rechtsbuendig stehen, die Collage
+    wird gespiegelt (kleine Spalte aussen rechts, grosse Treppe nach links).
+    Dazu ein `wunsch_x` in der Platzierungs-Regie - ohne den zog die
+    Mitten-Anziehung jeden Block wieder in dieselbe Zone.
+  - **RANGFOLGE, zweimal falsch gemacht.** Als reiner Kosten-Term (Gewicht
+    1.3, dann 0.55) uebertoente die Wunschseite das Gesichts-Ausweichen: der
+    Block blieb im Querformat links, egal ob die Person links oder rechts
+    stand (beide Male gemessen x = 0.155 W). Die Seite gilt jetzt nur noch
+    als TIEBREAKER zwischen Stellen, die das Motiv ohnehin freilaesst.
+    Beweis: Person links -> Block 0.453 W, Person rechts -> Block 0.327 W.
+    Ein Seitenwechsel durchbricht ausserdem die Hysterese - sie soll Zittern
+    verhindern, nicht die Regie.
+  - **SCHRIFT.** 0.098 -> 0.088 em Schluesselwort, 0.045 -> 0.040 em
+    Fliesstext. Der Punch-Faktor musste von 1.60 auf 1.95 mit, sonst
+    erreichte das Schlusswort die Bildbreite nicht mehr und der Randabfall
+    aus v152 lief ins Leere (gemessen 0.96 W statt 1.14 W).
+  - **NUTZER-REGLER** im Feintuning: Anordnung (Auto/Rows/Collage), Seite
+    (Auto/Links/Rechts/Mitte), Caption-Groesse 60-180 %, Groessenkontrast
+    1.4-5.0, Randabfall an/aus. Serverseitig gedeckelt, damit kein Client
+    eine Schrift anfordert, die das Bild sprengt.
+  - **DRITTER ANLAUF an derselben Stelle.** Die Tiebreaker-Bedingung prueft
+    jetzt die MOTIV-Kosten, nicht die Gesamtkosten. Beim zweiten Versuch
+    stand sie gegen `k`, und `k` enthaelt bereits den Zonen-Wunsch - der ist
+    nie null, also griff der Tiebreaker nirgends und die Blockmitten lagen
+    alle zwischen 0.49 und 0.67 W. Jetzt streuen sie ueber 0.36 W.
+  - **TESTKORREKTUR, ehrlich benannt:** der v143-Ausweichtest setzte das
+    Gesicht auf 0.40 H. Nach der Schriftverkleinerung sitzt der Block
+    vollstaendig UNTER dieser Box - es gab dort gar keine Kollision mehr,
+    der Test mass ein Ausweichen vor einem Hindernis, das ihn nicht
+    beruehrt. Das Gesicht steht jetzt auf Blockhoehe (0.68 H). Gegenprobe
+    mit echtem Konflikt: Person links -> Block 0.453 W, Person rechts ->
+    0.186 W. Das Verhalten wurde NICHT angepasst, nur die Messstelle.
+  Tests 941 logic + 7/1/5/2 Renders + GUI gruen.
 - **v152 Randabfall + satzweise Collage** (beides von Ismet beauftragt, um
   naeher an die Vorbilder zu kommen).
   - **RANDABFALL.** Das Vorbild laesst sein Schlusswort links und rechts aus

@@ -469,8 +469,14 @@ def _scenario_logic(clip, transcript, tmp):
     check('v143: Hochformat - Block folgt der Kopfhoehe',
           _oben and _unten and abs(_oben[2] - _unten[2]) > 0.05,
           f'Kopf hoch y={_oben[2]:.3f} vs Kopf tief y={_unten[2]:.3f}')
-    _li = _flowbox(1920, 1080, 1920 * 0.25, 1080 * 0.40, 180)
-    _re = _flowbox(1920, 1080, 1920 * 0.75, 1080 * 0.40, 180)
+    # v153 TESTKORREKTUR (kein Verhaltenswechsel): das Gesicht sitzt jetzt auf
+    # BLOCKHOEHE. Mit 0.40 H stand es nach der Schriftverkleinerung komplett
+    # UEBER dem Textblock - es gab dort gar keine Kollision mehr, und der
+    # Test mass, ob der Block einem Hindernis ausweicht, das ihn nicht
+    # beruehrt. Gegenprobe mit dem echten Konflikt: Person links -> Block
+    # 0.453 W, Person rechts -> Block 0.186 W.
+    _li = _flowbox(1920, 1080, 1920 * 0.25, 1080 * 0.68, 180)
+    _re = _flowbox(1920, 1080, 1920 * 0.75, 1080 * 0.68, 180)
     check('v143: Querformat - Block weicht der Person zur Seite aus',
           _li and _re and (_li[0] > _re[0] + 0.06),
           f'Person links -> x={_li[0]:.3f}, Person rechts -> x={_re[0]:.3f}')
@@ -2634,7 +2640,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v152-bleed-satz'" in _srv_m)
+          and "DVE_BUILD = 'v153-seiten'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4734,6 +4740,77 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ============ v153: Seitenwechsel, kleinere Schrift, Nutzer-Regler ======
+    import yaml as _y153
+    import render as R
+    import io as _io153, contextlib as _cl153
+    _r153 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    # Die alte Streufunktion nahm nur die unteren 10 Bit EINER Multiplikation
+    # und lief fuer kleine Vielfache fast linear - der Seitenwechsel fiel
+    # dadurch immer auf dieselbe Seite.
+    _mv = [R._mix01(i * 11) for i in range(0, 60, 3)]
+    check('v153: die Streuung ist wirklich gestreut, keine Rampe',
+          sum(1 for v in _mv if v >= 0.55) >= 3
+          and sum(1 for v in _mv if v < 0.55) >= 3
+          and max(_mv) - min(_mv) > 0.7,
+          f'{sum(1 for v in _mv if v >= 0.55)} rechts / {len(_mv)}')
+    check('v153: gleiche Eingabe bleibt gleich (Re-Render reproduzierbar)',
+          [R._mix01(i) for i in range(20)] == [R._mix01(i) for i in range(20)])
+
+    def _seiten(align='auto'):
+        _c = _y153.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                  encoding='utf-8'))
+        _c['look'] = 'creator'
+        _c['effects']['caption_align'] = align
+        _S = R.Sprites(_c, 1080, 1920)
+        _t = ('du hast das schon oft gehoert aber was wirklich dahinter '
+              'steckt. genau das zeige ich dir jetzt hier und heute.').split()
+        _w = [{'word': x, 'start': round(i * 0.36, 2),
+               'end': round(i * 0.36 + 0.28, 2)} for i, x in enumerate(_t)]
+        with _cl153.redirect_stdout(_io153.StringIO()):
+            _pl = R.build_plans(_w, set(), _c, _S, 1080, 1920,
+                                lambda a, b: True, {})
+        return [sum(i['cx'] for i in p['front']) / len(p['front']) / 1080.0
+                for p in _pl if p.get('tpl') == 'flow' and p.get('front')]
+    _auto = _seiten('auto')
+    check('v153: die Captions kleben nicht mehr an einer Kante',
+          max(_auto) - min(_auto) > 0.20
+          and any(v > 0.55 for v in _auto) and any(v < 0.45 for v in _auto),
+          'Blockmitten ' + ', '.join(f'{v:.2f}' for v in _auto))
+    _li = _seiten('links')
+    _re = _seiten('rechts')
+    check('v153: eine feste Seite wird auch eingehalten',
+          sum(_li) / len(_li) < sum(_re) / len(_re) - 0.10,
+          f'links {sum(_li) / len(_li):.2f} W gegen '
+          f'rechts {sum(_re) / len(_re):.2f} W')
+    # Die Wunschseite darf das Gesichts-Ausweichen NIE ueberstimmen.
+    check('v153: das Motiv schlaegt die Wunschseite (Rangfolge)',
+          'if wunsch_x is not None and _motiv <= 0.0:' in _r153
+          and '_motiv = k                        # alles bis hier ist das MOTIV'
+          in _r153)
+    check('v153: ein Seitenwechsel durchbricht die Hysterese',
+          "spot_state.get('seite') != _seite" in _r153)
+    # Schrift eine Stufe kleiner (Ismets Befund am fertigen Video).
+    check('v153: die Grundschrift ist eine Stufe kleiner',
+          "H * 0.088 * pf * _skal" in _r153 and "H * 0.040 * pf * _skal" in _r153
+          and 'H * 0.098 * pf' not in _r153)
+    # Nutzer-Regler
+    _ui153 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    for _k in ('effects.caption_layout', 'effects.caption_align',
+               'effects.caption_scale', 'effects.caption_hierarchie',
+               'effects.caption_bleed'):
+        check(f'v153: Regler {_k} steht in der UI', f'data-cfg="{_k}"' in _ui153)
+    check('v153: Regler werden serverseitig gedeckelt',
+          SV._sanitize_overrides({'effects': {'caption_scale': 99}})
+          == {'effects': {'caption_scale': 1.8}}
+          and SV._sanitize_overrides({'effects': {'caption_layout': 'boese'}})
+          == {'effects': {}}
+          and SV._sanitize_overrides({'effects': {'caption_align': 'rechts'}})
+          == {'effects': {'caption_align': 'rechts'}})
+    check('v153: erzwungenes Layout wird eingehalten',
+          "_lm == 'collage' or _mix01(g[0] * 3) >= 0.42" in _r153
+          and "_lm != 'rows'" in _r153)
+
     # ============ v152: Randabfall + satzweise Collage ======================
     import yaml as _y152
     import render as R
@@ -4790,6 +4867,11 @@ def _scenario_betrieb(tmp):
                                    encoding='utf-8'))
         _cx['look'] = 'creator'
         _cx['effects']['caption_satz_collage'] = satz_collage
+        # v153: Layout erzwingen. Vorher haing der Test daran, ob die
+        # deterministische Streuung fuer GENAU diese Wort-Indizes eine
+        # Collage waehlt - eine Aenderung an _mix01 liess ihn dann kippen,
+        # ohne dass an der geprueften Eigenschaft etwas falsch war.
+        _cx['effects']['caption_layout'] = 'collage'
         _Sx = R.Sprites(_cx, 1080, 1920)
         with _cl152.redirect_stdout(_io152.StringIO()):
             _pl = R.build_plans(_wsz, set(), _cx, _Sx, 1080, 1920,

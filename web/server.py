@@ -1704,7 +1704,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v152-bleed-satz'
+DVE_BUILD = 'v153-seiten'
 
 
 @app.middleware('http')
@@ -2275,6 +2275,22 @@ def _sanitize_overrides(ov):
             o.pop('platform', None)
     e = out.get('effects')
     if isinstance(e, dict):
+        # v153: Caption-Regler aus der UI. Groessen hart deckeln - ein Client
+        # koennte sonst eine Schrift anfordern, die das Bild sprengt und den
+        # Render unnoetig teuer macht.
+        for k, lo, hi in (('caption_scale', 0.60, 1.80),
+                          ('caption_hierarchie', 1.40, 5.00)):
+            if k in e:
+                try:
+                    e[k] = round(min(max(float(e[k]), lo), hi), 3)
+                except Exception:
+                    e.pop(k, None)
+        if 'caption_layout' in e and str(e.get('caption_layout')).lower() \
+                not in ('auto', 'rows', 'collage'):
+            e.pop('caption_layout', None)
+        if 'caption_align' in e and str(e.get('caption_align')).lower() \
+                not in ('auto', 'links', 'rechts', 'mitte'):
+            e.pop('caption_align', None)
         for k, cap in (('blender_samples', 256), ('blender_anim_frames', 24),
                        ('blender_width', 1920)):
             if k in e:
