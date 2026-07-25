@@ -103,7 +103,10 @@ Standardweg bewerben. Determin. Leitplanken danach: `_regie_sanity`,
 ### Semantische Regie (v99/v99a) — "Captions tun, was der Sprecher sagt"
 Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
 - "behind me" → fx `behind` (Text hinter der Person, echte RVM-Occlusion; bei
-  Nahaufnahme szene `himmel` = steigt über den Kopf, statt unsichtbar).
+  Nahaufnahme Flag `nah` = bleibt auf Kopf-/Schulterhöhe und wird so weit
+  vergrößert, dass er beidseitig am Kopf vorbeiragt. **NICHT mehr `himmel`** —
+  das schob den Text an den oberen Bildrand, weg von der Person, und die
+  Ansage stimmte nicht mehr (v141, Ismets Befund).
 - "on the ground / an der Wand / im Wasser / am Himmel" → fx `ground`+szene+lage.
 - "explode / fällt / fliegt / …" → passende Animation, sichtbar vorn (nie behind).
 - Selbstbezug-Sätze bestehen oft nur aus Sperrlisten-Wörtern → `_self_ref_intent`

@@ -1374,13 +1374,20 @@ def _behind_cover_backstop(fx_map, face_cover, thresh=0.52):
     for i, v in fx_map.items():
         if v.get('fx') != 'behind':
             continue
-        # v99a: explizite Sprecher-Ansage ("behind me") bleibt 'behind' - aber
-        # bei bildfuellender Nahaufnahme (Selfie) waere der Text komplett
-        # verdeckt. Loesung: szene 'himmel' - das Wort steigt HINTER dem Kopf
-        # hervor und endet lesbar UEBER ihm. Bleibt 'hinter mir' UND sichtbar.
+        # v99a: explizite Sprecher-Ansage ("behind me") bleibt 'behind'.
+        # v141 (Ismets Befund): frueher wurde bei bildfuellender Nahaufnahme
+        # szene='himmel' erzwungen - das Wort landete dann ganz oben am
+        # Bildrand, wo die Person gar nicht ist. "behind you" ueber leerem
+        # Himmel ergibt keinen Sinn. Stattdessen wird der Moment nur als
+        # Nahaufnahme markiert: die Platzierung bleibt auf Kopf-/Schulterhoehe
+        # (die Aussage stimmt), und die Lesbarkeits-Logik weiter unten
+        # vergroessert das Wort, bis es beidseitig am Kopf vorbeiragt. Erst
+        # wenn selbst das nicht reicht, wandert es als letzte Rettung ueber
+        # den Kopf. Echte Himmel-Ansagen ("ueber mir") setzen szene selbst und
+        # bleiben davon unberuehrt.
         if v.get('intent'):
             if face_cover.get(i, 0.0) >= thresh and not v.get('szene'):
-                v['szene'] = 'himmel'
+                v['nah'] = True
             continue
         if face_cover.get(i, 0.0) >= thresh:
             # Grosses Statement -> ground, sonst klar sichtbares outline.
@@ -4339,7 +4346,12 @@ def ai_direct(words, language, model='gpt-5', voice_wav=None, validate=True):
     # vorher war ein leerer/verlorener Block unsichtbar ("KI wendet nichts an").
     if ref_block:
         _n_refs = sum(1 for l in ref_block.splitlines() if l.startswith('- '))
-        print(f"Stil-Referenzen: {_n_refs} aktiv - fliessen in die KI-Regie ein")
+        # v141: Quelle mitschreiben. Ohne sie konnte die UI nicht unterscheiden,
+        # ob der Kunde WIRKLICH etwas gelernt hat oder ob nur der Haus-Stil
+        # wirkt - genau daraus wurde die falsche Meldung "N learned references".
+        _src = (os.environ.get('DVE_REFS_SOURCE') or '').strip().lower()
+        _lbl = {'eigene': 'eigene', 'haus': 'Haus-Stil'}.get(_src, 'unbekannt')
+        print(f"Stil-Referenzen: {_n_refs} aktiv ({_lbl}) - fliessen in die KI-Regie ein")
     else:
         print("Stil-Referenzen: keine gefunden (Regie laeuft ohne Stil-Anker)")
     merged = {}
@@ -5322,7 +5334,17 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
     FRUEHEREN so weit vorgezogen, dass er raeumt, bevor der spaetere steht.
     Anker-Naehe schuetzt echte Neben-Platzierungen (links/rechts, oben/unten).
     Wirkt auf Plaene mit 'target'=(x, y); Kamera-Impulse (ohne target) bleiben
-    unberuehrt. Rueckgabe: Anzahl vorgezogener Momente."""
+    unberuehrt. Rueckgabe: Anzahl vorgezogener Momente.
+
+    v141 (Ismets Doppelbild-Screenshot): verglichen wird jetzt 'vpos' - die
+    Stelle, an der der Text WIRKLICH steht. 'target' ist bei der Flow-Caption
+    das KAMERA-Ziel (x = W*0.07, linker Rand), nicht der Textblock (Mitte).
+    Damit lag der horizontale Abstand zu einem Keyword-Moment bei 0.43*W und
+    riss die 0.42*W-Schranke - der Schutz griff bei Flow-Captions nie, obwohl
+    beide Texte uebereinander standen. Plaene ohne 'vpos' nutzen 'target'."""
+    def _vp(p):
+        return p.get('vpos') or p['target']
+
     txt = sorted([p for p in plans if 'target' in p],
                  key=lambda p: p.get('t0', p['start']))
     n = 0
@@ -5337,8 +5359,8 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
                 break                       # sortiert -> ab hier keiner mehr nah
             if b_t0 <= a_t0 + 0.05:
                 continue                    # praktisch gleichzeitig gestartet
-            if (abs(a['target'][1] - b['target'][1]) < H * 0.16
-                    and abs(a['target'][0] - b['target'][0]) < W * 0.42):
+            if (abs(_vp(a)[1] - _vp(b)[1]) < H * 0.16
+                    and abs(_vp(a)[0] - _vp(b)[0]) < W * 0.42):
                 new_end = min(new_end, max(a_t0 + 0.3, b_t0 - 0.12))
         if new_end < a_end0 - 1e-3:
             a['end'] = new_end
@@ -5963,7 +5985,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # HERAUSSCHIEBEN braucht Ueberlappung: liegt das Wort ueber dem
                 # Kopf, verdeckt die Person nichts und der Effekt ist unsichtbar.
                 # Darum wird es auf Kopf-/Schulterhoehe gelegt.
-                elif p.get('entr') == 'emerge' and face_pos is not None:
+                elif face_pos is not None and (
+                        p.get('entr') == 'emerge'
+                        or (isinstance(info, dict) and info.get('nah'))):
+                    # v141: auch die angesagte Nahaufnahme ("behind you") wird
+                    # hier gehalten - am Kopf, nicht am oberen Bildrand.
                     _fp = face_pos(start, end)
                     if _fp:
                         p['by'] = max(min(float(_fp[1]) - H * 0.055, H * 0.62),
@@ -6255,6 +6281,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                   'side': 0, 'ccam': 'none',
                   'target': (int(W * 0.07), int(y0 + tot_h / 2.0)),
                   'broll': broll}
+            # v141: echte Textposition fuer den Ueberlappungs-Schutz. 'target'
+            # bleibt das Kamera-Ziel - die beiden duerfen nicht verwechselt
+            # werden, sonst zieht die Kamera wieder in die Bildmitte.
+            _fcx = [it.get('cx') for it in items if it.get('cx') is not None]
+            sp['vpos'] = (sum(_fcx) / len(_fcx) if _fcx else W / 2.0,
+                          y0 + tot_h / 2.0)
             if anchor_i is not None:                 # leiser Tick auf den Anker
                 sp['flow'] = True
                 sp['flow_anchor'] = anchor_i
@@ -8267,7 +8299,10 @@ def main():
                     fx_map[i] = {'fx': m.get('fx', e.get('fx', 'behind')),
                                  'power': int(m.get('power', e.get('power', 2))),
                                  'n': int(m.get('n', e.get('n', 1)))}
-                    for k_v in ('szene', 'lage'):
+                    # v141: 'nah' (angesagte Nahaufnahme) gehoert dazu - ohne
+                    # das Flag rutschte der Text nach einem Editor-Roundtrip
+                    # wieder weg vom Kopf.
+                    for k_v in ('szene', 'lage', 'nah'):
                         if isinstance(e, dict) and e.get(k_v):
                             fx_map[i][k_v] = e[k_v]     # Vision-Regie ueberlebt Edits
                     # v99a: Sprecher-Ansage ueberlebt den Editor-Roundtrip -

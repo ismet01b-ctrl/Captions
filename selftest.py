@@ -381,17 +381,38 @@ def _scenario_logic(clip, transcript, tmp):
              {'target': (900, 700), 'start': 2.0, 'end': 3.5}]
     check('Ueberlappung: nebeneinander bleibt unangetastet',
           R.resolve_overlaps(_side, 1080, 1920) == 0)
+    # v141 (Ismets Doppelbild): die Flow-Caption traegt in 'target' das
+    # KAMERA-Ziel am linken Rand. Verglichen wird jetzt 'vpos' - der echte
+    # Textblock in der Mitte. Vorher lag der Abstand bei 0.43*W und der Schutz
+    # griff nie, obwohl beide Texte uebereinander standen.
+    _flow = [{'target': (int(1080 * 0.07), 700), 'vpos': (540, 700),
+              'start': 0.0, 'end': 4.0},
+             {'target': (540, 700), 'start': 2.0, 'end': 3.5}]
+    _nf = R.resolve_overlaps(_flow, 1080, 1920)
+    check('v141: Flow-Caption wird am ECHTEN Textblock geprueft (Doppelbild weg)',
+          _nf == 1 and abs(_flow[0]['end'] - 1.88) < 1e-6,
+          f"n={_nf} end={_flow[0]['end']:.2f}")
+    _flow_old = [{'target': (int(1080 * 0.07), 700), 'start': 0.0, 'end': 4.0},
+                 {'target': (540, 700), 'start': 2.0, 'end': 3.5}]
+    check('v141: ohne vpos bleibt das alte Verhalten (Kamera-Ziel, kein Treffer)',
+          R.resolve_overlaps(_flow_old, 1080, 1920) == 0)
+    check('v141: build_plans gibt der Flow-Caption ein vpos',
+          "sp['vpos'] = (sum(_fcx) / len(_fcx) if _fcx else W / 2.0," in
+          open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
     # Nach build_plans darf kein Paar mit target ko-sichtbar+nah stehen
     def _codisplay(pl):
         ts = [p for p in pl if 'target' in p]
         for _x in range(len(ts)):
             for _y in range(_x + 1, len(ts)):
                 a, b = ts[_x], ts[_y]
+                # v141: am ECHTEN Textblock messen (vpos), nicht am Kamera-Ziel.
+                av = a.get('vpos') or a['target']
+                bv = b.get('vpos') or b['target']
                 lo = max(a.get('t0', a['start']), b.get('t0', b['start']))
                 hi = min(a['end'], b['end'])
                 if (hi - lo > 0.25
-                        and abs(a['target'][1] - b['target'][1]) < 1920 * 0.16
-                        and abs(a['target'][0] - b['target'][0]) < 1080 * 0.42):
+                        and abs(av[1] - bv[1]) < 1920 * 0.16
+                        and abs(av[0] - bv[0]) < 1080 * 0.42):
                     return True
         return False
     _wov = [{'word': w, 'start': 1.0 + i * .35, 'end': 1.0 + i * .35 + .3}
@@ -1278,9 +1299,27 @@ def _scenario_logic(clip, transcript, tmp):
     _bcb = R._behind_cover_backstop(
         {0: {'fx': 'behind', 'power': 2, 'intent': True},
          5: {'fx': 'behind', 'power': 2}}, {0: 0.60, 5: 0.60})
-    check('Ansage schlaegt Nahaufnahme-Backstop (behind bleibt, wird himmel)',
-          _bcb[0]['fx'] == 'behind' and _bcb[0].get('szene') == 'himmel'
+    # v141 (Ismets Befund): die Nahaufnahme-Ansage wird NICHT mehr zu 'himmel'
+    # umgebogen. "behind you" landete dadurch ganz oben am Bildrand, weit weg
+    # von der Person - die Aussage stimmte nicht mehr. Jetzt nur noch als
+    # Nahaufnahme markiert; die Platzierung bleibt am Kopf.
+    check('Ansage schlaegt Nahaufnahme-Backstop (behind bleibt, nah markiert)',
+          _bcb[0]['fx'] == 'behind' and _bcb[0].get('nah') is True
+          and not _bcb[0].get('szene')
           and _bcb[5]['fx'] != 'behind', str(_bcb))
+    _bcb2 = R._behind_cover_backstop(
+        {0: {'fx': 'behind', 'power': 2, 'intent': True, 'szene': 'himmel'}},
+        {0: 0.60})
+    check('v141: echte Himmel-Ansage bleibt Himmel (Backstop fasst sie nicht an)',
+          _bcb2[0].get('szene') == 'himmel' and not _bcb2[0].get('nah'), str(_bcb2))
+    _bcb3 = R._behind_cover_backstop(
+        {0: {'fx': 'behind', 'power': 2, 'intent': True}}, {0: 0.20})
+    check('v141: normale Einstellung setzt kein nah-Flag',
+          not _bcb3[0].get('nah'), str(_bcb3))
+    _rsrc141 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v141: nah wird am Kopf platziert und ueberlebt den Editor-Roundtrip',
+          "info.get('nah')" in _rsrc141
+          and "for k_v in ('szene', 'lage', 'nah'):" in _rsrc141)
     _si = R._speech_intent({4: {'fx': 'outline', 'power': 2, 'n': 1}},
                            _wsr('The word stays right behind me. Okay then.'))
     check('_speech_intent markiert Ansagen als intent',
@@ -2186,7 +2225,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v140-senior'" in _srv_m)
+          and "DVE_BUILD = 'v141-refs'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3560,6 +3599,75 @@ def _scenario_security(tmp):
     check('v126: render.py nimmt DVE_REFS_FILE (persoenlich uebersteuert global)',
           "os.environ.get('DVE_REFS_FILE')" in
           open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+    # ---- v141: Referenz-Herkunft. Der globale Haus-Store (den der Owner ueber
+    # /api/reference/learn fuellt) darf NIE der stille Fallback fremder Konten
+    # sein - genau das liess Gelerntes in jeden Kundenschnitt lecken.
+    _srv141 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _ui141 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _rp141 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _repo_refs = os.path.join(HERE, 'regie_reference.json')
+    _p_none, _q_none = SV._refs_for_job(None)
+    _p_b, _q_b = SV._refs_for_job(idb)                 # Konto ohne eigene Stile
+    _glob = SV._reference_file()
+    # Schutz: der globale Store MUSS in der isolierten Test-DVE_DATA liegen -
+    # sonst wuerde der Test unten die echte Repo-Datei ueberschreiben/loeschen.
+    check('v141: Test-Isolation - globaler Store liegt nicht im Repo',
+          os.path.abspath(_glob) != os.path.abspath(_repo_refs), _glob)
+    check('v141: Konto ohne eigene Stile bekommt Repo-Haus-Stil, NIE den Owner-Store',
+          _q_b == 'haus' and os.path.abspath(_p_b) == os.path.abspath(_repo_refs)
+          and os.path.abspath(_p_b) != os.path.abspath(_glob)
+          and _q_none == 'haus' and os.path.abspath(_p_none) == os.path.abspath(_repo_refs),
+          f'b=({_p_b},{_q_b}) global={_glob}')
+    _p_a, _q_a = SV._refs_for_job(ida)                 # ida hat oben 1 eigenen Stil
+    check('v141: Konto MIT eigenem Stil bekommt die eigene Datei (Quelle eigene)',
+          _q_a == 'eigene' and os.path.abspath(_p_a) == os.path.abspath(_urp))
+    json.dump([], open(_urp, 'w', encoding='utf-8'))   # letzten Stil geloescht
+    _p_e, _q_e = SV._refs_for_job(ida)
+    check('v141: leere eigene Referenz-Datei zaehlt nicht als eigener Stil',
+          _q_e == 'haus' and os.path.abspath(_p_e) == os.path.abspath(_repo_refs))
+    json.dump([{'name': 'A', 'beispiel': 'dense punchy'}],
+              open(_urp, 'w', encoding='utf-8'))       # Ausgangslage zurueck
+    # Owner: sein global gelernter Haus-Store bleibt fuer SEINE Renders aktiv.
+    _old_owner = SV.OWNER_EMAIL
+    try:
+        con = SV._db()
+        con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, "
+                    "verified) VALUES ('owner141@test','x','O',0,?,1)", (int(_t.time()),))
+        con.commit()
+        _oid = con.execute("SELECT id FROM users WHERE email='owner141@test'").fetchone()['id']
+        con.close()
+        SV.OWNER_EMAIL = 'owner141@test'
+        os.makedirs(os.path.dirname(_glob) or '.', exist_ok=True)
+        json.dump([{'name': 'Haus', 'beispiel': 'owner taste'}],
+                  open(_glob, 'w', encoding='utf-8'))
+        _p_o, _q_o = SV._refs_for_job(_oid)
+        _p_b2, _q_b2 = SV._refs_for_job(idb)           # gleicher Moment, fremdes Konto
+        check('v141: Owner behaelt seinen globalen Store, fremdes Konto sieht ihn nicht',
+              _q_o == 'eigene' and os.path.abspath(_p_o) == os.path.abspath(_glob)
+              and _q_b2 == 'haus' and os.path.abspath(_p_b2) != os.path.abspath(_glob),
+              f'owner=({_p_o},{_q_o}) fremd=({_p_b2},{_q_b2})')
+    finally:
+        SV.OWNER_EMAIL = _old_owner
+        try: os.remove(_glob)
+        except OSError: pass
+    check('v141: Beweis-Zeile des Renders wird korrekt in Anzahl+Quelle gelesen',
+          SV._parse_refs_line('Stil-Referenzen: 3 aktiv (eigene) - fliessen in die '
+                              'KI-Regie ein') == (3, 'eigene')
+          and SV._parse_refs_line('Stil-Referenzen: 2 aktiv (Haus-Stil) - fliessen '
+                                  'in die KI-Regie ein') == (2, 'haus')
+          and SV._parse_refs_line('Stil-Referenzen: 2 aktiv - alt') == (2, '')
+          and SV._parse_refs_line('Stil-Referenzen: keine gefunden') == (0, ''))
+    check('v141: Env-Quelle immer gesetzt + render.py schreibt sie ins Log',
+          "env['DVE_REFS_FILE'] = _urp" in _srv141
+          and "env['DVE_REFS_SOURCE'] = _rsrc" in _srv141
+          and 'def _refs_for_job' in _srv141
+          and 'DVE_REFS_SOURCE' in _rp141 and "'haus': 'Haus-Stil'" in _rp141
+          and 'aktiv ({_lbl})' in _rp141)
+    check('v141: UI nennt nur EIGENE Stile "learned", Haus-Stil heisst Haus-Stil',
+          "st.stil_quelle === 'eigene'" in _ui141
+          and 'your ${st.stil_refs} learned style' in _ui141
+          and 'Edited with our house style' in _ui141
+          and 'learned reference' not in _ui141)
     # v126-sec: doppeltes Verify darf Referral NICHT doppelt buchen (Race-Fix).
     con = SV._db()
     con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "

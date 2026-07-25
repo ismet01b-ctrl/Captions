@@ -1603,7 +1603,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v140-senior'
+DVE_BUILD = 'v141-refs'
 
 
 @app.middleware('http')
@@ -2439,6 +2439,17 @@ def build_config(look, overrides=None):
 
 
 # ---------------------------------------------------------------- Render-Worker
+def _parse_refs_line(ln):
+    """v141: liest die Beweis-Zeile des Renders
+    'Stil-Referenzen: N aktiv (eigene|Haus-Stil) - ...' und gibt (anzahl,
+    quelle) zurueck. Quelle ist '' bei alten Logs ohne Klammer - die UI zeigt
+    dann bewusst NICHT 'learned', weil die Herkunft unbekannt ist."""
+    m = re.search(r'(\d+)\s+aktiv', ln or '')
+    n = int(m.group(1)) if m else 0
+    q = 'eigene' if '(eigene)' in ln else ('haus' if 'Haus-Stil' in ln else '')
+    return n, q
+
+
 def job_dir(jid):
     # Sicherheit: jid kommt teils aus der URL - hart auf Hex sanitisieren,
     # damit '../'-Traversal unmoeglich ist (uuid4.hex-Jobs bleiben identisch).
@@ -2488,9 +2499,20 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
     # v126 Kunden-Stil: hat das Konto eigene Stil-Referenzen, bekommt der Render-
     # Subprozess deren Datei (DVE_REFS_FILE) - Prompt-Block und Mess-Parameter
     # kommen dann aus dem PERSOENLICHEN Geschmack statt aus dem Haus-Stil.
-    _urp = _user_refs_path(j.get('user_id'))
-    if _urp and os.path.exists(_urp):
-        env['DVE_REFS_FILE'] = _urp
+    # v141 FIX (Ismets Befund): Frueher wurde DVE_REFS_FILE NUR gesetzt, wenn
+    # das Konto eigene Referenzen hat. Ohne eigene fiel render.py auf
+    # DATA/regie_reference.json zurueck - und GENAU dorthin schreibt der
+    # Owner-Endpoint /api/reference/learn. Ergebnis: was der Owner auf seinem
+    # Konto lernte, steuerte JEDEN fremden Kundenschnitt (und die UI nannte es
+    # faelschlich "learned references" des Kunden). Jetzt ist die Quelle IMMER
+    # explizit gesetzt, es gibt keinen impliziten Fallback mehr:
+    #   eigene Referenzen        -> persoenliche Datei      (Quelle 'eigene')
+    #   Owner mit Haus-Referenzen-> globale Owner-Datei      (Quelle 'eigene')
+    #   sonst                    -> mitgelieferte Repo-Defaults (Quelle 'haus')
+    # Die globale Owner-Datei erreicht ein fremdes Konto nie mehr.
+    _urp, _rsrc = _refs_for_job(j.get('user_id'))
+    env['DVE_REFS_FILE'] = _urp
+    env['DVE_REFS_SOURCE'] = _rsrc
 
     # v88b: Transkript aus dem Cache holen, falls dasselbe Video (gleicher
     # Nutzer, gleiche Sprache) schon einmal transkribiert wurde. render.py
@@ -2524,8 +2546,8 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
         # Job, ob (und wie viele) Stil-Referenzen den Schnitt gesteuert haben.
         if ln.startswith('Stil-Referenzen:'):
             try:
-                _m = re.search(r'(\d+)\s+aktiv', ln)
-                set_state(jid, stil_refs=int(_m.group(1)) if _m else 0)
+                _n, _q = _parse_refs_line(ln)
+                set_state(jid, stil_refs=_n, stil_quelle=_q)
             except Exception:
                 pass
         elif ln.startswith('Stil-Anker:'):
@@ -5562,6 +5584,45 @@ def _load_user_refs(uid):
         return refs if isinstance(refs, list) else []
     except Exception:
         return []
+
+
+def _refs_for_job(uid):
+    """v141: entscheidet EXPLIZIT, welche Stil-Referenz-Datei ein Render-
+    Subprozess sieht, und woher sie stammt. Rueckgabe (pfad, quelle) mit
+    quelle in {'eigene','haus'}.
+
+    Reihenfolge:
+      1. persoenliche Referenzen des Kontos (/api/style/learn)     -> 'eigene'
+      2. NUR fuer das Besitzer-Konto: die globale Haus-Datei, die
+         /api/reference/learn schreibt                            -> 'eigene'
+      3. sonst die mitgelieferten Repo-Defaults                   -> 'haus'
+
+    Punkt 2 ist der Kern des v141-Fixes: vorher war die globale Datei der
+    stille Fallback FUER ALLE - das Gelernte des Owners lief in jeden fremden
+    Kundenschnitt. Jetzt bleibt sie auf das Konto beschraenkt, das sie fuellt.
+    """
+    _repo = os.path.join(ROOT, 'regie_reference.json')
+    if not uid:
+        return _repo, 'haus'
+    p = _user_refs_path(uid)
+    if p and os.path.exists(p) and _load_user_refs(uid):
+        return p, 'eigene'
+    row = None
+    con = None
+    try:
+        con = _db()
+        row = con.execute('SELECT email FROM users WHERE id=?', (uid,)).fetchone()
+    except Exception:
+        pass
+    finally:
+        if con is not None:
+            try: con.close()
+            except Exception: pass
+    if row and str(row['email'] or '').strip().lower() == OWNER_EMAIL:
+        g = _reference_file()
+        if g and os.path.exists(g) and _load_references():
+            return g, 'eigene'
+    return _repo, 'haus'
 
 
 @app.post('/api/style/learn')

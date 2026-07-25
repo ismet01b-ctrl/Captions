@@ -4784,11 +4784,39 @@ async function loadDirectorReport() {
         </span>
       </div>`).join('');
     // v96y: Beweis, ob (und wie) gelernte Stil-Referenzen den Schnitt steuerten
+    // v141: EHRLICHE Quelle. Vorher hiess auch der mitgelieferte Haus-Stil
+    // faelschlich "gelernt" - der Kunde las, er haette etwas beigebracht, was
+    // nie passiert ist.
+    // v141: die Mess-Parameter im Klartext, nicht als Roh-Tokens. Der Kunde
+    // soll SEHEN, was sein gelernter Stil konkret verstellt hat.
+    const ankerList = s => {
+      const out = [];
+      String(s || '').split(',').forEach(tok => {
+        const t = tok.trim();
+        let m;
+        if ((m = t.match(/^chunks=(\d+)$/))) out.push(`${m[1]} word${m[1] === '1' ? '' : 's'} per caption`);
+        else if ((m = t.match(/^gap=([\d.]+)s$/))) out.push(`${m[1]}s between highlights`);
+        else if ((m = t.match(/^hook=([\d.]+)$/))) out.push(`hook intensity ${Math.round(parseFloat(m[1]) * 100)}%`);
+        else if ((m = t.match(/^wucht=(\w+)$/))) out.push({ruhig: 'calm motion and sound', normal: 'balanced motion and sound', wuchtig: 'punchy motion and sound'}[m[1]] || esc(t));
+        else if ((m = t.match(/^farbe=(#[0-9a-f]{6})$/i))) out.push(`accent colour <span style="display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:baseline;background:${esc(m[1])}"></span> ${esc(m[1])}`);
+        else if ((m = t.match(/^dichte=(\w+)$/))) out.push(m[1] === 'durchgehend' ? 'captions run continuously' : 'captions as accents only');
+        else if (t) out.push(esc(t));
+      });
+      return out;
+    };
     let refLine = '';
     if (typeof st.stil_refs === 'number') {
-      refLine = st.stil_refs > 0
-        ? `<p style="font-size:12px; color:#6dd48a; margin:-4px 0 8px;">Style anchor: ${st.stil_refs} learned reference${st.stil_refs > 1 ? 's' : ''} shaped this edit${st.stil_anker ? ' (' + esc(st.stil_anker) + ')' : ''}.</p>`
-        : `<p style="font-size:12px; color:var(--mut2); margin:-4px 0 8px;">No learned style references were active for this render.</p>`;
+      const det = ankerList(st.stil_anker);
+      const detHtml = det.length
+        ? `<span style="color:var(--mut2);"> It set ${det.join(', ')}.</span>`
+        : '';
+      if (st.stil_refs > 0 && st.stil_quelle === 'eigene') {
+        refLine = `<p style="font-size:12px; color:#6dd48a; margin:-4px 0 8px;">Style anchor: your ${st.stil_refs} learned style${st.stil_refs > 1 ? 's' : ''} shaped this edit.${detHtml}</p>`;
+      } else if (st.stil_refs > 0) {
+        refLine = `<p style="font-size:12px; color:var(--mut2); margin:-4px 0 8px;">Edited with our house style.${detHtml} Teach your own look under Account &rsaquo; Your caption style.</p>`;
+      } else {
+        refLine = `<p style="font-size:12px; color:var(--mut2); margin:-4px 0 8px;">No style references were active for this render.</p>`;
+      }
     }
     box.innerHTML = `
       <h4 style="font-size:14px; font-weight:800; margin-bottom:2px;">Director's cut</h4>

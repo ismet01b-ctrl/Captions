@@ -3,6 +3,49 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v141 Stil-Referenzen ehrlich + zwei Platzierungs-Fehler behoben.** Alle drei
+  Punkte kamen aus Ismets Screenshots, alle drei waren echte Fehler im Code.
+  - **(1) Referenz-Leck (der schwerste).** `_run_render` setzte `DVE_REFS_FILE`
+    NUR, wenn das Konto eigene Stile hatte. Ohne eigene fiel `render.py` auf
+    `DATA/regie_reference.json` zurueck - und GENAU dorthin schreibt der
+    Owner-Endpoint `/api/reference/learn`. Folge: was auf dem Owner-Konto
+    gelernt wurde, steuerte JEDEN fremden Kundenschnitt, und die UI nannte es
+    dem Kunden gegenueber "N learned references" (er hatte nie etwas gelernt).
+    Neu: `_refs_for_job(uid)` entscheidet EXPLIZIT, es gibt keinen stillen
+    Fallback mehr - eigene Stile -> persoenliche Datei; Owner-Konto -> seine
+    globale Haus-Datei (sein Gelerntes bleibt fuer SEINE Renders aktiv);
+    alle anderen -> die mitgelieferten Repo-Defaults. `DVE_REFS_SOURCE`
+    ('eigene'/'haus') geht mit in den Subprozess, `render.py` schreibt die
+    Quelle in die Beweis-Zeile (`Stil-Referenzen: N aktiv (eigene|Haus-Stil)`),
+    der Server liest sie via `_parse_refs_line` in `stil_quelle`.
+  - **(1b) Director's cut sagt jetzt die Wahrheit UND das Detail.** Nur eigene
+    Stile heissen "your N learned styles". Der Haus-Stil heisst Haus-Stil, mit
+    Hinweis, wo man den eigenen anlernt. Die Mess-Parameter stehen im Klartext
+    statt als Roh-Tokens ("2 words per caption, 5.0s between highlights, hook
+    intensity 60%") - der Kunde sieht, was sein Stil konkret verstellt hat.
+  - **(2) "behind you" stand am oberen Bildrand.** `_behind_cover_backstop`
+    bog angesagte behind-Momente bei bildfuellender Nahaufnahme auf
+    `szene='himmel'` um - der Text landete dadurch ganz oben, wo die Person
+    gar nicht ist. Die Ansage stimmte optisch nicht mehr. Neu: nur noch ein
+    `nah`-Flag; die Platzierung bleibt auf Kopf-/Schulterhoehe und die
+    bestehende Lesbarkeits-Logik vergroessert das Wort, bis es beidseitig am
+    Kopf vorbeiragt (ueber den Kopf nur noch als letzte Rettung, mit Log).
+    Echte Himmel-Ansagen ("ueber mir") setzen `szene` selbst und bleiben
+    unberuehrt. `nah` ueberlebt den Editor-Roundtrip. CLAUDE.md angepasst -
+    die alte Regel stand dort als Invariante drin.
+  - **(3) Caption-Doppelbild.** `resolve_overlaps` verglich `target` - bei der
+    Flow-Caption ist das aber das KAMERA-Ziel am linken Rand (x = 0.07*W),
+    nicht der Textblock in der Mitte. Der horizontale Abstand zu einem
+    Keyword-Moment lag damit bei 0.43*W und riss die 0.42*W-Schranke: der
+    Ueberlappungs-Schutz griff bei Flow-Captions NIE. Neu: die Flow-Caption
+    traegt zusaetzlich `vpos` (echter Textblock), der Schutz misst daran.
+  - Tests: 811 logic + 7/1/5/2 Renders gruen. Neu u.a. Owner-Store bleibt beim
+    Owner, fremdes Konto sieht ihn nicht, leere eigene Datei zaehlt nicht als
+    eigener Stil, Log-Zeile -> (Anzahl, Quelle), Flow-Caption wird am echten
+    Textblock geprueft. EHRLICH: alles auf Linux/CPU mit synthetischem
+    Material und OHNE OpenAI-Key. Ob das Doppelbild in Ismets konkretem Video
+    genau diese Ursache hatte, ist damit NICHT bewiesen - der Screenshot passt
+    zum Fehlerbild, das Video selbst lag hier nicht vor.
 - **v140 Senior-Editor-Batch: Kontrast-Garantie, Tempo-Kurve, Stille vor der Pointe.** Aus der
   Produktanalyse (Code gelesen, nicht geraten) kamen drei echte Luecken, alle drei gebaut:
   - **(1) Kontrast-Garantie (war ein echter Fehler).** `scene_palette_sampler` nahm den Szenen-
