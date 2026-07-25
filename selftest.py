@@ -2634,7 +2634,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v143-editorial'" in _srv_m)
+          and "DVE_BUILD = 'v145-rechnung'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4733,6 +4733,68 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ================= v145: Pflichtangaben auf der Rechnung =================
+    # §14 Abs. 4 UStG (bei Kleinbetraegen bis 250 EUR §33 UStDV): vollstaendiger
+    # NAME und ANSCHRIFT des leistenden Unternehmers gehoeren auf die Rechnung.
+    # Der Rechnungskopf ('Von: ...') kommt aus dem Stripe-Unternehmensprofil,
+    # darauf hat der Code keinen Zugriff - stand dort nur die Marke, fehlte die
+    # Angabe. Fusszeile und Zusatzfelder tragen sie deshalb selbst.
+    _inv145 = SV._invoice_creation('starter', SV.PACKS['starter'])
+    _f145 = _inv145['invoice_data']['footer']
+    _cf145 = _inv145['invoice_data'].get('custom_fields') or []
+    check('v145: Name und Anschrift des Ausstellers stehen auf der Rechnung',
+          'Ismet Beyazkus' in _f145 and 'Hinter den Gärten 4' in _f145
+          and '52388 Nörvenich' in _f145 and 'Germany' in _f145,
+          _f145.splitlines()[0] if _f145 else '(leer)')
+    check('v145: Aussteller und USt-IdNr auch als Kopf-Zusatzfeld',
+          any(c['name'] == 'Aussteller' and 'Ismet Beyazkus' in c['value']
+              for c in _cf145)
+          and any(c['value'] == 'DE463613884' for c in _cf145),
+          str(_cf145))
+    # Stripe deckelt Name und Wert bei 30 Zeichen. Zu lange Werte weist die
+    # API zurueck - und riessen ueber invoice_creation den ganzen Checkout mit.
+    check('v145: Zusatzfelder bleiben unter der 30-Zeichen-Grenze von Stripe',
+          all(len(c['name']) <= 30 and len(c['value']) <= 30 for c in _cf145)
+          and 1 <= len(_cf145) <= 4, str([len(c['value']) for c in _cf145]))
+    check('v145: §19-Hinweis bleibt, weiterhin KEIN USt-Satz und kein Betrag',
+          '§19 UStG' in _f145 and 'keine Umsatzsteuer' in _f145
+          and '19%' not in _f145 and '7%' not in _f145
+          and 'zzgl' not in _f145.lower())
+    check('v145: Leistungsbeschreibung nennt Menge und Art',
+          'minutes of video credit' in _inv145['invoice_data']['description']
+          and str(SV.PACKS['starter']['minuten'])
+          in _inv145['invoice_data']['description'],
+          _inv145['invoice_data']['description'])
+    # Aussteller ueber Env austauschbar - sonst muesste bei einem Umzug der
+    # Code angefasst werden, und die Rechnung waere bis zum Deploy falsch.
+    _alt145 = {k: os.environ.get(k) for k in
+               ('DVE_SELLER_NAME', 'DVE_SELLER_ADDR', 'DVE_SELLER_MAIL')}
+    try:
+        os.environ['DVE_SELLER_NAME'] = 'Max Muster'
+        os.environ['DVE_SELLER_ADDR'] = 'Teststr. 1, 10115 Berlin, Germany'
+        _inv145b = SV._invoice_creation('starter', SV.PACKS['starter'])
+    finally:
+        for k, v in _alt145.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check('v145: Aussteller-Angaben sind ohne Code-Aenderung umstellbar',
+          'Max Muster' in _inv145b['invoice_data']['footer']
+          and '10115 Berlin' in _inv145b['invoice_data']['footer']
+          and 'Ismet Beyazkus' not in _inv145b['invoice_data']['footer'])
+    _tax145 = SV._admin_tax_calc()
+    check('v145: Admin-Panel listet die Pflichtangaben und den Dashboard-Rest',
+          len(_tax145['identitaet'].get('rechnungspflicht') or []) >= 6
+          and 'Stripe business profile' in (_tax145['identitaet'].get('dashboard') or '')
+          and _tax145['identitaet'].get('anschrift'),
+          str(_tax145['identitaet'].get('anschrift')))
+    _adm145 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v145: Pflichtangaben sind im Admin-Panel sichtbar',
+          'Mandatory invoice fields' in _adm145
+          and 'd.identitaet.rechnungspflicht' in _adm145
+          and 'd.identitaet.anschrift' in _adm145)
+
     # ================= v135a: Audit-Fixes (Bezahl-Vollaudit) =================
     _srvA = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     _idxA = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()

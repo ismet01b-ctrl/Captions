@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v145 Rechnung: Pflichtangaben vollstaendig, unabhaengig vom Dashboard.**
+  Befund an einer echten Stripe-Rechnung: der Kopf zeigte nur die Marke
+  ('Von: DouchkoVE'). Vollstaendiger Name und Anschrift des leistenden
+  Unternehmers sind aber Pflicht (§14 Abs. 4 Nr. 1 UStG; bei Kleinbetraegen
+  bis 250 EUR §33 UStDV ebenso). Der Rechnungskopf kommt aus dem
+  Stripe-Unternehmensprofil, darauf hat der Code keinen Zugriff. Deshalb
+  tragen jetzt FUSSZEILE und ZUSATZFELDER die Identitaet selbst:
+  Fusszeile `Ismet Beyazkus (DouchkoVE) · Hinter den Gärten 4, 52388
+  Nörvenich, Germany · Ismet@douchkove.com` + `USt-IdNr.: DE463613884` +
+  §19-Hinweis; Zusatzfelder im Kopf `Aussteller` und `USt-IdNr.`.
+  Die Anschrift passt NICHT in ein Zusatzfeld - Stripe deckelt Name und Wert
+  bei 30 Zeichen, ein zu langer Wert wird abgewiesen und riesse ueber
+  `invoice_creation` den ganzen Checkout mit. Sie steht deshalb nur in der
+  Fusszeile, die Laenge ist getestet.
+  Aussteller ueber `DVE_SELLER_NAME` / `DVE_SELLER_ADDR` / `DVE_SELLER_MAIL` /
+  `DVE_SELLER_BRAND` umstellbar (Defaults = Impressum), damit ein Umzug keine
+  Code-Aenderung braucht. Weiterhin NIE ein USt-Satz oder -Betrag.
+  Der Admin-Tab 'Recht & Steuern' listet jetzt die sechs Pflichtangaben mit
+  Status und nennt ausdruecklich den einen Punkt, der nur im Stripe-Dashboard
+  zu erledigen ist (Rechnungskopf). Tests 877 logic gruen.
 - **v144 Referenz-Funktion: gemessen statt geschaetzt.** Die Stil-Referenz im
   Konto uebernimmt jetzt nachpruefbar den Stil des hochgeladenen Vorbilds.
   EHRLICHE URSACHE des alten Zustands: bis v143 lief das Stil-Lernen ueber

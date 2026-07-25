@@ -576,6 +576,13 @@ async function loadLegal(){
       <tr><td>VAT ID</td><td class="mono"><b>${esc(d.identitaet.ust_id)}</b></td></tr>
       <tr><td>Show a VAT amount / rate</td><td><span class="tag no">never</span> <span class="subtle">${esc(d.identitaet.hinweis)}</span></td></tr>
       <tr><td>VAT ID on invoice</td><td><span class="tag ok">yes</span> <span class="subtle">Printed as an identifier in the footer, next to the §19 note. It is not a VAT charge.</span></td></tr>
+      <tr><td>Issuer</td><td><b>${esc(d.identitaet.name||'')}</b><br><span class="subtle">${esc(d.identitaet.anschrift||'')}</span></td></tr>
+    </tbody></table>
+
+    <h3>Mandatory invoice fields</h3>
+    <table><tbody>
+      ${(d.identitaet.rechnungspflicht||[]).map(x=>`<tr><td><span class="tag ok">on</span></td><td>${esc(x)}</td></tr>`).join('')}
+      <tr><td><span class="tag no">manual</span></td><td>${esc(d.identitaet.dashboard||'')}</td></tr>
     </tbody></table>
 
     <h3>&sect;19 UStG thresholds</h3>

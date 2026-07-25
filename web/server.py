@@ -1643,7 +1643,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v144-referenz-messung'
+DVE_BUILD = 'v145-rechnung'
 
 
 @app.middleware('http')
@@ -1688,23 +1688,46 @@ def _invoice_creation(pack_id, p):
     Kundenanschrift noetig. Steuernummer optional ueber DVE_TAX_ID.
     Firmenname/Anschrift im Rechnungskopf kommen aus den Stripe-
     Unternehmensdaten (Dashboard, einmalig pflegen)."""
-    footer = ('Gemäß §19 UStG wird keine Umsatzsteuer berechnet. / '
-              'No VAT is charged in accordance with §19 UStG '
-              '(German small business scheme).')
     # v135: Ismets USt-IdNr als fester Default (Pflichtangabe §14 UStG:
     # Steuernummer ODER USt-IdNr; sie steht auch oeffentlich im Impressum).
     # 'or'-Fallback statt get-Default: docker-compose reicht bei fehlender
     # .env-Zeile einen LEEREN String durch, der den get-Default schlagen wuerde.
     tax_id = (os.environ.get('DVE_TAX_ID') or 'DE463613884').strip()
+    label = ('USt-IdNr.' if re.match(r'(?i)^DE\d{9}$', tax_id)
+             else 'Steuernummer')
+    # v145: VOLLSTAENDIGE Aussteller-Angaben in die Rechnung.
+    # Der Rechnungskopf ('Von: ...') kommt aus den Stripe-Unternehmensdaten im
+    # Dashboard - darauf hat der Code keinen Zugriff. Steht dort nur die Marke,
+    # fehlt der Rechnung der vollstaendige Name und die Anschrift des
+    # leistenden Unternehmers (§14 Abs. 4 Nr. 1 UStG; bei Kleinbetraegen bis
+    # 250 EUR §33 UStDV ebenfalls Pflicht). Deshalb tragen Fusszeile UND
+    # Zusatzfelder die Identitaet noch einmal selbst - dann stimmt die
+    # Rechnung auch, wenn im Dashboard etwas fehlt oder spaeter verstellt wird.
+    name = (os.environ.get('DVE_SELLER_NAME') or 'Ismet Beyazkus').strip()
+    marke = (os.environ.get('DVE_SELLER_BRAND') or 'DouchkoVE').strip()
+    adresse = (os.environ.get('DVE_SELLER_ADDR')
+               or 'Hinter den Gärten 4, 52388 Nörvenich, Germany').strip()
+    mail = (os.environ.get('DVE_SELLER_MAIL') or 'Ismet@douchkove.com').strip()
+    kopf = ' · '.join(x for x in (f'{name} ({marke})' if marke else name,
+                                  adresse, mail) if x)
+    footer = (kopf + (f'\n{label}: {tax_id}' if tax_id else '') + '\n'
+              'Gemäß §19 UStG wird keine Umsatzsteuer berechnet. / '
+              'No VAT is charged in accordance with §19 UStG '
+              '(German small business scheme).')
+    # Zusatzfelder stehen im Rechnungskopf, nicht unten im Kleingedruckten.
+    # Stripe deckelt sie bei 30 Zeichen je Name und Wert - laengere Werte
+    # weist die API zurueck und riesse den ganzen Checkout mit. Die Anschrift
+    # passt dort nicht hinein, sie steht deshalb nur in der Fusszeile.
+    felder = [{'name': 'Aussteller', 'value': name[:30]}]
     if tax_id:
-        label = 'USt-IdNr.' if re.match(r'(?i)^DE\d{9}$', tax_id) else 'Steuernummer'
-        footer += f' {label}: {tax_id}'
+        felder.append({'name': label[:30], 'value': tax_id[:30]})
     return {
         'enabled': True,
         'invoice_data': {
             'description': (f"DouchkoVE {p['name']} Pack, "
                             f"{p['minuten']} minutes of video credit"),
             'footer': footer,
+            'custom_fields': felder,
             'metadata': {'pack': pack_id},
         },
     }
@@ -6739,10 +6762,30 @@ def _admin_tax_calc():
             'regelung': 'Kleinunternehmer nach §19 UStG (small business scheme)',
             'ust_id': (os.environ.get('DVE_TAX_ID') or 'DE463613884').strip(),
             'ust_ausweis': False,
+            'name': (os.environ.get('DVE_SELLER_NAME') or 'Ismet Beyazkus').strip(),
+            'anschrift': (os.environ.get('DVE_SELLER_ADDR')
+                          or 'Hinter den Gärten 4, 52388 Nörvenich, '
+                             'Germany').strip(),
             'hinweis': 'Never show a VAT amount or rate on invoices (that is what '
                        '"state VAT" means). The VAT ID itself DOES go on the '
                        'invoice as an identifier, together with the §19 note - '
                        'both are already in the Stripe footer.',
+            'rechnungspflicht': [
+                'Full name and address of the issuer (§14 (4) 1 UStG) - '
+                'carried by the invoice footer and the "Aussteller" field, '
+                'independently of the Stripe business profile.',
+                'Issue date (§14 (4) 3) - set by Stripe.',
+                'Quantity and description of the service (§14 (4) 5) - the '
+                'line item carries pack name and minutes of video credit.',
+                'Total amount (§14 (4) 7) - set by Stripe, gross, no VAT line.',
+                '§19 note - in the footer, on every invoice, no threshold.',
+                'VAT ID as identifier (§27a UStG) - in the footer and in the '
+                'invoice header field.',
+            ],
+            'dashboard': 'The invoice HEADER ("From: ...") comes from the '
+                         'Stripe business profile, not from this code. Set the '
+                         'legal name and full address there as well, otherwise '
+                         'the header shows the brand only.',
         },
         'jahr': jahr, 'jahre': jahre, 'monate': monate,
         'kleinunternehmer': kleinunternehmer,
