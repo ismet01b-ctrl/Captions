@@ -4749,6 +4749,42 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # v165: Gemini-Pruefung der Rechnung (Ismets Vorlage). Drei Punkte:
+    # (1) Marke + buergerlicher Name zusammen im Aussteller-Feld - §14 UStG
+    #     verlangt den vollen Namen, die Marke allein reicht nicht.
+    # (2) USt-IdNr als EIGENE Zeile direkt unter der Identitaet, nicht im
+    #     Fliesstext versteckt.
+    # (3) Leistungsdatum-Pflichtsatz (§14 Abs. 4 Nr. 6 UStG), zweisprachig.
+    _f165 = _invd['invoice_data']['footer']
+    _flds165 = {f['name']: f['value']
+                for f in _invd['invoice_data']['custom_fields']}
+    check('v165: Aussteller-Feld traegt Marke UND vollen Namen',
+          _flds165.get('Aussteller') == 'DouchkoVE - Ismet Beyazkus'
+          and len(_flds165['Aussteller']) <= 30)
+    check('v165: die USt-IdNr steht als eigene Zeile im Absenderblock',
+          '\nUSt-IdNr.: DE463613884\n' in _f165)
+    check('v165: Leistungsdatum-Satz steht zweisprachig im Footer',
+          'Leistungsdatum entspricht dem Ausstellungsdatum.' in _f165
+          and 'Date of service corresponds to the invoice date.' in _f165)
+    # Der 30-Zeichen-Deckel von Stripe: passt Marke+Name nicht hinein,
+    # gewinnt der NAME (die Pflichtangabe), nicht die Marke.
+    _n0 = os.environ.get('DVE_SELLER_NAME')
+    _b0 = os.environ.get('DVE_SELLER_BRAND')
+    try:
+        os.environ['DVE_SELLER_NAME'] = 'Maximiliane Musterfrau-Beispiel'
+        os.environ['DVE_SELLER_BRAND'] = 'DouchkoVE'
+        _invl = SV._invoice_creation('starter', SV.PACKS['starter'])
+    finally:
+        for _k, _v in (('DVE_SELLER_NAME', _n0), ('DVE_SELLER_BRAND', _b0)):
+            if _v is None:
+                os.environ.pop(_k, None)
+            else:
+                os.environ[_k] = _v
+    _fl = {f['name']: f['value'] for f in _invl['invoice_data']['custom_fields']}
+    check('v165: wird es zu lang, gewinnt der Name die 30 Zeichen, nicht die Marke',
+          _fl['Aussteller'].startswith('Maximiliane')
+          and 'DouchkoVE' not in _fl['Aussteller']
+          and len(_fl['Aussteller']) <= 30)
     # ============ v157: 4K als Aufloesungsstufe, echte Abbuchung ===========
     # Die UI zeigt 4K jetzt als dritte Stufe NEBEN 720p/1080p, nicht mehr als
     # eigenes Quality-Feld. Damit schickt der Client die HOEHE - der Server

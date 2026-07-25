@@ -1776,15 +1776,28 @@ def _invoice_creation(pack_id, p):
     mail = (os.environ.get('DVE_SELLER_MAIL') or 'Ismet@douchkove.com').strip()
     kopf = ' · '.join(x for x in (f'{name} ({marke})' if marke else name,
                                   adresse, mail) if x)
+    # v165: Leistungsdatum ist Pflichtangabe (§14 Abs. 4 Nr. 6 UStG). Bei
+    # Credits ist die Leistung mit dem Kauf erbracht (Guthaben-Freischaltung),
+    # darum genuegt der Verweis auf das Ausstellungsdatum.
     footer = (kopf + (f'\n{label}: {tax_id}' if tax_id else '') + '\n'
               'Gemäß §19 UStG wird keine Umsatzsteuer berechnet. / '
               'No VAT is charged in accordance with §19 UStG '
-              '(German small business scheme).')
+              '(German small business scheme).\n'
+              'Leistungsdatum entspricht dem Ausstellungsdatum. / '
+              'Date of service corresponds to the invoice date.')
     # Zusatzfelder stehen im Rechnungskopf, nicht unten im Kleingedruckten.
     # Stripe deckelt sie bei 30 Zeichen je Name und Wert - laengere Werte
     # weist die API zurueck und riesse den ganzen Checkout mit. Die Anschrift
     # passt dort nicht hinein, sie steht deshalb nur in der Fusszeile.
-    felder = [{'name': 'Aussteller', 'value': name[:30]}]
+    # v165: Marke UND buergerlicher Name zusammen ("DouchkoVE - Ismet
+    # Beyazkus") - §14 UStG verlangt den vollstaendigen Namen des leistenden
+    # Unternehmers, die Marke allein reicht nicht. 30-Zeichen-Deckel von
+    # Stripe beachten: passt beides nicht hinein, gewinnt der NAME, denn der
+    # ist die Pflichtangabe, die Marke nicht.
+    _ausst = f'{marke} - {name}' if marke else name
+    if len(_ausst) > 30:
+        _ausst = name
+    felder = [{'name': 'Aussteller', 'value': _ausst[:30]}]
     if tax_id:
         felder.append({'name': label[:30], 'value': tax_id[:30]})
     return {
