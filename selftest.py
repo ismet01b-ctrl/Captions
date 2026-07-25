@@ -139,16 +139,16 @@ def _scenario_1(clip, transcript, tmp):
     check('Voll-Render laeuft durch', code == 0 and os.path.exists(out))
     check('Ausgabedauer synchron', abs(out_dur - src_dur) < 0.25,
           f'{out_dur:.2f}s vs {src_dur:.2f}s')
-    check('Matting-Gating aktiv', 'Matting-Fenster' in log and 'von ~' in log)
-    check('Wort-Timing nachjustiert', 'nachjustiert' in log)
-    check('SFX intelligent gesetzt', 'Onset' in log)
-    check('Sound-Pack wird im Render benutzt', 'Sound-Pack:' in log)
+    check('Matting-Gating aktiv', 'Matting window' in log and 'of ~' in log)
+    check('Wort-Timing nachjustiert', 'Word timing adjusted' in log)
+    check('SFX intelligent gesetzt', 'onset' in log or 'Onset' in log)
+    check('Sound-Pack wird im Render benutzt', 'Sound pack:' in log)
     # v101g: Kontaktbogen entsteht beim Voll-Render (echte Moment-Frames)
     _kbp = os.path.splitext(out)[0] + '_kontakt.jpg'
     _kbi = cv2.imread(_kbp) if os.path.exists(_kbp) else None
     check('v101g: Kontaktbogen liegt neben dem Video (gueltiges Bild)',
           _kbi is not None and _kbi.shape[0] > 50 and _kbi.shape[1] >= 360
-          and 'Kontaktbogen:' in log,
+          and 'Contact sheet:' in log,
           str(_kbi.shape if _kbi is not None else 'fehlt'))
 
 
@@ -157,8 +157,8 @@ def _scenario_2a(clip, transcript, tmp, mixed):
     if mixed:
         out2 = os.path.join(tmp, 'st_mixed.mp4')
         code, log = render(mixed, transcript, out2)
-        check('B-Roll-Szenen erkannt', 'B-Roll eingestuft' in log)
-        check('B-Roll komplett textfrei', '0 ueber B-Roll' in log)
+        check('B-Roll-Szenen erkannt', 'classified as B-roll' in log)
+        check('B-Roll komplett textfrei', '0 over B-roll' in log)
 
     # 3) Hochformat
     port = os.path.join(tmp, 'st_portrait_src.mov')
@@ -222,7 +222,7 @@ def _scenario_2b(clip, transcript, tmp, pan):
         _aok = (_aal > 200).any() and (_aal < 10).mean() > 0.5
     check('v101h: Alpha-Kanal traegt Text (opak) auf Transparenz', _aok)
     check('v101h: Kamera im Alpha-Modus deaktiviert (deckungsgleiche Ebene)',
-          'Alpha-Export: Caption-Ebene' in log6)
+          'Alpha export: caption layer' in log6)
 
 
 def _scenario_2c(clip, transcript, tmp):
@@ -254,7 +254,7 @@ def _scenario_2c(clip, transcript, tmp):
         code, log = render(ph_src, transcript, out7,
                            extra=['--duration', str(words[pair]['end'] + 1.5)])
         check('Phrasen-Highlight rendert',
-              code == 0 and 'KI-Regie:' in log and os.path.exists(out7))
+              code == 0 and 'AI director:' in log and os.path.exists(out7))
 
 
 def _scenario_logic(clip, transcript, tmp):
@@ -530,7 +530,7 @@ def _scenario_logic(clip, transcript, tmp):
     check('v143: Ticks nur am Anfang einer Einstellung (kein Maschinengewehr)',
           '_t0 - _shot0 > 1.60' in _sfxsrc)
     check('v143: ohne Sound-Pack bleibt es STUMM (Projektregel unangetastet)',
-          'Kein Sound-Pack gefunden' in _sfxsrc
+          'No sound pack found' in _sfxsrc
           and 'synthetischer Ersatzton waere schlechter als Stille' in _sfxsrc)
 
     # ================================================================
@@ -2053,7 +2053,7 @@ def _scenario_logic(clip, transcript, tmp):
           and 'alpha_from_pair(_cb, _cw)' in _src99
           and '_alpha_state_restore(plans, cam_state, _snap)' in _src99
           and "'-profile:v', '4444'" in _src99
-          and 'nur SFX' in _src99)
+          and 'SFX only' in _src99)
     check('v101h: Grain deterministisch seedbar (Doppelpass-Voraussetzung)',
           'grain_seed=_gs' in _src99
           and 'default_rng(grain_seed)' in _src99)
@@ -2634,11 +2634,12 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v145-rechnung'" in _srv_m)
+          and "DVE_BUILD = 'v149-resolution'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
-          "const AUTO={live:15000, jobs:5000}" in _adm
+          "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
           and 'X-Admin-Key' in _adm
+          and "['alerts','Alerts']" in _adm
           and all(t in _adm for t in ("'revenue'", "'credits'", "'abuse'",
                                       "'system'", "'compliance'", "'codes'")))
     # v130x: Pfad-Routing (/app/<name>) statt reinem Hash -> Adressleiste laedt
@@ -2998,7 +2999,7 @@ def _scenario_logic(clip, transcript, tmp):
         mx = max((mom[i + 1]['start'] - mom[i]['end'] for i in range(len(mom) - 1)),
                  default=0)
         return (len([p for p in mom if p['start'] < 30]), len(cams), mx,
-                _b.getvalue().count('Watchtime-Moment'))
+                _b.getvalue().count('Watchtime moment'))
 
     e0, e15, e30 = _early(0)[0], _early(15)[0], _early(30)[0]
     check('Hook-Laenge wirkt', e0 < e15 < e30, f'0s={e0} 15s={e15} 30s={e30}')
@@ -3876,7 +3877,7 @@ def _scenario_security(tmp):
                                  'effects': {'blender_samples': 99999, 'bg_blur': 0.5},
                                  'boeses': {'x': 1}})
     check('cfg_overrides: Whitelist + Ressourcen-Deckel',
-          ov.get('output', {}).get('height') == 1920
+          ov.get('output', {}).get('height') == 2160
           and 'master' not in ov.get('output', {})
           and ov['effects']['blender_samples'] == 256
           and ov['effects']['bg_blur'] == 0.5 and 'boeses' not in ov)
@@ -4072,8 +4073,8 @@ def _scenario_security(tmp):
           "env['DVE_REFS_FILE'] = _urp" in _srv141
           and "env['DVE_REFS_SOURCE'] = _rsrc" in _srv141
           and 'def _refs_for_job' in _srv141
-          and 'DVE_REFS_SOURCE' in _rp141 and "'haus': 'Haus-Stil'" in _rp141
-          and 'aktiv ({_lbl})' in _rp141)
+          and 'DVE_REFS_SOURCE' in _rp141 and "'haus': 'house style'" in _rp141
+          and 'active ({_lbl})' in _rp141)
     check('v141: UI nennt nur EIGENE Stile "learned", Haus-Stil heisst Haus-Stil',
           "st.stil_quelle === 'eigene'" in _ui141
           and 'your ${st.stil_refs} learned style' in _ui141
@@ -4733,6 +4734,111 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ================= v149: Aufloesung + 4K =================================
+    # Befund: 'output.height' wurde stur als BILDHOEHE genommen. Eine
+    # 1080x1920-Aufnahme kam damit als 607x1080 heraus - schmaler als die
+    # Quelle. Quer stimmte es zufaellig, deshalb ist es nie aufgefallen.
+    _r149 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v149: Hoehe ist die KURZE Kante, Hochformat wird nicht kleingerechnet',
+          "_kurz if src_w >= src_h else" in _r149)
+    check('v149: es wird NIE hochskaliert (aus 1080p wird kein 4K)',
+          'H = min(H, src_h)' in _r149 and "('4k', 'uhd')" in _r149)
+    check('v149: 4K kostet das Doppelte',
+          SV.cost_seconds(60, uhd=True) == 2 * SV.cost_seconds(60)
+          and SV.UHD_FAKTOR == 2,
+          f'{SV.cost_seconds(60)} -> {SV.cost_seconds(60, uhd=True)} Sekunden')
+    check('v149: angefangene Minuten zaehlen auch bei 4K',
+          SV.cost_seconds(61, uhd=True) == 240 and SV.cost_seconds(1) == 60,
+          f'61s 4K = {SV.cost_seconds(61, uhd=True)}')
+    # Der WUNSCH allein darf nicht kosten - nur ein Video, das die Aufloesung
+    # wirklich hergibt, wird als 4K berechnet.
+    _hd149 = os.path.join(tmp, 'st_hd149.mp4')
+    _uh149 = os.path.join(tmp, 'st_uhd149.mp4')
+    for _pth, _sz in ((_hd149, '640x360'), (_uh149, '2560x1440')):
+        if not os.path.exists(_pth):
+            subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i',
+                            f'testsrc=size={_sz}:rate=10:duration=1',
+                            '-pix_fmt', 'yuv420p', _pth], check=True,
+                           capture_output=True)
+    check('v149: 4K nur wenn die Quelle es hergibt',
+          SV._will_uhd({'output': {'quality': '4k'}}, _uh149) is True
+          and SV._will_uhd({'output': {'quality': '4k'}}, _hd149) is False
+          and SV._will_uhd({'output': {'quality': 'hd'}}, _uh149) is False,
+          f'1440p {SV._will_uhd({"output": {"quality": "4k"}}, _uh149)}, '
+          f'360p {SV._will_uhd({"output": {"quality": "4k"}}, _hd149)}')
+    check('v149: Erstattung gibt den WIRKLICH gezahlten Betrag zurueck',
+          SV._job_cost({'dauer': 60, 'cost_sec': 120}) == 120
+          and SV._job_cost({'dauer': 60, 'uhd': True}) == 120
+          and SV._job_cost({'dauer': 60}) == 60)
+    check('v149: freie Hoehen bleiben gedeckelt, quality nur als Stufe',
+          SV._sanitize_overrides({'output': {'height': 9999, 'quality': '8k'}})
+          == {'output': {'height': 2160}}
+          and SV._sanitize_overrides({'output': {'quality': '4k'}})
+          == {'output': {'quality': '4k'}})
+    _ui149 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v149: die UI nennt Aufpreis und Upscale-Grenze beim Namen',
+          'data-cfg="output.quality"' in _ui149
+          and '2&times; credits' in _ui149
+          and 'we never upscale' in _ui149
+          and 'at least 1440p' in _ui149)
+
+    # ============ v147: Render-Fehler ins Panel statt ins Postfach ============
+    # Ismets Wunsch: keine Mail mehr bei fehlgeschlagenem Render, nur noch im
+    # Admin-Panel. Die JOBS-Liste haelt aber nur den Arbeitsspeicher - ohne
+    # eigene Tabelle waere die Stoerung nach einem Neustart spurlos weg.
+    _mails147 = []
+    _sm147 = SV._send_mail
+    try:
+        SV._send_mail = lambda to, subj, body, **k: _mails147.append(subj)
+        SV._ADMIN_NOTIFIED.clear()
+        SV.JOBS['j147'] = {'status': 'fehler', 'msg': 'KI-Dienst-Problem (HTTP 500)',
+                           'kind': 'caption', 'user_id': 1}
+        SV._notify_job_fail('j147')
+        # Timeout ist ebenfalls ein Render-Fehler und darf nicht mailen.
+        SV._notify_admin('timeout:j147', 'Job automatisch beendet (Timeout)',
+                         'test', mail=False)
+        # Eine ECHTE Betriebsstoerung (Platte knapp) mailt weiterhin.
+        SV._notify_admin('disk147', 'Speicher knapp', 'test')
+    finally:
+        SV._send_mail = _sm147
+        SV.JOBS.pop('j147', None)
+    check('v147: Render-Fehler schickt KEINE Mail mehr',
+          not any('Render fehlgeschlagen' in m for m in _mails147)
+          and not any('Timeout' in m for m in _mails147), str(_mails147))
+    check('v147: echte Betriebsstoerung mailt weiterhin',
+          any('Speicher knapp' in m for m in _mails147), str(_mails147))
+    _con147 = SV._db()
+    _al147 = [dict(r) for r in _con147.execute(
+        "SELECT schluessel, betreff, gemailt, gelesen FROM alerts "
+        "ORDER BY id DESC LIMIT 5").fetchall()]
+    _con147.close()
+    check('v147: die Stoerung steht persistent in der alerts-Tabelle',
+          any(a['betreff'] == 'Render fehlgeschlagen' and a['gemailt'] == 0
+              and a['gelesen'] == 0 for a in _al147)
+          and any(a['schluessel'].startswith('timeout:') for a in _al147),
+          str([(a['betreff'], a['gemailt']) for a in _al147]))
+    check('v147: gemailte Stoerungen sind als solche markiert',
+          any(a['schluessel'] == 'disk147' and a['gemailt'] == 1 for a in _al147),
+          str(_al147))
+    check('v147: offene Stoerungen werden gezaehlt',
+          SV._alerts_offen() >= 3, str(SV._alerts_offen()))
+    # Routine-Post (taegliches Backup) gehoert NICHT in die Stoerungsliste,
+    # sonst ist die Liste nach einer Woche nur noch Backup-Rauschen.
+    _n147a = SV._alerts_offen()
+    SV._notify_admin('backup147', 'Backup', 'test', routine=True)
+    check('v147: Routine-Post landet nicht in der Stoerungsliste',
+          SV._alerts_offen() == _n147a, f'{_n147a} -> {SV._alerts_offen()}')
+    _srv147 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _adm147 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v147: Endpunkte und Indexe verdrahtet',
+          "@app.get('/api/admin/alerts')" in _srv147
+          and "@app.post('/api/admin/alerts/read')" in _srv147
+          and 'ix_alerts_offen' in _srv147
+          and "mail=False)" in _srv147)
+    check('v147: Admin-Panel hat den Alerts-Tab',
+          "['alerts','Alerts']" in _adm147 and 'alerts:loadAlerts' in _adm147
+          and 'Mark all read' in _adm147 and 'Unread alerts' in _adm147)
+
     # ============ v146: Transkription haelt einen OpenAI-Aussetzer aus ========
     # Live-Befund (Ismet, 4K-Clip auf douchko.eu): ein einzelner HTTP 500 von
     # OpenAI brach den ganzen Render ab. 5xx/429/Netzabbruch sind transient -
@@ -4804,7 +4910,7 @@ def _scenario_betrieb(tmp):
         except SystemExit as e:
             _r401 = str(e)
         check('v146: 401 wird NICHT wiederholt (aendert sich nie)',
-              _fake3.n == 1 and 'Zugang' in _r401, f'{_fake3.n} Versuche, {_r401}')
+              _fake3.n == 1 and 'AI access is invalid' in _r401, f'{_fake3.n} Versuche, {_r401}')
     finally:
         R146.time.sleep = _slp146
         if _rq146 is not None:
@@ -5191,13 +5297,22 @@ def _scenario_betrieb(tmp):
           and 'Credits spent per day' in _admA
           and 'Status distribution (live)' in _admA
           and "api('/api/admin/timeseries?days='+days)" in _admA)
-    # 3) Nur FEHLER-Jobs alarmieren, fertige nicht
+    # 3) Nur FEHLER-Jobs alarmieren, fertige nicht. v147: der Alarm geht ins
+    # Admin-Panel, NICHT mehr als Mail (Ismets Wunsch) - gemessen wird deshalb
+    # die alerts-Tabelle, und dass das Postfach still bleibt.
     SV.JOBS['t_fail'] = {'status': 'fehler', 'msg': 'kaputt', 'user_id': 1}
     SV.JOBS['t_ok'] = {'status': 'fertig'}
     n0 = len(sent)
+    _c3 = SV._db()
+    _a0 = _c3.execute("SELECT COUNT(*) c FROM alerts").fetchone()['c']
+    _c3.close()
     SV._notify_job_fail('t_fail')
     SV._notify_job_fail('t_ok')
-    check('Job-Fehler -> genau 1 Admin-Mail', len(sent) == n0 + 1)
+    _c3 = SV._db()
+    _a1 = _c3.execute("SELECT COUNT(*) c FROM alerts").fetchone()['c']
+    _c3.close()
+    check('Job-Fehler -> genau 1 Panel-Eintrag, KEINE Mail',
+          _a1 == _a0 + 1 and len(sent) == n0, f'alerts {_a0}->{_a1}, Mails {len(sent)-n0}')
     check('Worker melden Fehl-Jobs an den Alarm',
           open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8')
           .read().count('_notify_job_fail(jid)') >= 2)
@@ -5527,11 +5642,11 @@ def _scenario_lang(tmp):
     # (b) Regie-Cache wird bei geaenderten Referenzen verworfen (Fingerprint)
     check('Stil-Referenzen: Regie-Cache invalidiert bei Referenz-Aenderung',
           _fp1 != _fp2 and "'ref_fp': _ref_fingerprint()" in _r
-          and 'alte Regie verworfen' in _r)
+          and 'old direction discarded' in _r)
     # (c) Anwendung ist im Job-Log beweisbar
     check('Stil-Referenzen: Anwendung wird geloggt (aktiv/keine)',
-          'Stil-Referenzen: {_n_refs} aktiv' in _r.replace('f"', '"')
-          or 'aktiv - fliessen in die KI-Regie ein' in _r)
+          'Style references: {_n_refs} active' in _r.replace('f"', '"')
+          or 'feeding into the AI direction' in _r)
     # (d) v96y: Referenz-Parameter wirken DETERMINISTISCH auf die Config
     _refd = _tfx.mkdtemp(prefix='dve_refy_')
     _old_dd2 = os.environ.get('DVE_DATA')
@@ -5851,7 +5966,7 @@ def _scenario_multiperson(tmp):
     check('Hoehepunkt: keine visuelle Wiederholung (tpl,anim,entr,cam) bei power 3',
           'big_used = set()' in _r2 and 'big_used.add(_sig)' in _r2
           and "_sig = (p.get('tpl'), p.get('anim') or '', p.get('entr'), _cam)" in _r2
-          and 'Motion aufgebrochen' in _r2)
+          and 'motion broken up' in _r2)
     _se2 = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
     check('Hoehepunkt-SFX: Einschlag rotiert + klarer Pitch-Versatz je Moment',
           "_lows = [s for s in ('boom', 'slam', 'impact')" in _se2

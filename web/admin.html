@@ -121,8 +121,8 @@ select.search{cursor:pointer}
 <script>
 let KEY = sessionStorage.getItem('dve_admin_key') || '';
 let POLL=null, TICK=null, paused=false, active='live', lastLoad={}, serverNow=0;
-const AUTO={live:15000, jobs:5000};
-const TABS=[['live','Live'],['jobs','Jobs'],['revenue','Revenue'],['credits','Credits'],
+const AUTO={live:15000, jobs:5000, alerts:20000};
+const TABS=[['live','Live'],['alerts','Alerts'],['jobs','Jobs'],['revenue','Revenue'],['credits','Credits'],
   ['users','Users'],['support','Support'],['abuse','Abuse'],['system','System'],
   ['compliance','Compliance'],['legal','Recht & Steuern'],['codes','Codes']];
 const $=s=>document.querySelector(s), el=id=>document.getElementById(id);
@@ -223,7 +223,7 @@ async function loadLive(silent){
       <div class="card"><div class="k">Caption queue</div><div class="v">${d.jobs.queue} <small>wait ${d.jobs.waiting} · run ${d.jobs.running} · fail ${d.jobs.failed}</small></div></div>
       <div class="card"><div class="k">Motion queue</div><div class="v">${d.jobs.motion_queue}</div></div>
       <div class="card"><div class="k">Renders total</div><div class="v">${d.renders.count} <small>${d.renders.minutes} min</small></div></div>
-      <div class="card"><div class="k">Active alerts</div><div class="v">${d.alerts_active}</div></div>
+      <div class="card"><div class="k">Unread alerts</div><div class="v">${d.alerts_offen||0} <small>throttled ${d.alerts_active}</small></div></div>
     </div>
     <h3>System health</h3>
     <div class="health">
@@ -656,8 +656,30 @@ async function loadSupport(){
 }
 async function ticketAct(id,status){const fd=new FormData();fd.append('status',status);try{await api('/api/admin/tickets/'+id+'/status',{method:'POST',body:fd});loadSupport();}catch(e){alert(e.message);}}
 
+// v147: Stoerungen stehen HIER, nicht mehr im Postfach. Render-Fehler und
+// Timeouts werden nur noch protokolliert - Ismets Wunsch.
+async function loadAlerts(silent){
+  let d;try{d=await api('/api/admin/alerts');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.alerts=Date.now()/1000;
+  const rows=d.alerts.length?d.alerts.map(a=>`<tr${a.gelesen?'':' style="background:rgba(255,122,26,.06)"'}>
+    <td>${a.gelesen?'<span class="tag ok">read</span>':'<span class="tag no">new</span>'}</td>
+    <td><b>${esc(a.betreff)}</b><div class="subtle mono" style="font-size:11px">${esc(a.schluessel)}</div></td>
+    <td><pre class="mono" style="white-space:pre-wrap;font-size:11.5px;margin:0">${esc(a.text)}</pre></td>
+    <td class="subtle">${a.gemailt?'mailed':'panel only'}</td>
+    <td class="subtle">${new Date(a.created_at*1000).toLocaleString()}</td>
+    <td>${a.gelesen?'':`<button class="btn" onclick="alertRead(${a.id})">Mark read</button>`}</td>
+  </tr>`).join(''):'<tr><td colspan="6" class="subtle">No alerts.</td></tr>';
+  el('view').innerHTML=`
+    <h3>Alerts <span class="subtle">${d.offen} unread</span>
+      <button class="btn" style="float:right" onclick="alertRead(0)">Mark all read</button></h3>
+    <p class="subtle">Render failures and job timeouts are logged here only, no email.
+      Credits are refunded automatically.</p>
+    <table><thead><tr><th></th><th>What</th><th>Detail</th><th>Mail</th><th>When</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function alertRead(id){const fd=new FormData();fd.append('id',id);try{await api('/api/admin/alerts/read',{method:'POST',body:fd});loadAlerts();}catch(e){alert(e.message);}}
+
 function err(e){return '<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Error</b> '+esc(e.message)+'</div>';}
-const RENDER={live:loadLive,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes};
+const RENDER={live:loadLive,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes};
 if(KEY)boot();
 </script>
 </body>

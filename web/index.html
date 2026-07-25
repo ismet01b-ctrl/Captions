@@ -2092,13 +2092,21 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               100 = maximum dynamics. Crash zooms and whip pans come with the look.</div>
             <div class="slider" data-cfg="camera.strength" data-min="0" data-max="100" data-scale="100" data-suffix=" %"></div>
           </div>
-          <!-- v98: 4K-Kachel entfernt - der Server rendert max. 1080p
-               (Ressourcen-Deckel); eine Option anbieten, die stumm auf
-               1080p gekappt wird, waere gelogen. -->
+          <!-- v149: 4K ist zurueck, aber ehrlich. Es kostet das Doppelte
+               (Matting, Tiefe und Encode laufen auf der vierfachen
+               Pixelmenge) und wird nur berechnet, wenn die QUELLE es
+               hergibt - aus 1080p macht die Engine kein 4K, sie skaliert
+               nie hoch. Vor v149 war der Wert ausserdem die Bildhoehe: eine
+               1080x1920-Aufnahme kam als 607x1080 heraus. Jetzt ist es die
+               kurze Kante, hoch also 1080x1920. -->
           <div class="setting"><div class="setting-label">Resolution of the finished video</div>
-            <div class="setting-desc">1080p = standard (recommended).
-              720p = mobile-optimized, smaller file.</div>
+            <div class="setting-desc">Sets the short edge: 1080p gives 1080&times;1920 upright
+              and 1920&times;1080 wide. 720p is smaller and quicker.
+              4K doubles the credit cost and only applies if your source is at least 1440p -
+              we never upscale.</div>
             <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080"></div>
+            <div class="setting-desc" style="margin-top:10px">Quality</div>
+            <div class="seg" data-cfg="output.quality" data-opts="HD:hd,4K &middot; 2&times; credits:4k"></div>
           </div>
         </div>
       </div>

@@ -1,6 +1,12 @@
 language: auto
 output:
+  # Zielmass der KURZEN Kante (nicht der Bildhoehe): 1080 ergibt hoch
+  # 1080x1920 und quer 1920x1080. Wird nie ueber die Quelle hochskaliert.
   height: 1080
+  # 'hd' (Standard) oder '4k' - 4k hebt die kurze Kante auf 2160 und kostet
+  # im Web-Produkt das Doppelte, weil Matting, Tiefe und Encode auf voller
+  # Aufloesung laufen.
+  quality: hd
   crf: 18
   preset: medium
   master: false

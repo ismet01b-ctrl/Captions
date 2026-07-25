@@ -172,6 +172,28 @@ Muster, Tremor statt Weißrauschen. Keine Anim darf mechanisch/synthetisch/
 1-Frame-zufällig wirken. Katalog: `ANIM_LIST`; Keyword→Anim-Heuristik
 `ANIM_HINTS`/`anim_for` (DE+EN, an Satzgrenzen gekappt via `anim_ctx`).
 
+## Aufloesung (v149)
+`output.height` ist das Zielmass der **kurzen Kante**, nicht der Bildhoehe
+(hoch 1080x1920, quer 1920x1080). `output.quality: 4k` hebt es auf 2160.
+Es wird **nie hochskaliert** — `H = min(H, src_h)`. 4K kostet im Web-Produkt
+den doppelten Credit-Satz und wird nur berechnet, wenn die Quelle mindestens
+1440p kurze Kante hat (`_will_uhd`). Der gezahlte Betrag steht als `cost_sec`
+am Job; Erstattungen gehen ueber `_job_cost(j)`, nie ueber `cost_seconds(dauer)`.
+
+## Sprache der Ausgaben (v148)
+`render.py` schreibt seine `print()`/`sys.exit()`-Meldungen **englisch** — der
+Job-Log landet im Web-Produkt beim Kunden. Kommentare und Docstrings bleiben
+deutsch. Wer eine Log-Zeile aendert, muss BEIDE Leser mitziehen:
+`web/server.py` (Fortschritts-Phasen, `_parse_refs_line`, `ERROR:`-Erkennung)
+und `gui.py` (Desktop-Statuszeile). Die alten deutschen Marker stehen als
+Fallback daneben — gecachte Logs von vor v148 sollen weiter lesbar bleiben.
+
+## Betriebs-Meldungen (v147)
+Render-Fehler und Job-Timeouts gehen **nicht** mehr per Mail raus, sondern nur
+in die Tabelle `alerts` und den Admin-Tab **Alerts**. `_notify_admin(...,
+mail=False)`. Echte Betriebsstoerungen (Platte knapp, Ghost-Buy, Stripe)
+mailen weiter. Routine-Post (Backup) wird gar nicht protokolliert.
+
 ## Transkription
 Nur OpenAI Whisper API (`whisper-1`) — beste Qualität für Namen/Fachbegriffe.
 Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
@@ -213,7 +235,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **869/869 grün (Stand v144)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **897/897 grün (Stand v149)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

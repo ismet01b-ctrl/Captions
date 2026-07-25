@@ -255,10 +255,10 @@ def render_water_text(text, bg_path, font_path, tint=(0.55, 0.9, 0.86),
                                capture_output=True, timeout=timeout * max(frames, 1))
             if not all(os.path.exists(p) for p in frame_paths):
                 tail = (r.stdout or b'')[-500:].decode('utf-8', 'ignore')
-                print(f"Blender-Render fehlgeschlagen: {tail}")
+                print(f"Blender render failed: {tail}")
                 return None
         except subprocess.TimeoutExpired:
-            print("Blender-Render: Timeout")
+            print("Blender render: timed out")
             return None
         finally:
             for p in (args_path, script_path):

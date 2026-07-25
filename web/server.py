@@ -88,9 +88,59 @@ def credits_of(sec):
     return int(sec) // 60
 
 
-def cost_seconds(dur_sec):
-    """Was ein Video kostet: pro angefangener Minute, mindestens 1 Credit."""
-    return max(1, _math.ceil(float(dur_sec) / 60.0)) * 60
+# v149: 4K kostet das Doppelte. Matting, Tiefenkarte, Gesichts-Tracking und
+# Encode laufen alle auf voller Aufloesung - die vierfache Pixelmenge ist echte
+# Rechenzeit, kein Schalter. Ein Faktor 2 deckt sie, ohne den Preis zu
+# verdoppeln, wo er nichts kostet.
+UHD_FAKTOR = 2
+# Darunter lohnt 4K nicht: aus einer 1080p-Quelle wird kein 4K, nur ein grosses
+# weiches 1080p. Die Engine skaliert deshalb nie hoch - und wir berechnen es
+# auch nicht.
+UHD_MIN_KURZE_KANTE = 1440
+
+
+def cost_seconds(dur_sec, uhd=False):
+    """Was ein Video kostet: pro angefangener Minute, mindestens 1 Credit.
+    v149: bei 4K das Doppelte."""
+    return (max(1, _math.ceil(float(dur_sec) / 60.0)) * 60
+            * (UHD_FAKTOR if uhd else 1))
+
+
+def _job_cost(j):
+    """v149: was DIESER Job kostet. Bevorzugt den beim Anlegen festgehaltenen
+    Betrag - sonst wuerde eine Erstattung nach einem 4K-Render nur die Haelfte
+    zurueckgeben, weil die reine Dauer den Faktor nicht kennt."""
+    j = j or {}
+    c = j.get('cost_sec')
+    if c:
+        return int(c)
+    return cost_seconds(j.get('dauer', 0), uhd=bool(j.get('uhd')))
+
+
+def _quelle_kurze_kante(pfad):
+    """Kurze Kante der Quelldatei in Pixeln, 0 wenn nicht lesbar."""
+    try:
+        r = subprocess.run(
+            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+             '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', pfad],
+            capture_output=True, text=True, timeout=30)
+        w, h = (int(x) for x in r.stdout.strip().split('x')[:2])
+        return min(w, h)
+    except Exception:
+        return 0
+
+
+def _will_uhd(overrides, pfad):
+    """Wird dieser Job wirklich in 4K gerendert? Nur dann darf er auch das
+    Doppelte kosten. Der Wunsch allein reicht nicht - eine 1080p-Quelle
+    bleibt 1080p, egal was angehakt ist."""
+    try:
+        q = str(((overrides or {}).get('output') or {}).get('quality', '')).lower()
+    except Exception:
+        return False
+    if q not in ('4k', 'uhd'):
+        return False
+    return _quelle_kurze_kante(pfad) >= UHD_MIN_KURZE_KANTE
 
 
 def _hook_score(moms, dauer=0.0):
@@ -322,6 +372,15 @@ def _init_users_db():
     con.execute("CREATE TABLE IF NOT EXISTS consents ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, "
                 "kind TEXT NOT NULL, created_at INTEGER NOT NULL)")
+    # v147: STOERUNGEN persistent statt per Mail. Ismet will Job-Fehler nicht
+    # mehr im Postfach, sondern im Admin-Panel - und die JOBS-Liste haelt nur
+    # den Arbeitsspeicher, ein Neustart loescht sie. Deshalb eine eigene
+    # Tabelle: jede Stoerung landet hier IMMER, unabhaengig von DVE_ALERTS.
+    con.execute("CREATE TABLE IF NOT EXISTS alerts ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, schluessel TEXT NOT NULL, "
+                "betreff TEXT NOT NULL, text TEXT NOT NULL, "
+                "gemailt INTEGER NOT NULL DEFAULT 0, "
+                "gelesen INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)")
     # v128 Admin: Kauf-Beleg mit ECHTEM Betrag (cents) fuer die Umsatz-Ansicht.
     # Das Ledger kennt nur Sekunden, nicht das bezahlte Geld - hier steht der
     # tatsaechlich gezahlte Betrag (amount_total, also inkl. evtl. Rabatt).
@@ -393,6 +452,8 @@ def _init_users_db():
         "CREATE INDEX IF NOT EXISTS ix_arch_time ON ledger_archive(created_at)",
         "CREATE INDEX IF NOT EXISTS ix_sess_exp ON sessions(expires_at)",
         "CREATE INDEX IF NOT EXISTS ix_mail_log_user ON mail_log(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_alerts_time ON alerts(created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_alerts_offen ON alerts(gelesen, created_at DESC)",
     ):
         try:
             con.execute(_ddl)
@@ -1507,7 +1568,7 @@ def _maybe_refund(jid):
         return
     # Motion-Jobs tragen ihre Kosten explizit (MOV kostet mehr als die Dauer
     # hergibt); sonst wie gehabt aus der Videodauer.
-    _refund_credits(uid, jid, j.get('cost_sec') or cost_seconds(j.get('dauer', 0)))
+    _refund_credits(uid, jid, _job_cost(j))
 
 
 def _pack_processed(user_id, session_id):
@@ -1643,7 +1704,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v145-rechnung'
+DVE_BUILD = 'v149-resolution'
 
 
 @app.middleware('http')
@@ -2200,9 +2261,13 @@ def _sanitize_overrides(ov):
     if isinstance(o, dict):
         if 'height' in o:
             try:
-                o['height'] = min(max(int(o['height']), 480), 1920)
+                o['height'] = min(max(int(o['height']), 480), 2160)
             except Exception:
                 o.pop('height', None)
+        # v149: 4K nur als bekannte Stufe, nie als freie Zahl. Die Hoehe
+        # rechnet die Engine selbst aus dem Quellformat aus.
+        if 'quality' in o and str(o.get('quality')).lower() not in ('hd', '4k'):
+            o.pop('quality', None)
         o.pop('master', None)          # ProRes-Master nie per Override (Riesen-Files)
         # v101d: Safe-Zone-Plattform - nur bekannte Masken zulassen.
         if 'platform' in o and str(o.get('platform')).lower() not in \
@@ -2530,9 +2595,17 @@ def _parse_refs_line(ln):
     'Stil-Referenzen: N aktiv (eigene|Haus-Stil) - ...' und gibt (anzahl,
     quelle) zurueck. Quelle ist '' bei alten Logs ohne Klammer - die UI zeigt
     dann bewusst NICHT 'learned', weil die Herkunft unbekannt ist."""
-    m = re.search(r'(\d+)\s+aktiv', ln or '')
+    # v148: die Engine schreibt englisch ('N active (own|house style)').
+    # Die deutschen Muster bleiben stehen, damit Job-Logs von vor dem Deploy
+    # weiter gelesen werden - sonst zeigte die Library dort ploetzlich nichts.
+    m = re.search(r'(\d+)\s+(?:active|aktiv)', ln or '')
     n = int(m.group(1)) if m else 0
-    q = 'eigene' if '(eigene)' in ln else ('haus' if 'Haus-Stil' in ln else '')
+    if '(own)' in ln or '(eigene)' in ln:
+        q = 'eigene'
+    elif 'house style' in ln or 'Haus-Stil' in ln:
+        q = 'haus'
+    else:
+        q = ''
     return n, q
 
 
@@ -2630,52 +2703,58 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
 
         # v96y: Referenz-Beweis in den Job-State - der User sieht am fertigen
         # Job, ob (und wie viele) Stil-Referenzen den Schnitt gesteuert haben.
-        if ln.startswith('Stil-Referenzen:'):
+        # v148: die Engine schreibt englisch. Die alten deutschen Marker
+        # bleiben als Fallback stehen - im Cache und in job-Logs von vor dem
+        # Deploy stehen sie noch, und eine Fortschrittsanzeige, die dort
+        # stumm bleibt, waere eine Verschlechterung.
+        if ln.startswith('Style references:') or ln.startswith('Stil-Referenzen:'):
             try:
                 _n, _q = _parse_refs_line(ln)
                 set_state(jid, stil_refs=_n, stil_quelle=_q)
             except Exception:
                 pass
-        elif ln.startswith('Stil-Anker:'):
-            set_state(jid, stil_anker=ln.split('Stil-Anker:', 1)[1].strip())
+        elif ln.startswith('Style anchor:') or ln.startswith('Stil-Anker:'):
+            set_state(jid, stil_anker=ln.split(':', 1)[1].strip())
 
         phase = None
         progress = None
         eta = None
-        if 'Transkribiere' in ln:
+        if 'Transcribing' in ln or 'Transkribiere' in ln:
             phase = 'Listening to every word you said …'
             progress = 0.05
-        elif 'Woerter' in ln and 'Transkript' in ln:
+        elif ('words' in ln and 'transcript' in ln) \
+                or ('Woerter' in ln and 'Transkript' in ln):
             phase = 'Pinning each word to the exact millisecond …'
             progress = 0.10
-        elif 'Gesichts-Tracking' in ln:
+        elif 'Face tracking' in ln or 'Gesichts-Tracking' in ln:
             phase = 'Finding you in the frame and splitting the scenes …'
             progress = 0.20
-        elif 'Musik-Beat' in ln:
+        elif 'Music beat' in ln or 'Musik-Beat' in ln:
             phase = 'Feeling out the rhythm of your music …'
             progress = 0.28
-        elif 'KI-Regie' in ln and 'analysiert' in ln:
+        elif ('AI director' in ln and 'analysing' in ln) \
+                or ('KI-Regie' in ln and 'analysiert' in ln):
             phase = 'Our AI director is reading your script …'
             progress = 0.35
-        elif 'Vision-Regie' in ln:
+        elif 'Vision director' in ln or 'Vision-Regie' in ln:
             phase = 'Taking a closer look at your footage, frame by frame …'
             progress = 0.38
         elif ln.startswith('Keywords'):
             phase = 'The big moments are locked in …'
             progress = 0.40
-        elif 'Adaptive Farben' in ln:
+        elif 'Adaptive colours' in ln or 'Adaptive Farben' in ln:
             phase = 'Picking caption colors straight from your scene …'
             progress = 0.43
-        elif 'Kompositionen' in ln:
+        elif 'Compositions:' in ln or 'Kompositionen' in ln:
             phase = 'Laying your words out like a magazine spread …'
             progress = 0.45
-        elif 'Matting-Fenster' in ln:
+        elif 'Matting window' in ln or 'Matting-Fenster' in ln:
             phase = 'Cutting you cleanly out from the background …'
             progress = 0.47
-        elif 'Tiefen-Okklusion' in ln:
+        elif 'Depth occlusion' in ln or 'Tiefen-Okklusion' in ln:
             phase = 'Working out what sits in front of you …'
             progress = 0.49
-        elif 'Kamera-Track' in ln:
+        elif 'Camera track' in ln or 'Kamera-Track' in ln:
             phase = 'Locking the text onto the moving scene …'
             progress = 0.50
         elif 'Frame' in ln and '/' in ln:
@@ -2704,7 +2783,8 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
                         eta = int((tot - cur) * (dt / dc))
             except Exception:
                 pass
-        elif ln.startswith('Fertig') or 'Encode fertig' in ln:
+        elif ln.startswith('Done:') or ln.startswith('Fertig') \
+                or 'Encode fertig' in ln:
             phase = 'Encoding the final cut and saving it to your Library …'
             progress = 0.97
 
@@ -2766,19 +2846,51 @@ if ALERT_LEVEL not in ('all', 'important', 'off'):
     ALERT_LEVEL = 'important'
 
 
-def _notify_admin(key, subject, body, routine=False):
-    """Stoerungs-Mail an Ismet ueber den vorhandenen SMTP-Weg. Pro
-    Stoerungs-Schluessel max. 1 Mail/Stunde (kein Postfach-Spam, wenn
+def _alert_log(key, subject, body, gemailt=False):
+    """v147: Stoerung in die alerts-Tabelle schreiben. Scheitert leise - eine
+    kaputte Meldung darf nie den Betrieb reissen."""
+    try:
+        con = _db()
+        con.execute("INSERT INTO alerts (schluessel, betreff, text, gemailt, "
+                    "gelesen, created_at) VALUES (?,?,?,?,0,?)",
+                    (str(key)[:120], str(subject)[:200], str(body)[:4000],
+                     1 if gemailt else 0, int(time.time())))
+        con.commit()
+        con.close()
+    except Exception as e:
+        print(f'Alert nicht gespeichert: {e}')
+
+
+def _alerts_offen():
+    """Anzahl ungelesener Stoerungen - fuer den Zaehler im Live-Tab."""
+    try:
+        con = _db()
+        n = con.execute("SELECT COUNT(*) c FROM alerts WHERE gelesen=0").fetchone()['c']
+        con.close()
+        return int(n)
+    except Exception:
+        return 0
+
+
+def _notify_admin(key, subject, body, routine=False, mail=True):
+    """Stoerung melden. Sie landet IMMER in der alerts-Tabelle (Admin-Panel);
+    ob zusaetzlich eine Mail rausgeht, entscheiden DVE_ALERTS und mail=.
+    Pro Stoerungs-Schluessel max. 1 Mail/Stunde (kein Postfach-Spam, wenn
     z.B. die Platte voll bleibt). Scheitert leise - ein kaputter
     Mail-Weg darf nie den Betrieb reissen.
     v131: durch DVE_ALERTS gefiltert. routine=True (z.B. taegliches Backup)
-    geht NUR bei DVE_ALERTS=all raus; echte Stoerungen bei 'all'/'important'."""
-    if ALERT_LEVEL == 'off':
-        return False
-    if routine and ALERT_LEVEL != 'all':
-        return False
+    geht NUR bei DVE_ALERTS=all raus; echte Stoerungen bei 'all'/'important'.
+    v147: mail=False meldet NUR ins Panel. Ismets Wunsch fuer Render-Fehler -
+    die will er sehen, wenn er hinschaut, nicht im Postfach."""
     now = time.time()
-    if now - _ADMIN_NOTIFIED.get(key, 0) < 3600:
+    darf = (mail and ALERT_LEVEL != 'off'
+            and not (routine and ALERT_LEVEL != 'all')
+            and now - _ADMIN_NOTIFIED.get(key, 0) >= 3600)
+    if not routine:
+        # Routine-Post (taegliches Backup) ist keine Stoerung und wuerde die
+        # Liste zumuellen. Alles andere wird protokolliert, auch ungemailt.
+        _alert_log(key, subject, body, gemailt=darf)
+    if not darf:
         return False
     _ADMIN_NOTIFIED[key] = now
     try:
@@ -2790,8 +2902,10 @@ def _notify_admin(key, subject, body, routine=False):
 
 
 def _notify_job_fail(jid):
-    """Nach jedem Job pruefen: fehlgeschlagen -> Mail an Ismet (gedrosselt
-    ueber die Fehlermeldung, damit ein Serienfehler nur 1 Mail/h schickt)."""
+    """Nach jedem Job pruefen: fehlgeschlagen -> Eintrag im Admin-Panel.
+    v147: KEINE Mail mehr (Ismets Wunsch). Der Eintrag bleibt persistent in
+    der alerts-Tabelle - die JOBS-Liste haelt nur den Arbeitsspeicher und
+    waere nach einem Neustart weg."""
     j = JOBS.get(jid) or {}
     if j.get('status') != 'fehler':
         return
@@ -2799,7 +2913,8 @@ def _notify_job_fail(jid):
     _notify_admin(f'jobfail:{msg[:60]}', 'Render fehlgeschlagen',
                   f'Job {jid} ({j.get("kind", "caption")})\n'
                   f'User-ID: {j.get("user_id", "?")}\nMeldung: {msg}\n\n'
-                  f'Credits wurden automatisch erstattet (falls reserviert).')
+                  f'Credits wurden automatisch erstattet (falls reserviert).',
+                  mail=False)
 
 
 def _notify_job_done(jid):
@@ -3163,7 +3278,7 @@ def run_job(jid):
             uid = j.get('user_id')
             if uid:
                 _refund_credits(uid, f'Alpha {jid}',
-                                cost_seconds(j.get('dauer', 0)),
+                                _job_cost(j),
                                 resv_like=f'Alpha {jid} %')
         return
     if mode == 'analyze':
@@ -3196,20 +3311,21 @@ def run_job(jid):
     rc, log, out = _run_render(jid, extra_args=_extra)
     log_txt = '\n'.join(log)
     # v80g: Menschliche Fehlermeldungen aus dem Render-Log herausklauben
-    if 'OPENAI_API_KEY ist nicht gesetzt' in log_txt:
+    if 'OPENAI_API_KEY is not set' in log_txt \
+            or 'OPENAI_API_KEY ist nicht gesetzt' in log_txt:
         set_state(jid, status='fehler', progress=0,
                   msg='Server is not fully configured '
                       '(AI key missing). Please contact support.')
         _maybe_refund(jid)
         return
     for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
-        if line.startswith('FEHLER:'):
+        if line.startswith('ERROR:') or line.startswith('FEHLER:'):
             # v80o: Kontext mitliefern - die Zeilen um den Fehler herum
             # helfen bei der Diagnose direkt in der Web-UI.
             idx = len(log) - 1 - list(reversed(log)).index(line)
             ctx = [x for x in log[max(0, idx - 5):idx + 6] if x.strip()]
             set_state(jid, status='fehler', progress=0,
-                      msg=line.replace('FEHLER:', '').strip(),
+                      msg=line.split(':', 1)[1].strip(),
                       detail='\n'.join(ctx))
             _maybe_refund(jid)
             return
@@ -3220,7 +3336,7 @@ def run_job(jid):
         # (Konkurrenz-Standard, sonst zahlt man jede Korrektur doppelt).
         uid = j.get('user_id')
         if uid and not _render_charged(uid, jid):
-            verbrauch = cost_seconds(j.get('dauer', 0))
+            verbrauch = _job_cost(j)
             # v135a: race-sicher reservieren (WHERE balance >= need) statt
             # MAX(0)-Clamp. Nach den Reservierungs-Fixes in render_start und
             # save_and_render sollte dieser Pfad nie mehr feuern - wenn doch
@@ -3523,7 +3639,9 @@ def _reap_stuck_job(jid, why=''):
     except Exception as e:
         print(f'Reap-Refund {jid}: {e}')
     if why:
-        _notify_admin(f'timeout:{jid}', 'Job automatisch beendet (Timeout)', why)
+        # v147: ebenfalls nur ins Panel - ein Timeout IST ein Render-Fehler.
+        _notify_admin(f'timeout:{jid}', 'Job automatisch beendet (Timeout)', why,
+                      mail=False)
     return True
 
 
@@ -4462,7 +4580,7 @@ def api_alpha(jid: str, request: Request):
                                  'again to create an editor layer.')
     if j.get('status') in ('laeuft', 'wartet'):
         raise HTTPException(409, 'A render for this job is already running.')
-    cost = cost_seconds(j.get('dauer', 0))
+    cost = _job_cost(j)
     con = _db()
     _done = con.execute("SELECT id FROM ledger WHERE user_id = ? AND grund = ?",
                         (u['id'], f'Alpha {jid} ({cost}s)')).fetchone()
@@ -4767,6 +4885,7 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
                                  f'Maximum {MAX_SECONDS} seconds.')
     u = _current_user(request) if mode != 'demo' else None
     uid = None
+    _uhd, need = False, 0
     if u:
         uid = u['id']
         # v127-sec: Flooding-Deckel - pro Konto nur wenige gleichzeitig
@@ -4776,7 +4895,10 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
             shutil.rmtree(d, ignore_errors=True)
             raise HTTPException(429, 'You already have several videos in the queue. '
                                      'Please wait for one to finish before uploading more.')
-        need = cost_seconds(dur)
+        # v149: 4K erst bezahlen, wenn es auch 4K WIRD. Die Pruefung sitzt
+        # bewusst hier, vor der Reservierung - nicht im Render.
+        _uhd = _will_uhd(overrides, src)
+        need = cost_seconds(dur, uhd=_uhd)
         if mode == 'pre':
             if u['balance_sec'] < need:
                 shutil.rmtree(d, ignore_errors=True)
@@ -4797,10 +4919,16 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
                 f"credit{'s' if credits_of(need) != 1 else ''}, you have "
                 f"{have}). Missing {max(1, fehlt)} - please top up.")
     _vh = await _aio.to_thread(_video_hash, src)
+    if not _will_uhd(overrides, src) and isinstance(overrides.get('output'), dict):
+        # Wunsch war 4K, die Quelle gibt es nicht her: Stufe wieder rausnehmen,
+        # damit der Render gar nicht erst gross rechnet.
+        overrides['output'].pop('quality', None)
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': (code or '').strip(),
                  'user_id': uid, 'vhash': _vh, 'mode': mode,
                  'cfg_overrides': overrides, 'status': 'wartet', 'progress': 0.0,
                  'phase': 'Queued …', 'dauer': round(dur, 1),
+                 'uhd': bool(_uhd) if uid else False,
+                 'cost_sec': need if uid else 0,
                  'name': _safe_name(filename)}
     set_state(jid, **{k: v for k, v in JOBS[jid].items()
                       if k not in ('input', 'code')})
@@ -5000,8 +5128,16 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
         except OSError:
             pass
     j['cfg_overrides'] = overrides
+    # v149: im Editor kann 4K noch an- oder abgewaehlt werden. Der Preis
+    # richtet sich nach dem, was jetzt gerendert wird - und 4K wird nur
+    # berechnet, wenn die Quelle es hergibt.
+    _uhd2 = _will_uhd(overrides, j.get('input') or '')
+    if not _uhd2 and isinstance(overrides.get('output'), dict):
+        overrides['output'].pop('quality', None)
+    j['uhd'] = bool(_uhd2)
+    j['cost_sec'] = cost_seconds(j.get('dauer', 0), uhd=_uhd2)
     if u and mode == 'full':
-        need = cost_seconds(j.get('dauer', 0))
+        need = _job_cost(j)
         # v95: Das ist der Abbuch-Punkt des Pre-Flows. Der Upload (mode 'pre')
         # hat NUR transkribiert, nichts abgebucht - erst hier wird atomar
         # reserviert. Idempotent gegen Doppel-Klick/Retry ueber den Ledger-
@@ -5574,7 +5710,7 @@ async def save_and_render(request: Request, jid: str,
     # 'Render {jid}'-Ledger-Zeile (Re-Render nach Edit bleibt inklusive).
     _uid = j.get('user_id')
     if _uid:
-        _need = cost_seconds(j.get('dauer', 0))
+        _need = _job_cost(j)
         if not _render_charged(_uid, jid) and not _reserve_credits(_uid, _need, jid):
             _uu = _find_user_by_id(_uid)
             _have = credits_of(_uu['balance_sec'] if _uu else 0)
@@ -6150,6 +6286,7 @@ def admin_overview(request: Request):
                  'failed': _jstat('fehler'), 'queue': QUEUE.qsize(),
                  'motion_queue': MQUEUE.qsize()},
         'alerts_active': len(_ADMIN_NOTIFIED),
+        'alerts_offen': _alerts_offen(),
         'tickets_open': tickets_open,                  # v133c
         'system': {'disk': _disk_info(), 'db_mb': _db_size_mb(),
                    'last_backup': _last_backup_ts(),
@@ -6160,6 +6297,39 @@ def admin_overview(request: Request):
                    'admin_key_set': bool(os.environ.get('DVE_ADMIN', '').strip()),
                    'heartbeats': {'watchdog': hb.get('watchdog'), 'cleanup': hb.get('cleanup')}},
     }
+
+
+@app.get('/api/admin/alerts')
+def admin_alerts(request: Request, limit: int = 100, offen: int = 0):
+    """v147: Stoerungsliste. Ersetzt die Fehler-Mail - Render-Fehler und
+    Timeouts stehen hier, nicht mehr im Postfach."""
+    _admin_ok(request)
+    lim = min(max(int(limit), 1), 500)
+    con = _db()
+    q = ("SELECT id, schluessel, betreff, text, gemailt, gelesen, created_at "
+         "FROM alerts ")
+    if offen:
+        q += "WHERE gelesen=0 "
+    q += "ORDER BY created_at DESC LIMIT ?"
+    rows = [dict(r) for r in con.execute(q, (lim,)).fetchall()]
+    n_offen = con.execute("SELECT COUNT(*) c FROM alerts WHERE gelesen=0").fetchone()['c']
+    con.close()
+    return {'alerts': rows, 'offen': n_offen}
+
+
+@app.post('/api/admin/alerts/read')
+def admin_alerts_read(request: Request, id: int = Form(0)):
+    """Eine Stoerung oder alle als gelesen markieren (id=0 -> alle)."""
+    _admin_ok(request)
+    con = _db()
+    if int(id) > 0:
+        con.execute("UPDATE alerts SET gelesen=1 WHERE id=?", (int(id),))
+    else:
+        con.execute("UPDATE alerts SET gelesen=1 WHERE gelesen=0")
+    con.commit()
+    n = con.execute("SELECT COUNT(*) c FROM alerts WHERE gelesen=0").fetchone()['c']
+    con.close()
+    return {'ok': True, 'offen': n}
 
 
 @app.get('/api/admin/jobs')
@@ -6283,7 +6453,7 @@ def admin_job_refund(jid: str, request: Request,
     uid = j.get('user_id')
     if not uid:
         raise HTTPException(400, 'Job has no user.')
-    sec = int(minutes) * 60 if minutes else cost_seconds(j.get('dauer', 0) or 0)
+    sec = int(minutes) * 60 if minutes else _job_cost(j)
     if sec <= 0:
         raise HTTPException(400, 'Nothing to refund.')
     _adjust_balance(uid, sec, f'Refund {jid} admin {(reason or "")[:40]}')
@@ -6538,6 +6708,7 @@ def admin_system(request: Request):
         'disk': _disk_info(), 'db_mb': _db_size_mb(), 'last_backup': _last_backup_ts(),
         'heartbeats': {'watchdog': hb.get('watchdog'), 'cleanup': hb.get('cleanup')},
         'alerts_active': len(_ADMIN_NOTIFIED),
+        'alerts_offen': _alerts_offen(),
         'config': {
             'workers': int(os.environ.get('DVE_WORKERS', '1')),
             'inflight_cap': CAPTION_INFLIGHT_CAP,

@@ -147,13 +147,13 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
     # ein synthetischer Ersatzton waere schlechter als Stille.
     bank = load_bank(folder if (folder and os.path.isdir(folder)) else None)
     if not bank:
-        print("Kein Sound-Pack gefunden - das Video bekommt KEINE Sound-Effekte.")
-        print("  Sounds laden: GUI -> Profi -> Sound-Pack -> 'Echte Sounds laden'")
+        print("No sound pack found - the video gets NO sound effects.")
+        print("  Load sounds: GUI -> Pro -> Sound pack -> 'Load real sounds'")
         _save(out_path, np.zeros(int(duration * SR), dtype=np.float32))
         return 0
     fehlt = [s for s in SLOTS if s not in bank]
-    print(f"Sound-Pack: {len(bank)}/{len(SLOTS)} echte Sounds geladen"
-          + (f" (fehlen: {', '.join(fehlt)})" if fehlt else ""))
+    print(f"Sound pack: {len(bank)}/{len(SLOTS)} real sounds loaded"
+          + (f" (missing: {', '.join(fehlt)})" if fehlt else ""))
     # v96d: Varianten + Mikro-Variation, damit sich wiederkehrende Sounds (v.a.
     # der Tick/Klick) nicht identisch anhoeren. V(slot) wechselt reihum durch
     # die Varianten-Dateien und legt pro Aufruf einen leichten Pitch/Pegel-Jitter
@@ -162,8 +162,8 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
     _vc = {}
     _nvar = sum(len(v) for v in _variants.values())
     if _nvar > len(_variants):
-        print(f"  SFX-Varianten: {_nvar} Dateien fuer {len(_variants)} Slots "
-              f"(mehr Abwechslung)")
+        print(f"  SFX variants: {_nvar} files for {len(_variants)} slots "
+              f"(more variety)")
 
     def V(slot):
         """Naechste Variante eines Slots mit Pitch/Pegel-Jitter - oder None."""
@@ -262,8 +262,8 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
             place(V('boom'), _ct + 0.040, 0.70 * _g)     # traegt die neue Szene
             n_placed += 1
     if _cuts:
-        print(f"  Schnitt-Dramaturgie: {len(_cuts)} Uebergaenge vertont "
-              f"(Ton laeuft dem Bild 15-30 ms voraus)")
+        print(f"  Cut dramaturgy: {len(_cuts)} transitions scored "
+              f"(sound runs 15-30 ms ahead of the picture)")
 
     _big_i = 0                             # v96i: zaehlt grosse Momente fuer Variation
     kw_times = []                          # fuer den Anti-Matsch-Limiter der Stacks
@@ -359,7 +359,7 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
             else:
                 place(bank.get('counter'), t_raw, 1.3 * max(g, 0.75))
             n_placed += 1
-            print(f"  SFX '{clean_word(words[p['kw_i']]['word'])}': Hochzaehlen ({cdur:.1f}s)")
+            print(f"  SFX '{clean_word(words[p['kw_i']]['word'])}': count-up ({cdur:.1f}s)")
             continue
         if tpl == 'behind':
             place(V('whoosh'), t0 - 0.30, 0.8 * g)
@@ -379,7 +379,7 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
             place(V('tick'), t0 + 0.08, 0.9 * g)           # v96g: sitzt auf dem Wort
         n_placed += 1
         w = words[p['kw_i']]['word'].strip()
-        print(f"  SFX '{w}': Onset {off*1000:+.0f} ms, Pegel x{g:.2f}"
+        print(f"  SFX '{w}': onset {off*1000:+.0f} ms, level x{g:.2f}"
               + (' +Boom' if pw >= 3 else ''))
     # Folge-Captions (laufende Wortgruppen): JEDE bekommt einen dezenten
     # Einflug-Sound. Vorher lief nur ein rate-begrenzter Micro-Tick (>=1s
@@ -417,7 +417,7 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
         last_tick = ts
         n_ticks += 1
     if n_ticks:
-        print(f"  SFX: {n_ticks} Einflug-Sounds auf Folge-Captions")
+        print(f"  SFX: {n_ticks} entry sounds on follow-up captions")
         n_placed += n_ticks
     peak = np.abs(total).max()
     if peak > 1.0:

@@ -3,6 +3,59 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v149 4K als bezahlte Stufe - und ein Aufloesungs-Fehler, der teurer war.**
+  Ismets Frage 'warum hab ich da kein 4K Output' hat einen aelteren Fehler
+  aufgedeckt: `output.height` wurde stur als BILDHOEHE genommen. Eine
+  1080x1920-Aufnahme kam damit als **607x1080** heraus, also SCHMALER als die
+  Quelle - im Hochformat hat die Engine jedes Video kleingerechnet. Im
+  Querformat stimmte es zufaellig, deshalb ist es nie aufgefallen.
+  Jetzt ist `height` das Zielmass der KURZEN Kante: hoch 1080x1920, quer
+  1920x1080. Zusaetzlich `output.quality: hd|4k` (kurze Kante 2160).
+  **Es wird NIE hochskaliert** (`H = min(H, src_h)`): aus 1080p wird kein 4K,
+  sondern nur ein grosses weiches 1080p - teurer zu rechnen und schlechter
+  anzusehen. Nebenwirkung: eine 960x540-Quelle wurde bisher auf 1920x1080
+  aufgeblasen, das faellt jetzt weg.
+  **Preis:** 4K kostet den doppelten Credit-Satz (`UHD_FAKTOR = 2`), weil
+  Matting, Tiefenkarte, Gesichts-Tracking und Encode alle auf der vierfachen
+  Pixelmenge laufen. Berechnet wird es NUR, wenn die Quelle mindestens 1440p
+  kurze Kante hat (`_will_uhd`) - der Wunsch allein kostet nichts, und die
+  Stufe wird dann auch aus den Overrides entfernt, damit der Render gar nicht
+  erst gross rechnet. Die Pruefung sitzt vor der Reservierung, und der
+  gezahlte Betrag steht als `cost_sec` am Job: sonst haette eine Erstattung
+  nach einem 4K-Render nur die Haelfte zurueckgegeben (neues `_job_cost`,
+  ersetzt sechs Aufrufe von `cost_seconds(dauer)`). Im Editor kann die Stufe
+  noch kippen, `save_and_render` rechnet den Preis dort neu.
+  UI: Stufe 'HD / 4K - 2x credits' im Feintuning, mit dem Hinweis auf die
+  1440p-Grenze und darauf, dass nicht hochskaliert wird.
+- **v148 Engine spricht Englisch.** Das Web-Produkt ist englisch, die Engine
+  schrieb aber deutsch - im Fehlerkasten stand `KI-Dienst-Problem (HTTP 500)`
+  und `Eingabe erkannt als LANDSCAPE` mitten in einer englischen Oberflaeche
+  (Ismets Screenshot). Alle 130 Ausgaben und 19 Abbruch-Meldungen in
+  `render.py` sind jetzt englisch.
+  ERSETZT WURDEN NUR STRING-LITERALE INNERHALB VON `print()`/`sys.exit()`:
+  ein erster Versuch lief ueber alle String-Tokens und uebersetzte prompt auch
+  Kommentare und Docstrings mit ("teure Motion-Graphics of billigen
+  Ease-Out-Presets") - deutsche Fuellwoerter wie ' von ' stehen eben auch in
+  Prosa. Der zweite Anlauf bestimmt die Zeilenbereiche der Aufrufe per AST und
+  fasst nur die an.
+  **Beide Log-Leser wurden mitgezogen:** `web/server.py` mappt die Marker auf
+  die Fortschritts-Phasen, `gui.py` auf die Desktop-Statuszeile. Die deutschen
+  Marker bleiben als Fallback daneben stehen - in Job-Logs und im
+  Transkript-Cache von vor dem Deploy stehen sie noch, und eine
+  Fortschrittsanzeige, die dort ploetzlich stumm bleibt, waere eine
+  Verschlechterung. Das gilt auch fuer `_parse_refs_line` und die
+  `FEHLER:`/`ERROR:`-Erkennung. Die Texte der Desktop-GUI selbst bleiben
+  deutsch, das ist Ismets eigene App.
+- **v147 Render-Fehler ins Admin-Panel statt ins Postfach.** Ismets Wunsch.
+  `_notify_job_fail` und die Timeout-Meldung mailen nicht mehr. Damit die
+  Information nicht verloren geht, gibt es eine neue Tabelle `alerts`: jede
+  Stoerung landet dort IMMER, unabhaengig von `DVE_ALERTS`. Noetig, weil die
+  `JOBS`-Liste nur im Arbeitsspeicher steht - nach einem Neustart waere die
+  Stoerung spurlos weg. Neuer Admin-Tab **Alerts** mit ungelesen-Markierung,
+  'mark read' je Zeile und fuer alle, plus Zaehler im Live-Tab. Routine-Post
+  (taegliches Backup) wird bewusst NICHT protokolliert, sonst ist die Liste
+  nach einer Woche nur noch Backup-Rauschen. Echte Betriebsstoerungen (Platte
+  knapp, Ghost-Buy, Stripe) mailen weiterhin.
 - **v145 Rechnung: Pflichtangaben vollstaendig, unabhaengig vom Dashboard.**
   Befund an einer echten Stripe-Rechnung: der Kopf zeigte nur die Marke
   ('Von: DouchkoVE'). Vollstaendiger Name und Anschrift des leistenden

@@ -46,11 +46,11 @@ def ensure_models():
         if os.path.exists(path) and os.path.getsize(path) >= need:
             continue
         if os.path.exists(path):
-            print(f"  {rel} ist unvollstaendig - wird neu geladen")
+            print(f"  {rel} is incomplete - downloading again")
             os.remove(path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         part = path + '.part'
-        print(f"Lade {rel} herunter...")
+        print(f"Downloading {rel} ...")
         for versuch in range(1, 6):
             have = os.path.getsize(part) if os.path.exists(part) else 0
             try:
@@ -78,8 +78,8 @@ def ensure_models():
                 os.replace(part, path)
                 break
             except Exception as e:
-                print(f"\n  Abbruch ({type(e).__name__}) - Versuch {versuch}/5, "
-                      f"mache bei {have / 1e6:.0f} MB weiter ...")
+                print(f"\n  Aborted ({type(e).__name__}) - attempt {versuch}/5, "
+                      f"mache bei {have / 1e6:.0f} MB ...")
                 time.sleep(2 * versuch)
         else:
             raise RuntimeError(
@@ -947,8 +947,8 @@ def transcribe(audio_path, language, cfg=None):
     import requests
     key = os.environ.get('OPENAI_API_KEY')
     if not key:
-        sys.exit("FEHLER: Umgebungsvariable OPENAI_API_KEY ist nicht gesetzt.")
-    print("Transkribiere ueber Sprach-KI...")
+        sys.exit("ERROR: environment variable OPENAI_API_KEY is not set.")
+    print("Transcribing speech ...")
     # v146: WIEDERHOLEN statt aufgeben. Ein einzelner HTTP 500 von OpenAI hat
     # bis v145 den ganzen Render abgebrochen - der Kunde sah 'KI-Dienst-Problem'
     # und musste von vorn anfangen (Ismets Befund live auf douchko.eu, 4K-Clip).
@@ -972,42 +972,42 @@ def transcribe(audio_path, language, cfg=None):
                     files={'file': (os.path.basename(audio_path), f, 'audio/mp4')},
                     timeout=600)
         except requests.exceptions.Timeout:
-            _grund, r = 'Zeitueberschreitung', None
+            _grund, r = 'timed out', None
         except requests.exceptions.ConnectionError:
-            _grund, r = 'Verbindungsabbruch', None
+            _grund, r = 'connection lost', None
         if r is not None:
             # Endgueltig: daran aendert kein weiterer Versuch etwas.
             if r.status_code == 401:
-                sys.exit("FEHLER: KI-Zugang ungueltig. Support kontaktieren.")
+                sys.exit("ERROR: AI access is invalid. Please contact support.")
             if r.status_code == 413:
-                sys.exit("FEHLER: Audio-Spur zu gross. Kuerzeres Video versuchen.")
+                sys.exit("ERROR: audio track too large. Try a shorter video.")
             if r.status_code == 429:
-                _grund = 'ueberlastet (429)'
+                _grund = 'overloaded (429)'
             elif 500 <= r.status_code < 600:
-                _grund = f'Dienst-Problem (HTTP {r.status_code})'
+                _grund = f'service problem (HTTP {r.status_code})'
             else:
                 break
         if _v >= _versuche - 1:
             break
         _s = _warte[min(_v, len(_warte) - 1)]
-        print(f"Sprach-KI {_grund} - Versuch {_v + 2} von {_versuche} "
+        print(f"Speech AI {_grund} - attempt {_v + 2} of {_versuche} "
               f"in {_s:.0f}s...")
         time.sleep(_s)
     if r is None:
-        sys.exit("FEHLER: Keine Verbindung zur Sprach-KI. "
-                 "Internet pruefen oder in ein paar Minuten erneut versuchen.")
+        sys.exit("ERROR: no connection to the speech AI. "
+                 "Check the connection or try again in a few minutes.")
     if r.status_code == 429:
-        sys.exit("FEHLER: KI-Dienst ueberlastet. "
-                 "Bitte in 5 Minuten erneut versuchen.")
+        sys.exit("ERROR: the AI service is overloaded. "
+                 "Please try again in 5 minutes.")
     if 500 <= r.status_code < 600:
-        sys.exit(f"FEHLER: KI-Dienst-Problem (HTTP {r.status_code}). "
-                 f"Bitte in ein paar Minuten erneut versuchen.")
+        sys.exit(f"ERROR: AI service problem (HTTP {r.status_code}). "
+                 f"Please try again in a few minutes.")
     r.raise_for_status()
     data = r.json()
     words = [{'word': w['word'].strip(), 'start': round(w['start'], 3), 'end': round(w['end'], 3)}
              for w in data.get('words', [])]
     if not words:
-        sys.exit("FEHLER: Keine Woerter in der Transkription. Hat das Video eine Tonspur?")
+        sys.exit("ERROR: no words in the transcript. Does the video have an audio track?")
     return attach_punctuation(words, data.get('segments') or [])
 
 
@@ -1325,7 +1325,7 @@ def silent_score(out_video, words, fx_map, model='gpt-5'):
                 continue
         return {'score': score, 'hinweise': hints}
     except Exception as e:
-        print(f"Silent-Score nicht verfuegbar ({type(e).__name__})")
+        print(f"Silent score unavailable ({type(e).__name__})")
         return None
 
 
@@ -1445,9 +1445,9 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-5', min_power=2,
             if fxo in ('behind', 'cascade', 'blurin', 'outline', 'ground'):
                 fx_map[i]['fx'] = fxo
             n_v += 1
-        print(f"Vision-Regie: {n_v} Momente an die Umgebung angepasst")
+        print(f"Vision director: {n_v} moments matched to the scene")
     except Exception as e:
-        print(f"Vision-Regie nicht verfuegbar ({type(e).__name__}), Text-Regie bleibt.")
+        print(f"Vision director unavailable ({type(e).__name__}), text direction stays.")
     return _behind_cover_backstop(fx_map, face_cover)
 
 
@@ -1484,7 +1484,7 @@ def _behind_cover_backstop(fx_map, face_cover, thresh=0.52):
             v['fx'] = 'ground' if int(v.get('power', 2)) >= 3 else 'outline'
             moved += 1
     if moved:
-        print(f"  Sichtbarkeit: {moved} 'behind' bei Nahaufnahme -> nach vorn")
+        print(f"  Visibility: {moved} 'behind' in a close-up -> moved to the front")
     return fx_map
 
 def persp_warp(arr, yaw=0.0, pitch=0.0):
@@ -1761,7 +1761,7 @@ def _person_cutout_png(frame_path, out_png):
         return True
     except Exception as e:
         _CUT_SESS = False
-        print(f"  Cutout-Vorschau uebersprungen ({type(e).__name__})")
+        print(f"  Cutout preview skipped ({type(e).__name__})")
         return False
 
 
@@ -1793,7 +1793,7 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     import mediapipe as mp
     from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision
-    print("Gesichts-Tracking + Szenen-Analyse...")
+    print("Face tracking + scene analysis ...")
     # v96c: niedrigere Confidence (0.4->0.25) faengt angewinkelte / halb
     # abgewandte / kleinere Gesichter, die frontal-optimierte Modelle sonst
     # verwerfen. Die dadurch moeglichen Fehldetektionen werden ueber die
@@ -1977,9 +1977,9 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
                       kernel, 'valid')[:n]
     n_broll = int((~present).sum())
     _npf = sum(len(f) >= 2 for f in smooth_boxes)
-    print(f"  {len(shots)} Szenen, {int(sum(r is not None for r in raw))}/{n} Frames mit Gesicht"
-          + (f", {n_broll} Frames als B-Roll eingestuft" if n_broll else "")
-          + (f", Multi-Person in {_npf} Frames" if multi_person else ""))
+    print(f"  {len(shots)} shots, {int(sum(r is not None for r in raw))}/{n} frames with a face"
+          + (f", {n_broll} frames classified as B-roll" if n_broll else "")
+          + (f", multiple people in {_npf} frames" if multi_person else ""))
     sc = out_w / float(work_w)
     # v85: interne Schnitt-Frames mitgeben (fuer Caption-Schnitt-Disziplin).
     inner_cuts = [c for c in cuts if 0 < c < n]
@@ -3614,7 +3614,7 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
     try:
         mess = measure_reference_video(video_path)
     except Exception as e:
-        print(f"Stil-Messung uebersprungen ({type(e).__name__})")
+        print(f"Style measurement skipped ({type(e).__name__})")
         mess = {}
     if not key:
         if not mess:
@@ -3652,7 +3652,7 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
         r.raise_for_status()
         desc = r.json()['choices'][0]['message']['content'].strip()
     except Exception as e:
-        print(f"Stil-Lernen nicht verfuegbar ({type(e).__name__})")
+        print(f"Style learning unavailable ({type(e).__name__})")
         desc = ''
     if not desc:
         # Prosa fehlt (Ausfall, Rate-Limit, leere Antwort). Die Messung
@@ -3723,7 +3723,7 @@ def _reference_entry(video_path, name, desc, params, mess, save, store_path):
         entry['gemessen'] = klar
         if not entry['beispiel']:
             entry['beispiel'] = klar
-        print(f"Stil gemessen: Schnitt {mess.get('einstellung_s', '?')}s, "
+        print(f"Style measured: shot {mess.get('einstellung_s', '?')}s, "
               f"Kamera {mess.get('kamera', '?')}, "
               f"Musik {'ja' if mess.get('musik') else 'nein'}, "
               f"Zone {mess.get('zone_y', '?')}")
@@ -3743,8 +3743,8 @@ def _reference_entry(video_path, name, desc, params, mess, save, store_path):
             json.dump(refs[-12:], open(path, 'w', encoding='utf-8'),
                       ensure_ascii=False, indent=2)   # max 12 Referenzen halten
         except Exception as e:
-            print(f"Referenz nicht gespeichert ({type(e).__name__})")
-    print(f"Stil-Referenz gelernt: {entry['name']}")
+            print(f"Reference not saved ({type(e).__name__})")
+    print(f"Style reference learned: {entry['name']}")
     return entry
 
 
@@ -3865,7 +3865,7 @@ def _style_params_from_desc(desc, model='gpt-5', key=None, frames=None):
             out['density'] = str(data['density']).lower()
         return out
     except Exception as e:
-        print(f"  Stil-Parameter uebersprungen ({type(e).__name__})")
+        print(f"  Style parameters skipped ({type(e).__name__})")
         return {}
 
 
@@ -4208,11 +4208,11 @@ def _regie_validate(fx_map, words, model, key):
         if drop:
             for i in drop:
                 fx_map.pop(i, None)
-            print(f"  Validator: {len(drop)} Fehl-Highlights gestrichen")
+            print(f"  Validator: {len(drop)} wrong highlights dropped")
         else:
-            print(f"  Validator: alle {len(entries)} Highlights bestaetigt")
+            print(f"  Validator: all {len(entries)} highlights confirmed")
     except Exception as e:
-        print(f"  Validator uebersprungen ({type(e).__name__})")
+        print(f"  Validator skipped ({type(e).__name__})")
     return fx_map
 
 
@@ -4267,7 +4267,7 @@ def _word_loudness(words, voice_wav_path):
             elif v <= lo:
                 out[i] = '~'
     except Exception as e:
-        print(f"  Wort-Lautstaerke uebersprungen ({type(e).__name__})")
+        print(f"  Word loudness skipped ({type(e).__name__})")
     return out
 
 
@@ -4309,9 +4309,9 @@ def _audio_boost(fx_map, words, voice_wav_path):
                     fx_map[i]['power'] = cur + 1
                     bumped += 1
         if bumped:
-            print(f"  Audio-Emotion: {bumped} Momente lauter -> Power hoch")
+            print(f"  Audio emotion: {bumped} moments louder -> power up")
     except Exception as e:
-        print(f"  Audio-Emotion uebersprungen ({type(e).__name__})")
+        print(f"  Audio emotion skipped ({type(e).__name__})")
     return fx_map
 
 def _cap_power3(fx_map, keep=2):
@@ -4351,7 +4351,7 @@ def _regie_sanity(fx_map, words):
                 fx_map[i].pop('anim', None)
                 dropped += 1
     if dropped:
-        print(f"  Regie-Check: {dropped} unpassende Sound-Animation(en) entfernt")
+        print(f"  Direction check: {dropped} mismatched sound animation(s) removed")
     return fx_map
 
 
@@ -4437,7 +4437,7 @@ def _speech_intent(fx_map, words):
         fx_map[i]['intent'] = True   # v99a: Ansage ist Gesetz (Vision/Backstop tabu)
         hits += 1
     if hits:
-        print(f"  Sprach-Intent: {hits} Caption(s) folgen der Ansage "
+        print(f"  Spoken intent: {hits} caption(s) follow what was said "
               f"(hinter/Boden/Himmel/Wasser/Wand)")
     return fx_map
 
@@ -4548,7 +4548,7 @@ def _self_ref_intent(fx_map, words):
         out[i] = ent
         neu += 1
     if neu:
-        print(f"  Selbstbezug: {neu} Caption(s) tun, was der Sprecher ansagt")
+        print(f"  Self reference: {neu} caption(s) do what the speaker announces")
         return out
     return fx_map
 
@@ -4600,7 +4600,7 @@ def _apply_corrections(fx_map, words, corrections):
                 fx_map[i].pop('anim', None)
             applied += 1
     if applied:
-        print(f"  Gelernt: {applied} Korrektur(en) aus frueheren Edits angewandt")
+        print(f"  Learned: {applied} correction(s) from earlier edits applied")
     return fx_map
 
 
@@ -4844,7 +4844,7 @@ def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None):
             a['quelle'] = 'ki'
         return san if san else heuristic_accents(words, cfg, profile)
     except Exception as e:
-        print(f"KI-Akzente nicht verfuegbar ({type(e).__name__}), nutze Heuristik.")
+        print(f"AI accents unavailable ({type(e).__name__}), falling back to the heuristic.")
         return heuristic_accents(words, cfg, profile)
 
 
@@ -5107,7 +5107,7 @@ def apply_keyword_marks(kw, fx_map, words, marks, cfg):
             fx_map.pop(i, None)
             removed += 1
     if added or removed:
-        print(f"Text-Markierungen: {added} erzwungen, {removed} entfernt")
+        print(f"Text markers: {added} forced, {removed} removed")
     return kw, fx_map
 
 
@@ -5182,7 +5182,7 @@ def ai_direct(words, language, model='gpt-5', voice_wav=None, validate=True):
     prof_block = correction_profile(_corr)
     if prof_block:
         _n_rules = sum(1 for l in prof_block.splitlines() if l.startswith('- '))
-        print(f"Korrektur-Gedaechtnis: {_n_rules} Vorlieben fliessen in die Regie ein")
+        print(f"Correction memory: {_n_rules} preferences feed into the direction")
     # v96x: BEWEIS im Job-Log, ob Referenzen wirklich in den Prompt fliessen -
     # vorher war ein leerer/verlorener Block unsichtbar ("KI wendet nichts an").
     if ref_block:
@@ -5191,10 +5191,10 @@ def ai_direct(words, language, model='gpt-5', voice_wav=None, validate=True):
         # ob der Kunde WIRKLICH etwas gelernt hat oder ob nur der Haus-Stil
         # wirkt - genau daraus wurde die falsche Meldung "N learned references".
         _src = (os.environ.get('DVE_REFS_SOURCE') or '').strip().lower()
-        _lbl = {'eigene': 'eigene', 'haus': 'Haus-Stil'}.get(_src, 'unbekannt')
-        print(f"Stil-Referenzen: {_n_refs} aktiv ({_lbl}) - fliessen in die KI-Regie ein")
+        _lbl = {'eigene': 'own', 'haus': 'house style'}.get(_src, 'unknown')
+        print(f"Style references: {_n_refs} active ({_lbl}) - feeding into the AI direction")
     else:
-        print("Stil-Referenzen: keine gefunden (Regie laeuft ohne Stil-Anker)")
+        print("Style references: none found (direction runs without a style anchor)")
     merged = {}
     for ci, (a, b, sel) in enumerate(chunks):
         part = words[a:b]
@@ -5238,12 +5238,12 @@ def ai_direct(words, language, model='gpt-5', voice_wav=None, validate=True):
                     res = {i: v for i, v in res.items() if i >= sel}
                 merged.update(res)
             if len(chunks) > 1:
-                print(f"  KI-Regie Etappe {ci + 1}/{len(chunks)}: "
-                      f"{len(res) if res else 0} Momente")
+                print(f"  AI director stage {ci + 1}/{len(chunks)}: "
+                      f"{len(res) if res else 0} moments")
         except Exception as e:
-            print(f"KI-Regie Etappe {ci + 1}/{len(chunks)} nicht verfuegbar "
+            print(f"AI director stage {ci + 1}/{len(chunks)} unavailable "
                   f"({type(e).__name__})" if len(chunks) > 1 else
-                  f"KI-Regie nicht verfuegbar ({type(e).__name__}), nutze Automatik.")
+                  f"AI director unavailable ({type(e).__name__}), falling back to automatic.")
     if not merged:
         return None
     if validate:
@@ -6027,7 +6027,7 @@ def ai_flow_direct(words, groups, language='de', model='gpt-5'):
         r.raise_for_status()
         data = json.loads(r.json()['choices'][0]['message']['content'])
     except Exception as e:
-        print(f"KI-Flow nicht verfuegbar ({type(e).__name__}), nutze Heuristik.")
+        print(f"AI flow unavailable ({type(e).__name__}), falling back to the heuristic.")
         return None
     return _parse_flow_sel(data, groups, words)
 
@@ -6468,8 +6468,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     _plat = str(cfg.get('output', {}).get('platform', 'generic')).lower()
     _pz = platform_safe_zones(_plat, W, H) if safe_z else None
     if safe_z:
-        print(f"Safe-Zone 9:16 aktiv ({_pz['label']}): Button-Spalte rechts "
-              f"und Caption-Zeile unten bleiben frei")
+        print(f"Safe zone 9:16 active ({_pz['label']}): Button-Spalte rechts "
+              f"and the caption row at the bottom stay clear")
 
     # v86: Baseline-Grid. Aufeinanderfolgende Captions sollen auf EINER Linie
     # sitzen statt bei jedem Moment ein paar Prozent zu huepfen. Zwei Massnahmen:
@@ -6793,7 +6793,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     voiceover = bool(groups) and not any(
         face_ok(words[g[0]]['start'], words[g[-1]]['end']) for g in groups)
     if voiceover and not cfg['effects'].get('broll_captions', False):
-        print("Kein Sprecher-Gesicht im Video: Captions werden szenen-verankert gesetzt.")
+        print("No speaker face in the video: captions are anchored to the scene.")
     used = set()                            # von Phrasen verbrauchte Woerter
     kw_count = 0
     for gi, g in enumerate(groups):
@@ -6882,7 +6882,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 fx_map[i_f].setdefault('power', 1)             # dezent, nicht laut
                 last_kw_end = end
                 prev_was_keyword = True
-                print(f"  Watchtime-Moment (Luecke {start - prev_budget:.0f}s): "
+                print(f"  Watchtime moment (gap {start - prev_budget:.0f}s): "
                       f"{words[i_f].get('word', '')}")
 
         # SATZ ZU ENDE FUEHREN: Ein grosser Keyword-Moment ("BLEIB dran denn am
@@ -6914,7 +6914,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             i = g_kw[0]                       # bestes Keyword der Gruppe (Score)
             if zrel(i) > 0:
                 last_num_end = end
-                print(f"  Zahl-Moment ({zrel(i):.1f}): {clean(words[i]['word'])}")
+                print(f"  Number moment ({zrel(i):.1f}): {clean(words[i]['word'])}")
             # Mindest-Anzeigedauer: das grosse Wort braucht mindestens 1 s Buehne.
             # Wenn Platz ist, wird die Anzeige in die folgende Pause verlaengert;
             # wenn nicht (naechste Gruppe zu nah, Szenenwechsel), faellt der
@@ -7035,10 +7035,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     if isinstance(fx_map.get(i), dict):
                         fx_map[i].setdefault('anim', _auto_anim)
                 if p.get('anim'):
-                    print(f"  Lebendige Typo: {p['anim']} auf '{txt}'")
+                    print(f"  Living typography: {p['anim']} on '{txt}'")
             if _cnt:
                 p['count'] = {'fmt': _cnt[0], 'dur': _cnt[1]}
-                print(f"  Zaehler-Moment: {txt}")
+                print(f"  Counter moment: {txt}")
 
             _pw_here = int(info.get('power', 2)) if isinstance(info, dict) else 2
 
@@ -7059,7 +7059,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if len(phrase) >= 2 and not _platzierung:
                 p['tokens'] = compose_phrase(phrase, words_c, S, W, H, portrait, safe_z,
                                              loud=loud)
-                print(f"  Editorial-Komposition: {txt}")
+                print(f"  Editorial composition: {txt}")
                 core_tok = next((tk for tk in p['tokens'] if tk.get('role') == 'core'), None)
                 if core_tok is not None and p.get('count'):
                     c2 = make_counter(core_tok.get('txt', ''))
@@ -7134,10 +7134,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                                               H * 0.07)
                                 if p.get('entr') == 'emerge':
                                     p['entr'] = 'rise'
-                                print(f"  Lesbarkeit: '{txt}' schmaler als der "
-                                      f"Kopf -> ueber den Kopf gelegt")
+                                print(f"  Legibility: '{txt}' narrower than the "
+                                      f"head -> placed above the head")
                             else:
-                                print(f"  Lesbarkeit: '{txt}' vergroessert "
+                                print(f"  Legibility: '{txt}' vergroessert "
                                       f"(ragt beidseitig heraus)")
                 if p.get('count'):
                     p['builder'] = (lambda s, _sz=sz, _tl=p['tilt']:
@@ -7154,7 +7154,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                                       yaw=_tl * 4.5))
                     try:
                         p['_wladder'] = build_wladder(_wb)
-                        print(f"  Variable-Achse: echte Gewichts-Leiter auf '{txt}'")
+                        print(f"  Variable axis: real weight ladder on '{txt}'")
                     except Exception:
                         p['_wladder'] = None
                 # v143 FIX: safe_z ist nur im Hochformat wahr - im Querformat
@@ -7330,7 +7330,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 try:
                     p['arr'] = bake_emoji(p['arr'], p['emoji'])
                 except Exception as _e:
-                    print(f"  Emoji uebersprungen ({type(_e).__name__})")
+                    print(f"  Emoji skipped ({type(_e).__name__})")
             p['target'] = (p.get('cx', W / 2), p.get('cy', p.get('by', H * 0.398)))
             # v143: vpos deckt Keyword UND Nebenwort-Zeile ab. Vorher trug der
             # Plan nur die Keyword-Hoehe; eine Nebenwort-Zeile weit darunter
@@ -7381,7 +7381,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                                 p['anim'] = _a
                                 _sig = _s2
                                 break
-                    print("  Hoehepunkt-Variation: Motion aufgebrochen")
+                    print("  Climax variation: motion broken up")
                 big_used.add(_sig)
             plans.append(p)
         elif cfg['effects'].get('caption_flow', True):
@@ -7528,7 +7528,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if t_spoken > 0.35:
                 best['t0'] = 0.0
                 best['start'] = 0.0
-                print(f"  Sofort-Hook: '{best['kw_txt']}' steht ab Frame 1 "
+                print(f"  Instant hook: '{best['kw_txt']}' steht ab Frame 1 "
                       f"(gesprochen bei {t_spoken:.1f}s)")
 
     # WATCHTIME: Pattern-Interrupt. Wo laenger nichts passiert, bekommt die
@@ -7561,11 +7561,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                               'ccam': 'none', 'arr': None})
             t_last = t_e
         if skipped:
-            print(f"  Watchtime: {skipped} Kamera-Impuls(e) auf B-Roll uebersprungen")
+            print(f"  Watchtime: {skipped} camera impulse(s) on B-roll skipped")
         if extra:
             n_h = sum(1 for x in extra if x['start'] < hook_pi)
-            print(f"  Watchtime: {len(extra)} Kamera-Impuls(e) in ruhigen Passagen"
-                  + (f", davon {n_h} im Hook-Takt" if n_h else ""))
+            print(f"  Watchtime: {len(extra)} camera impulse(s) in quiet passages"
+                  + (f", of those {n_h} on the hook beat" if n_h else ""))
             plans.extend(extra)
 
     # ------------------------------------------------------------- Crash & Whip
@@ -7584,7 +7584,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             top = max(cand, key=_wucht)
             top['cam'] = 'crash'
             top['crash_amt'] = crash_amt
-            print(f"  Crash-Zoom auf staerksten Moment: "
+            print(f"  Crash zoom on the strongest moment: "
                   f"{clean(words[top['kw_i']].get('word', ''))}")
 
     if cfg['camera'].get('whip', False):
@@ -7598,14 +7598,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 b['whip_dir'] = 1 if n_whip % 2 == 0 else -1
                 n_whip += 1
         if n_whip:
-            print(f"  Whip-Pan an {n_whip} Abschnittsgrenze(n)")
+            print(f"  Whip pan at {n_whip} section boundary/boundaries")
 
     # v88: Kein Doppelbild - generalisiert ueber ALLE Text-Momente (siehe
     # resolve_overlaps). Laeuft NACH dem Hook (der t0 auf 0 zieht), damit die
     # Hook-Karte in der Ueberlappungs-Pruefung mitgezaehlt wird.
     _n_ovl = resolve_overlaps(plans, W, H)
     if _n_ovl:
-        print(f"  Ueberlappungs-Schutz: {_n_ovl} Moment(e) vorgezogen")
+        print(f"  Overlap guard: {_n_ovl} moment(s) pulled forward")
 
     # v85: SCHNITT-DISZIPLIN (Broadcast-Regel, BBC/Netflix). Ein Untertitel darf
     # nicht ueber einen harten Schnitt hinweg stehen bleiben - das ist der
@@ -7632,7 +7632,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['end'] = limit
                 n_clamp += 1
         if n_clamp:
-            print(f"  Schnitt-Disziplin: {n_clamp} Moment(e) enden vor dem Schnitt")
+            print(f"  Cut discipline: {n_clamp} moment(s) end before the cut")
 
     # v101c BEAT-GRID: Liegt Musik mit klarem Takt unter dem Clip, rasten
     # Keyword-Momente auf den naechsten Beat ein (Editor-Handwerk: "cut on the
@@ -7654,7 +7654,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['start'] = nb
                 n_snap += 1
         if n_snap:
-            print(f"  Beat-Grid: {n_snap} Moment(e) rasten auf den Takt")
+            print(f"  Beat grid: {n_snap} moment(s) snap to the beat")
 
     # v140 STILLE VOR DEM EINSCHLAG. Die teuerste Sekunde im professionellen
     # Schnitt ist die leere: kurz vor der Pointe verschwindet der Text, das
@@ -7693,7 +7693,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         q['end'] = neu
                         n_sil += 1
         if n_sil:
-            print(f"  Stille vor dem Einschlag: {n_sil} Moment(e) enden frueher")
+            print(f"  Silence before the impact: {n_sil} moment(s) end earlier")
 
     # v101d: Safe-Zone-Kontrolle. Die Constraints (v_zone/clamp_cx) halten Text
     # schon in der Flaeche; hier melden wir nur die Faelle, wo ein Sprite dafuer
@@ -7701,7 +7701,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     _sz_warn = safe_zone_report(plans, _pz, W, H)
     if _sz_warn:
         _lst = ', '.join(f"'{t}' ({g})" for t, g in _sz_warn[:3])
-        print(f"  Safe-Zone-Warnung ({_pz['label']}): {len(_sz_warn)} Moment(e) "
+        print(f"  Safe zone warning ({_pz['label']}): {len(_sz_warn)} Moment(e) "
               f"ragen ins UI - {_lst}")
 
     plans.sort(key=lambda p: p['start'])
@@ -9059,7 +9059,7 @@ def main():
     # Occlusion bleiben: die werden korrekt zu (teil-)transparenten Pixeln.
     if args.alpha_export:
         if args.window:
-            sys.exit('FEHLER: --alpha-export ist nur fuer den Voll-Render.')
+            sys.exit('ERROR: --alpha-export is only for the full render.')
         cfg.setdefault('camera', {})
         cfg['camera'].update({'strength': 0.0, 'crash': 0.0, 'whip': False,
                               'keyword_rotation': [], 'side_rotation': []})
@@ -9070,8 +9070,8 @@ def main():
         cfg.setdefault('output', {})['master'] = False
         args.watermark = False
         args.watermark_split = False
-        print('Alpha-Export: Caption-Ebene (ProRes 4444) - Kamera/Freeze/'
-              'Split/BG-Blur aus, Ebene bleibt deckungsgleich zum Original')
+        print('Alpha export: caption layer (ProRes 4444) - camera/freeze/'
+              'split/background blur off, the layer stays aligned with the original')
     # v96y: gelernte Stil-Referenzen wirken DETERMINISTISCH auf die Config
     # (Chunk-Laenge, Highlight-Dichte, Hook, Wucht) - zusaetzlich zum Prompt.
     # So ist der Referenz-Einfluss sichtbar, egal wie GPT den Hinweis gewichtet.
@@ -9089,13 +9089,25 @@ def main():
 
     src_w, src_h, fps, fps_str, src_dur = probe(args.input)
     n_frames = int(src_dur * fps)
-    H = cfg['output'].get('height', 1080)
+    # v149: 'height' ist das Zielmass der KURZEN Kante, nicht der Bildhoehe.
+    # Vorher wurde es stur als Hoehe genommen: eine 1080x1920-Aufnahme kam als
+    # 607x1080 heraus, also SCHMALER als die Quelle - im Hochformat hat die
+    # Engine damit jedes Video kleingerechnet. Quer war es zufaellig richtig,
+    # deshalb ist es nie aufgefallen. 'quality: 4k' hebt das Ziel auf 2160.
+    _kurz = int(cfg['output'].get('height', 1080))
+    if str(cfg['output'].get('quality', '')).lower() in ('4k', 'uhd'):
+        _kurz = max(_kurz, 2160)
+    H = _kurz if src_w >= src_h else int(round(_kurz * src_h / max(src_w, 1)))
+    # NIE hochskalieren. Aus 1080p wird kein 4K, es wird nur ein grosses,
+    # weiches 1080p - teurer zu rechnen und schlechter anzusehen.
+    H = min(H, src_h)
+    H = int(round(H / 2) * 2)
     if args.preview:
         H = 540
         cfg['output']['master'] = False
         cfg['output']['crf'] = 30
         cfg['output']['speed'] = 'schnell'
-        print("VORSCHAU-MODUS: 540p, schneller Encode")
+        print("PREVIEW MODE: 540p, fast encode")
     W = int(round(src_w * H / src_h / 2) * 2)
 
     # v80f: Aspect-Ratio Auto-Detect. Der Renderer ist auf 9:16 optimiert
@@ -9113,9 +9125,9 @@ def main():
             _mode = 'portrait'
     if _mode != 'portrait':
         cfg['effects']['safe_zone'] = False
-        print(f"Eingabe erkannt als {_mode.upper()} ({src_w}x{src_h}, "
-              f"AR {_ar:.2f}). Portrait-Optimierungen deaktiviert.")
-    print(f"Eingabe: {src_w}x{src_h} @ {fps:.3g}fps, {n_frames} Frames -> Ausgabe {W}x{H}")
+        print(f"Input detected as {_mode.upper()} ({src_w}x{src_h}, "
+              f"AR {_ar:.2f}). Portrait optimisations disabled.")
+    print(f"Input: {src_w}x{src_h} @ {fps:.3g}fps, {n_frames} frames -> output {W}x{H}")
 
     # --- Transkription
     # Transkript-Cache neben dem Video automatisch nutzen (kein API-Aufruf)
@@ -9125,7 +9137,7 @@ def main():
             args.transcript = auto_t
     if args.transcript and os.path.exists(args.transcript):
         words = json.load(open(args.transcript, encoding='utf-8'))
-        print(f"Transkript geladen: {len(words)} Woerter")
+        print(f"Transcript loaded: {len(words)} words")
     else:
         with tempfile.TemporaryDirectory() as td:
             wav = os.path.join(td, 'audio.m4a')
@@ -9141,17 +9153,17 @@ def main():
             if _sz_mb > 24.5:
                 br_kbps = max(16, br_kbps // 2)
                 print(f"Audio {_sz_mb:.1f} MB > Whisper-Limit, "
-                      f"neu enkodiert mit {br_kbps} kbps")
+                      f"re-encoded at {br_kbps} kbps")
                 subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', args.input,
                                 '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'aac',
                                 '-b:a', f'{br_kbps}k', wav], check=True)
             words = transcribe(wav, cfg.get('language', 'de'), cfg)
         tpath = os.path.splitext(args.input)[0] + '_transcript2.json'
         json.dump(words, open(tpath, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-        print(f"{len(words)} Woerter, Transkript gespeichert: {tpath}")
+        print(f"{len(words)} words, transcript saved: {tpath}")
 
     if args.transcribe_only:
-        print('Transkript bereit - Kontrolle kann starten.')
+        print('Transcript ready - you can review it now.')
         sys.exit(0)
 
     # --- Wort-Timing am echten Audio nachjustieren
@@ -9160,7 +9172,7 @@ def main():
                     '-ac', '1', '-ar', '44100', voice_wav], check=False)
     if os.path.exists(voice_wav):
         words, avg_shift = refine_word_times(words, voice_wav)
-        print(f"Wort-Timing nachjustiert (mittlere Korrektur {avg_shift:.0f} ms)")
+        print(f"Word timing adjusted (average correction {avg_shift:.0f} ms)")
     else:
         voice_wav = None
     # v101 Betonungs-Typografie: Sprech-Pegel pro Wort einmal messen -
@@ -9168,8 +9180,8 @@ def main():
     loud_map = _word_loudness(words, voice_wav) if voice_wav else {}
     if loud_map:
         _nl = sum(1 for v in loud_map.values() if v == '!')
-        print(f"Betonung: {_nl} laute / {len(loud_map) - _nl} leise Woerter "
-              f"typografisch gesetzt")
+        print(f"Emphasis: {_nl} loud / {len(loud_map) - _nl} leise words "
+              f"set typographically")
 
     # --- Tracking + Plaene
     speed = str(cfg['output'].get('speed', 'standard')).lower()
@@ -9184,9 +9196,9 @@ def main():
     # Gespraech. Ismet muss nichts umstellen, der Render erkennt es selbst.
     face_frac = float(has_face.mean()) if len(has_face) else 0.0
     video_mode = _video_mode(face_frac, multi_person)
-    print(f"Modus automatisch: {video_mode} "
-          f"(Gesicht in {face_frac*100:.0f}% der Frames"
-          + (", mehrere Personen" if multi_person else "") + ")")
+    print(f"Mode detected: {video_mode} "
+          f"(face in {face_frac*100:.0f}% of frames"
+          + (", multiple people" if multi_person else "") + ")")
     k2 = 41
     kern2 = np.ones(k2) / k2
     face_stable = np.stack([np.convolve(np.pad(face[:, j], k2 // 2, mode='edge'),
@@ -9230,10 +9242,10 @@ def main():
             if conf > 0.10:
                 gain = _mb_w * conf
                 aud_onset = np.maximum(aud_onset, beat_env * gain).astype(np.float32)
-                print(f"Musik-Beat: ~{bpm} BPM (Confidence {conf:.2f}, "
+                print(f"Music beat: ~{bpm} BPM (confidence {conf:.2f}, "
                       f"Gewicht {gain:.2f})")
             else:
-                print("Musik-Beat: kein klares Tempo (Confidence zu niedrig) - "
+                print("Music beat: no clear tempo (confidence too low) - "
                       "nur Sprech-Onset")
             _beat_ts = beat_grid_times(beat_env, fps, conf, bpm)
     else:
@@ -9257,9 +9269,9 @@ def main():
                 fx_map = parse_regie(_rtxt, words, cfg.get('language', 'de'))
                 _regie_wahl = bool(fx_map)
             else:
-                print("Stil-Referenzen geaendert - alte Regie verworfen, KI plant neu")
+                print("Style references changed - old direction discarded, the AI plans again")
         if fx_map is None:
-            print("KI-Regie analysiert das Transkript...")
+            print("AI director is analysing the transcript ...")
             fx_map = ai_direct(words, cfg.get('language', 'de'),
                                cfg['keywords'].get('ai_model', 'gpt-5'),
                                voice_wav=voice_wav,
@@ -9318,7 +9330,7 @@ def main():
             kw |= detect_keywords(words, cfg, args.keywords)
         exclude = {k.lower() for k in (cfg['keywords'].get('exclude') or [])}
         kw = {i for i in kw if clean(words[i]['word']).lower() not in exclude}
-        print(f"KI-Regie: {len(kw)} Keywords gewaehlt")
+        print(f"AI director: {len(kw)} keywords chosen")
     else:
         kw = detect_keywords(words, cfg, args.keywords)
 
@@ -9349,7 +9361,7 @@ def main():
                 n_chap += 1
                 break
         if n_chap:
-            print(f"Kapitel-Struktur: {n_chap} Themenwechsel markiert")
+            print(f"Chapter structure: {n_chap} topic changes marked")
 
     # v101m: Keyword-Markierungen aus dem Text-Editor (Sidecar neben dem Input).
     # Laeuft NACH KI-Regie + Heuristik + Kapiteln -> ist die letzte Instanz.
@@ -9360,7 +9372,7 @@ def main():
             _kmr = {int(k): int(v) for k, v in _kmr.items() if int(v) in (1, -1)}
             kw, fx_map = apply_keyword_marks(kw, fx_map, words, _kmr, cfg)
         except Exception as _kme:
-            print(f"Text-Markierungen ignoriert ({type(_kme).__name__})")
+            print(f"Text markers ignored ({type(_kme).__name__})")
 
     print("Keywords:", [clean(words[i]['word']) for i in sorted(kw)])
 
@@ -9456,7 +9468,7 @@ def main():
         except Exception:
             pass
     if args.plan_only:
-        print(f"Momente exportiert: {mom_path}")
+        print(f"Moments exported: {mom_path}")
         sys.exit(0)
     if os.path.exists(mom_path):
         try:
@@ -9494,9 +9506,9 @@ def main():
                         fx_map[i]['txt'] = m['text']
                     if m.get('emoji'):
                         fx_map[i]['emoji'] = m['emoji']
-            print(f"Moment-Editor: {len(kw)} aktive Momente uebernommen")
+            print(f"Moment editor: {len(kw)} active moments applied")
         except Exception as e:
-            print(f"Momente-Datei ignoriert ({type(e).__name__})")
+            print(f"Moments file ignored ({type(e).__name__})")
     palette_at = None
     # Farbwelt: 'auto' = adaptiv aus der Szene. 'schwarz'/'weiss' = feste
     # High-End-Palette; die Szenen-Toene werden dann bewusst NICHT aufgegriffen,
@@ -9505,15 +9517,15 @@ def main():
     c_style = str(cfg.get('colors', {}).get('style', 'auto')).lower()
     if c_style == 'schwarz':
         S.set_base_colors((20, 20, 22), (58, 58, 64))
-        print("Farbwelt: Elegantes Schwarz (Tiefschwarz + Graphit-Akzent)")
+        print("Colour world: elegant black (deep black + graphite accent)")
     elif c_style == 'weiss':
         S.set_base_colors((250, 249, 246), (208, 204, 196))
-        print("Farbwelt: Elegantes Weiss (Softweiss + warmer Grau-Akzent)")
+        print("Colour world: elegant white (soft white + warm grey accent)")
     elif cfg.get('colors', {}).get('adaptive', True):
         palette_at = scene_palette_sampler(
             args.input, cut_times,
             min_contrast=float(cfg['effects'].get('caption_contrast', 2.2)))
-        print("Adaptive Farben: Captions greifen die Szenen-Toene auf (pro Shot)")
+        print("Adaptive colours: captions pick up the scene tones (per shot)")
     # v143: Raum-Karte fuer die Platzierungs-Regie. Ein Abtastframe je Shot,
     # daraus ein Kostenraster 'wie besetzt ist diese Bildregion'. Abschaltbar
     # ueber effects.adaptive_place - dann faellt spot() auf Gesicht + Wunschzone
@@ -9522,10 +9534,10 @@ def main():
     if cfg['effects'].get('adaptive_place', True):
         try:
             space_at = scene_space_sampler(args.input, cut_times)
-            print("Platzierungs-Regie: Captions weichen Motiv und Unruhe aus "
+            print("Placement director: captions dodge the subject and busy areas "
                   "(Raum-Karte pro Shot)")
         except Exception as _e:
-            print(f"Platzierungs-Regie: Raum-Karte uebersprungen ({type(_e).__name__})")
+            print(f"Placement director: space map skipped ({type(_e).__name__})")
     # v96b: Erzaehler-/Voiceover-Modus. Kaum Gesicht im Bild -> Captions NICHT
     # an einer (kaum vorhandenen) Person ausrichten, sondern zentriert-editorial
     # setzen (face_pos/faces_at = None laesst build_plans das freie, mittige
@@ -9557,7 +9569,7 @@ def main():
                 except OSError:
                     pass
         if flow_map:
-            print(f"KI-Flow: {len(flow_map)} Anker gewaehlt")
+            print(f"AI flow: {len(flow_map)} anchors chosen")
 
     # v101f LICHT-WAHRHEIT: dominante Lichtrichtung einmal aus einem Mittel-Frame
     # schaetzen, damit der Kontakt-Schatten des stehenden Textes licht-wahr zur
@@ -9576,10 +9588,10 @@ def main():
                 _lf = np.frombuffer(_lr.stdout[:96 * 96 * 3],
                                     dtype=np.uint8).reshape(96, 96, 3)
                 _light = estimate_light_dir(_lf)
-                print(f"Licht-Wahrheit: Lichtrichtung lx={_light[0]:+.2f} "
-                      f"Haerte={_light[1]:.2f} (Schatten faellt licht-wahr)")
+                print(f"Light truth: light direction lx={_light[0]:+.2f} "
+                      f"Haerte={_light[1]:.2f} (the shadow falls with the light)")
         except Exception as _e:
-            print(f"Licht-Wahrheit: Schaetzung uebersprungen ({type(_e).__name__})")
+            print(f"Light truth: estimate skipped ({type(_e).__name__})")
 
     if video_mode == 'narrator':
         if fx_map:
@@ -9626,7 +9638,7 @@ def main():
             # v101u: Position gegen die echten Caption-Boxen aufloesen -> Akzent
             # und Caption ueberschneiden sich nie (Akzent weicht nach oben aus).
             resolve_accent_positions(accents_render, plans, W, H, _pz_for_accents)
-            print(f"Auto-Akzente: {len(accents_render)} dezente Motion-Graphics")
+            print(f"Auto accents: {len(accents_render)} subtle motion graphics")
 
     # --- Blender-Wasser-Text: stehende Szenen-Texte werden echtes 3D-Wasser-Glas.
     # Ein Render pro Moment (gecacht); Bewegung/Okklusion macht weiter die Pipeline.
@@ -9637,10 +9649,10 @@ def main():
                       and (not args.window or (p['start'] < args.window[1]
                                                and p['end'] > args.window[0]))]
         if bl_targets and not bl_exe:
-            print("Blender nicht gefunden - stehende Szenen-Texte nutzen den 2D-Look."
+            print("Blender not found - standing scene text falls back to the 2D look."
                   " (Blender installieren oder render.blender_path in config.yaml setzen)")
         elif bl_targets:
-            print(f"Blender-Wasser-Text: {len(bl_targets)} Moment(e) ({bl_exe})")
+            print(f"Blender water text: {len(bl_targets)} moment(s) ({bl_exe})")
             import tempfile as _tf
             for p in bl_targets:
                 bg_png = os.path.join(_tf.gettempdir(),
@@ -9688,7 +9700,7 @@ def main():
                         p['refl'], p['refl_dy'], p['refl_dx'] = r, rdy, rdx
     n_kw = sum(1 for p in plans if 'kw_i' in p)
     n_broll = sum(1 for p in plans if p.get('broll'))
-    print(f"Kompositionen: {len(plans)} ({n_kw} Keyword-Momente, {n_broll} ueber B-Roll)")
+    print(f"Compositions: {len(plans)} ({n_kw} keyword moments, {n_broll} over B-roll)")
 
     # --- Matting-Session: probiert CUDA, dann DirectML, dann CPU
     import onnxruntime as ort
@@ -9714,7 +9726,7 @@ def main():
             sess = cand
             break
         except Exception:
-            print(f"{prov} nicht nutzbar, probiere naechsten...")
+            print(f"{prov} not usable, trying the next one ...")
     if sess is None:
         sess = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
     rec = [np.zeros([1, 1, 1, 1], dtype=np.float32)] * 4
@@ -9735,8 +9747,8 @@ def main():
         md_val = float(md)
     dsr = np.array([md_val], dtype=np.float32)
     refine_str = float(cfg['effects'].get('refine', 1.0)) * q_refine
-    print(f"Matting: {active_prov}, Qualitaet '{q_name}' "
-          f"(Detailstufe {md_val:.3g}, Kantenschaerfe {refine_str:.2g})")
+    print(f"Matting: {active_prov}, quality '{q_name}' "
+          f"(Detailstufe {md_val:.3g}, edge sharpness {refine_str:.2g})")
 
     # --- SFX-Spur. Es gibt NUR echte Sounds aus dem Sound-Pack (sfx/pack/).
     # Synthetische Ersatztoene wurden ersatzlos entfernt - ein billiger Sound ist
@@ -9747,24 +9759,24 @@ def main():
             import sfx_engine
             folder = sfx_engine.pack_folder(HERE)
             if not sfx_engine.load_bank(folder):
-                print("HINWEIS: Kein Sound-Pack -> das Video bekommt keine "
+                print("NOTE: no sound pack -> the video gets no "
                       "Sound-Effekte.")
-                print("  Laden: GUI -> Profi -> Sound-Pack -> 'Echte Sounds laden'")
+                print("  Load it: GUI -> Pro -> Sound pack -> 'Load real sounds'")
             else:
                 sfx_path = os.path.join(tempfile.gettempdir(), 'dve_sfx_track.wav')
                 powers = {i: v.get('power', 2) for i, v in (fx_map or {}).items()
                           if isinstance(v, dict)}
                 dur_total = (args.duration if args.duration else n_frames / fps)
-                print("SFX werden intelligent gesetzt (Onset-Analyse)...")
+                print("Placing SFX on the word onsets ...")
                 n_sfx = sfx_engine.build_sfx_track(plans, words, dur_total, folder,
                                                    sfx_path, voice_wav=voice_wav,
                                                    powers=powers,
                                                    cut_times=cut_times)
-                print(f"SFX: {n_sfx} Sound-Momente gesetzt")
+                print(f"SFX: {n_sfx} sound moments placed")
                 if not n_sfx:
                     sfx_path = None
         except Exception as e:
-            print(f"SFX uebersprungen ({type(e).__name__})")
+            print(f"SFX skipped ({type(e).__name__})")
             sfx_path = None
 
     # --- Wasserzeichen-Sprite (v80y, Free-Tier): einmal gebaut, pro Frame
@@ -9772,7 +9784,7 @@ def main():
     wm = None
     if args.watermark:
         wm = build_watermark(W, H)
-        print("Wasserzeichen: aktiv (Free-Tier, mit Logo)")
+        print("Watermark: on (free tier, with logo)")
 
     # --- Encoder (v80p): ZWEI Stufen statt einer Pipe-Mux-Kombi.
     # Stufe 1: NUR Video aus der Pipe in eine Temp-Datei. Kein zweiter Input,
@@ -9791,14 +9803,14 @@ def main():
                   '-pix_fmt', 'yuva444p10le']
         acodec = ['-c:a', 'pcm_s16le']
         video_tmp = os.path.splitext(out_path)[0] + '.videoonly.mov'
-        print("Ausgabe: Caption-Ebene mit Alpha (ProRes 4444 .mov)")
+        print("Output: caption layer with alpha (ProRes 4444 .mov)")
     elif cfg['output'].get('master', False):
         if not out_path.lower().endswith('.mov'):
             out_path = os.path.splitext(out_path)[0] + '.mov'
         vcodec = ['-c:v', 'prores_ks', '-profile:v', '3', '-pix_fmt', 'yuv422p10le']
         acodec = ['-c:a', 'pcm_s16le']
         video_tmp = os.path.splitext(out_path)[0] + '.videoonly.mov'
-        print("Ausgabe: ProRes-Master (.mov) fuer Premiere")
+        print("Output: ProRes master (.mov) for Premiere")
     else:
         vcodec = ['-c:v', 'libx264', '-preset', x264_preset,
                   '-crf', str(cfg['output'].get('crf', 18)), '-pix_fmt', 'yuv420p']
@@ -9838,7 +9850,7 @@ def main():
             a = max(int((p['start'] - 0.2) * fps), 0)
             b = min(int((p['end'] + 0.6) * fps) + 1, total_est)
             need_alpha[a:b] = True
-    print(f"Matting-Fenster: {int(need_alpha.sum())} von ~{total_est} Frames")
+    print(f"Matting window: {int(need_alpha.sum())} of ~{total_est} frames")
 
     # v101g Kontaktbogen: pro Keyword-Moment den Frame auf dem Hoehepunkt
     # einsammeln (echtes Compositing, kein Editor-Fake). Nur Voll-Render.
@@ -9870,10 +9882,10 @@ def main():
                         break
                     except Exception:
                         continue
-                print(f"Tiefen-Okklusion: {int(need_depth.sum())} Frames "
-                      f"({dsess.get_providers()[0] if dsess else 'kein Modell'})")
+                print(f"Depth occlusion: {int(need_depth.sum())} frames "
+                      f"({dsess.get_providers()[0] if dsess else 'no model'})")
             else:
-                print("Tiefen-Okklusion uebersprungen (models/depth.onnx fehlt - setup.bat laedt es)")
+                print("Depth occlusion skipped (models/depth.onnx is missing - setup.bat downloads it)")
     # v101k Bullet-Time: Kandidat suchen (laengste Sprech-Pause >=0.8s vor
     # einem power-3-Moment). Braucht das Tiefen-Modell - notfalls hier laden.
     bt_win = None
@@ -9890,10 +9902,10 @@ def main():
                     except Exception:
                         continue
             if dsess is None:
-                print("Bullet-Time uebersprungen (kein Tiefen-Modell)")
+                print("Bullet time skipped (no depth model)")
                 bt_win = None
         if bt_win is not None:
-            print(f"Bullet-Time-Kandidat: Pause {bt_win[0]:.2f}s-{bt_win[1]:.2f}s "
+            print(f"Bullet time candidate: pause {bt_win[0]:.2f}s-{bt_win[1]:.2f}s "
                   f"vor Moment '{clean(words[bt_win[2]].get('word', '?'))}'")
     # Tracking-Fenster (planarer Kamera-Track) = Szenen-Text-Fenster
     need_track = np.zeros(total_est, dtype=bool)
@@ -9910,8 +9922,8 @@ def main():
                 if p.get('szene') == 'wand' and not p.get('lying'):
                     need_track_wall[a:b] = True
         if need_track.any():
-            print(f"Kamera-Track (planar): {int(need_track.sum())} Frames"
-                  + (f", davon Wand-Ebene: {int(need_track_wall.sum())}"
+            print(f"Camera track (planar): {int(need_track.sum())} frames"
+                  + (f", of those wall plane: {int(need_track_wall.sum())}"
                      if need_track_wall.any() else ""))
     # v101j Hand-Kontakt: Fingerspitzen nur in Moment-Fenstern suchen (gated).
     need_hands = np.zeros(total_est, dtype=bool)
@@ -9925,11 +9937,11 @@ def main():
         if need_hands.any():
             hand_tracker = HandTracker(W, H)
             if hand_tracker.ok:
-                print(f"Hand-Kontakt: {int(need_hands.sum())} Frames werden "
-                      f"auf Beruehrung geprueft")
+                print(f"Hand contact: {int(need_hands.sum())} frames are "
+                      f"checked for contact")
             else:
                 hand_tracker = None
-                print("Hand-Kontakt uebersprungen (models/hand.task fehlt "
+                print("Hand contact skipped (models/hand.task is missing "
                       "oder mediapipe ohne HandLandmarker)")
     if W >= H:
         d_w = 252; d_h = max(int(round(H / W * 252 / 14)) * 14, 56)
@@ -9963,15 +9975,15 @@ def main():
     t_start = _time.time()
     max_frames = int(args.duration * fps) if args.duration else None
     if max_frames:
-        print(f'Vorschau-Modus: nur die ersten {args.duration:.0f} Sekunden')
+        print(f'Preview mode: only the first {args.duration:.0f} seconds')
     win = args.window
     preroll = 1.2
     seek = max(win[0] - preroll, 0.0) if win else 0.0
     off_frames = int(round(seek * fps))
     first_abs = last_abs = None                 # exakt geschriebene Frame-Grenzen
     if win:
-        print(f'Fenster-Render: {win[0]:.2f}s - {win[1]:.2f}s '
-              f'(Vorlauf {win[0] - seek:.2f}s fuer Tracking/Matting)')
+        print(f'Window render: {win[0]:.2f}s - {win[1]:.2f}s '
+              f'(Vorlauf {win[0] - seek:.2f}s for tracking/matting)')
     # ---- v73: Freeze-Frame vorberechnen. Auf dem staerksten power=3-Moment
     # wird das Video-Frame fuer `freeze_frame` Sekunden gehalten (Regie-Trick,
     # der die Aufmerksamkeit auf die Punchline zwingt). Caption laeuft weiter.
@@ -9986,7 +9998,7 @@ def main():
             fp = p3[0]
             fz_start = float(fp.get('t0', fp['start']))
             freeze_windows.append((fz_start, fz_start + freeze_dur))
-            print(f'Freeze-Frame: {fz_start:.2f}s fuer {freeze_dur:.2f}s '
+            print(f'Freeze frame: {fz_start:.2f}s for {freeze_dur:.2f}s '
                   f'(Moment "{fp.get("text", "?")}")')
     frozen_frame = None
     for frame in iter_frames(args.input, W, H, fps_str,
@@ -10020,11 +10032,11 @@ def main():
                 _bd = np.clip((_bp - _b5) / max(_b95 - _b5, 1e-4), 0, 1)
                 bt_depth = cv2.resize(_bd.astype(np.float32), (W, H))
                 if depth_quality_ok(bt_depth):
-                    print(f"Bullet-Time: aktiv {bt_win[0]:.2f}s-{bt_win[1]:.2f}s "
+                    print(f"Bullet time: active {bt_win[0]:.2f}s-{bt_win[1]:.2f}s "
                           f"(2.5D-Dolly, Dauer unveraendert)")
                 else:
-                    print("Bullet-Time uebersprungen (Tiefenkarte zu flach - "
-                          "lieber kein Effekt als ein billiger)")
+                    print("Bullet time skipped (depth map too flat - "
+                          "no effect beats a cheap one)")
                     bt_win = None
                     bt_freeze = bt_depth = None
             if bt_win is not None:
@@ -10207,7 +10219,7 @@ def main():
                 except BrokenPipeError:
                     err = enc.stderr.read().decode('utf-8', 'ignore')[-800:] \
                         if enc.stderr else ''
-                    sys.exit(f"FEHLER: Alpha-Encoder abgebrochen. {err.strip()}")
+                    sys.exit(f"ERROR: alpha encoder aborted. {err.strip()}")
             if not args.alpha_export and wm is not None:
                 _a, _x, _y = wm
                 _h, _w = _a.shape[:2]
@@ -10240,14 +10252,14 @@ def main():
                              f'oder System-Kill.')
                 else:
                     grund = f'ffmpeg-Fehler: {err.strip()}'
-                sys.exit(f"FEHLER: Video-Encoding abgebrochen. {grund}")
+                sys.exit(f"ERROR: video encoding aborted. {grund}")
         fi += 1
         if fi % 100 == 0:
             el = _time.time() - t_start
             rate = fi / max(el, 0.01)
             rest = int(((max_frames or n_frames) - fi) / max(rate, 0.01))
             print(f"  Frame {fi}/{max_frames or n_frames} | {rate:.1f} f/s | "
-                  f"noch ~{rest // 60}:{rest % 60:02d}", flush=True)
+                  f"~{rest // 60}:{rest % 60:02d} left", flush=True)
     enc.stdin.close()
     enc_err = b''
     try:
@@ -10256,11 +10268,11 @@ def main():
         pass
     enc.wait()
     if fi == 0:
-        sys.exit("FEHLER: Es konnten keine Frames gelesen werden. Ist die Videodatei intakt?")
+        sys.exit("ERROR: no frames could be read. Is the video file intact?")
     if enc.returncode != 0:
-        sys.exit(f"FEHLER: Video-Encoding fehlgeschlagen (ffmpeg Exit "
+        sys.exit(f"ERROR: video encoding failed (ffmpeg exit "
                  f"{enc.returncode}). "
-                 f"{enc_err.decode('utf-8', 'ignore')[-600:].strip() or '(keine Ausgabe)'}")
+                 f"{enc_err.decode('utf-8', 'ignore')[-600:].strip() or '(no output)'}")
 
     # --- Stufe 2 (v80p): Audio + SFX dazu muxen. Video wird nur kopiert.
     if video_tmp and args.alpha_export:
@@ -10271,11 +10283,11 @@ def main():
                    '-i', sfx_path, '-filter_complex', f'[1:a:0]volume={vol}[aout]',
                    '-map', '0:v', '-map', '[aout]', '-c:v', 'copy'] + acodec + \
                   ['-shortest', out_path]
-            print("Tonspur wird angelegt (nur SFX)...")
+            print("Building the audio track (SFX only) ...")
             r_mux = subprocess.run(mux, capture_output=True, text=True)
             if r_mux.returncode != 0 or not os.path.exists(out_path):
-                sys.exit(f"FEHLER: Ton-Muxing fehlgeschlagen: "
-                         f"{(r_mux.stderr or '')[-600:].strip() or '(keine Ausgabe)'}")
+                sys.exit(f"ERROR: audio muxing failed: "
+                         f"{(r_mux.stderr or '')[-600:].strip() or '(no output)'}")
             try:
                 os.remove(video_tmp)
             except OSError:
@@ -10299,11 +10311,11 @@ def main():
         else:
             mux += ['-map', '0:v', '-map', '1:a:0?']
         mux += ['-c:v', 'copy'] + acodec + ['-shortest', out_path]
-        print("Tonspur wird angelegt...")
+        print("Building the audio track ...")
         r_mux = subprocess.run(mux, capture_output=True, text=True)
         if r_mux.returncode != 0 or not os.path.exists(out_path):
-            sys.exit(f"FEHLER: Ton-Muxing fehlgeschlagen: "
-                     f"{(r_mux.stderr or '')[-600:].strip() or '(keine Ausgabe)'}")
+            sys.exit(f"ERROR: audio muxing failed: "
+                     f"{(r_mux.stderr or '')[-600:].strip() or '(no output)'}")
         try:
             os.remove(video_tmp)
         except OSError:
@@ -10328,16 +10340,16 @@ def main():
                  '-c:a', 'copy', _wtmp], capture_output=True, text=True)
             if _wr.returncode == 0 and os.path.exists(_wtmp):
                 os.replace(_wtmp, out_path)
-                print("Wasserzeichen: Split aktiv (sauberer Master gecacht)")
+                print("Watermark: split active (clean master cached)")
             else:
                 try:
                     os.remove(_mc)
                 except OSError:
                     pass
-                print("WARNUNG: Watermark-Split fehlgeschlagen - Ausgabe ohne "
-                      "Wasserzeichen ausgeliefert")
+                print("WARNING: watermark split failed - delivered without a "
+                      "watermark")
         except Exception as _we:
-            print(f"WARNUNG: Watermark-Split uebersprungen ({type(_we).__name__})")
+            print(f"WARNING: watermark split skipped ({type(_we).__name__})")
 
     # v101g Kontaktbogen speichern: ein Blick = alle Momente, echtes Compositing.
     if _kb_tiles:
@@ -10346,11 +10358,11 @@ def main():
             if _kb is not None:
                 _kb_path = os.path.splitext(out_path)[0] + '_kontakt.jpg'
                 cv2.imwrite(_kb_path, _kb, [cv2.IMWRITE_JPEG_QUALITY, 88])
-                print(f"Kontaktbogen: {len(_kb_tiles)} Moment(e) -> {_kb_path}")
+                print(f"Contact sheet: {len(_kb_tiles)} moment(s) -> {_kb_path}")
         except Exception as _ke:
-            print(f"WARNUNG: Kontaktbogen uebersprungen ({type(_ke).__name__})")
+            print(f"WARNING: contact sheet skipped ({type(_ke).__name__})")
 
-    print(f"Fertig: {out_path}")
+    print(f"Done: {out_path}")
 
     # v101 Silent-Score: das fertige Video stumm bewerten (74% der Views
     # laufen ohne Ton). Ein guenstiger Vision-Call; ohne Key passiert nichts.
@@ -10360,14 +10372,14 @@ def main():
         if _sil:
             _sp = os.path.splitext(args.input)[0] + '_silent.json'
             json.dump(_sil, open(_sp, 'w', encoding='utf-8'), ensure_ascii=False)
-            print(f"Silent-Score: {_sil['score']}/100 (stumme Wirkung)")
+            print(f"Silent score: {_sil['score']}/100 (impact without sound)")
 
     # --- Fenster-Segment frame-exakt ins fertige Video einsetzen
     if args.window and args.splice_into:
         if first_abs is None:
-            sys.exit("FEHLER: Fenster hat keine Frames erzeugt.")
+            sys.exit("ERROR: the window produced no frames.")
         if not os.path.exists(args.splice_into):
-            sys.exit(f"FEHLER: Zielvideo nicht gefunden: {args.splice_into}")
+            sys.exit(f"ERROR: target video not found: {args.splice_into}")
         t0x = first_abs / fps                    # exakte Grenzen auf dem Frame-Raster
         t1x = (last_abs + 1) / fps
         tmp = args.splice_into + '.splice.tmp.mp4'
@@ -10388,10 +10400,10 @@ def main():
                             '-crf', str(cfg['output'].get('crf', 18)),
                             '-pix_fmt', 'yuv420p', tmp], capture_output=True)
         if r.returncode != 0 or not os.path.exists(tmp):
-            sys.exit("FEHLER beim Einsetzen: " + r.stderr.decode('utf-8', 'ignore')[-300:])
+            sys.exit("ERROR while inserting: " + r.stderr.decode('utf-8', 'ignore')[-300:])
         os.replace(tmp, args.splice_into)
-        print(f"Segment eingesetzt: {args.splice_into} "
-              f"({t0x:.2f}s - {t1x:.2f}s ersetzt)")
+        print(f"Segment inserted: {args.splice_into} "
+              f"({t0x:.2f}s - {t1x:.2f}s replaced)")
 
 if __name__ == '__main__':
     main()

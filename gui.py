@@ -2238,26 +2238,32 @@ class App:
         self.root.after(120, self.poll_queue)
 
     def handle_line(self, item):
+        # v148: die Engine schreibt englisch. Alte Marker bleiben daneben
+        # stehen, damit ein aelterer Log weiter gelesen wird.
         m = re.search(r'Frame (\d+)/(\d+)', item)
         if m:
             cur, tot = int(m.group(1)), int(m.group(2))
             self.total_frames = tot
             self.progress.set(cur / max(tot, 1))
-            eta = re.search(r'noch ~(\S+)', item)
+            eta = re.search(r'~(\S+) left', item) or re.search(r'noch ~(\S+)', item)
             extra = f'  ·  noch {eta.group(1)} min' if eta else ''
             self.status.configure(text=f'Rendert...  {cur}/{tot} Frames  '
                                        f'({cur / max(tot,1):.0%}){extra}')
             return
-        if 'Transkribiere' in item:
+        if 'Transcribing' in item or 'Transkribiere' in item:
             self.status.configure(text='Transkription läuft …')
-        elif 'KI-Regie analysiert' in item:
+        elif 'AI director is analysing' in item or 'KI-Regie analysiert' in item:
             self.status.configure(text='KI-Regie analysiert das Transkript...')
-        elif 'Szenen-Analyse' in item or 'Gesichts-Tracking' in item:
+        elif 'Face tracking' in item or 'Szenen-Analyse' in item \
+                or 'Gesichts-Tracking' in item:
             self.status.configure(text='Szenen- und Gesichts-Analyse...')
         low = item.lower()
         if any(s in low for s in ('error', 'traceback')) \
-           or any(s in item for s in ('Lade', 'Keywords', 'Matting', 'Fertig', 'Transk', 'Eingabe',
-                                      'FEHLER', 'Szenen', 'Kompositionen', 'KI-Regie', 'Vorschau',
+           or any(s in item for s in ('Downloading', 'Keywords', 'Matting', 'Done:', 'Transc',
+                                      'Input:', 'ERROR', 'shots', 'Compositions', 'AI director',
+                                      'Preview', 'not usable',
+                                      'Lade', 'Fertig', 'Transk', 'Eingabe', 'FEHLER',
+                                      'Szenen', 'Kompositionen', 'KI-Regie', 'Vorschau',
                                       'nicht nutzbar')):
             self.log_line(item)
 
