@@ -56,6 +56,9 @@ effects:
   # Caption-Ton und gemessenem Untergrund. Reicht Hell nicht, kippt derselbe
   # Farbton nach Dunkel. 0 = aus (Alt-Verhalten, immer fast weiss).
   caption_contrast: 2.2
+  # v143: Platzierungs-Regie. true = der Textblock weicht Gesicht und
+  # unruhigen Bildbereichen aus (Raum-Karte pro Shot). false = feste Zone.
+  adaptive_place: true
   # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
   # power-3-Moment. 0 = aus.
   punch_silence: 0.34

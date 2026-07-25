@@ -369,6 +369,10 @@ def _scenario_logic(clip, transcript, tmp):
     check('Farbwelt pro Shot: kein Tint-Sprung ueber Sekundengrenze',
           _samp(0.3) is _samp(1.2))
 
+    _rsrc143 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    # v143: eigene, unberuehrte Config - frueh laufende Tests veraendern cfg
+    # (Dichte, Safe-Zone), und die Platzierung haengt davon ab.
+    _cfg143 = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
     # v88: Ueberlappungs-Schutz. Zwei Momente an fast derselben Stelle, zeitlich
     # ueberlappend -> der fruehere wird vorgezogen; nebeneinander bleibt frei.
     _ov = [{'target': (540, 700), 't0': 0.0, 'start': 0.0, 'end': 4.0},
@@ -399,6 +403,132 @@ def _scenario_logic(clip, transcript, tmp):
     check('v141: build_plans gibt der Flow-Caption ein vpos',
           "sp['vpos'] = (sum(_fcx) / len(_fcx) if _fcx else W / 2.0," in
           open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+    # ================================================================
+    # v143: Groessenhierarchie + Platzierungs-Regie.
+    # ================================================================
+    def _kern(arr, thr=200):
+        """Buchstabenkern OHNE Glow - sonst misst man den Aussenschein mit."""
+        _ys, _xs = np.where(arr[..., 3] > thr)
+        return ((_ys.max() - _ys.min() + 1, _xs.max() - _xs.min() + 1)
+                if len(_ys) else (0, 0))
+
+    def _flowmass(W, H, woerter=('was', 'HINTER', 'diesen', 'Zahlen')):
+        _S = R.Sprites(_cfg143, W, H)
+        _ws = [{'word': w, 'start': i * 0.4, 'end': i * 0.4 + 0.3}
+               for i, w in enumerate(woerter)]
+        _it, _th, _ = R.compose_flow(list(range(len(_ws))), _ws, _S, W, H,
+                                     portrait=(W / H < 0.8))
+        _k = next((i for i in _it if i['role'] == 'key'), None)
+        _n = [i for i in _it if i['role'] == 'norm']
+        _kh, _kw = _kern(_k['arr']) if _k is not None else (0, 0)
+        _nh = np.mean([_kern(i['arr'])[0] for i in _n]) if _n else 1.0
+        return _kh / H, _kw / W, _nh / H, _kh / max(_nh, 1.0)
+    # Referenz (@migs.visuals, gemessen): Schluesselwort-Versalhoehe
+    # 0.051-0.085 H, Kleintext-x-Hoehe 0.023-0.033 H, Verhaeltnis 2.2-2.6.
+    # Vorher lag das Verhaeltnis bei 1.10 - alles war fast gleich gross.
+    _kh9, _kw9, _nh9, _r9 = _flowmass(1080, 1920)
+    check('v143: Schluesselwort-Versalhoehe im Referenzband (Hochformat)',
+          0.045 <= _kh9 <= 0.092, f'{_kh9:.4f} H (Referenz 0.051-0.085)')
+    check('v143: Hierarchie Schluesselwort zu Kleintext wie in der Referenz',
+          2.0 <= _r9 <= 2.9, f'{_r9:.2f}x (Referenz 2.2-2.6, vorher 1.10)')
+    check('v143: langes Schluesselwort spannt die Zeile (Referenz 0.83 W)',
+          0.60 <= _kw9 <= 0.88, f'{_kw9:.3f} W')
+    # Querformat war der Ausreisser: pf = 0.62 VERKLEINERTE dort, waehrend
+    # alle Nachbar-Composer um Faktor 1.68 bis 2.00 vergroessern.
+    _kh16, _, _, _r16 = _flowmass(1920, 1080)
+    check('v143: Querformat vergroessert statt zu schrumpfen',
+          _kh16 > _kh9 * 1.25 and 2.0 <= _r16 <= 2.9,
+          f'quer {_kh16:.4f} H vs hoch {_kh9:.4f} H, Verhaeltnis {_r16:.2f}x')
+    check('v143: pf im Querformat ist eine Vergroesserung',
+          'pf = 1.35 if not portrait else 1.0' in _rsrc143)
+
+    # ---- Platzierungs-Regie: der Block MUSS sich nach dem Bild richten.
+    def _flowbox(W, H, fx, fy, fw, ct=None):
+        _S = R.Sprites(_cfg143, W, H)
+        _ws = [{'word': w, 'start': 1.0 + i * 0.42, 'end': 1.0 + i * 0.42 + 0.36}
+               for i, w in enumerate(['was', 'HINTER', 'diesen', 'Zahlen', 'steckt'])]
+        _pl = R.build_plans(_ws, {3}, _cfg143, _S, W, H, lambda s, e: True,
+                            {3: {'fx': 'behind', 'power': 3, 'n': 1}},
+                            face_pos=lambda s, e: (fx, fy, fw), cut_times=ct)
+        for _p in _pl:
+            if _p.get('tpl') == 'flow' and _p.get('front'):
+                _L, _Rt = [], []
+                for _i in _p['front']:
+                    _a = _i['arr']
+                    _m = np.where(_a[..., 3] > 200)[1]
+                    if len(_m):
+                        _L.append(_i['cx'] - _a.shape[1] / 2 + _m.min())
+                        _Rt.append(_i['cx'] - _a.shape[1] / 2 + _m.max())
+                _ys = [_i['cy'] for _i in _p['front']]
+                if _L:
+                    return (min(_L) / W, max(_Rt) / W, min(_ys) / H, max(_ys) / H)
+        return None
+    _oben = _flowbox(1080, 1920, 540, 1920 * 0.28, 108)
+    _unten = _flowbox(1080, 1920, 540, 1920 * 0.62, 108)
+    check('v143: Hochformat - Block folgt der Kopfhoehe',
+          _oben and _unten and abs(_oben[2] - _unten[2]) > 0.05,
+          f'Kopf hoch y={_oben[2]:.3f} vs Kopf tief y={_unten[2]:.3f}')
+    _li = _flowbox(1920, 1080, 1920 * 0.25, 1080 * 0.40, 180)
+    _re = _flowbox(1920, 1080, 1920 * 0.75, 1080 * 0.40, 180)
+    check('v143: Querformat - Block weicht der Person zur Seite aus',
+          _li and _re and (_li[0] > _re[0] + 0.06),
+          f'Person links -> x={_li[0]:.3f}, Person rechts -> x={_re[0]:.3f}')
+    # Nahaufnahme: Block gehoert NEBEN den Kopf, nicht darunter. Dafuer darf
+    # die Spalte schmaler werden (_freie_breite).
+    _nah = _flowbox(1080, 1920, 1080 * 0.72, 1920 * 0.40, 1080 * 0.30)
+    check('v143: Nahaufnahme - schmale Spalte neben dem Kopf statt Ausweichen nach unten',
+          _nah and _nah[1] < 0.52 and _nah[2] < 0.45,
+          f'x bis {_nah[1]:.3f} W, y ab {_nah[2]:.3f} H (Kopfbox ab 0.46 W)')
+    # Der Text darf NIE im Gesicht landen, wenn daneben Platz ist.
+    _fbx = (0.46, 0.98)
+    check('v143: Block ueberlappt die Kopfbox nicht, wenn daneben Platz ist',
+          _nah and _nah[1] <= _fbx[0] + 0.02,
+          f'Blockkante {_nah[1]:.3f} W gegen Kopfbox ab {_fbx[0]:.2f} W')
+    # Hysterese: winzige Schwankungen der Gesichtserkennung duerfen den Block
+    # NICHT verschieben. Genau daran ist der erste Entwurf im Audit gescheitert
+    # (10 px Gesichtsbreite kippten ihn um 0.19 W).
+    _a1 = _flowbox(1920, 1080, 1920 * 0.50, 1080 * 0.40, 200)
+    _a2 = _flowbox(1920, 1080, 1920 * 0.50, 1080 * 0.40, 210)
+    check('v143: Hysterese - 10 px Gesichtsbreite verschieben den Block nicht',
+          _a1 and _a2 and abs(_a1[0] - _a2[0]) < 0.03 and abs(_a1[2] - _a2[2]) < 0.03,
+          f'{_a1[0]:.3f}/{_a1[2]:.3f} gegen {_a2[0]:.3f}/{_a2[2]:.3f}')
+    # Title-Safe: gemessen wird die SICHTBARE Ausdehnung, nicht die
+    # Vorschubweite. Mit adv gerechnet ragte der Block im echten Render bis
+    # 0.963 W und riss den 5-Prozent-Rand (SMPTE ST 2046-1 / EBU R 95).
+    for _W143, _H143 in ((1080, 1920), (1920, 1080)):
+        _bx = _flowbox(_W143, _H143, _W143 * 0.5, _H143 * 0.40, _W143 * 0.10)
+        if _bx:
+            break
+    check('v143: Textblock bleibt im Title-Safe-Rand (5 Prozent)',
+          _bx and _bx[0] >= 0.045 and _bx[1] <= 0.955,
+          f'x {_bx[0]:.3f} .. {_bx[1]:.3f} W')
+    check('v143: Blockbreite wird an der sichtbaren Schrift gemessen',
+          'def _ink_x' in _rsrc143 and "_a[..., 3] > 80" in _rsrc143)
+    check('v143: Raum-Karte und Regie sind verdrahtet',
+          'def scene_space_sampler' in _rsrc143
+          and 'def spot(start, end, bw, bh' in _rsrc143
+          and 'def _freie_breite' in _rsrc143
+          and 'space_at=space_at' in _rsrc143
+          and "spot_state['xy']" in _rsrc143)
+    check('v143: Raum-Karte liefert ein Kostenraster und faellt sauber aus',
+          R.scene_space_sampler('/gibt/es/nicht.mp4')(0.0).shape == (16, 12)
+          and float(R.scene_space_sampler('/gibt/es/nicht.mp4')(0.0).max()) == 0.0)
+    # ---- Ton: Schnitt-Dramaturgie
+    _sfxsrc = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
+    check('v143: Schnittzeiten erreichen die Sound-Engine',
+          'cut_times=None' in _sfxsrc.split('def build_sfx_track')[1][:220]
+          and 'cut_times=cut_times' in _rsrc143)
+    check('v143: Ton laeuft dem Bild voraus (gemessene Rezeptur)',
+          "place(V('impact'), _ct - 0.030" in _sfxsrc
+          and '_ct - 0.115' in _sfxsrc
+          and "place(V('boom'), _ct + 0.040" in _sfxsrc
+          and 'len(_rs) / float(SR)' in _sfxsrc)
+    check('v143: Ticks nur am Anfang einer Einstellung (kein Maschinengewehr)',
+          '_t0 - _shot0 > 1.60' in _sfxsrc)
+    check('v143: ohne Sound-Pack bleibt es STUMM (Projektregel unangetastet)',
+          'Kein Sound-Pack gefunden' in _sfxsrc
+          and 'synthetischer Ersatzton waere schlechter als Stille' in _sfxsrc)
+
     # Nach build_plans darf kein Paar mit target ko-sichtbar+nah stehen
     def _codisplay(pl):
         ts = [p for p in pl if 'target' in p]
@@ -2225,7 +2355,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v142-perf'" in _srv_m)
+          and "DVE_BUILD = 'v143-editorial'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm

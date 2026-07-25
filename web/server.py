@@ -1643,7 +1643,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v142-perf'
+DVE_BUILD = 'v143-editorial'
 
 
 @app.middleware('http')
@@ -2237,6 +2237,7 @@ def build_config(look, overrides=None):
                 'display': 'fonts/tiktok_bold.ttf',
                 'italic': 'fonts/tiktok_bold.ttf',
                 'script': 'fonts/tiktok_bold.ttf',
+                'support': 'fonts/tiktok_bold.ttf',      # v143: 0.219, eine Familie
             },
             'output': {'platform': 'tiktok'},   # v101d: engere TikTok-UI-Maske
             'matting_quality': 'hoch',
@@ -2270,6 +2271,7 @@ def build_config(look, overrides=None):
                 'display': 'fonts/montserrat_xb.ttf',
                 'italic': 'fonts/montserrat_xb.ttf',
                 'script': 'fonts/playfair_i.ttf',
+                'support': 'fonts/poppins_b.ttf',        # v143: 0.243, sachlich
             },
             'matting_quality': 'hoch',
         },
@@ -2307,6 +2309,7 @@ def build_config(look, overrides=None):
                 'display': 'fonts/inter_black.ttf',
                 'italic': 'fonts/playfair_i.ttf',
                 'script': 'fonts/playfair_i.ttf',
+                'support': 'fonts/inter_black.ttf',      # v143: 0.280, eine Familie
             },
             'matting_quality': 'hoch',
         },
@@ -2339,6 +2342,7 @@ def build_config(look, overrides=None):
                 'display': 'fonts/inter_black.ttf',
                 'italic': 'fonts/serif_i.ttf',
                 'script': 'fonts/playfair_i.ttf',
+                'support': 'fonts/montserrat_xb.ttf',    # v143: 0.286, breiter Fuss
             },
             'matting_quality': 'maximum',
         },
@@ -2407,6 +2411,7 @@ def build_config(look, overrides=None):
                 'display': 'fonts/yeseva.ttf',
                 'italic': 'fonts/playfair_i.ttf',
                 'script': 'fonts/playfair_i.ttf',
+                'support': 'fonts/serif.ttf',            # v143: 0.228, Magazin
             },
             'matting_quality': 'hoch',
         },
@@ -2441,6 +2446,7 @@ def build_config(look, overrides=None):
                 'display': 'fonts/staatliches.ttf',
                 'italic': 'fonts/staatliches.ttf',
                 'script': 'fonts/staatliches.ttf',
+                'support': 'fonts/archivo.ttf',          # v143: 0.321, Plakat
             },
             'matting_quality': 'hoch',
         },
@@ -2475,6 +2481,7 @@ def build_config(look, overrides=None):
                 'display': 'fonts/righteous.ttf',
                 'italic': 'fonts/righteous.ttf',
                 'script': 'fonts/lobster.ttf',
+                'support': 'fonts/righteous.ttf',        # v143: 0.202, eine Familie
             },
             'matting_quality': 'hoch',
         },

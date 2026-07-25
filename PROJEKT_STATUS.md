@@ -3,6 +3,78 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v143 Referenz-Niveau: Schriftgewicht, Hierarchie, Platzierungs-Regie, Schnitt-Ton.**
+  Grundlage war Ismets Referenzvideo (@migs.visuals, 5.5 s, 9:16), forensisch
+  vermessen (Typografie, Animation, Ton) und gegen unsere Engine gestellt.
+  - **(1) Der groesste Befund war NICHT die Position, sondern das Gewicht.**
+    KEIN einziges Preset setzte `fonts.support`; `deep_merge` liess damit alle
+    acht Looks auf `config.yaml:16` = `fonts/sans_l.ttf` landen. Gemessen
+    (Stammbreite/Versalhoehe oberhalb des Querbalkens): sans_l **0.102** gegen
+    **0.22** in der Referenz, also weniger als die halbe Strichstaerke - in
+    JEDEM Preset. Dazu lief das Flow-Schluesselwort hart auf `poppins_b`,
+    ebenfalls in jedem Look. Der Fliesstext sah deshalb ueberall gleich aus,
+    nur die Akzentfarbe unterschied sich. Neu: sieben eigene Support-Schriften
+    (tiktok 0.219, creator 0.243, editorial 0.228, poster 0.321, retro 0.202,
+    elegant 0.280, cinematic 0.286), und das Schluesselwort nimmt die
+    Display-Schrift des Looks (`fonts.strong` kann uebersteuern). 'clean'
+    bleibt bewusst auf sans_l - dort ist schlicht das gewollte Ergebnis.
+  - **(2) Groessenhierarchie.** Referenz: Versalhoehe Schluesselwort zu
+    x-Hoehe Kleintext = 2.2 bis 2.6. Bei uns gemessen 1.10 - alles fast gleich
+    gross. `sz_k` von 0.074 auf 0.115 em; danach 2.25 bis 2.60, Versalhoehe
+    0.080-0.083 H (Referenzband 0.051-0.085). WICHTIG und kontraintuitiv: die
+    Referenz FUELLT die Spalte nicht. 'CREATORS' (8 Zeichen) spannt 0.828 W bei
+    Versalhoehe 0.051 H, "DON'T" (5) nur 0.638 W bei 0.085 H, 'no' (2) sogar
+    nur 0.124 W. Der Grad ist nicht breitengetrieben - gross ansetzen, nur
+    lange Woerter schrumpfen. Ein erster Versuch mit einer 'Spalte fuellen'-
+    Funktion ergab 3.1x statt 1.8x und wurde wieder entfernt.
+  - **(3) Platzierungs-Regie (Ismets eigentlicher Punkt).** Gemessen: Person
+    links, rechts, hoch, tief und in Nahaufnahme ergaben FUENFMAL exakt
+    dieselbe Caption-Position (hoch x=0.164/y=0.234, quer x=0.090/y=0.780).
+    Ursachen: `compose_flow` bekam ueberhaupt keine Bildinformation
+    (`x0 = W*0.07` fest); im Hochformat wurde `v_zone()` sogar AUFGERUFEN und
+    das Ergebnis danach durch die feste `H*0.13` ersetzt (zwei Zeilen
+    untereinander); im Querformat war die vertikale Adaptivitaet komplett aus
+    (`if portrait else Z_MAIN`); `pick_side` nutzte nur das Stack-Template.
+    Neu: `scene_space_sampler` liefert pro Shot eine Raum-Karte (Kantenenergie
+    + Helligkeitsstreuung, ein ffmpeg-Abtastframe je Shot) und `spot()` waehlt
+    daraus die Stelle - harte Sperren Title-Safe/Plattform-Maske/Gesichtsbox,
+    weiche Kosten Motiv-Unruhe und Wunschzone, **Hysterese** gegen Springen und
+    Rasterung gegen Pixelwandern. `_freie_breite` verengt die Spalte bei einer
+    echten Nahaufnahme (Koepfe belegen ueber 40 % der Breite), damit der Block
+    NEBEN den Kopf passt statt darunter zu fliehen. BEWEIS: Kopf rechts ->
+    Block 0.046-0.445 W bei y 0.155-0.352 H, Kopf links -> Block 0.446-0.845 W;
+    10 px Aenderung der Gesichtsbreite verschieben ihn NICHT (Hysterese).
+  - **(4) Querformat-Groesse.** `pf` war 0.62, also eine VERKLEINERUNG, waehrend
+    alle Nachbar-Composer die kurze H-Kante um Faktor 1.68 bis 2.00 ausgleichen
+    (compose_phrase 0.16/0.085, behind 0.213/0.11, blurin 0.199/0.10, ground
+    0.20/0.10, stack 0.104/0.062). compose_flow war der einzige Ausreisser.
+    Jetzt 1.35. Dazu Spaltenbreite 0.55 W quer und Tracking relativ zum Grad
+    statt absoluter 6 px (die waren quer ueber 25 % em, der Satz fiel
+    auseinander).
+  - **(5) Schnitt-Dramaturgie im Ton.** Am Referenzvideo gemessen: KEINE Musik
+    (Side-Signal in Sprechpassagen exakt null, L/R bitidentisch), stattdessen
+    Sub-Riser 18-80 Hz mit +40 dB ueber 1.6 s, HF-Whoosh 4-16 kHz ab 115 ms
+    vorher mit Spitze 15 ms VOR dem Bild, Impact 30 ms vor dem Bild, Boom
+    40 ms danach mit 620 ms Ausklang. Ton fuehrt Bild, durchgehend.
+    `build_sfx_track` bekam die Schnittzeiten bisher gar nicht - es konnte also
+    nichts auf einem Schnitt sitzen. Jetzt verdrahtet, mit den gemessenen
+    Vorlaufzeiten, abwechselnd voll und straff. Flow-Ticks nur noch in den
+    ersten 1.6 s einer Einstellung (Referenz: 6 Ticks auf 5 s, alle im ersten
+    Drittel) - durchgehende Ticks klingen wie ein Maschinengewehr.
+    Gebaut ausschliesslich aus vorhandenen Pack-Slots. **Ohne Sound-Pack bleibt
+    es weiterhin STUMM**, die Projektregel ist unangetastet.
+  - Tests: 840 logic + Renders + GUI gruen. Neu u.a. Versalhoehe im
+    Referenzband, Hierarchie 2.0-2.9, Querformat vergroessert statt zu
+    schrumpfen, Block folgt der Kopfhoehe, Block weicht seitlich aus,
+    Nahaufnahme neben statt unter dem Kopf, Hysterese gegen 10-px-Zittern,
+    Ton-Vorlauf, Tick-Begrenzung, Stumm-Regel.
+  - EHRLICH: alles auf Linux/CPU mit synthetischem Material und ohne
+    OpenAI-Key. Die Geometrie ist hart gemessen, die ENDGUELTIGE Optik
+    entscheidet der Frame-Streifen auf echtem Material. Der Ton ist verdrahtet,
+    aber ohne CC0-Pack nicht hoerbar. Nicht angefasst: `Z_MAIN`/`v_zone` fuer
+    die Keyword-Templates (die adaptieren im Hochformat bereits, im Querformat
+    noch nicht - eigene Runde), und die Treppen-Einrueckung der Referenz
+    (dort pro Zeile von Hand gesetzt, kein konstanter Schritt).
 - **v142 Vor dem Live-Gang: Queries/Indexe, Caching, Async, Recht-&-Steuern-Panel.**
   - **(1) Indexe - 13 von 15 Kern-Abfragen waren Full-Table-Scans.** Gemessen mit
     EXPLAIN QUERY PLAN gegen das frische Schema, nicht vermutet: Ledger je Nutzer,

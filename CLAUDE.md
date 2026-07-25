@@ -115,6 +115,28 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
   durch Dichte-Limit, B-Roll-Gate, Mehrwort-Komposition, Nahaufnahme-Backstop
   und Editor-Roundtrip. NUR eine bewusste Nutzer-Änderung im Editor löscht es.
 
+### Platzierungs-Regie (v143) — "Captions passen sich dem Bild an"
+Ein Textblock bekommt seine Position aus `spot()` in `build_plans`, nicht aus
+Konstanten. Reihenfolge: harte Sperren (Title-Safe 5 %, Plattform-UI-Maske,
+Gesichtsbox), weiche Kosten (Motiv-Unruhe aus `scene_space_sampler`, Abstand
+zur Wunschzone), **Hysterese** (alte Stelle gewinnt, solange sie nicht klar
+schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
+`_freie_breite` die Spalte, damit der Block NEBEN den Kopf passt.
+**Ohne Hysterese springt der Text** — 10 px Gesichtsbreite reichten im ersten
+Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
+zwischen Regie und Zittern.
+
+### Typografie-Regeln aus der Referenz (v143, gemessen)
+- Jeder Look setzt **eigene** `fonts.support`. Stammbreite/Versalhöhe ≥ 0.20
+  (Referenz 0.22). `sans_l` = 0.102 ist nur für `clean` richtig.
+- Schlüsselwort nimmt die **Display-Schrift des Looks** (`fonts.strong`
+  übersteuert), nicht mehr hart `poppins_b`.
+- Versalhöhe Schlüsselwort zu x-Höhe Kleintext = **2.2 bis 2.6**.
+- Die Referenz **füllt die Spalte nicht**: groß ansetzen, nur lange Wörter
+  schrumpfen lassen. Eine "Spalte füllen"-Funktion ergibt 3.1× und ist falsch.
+- Querformat **vergrößert** (`pf` 1.35), es verkleinert nicht. Alle anderen
+  Composer gleichen die kurze H-Kante um 1.68 bis 2.00 aus.
+
 ## Animationen (26 Stück, Stand 2026)
 Alle über zentrales `anim_apply()` routen (Beat-Sync + Motion-Blur legt es
 oben drauf). Kern in `_anim_core`. Qualitätsmaßstab (v100): Federn mit

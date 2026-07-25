@@ -1091,6 +1091,69 @@ def region_luminance(bgr_region):
     return float(np.percentile(lum, 65))
 
 
+def scene_space_sampler(video_path, cut_times=None, gx=12, gy=16):
+    """v143 RAUM-KARTE: liefert space_at(t) -> Kostenraster (gy x gx, 0..1),
+    das sagt, wie BESETZT eine Bildregion ist. 0 = ruhige Flaeche, dort darf
+    Text stehen. 1 = viel Struktur (Motiv, Kanten, Muster), dort stoert er.
+
+    Warum ueberhaupt: bis v142 kannte die Platzierung nur die Gesichtsbox.
+    Ein Textblock landete deshalb genauso auf einem vollen Buecherregal wie
+    auf einer leeren Wand. Die echte Personen-Maske (RVM) steht erst NACH der
+    Planung zur Verfuegung, deshalb hier ein billiger, aber ehrlicher Ersatz:
+    lokale Kantenenergie plus lokale Helligkeitsstreuung, pro Shot einmal
+    abgetastet (gleicher ffmpeg-Weg und dieselbe Shot-Cache-Logik wie
+    scene_palette_sampler, also kein zusaetzlicher Suchaufwand).
+
+    Ausdruecklich KEINE Segmentierung und keine Objekterkennung - das Raster
+    sagt nur 'hier ist viel los', nicht 'hier ist ein Mensch'. Das Gesicht
+    bleibt eine harte, separate Sperre."""
+    cache = {}
+    bounds = sorted(float(c) for c in (cut_times or []))
+    leer = np.zeros((gy, gx), dtype=np.float32)
+
+    def _shot(t):
+        import bisect
+        idx = bisect.bisect_right(bounds, t)
+        start = bounds[idx - 1] if idx > 0 else 0.0
+        return (idx, int((t - start) / 6.0))
+
+    def space_at(t):
+        key = _shot(t)
+        if key in cache:
+            return cache[key]
+        karte = leer
+        try:
+            r = subprocess.run(
+                ['ffmpeg', '-v', 'error', '-ss', str(max(float(t), 0.0)),
+                 '-i', video_path, '-frames:v', '1', '-f', 'rawvideo',
+                 '-pix_fmt', 'gray', '-s', '192x192', '-'],
+                capture_output=True, timeout=20)
+            if len(r.stdout) >= 192 * 192:
+                g = np.frombuffer(r.stdout[:192 * 192],
+                                  dtype=np.uint8).reshape(192, 192).astype(np.float32)
+                # Kantenenergie (Sobel) = Struktur; Streuung = Kontrastunruhe.
+                kx = cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)
+                ky = cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3)
+                kant = np.hypot(kx, ky)
+                zell_y, zell_x = 192 // gy, 192 // gx
+                k = kant[:zell_y * gy, :zell_x * gx].reshape(gy, zell_y, gx, zell_x)
+                s = g[:zell_y * gy, :zell_x * gx].reshape(gy, zell_y, gx, zell_x)
+                e = k.mean(axis=(1, 3))
+                v = s.std(axis=(1, 3))
+                # Beide Anteile robust auf 0..1 normieren (95. Perzentil, damit
+                # ein einzelner Glanzpunkt nicht die ganze Karte flach macht).
+                def norm(a):
+                    p = float(np.percentile(a, 95)) or 1.0
+                    return np.clip(a / p, 0.0, 1.0)
+                karte = (0.65 * norm(e) + 0.35 * norm(v)).astype(np.float32)
+        except Exception:
+            karte = leer
+        cache[key] = karte
+        return karte
+
+    return space_at
+
+
 def scene_palette_sampler(video_path, cut_times=None, min_contrast=2.2):
     """Liefert palette_at(t, region): tastet den Frame zum Zeitpunkt t per ffmpeg ab
     (robust bei HEVC/VFR, wo cv2-Seeks scheitern) und leitet Caption-Farben ab,
@@ -1915,7 +1978,15 @@ class Sprites:
         if not os.path.exists(scr):
             scr = os.path.join(HERE, 'fonts', 'lobster.ttf')
         self.f_script = scr if os.path.exists(scr) else self.f_italic
-        sb = os.path.join(HERE, 'fonts', 'poppins_b.ttf')
+        # v143: das SCHLUESSELWORT der Flow-Caption lief bisher in JEDEM Look
+        # hart auf poppins_b. Damit sah der Fliesstext in allen acht Presets
+        # gleich aus, nur die Akzentfarbe unterschied sich - der teuerste Teil
+        # des Bildes war look-blind. Die Referenz benutzt EINE Familie in zwei
+        # Groessen; entsprechend nimmt das Schluesselwort jetzt die Display-
+        # Schrift des Looks. 'strong' kann das gezielt uebersteuern.
+        sb = os.path.join(HERE, f.get('strong') or f['display'])
+        if not os.path.exists(sb):
+            sb = os.path.join(HERE, 'fonts', 'poppins_b.ttf')
         self.f_sans_b = sb if os.path.exists(sb) else self.f_sans
         self.white = tuple(cfg['colors']['text'])
         self.accent = tuple(cfg['colors']['accent'])
@@ -4934,7 +5005,8 @@ _FLOW_CONN = {'im', 'in', 'am', 'an', 'auf', 'aus', 'bei', 'der', 'die', 'das',
               'why', 'how', 'that', 'this', 'not', 'but', 'just', 'my', 'your'}
 
 
-def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None):
+def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
+                 colw=None):
     """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
     Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
       - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
@@ -4969,23 +5041,66 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None):
         raw_last = clean(words[last]['word'])
         if last != anchor and raw_last[:1].islower() and len(raw_last) >= 3:
             accent = last
-    pf = 0.62 if not portrait else 1.0
+    # v143 GROESSENHIERARCHIE + QUERFORMAT.
+    # (a) pf war im Querformat 0.62, also eine VERKLEINERUNG. Im 16:9 ist H
+    #     ohnehin die kurze Kante, die H-Bruchteile schrumpfen dadurch schon
+    #     von allein. compose_flow war damit der einzige Composer, der den
+    #     Effekt verstaerkt statt ausgleicht - alle Nachbarn kompensieren:
+    #     compose_phrase 0.16/0.085, behind 0.213/0.11, blurin 0.199/0.10,
+    #     ground 0.20/0.10, stack 0.104/0.062 (Faktor 1.68 bis 2.00).
+    #     Flow ist Fliesstext, darf also etwas darunter bleiben: 1.50.
+    # (b) sz_k von 0.074 auf 0.120. WICHTIG, weil es kontraintuitiv ist:
+    #     die Referenz FUELLT die Spalte nicht. Gemessen spannt 'CREATORS'
+    #     (8 Zeichen) 0.828 W bei Versalhoehe 0.051 H, "DON'T" (5) nur
+    #     0.638 W bei 0.085 H, 'no' (2) sogar nur 0.124 W bei 0.082 H
+    #     Versal-Aequivalent. Der Grad ist also NICHT breitengetrieben - es
+    #     wird gross angesetzt und nur das LANGE Wort schrumpft in die Zeile.
+    #     Genau das macht S.fit von sich aus, es fehlte nur der grosse
+    #     Startwert. 0.120 em ergibt bei cap/em 0.707 eine Versalhoehe von
+    #     0.085 H = Oberkante des Referenzbands, lange Woerter landen nach
+    #     dem Schrumpfen bei rund 0.066 H.
+    # sz_n bleibt: unsere x-Hoehe liegt mit 0.0273 H mitten im gemessenen
+    # Referenzband 0.0215-0.0313 H. Hier waere eine Aenderung eine
+    # Verschlechterung gewesen.
+    pf = 1.35 if not portrait else 1.0
     sz_n = int(H * 0.050 * pf)
-    sz_k = int(H * 0.074 * pf)
+    sz_k = int(H * 0.115 * pf)
     sz_a = int(H * 0.056 * pf)
+    # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
+    # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
+    # v143: die Spaltenbreite ist verhandelbar. Fuellt eine Person das Bild,
+    # bekommt der Block eine schmale Spalte und passt NEBEN den Kopf, statt
+    # unter ihn ausweichen zu muessen - genau das macht die Referenz in ihren
+    # Nahaufnahmen. Untergrenze 0.34 W, darunter wird der Satz zum Wortsalat.
+    _colw = int(W * (0.86 if portrait else 0.55))
+    if colw:
+        _colw = int(max(W * 0.34, min(_colw, float(colw))))
+    # Tracking relativ zum Grad statt absolut: 6 px waren bei 96 px Hochformat
+    # 6.25 % em, dieselben 6 px bei geschrumpfter Querformat-Schrift ueber 25 %
+    # em - der Satz fiel dort in Einzelbuchstaben auseinander.
+    _trk_n = 6 if portrait else max(2, int(sz_n * 0.0625))
     items = []
     for i in idxs:
         raw = clean(words[i]['word'])
         if i == anchor:
             up = raw.upper()
-            sz = S.fit(up, sz_k, int(W * 0.86), font=S.f_sans_b)
+            # v143: gross ansetzen, nur lange Woerter schrumpfen lassen -
+            # die Zeilenbreite der Referenz (0.83 W) ist das Ergebnis, nicht
+            # das Ziel. Deckel 0.83 W hoch / Spaltenbreite quer.
+            # Die Referenz-Deckelung 0.83 W gilt nur, solange die Spalte
+            # voll ist. Wurde sie wegen eines Motivs verengt, gewinnt die
+            # Spalte - sonst spraengte das Schluesselwort den Block wieder
+            # auf volle Breite und die Verengung waere wirkungslos.
+            sz = S.fit(up, sz_k, min(int(W * 0.83), _colw) if portrait else _colw,
+                       font=S.f_sans_b, tracking=2)
             arr, tw, lets = S.text(up, sz, S.white, font=S.f_sans_b,
                                    glow=True, per_letter=True, tracking=2)
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'key',
                           'letters': lets, 't': words[i]['start']})
         elif i == accent:
             cap = raw.lower().capitalize()
-            sz = S.fit(cap, sz_a, int(W * 0.5), font=S.f_script)
+            sz = S.fit(cap, sz_a, int(W * 0.5) if portrait else int(_colw * 0.58),
+                       font=S.f_script)
             arr, tw = S.text(cap, sz, S.accent, font=S.f_script)   # Kursive gibt
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'accent',  # den Slant
                           't': words[i]['start']})
@@ -4996,14 +5111,14 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None):
             _m = (loud or {}).get(i)
             _sz = int(sz_n * (1.12 if _m == '!' else (0.92 if _m == '~' else 1.0)))
             _wg = 800 if _m == '!' else (460 if _m == '~' else None)
-            arr, tw = S.text(raw, _sz, S.white, tracking=6, font=S.f_sans,
+            arr, tw = S.text(raw, _sz, S.white, tracking=_trk_n, font=S.f_sans,
                              wght=_wg)
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'norm',
                           't': words[i]['start']})
     # Inline-Fluss mit Umbruch, Zeilen unten ausgerichtet (gemeinsame Grundlinie)
-    max_w = int(W * 0.86)
+    max_w = _colw
     x0 = int(W * 0.07)
-    space = int(W * 0.032)
+    space = int(W * (0.032 if portrait else 0.020))
     # STRUKTUR wie in der Referenz: klare Zeilen nach ROLLE statt wildem
     # Breiten-Umbruch. Verbinder-vor-Keyword = Zeile 1, das KEYWORD = eigene
     # Zeile, Rest (inkl. Kursiv-Akzent) = Zeile darunter. Alles LINKS buendig,
@@ -5498,7 +5613,7 @@ def safe_zone_report(plans, pz, W, H):
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None, faces_at=None, flow_map=None,
-                loud=None, beat_times=None, light_dir=None):
+                loud=None, beat_times=None, light_dir=None, space_at=None):
     KW_FX = cfg['effects']['keyword_rotation']
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
@@ -5604,6 +5719,167 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         y = (max(head_top * 0.52, floor_top) if band == 'oben'
              else min(cap_bot, fy + fw * 2.4))
         return round(y / VZ_GRID) * VZ_GRID          # aufs Raster einrasten
+
+    # ================================================================
+    # v143 PLATZIERUNGS-REGIE. Bis v142 stand der Fliesstext IMMER an
+    # derselben Stelle: gemessen mit der Person links, rechts, hoch, tief und
+    # in Nahaufnahme kam fuenfmal exakt x=0.164 y=0.234 (hoch) bzw.
+    # x=0.090 y=0.780 (quer) heraus. Die Bausteine dafuer gab es laengst,
+    # sie waren nur nicht verdrahtet: v_zone wurde im Hochformat sogar
+    # AUFGERUFEN und ihr Ergebnis danach durch die feste H*0.13 ersetzt.
+    #
+    # spot() ist die eine Stelle, die das jetzt entscheidet. Sie bekommt die
+    # Blockgroesse und liefert die linke obere Ecke. Reihenfolge der Regeln:
+    #   1. HARTE Sperren: Title-Safe-Rand und Plattform-UI-Maske.
+    #   2. HARTE Sperre: Gesichtsbox mit Rand - Text darf nie ins Gesicht.
+    #   3. WEICHE Kosten: Motiv-Unruhe aus der Raum-Karte (space_at) und
+    #      Abstand zur Wunschzone des Templates.
+    #   4. HYSTERESE: die zuletzt gewaehlte Stelle gewinnt, solange sie nicht
+    #      deutlich schlechter ist. Ohne das springt der Block bei jedem
+    #      Zittern der Gesichtserkennung quer durchs Bild - genau daran ist
+    #      der erste Entwurf im Audit gescheitert (10 px Gesichtsbreite
+    #      kippten den Block um 0.19 W).
+    #   5. RASTER: Ergebnis rastet auf VZ_GRID ein, damit Rundungsrauschen
+    #      keine Ein-Pixel-Wanderung erzeugt.
+    # ================================================================
+    spot_state = {'xy': None, 'letzte_zeit': -1e9}
+    _cuts_sorted = sorted(float(c) for c in (cut_times or []))
+
+    def _shot_neu(t):
+        """Liegt zwischen der letzten Caption und dieser ein Schnitt? Dann
+        darf (und soll) der Block frei neu platziert werden - die Hysterese
+        wuerde ihn sonst aus der alten Einstellung mitschleppen."""
+        import bisect
+        vor = spot_state['letzte_zeit']
+        spot_state['letzte_zeit'] = t
+        if vor < -1e8:
+            return True
+        return bisect.bisect_right(_cuts_sorted, t) != bisect.bisect_right(_cuts_sorted, vor)
+
+    def _freie_breite(start, end):
+        """v143: breitester horizontaler Streifen, den KEIN Gesicht belegt.
+        Rueckgabe in Pixeln oder None (dann bleibt die Standardspalte).
+        Ohne das musste ein bildfuellender Kopf den Textblock nach unten
+        draengen, weil der Block immer 0.86 W breit war und nirgends
+        danebenpasste."""
+        if face_pos is None and faces_at is None:
+            return None
+        boxen = []
+        if faces_at is not None:
+            for _f in (faces_at(start, end) or []):
+                try:
+                    boxen.append((float(_f[0]), float(_f[2])))
+                except (TypeError, IndexError, ValueError):
+                    pass
+        if not boxen and face_pos is not None:
+            _fx, _, _fw = face_pos(start, end)
+            boxen.append((float(_fx), float(_fw)))
+        if not boxen:
+            return None
+        rand = W * 0.05 + 8
+        belegt = []
+        for _fx, _fw in boxen:
+            hw = _fw * 0.80 + W * 0.02
+            belegt.append((_fx - hw, _fx + hw))
+        belegt.sort()
+        # Luecken links, zwischen und rechts der Koepfe messen
+        luecken, cur = [], rand
+        for a, b in belegt:
+            if a > cur:
+                luecken.append(a - cur)
+            cur = max(cur, b)
+        if (W - rand) > cur:
+            luecken.append((W - rand) - cur)
+        breit = max(luecken) if luecken else 0.0
+        # Nur bei einer echten Nahaufnahme verengen. Gemessen am Anteil der
+        # Breite, den die Koepfe wirklich belegen - NICHT an der groessten
+        # Luecke: bei einem normal grossen Kopf in der Bildmitte ist die
+        # groesste Luecke immer knapp unter der halben Breite, die Spalte
+        # waere dann permanent schmal und der Block koennte vertikal gar
+        # nicht mehr ausweichen.
+        voll = W - 2 * rand
+        belegt_w = 0.0
+        cur = rand
+        for a, b in belegt:
+            belegt_w += max(0.0, min(b, W - rand) - max(a, cur))
+            cur = max(cur, b)
+        if belegt_w < voll * 0.40:
+            return None
+        return breit
+
+    def spot(start, end, bw, bh, wunsch_y=None, kalt=False):
+        """Freie Stelle fuer einen Textblock (bw x bh). Rueckgabe (x0, y0)."""
+        rand_x = W * 0.05 + 8                 # 5 % Title-Safe (SMPTE/EBU)
+        oben = (_pz['top'] if _pz is not None else H * 0.05)
+        unten = (_pz['bottom'] if _pz is not None else H * 0.95)
+        rechts = (_pz['right_rail'] if _pz is not None else W - rand_x)
+        x_lo, x_hi = rand_x, max(rand_x, rechts - bw)
+        y_lo, y_hi = oben, max(oben, unten - bh)
+        if x_hi < x_lo or y_hi < y_lo:        # Block groesser als die Flaeche
+            return (max(x_lo, (W - bw) / 2.0), max(y_lo, (H - bh) / 2.0))
+
+        # Gesichter als harte Sperrflaechen (mit Sicherheitsrand).
+        sperren = []
+        if faces_at is not None:
+            for _f in (faces_at(start, end) or []):
+                try:
+                    _fx, _fy, _fw = float(_f[0]), float(_f[1]), float(_f[2])
+                except (TypeError, IndexError, ValueError):
+                    continue
+                sperren.append((_fx, _fy, _fw))
+        if not sperren and face_pos is not None:
+            _fx, _fy, _fw = face_pos(start, end)
+            sperren.append((float(_fx), float(_fy), float(_fw)))
+        kaesten = []
+        for _fx, _fy, _fw in sperren:
+            hw = _fw * 0.80 + W * 0.02        # Kopf inkl. Haar + Rand
+            hh = _fw * 1.25 + H * 0.015
+            kaesten.append((_fx - hw, _fy - hh, _fx + hw, _fy + hh))
+
+        karte = space_at(start + 0.15) if space_at is not None else None
+        gy, gx = (karte.shape if karte is not None else (0, 0))
+
+        def kosten(x, y):
+            k = 0.0
+            for (a, b, c, d) in kaesten:      # Ueberlappung mit einem Gesicht
+                ux = max(0.0, min(x + bw, c) - max(x, a))
+                uy = max(0.0, min(y + bh, d) - max(y, b))
+                if ux > 0 and uy > 0:
+                    k += 8.0 * (ux * uy) / max(bw * bh, 1.0)
+            if karte is not None and gy and gx:
+                i0 = int(max(0, min(gy - 1, y / H * gy)))
+                i1 = int(max(i0 + 1, min(gy, (y + bh) / H * gy)))
+                j0 = int(max(0, min(gx - 1, x / W * gx)))
+                j1 = int(max(j0 + 1, min(gx, (x + bw) / W * gx)))
+                k += 1.6 * float(karte[i0:i1, j0:j1].mean())
+            if wunsch_y is not None:          # Template-Wunschzone, weich
+                k += 1.1 * abs((y + bh / 2.0) - wunsch_y) / max(H, 1)
+            k += 0.35 * abs((x + bw / 2.0) - W / 2.0) / max(W, 1)
+            return k
+
+        schritte_x = 9 if not portrait else 7
+        kx = [x_lo + (x_hi - x_lo) * i / (schritte_x - 1.0)
+              for i in range(schritte_x)] if x_hi > x_lo else [x_lo]
+        ky = [y_lo + (y_hi - y_lo) * i / 8.0 for i in range(9)] \
+            if y_hi > y_lo else [y_lo]
+        best, best_k = (kx[0], ky[0]), 1e9
+        for x in kx:
+            for y in ky:
+                k = kosten(x, y)
+                if k < best_k:
+                    best, best_k = (x, y), k
+
+        # Hysterese: alte Stelle behalten, solange sie nicht klar schlechter ist.
+        alt = spot_state['xy']
+        if alt is not None and not kalt:
+            ax = min(max(alt[0], x_lo), x_hi)
+            ay = min(max(alt[1], y_lo), y_hi)
+            if kosten(ax, ay) <= best_k + 0.16:
+                best = (ax, ay)
+        gr = max(VZ_GRID, 1.0)
+        best = (round(best[0] / gr) * gr, round(best[1] / gr) * gr)
+        spot_state['xy'] = best
+        return best
 
     def clamp_cx(cx, sprite_w):
         m = W * 0.045 + 30            # Rand + Reserve fuer Kamera und Tracking
@@ -6058,7 +6334,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         print(f"  Variable-Achse: echte Gewichts-Leiter auf '{txt}'")
                     except Exception:
                         p['_wladder'] = None
-                sy = H * (0.74 if safe_z else 0.80)
+                # v143 FIX: safe_z ist nur im Hochformat wahr - im Querformat
+                # stand die Nebenwort-Zeile deshalb IMMER bei 0.80 H, waehrend
+                # ihr eigenes Keyword bei Z_BEHIND = 0.34 H sass. Das sind
+                # 0.46 H Abstand, bei 1080p fast 500 px quer durchs Bild, und
+                # der Ueberlappungs-Schutz sah es nicht (der Plan traegt als
+                # vpos die Keyword-Hoehe). Jetzt haengt die Zeile an ihrem
+                # Keyword, gedeckelt auf die alte Untergrenze.
+                sy = (H * 0.74 if safe_z
+                      else min(H * 0.80, p.get('by', Z_BEHIND) + H * 0.26))
             elif fx == 'cascade':
                 max_w = int(W * (0.60 if safe_z else 0.82)) if portrait else int(W * 0.396)
                 sz = S.fit(txt, int(H * 0.139) if not portrait else int(H * 0.085), max_w, font=S.f_italic)
@@ -6076,7 +6360,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     p['builder'] = (lambda s, _sz=sz, _tl=p['tilt']:
                                     rot_img(S.text(s, _sz, S.white, tracking=6,
                                                    extrude=S.ex)[0], _tl * 0.5))
-                sy = H * (0.74 if safe_z else 0.80)
+                # v143 FIX: safe_z ist nur im Hochformat wahr - im Querformat
+                # stand die Nebenwort-Zeile deshalb IMMER bei 0.80 H, waehrend
+                # ihr eigenes Keyword bei Z_BEHIND = 0.34 H sass. Das sind
+                # 0.46 H Abstand, bei 1080p fast 500 px quer durchs Bild, und
+                # der Ueberlappungs-Schutz sah es nicht (der Plan traegt als
+                # vpos die Keyword-Hoehe). Jetzt haengt die Zeile an ihrem
+                # Keyword, gedeckelt auf die alte Untergrenze.
+                sy = (H * 0.74 if safe_z
+                      else min(H * 0.80, p.get('by', Z_BEHIND) + H * 0.26))
             elif fx == 'outline':
                 max_w = int(W * (0.60 if safe_z else 0.82)) if portrait else int(W * 0.396)
                 sz = S.fit(txt, int(H * 0.148) if not portrait else int(H * 0.09), max_w)
@@ -6217,6 +6509,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 except Exception as _e:
                     print(f"  Emoji uebersprungen ({type(_e).__name__})")
             p['target'] = (p.get('cx', W / 2), p.get('cy', p.get('by', H * 0.398)))
+            # v143: vpos deckt Keyword UND Nebenwort-Zeile ab. Vorher trug der
+            # Plan nur die Keyword-Hoehe; eine Nebenwort-Zeile weit darunter
+            # war fuer resolve_overlaps unsichtbar und konnte ungestraft mit
+            # einer Flow-Caption kollidieren.
+            _vy = p.get('cy', p.get('by', H * 0.398))
+            if small:
+                _vy = (_vy + sy) / 2.0
+            p['vpos'] = (p.get('cx', W / 2), _vy)
             gap = 28
             total = sum(it['w'] for it in small) + gap * max(len(small) - 1, 0)
             x0 = p.get('cx', W / 2) - total / 2
@@ -6264,14 +6564,54 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         elif cfg['effects'].get('caption_flow', True):
             # v97 Flow-Caption (Referenz-Look): Chunk baut sich INLINE auf,
             # Anker-Wort gross+getippt+Glow, Abschlusswort kursiv-Akzent.
+            # v143: freie Breite VOR dem Setzen bestimmen. Steht die Person
+            # seitlich oder fuellt sie das Bild, liefert _freie_breite eine
+            # schmalere Spalte; der Block wird dann hoeher und schmaler und
+            # findet neben dem Kopf Platz.
             items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait, loud=loud,
-                                                  flow_sel=(flow_map or {}).get(g[0]))
-            # Referenz-Look: Block im OBEREN Drittel (nicht mittig ueber dem
-            # Gesicht). Bei Hochformat oben verankert, sonst zentriert.
-            zc = v_zone(start, end) if portrait else Z_MAIN
-            y0 = int(H * 0.13) if portrait else (zc - tot_h / 2.0)
+                                                  flow_sel=(flow_map or {}).get(g[0]),
+                                                  colw=_freie_breite(start, end))
+            # v143: Position kommt aus der Platzierungs-Regie statt aus einer
+            # Konstanten. Wunschzone = wo der Block AM LIEBSTEN sitzt; spot()
+            # weicht davon ab, wenn dort ein Gesicht oder ein unruhiger
+            # Bildbereich liegt. Hochformat 0.25 H entspricht der gemessenen
+            # Referenzzone (Block 0.14-0.36 H, ueber dem Kopf); Querformat
+            # bleibt beim Lower Third, weil 16:9 auf breiten Schirmen laeuft.
+            # Vorher: y0 fest H*0.13 bzw. Z_MAIN, x fest W*0.07 - der Block
+            # stand bei JEDER Kadrierung an derselben Stelle.
+            # v143: SICHTBARE Ausdehnung messen, nicht die Vorschubweite.
+            # Gezeichnet wird das Sprite inklusive Leuchten; mit adv gerechnet
+            # ragte der Block gemessen bis 0.963 W und riss den Title-Safe-Rand.
+            def _ink_x(_it):
+                _a = _it.get('arr')
+                if _a is None:
+                    _h = _it.get('adv', _it.get('w', 0)) / 2.0
+                    return (_it['cx'] - _h, _it['cx'] + _h)
+                _c = np.where(_a[..., 3] > 80)[1]
+                if not len(_c):
+                    return (_it['cx'], _it['cx'])
+                _o = _it['cx'] - _a.shape[1] / 2.0
+                return (_o + float(_c.min()), _o + float(_c.max()))
+            _spans = [_ink_x(it) for it in items]
+            _bl = min(sp[0] for sp in _spans)
+            _br = max(sp[1] for sp in _spans)
+            _wunsch = H * (0.25 if portrait else 0.72)
+            _sx, _sy = spot(start, end, _br - _bl, tot_h,
+                            wunsch_y=_wunsch, kalt=_shot_neu(start))
+            _dx = _sx - _bl
             for it in items:
-                it['cy'] += y0
+                it['cx'] += _dx
+                it['cy'] += _sy
+            y0 = _sy
+            # v143: der Kamera-Follow schiebt den Block zur Laufzeit. Die
+            # Planung war korrekt und das FERTIGE Bild trotzdem bei 0.961 W -
+            # gemessen im echten Render. Statt die Platzierungsflaeche zu
+            # verkleinern (das schoebe den Block nur nach rechts), bekommt der
+            # Follow hier seinen tatsaechlich vorhandenen Spielraum mit.
+            _rnd = W * 0.05 + 8
+            _fol_lim = max(0.0, min(W * 0.045,
+                                    _sx - _rnd,
+                                    (W - _rnd) - (_sx + (_br - _bl))))
             # v97d: KEINE Seiten-/Cap-Zoom-Fahrt auf Filler-Flow. Die zog frueher
             # zur alten Stack-Seite bzw. zum Ziel (W*0.07, zc) = leerer linker
             # Rand auf halber Hoehe -> "Zoom ins Leere", entkoppelt von der oben
@@ -6279,7 +6619,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # dramatischen Keyword-Momente behalten ihre Kamera.
             sp = {'tpl': 'flow', 'front': items, 'start': start, 'end': end,
                   'side': 0, 'ccam': 'none',
-                  'target': (int(W * 0.07), int(y0 + tot_h / 2.0)),
+                  'target': (int(_sx), int(y0 + tot_h / 2.0)),
+                  'fol_lim': _fol_lim,
                   'broll': broll}
             # v141: echte Textposition fuer den Ueberlappungs-Schutz. 'target'
             # bleibt das Kamera-Ziel - die beiden duerfen nicht verwechselt
@@ -7393,7 +7734,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 fp = p.setdefault('fpos', [0.0, 0.0])
                 fp[0] += 0.10 * (tgt[0] - fp[0])
                 fp[1] += 0.10 * (tgt[1] - fp[1])
-                lim = W * 0.045
+                # v143: plan-eigener Spielraum, falls gesetzt - sonst wie bisher.
+                lim = float(p.get('fol_lim', W * 0.045))
                 fdx = max(-lim, min(fp[0] * 0.6, lim))
                 fdy = max(-lim * 0.5, min(fp[1] * 0.5, lim * 0.5))
             for it in p['front']:
@@ -8344,6 +8686,18 @@ def main():
             args.input, cut_times,
             min_contrast=float(cfg['effects'].get('caption_contrast', 2.2)))
         print("Adaptive Farben: Captions greifen die Szenen-Toene auf (pro Shot)")
+    # v143: Raum-Karte fuer die Platzierungs-Regie. Ein Abtastframe je Shot,
+    # daraus ein Kostenraster 'wie besetzt ist diese Bildregion'. Abschaltbar
+    # ueber effects.adaptive_place - dann faellt spot() auf Gesicht + Wunschzone
+    # zurueck und verhaelt sich wie eine reine Motiv-Ausweichung.
+    space_at = None
+    if cfg['effects'].get('adaptive_place', True):
+        try:
+            space_at = scene_space_sampler(args.input, cut_times)
+            print("Platzierungs-Regie: Captions weichen Motiv und Unruhe aus "
+                  "(Raum-Karte pro Shot)")
+        except Exception as _e:
+            print(f"Platzierungs-Regie: Raum-Karte uebersprungen ({type(_e).__name__})")
     # v96b: Erzaehler-/Voiceover-Modus. Kaum Gesicht im Bild -> Captions NICHT
     # an einer (kaum vorhandenen) Person ausrichten, sondern zentriert-editorial
     # setzen (face_pos/faces_at = None laesst build_plans das freie, mittige
@@ -8408,12 +8762,14 @@ def main():
                             face_pos=None, palette_at=palette_at,
                             cut_times=cut_times, faces_at=None,
                             flow_map=flow_map, loud=loud_map,
-                            beat_times=_beat_ts, light_dir=_light)
+                            beat_times=_beat_ts, light_dir=_light,
+                            space_at=space_at)
     else:
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
                             palette_at, cut_times=cut_times, faces_at=faces_at,
                             flow_map=flow_map, loud=loud_map,
-                            beat_times=_beat_ts, light_dir=_light)
+                            beat_times=_beat_ts, light_dir=_light,
+                            space_at=space_at)
 
     # --- v101t Auto-Akzente: dezente Motion-Graphics-Akzente aufs Transkript.
     # Der Akzent-Plan wird bei der Momente-Ausgabe geschrieben (compute_accents,
@@ -8574,7 +8930,8 @@ def main():
                 print("SFX werden intelligent gesetzt (Onset-Analyse)...")
                 n_sfx = sfx_engine.build_sfx_track(plans, words, dur_total, folder,
                                                    sfx_path, voice_wav=voice_wav,
-                                                   powers=powers)
+                                                   powers=powers,
+                                                   cut_times=cut_times)
                 print(f"SFX: {n_sfx} Sound-Momente gesetzt")
                 if not n_sfx:
                     sfx_path = None

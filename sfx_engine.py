@@ -139,7 +139,8 @@ def clean_word(w):
     return ''.join(ch for ch in w if ch.isalnum())
 
 
-def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, powers=None):
+def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
+                    powers=None, cut_times=None):
     """Setzt die Sounds intelligent: Onset-Snapping auf den echten Sprech-Einsatz,
     Lautstaerke adaptiv zur lokalen Stimm-Energie, Wucht nach KI-Regie-Bewertung."""
     # Es gibt NUR das Sound-Pack. Fehlt ein Sound, wird er nicht gesetzt -
@@ -220,6 +221,50 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
             total[i:j] += sig[:j - i] * gain
 
     n_placed = 0
+
+    # ================================================================
+    # v143 SCHNITT-DRAMATURGIE. Am Referenzvideo (@migs.visuals) gemessen:
+    # der Ton traegt dort nicht die Musik, sondern die UEBERGAENGE. Konkret
+    # nachgemessen an den beiden Schnitten bei 2.76 s und 3.85 s:
+    #   Sub-Riser  18-80 Hz, Einsatz rund 1.6 s vorher, Anstieg +40 dB
+    #   HF-Whoosh  4-16 kHz, Einsatz 115 ms vorher, Spitze 15 ms VOR dem Bild
+    #   Impact     18-150 Hz, 30 ms VOR dem Bild
+    #   Boom       40 ms NACH dem Bild, 620 ms Ausklang, traegt die neue Szene
+    #   und ein 170-ms-Loch direkt davor - DAS macht den Schlag gross,
+    #   nicht der Pegel.
+    # Der zweite Uebergang ist bewusst straffer und rund 8 dB leiser als der
+    # erste. Bis v142 bekam build_sfx_track die Schnittzeiten gar nicht, es
+    # konnte also gar nichts auf einem Schnitt sitzen.
+    # Gebaut wird ausschliesslich aus vorhandenen Pack-Slots. Fehlt ein Slot,
+    # setzt place() ihn nicht - kein synthetischer Ersatz, so wie es die
+    # Projektregel verlangt.
+    # ================================================================
+    _cuts = sorted(float(c) for c in (cut_times or []) if 0.6 < float(c) < duration - 0.2)
+    for _ci, _ct in enumerate(_cuts):
+        # Abwechselnd voll und straff, damit nicht jeder Schnitt gleich knallt.
+        _stark = (_ci % 2 == 0)
+        _g = 1.0 if _stark else 0.42
+        if 'riser' in bank and _stark:
+            _rs = V('riser')
+            if _rs is not None:
+                place(_rs, _ct - min(1.60, len(_rs) / float(SR)), 0.30 * _g)
+                n_placed += 1
+        _wh = V('whoosh') if 'whoosh' in bank else (
+            V('whoosh_soft') if 'whoosh_soft' in bank else None)
+        if _wh is not None:
+            # Spitze 15 ms vor dem Bild: der Sound muss also frueher starten.
+            place(_wh, _ct - 0.115, 0.55 * _g)
+            n_placed += 1
+        if 'impact' in bank:
+            place(V('impact'), _ct - 0.030, 0.85 * _g)   # Ton fuehrt Bild
+            n_placed += 1
+        if 'boom' in bank:
+            place(V('boom'), _ct + 0.040, 0.70 * _g)     # traegt die neue Szene
+            n_placed += 1
+    if _cuts:
+        print(f"  Schnitt-Dramaturgie: {len(_cuts)} Uebergaenge vertont "
+              f"(Ton laeuft dem Bild 15-30 ms voraus)")
+
     _big_i = 0                             # v96i: zaehlt grosse Momente fuer Variation
     kw_times = []                          # fuer den Anti-Matsch-Limiter der Stacks
     for p in plans:
@@ -231,9 +276,19 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None, po
                 continue
             _ft = p.get('flow_t', words[_fa]['start'])
             _t0, _ = snap(_ft)
+            # v143: Ticks nur in den ersten 1.6 s einer Einstellung. In der
+            # Referenz sitzen genau 6 Ticks auf 5 s, alle im ersten Drittel;
+            # danach uebernimmt der Riser. Durchgehende Ticks auf jedem Anker
+            # klingen wie ein Maschinengewehr - das ist der Unterschied
+            # zwischen Sounddesign und Klickerei.
+            import bisect as _bi
+            _shot0 = _cuts[_bi.bisect_right(_cuts, _t0) - 1] \
+                if (_cuts and _bi.bisect_right(_cuts, _t0) > 0) else 0.0
+            if _t0 - _shot0 > 1.60:
+                continue
             _tick = V('tick') if 'tick' in bank else None
             if _tick is not None:
-                place(_tick, _t0, 0.42 * local_gain(_t0))
+                place(_tick, _t0 - 0.012, 0.42 * local_gain(_t0))   # Ton fuehrt
                 n_placed += 1
             continue
         if 'kw_i' not in p:
