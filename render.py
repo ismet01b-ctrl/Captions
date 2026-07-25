@@ -949,29 +949,56 @@ def transcribe(audio_path, language, cfg=None):
     if not key:
         sys.exit("FEHLER: Umgebungsvariable OPENAI_API_KEY ist nicht gesetzt.")
     print("Transkribiere ueber Sprach-KI...")
-    try:
-        with open(audio_path, 'rb') as f:
-            r = requests.post(
-                'https://api.openai.com/v1/audio/transcriptions',
-                headers={'Authorization': f'Bearer {key}'},
-                data={'model': 'whisper-1', 'response_format': 'verbose_json',
-                      'timestamp_granularities[]': ['word', 'segment'],
-                      **({} if language == 'auto' else {'language': language})},
-                files={'file': (os.path.basename(audio_path), f, 'audio/mp4')},
-                timeout=600)
-    except requests.exceptions.Timeout:
-        sys.exit("FEHLER: Sprach-KI antwortet zu langsam. "
-                 "Bitte in 2-3 Minuten erneut versuchen.")
-    except requests.exceptions.ConnectionError:
+    # v146: WIEDERHOLEN statt aufgeben. Ein einzelner HTTP 500 von OpenAI hat
+    # bis v145 den ganzen Render abgebrochen - der Kunde sah 'KI-Dienst-Problem'
+    # und musste von vorn anfangen (Ismets Befund live auf douchko.eu, 4K-Clip).
+    # 5xx, 429 und Netzabbrueche sind aber voruebergehend; genau dafuer ist
+    # exponentielles Backoff da. Die Datei wird je Versuch NEU geoeffnet, ein
+    # bereits gelesener Datei-Zeiger wuerde sonst einen leeren Upload schicken.
+    # Abgebrochen wird erst, wenn alle Versuche scheitern - dann ist es echt.
+    _versuche = 4
+    _warte = (2.0, 6.0, 14.0)
+    r = None
+    for _v in range(_versuche):
+        _grund = None
+        try:
+            with open(audio_path, 'rb') as f:
+                r = requests.post(
+                    'https://api.openai.com/v1/audio/transcriptions',
+                    headers={'Authorization': f'Bearer {key}'},
+                    data={'model': 'whisper-1', 'response_format': 'verbose_json',
+                          'timestamp_granularities[]': ['word', 'segment'],
+                          **({} if language == 'auto' else {'language': language})},
+                    files={'file': (os.path.basename(audio_path), f, 'audio/mp4')},
+                    timeout=600)
+        except requests.exceptions.Timeout:
+            _grund, r = 'Zeitueberschreitung', None
+        except requests.exceptions.ConnectionError:
+            _grund, r = 'Verbindungsabbruch', None
+        if r is not None:
+            # Endgueltig: daran aendert kein weiterer Versuch etwas.
+            if r.status_code == 401:
+                sys.exit("FEHLER: KI-Zugang ungueltig. Support kontaktieren.")
+            if r.status_code == 413:
+                sys.exit("FEHLER: Audio-Spur zu gross. Kuerzeres Video versuchen.")
+            if r.status_code == 429:
+                _grund = 'ueberlastet (429)'
+            elif 500 <= r.status_code < 600:
+                _grund = f'Dienst-Problem (HTTP {r.status_code})'
+            else:
+                break
+        if _v >= _versuche - 1:
+            break
+        _s = _warte[min(_v, len(_warte) - 1)]
+        print(f"Sprach-KI {_grund} - Versuch {_v + 2} von {_versuche} "
+              f"in {_s:.0f}s...")
+        time.sleep(_s)
+    if r is None:
         sys.exit("FEHLER: Keine Verbindung zur Sprach-KI. "
                  "Internet pruefen oder in ein paar Minuten erneut versuchen.")
-    if r.status_code == 401:
-        sys.exit("FEHLER: KI-Zugang ungueltig. Support kontaktieren.")
     if r.status_code == 429:
         sys.exit("FEHLER: KI-Dienst ueberlastet. "
                  "Bitte in 5 Minuten erneut versuchen.")
-    if r.status_code == 413:
-        sys.exit("FEHLER: Audio-Spur zu gross. Kuerzeres Video versuchen.")
     if 500 <= r.status_code < 600:
         sys.exit(f"FEHLER: KI-Dienst-Problem (HTTP {r.status_code}). "
                  f"Bitte in ein paar Minuten erneut versuchen.")

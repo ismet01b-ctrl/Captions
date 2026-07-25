@@ -4733,6 +4733,89 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ============ v146: Transkription haelt einen OpenAI-Aussetzer aus ========
+    # Live-Befund (Ismet, 4K-Clip auf douchko.eu): ein einzelner HTTP 500 von
+    # OpenAI brach den ganzen Render ab. 5xx/429/Netzabbruch sind transient -
+    # der Server-Pfad _whisper_words hatte laengst Backoff, die Engine nicht.
+    class _FakeResp:
+        def __init__(self, code, payload=None):
+            self.status_code = code
+            self._p = payload or {}
+            self.text = ''
+        def json(self):
+            return self._p
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(f'HTTP {self.status_code}')
+
+    class _FakeRQ:
+        class exceptions:
+            class Timeout(Exception): pass
+            class ConnectionError(Exception): pass
+        def __init__(self, codes, payload):
+            self.codes = list(codes)
+            self.payload = payload
+            self.n = 0
+            self.bytes = []
+        def post(self, *a, **k):
+            self.n += 1
+            self.bytes.append(len(k['files']['file'][1].read()))
+            c = self.codes.pop(0) if self.codes else 200
+            return _FakeResp(c, self.payload if c == 200 else {})
+
+    _wav146 = os.path.join(tmp, 'st146.m4a')
+    subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i',
+                    'sine=frequency=300:duration=1', '-c:a', 'aac', _wav146],
+                   check=True, capture_output=True)
+    _ok146 = {'words': [{'word': 'hallo', 'start': 0.0, 'end': 0.4},
+                        {'word': 'welt', 'start': 0.5, 'end': 0.9}],
+              'segments': [{'text': 'hallo welt.'}]}
+    _key146 = os.environ.get('OPENAI_API_KEY')
+    import render as R146
+    _slp146, _rq146 = R146.time.sleep, sys.modules.get('requests')
+    try:
+        os.environ['OPENAI_API_KEY'] = 'sk-test'
+        R146.time.sleep = lambda *a: None
+        _fake = _FakeRQ([500, 500, 200], _ok146)
+        sys.modules['requests'] = _fake
+        _w146 = R146.transcribe(_wav146, 'de')
+        check('v146: zwei HTTP 500 werden weggesteckt, Transkript kommt trotzdem',
+              len(_w146) == 2 and _fake.n == 3,
+              f'{_fake.n} Versuche, {len(_w146)} Woerter')
+        # Jeder Versuch muss die Datei NEU lesen. Ein einmal geleerter
+        # Datei-Zeiger schickt beim Retry 0 Bytes - der Retry waere Theater.
+        check('v146: jeder Versuch laedt die Audiodatei wirklich neu hoch',
+              len(set(_fake.bytes)) == 1 and min(_fake.bytes) > 100,
+              str(_fake.bytes))
+        _fake2 = _FakeRQ([500, 500, 500, 500], _ok146)
+        sys.modules['requests'] = _fake2
+        try:
+            R146.transcribe(_wav146, 'de')
+            _raus = 'kein Abbruch'
+        except SystemExit as e:
+            _raus = str(e)
+        check('v146: dauerhafter Ausfall bricht erst nach 4 Versuchen ab',
+              _fake2.n == 4 and 'HTTP 500' in _raus, f'{_fake2.n} Versuche, {_raus}')
+        _fake3 = _FakeRQ([401], _ok146)
+        sys.modules['requests'] = _fake3
+        try:
+            R146.transcribe(_wav146, 'de')
+            _r401 = 'kein Abbruch'
+        except SystemExit as e:
+            _r401 = str(e)
+        check('v146: 401 wird NICHT wiederholt (aendert sich nie)',
+              _fake3.n == 1 and 'Zugang' in _r401, f'{_fake3.n} Versuche, {_r401}')
+    finally:
+        R146.time.sleep = _slp146
+        if _rq146 is not None:
+            sys.modules['requests'] = _rq146
+        else:
+            sys.modules.pop('requests', None)
+        if _key146 is None:
+            os.environ.pop('OPENAI_API_KEY', None)
+        else:
+            os.environ['OPENAI_API_KEY'] = _key146
+
     # ================= v145: Pflichtangaben auf der Rechnung =================
     # §14 Abs. 4 UStG (bei Kleinbetraegen bis 250 EUR §33 UStDV): vollstaendiger
     # NAME und ANSCHRIFT des leistenden Unternehmers gehoeren auf die Rechnung.
