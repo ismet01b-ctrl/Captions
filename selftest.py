@@ -5145,6 +5145,40 @@ def _scenario_betrieb(tmp):
     check('v161: auf B-Roll gibt es keinen Objekt-Anker',
           "and not broll:" in _rsrc161 and "p['_ank0'] = (" in _rsrc161)
 
+    # ======= v166: Blick ist ABWEICHUNG, nicht Haltung ====================
+    # Ismets Befund nach v160: "es ist immer noch links". Ursache: die
+    # absolute Blick-Schwelle. Eine seitlich stehende Kamera legte den Kopf
+    # in JEDEM Moment ueber 0.35 - Dauer-Ziel auf einer Seite, das Ziel
+    # ueberstimmt die Seiten-Abwechslung, alle Captions kleben links.
+    _Wb, _Hb = 1080, 1920
+    # Haltung: sechs Momente, Kopf immer bei +0.5 -> NULL Ziele.
+    check('v166: eine seitliche Kopfhaltung erzeugt KEINE Blick-Ziele',
+          R._blick_targets([(1.0 + i, 0.5, 0.55, 0.35) for i in range(6)],
+                           _Wb, _Hb) == [])
+    # Frontal-Sprecher mit EINEM bewussten Blick -> genau ein Ziel, rechts.
+    _fr166 = [(1.0, 0.05, 0.50, 0.35), (2.0, 0.02, 0.50, 0.35),
+              (3.0, 0.70, 0.53, 0.35), (4.0, -0.03, 0.50, 0.35)]
+    _zf = R._blick_targets(_fr166, _Wb, _Hb)
+    check('v166: ein bewusster Blick aus Frontal-Haltung zaehlt weiter',
+          len(_zf) == 1 and _zf[0][0] == 3.0 and _zf[0][1] > _Wb * 0.55)
+    # Haltung +0.5, EIN Moment dreht weiter auf +1.0 -> nur der zaehlt.
+    _wt166 = [(1.0, 0.5, 0.55, 0.35), (2.0, 0.5, 0.55, 0.35),
+              (3.0, 1.0, 0.58, 0.35), (4.0, 0.5, 0.55, 0.35)]
+    _zw = R._blick_targets(_wt166, _Wb, _Hb)
+    check('v166: wer aus seiner Haltung heraus WEITER dreht, meint einen Ort',
+          len(_zw) == 1 and _zw[0][0] == 3.0)
+    # Zurueck zur Kamera ist KEIN Blick auf einen Ort.
+    _zk166 = [(1.0, 0.5, 0.55, 0.35), (2.0, 0.5, 0.55, 0.35),
+              (3.0, 0.0, 0.50, 0.35), (4.0, 0.5, 0.55, 0.35)]
+    check('v166: die Drehung zurueck zur Kamera ergibt kein Ziel',
+          R._blick_targets(_zk166, _Wb, _Hb) == [])
+    check('v166: unter 3 Messungen zaehlt nur eine deutliche Drehung',
+          len(R._blick_targets([(1.0, 0.45, 0.55, 0.35)], _Wb, _Hb)) == 0
+          and len(R._blick_targets([(1.0, 0.60, 0.55, 0.35)], _Wb, _Hb)) == 1)
+    check('v166: zeige_ziele sammelt Blicke und filtert erst am Ende',
+          '_blick_targets(blick_cands' in open(os.path.join(HERE, 'render.py'),
+                                               encoding='utf-8').read())
+
     # ======= v162: ZWEI-SPRECHER-REGIE - der Text folgt dem Redner ========
     _cfg162 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
                                    encoding='utf-8'))

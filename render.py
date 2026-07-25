@@ -2751,6 +2751,66 @@ def _blick_strahl(kp, W, H):
     return _rand_ziel(kp[2].x * W, a_y * H, ri, 0.0, W, H, anteil=0.60)
 
 
+def _blick_yaw(kp):
+    """Rohwert der Kopfdrehung: Nasenversatz zur Augenmitte in
+    Augenabstaenden, plus Nasen-/Augenposition (normiert) fuer den Strahl.
+    Rueckgabe (yaw, nase_x, augen_y) oder None."""
+    if len(kp) < 3:
+        return None
+    a_x = (kp[0].x + kp[1].x) / 2.0
+    a_y = (kp[0].y + kp[1].y) / 2.0
+    augen = abs(kp[0].x - kp[1].x)
+    if augen < 1e-4:
+        return None
+    return ((kp[2].x - a_x) / augen, kp[2].x, a_y)
+
+
+def _blick_targets(cands, W, H):
+    """v166: macht aus rohen Kopfdrehungen Blick-Ziele - RELATIV zur
+    Grundhaltung des Sprechers, nicht absolut.
+
+    Der v160-Fehler (Ismets Befund: "es ist immer noch links"): die absolute
+    Schwelle 0.35 haelt nur Frontal-Sprecher auf. Wer sein Video mit leicht
+    seitlich stehender Kamera aufnimmt, liegt in JEDEM Moment darueber -
+    jeder Moment bekam dasselbe Blick-Ziel, das Ziel ueberstimmt die
+    Seiten-Abwechslung, und ALLE Captions klebten auf einer Seite.
+    Eine Haltung ist keine Regie. Regie ist die ABWEICHUNG davon:
+    der Median der gemessenen Drehungen ist die Grundhaltung, nur wer
+    deutlich darueber hinaus dreht (und zwar in die Richtung, in die er
+    schaut), meint wirklich einen Ort im Bild.
+
+    cands = [(t, yaw, nase_x, augen_y)] (normierte Koordinaten)."""
+    if not cands:
+        return []
+    yaws = [c[1] for c in cands]
+    stabil = len(yaws) >= 3
+    med = float(np.median(yaws)) if stabil else 0.0
+    out = []
+    for (t, yaw, nx, ay) in cands:
+        if abs(yaw) < 0.35:
+            continue                     # praktisch frontal: niemand gemeint
+        if stabil:
+            dev = yaw - med
+            # Abweichung von der eigenen Grundhaltung, nicht vom Nullpunkt.
+            # Sitzt der Kopf IMMER bei +0.5, ist med +0.5 und dev ~0 - alle
+            # diese "Ziele" fallen weg. Genau das ist der Zweck.
+            if abs(dev) < 0.25:
+                continue
+            # Die Abweichung muss in die BLICKrichtung gehen. Wer aus einer
+            # Rechts-Haltung zurueck zur Kamera dreht, schaut nirgendwohin.
+            if (dev > 0) != (yaw > 0):
+                continue
+        elif abs(yaw) < 0.55:
+            # Unter 3 Messungen gibt es keinen brauchbaren Median - dann
+            # zaehlt nur eine wirklich deutliche Drehung.
+            continue
+        ri = 1.0 if yaw > 0 else -1.0
+        z = _rand_ziel(nx * W, ay * H, ri, 0.0, W, H, anteil=0.60)
+        if z is not None:
+            out.append((float(t), float(z[0]), float(z[1]), 'blick'))
+    return out
+
+
 def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
     """v160: misst zu jedem Moment-Zeitpunkt, wohin der Sprecher zeigt oder
     schaut. Rueckgabe [(t, tx, ty, art)] mit art 'zeigen' | 'blick'.
@@ -2785,7 +2845,8 @@ def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
         lm = det = None
     if lm is None and det is None:
         return ziele
-    n_z = n_b = 0
+    n_z = 0
+    blick_cands = []
     for t in times:
         treffer = None
         blick = None
@@ -2817,22 +2878,26 @@ def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
                 except Exception:
                     dres = None
                 for dd in ((dres.detections if dres else None) or []):
-                    b = _blick_strahl(list(getattr(dd, 'keypoints', []) or []),
-                                      W, H)
-                    if b is not None:
-                        blick = ('blick', b)
+                    y = _blick_yaw(list(getattr(dd, 'keypoints', []) or []))
+                    if y is not None:
+                        blick = y
                         break
         # Zeigen schlaegt Blick: eine Hand ist eine Ansage, ein Kopf eine
-        # Tendenz.
-        wahl = treffer or blick
-        if wahl is None:
-            continue
-        art, (tx, ty) = wahl
-        ziele.append((float(t), float(tx), float(ty), art))
-        if art == 'zeigen':
+        # Tendenz. Zeige-Ziele stehen sofort fest; Blicke werden erst
+        # GESAMMELT und nach dem Durchlauf gegen die Grundhaltung des
+        # Sprechers gefiltert (_blick_targets, v166) - sonst wird eine
+        # seitlich stehende Kamera zum Dauer-Ziel und alle Captions kleben
+        # auf einer Seite.
+        if treffer is not None:
+            _, (tx, ty) = treffer
+            ziele.append((float(t), float(tx), float(ty), 'zeigen'))
             n_z += 1
-        else:
-            n_b += 1
+        elif blick is not None:
+            blick_cands.append((float(t), blick[0], blick[1], blick[2]))
+    blick_ziele = _blick_targets(blick_cands, W, H)
+    ziele.extend(blick_ziele)
+    n_b = len(blick_ziele)
+    ziele.sort(key=lambda z: z[0])
     for obj in (lm, det):
         try:
             if obj is not None:

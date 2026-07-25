@@ -145,6 +145,10 @@ Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
   es keinen gemeinten Ort. Raten ist schlechter als nichts.
 - **Das Gesicht bleibt tabu.** Zeige-Gewicht 2.2, Gesichtsberührung ab 2.5.
   Wer auf den eigenen Kopf zeigt, bekommt den Text daneben.
+- **Blick ist Abweichung, nicht Haltung (v166).** `_blick_targets` filtert
+  gegen den Median der Kopfdrehungen. Eine absolute Schwelle macht aus einer
+  seitlich stehenden Kamera ein Dauer-Ziel und nagelt alle Captions auf eine
+  Seite (Ismets Befund). Zeigen bleibt absolut — eine Geste ist eine Ansage.
 - Bei gesetztem Ziel fallen Wunschzone und Wunschseite weg (`return k`), der
   Rest der Kosten bleibt. Ein Ziel bricht die Hysterese (`kalt`).
 - **Grenze:** ein breiter Block hat im Title-Safe kaum Spielraum (0.773 W bei
@@ -374,7 +378,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1020/1020 grün (Stand v162)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1030/1030 grün (Stand v166)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v166 Blick ist ABWEICHUNG, nicht Haltung.** Ismets Befund nach v160:
+  "es ist immer noch links die captions". EHRLICHE URSACHE: die Blick-Regie
+  aus v160 arbeitete mit einer ABSOLUTEN Schwelle (0.35 Augenabstaende
+  Nasenversatz). Die haelt nur Frontal-Sprecher auf. Wer sein Video mit
+  leicht seitlich stehender Kamera aufnimmt - der Normalfall bei
+  Selfie-Setups - liegt in JEDEM Moment darueber. Ergebnis: jeder Moment
+  bekam dasselbe Blick-Ziel, das Ziel ueberstimmt Wunschzone und
+  Seiten-Abwechslung (so gebaut, fuer echte Gesten richtig), und ALLE
+  Captions klebten auf einer Seite. Die v160-Pruefung hatte nur Frontal-
+  und Dreh-Momente einzeln getestet, nie eine DAUERHALTUNG ueber mehrere
+  Momente.
+  FIX: `_blick_targets()` sammelt erst alle Kopfdrehungen der Momente und
+  filtert dann gegen die GRUNDHALTUNG des Sprechers (Median der Drehungen):
+  - Haltung dauerhaft +0.5 -> Median +0.5, Abweichung ~0 -> NULL Ziele.
+  - Frontal-Haltung, EIN bewusster Blick +0.7 -> genau der zaehlt.
+  - Haltung +0.5, ein Moment dreht WEITER auf +1.0 -> genau der zaehlt.
+  - Drehung ZURUECK zur Kamera -> kein Ziel (wer zur Kamera schaut, meint
+    keinen Ort im Bild; die Abweichung muss in die Blickrichtung gehen).
+  - Unter 3 Messungen gibt es keinen brauchbaren Median -> dann zaehlt nur
+    eine wirklich deutliche Drehung (0.55).
+  Zeigen (Hand) bleibt unveraendert absolut - eine Zeigegeste ist eine
+  Ansage, keine Haltung.
+  Beweis im Selftest: alle fuenf Faelle einzeln geprueft, dazu die
+  v160-Regression unveraendert gruen (Frontal/gedreht/Gegenrichtung).
+  NICHT LIVE VERIFIZIERT: ob damit SEIN Video wieder wechselnde Seiten
+  zeigt, sieht Ismet erst am echten Render nach dem Deploy. Wenn es danach
+  immer noch klebt, ist die naechste Messstation der Job-Log (Zeile
+  "Pointing direction: X pointing, Y gaze") - steht dort weiter eine hohe
+  Gaze-Zahl, liegt es NICHT an der Haltungs-Filterung.
 - **v164 Gratis-Teaser wieder ENTFERNT** (Ismets Entscheidung: die Vorschau
   kostet ihn API + Rechenzeit, auch wenn beim Kunden 0 Credits stehen).
   Sauberer Revert des v163-Commits: Endpoint `/api/teaser/{jid}`, Teaser-Modus
