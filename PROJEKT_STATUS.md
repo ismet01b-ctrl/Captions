@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v154 Schriftgroesse + Keyword-Variation** (Ismets dritter Befund:
+  "Schriften zu gross. Keywords immer gleiche Animation und Optik.")
+  - **DER FLIESSTEXT HING AM SCHLUESSELWORT.** `caption_scale` skalierte nur
+    `sz_k`; `sz_n` wurde daraus ueber die Hierarchie abgeleitet. Gemessen
+    wird aber die PUNCHLINE des Vorbilds (96. Perzentil, im zweiten
+    Referenzvideo das riesige Schlusswort mit 0.1836 H). Dieser Wert auf den
+    Fliesstext angewandt machte ihn 68 % groesser: 76 -> 128 px. Der
+    Fliesstext hat jetzt einen EIGENEN gemessenen Faktor
+    (`caption_scale_klein` aus `klein_hoehe`), gedeckelt auf 1.30.
+    Ergebnis: Haus 65 px, mit Referenz 85 px statt 128 px.
+  - **HAUSMASS nochmal runter**: 0.088 -> 0.076 em Schluesselwort, 0.040 ->
+    0.034 em Fliesstext. Der Punch-Faktor musste zum zweiten Mal mit
+    (1.95 -> 2.25), sonst rutscht der Randabfall aus v152 unter die
+    Bildbreite und ist nicht mehr zu sehen.
+  - **KEYWORDS STANDEN STILL.** `anim_for()` findet nur etwas, wenn das Wort
+    oder sein Satz einen Hinweis traegt ("faellt", "explodiert"). Bei
+    normalen Keywords traf gemessen KEIN Hinweis, `p['anim']` blieb None -
+    der grosse Moment stand einfach da. Neu: eine Rotation
+    bedeutungsneutraler Animationen als Fallback (gewicht, puls, schweben,
+    fokus, welle, enthuellen, schub, neon). Bewusst NICHT sturz/knall - die
+    muessen zum Wortsinn passen.
+  - GEAENDERTE ERWARTUNG (kein Testkosmetik-Fix): der v143-Test verlangte,
+    dass ein langes Schluesselwort die Zeile bis 0.83 W spannt. Nach drei
+    Verkleinerungen gilt das bewusst nicht mehr; die untere Grenze bleibt,
+    damit es nicht zum Fliesstext zusammenfaellt.
 - **v153 Seitenwechsel, kleinere Schrift, Nutzer-Regler.** Ismets Befund:
   "Captions sind immer auf einer Seite" und "mach die Schrift etwas kleiner".
   - **DIE STREUFUNKTION WAR KAPUTT.** `_mix01` nahm nur die unteren 10 Bit

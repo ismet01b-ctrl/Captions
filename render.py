@@ -4046,6 +4046,15 @@ def _apply_reference_params(cfg):
             _sk = round(max(0.70, min(2.60, _kh / 0.0686)), 3)
             cfg['effects']['caption_scale'] = _sk
             parts.append(f"grad={_kh:.3f}H")
+    # v154: der KLEINTEXT bekommt seinen eigenen gemessenen Wert. Vorher lief
+    # er ueber key_hoehe mal Hierarchie mit - eine Referenz mit grosser
+    # Punchline blies damit den ganzen Satz auf.
+    if p.get('klein_hoehe'):
+        _kl = float(p['klein_hoehe'])
+        if 0.008 <= _kl <= 0.20:
+            # x-Hoehe/em 0.52, Hausmass 0.034 em -> 0.0177 H
+            cfg['effects']['caption_scale_klein'] = round(
+                max(0.70, min(1.30, _kl / 0.0177)), 3)
     if p.get('verhaeltnis'):
         _vh = float(p['verhaeltnis'])
         if 1.1 <= _vh <= 8.0:
@@ -5907,21 +5916,33 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # Hausmass kam mit 1.35 an, also gerade der halbe Unterschied, und der
     # Kunde sah "es aendert sich kaum was". Hier nur noch die harte
     # Sicherung gegen Unsinn, die Regie entscheidet davor.
+    # v154: DER FLIESSTEXT HAT EINEN EIGENEN FAKTOR. Bis v153 skalierte
+    # caption_scale nur sz_k, und sz_n wurde daraus ueber die Hierarchie
+    # abgeleitet - eine gemessene Referenz zog damit den GANZEN Satz mit.
+    # Gemessen wird aber die PUNCHLINE des Vorbilds (96. Perzentil, im
+    # zweiten Referenzvideo das riesige Schlusswort); dieser Wert auf den
+    # Fliesstext angewandt machte ihn 68 % groesser: 76 -> 128 px.
+    # Genau das war Ismets "Schriften zu gross".
     _skal = float(_ef.get('caption_scale') or 1.0)
     _skal = max(0.60, min(2.80, _skal))
+    _skn = float(_ef.get('caption_scale_klein') or 0) or None
+    _skn = max(0.60, min(1.30, _skn)) if _skn else _skal
     _hier = float(_ef.get('caption_hierarchie') or 0) or None
     # v153: eine Stufe kleiner (Ismets Befund am fertigen Video). 0.098 ->
     # 0.088 em ergibt bei cap/em 0.70 eine Versalhoehe von 0.062 H statt
     # 0.069 H. sz_n geht ueber die Hierarchie automatisch mit - wuerde nur
     # das Schluesselwort schrumpfen, flachte der Kontrast wieder ab (der
     # Fehler aus v143b).
+    # v154: noch eine Stufe kleiner (Ismets dritter Befund, "immer noch zu
+    # gross"). 0.088 -> 0.076 em ergibt bei cap/em 0.70 eine Versalhoehe von
+    # 0.053 H. Der Fliesstext geht mit (0.040 -> 0.034 em, x-Hoehe 0.018 H).
     pf = 1.35 if not portrait else 1.0
-    sz_k = int(H * 0.088 * pf * _skal)
-    if _hier:
+    sz_k = int(H * 0.076 * pf * _skal)
+    if _hier and not _ef.get('caption_scale_klein'):
         _hier = max(1.4, min(5.0, _hier))
         sz_n = int(sz_k * 0.70 / (0.52 * _hier))
     else:
-        sz_n = int(H * 0.040 * pf * _skal)
+        sz_n = int(H * 0.034 * pf * _skn)
     sz_a = int(sz_n * 1.244)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
@@ -5989,7 +6010,11 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # Stufe kleiner geworden (0.098 -> 0.088 em); mit dem alten Faktor
             # erreichte das Schlusswort die Bildbreite nicht mehr und der
             # Randabfall lief ins Leere (gemessen 0.96 W statt 1.07 W).
-            _kf = 1.95 if punch else 1.0
+            # v154: 2.25. Die Grundschrift ist erneut kleiner geworden
+            # (0.088 -> 0.076 em); mit 1.95 rutschte der Knall auf 1.01 W und
+            # der Abstand zum normalen Schluesselwort schrumpfte auf 1.14x -
+            # der Effekt waere kaum noch zu sehen gewesen.
+            _kf = 2.25 if punch else 1.0
             # Beim Knall darf die Zeile ueber den normalen Satzspiegel
             # hinaus - im Vorbild laeuft das Schlusswort ueber die volle
             # Breite. 0.89 W und nicht mehr: der Block SETZT bei x0 = 0.07 W
@@ -7028,6 +7053,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     rot_entr_no_em = Rotator(('edge_l', 'edge_r', 'rise', 'drop', 'zoom', 'swing', 'morph'),
                              _seed + 9)
     rot_fill = Rotator(('cascade', 'outline', 'blurin'), _seed + 3)   # Lueckenfueller
+    # v154: FALLBACK-ANIMATIONEN. anim_for() findet nur etwas, wenn das Wort
+    # (oder sein Satz) einen Hinweis traegt - "fliegt", "faellt", "explodiert".
+    # Bei normalen Keywords traf gemessen KEIN Hinweis, p['anim'] blieb None
+    # und der Moment stand still. Ueber ein ganzes Video sahen die grossen
+    # Momente dadurch alle gleich aus (Ismets Befund). Bewusst nur
+    # BEDEUTUNGSNEUTRALE Animationen in der Rotation: 'sturz' oder 'knall'
+    # muessen zum Wortsinn passen, 'puls' oder 'gewicht' passen immer.
+    rot_anim = Rotator(('gewicht', 'puls', 'schweben', 'fokus', 'welle',
+                        'enthuellen', 'schub', 'neon'), _seed + 17)
     last_kw_end = -999.0
     last_num_end = -999.0
     prev_was_keyword_sentence = False   # letzter Moment liess seinen Satz offen
@@ -7284,6 +7318,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 _auto_anim = (info.get('anim') if isinstance(info, dict) else None)
                 if not _auto_anim:
                     _auto_anim = anim_for(txt, anim_ctx(words, i, len(phrase)))
+                if not _auto_anim:
+                    # Kein semantischer Treffer: eine neutrale Animation aus
+                    # der Rotation, statt den Moment still stehen zu lassen.
+                    _auto_anim = rot_anim.next()
                 p['anim'] = _auto_anim
                 # Auto-Wahl zurueck in fx_map schreiben, damit der Momente-Editor
                 # sie anzeigt (sonst steht dort "keine", obwohl das Video animiert).

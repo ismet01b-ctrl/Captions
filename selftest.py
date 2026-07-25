@@ -432,8 +432,13 @@ def _scenario_logic(clip, transcript, tmp):
           0.045 <= _kh9 <= 0.092, f'{_kh9:.4f} H (Referenz 0.051-0.085)')
     check('v143: Hierarchie Schluesselwort zu Kleintext wie in der Referenz',
           2.0 <= _r9 <= 2.9, f'{_r9:.2f}x (Referenz 2.2-2.6, vorher 1.10)')
-    check('v143: langes Schluesselwort spannt die Zeile (Referenz 0.83 W)',
-          0.60 <= _kw9 <= 0.88, f'{_kw9:.3f} W')
+    # v154 GEAENDERTE ERWARTUNG, kein Testkosmetik-Fix: Ismet hat die Schrift
+    # dreimal als zu gross beanstandet, das Hausmass ist von 0.115 ueber 0.098
+    # und 0.088 auf 0.076 em gefallen. Ein langes Schluesselwort spannt die
+    # Spalte dadurch bewusst nicht mehr bis 0.83 W. Die untere Grenze bleibt,
+    # damit es nicht zum Fliesstext zusammenfaellt.
+    check('v143/v154: langes Schluesselwort bleibt deutlich breiter als der Satz',
+          0.45 <= _kw9 <= 0.88, f'{_kw9:.3f} W')
     # Querformat war der Ausreisser: pf = 0.62 VERKLEINERTE dort, waehrend
     # alle Nachbar-Composer um Faktor 1.68 bis 2.00 vergroessern.
     _kh16, _, _, _r16 = _flowmass(1920, 1080)
@@ -2640,7 +2645,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v153-seiten'" in _srv_m)
+          and "DVE_BUILD = 'v154-groesse'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4740,6 +4745,81 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ============ v154: Schriftgroesse + Keyword-Variation ==================
+    import yaml as _y154
+    import render as R
+    import io as _io154, contextlib as _cl154
+    _r154 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+
+    def _flow_sz(cfgx):
+        _S = R.Sprites(cfgx, 1080, 1920)
+        _w = [{'word': x, 'start': i * 0.35, 'end': i * 0.35 + 0.3}
+              for i, x in enumerate(['was', 'steckt', 'WIRKLICH', 'dahinter'])]
+        _it, _, _ = R.compose_flow(list(range(4)), _w, _S, 1080, 1920,
+                                   portrait=True)
+        return max(i['sz'] for i in _it if i['role'] == 'norm')
+    _c154 = _y154.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _haus154 = _flow_sz(_c154)
+    check('v154: der Fliesstext ist kleiner geworden (Ismets Befund)',
+          _haus154 <= 70, f'{_haus154} px bei 1920 H (v153 waren 76)')
+    # Kern des Befunds "Schriften zu gross": eine gemessene Referenz zog den
+    # GANZEN Satz mit, weil sz_n ueber key_hoehe * Hierarchie lief. Gemessen
+    # wird aber die PUNCHLINE des Vorbilds.
+    _p154 = {'key_hoehe': 0.1836, 'klein_hoehe': 0.04, 'verhaeltnis': 4.59}
+    _rf154 = os.path.join(tmp, 'refs154.json')
+    json.dump([{'name': 'v2', 'beispiel': 'x', 'params': _p154}],
+              open(_rf154, 'w', encoding='utf-8'))
+    _c154r = _y154.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _alt154 = os.environ.get('DVE_REFS_FILE')
+    try:
+        os.environ['DVE_REFS_FILE'] = _rf154
+        R._apply_reference_params(_c154r)
+    finally:
+        if _alt154 is None:
+            os.environ.pop('DVE_REFS_FILE', None)
+        else:
+            os.environ['DVE_REFS_FILE'] = _alt154
+    _ref154 = _flow_sz(_c154r)
+    check('v154: der Fliesstext hat einen EIGENEN Referenz-Faktor',
+          _c154r['effects'].get('caption_scale_klein'),
+          f"klein {_c154r['effects'].get('caption_scale_klein')}, "
+          f"key {_c154r['effects'].get('caption_scale')}")
+    check('v154: eine grosse Punchline blaeht den Fliesstext nicht mehr auf',
+          _ref154 <= _haus154 * 1.35,
+          f'Haus {_haus154} px -> Referenz {_ref154} px (v153 waren 76 -> 128)')
+    check('v154: das Schluesselwort darf trotzdem gross bleiben',
+          float(_c154r['effects'].get('caption_scale', 0)) >= 2.0,
+          str(_c154r['effects'].get('caption_scale')))
+    # Keyword-Momente: jeder bekommt eine Animation, und sie wiederholen sich
+    # nicht stur. Vorher lieferte anim_for() bei normalen Woertern None.
+    _c154b = _y154.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _c154b['look'] = 'creator'
+    _S154 = R.Sprites(_c154b, 1080, 1920)
+    _t154 = ('du hast das schon oft gehoert. aber was wirklich dahinter steckt '
+             'weiss niemand. genau das zeige ich dir heute. es wird dich '
+             'schockieren wie einfach das geht. danach machst du es nie wieder '
+             'anders. versprochen wirklich gut.').split()
+    _w154 = [{'word': x, 'start': round(i * 0.36, 2),
+              'end': round(i * 0.36 + 0.28, 2)} for i, x in enumerate(_t154)]
+    _kw154 = {i for i, x in enumerate(_t154) if x.strip('.') in
+              ('gehoert', 'dahinter', 'schockieren', 'zeige', 'versprochen',
+               'niemand', 'einfach')}
+    with _cl154.redirect_stdout(_io154.StringIO()):
+        _pl154 = R.build_plans(_w154, _kw154, _c154b, _S154, 1080, 1920,
+                               lambda a, b: True, {})
+    _kwp = [p for p in _pl154 if 'kw_i' in p]
+    check('v154: JEDER Keyword-Moment bekommt eine Animation',
+          _kwp and all(p.get('anim') for p in _kwp),
+          f"{sum(1 for p in _kwp if p.get('anim'))}/{len(_kwp)} animiert")
+    check('v154: die grossen Momente wiederholen sich nicht',
+          len({(p.get('tpl'), p.get('anim'), p.get('entr')) for p in _kwp})
+          == len(_kwp),
+          str([(p.get('tpl'), p.get('anim')) for p in _kwp]))
+    check('v154: die Fallback-Animationen sind bedeutungsneutral',
+          'rot_anim = Rotator(' in _r154
+          and all(x not in _r154.split('rot_anim = Rotator(')[1][:200]
+                  for x in ("'sturz'", "'knall'", "'explosion'")))
+
     # ============ v153: Seitenwechsel, kleinere Schrift, Nutzer-Regler ======
     import yaml as _y153
     import render as R
@@ -4792,8 +4872,8 @@ def _scenario_betrieb(tmp):
           "spot_state.get('seite') != _seite" in _r153)
     # Schrift eine Stufe kleiner (Ismets Befund am fertigen Video).
     check('v153: die Grundschrift ist eine Stufe kleiner',
-          "H * 0.088 * pf * _skal" in _r153 and "H * 0.040 * pf * _skal" in _r153
-          and 'H * 0.098 * pf' not in _r153)
+          "H * 0.076 * pf * _skal" in _r153 and "H * 0.034 * pf * _skn" in _r153
+          and 'H * 0.098 * pf' not in _r153 and 'H * 0.088 * pf' not in _r153)
     # Nutzer-Regler
     _ui153 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     for _k in ('effects.caption_layout', 'effects.caption_align',

@@ -126,6 +126,17 @@ schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
 Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
 zwischen Regie und Zittern.
 
+### Schriftgroessen (v154)
+Das **Schluesselwort und der Fliesstext haben getrennte Referenz-Faktoren**
+(`caption_scale` aus `key_hoehe`, `caption_scale_klein` aus `klein_hoehe`).
+Den Fliesstext ueber key_hoehe mal Hierarchie abzuleiten war der Grund, warum
+eine Referenz mit grosser Punchline den ganzen Satz aufblies.
+Hausmass: 0.076 em Schluesselwort, 0.034 em Fliesstext. **Wer daran dreht,
+muss den Punch-Faktor mitziehen** — sonst faellt der Randabfall (v152) unter
+die Bildbreite und ist unsichtbar.
+Jeder Keyword-Moment bekommt eine Animation; `anim_for()` liefert bei
+normalen Woertern None, deshalb rotiert ein **bedeutungsneutraler Fallback**.
+
 ### Seite + Streuung (v153)
 `_mix01` ist der **32-Bit-Finalizer**, nicht eine einzelne Multiplikation mit
 `& 1023` — die lief fuer kleine Vielfache als lineare Rampe, jeder
