@@ -146,6 +146,18 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   atomar+idempotent, Ownership-Checks, Upload-Caps, jid-Path-Traversal dicht,
   Stripe-Webhook-Secret-Pflicht. Konto-Löschung: Kaufbuchungen → `ledger_archive`
   (GoBD/§147 AO 10 Jahre; DSGVO Art.17(3)(b)), Rest echt gelöscht.
+- **Performance (v142, nicht wieder aufweichen):** alle heißen Queries laufen
+  über Indexe — Selftest prüft per `EXPLAIN QUERY PLAN`, dass KEINE davon
+  scannt. Caching in drei Ebenen: Prozess-Datei-Cache (mtime-invalidiert),
+  ETag+304 auf HTML/Assets, 20s-TTL nur auf Admin-Aggregate (Middleware
+  verwirft ihn bei jedem Schreibzugriff). **Geld/Kontostand nie cachen.**
+  Blockierende Aufrufe in `async def`-Endpunkten sind ein Fehler (legen den
+  ganzen Server still) → `asyncio.to_thread`. Sync-`def`-Endpunkte bleiben
+  sync (FastAPI-Threadpool, korrekt für SQLite).
+- **Recht & Steuern (Admin-Tab, v142):** `/api/admin/compliance/tax` bündelt
+  Steuer-Identität, §19-Schwellen-Ampel (Vorjahr 25.000 €, laufend 100.000 €,
+  Warnung ab 80 %), Umsatz je Jahr/Monat, Belege, Aufbewahrungsfristen und das
+  Verarbeitungsverzeichnis (Art. 30 DSGVO). Übersicht, KEINE Steuerberatung.
 - Betrieb: `/api/health` (für externen Uptime-Pinger), Admin-Störungsmails
   (1/h/Schlüssel), Watchdog killt hängende Renders (45min) + erstattet,
   Offsite-DB-Backup per Mail, Warm-Preview-Daemon (~0.5s statt 2s).

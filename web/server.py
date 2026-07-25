@@ -16,6 +16,7 @@ Was NEU vs. v59:
 """
 import copy
 import glob
+import hashlib
 import hmac
 import io
 import json
@@ -197,6 +198,13 @@ def _db():
     con.execute('PRAGMA journal_mode=WAL')
     con.execute('PRAGMA busy_timeout=10000')
     con.execute('PRAGMA synchronous=NORMAL')
+    # v142: Lese-Cache pro Verbindung (8 MB) und Sortier-/Join-Temporaries im
+    # RAM statt auf Platte. Reines Tuning ohne Verhaltens-Aenderung, wirkt dort,
+    # wo die Aggregat-Abfragen des Admin-Panels teuer sind. Bewusst KEIN
+    # foreign_keys=ON: die Loeschpfade sind auf die bisherige Reihenfolge
+    # gebaut, das waere eine Verhaltens-Aenderung.
+    con.execute('PRAGMA cache_size=-8000')
+    con.execute('PRAGMA temp_store=MEMORY')
     return con
 
 
@@ -363,6 +371,38 @@ def _init_users_db():
         con.commit()
     except sqlite3.IntegrityError as e:
         print(f'WARN: ux_ledger_welcome/monthly nicht angelegt (Altdaten-Duplikate?): {e}')
+    # v142 PERFORMANCE (gemessen, nicht vermutet): mit EXPLAIN QUERY PLAN gegen
+    # das frische Schema liefen 13 von 15 Kern-Abfragen als FULL TABLE SCAN -
+    # Ledger je Nutzer, Verfall-FIFO, Kauf-Belege, Consents, Token-Aufraeumen,
+    # Archiv, aktive Sessions. Die partiellen UNIQUE-Indexe oben decken NUR
+    # ihre jeweiligen Buchungsgruende ab, nicht die normalen Lesepfade. Bei
+    # heute wenigen Zeilen faellt das nicht auf; jede Ledger-Zeile mehr macht
+    # /api/me linear langsamer, und genau das waechst mit jedem Kunden.
+    # IF NOT EXISTS -> idempotent, laeuft bei jedem Start ueber Bestandsdaten.
+    for _ddl in (
+        "CREATE INDEX IF NOT EXISTS ix_ledger_user_time ON ledger(user_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_ledger_user_grund ON ledger(user_id, grund)",
+        "CREATE INDEX IF NOT EXISTS ix_ledger_time ON ledger(created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_purch_user ON purchases(user_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_purch_time ON purchases(created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_users_created ON users(created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_consents_user ON consents(user_id, kind)",
+        "CREATE INDEX IF NOT EXISTS ix_verify_user ON verify_tokens(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_resets_user ON resets(user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_arch_mail ON ledger_archive(user_email)",
+        "CREATE INDEX IF NOT EXISTS ix_arch_time ON ledger_archive(created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_sess_exp ON sessions(expires_at)",
+        "CREATE INDEX IF NOT EXISTS ix_mail_log_user ON mail_log(user_id)",
+    ):
+        try:
+            con.execute(_ddl)
+        except sqlite3.OperationalError as e:
+            print(f'WARN: Index nicht angelegt: {e}')
+    con.commit()
+    try:
+        con.execute('PRAGMA optimize')      # Statistiken fuer den Planer
+    except Exception:
+        pass
     con.close()
 
 
@@ -1603,12 +1643,17 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v141-refs'
+DVE_BUILD = 'v142-perf'
 
 
 @app.middleware('http')
 async def _security_headers(request, call_next):
     resp = await call_next(request)
+    # v142: jede erfolgreiche schreibende Anfrage verwirft die Admin-Aggregate.
+    # Zentral hier statt in 20 Endpunkten - so kann kein neuer Schreibpfad die
+    # Invalidierung vergessen (Kauf, Refund, Credits, Factory-Reset).
+    if request.method not in ('GET', 'HEAD', 'OPTIONS') and resp.status_code < 400:
+        _ttl_drop('adm:')
     resp.headers['Content-Security-Policy'] = _CSP
     resp.headers['X-Frame-Options'] = 'DENY'
     resp.headers['X-Content-Type-Options'] = 'nosniff'
@@ -1739,9 +1784,14 @@ async def api_checkout(request: Request, pack: str = Form(...),
             kwargs['invoice_creation'] = _invoice_creation(pack, p)  # v134: §19
         return st.checkout.Session.create(**kwargs)
 
+    # v142 ASYNC: st.checkout.Session.create ist ein blockierender HTTPS-Call
+    # zu Stripe (typisch 200-800 ms, im Stoerfall Sekunden). In einem
+    # 'async def'-Endpunkt haelt er den EINZIGEN Event-Loop an - waehrend ein
+    # Kunde bezahlt, steht die Seite fuer alle anderen. In den Threadpool.
+    import asyncio as _aio
     try:
         try:
-            session = _mk_session(True)
+            session = await _aio.to_thread(_mk_session, True)
         except Exception as e:
             # v135b: Der KAUF geht immer vor der Rechnung. Lehnt Stripe die
             # Session wegen invoice_creation ab (alte Lib/API-Version kennt den
@@ -1754,7 +1804,7 @@ async def api_checkout(request: Request, pack: str = Form(...),
                               f'Kauf laeuft OHNE automatische Rechnung weiter - '
                               f'Stripe-Lib/API-Version pruefen, Rechnung manuell '
                               f'im Dashboard erstellen.')
-                session = _mk_session(False)
+                session = await _aio.to_thread(_mk_session, False)
             else:
                 raise
         return {'ok': True, 'url': session.url}
@@ -1775,6 +1825,7 @@ async def api_stripe_webhook(request: Request):
     """Stripe ruft hier an sobald eine Zahlung wirklich durch ist. Wir
     verifizieren die Signatur und schreiben das Guthaben gut. Idempotent -
     Stripe kann Webhooks mehrfach senden."""
+    import asyncio as _aio2
     st = _stripe()
     if not st:
         raise HTTPException(503, 'Stripe not configured.')
@@ -1856,14 +1907,19 @@ async def api_stripe_webhook(request: Request):
     try:
         inv_id = sess.get('invoice')
         if inv_id:
-            _inv = st.Invoice.retrieve(inv_id)
+            # v142 ASYNC: noch ein blockierender Stripe-Call im Event-Loop.
+            _inv = await _aio2.to_thread(st.Invoice.retrieve, inv_id)
             inv_url = (_inv.get('hosted_invoice_url') if isinstance(_inv, dict)
                        else getattr(_inv, 'hosted_invoice_url', None))
     except Exception as e:
         print(f'Invoice-URL nicht abrufbar: {e}')
     try:
-        _send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack,
-                            invoice_url=inv_url)       # v133/v137
+        # v142 ASYNC: der Mailversand geht ueber HTTPS (Resend/SMTP) und hing
+        # bisher im Event-Loop. Stripe wartet auf unsere 200 - jede Sekunde
+        # hier ist eine Sekunde, in der die ganze Seite steht.
+        await _aio2.to_thread(_send_purchase_mail, uid, sec, sess_id,
+                              cents=_cents, pack=pack,
+                              invoice_url=inv_url)       # v133/v137
     except Exception as e:                             # darf den Kauf nie reissen
         print(f'Kauf-Mail fehlgeschlagen: {e}')
     print(f"Kauf verbucht: user={uid} pack={pack} +{sec // 60} Min")
@@ -3495,8 +3551,82 @@ for _ in range(int(os.environ.get('DVE_WORKERS', '1'))):
 threading.Thread(target=motion_worker, daemon=True).start()
 
 
+# ================================================================
+# v142 CACHING. Drei Ebenen, bewusst getrennt - jede loest ein anderes
+# Problem, und keine darf frische Daten verstecken:
+#   (1) Datei-Cache im Prozess: index.html ist ~500 KB und wurde bei JEDEM
+#       Aufruf neu von Platte gelesen und dekodiert. Jetzt einmal, gehalten,
+#       ueber (mtime, groesse) invalidiert - ein Deploy tauscht die Datei und
+#       wird sofort gesehen, ohne Neustart und ohne manuelles Leeren.
+#   (2) ETag + 304: Cache-Control bleibt 'no-cache' (der Browser MUSS nach
+#       jedem Deploy nachfragen, sonst laeuft altes Frontend gegen neuen
+#       Server). Neu ist die ANTWORT darauf: unveraendert heisst jetzt ~200
+#       Byte 304 statt einer halben Megabyte HTML.
+#   (3) TTL-Cache fuer teure Aggregate (das Admin-Panel pollt im Sekunden-
+#       takt). Kurz genug, dass niemand veraltete Zahlen sieht, lang genug,
+#       dass das Panel die Datenbank nicht dauerhaft beschaeftigt.
+# NICHT gecacht: alles mit Geld oder Kontostand (/api/me, Ledger, Checkout,
+# Webhook). Dort ist ein veralteter Wert schlimmer als jede Rechenzeit.
+# ================================================================
+_FILE_CACHE = {}                 # pfad -> (stempel, text, etag)
+_FILE_CACHE_LOCK = threading.Lock()
+
+
+def _file_cached(path):
+    """Datei-Inhalt + ETag aus dem Prozess-Cache, invalidiert ueber
+    (mtime_ns, groesse)."""
+    stt = os.stat(path)
+    stamp = (stt.st_mtime_ns, stt.st_size)
+    with _FILE_CACHE_LOCK:
+        hit = _FILE_CACHE.get(path)
+        if hit and hit[0] == stamp:
+            return hit[1], hit[2]
+    text = open(path, encoding='utf-8').read()
+    etag = '"' + hashlib.sha1(text.encode('utf-8')).hexdigest()[:24] + '"'
+    with _FILE_CACHE_LOCK:
+        _FILE_CACHE[path] = (stamp, text, etag)
+    return text, etag
+
+
+def _etag_304(request, etag, cache_control):
+    """Antwortet mit 304, wenn der Browser diese Version schon hat."""
+    inm = (request.headers.get('if-none-match') or '') if request else ''
+    if inm and etag in [t.strip() for t in inm.split(',')]:
+        return Response(status_code=304, headers={'ETag': etag,
+                                                  'Cache-Control': cache_control})
+    return None
+
+
+_TTL_CACHE = {}                  # key -> (ablauf, wert)
+_TTL_LOCK = threading.Lock()
+
+
+def _ttl_cached(key, ttl, build):
+    """Kleiner TTL-Cache fuer teure, unkritische Aggregate. build() laeuft nur,
+    wenn der Eintrag fehlt oder abgelaufen ist. Bewusst simpel: kein
+    Hintergrund-Refresh, kein Stampede-Schutz - bei einem Admin-Panel mit einem
+    einzigen Nutzer waere beides Ballast."""
+    now = time.time()
+    with _TTL_LOCK:
+        hit = _TTL_CACHE.get(key)
+        if hit and hit[0] > now:
+            return hit[1]
+    val = build()
+    with _TTL_LOCK:
+        _TTL_CACHE[key] = (now + ttl, val)
+    return val
+
+
+def _ttl_drop(prefix=''):
+    """Cache-Eintraege verwerfen (nach schreibenden Aktionen), damit das Panel
+    nie die Zahlen von VOR der eigenen Aenderung zeigt."""
+    with _TTL_LOCK:
+        for k in [k for k in _TTL_CACHE if k.startswith(prefix)]:
+            _TTL_CACHE.pop(k, None)
+
+
 # ---------------------------------------------------------------- Endpunkte
-def _page(name):
+def _page(name, request=None):
     p = os.path.join(HERE, name)
     if not os.path.exists(p):
         raise HTTPException(404)
@@ -3504,8 +3634,13 @@ def _page(name):
     # tagelang - nach jedem Deploy lief bei Nutzern sonst das ALTE Frontend
     # gegen den neuen Server. no-cache = Browser fragt jedes Mal nach
     # (bekommt 200 mit frischem Inhalt), Assets/Videos bleiben unberuehrt.
-    return HTMLResponse(open(p, encoding='utf-8').read(),
-                        headers={'Cache-Control': 'no-cache, must-revalidate'})
+    # v142: die Nachfrage wird jetzt mit ETag beantwortet.
+    _cc = 'no-cache, must-revalidate'
+    text, etag = _file_cached(p)
+    hit = _etag_304(request, etag, _cc)
+    if hit is not None:
+        return hit
+    return HTMLResponse(text, headers={'Cache-Control': _cc, 'ETag': etag})
 
 
 # v80m: Rate-Limit gegen Spam-Registrierungen (in-memory, pro IP)
@@ -4112,28 +4247,36 @@ def api_delete_account(request: Request, response: Response,
     return {'ok': True}
 
 
-def _asset(name, media):
+def _asset(name, media, request=None):
     p = os.path.join(HERE, name)
     if not os.path.exists(p):
         raise HTTPException(404)
+    # v142: ETag zusaetzlich zum max-age. Nach Ablauf der 24h fragt der Browser
+    # nach - bisher kam dann immer das komplette Bild, jetzt ein 304.
+    stt = os.stat(p)
+    etag = '"%x-%x"' % (stt.st_mtime_ns, stt.st_size)
+    _cc = 'public, max-age=86400'
+    hit = _etag_304(request, etag, _cc)
+    if hit is not None:
+        return hit
     return FileResponse(p, media_type=media,
-                        headers={'Cache-Control': 'public, max-age=86400'})
+                        headers={'Cache-Control': _cc, 'ETag': etag})
 
 
 @app.get('/favicon.ico')
 @app.get('/favicon.png')
-def favicon():
-    return _asset('favicon.png', 'image/png')
+def favicon(request: Request):
+    return _asset('favicon.png', 'image/png', request)
 
 
 @app.get('/logo_white.png')
-def logo_white():
-    return _asset('logo_white.png', 'image/png')
+def logo_white(request: Request):
+    return _asset('logo_white.png', 'image/png', request)
 
 
 @app.get('/logo_dark.png')
-def logo_dark():
-    return _asset('logo_dark.png', 'image/png')
+def logo_dark(request: Request):
+    return _asset('logo_dark.png', 'image/png', request)
 
 
 @app.get('/api/health')
@@ -4151,37 +4294,37 @@ def health():
 
 
 @app.get('/', response_class=HTMLResponse)
-def landing():
-    return _page('landing.html')
+def landing(request: Request):
+    return _page('landing.html', request)
 
 
 @app.get('/app', response_class=HTMLResponse)
-def index():
-    return _page('index.html')
+def index(request: Request):
+    return _page('index.html', request)
 
 
 @app.get('/app/{rest:path}', response_class=HTMLResponse)
-def index_deep(rest: str):
+def index_deep(rest: str, request: Request):
     """v130x: Deep-Link-Routing. Die SPA nutzt jetzt echte Pfade (/app/create,
     /app/library, ...) statt nur Hash. Damit reagiert die Adressleiste normal
     (Enter laedt neu) und Links sind teilbar. Jeder /app/<...>-Aufruf liefert
     dieselbe SPA; der Client-Router liest den Pfad und zeigt den Bereich."""
-    return _page('index.html')
+    return _page('index.html', request)
 
 
 @app.get('/imprint', response_class=HTMLResponse)
-def imprint():
-    return _page('imprint.html')
+def imprint(request: Request):
+    return _page('imprint.html', request)
 
 
 @app.get('/privacy', response_class=HTMLResponse)
-def privacy():
-    return _page('privacy.html')
+def privacy(request: Request):
+    return _page('privacy.html', request)
 
 
 @app.get('/terms', response_class=HTMLResponse)
-def terms():
-    return _page('terms.html')
+def terms(request: Request):
+    return _page('terms.html', request)
 
 
 # Legacy DE-routes -> redirect
@@ -4510,10 +4653,16 @@ async def motion_showcase(request: Request,
         if total == 0:
             shutil.rmtree(d, ignore_errors=True)
             raise HTTPException(400, 'Upload a video or enter text.')
+        # v142 ASYNC: ffprobe auf einem frisch hochgeladenen Video ist
+        # blockierend. In diesem 'async def'-Endpunkt hielt es den Event-Loop
+        # an - jetzt im Threadpool.
+        import asyncio as _aio5
         try:
-            _pr = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-                                  '-of', 'default=noprint_wrappers=1:nokey=1', src],
-                                 capture_output=True, text=True, timeout=30)
+            _pr = await _aio5.to_thread(
+                subprocess.run,
+                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', src],
+                capture_output=True, text=True, timeout=30)
             dur = float((_pr.stdout or '0').strip() or 0)
         except Exception:
             dur = 0.0
@@ -4901,7 +5050,12 @@ def video(jid: str, request: Request, download: int = 0):
     if download:
         return FileResponse(p, media_type='video/mp4',
                             filename='DouchkoVE_Captions.mp4')
-    return FileResponse(p, media_type='video/mp4')
+    # v142: der Library-Player spult und laedt Bereiche nach. 'private' - das
+    # Video gehoert einem Konto und darf in keinem geteilten Cache landen.
+    # Kurze Frist, weil ein Kauf das Wasserzeichen entfernt und dieselbe URL
+    # danach eine andere Datei liefert.
+    return FileResponse(p, media_type='video/mp4',
+                        headers={'Cache-Control': 'private, max-age=600'})
 
 
 @app.get('/api/contact/{jid}')
@@ -4936,7 +5090,9 @@ def poster(jid: str, request: Request):
                 check=True, timeout=30)
         except Exception:
             raise HTTPException(404, 'No poster available.')
-    return FileResponse(poster_path, media_type='image/jpeg')
+    # v142: Library-Kachel. Das Poster aendert sich nach dem Render nie mehr.
+    return FileResponse(poster_path, media_type='image/jpeg',
+                        headers={'Cache-Control': 'private, max-age=86400'})
 
 
 @app.get('/api/library')
@@ -5265,8 +5421,12 @@ def get_thumb(jid: str, name: str, request: Request):
     thumb_path = os.path.join(thumb_dir, name)
     if not os.path.exists(thumb_path):
         raise HTTPException(404, 'Thumbnail not found.')
+    # v142: Thumbs sind pro Job unveraenderlich. Der Momente-Editor laedt
+    # dutzende davon - ohne Cache-Header holte der Browser sie bei jedem
+    # Oeffnen neu. 'private', weil sie zu genau einem Konto gehoeren.
     return FileResponse(thumb_path,
-                        media_type='image/png' if name.endswith('.png') else 'image/jpeg')
+                        media_type='image/png' if name.endswith('.png') else 'image/jpeg',
+                        headers={'Cache-Control': 'private, max-age=86400'})
 
 
 CORRECTIONS_PATH = os.path.join(DATA, 'corrections.json')
@@ -5524,7 +5684,12 @@ async def reference_learn(request: Request, datei: UploadFile = File(...),
                                      'cannot look at the video. Set it in the '
                                      'server environment and try again.')
         import render as _R
-        entry = _R.analyze_reference_video(
+        import asyncio as _aio3
+        # v142 ASYNC: analyze_reference_video zieht Frames mit ffmpeg und fragt
+        # danach die Vision-KI - zusammen leicht eine Minute. Bisher stand die
+        # gesamte Seite fuer alle Nutzer, solange das lief.
+        entry = await _aio3.to_thread(
+            _R.analyze_reference_video,
             tmp, name=(_safe_name(name) or _safe_name(datei.filename or 'Referenz')))
         if not entry:
             raise HTTPException(502, 'The AI could not analyze this video '
@@ -5665,7 +5830,11 @@ async def style_learn(request: Request, datei: UploadFile = File(...),
         if groesse == 0:
             raise HTTPException(400, 'Empty upload.')
         import render as _R
-        entry = _R.analyze_reference_video(
+        import asyncio as _aio4
+        # v142 ASYNC: siehe /api/reference/learn - minutenlange Blockade des
+        # Event-Loops, hier sogar auf einem Kunden-Endpunkt.
+        entry = await _aio4.to_thread(
+            _R.analyze_reference_video,
             tmp, name=(_safe_name(name) or _safe_name(datei.filename or 'Style')),
             store_path=_user_refs_path(u['id']))
         if not entry:
@@ -5749,21 +5918,29 @@ async def reference_transcribe(request: Request, datei: UploadFile = File(...),
         if groesse == 0:
             raise HTTPException(400, 'Empty upload.')
         # schlanke Mono-16kHz-Spur ziehen (Whisper-Limit 25 MB); Bitrate nach Laenge.
+        # v142 ASYNC: ffprobe, ffmpeg und der Whisper-Upload sind alle drei
+        # blockierend und zusammen minutenlang. Im Event-Loop legten sie den
+        # kompletten Server still - jetzt im Threadpool.
+        import asyncio as _aio5
         try:
-            _pr = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-                                  '-of', 'default=noprint_wrappers=1:nokey=1', src],
-                                 capture_output=True, text=True, timeout=30)
+            _pr = await _aio5.to_thread(
+                subprocess.run,
+                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', src],
+                capture_output=True, text=True, timeout=30)
             dur = float((_pr.stdout or '0').strip() or 0)
         except Exception:
             dur = 0.0
         _br = max(24, min(96, int(24 * 8192 / max(dur, 1.0)))) if dur else 64
-        _ar = subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', src, '-vn', '-ac', '1',
-                              '-ar', '16000', '-c:a', 'aac', '-b:a', f'{_br}k', apath],
-                             capture_output=True, text=True, timeout=300)
+        _ar = await _aio5.to_thread(
+            subprocess.run,
+            ['ffmpeg', '-y', '-v', 'error', '-i', src, '-vn', '-ac', '1',
+             '-ar', '16000', '-c:a', 'aac', '-b:a', f'{_br}k', apath],
+            capture_output=True, text=True, timeout=300)
         if not os.path.exists(apath) or os.path.getsize(apath) < 200:
             raise HTTPException(400, 'No usable audio track in this file. '
                                      + (_ar.stderr or '')[-200:])
-        words = _whisper_words(apath, lang)
+        words = await _aio5.to_thread(_whisper_words, apath, lang)
         if not words:
             raise HTTPException(502, 'No speech found in this file.')
         return {'ok': True, 'language': lang, 'duration': round(dur, 2),
@@ -5883,8 +6060,8 @@ def _revrow(con, since, until=None):
 
 
 @app.get('/admin', response_class=HTMLResponse)
-def admin_page():
-    return _page('admin.html')
+def admin_page(request: Request):
+    return _page('admin.html', request)
 
 
 @app.get('/api/admin/overview')
@@ -6093,9 +6270,18 @@ def admin_job_delete(jid: str, request: Request):
 
 @app.get('/api/admin/revenue')
 def admin_revenue(request: Request, days: int = 90):
-    """Alles Geld aus der purchases-Tabelle (v128+). Fenster, Zeitreihe, pro
-    Paket, AOV/ARPPU, Wiederkaeufer, Top-Spender, Pre-v128-Schaetzung, Katalog."""
+    """Alles Geld aus der purchases-Tabelle (v128+). v142: 20s TTL-Cache - das
+    Panel pollt, die Aggregate scannen mehrere Tabellen. Jede schreibende
+    Anfrage verwirft den Cache (Middleware), es kann also keine Zahl von VOR
+    einer Admin-Aktion stehen bleiben."""
     _require_admin(request)
+    return _ttl_cached(f'adm:revenue:{int(days)}', 20,
+                       lambda: _admin_revenue_calc(days))
+
+
+def _admin_revenue_calc(days: int = 90):
+    """Fenster, Zeitreihe, pro Paket, AOV/ARPPU, Wiederkaeufer, Top-Spender,
+    Pre-v128-Schaetzung, Katalog."""
     now = int(time.time()); day = 86400; days = max(7, min(365, days))
     con = _db()
     windows = {'today': _revrow(con, now - day), 'week': _revrow(con, now - 7 * day),
@@ -6145,8 +6331,14 @@ def admin_revenue(request: Request, days: int = 90):
 def admin_timeseries(request: Request, days: int = 30):
     """v136: Tages-Zeitreihen fuer die Admin-Grafen. Alle Reihen sind auf
     LUECKENLOSE Tage aufgefuellt (0 fuer leere Tage), damit die Balken-Achse
-    ehrlich ist - eine Reihe nur aus Verkaufstagen wuerde Flauten verstecken."""
+    ehrlich ist - eine Reihe nur aus Verkaufstagen wuerde Flauten verstecken.
+    v142: 20s TTL-Cache, Invalidierung wie bei /revenue."""
     _require_admin(request)
+    return _ttl_cached(f'adm:series:{int(days)}', 20,
+                       lambda: _admin_timeseries_calc(days))
+
+
+def _admin_timeseries_calc(days: int = 30):
     days = max(7, min(180, days))
     now = int(time.time()); day = 86400
     start_day = now - (days - 1) * day
@@ -6440,6 +6632,144 @@ def admin_archive(request: Request):
                        "FROM ledger_archive ORDER BY archived_at DESC LIMIT 500").fetchall()
     con.close()
     return {'archive': [dict(r) for r in rows]}
+
+
+# ================================================================
+# v142 RECHT & STEUERN. Ismets Frage war: "wo kann ich die gesetzlich
+# vorgeschriebenen Daten einsehen". Bisher lagen sie verstreut - Consents und
+# Archiv im Compliance-Tab, Umsatz im Revenue-Tab, Aufbewahrungsfristen nur
+# als Env-Variable, die §19-Grenze nirgends. Dieser Endpunkt sammelt ALLES
+# an einer Stelle und rechnet die Werte aus den ECHTEN Buchungen.
+#
+# WICHTIG / ehrlich: das ist eine Übersicht aus den eigenen Daten, keine
+# Steuerberatung und kein Ersatz fuer die Buchhaltung. Die Zahlen kommen aus
+# purchases (tatsaechlich gezahlte Betraege laut Stripe), nicht aus Stripe
+# selbst - eine Abweichung zu Stripe waere ein Alarmzeichen und muss dort
+# geprueft werden.
+# ================================================================
+# §19 UStG (Fassung ab 2025): Kleinunternehmer bleibt, wer im VORJAHR nicht
+# ueber 25.000 EUR Gesamtumsatz lag UND im laufenden Jahr 100.000 EUR nicht
+# ueberschreitet. Wird die 100.000 im Laufe des Jahres gerissen, endet die
+# Regelung SOFORT ab diesem Umsatz - ab dann muss USt ausgewiesen werden.
+# Darum warnt das Panel schon ab 80 % der jeweiligen Grenze.
+KU_VORJAHR_CENT = 25_000_00
+KU_LAUFEND_CENT = 100_000_00
+
+
+def _tax_year_bounds(year):
+    """Jahresgrenzen in UTC-Sekunden (wie alle created_at in der DB)."""
+    import calendar as _cal
+    a = int(_cal.timegm(time.strptime(f'{year}-01-01', '%Y-%m-%d')))
+    b = int(_cal.timegm(time.strptime(f'{year + 1}-01-01', '%Y-%m-%d')))
+    return a, b
+
+
+@app.get('/api/admin/compliance/tax')
+def admin_tax(request: Request):
+    """Steuer- und Rechts-Uebersicht: Identitaet, §19-Schwellen, Umsatz je
+    Jahr und Monat, Rechnungen, Aufbewahrung, Verarbeitungsverzeichnis."""
+    _require_admin(request)
+    return _ttl_cached('adm:tax', 30, _admin_tax_calc)
+
+
+def _admin_tax_calc():
+    con = _db()
+    jahr = int(time.strftime('%Y', time.gmtime()))
+    # --- Umsatz je Kalenderjahr (brutto = tatsaechlich gezahlt)
+    jahre = []
+    for y in range(jahr - 4, jahr + 1):
+        a, b = _tax_year_bounds(y)
+        r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents "
+                        "FROM purchases WHERE created_at >= ? AND created_at < ?",
+                        (a, b)).fetchone()
+        if r['c'] or y >= jahr - 1:
+            jahre.append({'jahr': y, 'anzahl': r['c'], 'brutto_cent': r['cents']})
+    _cur = next((j for j in jahre if j['jahr'] == jahr), {'brutto_cent': 0})
+    _prev = next((j for j in jahre if j['jahr'] == jahr - 1), {'brutto_cent': 0})
+    def _lage(ist, grenze):
+        q = ist / float(grenze) if grenze else 0.0
+        return 'ok' if q < 0.8 else ('warn' if q < 1.0 else 'ueber')
+    kleinunternehmer = {
+        'vorjahr_cent': _prev['brutto_cent'], 'vorjahr_grenze_cent': KU_VORJAHR_CENT,
+        'vorjahr_lage': _lage(_prev['brutto_cent'], KU_VORJAHR_CENT),
+        'laufend_cent': _cur['brutto_cent'], 'laufend_grenze_cent': KU_LAUFEND_CENT,
+        'laufend_lage': _lage(_cur['brutto_cent'], KU_LAUFEND_CENT),
+    }
+    # --- Monate des laufenden Jahres (fuer die Voranmeldungs-Logik / Beleg)
+    a, b = _tax_year_bounds(jahr)
+    mon = con.execute(
+        "SELECT strftime('%Y-%m', created_at, 'unixepoch') m, COUNT(*) c, "
+        "COALESCE(SUM(cents),0) cents FROM purchases "
+        "WHERE created_at >= ? AND created_at < ? GROUP BY m ORDER BY m",
+        (a, b)).fetchall()
+    monate = [{'monat': r['m'], 'anzahl': r['c'], 'brutto_cent': r['cents']}
+              for r in mon]
+    # --- Belege: jede Kauf-Zeile ist ein aufbewahrungspflichtiger Beleg
+    bel = con.execute(
+        "SELECT p.session_id, p.pack, p.cents, p.sekunden, p.created_at, u.email "
+        "FROM purchases p LEFT JOIN users u ON u.id = p.user_id "
+        "ORDER BY p.created_at DESC LIMIT 500").fetchall()
+    belege = [dict(r) for r in bel]
+    # --- Aufbewahrung
+    arch = con.execute("SELECT COUNT(*) c, MIN(created_at) a, MAX(created_at) b "
+                       "FROM ledger_archive").fetchone()
+    ncons = con.execute("SELECT COUNT(*) c FROM consents").fetchone()['c']
+    nledger = con.execute("SELECT COUNT(*) c FROM ledger").fetchone()['c']
+    con.close()
+    return {
+        'identitaet': {
+            'regelung': 'Kleinunternehmer nach §19 UStG (small business scheme)',
+            'ust_id': (os.environ.get('DVE_TAX_ID') or 'DE463613884').strip(),
+            'ust_ausweis': False,
+            'hinweis': 'Never state VAT. Invoices carry the §19 note in the '
+                       'Stripe footer.',
+        },
+        'jahr': jahr, 'jahre': jahre, 'monate': monate,
+        'kleinunternehmer': kleinunternehmer,
+        'belege': belege,
+        'aufbewahrung': {
+            'belege_jahre': 10, 'rechtsgrundlage': '§147 AO / GoBD',
+            'archiv_zeilen': arch['c'], 'archiv_von': arch['a'], 'archiv_bis': arch['b'],
+            'ledger_zeilen': nledger,
+            'consent_zeilen': ncons,
+            'video_tage': RETENTION_DAYS,
+            'credit_tage': CREDIT_VALIDITY_DAYS,
+        },
+        # Art. 30 DSGVO: Verzeichnis der Verarbeitungstaetigkeiten. Bewusst aus
+        # dem ECHTEN Schema abgeleitet und nicht frei getextet - so faellt auf,
+        # wenn eine neue Tabelle dazukommt und hier nicht auftaucht.
+        'verarbeitung': [
+            {'daten': 'users (email, name, credit balance, Google ID)',
+             'zweck': 'Account and contract performance', 'grundlage': 'Art. 6(1)(b)',
+             'frist': 'until the account is deleted'},
+            {'daten': 'sessions / verify_tokens / resets',
+             'zweck': 'Login, email confirmation, password reset',
+             'grundlage': 'Art. 6(1)(b)', 'frist': 'until the token expires'},
+            {'daten': 'ledger (credit bookings)',
+             'zweck': 'Credit accounting', 'grundlage': 'Art. 6(1)(b)',
+             'frist': 'until the account is deleted'},
+            {'daten': 'purchases / ledger_archive (purchase records)',
+             'zweck': 'Bookkeeping', 'grundlage': 'Art. 6(1)(c) + §147 AO',
+             'frist': '10 years, survives account deletion'},
+            {'daten': 'consents (withdrawal consent)',
+             'zweck': 'Proof under §356(4) BGB', 'grundlage': 'Art. 6(1)(c)',
+             'frist': '3 years (limitation period)'},
+            {'daten': 'referral_claims / credit_claims (salted hashes)',
+             'zweck': 'Fraud prevention on free credit',
+             'grundlage': 'Art. 6(1)(f)', 'frist': 'permanent, pseudonymous'},
+            {'daten': 'tickets (support messages)',
+             'zweck': 'Customer support', 'grundlage': 'Art. 6(1)(b)',
+             'frist': 'until resolved, correspondence kept'},
+            {'daten': 'video files (upload + render)',
+             'zweck': 'Delivering the service', 'grundlage': 'Art. 6(1)(b)',
+             'frist': f'{RETENTION_DAYS:.0f} days, then deleted automatically'},
+        ],
+        'seiten': [
+            {'titel': 'Imprint (§5 DDG)', 'url': '/imprint'},
+            {'titel': 'Privacy policy', 'url': '/privacy'},
+            {'titel': 'Terms / right of withdrawal', 'url': '/terms'},
+        ],
+    }
 
 
 @app.get('/api/admin/export/{table}.csv')

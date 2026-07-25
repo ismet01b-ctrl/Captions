@@ -2225,7 +2225,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v141-refs'" in _srv_m)
+          and "DVE_BUILD = 'v142-perf'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -3602,7 +3602,9 @@ def _scenario_security(tmp):
     # ---- v141: Referenz-Herkunft. Der globale Haus-Store (den der Owner ueber
     # /api/reference/learn fuellt) darf NIE der stille Fallback fremder Konten
     # sein - genau das liess Gelerntes in jeden Kundenschnitt lecken.
-    _srv141 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    import ast as _ast142
+    _srv142 = _srv141 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _adm142 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     _ui141 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     _rp141 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     _repo_refs = os.path.join(HERE, 'regie_reference.json')
@@ -3668,6 +3670,155 @@ def _scenario_security(tmp):
           and 'your ${st.stil_refs} learned style' in _ui141
           and 'Edited with our house style' in _ui141
           and 'learned reference' not in _ui141)
+
+    # ================================================================
+    # v142: Queries/Indexe, Caching, Async, Recht-&-Steuern-Panel.
+    # ================================================================
+    # (a) KEINE der heissen Abfragen darf mehr scannen. Verhaltens-Test ueber
+    #     EXPLAIN QUERY PLAN gegen die echte Test-DB - ein spaeter geloeschter
+    #     Index faellt hier sofort auf, eine reine Quelltext-Suche nicht.
+    _hot = [
+        ("ledger je User", "SELECT delta_sec, grund, created_at FROM ledger "
+                           "WHERE user_id=? ORDER BY created_at DESC", (1,)),
+        ("ledger Idempotenz", "SELECT id FROM ledger WHERE user_id=? AND grund=?", (1, 'x')),
+        ("ledger Verfall-FIFO", "SELECT delta_sec, created_at FROM ledger "
+                                "WHERE user_id=? ORDER BY created_at", (1,)),
+        ("ledger Zeitreihe", "SELECT created_at, delta_sec FROM ledger WHERE created_at>=?", (0,)),
+        ("purchases je User", "SELECT session_id FROM purchases WHERE user_id=?", (1,)),
+        ("purchases Zeitraum", "SELECT cents FROM purchases WHERE created_at>=?", (0,)),
+        ("users Neuanmeldungen", "SELECT COUNT(*) FROM users WHERE created_at>=?", (0,)),
+        ("consents je User", "SELECT kind FROM consents WHERE user_id=?", (1,)),
+        ("verify_tokens je User", "SELECT token FROM verify_tokens WHERE user_id=?", (1,)),
+        ("resets je User", "SELECT token FROM resets WHERE user_id=?", (1,)),
+        ("archiv je Mail", "SELECT delta_sec FROM ledger_archive WHERE user_email=?", ('a@b',)),
+        ("sessions aktiv", "SELECT COUNT(*) FROM sessions WHERE expires_at>?", (0,)),
+    ]
+    con = SV._db()
+    _scans = []
+    for _nm, _q, _p in _hot:
+        for _r in con.execute('EXPLAIN QUERY PLAN ' + _q, _p).fetchall():
+            if str(_r[3]).startswith('SCAN'):
+                _scans.append(f'{_nm}: {_r[3]}')
+    con.close()
+    check('v142: keine heisse Abfrage laeuft mehr als Full-Table-Scan',
+          not _scans, '; '.join(_scans[:4]))
+    # (b) Datei-Cache liefert dasselbe Ergebnis und erkennt eine Aenderung.
+    _tmpf = os.path.join(os.environ['DVE_DATA'], 'cachetest.html')
+    open(_tmpf, 'w', encoding='utf-8').write('<p>eins</p>')
+    _t1, _e1 = SV._file_cached(_tmpf)
+    _t2, _e2 = SV._file_cached(_tmpf)
+    _t.sleep(0.01)
+    open(_tmpf, 'w', encoding='utf-8').write('<p>zwei viel laenger</p>')
+    _t3, _e3 = SV._file_cached(_tmpf)
+    check('v142: Datei-Cache haelt, invalidiert aber bei Aenderung (Deploy)',
+          _t1 == '<p>eins</p>' and _e1 == _e2 and _t3 == '<p>zwei viel laenger</p>'
+          and _e3 != _e1, f'{_e1} -> {_e3}')
+
+    class _Req:                       # minimaler Request-Ersatz fuer den ETag
+        def __init__(self, inm=''):
+            self.headers = {'if-none-match': inm} if inm else {}
+    check('v142: ETag antwortet 304 nur bei passendem If-None-Match',
+          SV._etag_304(_Req(), _e1, 'no-cache') is None
+          and SV._etag_304(_Req('"anders"'), _e1, 'no-cache') is None
+          and getattr(SV._etag_304(_Req(_e1), _e1, 'no-cache'), 'status_code', 0) == 304)
+    # (c) TTL-Cache: baut einmal, liefert dann aus dem Cache, _ttl_drop wirkt.
+    _calls = []
+    _build = lambda: (_calls.append(1), {'n': len(_calls)})[1]
+    _c1 = SV._ttl_cached('adm:test', 30, _build)
+    _c2 = SV._ttl_cached('adm:test', 30, _build)
+    SV._ttl_drop('adm:')
+    _c3 = SV._ttl_cached('adm:test', 30, _build)
+    check('v142: TTL-Cache spart den Aufbau, _ttl_drop erzwingt frische Zahlen',
+          _c1 == _c2 == {'n': 1} and _c3 == {'n': 2} and len(_calls) == 2,
+          str(_calls))
+    # Geld und Kontostand duerfen NIE aus einem Cache kommen - ein veralteter
+    # Wert waere dort schlimmer als jede Rechenzeit. Per AST geprueft, nicht
+    # per Textsuche: die Funktionsgrenzen muessen exakt stimmen.
+    _tree142 = _ast142.parse(_srv142)
+    _cached_fns = {f.name for f in _ast142.walk(_tree142)
+                   if isinstance(f, (_ast142.FunctionDef, _ast142.AsyncFunctionDef))
+                   and any(isinstance(c, _ast142.Call)
+                           and getattr(c.func, 'id', '') == '_ttl_cached'
+                           for c in _ast142.walk(f))}
+    check('v142: Geld-/Konto-Endpunkte sind NICHT gecacht',
+          _cached_fns == {'admin_revenue', 'admin_timeseries', 'admin_tax'}
+          and "_ttl_drop('adm:')" in _srv142, str(sorted(_cached_fns)))
+    # (d) Async: kein blockierender Aufruf mehr direkt im Event-Loop.
+    _blocking = {'subprocess.run', 'requests.post', 'requests.get', 'time.sleep',
+                 '_whisper_words', '_send_purchase_mail', '_R.analyze_reference_video'}
+
+    def _dotted(_n):
+        if isinstance(_n, _ast142.Attribute):
+            _b = _dotted(_n.value)
+            return (_b + '.' + _n.attr) if _b else _n.attr
+        return _n.id if isinstance(_n, _ast142.Name) else ''
+
+    _loop_blockers = []
+    for _fn in _ast142.walk(_ast142.parse(_srv142)):
+        if not isinstance(_fn, _ast142.AsyncFunctionDef):
+            continue
+        _awaited = set()
+        for _aw in _ast142.walk(_fn):
+            if isinstance(_aw, _ast142.Await):
+                for _sub in _ast142.walk(_aw):
+                    _awaited.add(getattr(_sub, 'lineno', -1))
+        _nested = {id(_x) for _d in _ast142.walk(_fn)
+                   if isinstance(_d, _ast142.FunctionDef)
+                   for _x in _ast142.walk(_d)}
+        for _c in _ast142.walk(_fn):
+            if (isinstance(_c, _ast142.Call) and id(_c) not in _nested
+                    and _dotted(_c.func) in _blocking
+                    and _c.lineno not in _awaited):
+                _loop_blockers.append(f'{_fn.name}:{_c.lineno} {_dotted(_c.func)}')
+    check('v142: async-Endpunkte blockieren den Event-Loop nicht mehr',
+          not _loop_blockers, '; '.join(_loop_blockers[:4]))
+    check('v142: die langen Aufrufe laufen wirklich im Threadpool',
+          'to_thread(_mk_session' in _srv142
+          and 'to_thread(st.Invoice.retrieve' in _srv142
+          and 'to_thread(_send_purchase_mail' in _srv142
+          and 'to_thread(_whisper_words' in _srv142
+          and _srv142.count('to_thread(\n            _R.analyze_reference_video') == 2)
+    # (e) Recht & Steuern: echte Zahlen, §19-Ampel, USt-IdNr, kein USt-Ausweis.
+    _jahr = int(_t.strftime('%Y', _t.gmtime()))
+    SV._ttl_drop('adm:')
+    _tax0 = SV._admin_tax_calc()
+    _vor = next(j for j in _tax0['jahre'] if j['jahr'] == _jahr)
+    con = SV._db()
+    _uidt = con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, "
+                        "created_at, verified) VALUES ('tax@test','x','T',0,?,1)",
+                        (int(_t.time()),)).lastrowid
+    con.execute("INSERT INTO purchases (session_id, user_id, pack, cents, sekunden, "
+                "created_at) VALUES ('cs_tax1',?,'p19',1900,3600,?)",
+                (_uidt, int(_t.time())))
+    con.commit(); con.close()
+    SV._ttl_drop('adm:')
+    _tax = SV._admin_tax_calc()
+    _cur142 = next(j for j in _tax['jahre'] if j['jahr'] == _jahr)
+    check('v142: Steuer-Panel rechnet aus den ECHTEN Kaeufen',
+          _cur142['anzahl'] == _vor['anzahl'] + 1
+          and _cur142['brutto_cent'] == _vor['brutto_cent'] + 1900
+          and _tax['kleinunternehmer']['laufend_cent'] == _cur142['brutto_cent']
+          and any(b['session_id'] == 'cs_tax1' for b in _tax['belege']),
+          f"{_vor} -> {_cur142}")
+    check('v142: USt-IdNr steht drin und USt wird NIE ausgewiesen',
+          _tax['identitaet']['ust_id'] == 'DE463613884'
+          and _tax['identitaet']['ust_ausweis'] is False
+          and '19' in _tax['identitaet']['regelung'])
+    check('v142: §19-Ampel schlaegt ab 80 Prozent und ueber der Grenze an',
+          _tax['kleinunternehmer']['laufend_lage'] == 'ok'
+          and SV.KU_VORJAHR_CENT == 25_000_00 and SV.KU_LAUFEND_CENT == 100_000_00)
+    check('v142: Aufbewahrung + Verarbeitungsverzeichnis vollstaendig',
+          _tax['aufbewahrung']['belege_jahre'] == 10
+          and '147 AO' in _tax['aufbewahrung']['rechtsgrundlage']
+          and len(_tax['verarbeitung']) >= 8
+          and all(v.get('grundlage') and v.get('frist') for v in _tax['verarbeitung'])
+          and {s['url'] for s in _tax['seiten']} == {'/imprint', '/privacy', '/terms'})
+    check('v142: Admin-Panel hat den Tab und ruft den Endpunkt',
+          "['legal','Recht & Steuern']" in _adm142
+          and 'legal:loadLegal' in _adm142
+          and "api('/api/admin/compliance/tax')" in _adm142
+          and 'Record of processing activities' in _adm142
+          and 'not tax advice' in _adm142)
     # v126-sec: doppeltes Verify darf Referral NICHT doppelt buchen (Race-Fix).
     con = SV._db()
     con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
@@ -3998,7 +4149,7 @@ def _scenario_betrieb(tmp):
     _srv133 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('v133: Mails verdrahtet (Verify + Google + Webhook) + Copy ohne Gedankenstriche',
           _srv133.count('_send_welcome_mail(uid)') >= 2
-          and '_send_purchase_mail(uid, sec, sess_id, cents=_cents, pack=pack,' in _srv133
+          and 'to_thread(_send_purchase_mail, uid, sec, sess_id,' in _srv133
           and '—' not in _wm_src and '–' not in _wm_src)
     # v133a: Absender-Feld robust. Leeres MAIL_FROM (docker-compose reicht ''
     # durch) -> Default, nackte Adresse -> verpackt, fertiges 'Name <adr>' ->
@@ -4278,7 +4429,7 @@ def _scenario_betrieb(tmp):
     check('v135b: Checkout-Fallback ohne Rechnung + Fehler-Log + stripe>=10 gepinnt',
           'def _mk_session' in _coA
           and "kwargs['invoice_creation']" in _coA
-          and '_mk_session(False)' in _coA
+          and 'to_thread(_mk_session, False)' in _coA
           and 'inv_fallback' in _coA
           and 'Checkout fehlgeschlagen:' in _coA
           and 'stripe>=10' in _reqA)

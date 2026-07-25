@@ -3,6 +3,62 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v142 Vor dem Live-Gang: Queries/Indexe, Caching, Async, Recht-&-Steuern-Panel.**
+  - **(1) Indexe - 13 von 15 Kern-Abfragen waren Full-Table-Scans.** Gemessen mit
+    EXPLAIN QUERY PLAN gegen das frische Schema, nicht vermutet: Ledger je Nutzer,
+    Verfall-FIFO, Kauf-Belege, Consents, Token-Aufraeumen, Archiv und aktive
+    Sessions scannten die ganze Tabelle. Die vorhandenen partiellen UNIQUE-Indexe
+    decken NUR ihre Buchungsgruende ab (Kauf/Referral/Welcome/Monthly), nicht die
+    normalen Lesepfade. 13 Indexe ergaenzt (`ix_ledger_user_time`,
+    `ix_ledger_user_grund`, `ix_ledger_time`, `ix_purch_user`, `ix_purch_time`,
+    `ix_users_created`, `ix_consents_user`, `ix_verify_user`, `ix_resets_user`,
+    `ix_arch_mail`, `ix_arch_time`, `ix_sess_exp`, `ix_mail_log_user`) plus
+    `PRAGMA optimize`, `cache_size=-8000`, `temp_store=MEMORY`. BEWEIS: derselbe
+    EXPLAIN-Lauf danach = 0 Scans, als Selftest festgenagelt (ein spaeter
+    geloeschter Index faellt sofort auf). Bewusst KEIN `foreign_keys=ON` - die
+    Loeschpfade sind auf die bisherige Reihenfolge gebaut, das waere eine
+    Verhaltens-Aenderung ohne Auftrag.
+  - **(2) Caching, drei Ebenen.** (a) Prozess-Cache fuer die HTML-Dateien
+    (index.html ~260 KB wurde bei JEDEM Aufruf neu von Platte gelesen),
+    invalidiert ueber mtime+Groesse, ein Deploy wird also sofort gesehen.
+    (b) ETag + 304: `Cache-Control: no-cache` bleibt (der Browser MUSS nach jedem
+    Deploy nachfragen), aber die Antwort auf die Nachfrage ist jetzt 304 statt
+    Vollversand. BEWEIS live gemessen: `/app` 261.113 Byte -> 0 Byte, Favicon
+    7.405 -> 0. (c) 20s-TTL-Cache auf die teuren Admin-Aggregate (revenue,
+    timeseries, tax); jede erfolgreiche schreibende Anfrage verwirft ihn zentral
+    in der Middleware, damit das Panel nie die Zahlen von VOR der eigenen Aktion
+    zeigt. Zusaetzlich Cache-Header auf Poster/Thumbs (private, 1 Tag) und Video
+    (private, 10 min - kurz, weil ein Kauf das Wasserzeichen entfernt und
+    dieselbe URL danach eine andere Datei liefert). NICHT gecacht: alles mit Geld
+    oder Kontostand; per AST im Selftest festgenagelt.
+  - **(3) Async - das war ein echter Fehler, kein Tuning.** Mehrere `async def`-
+    Endpunkte riefen blockierende Funktionen direkt im Event-Loop auf. Dadurch
+    stand der KOMPLETTE Server fuer ALLE Nutzer still, solange einer davon lief:
+    `/api/style/learn` und `/api/reference/learn` (ffmpeg + Vision-KI, leicht
+    eine Minute), `/api/reference/transcribe` (ffprobe + ffmpeg + Whisper),
+    `/api/checkout` (Stripe-HTTPS) und der Stripe-Webhook (Invoice-Abruf +
+    Mailversand). Alle in `asyncio.to_thread` verlagert - dasselbe Muster, das
+    v98 schon fuer ffprobe im Upload nutzte. Der Selftest prueft das per AST:
+    kein blockierender Aufruf mehr ohne await in einem async-Endpunkt.
+    EHRLICH: die sync `def`-Endpunkte bleiben sync. FastAPI faehrt sie im
+    Threadpool, das ist mit SQLite korrekt; sie pauschal auf `async def`
+    umzuschreiben wuerde die Blockade erst erzeugen.
+  - **(4) Neuer Admin-Tab "Recht & Steuern".** Ismets Frage war, wo die
+    gesetzlich vorgeschriebenen Daten einsehbar sind - bisher lagen sie
+    verstreut, die §19-Grenze nirgends. Neu an einer Stelle, gerechnet aus den
+    echten Buchungen: Steuer-Identitaet (Kleinunternehmer §19, USt-IdNr
+    DE463613884, "USt niemals ausweisen"), §19-Schwellen-Ampel (Vorjahr 25.000 /
+    laufend 100.000, Warnung ab 80 %), Umsatz je Kalenderjahr und Monat inkl.
+    Balkengraf, alle Kauf-Belege, Aufbewahrungsfristen (§147 AO 10 Jahre, Archiv,
+    Video-Frist, Credit-Frist), Verarbeitungsverzeichnis nach Art. 30 DSGVO und
+    Links auf Impressum/Datenschutz/AGB. Klar als Uebersicht deklariert, nicht
+    als Steuerberatung; die Zahlen stammen aus `purchases` - weicht Stripe ab,
+    gilt Stripe.
+  - Tests: 823 logic + 7/1/5/2 Renders + GUI-Smoke gruen. EHRLICH: Linux/CPU,
+    synthetisches Material, ohne OpenAI-Key. Die Index- und Cache-Wirkung ist
+    hier gemessen; die Async-Wirkung ist strukturell bewiesen (kein blockierender
+    Aufruf mehr im Loop), unter echter Last auf douchko.eu aber noch nicht
+    beobachtet.
 - **v141 Stil-Referenzen ehrlich + zwei Platzierungs-Fehler behoben.** Alle drei
   Punkte kamen aus Ismets Screenshots, alle drei waren echte Fehler im Code.
   - **(1) Referenz-Leck (der schwerste).** `_run_render` setzte `DVE_REFS_FILE`
