@@ -5059,12 +5059,14 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     #     Startwert. 0.120 em ergibt bei cap/em 0.707 eine Versalhoehe von
     #     0.085 H = Oberkante des Referenzbands, lange Woerter landen nach
     #     dem Schrumpfen bei rund 0.066 H.
-    # sz_n bleibt: unsere x-Hoehe liegt mit 0.0273 H mitten im gemessenen
-    # Referenzband 0.0215-0.0313 H. Hier waere eine Aenderung eine
-    # Verschlechterung gewesen.
+    # (c) v143b: der ganze Block eine Stufe kleiner (Ismets Befund am echten
+    #     Streifen). sz_n MUSS mitgehen - schrumpft nur das Schluesselwort,
+    #     flacht die Hierarchie wieder auf das ab, was v143 gerade behoben
+    #     hat. Beide um denselben Faktor: x-Hoehe 0.030 H bleibt im
+    #     Referenzband 0.023-0.033, Verhaeltnis bleibt bei 2.2.
     pf = 1.35 if not portrait else 1.0
-    sz_n = int(H * 0.050 * pf)
-    sz_k = int(H * 0.115 * pf)
+    sz_n = int(H * 0.045 * pf)
+    sz_k = int(H * 0.098 * pf)
     sz_a = int(H * 0.056 * pf)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
@@ -5862,7 +5864,22 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 ux = max(0.0, min(x + bw, c) - max(x, a))
                 uy = max(0.0, min(y + bh, d) - max(y, b))
                 if ux > 0 and uy > 0:
-                    k += 8.0 * (ux * uy) / max(bw * bh, 1.0)
+                    # v143b: Grundstrafe fuer JEDE Beruehrung. Die reine
+                    # Flaechen-Normierung machte einen schmalen Anschnitt fast
+                    # gratis (gemessen 0.0125 Kosten bei 13 px Ueberlappung) -
+                    # der Block blieb dadurch am Gesicht kleben, statt
+                    # auszuweichen.
+                    k += 2.5 + 8.0 * (ux * uy) / max(bw * bh, 1.0)
+                elif uy > 0:
+                    # v143b: ATEMLUFT. Nicht-Ueberlappen reicht nicht - ein
+                    # Cutter laesst Abstand. Ohne diesen Term blieb ein klein
+                    # gesetzter Block an derselben Stelle stehen, egal ob die
+                    # Person links oder rechts stand: er passte ja beide Male
+                    # knapp vorbei. Kosten fallen linear ueber 0.06 W ab.
+                    _luft = min(abs(x - c), abs(a - (x + bw)))
+                    _soll = W * 0.06
+                    if _luft < _soll:
+                        k += 1.2 * (1.0 - _luft / _soll)
             if karte is not None and gy and gx:
                 i0 = int(max(0, min(gy - 1, y / H * gy)))
                 i1 = int(max(i0 + 1, min(gy, (y + bh) / H * gy)))

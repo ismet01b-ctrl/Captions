@@ -3,6 +3,24 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v143b Schrift eine Stufe kleiner + Ausweich-Kosten korrigiert.** Ismets
+  Befund am Frame-Streifen: das Schluesselwort war zu gross. Es sass mit
+  Versalhoehe 0.081 H an der OBERKANTE des gemessenen Referenzbands
+  (0.051-0.085). Jetzt `sz_k` 0.115 -> 0.098 em = 0.069 H, also die Mitte.
+  WICHTIG: `sz_n` musste im selben Verhaeltnis mit (0.050 -> 0.045). Schrumpft
+  nur das Schluesselwort, faellt die Hierarchie von 2.4 auf 1.93 zurueck - also
+  fast auf den Zustand, den v143 gerade behoben hatte. Jetzt 2.18-2.48
+  (Referenz 2.2-2.6), x-Hoehe 0.030 H bleibt im Band 0.023-0.033.
+  ZWEITER, VERSTECKTER FEHLER, der dadurch erst sichtbar wurde: der kleinere
+  Block wich der Person nicht mehr aus - er passte knapp an beiden Positionen
+  vorbei. Ursache: die Ueberlappungs-Kosten in `spot()` waren auf die
+  BLOCKFLAECHE normiert, ein 13-px-Anschnitt kostete dadurch gemessen 0.0125,
+  praktisch nichts. Neu: Grundstrafe 2.5 fuer JEDE Beruehrung plus ein
+  Atemluft-Term, der schon ab 0.06 W Naehe ansteigt. BEWEIS 16:9: Person links
+  (Box 0.155-0.345) -> Block 0.464-0.782; Person rechts (0.655-0.845) -> Block
+  0.211-0.529; Person mittig (0.405-0.595) -> Block 0.098-0.416.
+  Tests 842 logic + 7/1/5/2 Renders gruen, 0 Randverletzungen im echten Render
+  (links 0.093, rechts 0.915 W).
 - **v143 Referenz-Niveau: Schriftgewicht, Hierarchie, Platzierungs-Regie, Schnitt-Ton.**
   Grundlage war Ismets Referenzvideo (@migs.visuals, 5.5 s, 9:16), forensisch
   vermessen (Typografie, Animation, Ton) und gegen unsere Engine gestellt.
