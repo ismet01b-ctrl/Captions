@@ -4775,11 +4775,8 @@ def _scenario_betrieb(tmp):
           SV._will_uhd({'output': {'height': 2160}}, _hd157) is False)
     # Und dann darf die Engine auch nicht auf 2160 weiterrechnen.
     _srv157 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
-    # Gemeint sind die beiden ABBUCH-Pfade (Upload und render_start). Die
-    # Zahl war exakt gepinnt und schlug fehl, sobald eine dritte Stelle
-    # dazukam, die dasselbe zu Recht tut (v163 Teaser rendert nie in 4K).
     check('v157: abgelehntes 4K wird auch aus der Hoehe zurueckgesetzt',
-          _srv157.count("overrides['output']['height'] = 1080") >= 2)
+          _srv157.count("overrides['output']['height'] = 1080") == 2)
     _ui157 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     check('v157: 4K steht als dritte Stufe neben 720p und 1080p',
           '720p:720,1080p:1080,4K &middot; 2&times; credits:2160' in _ui157
@@ -5111,64 +5108,6 @@ def _scenario_betrieb(tmp):
           "if not lock or p.get('_ank0'):" in _rsrc161)
     check('v161: auf B-Roll gibt es keinen Objekt-Anker',
           "and not broll:" in _rsrc161 and "p['_ank0'] = (" in _rsrc161)
-
-    # ======= v163: GRATIS-TEASER - erst sehen, dann zahlen ================
-    # Der teuerste Fehler waere, dass die "Gratis"-Vorschau doch Credits
-    # kostet oder bei einem Fehlschlag welche verschenkt. Beides ist im
-    # Erfolgs- UND im Fehlerpfad gesperrt; genau das wird hier geprueft.
-    _srv163 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
-    check('v163: der Teaser hat einen eigenen Endpoint',
-          "@app.post('/api/teaser/{jid}')" in _srv163)
-    check('v163: der Teaser rendert nur die ersten Sekunden, mit Wasserzeichen',
-          "_extra = ['--watermark', '--duration', str(TEASER_SECONDS)]" in _srv163)
-    check('v163: der Erfolgspfad bucht einen Teaser NICHT ab',
-          "if uid and j.get('no_charge'):" in _srv163
-          and "            uid = None" in _srv163)
-    check('v163: ein fehlgeschlagener Teaser erstattet NICHTS',
-          "if j.get('no_charge'):\n        return" in _srv163)
-    check('v163: der Teaser hat einen eigenen Stundendeckel',
-          'def _teaser_quota_ok' in _srv163
-          and 'TEASER_MAX_PRO_H' in _srv163)
-    check('v163: Teaser landen nicht in der Bibliothek',
-          "if j.get('teaser'):\n            continue" in _srv163)
-    check('v163: der Teaser rendert nie in 4K',
-          _srv163.count("overrides['output'].pop('quality', None)") >= 3)
-    check('v163: der Client erfaehrt die Teaser-Laenge vom Server',
-          "'teaser_seconds': TEASER_SECONDS," in _srv163)
-
-    # Der Stundendeckel muss WIRKLICH zaehlen, nicht nur existieren.
-    SV._TEASER_LOG.clear()
-    _uid163 = 987654
-    _erlaubt = 0
-    for _ in range(SV.TEASER_MAX_PRO_H + 2):
-        if SV._teaser_quota_ok(_uid163):
-            _erlaubt += 1
-            SV._TEASER_LOG.setdefault(_uid163, []).append(_t.time())
-    check('v163: der Stundendeckel greift nach genau N Vorschauen',
-          _erlaubt == SV.TEASER_MAX_PRO_H,
-          f"{_erlaubt} erlaubt, Deckel {SV.TEASER_MAX_PRO_H}")
-    # Alte Eintraege duerfen nicht ewig blockieren.
-    SV._TEASER_LOG[_uid163] = [_t.time() - 4000] * (SV.TEASER_MAX_PRO_H + 3)
-    check('v163: aelter als eine Stunde blockiert nicht mehr',
-          SV._teaser_quota_ok(_uid163))
-    check('v163: ohne Konto gibt es keinen Gratis-Teaser',
-          not SV._teaser_quota_ok(None))
-    SV._TEASER_LOG.clear()
-
-    # _job_cost ist die Falle: cost_sec 0 faellt auf die Videodauer zurueck.
-    # Der Teaser darf sich darauf NICHT verlassen, sondern haengt an
-    # no_charge - dieser Test haelt die Falle sichtbar.
-    check('v163: _job_cost allein wuerde einen Teaser falsch bepreisen',
-          SV._job_cost({'cost_sec': 0, 'dauer': 90}) > 0,
-          'genau darum sperrt no_charge, nicht cost_sec')
-
-    _ui163 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
-    check('v163: der Knopf steht in der UI und nennt 0 Credits',
-          'id="btnTeaser"' in _ui163 and '0 credits' in _ui163)
-    check('v163: die Vorschau wird im Ergebnis ehrlich als Vorschau benannt',
-          'teaserResultNote' in _ui163 and 'No credits were used' in _ui163)
-    check('v163: der Teaser ueberschreibt den Upload-Job nicht',
-          "jobStarted(d.job, 'teaser')" in _ui163)
 
     # ======= v162: ZWEI-SPRECHER-REGIE - der Text folgt dem Redner ========
     _cfg162 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),

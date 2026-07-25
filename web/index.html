@@ -2226,12 +2226,6 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </svg>
       </button>
 
-      <!-- v163 Gratis-Teaser: erst sehen, dann zahlen. -->
-      <button class="btn secondary wide" id="btnTeaser" style="margin-top:10px;">
-        Free preview<span id="teaserSecs"></span> &middot; 0 credits
-      </button>
-      <div id="teaserNote" class="hint" style="display:none; margin-top:6px;"></div>
-
       <div class="wiz-nav">
         <button class="btn secondary" data-back="4">Back</button>
         <div class="grow"></div>
@@ -2272,7 +2266,6 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
       <!-- Success -->
       <div class="hidden" id="doneCard" style="margin-top:20px;">
-        <div id="teaserResultNote" class="hint" style="display:none; margin-bottom:10px;"></div>
         <div class="success-hero">
           <div class="ic-big">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -4493,67 +4486,7 @@ function setFile(f) {
 }
 
 /* --------- Analyze / Render --------- */
-$('#btnRender').addEventListener('click', () => { State.teaser = false; startUpload('full'); });
-// v163: Laenge der Gratis-Vorschau vom Server holen. Sie steht in einer
-// Env-Variable - fest eingetippt waere die Beschriftung irgendwann falsch.
-(async () => {
-  try {
-    const d = await (await fetch('/api/pricing')).json();
-    const el = $('#teaserSecs');
-    if (el && d && d.teaser_seconds) el.textContent = ' (' + d.teaser_seconds + 's)';
-  } catch (e) {}
-})();
-// v163 GRATIS-TEASER. Der haeufigste Frust am Markt ist rendern,
-// enttaeuscht sein, nochmal zahlen. Der Teaser zeigt die ersten Sekunden mit
-// denselben Einstellungen und kostet KEINE Credits.
-$('#btnTeaser').addEventListener('click', async () => {
-  const btn = $('#btnTeaser');
-  const note = $('#teaserNote');
-  // Der Teaser braucht das Video AUF DEM SERVER. Ohne Pre-Upload gibt es
-  // nichts zu rendern - dann sagen wir das, statt still nichts zu tun.
-  try { await State.preUpload; } catch (e) {}
-  if (!State.preJid) {
-    note.textContent = 'Your upload is still in progress - please try again in a moment.';
-    note.style.display = 'block';
-    return;
-  }
-  btn.disabled = true;
-  note.style.display = 'none';
-  try {
-    const fd = new FormData();
-    fd.append('look', State.look);
-    fd.append('code', State.code);
-    fd.append('cfg_overrides', JSON.stringify(diffCfg(State.cfgBase, State.cfg)));
-    const r = await fetch('/api/teaser/' + State.preJid, { method: 'POST', body: fd });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      note.textContent = d.detail || 'Preview could not be started.';
-      note.style.display = 'block';
-      btn.disabled = false;
-      return;
-    }
-    if (typeof d.left === 'number') {
-      note.textContent = d.left + ' free preview' + (d.left === 1 ? '' : 's')
-                       + ' left this hour.';
-      note.style.display = 'block';
-    }
-    // Der Teaser ist ein EIGENER Job. Er laeuft durch dieselbe
-    // Fortschritts-Anzeige, laesst den Upload-Job aber unberuehrt - sonst
-    // waere dessen Status ueberschrieben und der Vollrender danach kaputt.
-    State.teaser = true;
-    $('#progressCard').classList.remove('hidden');
-    $('#doneCard').classList.add('hidden');
-    $('#errCard').classList.add('hidden');
-    State.renderStart = Date.now();
-    const ph = $('#progressPhase');
-    if (ph) ph.textContent = 'Starting preview …';
-    jobStarted(d.job, 'teaser');
-  } catch (e) {
-    note.textContent = 'Network error - please try again.';
-    note.style.display = 'block';
-    btn.disabled = false;
-  }
-});
+$('#btnRender').addEventListener('click', () => startUpload('full'));
 $('#btnEditMoments').addEventListener('click', openMomentsEditor);
 if ($('#wmUpsellBtn')) $('#wmUpsellBtn').addEventListener('click', showPricing);
 if ($('#demoCta')) $('#demoCta').addEventListener('click', () => {
@@ -4974,19 +4907,6 @@ function aBtn(disabled) {
 
 function renderSuccess() {
   $('#doneCard').classList.remove('hidden');
-  // v163: eine Gratis-Vorschau ist KEIN fertiges Video. Sie traegt ein
-  // Wasserzeichen und endet nach wenigen Sekunden - das muss dranstehen,
-  // sonst haelt der Kunde sie fuer das Ergebnis und ist zu Recht sauer.
-  const tn = $('#teaserResultNote');
-  if (tn) {
-    tn.style.display = State.teaser ? 'block' : 'none';
-    if (State.teaser) {
-      tn.textContent = 'This is your free preview: the first seconds, with a '
-        + 'watermark. No credits were used. Happy with it? Build the full video.';
-    }
-  }
-  const tb = $('#btnTeaser');
-  if (tb) tb.disabled = false;
   const rv = $('#resultVid');
   rv.poster = '/api/poster/' + State.jid;   // v101o: Standbild sofort, Video on demand
   rv.src = '/api/video/' + State.jid;

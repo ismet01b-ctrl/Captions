@@ -3,41 +3,13 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
-- **v163 GRATIS-TEASER: erst sehen, dann zahlen.** Ein Knopf neben dem
-  Render startet die ersten Sekunden mit denselben Einstellungen, mit
-  Wasserzeichen, fuer NULL Credits. Der haeufigste Frust am Markt ist
-  rendern, enttaeuscht sein, nochmal zahlen - das faellt damit weg.
-  EIGENER JOB, nicht derselbe. Wuerde der Teaser den Upload-Job umschreiben,
-  klobberte er dessen Kosten-, Status- und Ausgabe-Felder und der spaetere
-  Vollrender liefe auf einem halb ueberschriebenen Zustand. Die Quelldatei
-  ist dieselbe, also waermt der Teaser nebenbei die Transkript- und
-  Regie-Caches: der volle Render danach ist schneller.
-  ZWEI GELD-FALLEN, BEIDE GESCHLOSSEN. `_job_cost` faellt bei `cost_sec` 0
-  auf die VIDEODAUER zurueck. Damit haette (a) der Erfolgspfad dem Konto
-  einen vollen Credit abgezogen, obwohl "gratis" draufsteht, und (b) ein
-  fehlgeschlagener Teaser dem Konto einen Credit GUTGESCHRIEBEN, der nie
-  geflossen ist - eine Geldquelle per Fehlschlag. Beide Pfade haengen jetzt
-  an einem eigenen Flag `no_charge`, nicht an `cost_sec`. Der Selftest haelt
-  die Falle sichtbar: er prueft ausdruecklich, dass `_job_cost` allein den
-  Teaser FALSCH bepreisen wuerde.
-  DECKEL: drei Vorschauen je Konto und Stunde (`DVE_TEASER_MAX_H`), dazu der
-  vorhandene Inflight-Deckel. Ohne Deckel waere der Teaser eine kostenlose
-  Render-Farm. Nur mit Konto - anonym gibt es ihn nicht.
-  IMMER WASSERZEICHEN, auch fuer Kaeufer, und nie `--watermark-split`: hier
-  gibt es nichts freizuschalten, sonst waere der Teaser ein fertiges
-  Kurzvideo zum Nulltarif. Nie 4K - er soll zeigen, wie die Captions sitzen,
-  nicht Rechenzeit verbrennen.
-  Teaser landen NICHT in der Bibliothek: eine 10-Sekunden-Vorschau mit
-  Wasserzeichen neben den echten Videos waere nur Verwechslungsgefahr.
-  In der Ergebnis-Karte steht ausdruecklich, dass es die Vorschau ist und
-  keine Credits verbraucht wurden.
-  Die Knopf-Beschriftung holt die Laenge vom Server (`/api/pricing`) - eine
-  fest eingetippte "10s" waere gelogen, sobald `DVE_TEASER_SEC` anders steht.
-  TESTKORREKTUR: der v157-Test zaehlte die 4K-Ruecksetzung exakt zweimal und
-  schlug fehl, sobald eine dritte, voellig berechtigte Stelle dazukam.
-  Gemeint waren die beiden ABBUCH-Pfade; die Pruefung sagt das jetzt.
-  NICHT LIVE GEPRUEFT: der Teaser-Render selbst lief hier nicht gegen einen
-  echten Job (Selftest prueft Endpoint, Kosten-Sperren, Deckel und UI).
+- **v164 Gratis-Teaser wieder ENTFERNT** (Ismets Entscheidung: die Vorschau
+  kostet ihn API + Rechenzeit, auch wenn beim Kunden 0 Credits stehen).
+  Sauberer Revert des v163-Commits: Endpoint `/api/teaser/{jid}`, Teaser-Modus
+  im Worker, no_charge-Sperren, Stundendeckel, UI-Knopf und die v163-Tests
+  sind komplett raus. Die v157-Testkorrektur (Zaehlung >= 2 statt == 2) ist
+  mit zurueckgedreht und stimmt wieder woertlich, weil die dritte Stelle weg
+  ist. Stand: 1020/1020 Tests.
 - **v162 ZWEI-SPRECHER-REGIE: der Text folgt dem, der gerade redet.** Sind
   mehrere Personen im Bild, springt die Caption auf die Seite des aktiven
   Sprechers. In einem Interview sah man dem Bild bisher nie an, wem der Satz
