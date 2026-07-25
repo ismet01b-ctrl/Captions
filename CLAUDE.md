@@ -373,8 +373,21 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - OFFEN (Ismet): Stripe Live-Modus scharfstellen, Demo-Video in den Hero,
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
+### Gratis-Teaser (v163) — "erst sehen, dann zahlen"
+`/api/teaser/{jid}` startet die ersten `TEASER_SECONDS` mit Wasserzeichen für
+0 Credits.
+- **Eigener Job**, nicht der Upload-Job. Sonst werden dessen Kosten-, Status-
+  und Ausgabe-Felder überschrieben und der Vollrender läuft auf Trümmern.
+- **`no_charge`, nicht `cost_sec: 0`.** `_job_cost` fällt bei 0 auf die
+  Videodauer zurück — damit hätte der Erfolgspfad abgebucht und der
+  Fehlerpfad Credits verschenkt. Wer hier etwas anfasst: beide Pfade prüfen.
+- Immer Wasserzeichen (auch für Käufer), nie `--watermark-split`, nie 4K.
+- Stundendeckel `TEASER_MAX_PRO_H`, nur mit Konto. Ohne Deckel ist es eine
+  kostenlose Render-Farm.
+- Teaser gehören nicht in die Bibliothek.
+
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1020/1020 grün (Stand v162)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1035/1035 grün (Stand v163)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

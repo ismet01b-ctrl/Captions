@@ -1569,6 +1569,12 @@ def _maybe_refund(jid):
     uid = j.get('user_id')
     if not uid:
         return
+    # v163: ein Gratis-Teaser hat NICHTS reserviert. Ohne diese Sperre wuerde
+    # ein fehlgeschlagener Teaser dem Konto Credits GUTSCHREIBEN, die es nie
+    # bezahlt hat - _job_cost faellt bei cost_sec 0 auf die Videodauer
+    # zurueck. Das waere eine Geldquelle per Fehlschlag.
+    if j.get('no_charge'):
+        return
     if os.path.exists(os.path.join(job_dir(jid), 'fertig.mp4')):
         return
     # Motion-Jobs tragen ihre Kosten explizit (MOV kostet mehr als die Dauer
@@ -1709,7 +1715,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v162-sprecher'
+DVE_BUILD = 'v163-teaser'
 
 
 @app.middleware('http')
@@ -1742,6 +1748,11 @@ def api_pricing():
             'trial_sec': TRIAL_SECONDS,
             'trial_credits': credits_of(TRIAL_SECONDS),
             'credit_minutes': 1,
+            # v163: Laenge und Stundendeckel der Gratis-Vorschau. Der Client
+            # beschriftet den Knopf damit - eine fest eingetippte "10s" waere
+            # gelogen, sobald DVE_TEASER_SEC anders steht.
+            'teaser_seconds': TEASER_SECONDS,
+            'teaser_per_hour': TEASER_MAX_PRO_H,
             'stripe_ready': _stripe() is not None}
 
 
@@ -2081,6 +2092,23 @@ def q_put(jid, q=None):
 # Caption-Jobs pro Konto - zielt nur auf Flooding, normale Nutzung (1-2 offen)
 # bleibt unberuehrt.
 CAPTION_INFLIGHT_CAP = int(os.environ.get('DVE_INFLIGHT_CAP', '3'))
+# v163 GRATIS-TEASER: die ersten Sekunden mit Captions, bevor Credits fliessen.
+# Der Grund Nummer eins fuer Frust ist rendern, enttaeuscht sein, nochmal
+# zahlen. Der Teaser kostet NICHTS - deshalb braucht er einen eigenen Deckel,
+# sonst ist er eine kostenlose Render-Farm.
+TEASER_SECONDS = int(os.environ.get('DVE_TEASER_SEC', '10'))
+TEASER_MAX_PRO_H = int(os.environ.get('DVE_TEASER_MAX_H', '3'))
+_TEASER_LOG = {}          # uid -> [Zeitstempel]
+
+
+def _teaser_quota_ok(uid):
+    """Hat das Konto noch einen Gratis-Teaser diese Stunde?"""
+    if not uid:
+        return False
+    jetzt = time.time()
+    hist = [t for t in _TEASER_LOG.get(uid, []) if jetzt - t < 3600]
+    _TEASER_LOG[uid] = hist
+    return len(hist) < TEASER_MAX_PRO_H
 
 
 def _inflight_count(uid):
@@ -3327,7 +3355,12 @@ def run_job(jid):
 
     _extra = []
     _uid = j.get('user_id')
-    if mode == 'demo':
+    if mode == 'teaser':
+        # v163: Gratis-Vorschau. IMMER mit Wasserzeichen, egal ob das Konto
+        # gekauft hat - sonst waere der Teaser ein fertiges Kurzvideo zum
+        # Nulltarif. Kein watermark-split: hier gibt es nichts freizuschalten.
+        _extra = ['--watermark', '--duration', str(TEASER_SECONDS)]
+    elif mode == 'demo':
         # v89: anonyme Kostprobe - immer Wasserzeichen, nur die ersten 10s.
         _extra = ['--watermark', '--duration', '10']
     elif _uid and not _has_purchased(_uid):
@@ -3361,6 +3394,12 @@ def run_job(jid):
         # v80s: nur EINMAL pro Job - Re-Render nach Momente-Edit ist inklusive
         # (Konkurrenz-Standard, sonst zahlt man jede Korrektur doppelt).
         uid = j.get('user_id')
+        # v163: der Gratis-Teaser wird NICHT abgebucht. Ohne diese Sperre
+        # haette der Erfolgspfad hier zugegriffen - cost_sec ist 0, aber
+        # _job_cost faellt dann auf die Videodauer zurueck und haette einen
+        # vollen Credit gezogen. Genau das Gegenteil von "gratis".
+        if uid and j.get('no_charge'):
+            uid = None
         if uid and not _render_charged(uid, jid):
             verbrauch = _job_cost(j)
             # v135a: race-sicher reservieren (WHERE balance >= need) statt
@@ -5206,6 +5245,74 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
     return {'job': jid, 'position': QUEUE.qsize()}
 
 
+@app.post('/api/teaser/{jid}')
+async def teaser_start(jid: str, request: Request, look: str = Form('creator'),
+                       code: str = Form(''), cfg_overrides: str = Form('{}')):
+    """v163 GRATIS-TEASER: die ersten Sekunden mit Captions, BEVOR Credits
+    fliessen. Der haeufigste Frust am Markt ist rendern, enttaeuscht sein,
+    nochmal zahlen - das faellt damit weg.
+
+    Der Teaser bekommt einen EIGENEN Job. Wuerde er den Upload-Job
+    umschreiben, klobberte er dessen Kosten-, Status- und Ausgabe-Felder und
+    der spaetere Vollrender liefe auf einem halb ueberschriebenen Zustand.
+    Die Quelldatei ist dieselbe, also waermt der Teaser nebenbei die
+    Transkript- und Regie-Caches - der volle Render danach ist schneller."""
+    ok, msg = check_auth(code, request)
+    if not ok:
+        raise HTTPException(403, msg)
+    j = JOBS.get(jid)
+    if not j or not os.path.exists(j.get('input', '')):
+        raise HTTPException(404, 'Upload expired - please upload again.')
+    u = _current_user(request)
+    uid = u['id'] if u else None
+    if j.get('user_id') != uid:
+        raise HTTPException(403, 'Not your upload.')
+    if not uid:
+        raise HTTPException(403, 'Please sign in to use the free preview.')
+    if not _teaser_quota_ok(uid):
+        raise HTTPException(
+            429, f'Free preview limit reached ({TEASER_MAX_PRO_H} per hour). '
+                 f'Please try again later or start the full render.')
+    _enqueue_guard(uid)
+    try:
+        overrides = json.loads(cfg_overrides) if cfg_overrides else {}
+    except Exception:
+        overrides = {}
+    overrides = _sanitize_overrides(overrides)
+    # Der Teaser rendert NIE in 4K. Er soll zeigen, wie die Captions sitzen,
+    # nicht Rechenzeit verbrennen - und bezahlt ist er ohnehin nicht.
+    if isinstance(overrides.get('output'), dict):
+        overrides['output'].pop('quality', None)
+        try:
+            if int(overrides['output'].get('height') or 0) > 1080:
+                overrides['output']['height'] = 1080
+        except Exception:
+            overrides['output'].pop('height', None)
+    tjid = uuid.uuid4().hex[:12]
+    os.makedirs(job_dir(tjid), exist_ok=True)
+    JOBS[tjid] = {'id': tjid, 'input': j['input'],
+                  'look': look if look in LOOKS else j.get('look', 'creator'),
+                  'code': (code or '').strip(), 'user_id': uid,
+                  'vhash': j.get('vhash'), 'mode': 'teaser',
+                  'cfg_overrides': overrides, 'status': 'wartet',
+                  'progress': 0.0, 'phase': 'Queued …',
+                  'dauer': min(float(j.get('dauer') or 0), TEASER_SECONDS),
+                  'uhd': False,
+                  # NICHT bezahlt. no_charge sperrt zusaetzlich die
+                  # Erstattung: _job_cost faellt bei cost_sec 0 sonst auf die
+                  # Videodauer zurueck und ein fehlgeschlagener Teaser wuerde
+                  # Credits GUTSCHREIBEN, die nie geflossen sind.
+                  'cost_sec': 0, 'no_charge': True, 'teaser': True,
+                  'parent': jid, 'name': j.get('name')}
+    set_state(tjid, **{k: v for k, v in JOBS[tjid].items()
+                       if k not in ('input', 'code')})
+    _TEASER_LOG.setdefault(uid, []).append(time.time())
+    q_put(tjid)
+    return {'job': tjid, 'seconds': TEASER_SECONDS,
+            'position': QUEUE.qsize(),
+            'left': max(0, TEASER_MAX_PRO_H - len(_TEASER_LOG.get(uid, [])))}
+
+
 @app.get('/api/status/{jid}')
 def status(jid: str, request: Request):
     if not _job_owner_ok(jid, request):
@@ -5310,6 +5417,11 @@ def api_library(request: Request):
         if j.get('user_id') != u['id']:
             continue
         if j.get('status') != 'fertig':
+            continue
+        # v163: Gratis-Teaser gehoeren NICHT in die Bibliothek. Sie sind
+        # 10-Sekunden-Vorschauen mit Wasserzeichen, kein Ergebnis - in der
+        # Liste waeren sie nur Verwechslungsgefahr mit dem echten Video.
+        if j.get('teaser'):
             continue
         d = job_dir(jid)
         mp4 = os.path.join(d, 'fertig.mp4')
