@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v155 Buendigkeit ist NICHT die Bildseite.** Ismet: "es ist immer noch
+  alles auf der linken Seite im Video" - obwohl v153 die Variation gebaut
+  hatte und sie im Testrender messbar lief (Blockmitten 0.33 bis 0.81 W).
+  Ursache: in SEINEM Konto liegt eine gelernte Referenz, die 'ausrichtung:
+  links' misst. v153 hat daraus BEIDES gemacht:
+    BUENDIGKEIT - stehen die Zeilen linksbuendig zueinander? Das misst die
+      Referenz, und das gehoert zum Stil.
+    BILDSEITE   - sitzt der Block links oder rechts im Frame? Das soll
+      variieren.
+  Zwei verschiedene Dinge, ein Schalter. Getrennt: `caption_align` ist die
+  Buendigkeit (aus der Messung), `caption_seite` die Bildseite (nur aus
+  ausdruecklicher Nutzerwahl, sonst 'auto').
+  ZWEITER FEHLER an derselben Stelle: der Seiten-Tiebreaker prueft auf
+  `_motiv <= 0`, aber `_motiv` enthielt die Zwischensumme INKLUSIVE
+  Unruhe-Karte - die liefert an jeder Stelle einen Beitrag, die Bedingung war
+  also praktisch nie erfuellt. `_motiv` zaehlt jetzt nur noch
+  Gesichts-Beruehrungen.
+  EHRLICH: mit linksbuendiger Referenz bleibt die Streuung kleiner (gemessen
+  0.27 bis 0.53 W) als ohne (0.33 bis 0.81 W) - ein linksbuendiger Block
+  kann nicht so weit nach rechts wandern wie ein rechtsbuendiger.
 - **v154 Schriftgroesse + Keyword-Variation** (Ismets dritter Befund:
   "Schriften zu gross. Keywords immer gleiche Animation und Optik.")
   - **DER FLIESSTEXT HING AM SCHLUESSELWORT.** `caption_scale` skalierte nur

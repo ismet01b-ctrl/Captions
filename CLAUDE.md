@@ -137,6 +137,15 @@ die Bildbreite und ist unsichtbar.
 Jeder Keyword-Moment bekommt eine Animation; `anim_for()` liefert bei
 normalen Woertern None, deshalb rotiert ein **bedeutungsneutraler Fallback**.
 
+### Buendigkeit vs. Bildseite (v155)
+**`caption_align` = Buendigkeit der Zeilen** (kommt aus der Referenz-Messung).
+**`caption_seite` = wo im Bild der Block sitzt** (nur ausdrueckliche
+Nutzerwahl, sonst 'auto'). Beides in einen Schalter zu legen war der Grund,
+warum eine gelernte Referenz mit 'links' jede Caption an die linke Kante
+nagelte.
+Der Seiten-Tiebreaker prueft `_motiv`, und `_motiv` zaehlt **nur
+Gesichts-Beruehrungen** — mit der Unruhe-Karte darin war er nie erfuellt.
+
 ### Seite + Streuung (v153)
 `_mix01` ist der **32-Bit-Finalizer**, nicht eine einzelne Multiplikation mit
 `& 1023` — die lief fuer kleine Vielfache als lineare Rampe, jeder

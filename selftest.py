@@ -2645,7 +2645,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v154-groesse'" in _srv_m)
+          and "DVE_BUILD = 'v155-seite'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4745,6 +4745,59 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ============ v155: Buendigkeit ist NICHT die Bildseite =================
+    import yaml as _y155
+    import render as R
+    import io as _io155, contextlib as _cl155
+    _r155 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+
+    def _mitten(align='auto', seite='auto'):
+        _c = _y155.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                  encoding='utf-8'))
+        _c['look'] = 'creator'
+        _c['effects']['caption_align'] = align
+        _c['effects']['caption_seite'] = seite
+        _S = R.Sprites(_c, 1080, 1920)
+        _t = ('du hast das schon oft gehoert aber was wirklich dahinter steckt. '
+              'genau das zeige ich dir jetzt hier und heute abend.').split()
+        _w = [{'word': x, 'start': round(i * 0.36, 2),
+               'end': round(i * 0.36 + 0.28, 2)} for i, x in enumerate(_t)]
+        with _cl155.redirect_stdout(_io155.StringIO()):
+            _pl = R.build_plans(_w, set(), _c, _S, 1080, 1920,
+                                lambda a, b: True, {})
+        return [sum(i['cx'] for i in p['front']) / len(p['front']) / 1080.0
+                for p in _pl if p.get('tpl') == 'flow' and p.get('front')]
+    # Der Kern des Befunds: eine gelernte Referenz misst die BUENDIGKEIT des
+    # Satzes ('linksbuendig'). Bis v154 nagelte das zusaetzlich die BILDSEITE
+    # fest - bei Ismet sass deshalb weiterhin jede Caption links, obwohl die
+    # Variation im Code lief.
+    _mb = _mitten(align='links', seite='auto')
+    check('v155: linksbuendiger Satz klebt trotzdem nicht an der linken Kante',
+          max(_mb) - min(_mb) > 0.18 and max(_mb) > 0.55,
+          'Mitten ' + ', '.join(f'{v:.2f}' for v in _mb))
+    check('v155: nur die ausdrueckliche Nutzerwahl nagelt die Seite fest',
+          sum(_mitten(seite='links')) / len(_mitten(seite='links'))
+          < sum(_mitten(seite='rechts')) / len(_mitten(seite='rechts')) - 0.10)
+    check('v155: Buendigkeit und Bildseite sind getrennte Schluessel',
+          "cfg['effects'].get('caption_seite')" in _r155
+          and "_bnd = _buendig or _seite" in _r155
+          and 'caption_seite' in open(os.path.join(HERE, 'config.yaml'),
+                                      encoding='utf-8').read())
+    # Der Tiebreaker prueft die MOTIV-Kosten, nicht die Gesamtkosten. Mit den
+    # Gesamtkosten war er nie erfuellt, sobald eine Raum-Karte existiert.
+    check('v155: der Seiten-Tiebreaker prueft nur das Motiv',
+          'if wunsch_x is not None and _motiv <= 0.0:' in _r155
+          and '_motiv += 1.0' in _r155
+          and '_motiv = k' not in _r155)
+    _ui155 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v155: der UI-Regler steuert die Bildseite, nicht die Buendigkeit',
+          'data-cfg="effects.caption_seite"' in _ui155)
+    check('v155: beide Schluessel werden serverseitig geprueft',
+          SV._sanitize_overrides({'effects': {'caption_seite': 'rechts'}})
+          == {'effects': {'caption_seite': 'rechts'}}
+          and SV._sanitize_overrides({'effects': {'caption_seite': 'x'}})
+          == {'effects': {}})
+
     # ============ v154: Schriftgroesse + Keyword-Variation ==================
     import yaml as _y154
     import render as R
@@ -4864,10 +4917,11 @@ def _scenario_betrieb(tmp):
           f'links {sum(_li) / len(_li):.2f} W gegen '
           f'rechts {sum(_re) / len(_re):.2f} W')
     # Die Wunschseite darf das Gesichts-Ausweichen NIE ueberstimmen.
-    check('v153: das Motiv schlaegt die Wunschseite (Rangfolge)',
+    # v155: _motiv zaehlt nur noch Gesichts-Beruehrungen. Mit der alten
+    # Zwischensumme (inkl. Unruhe-Karte) war die Bedingung nie erfuellt.
+    check('v153/v155: das Motiv schlaegt die Wunschseite (Rangfolge)',
           'if wunsch_x is not None and _motiv <= 0.0:' in _r153
-          and '_motiv = k                        # alles bis hier ist das MOTIV'
-          in _r153)
+          and '_motiv += 1.0' in _r153 and '_motiv = k' not in _r153)
     check('v153: ein Seitenwechsel durchbricht die Hysterese',
           "spot_state.get('seite') != _seite" in _r153)
     # Schrift eine Stufe kleiner (Ismets Befund am fertigen Video).
@@ -4876,7 +4930,9 @@ def _scenario_betrieb(tmp):
           and 'H * 0.098 * pf' not in _r153 and 'H * 0.088 * pf' not in _r153)
     # Nutzer-Regler
     _ui153 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
-    for _k in ('effects.caption_layout', 'effects.caption_align',
+    # v155: der Seiten-Regler heisst caption_seite; caption_align ist die
+    # Buendigkeit und kommt aus der Messung, nicht aus der UI.
+    for _k in ('effects.caption_layout', 'effects.caption_seite',
                'effects.caption_scale', 'effects.caption_hierarchie',
                'effects.caption_bleed'):
         check(f'v153: Regler {_k} steht in der UI', f'data-cfg="{_k}"' in _ui153)

@@ -1704,7 +1704,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v154-groesse'
+DVE_BUILD = 'v155-seite'
 
 
 @app.middleware('http')
@@ -2288,9 +2288,10 @@ def _sanitize_overrides(ov):
         if 'caption_layout' in e and str(e.get('caption_layout')).lower() \
                 not in ('auto', 'rows', 'collage'):
             e.pop('caption_layout', None)
-        if 'caption_align' in e and str(e.get('caption_align')).lower() \
-                not in ('auto', 'links', 'rechts', 'mitte'):
-            e.pop('caption_align', None)
+        for _ck in ('caption_align', 'caption_seite'):
+            if _ck in e and str(e.get(_ck)).lower() \
+                    not in ('auto', 'links', 'rechts', 'mitte'):
+                e.pop(_ck, None)
         for k, cap in (('blender_samples', 256), ('blender_anim_frames', 24),
                        ('blender_width', 1920)):
             if k in e:

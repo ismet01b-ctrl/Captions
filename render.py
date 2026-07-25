@@ -6925,6 +6925,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     # der Block blieb dadurch am Gesicht kleben, statt
                     # auszuweichen.
                     k += 2.5 + 8.0 * (ux * uy) / max(bw * bh, 1.0)
+                    _motiv += 1.0
                 elif uy > 0:
                     # v143b: ATEMLUFT. Nicht-Ueberlappen reicht nicht - ein
                     # Cutter laesst Abstand. Ohne diesen Term blieb ein klein
@@ -6935,28 +6936,25 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     _soll = W * 0.06
                     if _luft < _soll:
                         k += 1.2 * (1.0 - _luft / _soll)
+                        _motiv += 1.0
             if karte is not None and gy and gx:
                 i0 = int(max(0, min(gy - 1, y / H * gy)))
                 i1 = int(max(i0 + 1, min(gy, (y + bh) / H * gy)))
                 j0 = int(max(0, min(gx - 1, x / W * gx)))
                 j1 = int(max(j0 + 1, min(gx, (x + bw) / W * gx)))
                 k += 1.6 * float(karte[i0:i1, j0:j1].mean())
-            _motiv = k                        # alles bis hier ist das MOTIV
             if wunsch_y is not None:          # Template-Wunschzone, weich
                 k += 1.1 * abs((y + bh / 2.0) - wunsch_y) / max(H, 1)
-            # v153: Wunsch-SEITE. Ohne sie zog die Mitten-Anziehung jeden
-            # Block wieder in dieselbe Zone - die rechtsbuendige Ausrichtung
-            # war im fertigen Bild nicht zu sehen, weil der ganze Block
-            # anschliessend doch wieder links sass.
-            # v153 Wunsch-SEITE, aber nur als TIEBREAKER. Sie darf
-            # ausschliesslich zwischen Stellen entscheiden, die das Motiv
-            # ohnehin freilaesst. Ein blosser Kosten-Term reicht dafuer
-            # NICHT: mit Gewicht 1.3 und selbst mit 0.55 blieb der Block im
-            # Querformat links stehen, egal ob die Person links oder rechts
-            # stand (Selftest v143 gemessen, beide Male x = 0.155 W). Die
-            # Seite ist ein Wunsch, das Gesicht eine Sperre - diese
-            # Rangfolge darf nie kippen, deshalb wird der Wunsch bei jeder
-            # Beruehrung fallengelassen.
+            # Wunsch-SEITE, nur als TIEBREAKER. Sie darf ausschliesslich
+            # zwischen Stellen entscheiden, die das MOTIV ohnehin freilaesst.
+            # Ein blosser Kosten-Term reicht nicht: mit Gewicht 1.3 und selbst
+            # mit 0.55 blieb der Block im Querformat links stehen, egal ob die
+            # Person links oder rechts stand (v153, beide Male x = 0.155 W).
+            # v155: _motiv zaehlt NUR Gesichts-Beruehrungen. Vorher stand
+            # dort die Zwischensumme inklusive Unruhe-Karte - die liefert an
+            # JEDER Stelle einen Beitrag, die Bedingung war also praktisch nie
+            # erfuellt und die Wunschseite lief leer (gemessen streuten die
+            # Blockmitten nur ueber 0.26 W statt 0.48 W).
             if wunsch_x is not None and _motiv <= 0.0:
                 k += 0.55 * abs((x + bw / 2.0) - wunsch_x) / max(W, 1)
             else:
@@ -7730,15 +7728,36 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # klebte an der linken Kante. Die Seite wechselt jetzt
             # deterministisch aus dem ersten Wort-Index; hat der Nutzer (oder
             # eine gemessene Referenz) eine Ausrichtung vorgegeben, gilt die.
-            _al = str(cfg['effects'].get('caption_align') or 'auto').lower()
-            if _al in ('links', 'left'):
+            # v155 ZWEI VERSCHIEDENE DINGE, die v153 in einen Schalter warf:
+            #  BUENDIGKEIT - stehen die Zeilen linksbuendig zueinander? Das
+            #    misst die Referenz ('ausrichtung'), und das gehoert zum Stil.
+            #  BILDSEITE   - sitzt der Block links oder rechts im Frame? Das
+            #    soll variieren, sonst klebt alles an einer Kante.
+            # Bis v154 setzte eine Referenz mit 'links' beides - Ismets
+            # Konto hatte genau so eine gelernt, und deshalb sass bei ihm
+            # weiterhin JEDE Caption links, obwohl die Variation im Code
+            # laengst lief. Die Bildseite hoert jetzt nur noch auf die
+            # ausdrueckliche Nutzerwahl (caption_seite), nie auf die Messung.
+            _bd = str(cfg['effects'].get('caption_align') or 'auto').lower()
+            _buendig = ('links' if _bd in ('links', 'left')
+                        else ('rechts' if _bd in ('rechts', 'right')
+                              else ('mitte' if _bd in ('mitte', 'center',
+                                                       'centre') else None)))
+            _sw = str(cfg['effects'].get('caption_seite') or 'auto').lower()
+            if _sw in ('links', 'left'):
                 _seite = 'links'
-            elif _al in ('rechts', 'right'):
+            elif _sw in ('rechts', 'right'):
                 _seite = 'rechts'
-            elif _al in ('mitte', 'center', 'centre'):
+            elif _sw in ('mitte', 'center', 'centre'):
                 _seite = 'mitte'
             else:
                 _seite = 'rechts' if _mix01(g[0] * 11) >= 0.55 else 'links'
+            # Die gemessene Buendigkeit gilt fuer den SATZ, nicht fuer die
+            # Bildseite. 'mitte' ist die einzige, die beides festlegt - ein
+            # zentrierter Satz an der Bildkante saehe nach Fehler aus.
+            _bnd = _buendig or _seite
+            if _buendig == 'mitte':
+                _seite = 'mitte'
             _g_vor, _g_kurz = list(g), None
             if _lay == 'collage' \
                     and cfg['effects'].get('caption_satz_collage', True) \
@@ -7775,7 +7794,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                                                   flow_sel=(flow_map or {}).get(g[0]),
                                                   colw=_cw150,
                                                   layout=_lay, punch=_punch,
-                                                  seite=_seite)
+                                                  seite=_bnd)
             # Die Collage baut in die HOEHE. Wird sie zu hoch, passt sie an
             # keinem Kopf mehr vorbei und die Platzierungs-Regie muesste sie
             # in den Bildrand druecken - dann ist das gewohnte Zeilenraster
@@ -7796,14 +7815,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
                     colw=_cw150, layout='collage', punch=_punch,
-                    seite=_seite)
+                    seite=_bnd)
             if _lay == 'collage' and tot_h > H * 0.40:
                 _lay = 'flow'
                 items, tot_h, anchor_i = compose_flow(
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
                     colw=_cw150, layout='flow', punch=_punch,
-                    seite=_seite)
+                    seite=_bnd)
             # v143: Position kommt aus der Platzierungs-Regie statt aus einer
             # Konstanten. Wunschzone = wo der Block AM LIEBSTEN sitzt; spot()
             # weicht davon ab, wenn dort ein Gesicht oder ein unruhiger

@@ -73,9 +73,13 @@ effects:
   # v153: Anordnung. 'auto' laesst die Regie zwischen Zeilensatz und Collage
   # wechseln (empfohlen), 'rows' oder 'collage' erzwingen eine davon.
   caption_layout: auto
-  # v153: Seite des Satzspiegels. 'auto' wechselt deterministisch zwischen
-  # links und rechts; links/rechts/mitte legen ihn fest.
+  # v153/v155: BUENDIGKEIT der Zeilen zueinander. Kommt auch aus einer
+  # gemessenen Referenz. Legt NICHT fest, wo im Bild der Block sitzt.
   caption_align: auto
+  # v155: BILDSEITE. 'auto' wechselt deterministisch zwischen links und
+  # rechts, damit die Captions nicht an einer Kante kleben. Nur eine
+  # ausdrueckliche Nutzerwahl nagelt sie fest - eine gemessene Referenz nie.
+  caption_seite: auto
   # v152: die Collage haelt den GANZEN SATZ stehen (wie in den Vorbildern),
   # statt ihn chunkweise auszutauschen. Die Chunk-Bildung selbst bleibt
   # unangetastet - geschluckt wird nur fuer die Darstellung.
