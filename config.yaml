@@ -91,6 +91,11 @@ effects:
   # Caption dort. Gemessen aus Hand-Landmarks und Kopfdrehung, kein API-Ruf.
   # Ein Gesicht bleibt trotzdem tabu - der Text weicht ihm weiter aus.
   caption_zeige: true
+  # v161 OBJEKT-ANKER: bezieht sich der Satz auf einen sichtbaren Gegenstand
+  # ("dieses Glas hier"), setzt sich die Caption daneben und bleibt daran
+  # kleben, auch wenn die Kamera schwenkt. GPT-5-Vision sagt EINMAL, WAS
+  # gemeint ist; wohin es wandert, misst Optical Flow jeden Frame.
+  caption_objekt: true
   # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
   # power-3-Moment. 0 = aus.
   punch_silence: 0.34

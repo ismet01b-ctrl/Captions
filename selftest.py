@@ -4977,6 +4977,138 @@ def _scenario_betrieb(tmp):
           all(abs(y - 0.35) > 0.12 or abs(x - 0.50) > 0.18
               for (x, y) in _b_kopf),
           f"{[(round(x, 3), round(y, 3)) for (x, y) in _b_kopf]}")
+    # ======= v161: OBJEKT-ANKER - die Caption klebt am Gegenstand ==========
+    # Zwei Stufen, getrennt getestet: die KI sagt EINMAL, WAS gemeint ist
+    # (ai_objekt_anker + Cache), Optical Flow sagt jeden Frame, WO es ist
+    # (ObjektAnker).
+    _cfg161 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    check('v161: der Objekt-Anker ist abschaltbar',
+          _cfg161['effects'].get('caption_objekt') is True)
+
+    # (1) TRACKER. Ein strukturiertes Kaestchen wandert um bekannte Pixel;
+    # die gemessene Verschiebung muss das wiedergeben.
+    def _szene161(dx, dy, w=480, h=854):
+        img = np.zeros((h, w, 3), np.uint8)
+        _rs = np.random.RandomState(7)
+        img[:] = _rs.randint(0, 60, (h, w, 3))          # Grundrauschen
+        # Objekt: kontrastreiches Schachbrett, damit es Ecken hat
+        for _r in range(6):
+            for _c in range(6):
+                if (_r + _c) % 2 == 0:
+                    y0 = 300 + dy + _r * 8
+                    x0 = 150 + dx + _c * 8
+                    img[y0:y0 + 8, x0:x0 + 8] = 245
+        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    _W161, _H161 = 480, 854
+    _tr161 = R.ObjektAnker(_szene161(0, 0), 174.0, 324.0, 34.0, _W161, _H161)
+    check('v161: der Tracker findet genug Struktur zum Verfolgen', _tr161.ok)
+    for _k in range(1, 6):
+        _tr161.step(_szene161(4 * _k, 3 * _k))
+    check('v161: der Tracker misst die echte Verschiebung',
+          _tr161.ok and abs(_tr161.dx - 20.0) < 4.0
+          and abs(_tr161.dy - 15.0) < 4.0,
+          f"gemessen dx={_tr161.dx:.1f} dy={_tr161.dy:.1f}, erwartet 20/15")
+    # Struktrurlose Flaeche: KEIN Anker. Ein Tracker ohne Ecken liefert
+    # Rauschen, und Rauschen als Objektbewegung ist schlimmer als nichts.
+    _leer = np.full((854, 480), 90, np.uint8)
+    check('v161: ohne Struktur gibt es keine Spur',
+          not R.ObjektAnker(_leer, 240.0, 400.0, 40.0, _W161, _H161).ok)
+    # SCHNITT. Ein Sprung ueber ein Viertel der Bildbreite ist kein
+    # wanderndes Objekt - die Spur muss enden statt mitzuspringen.
+    _tr_cut = R.ObjektAnker(_szene161(0, 0), 174.0, 324.0, 34.0, _W161, _H161)
+    _tr_cut.step(_szene161(200, 0))          # Sprung ueber 0.25 Bildbreiten
+    check('v161: bei einem Schnitt endet die Spur, statt zu springen',
+          not _tr_cut.ok and abs(_tr_cut.dx) < 1.0 and abs(_tr_cut.dy) < 1.0,
+          f"ok={_tr_cut.ok} dx={_tr_cut.dx:.1f}")
+
+    # (2) DER ANKER UEBERLEBT DEN REGIE-CACHE. Genau das war der v159-Fehler
+    # an anderer Stelle: der Cache ist beim ZWEITEN Render der Normalfall.
+    _rg161 = json.dumps({'keywords': [
+        {'i': 1, 'fx': 'outline', 'power': 3, 'n': 1,
+         'anker': {'objekt': 'Glas', 'cx': 0.42, 'cy': 0.61, 'groesse': 0.18}}]})
+    # 'Glas' als Keyword: die Regie-Sperrliste wirft Fuellwoerter wie 'Dieses'
+    # raus, dann gaebe es gar keinen Eintrag zum Pruefen.
+    _w161 = [{'word': 'Schau', 'start': 0.5, 'end': 0.8},
+             {'word': 'Glas', 'start': 0.9, 'end': 1.3},
+             {'word': 'hier', 'start': 1.4, 'end': 1.8}]
+    _pr161 = R.parse_regie(_rg161, _w161, 'de')
+    check('v161: der Objekt-Anker ueberlebt den Regie-Cache',
+          _pr161 is not None and isinstance(_pr161.get(1, {}).get('anker'), dict)
+          and abs(_pr161[1]['anker']['cx'] - 0.42) < 1e-6)
+    # Unsinnige Werte werden verworfen, nicht durchgereicht - eine
+    # halluzinierte Box waere schlimmer als gar kein Anker.
+    _mist = json.dumps({'keywords': [
+        {'i': 1, 'fx': 'outline', 'power': 3, 'n': 1,
+         'anker': {'objekt': 'X', 'cx': 1.4, 'cy': 0.5, 'groesse': 0.2}}]})
+    check('v161: ein Anker ausserhalb des Bildes wird verworfen',
+          'anker' not in (R.parse_regie(_mist, _w161, 'de') or {}).get(1, {}))
+    _riesig = json.dumps({'keywords': [
+        {'i': 1, 'fx': 'outline', 'power': 3, 'n': 1,
+         'anker': {'objekt': 'X', 'cx': 0.5, 'cy': 0.5, 'groesse': 0.95}}]})
+    check('v161: ein absurd grosser Anker wird verworfen',
+          'anker' not in (R.parse_regie(_riesig, _w161, 'de') or {}).get(1, {}))
+    check('v161: der Cache SCHREIBT den Anker auch',
+          "**({'anker': v['anker']} if v.get('anker') else {})"
+          in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
+    # (3) PLATZIERUNG. Der Text gehoert NEBEN das Objekt, nicht darauf -
+    # sonst verdeckt die Caption genau den Gegenstand, den sie meint.
+    _Wo, _Ho = 1080, 1920
+    _So = R.Sprites(_cfg161, _Wo, _Ho)
+    _wo = [{'word': 'Schau', 'start': 0.5, 'end': 0.9},
+           {'word': 'GLAS', 'start': 1.0, 'end': 1.6},
+           {'word': 'hier', 'start': 1.7, 'end': 2.0}]
+
+    def _ankerplan(anker):
+        _fx = {1: {'fx': 'outline', 'power': 3, 'n': 1}}
+        if anker:
+            _fx[1]['anker'] = anker
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            return R.build_plans(_wo, {1}, _cfg161, _So, _Wo, _Ho,
+                                 lambda s_, e_: True, _fx,
+                                 face_pos=lambda s_, e_: (_Wo * 0.5, _Ho * 0.30,
+                                                          _Wo * 0.12))
+
+    _obj = {'objekt': 'Glas', 'cx': 0.28, 'cy': 0.55, 'groesse': 0.16}
+    _pl_ohne = [p for p in _ankerplan(None) if 'kw_i' in p]
+    _pl_mit = [p for p in _ankerplan(_obj) if 'kw_i' in p]
+    check('v161: der Anker landet ueberhaupt am Plan',
+          bool(_pl_mit) and _pl_mit[0].get('_ank0') is not None
+          and bool(_pl_ohne) and _pl_ohne[0].get('_ank0') is None)
+    _px = _pl_mit[0].get('cx')
+    _py = _pl_mit[0].get('cy')
+    # 0.18 W Toleranz mit Absicht: clamp_cx haelt den Block im sicheren
+    # Bereich, ein 0.56 W breiter Text kann seine Mitte nicht auf 0.28 W
+    # legen. Gefordert ist die SEITE, nicht der Pixel.
+    check('v161: der Text steht auf der Seite seines Objekts',
+          _px is not None and abs(_px / _Wo - 0.28) < 0.18
+          and _px / _Wo < 0.50,
+          f"cx = {(_px or 0) / _Wo:.3f}, Objekt bei 0.28 W")
+    # NEBEN, nicht DRAUF: die Objektmitte liegt bei 0.55 H, der Text muss
+    # mindestens um seine halbe Hoehe plus Objektradius versetzt sein.
+    _bild161 = _pl_mit[0].get('arr')
+    if _bild161 is None:
+        _bild161 = _pl_mit[0].get('o_arr')
+    _hh = _bild161.shape[0] / 2.0 / _Ho
+    check('v161: der Text steht NEBEN dem Objekt, nicht darauf',
+          _py is not None and abs(_py / _Ho - 0.55) > (_hh + 0.16 * 0.5 * _Wo / _Ho),
+          f"cy = {(_py or 0) / _Ho:.3f}, Objekt 0.55 H, halbe Texthoehe {_hh:.3f}")
+    check('v161: ohne Anker bleibt die Platzierung die alte',
+          _pl_ohne[0].get('cx') is not None)
+
+    # (4) KEINE DOPPELBEWEGUNG. Der Objekt-Track enthaelt die Kamerafahrt
+    # bereits. Szenen-Verankerung und Gesichts-Follow obendrauf wuerden
+    # jeden Schwenk zweimal anwenden.
+    _rsrc161 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v161: ein verankerter Text folgt NICHT zusaetzlich dem Gesicht',
+          "if p.get('_ank0'):\n        return 0.0, 0.0" in _rsrc161)
+    check('v161: die Szenen-Verankerung wendet den Schwenk nicht doppelt an',
+          "if not lock or p.get('_ank0'):" in _rsrc161)
+    check('v161: auf B-Roll gibt es keinen Objekt-Anker',
+          "and not broll:" in _rsrc161 and "p['_ank0'] = (" in _rsrc161)
+
     check('v160: die Zeige-Regie ist abschaltbar',
           'caption_zeige' in open(os.path.join(HERE, 'config.yaml'),
                                   encoding='utf-8').read())

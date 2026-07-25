@@ -3,6 +3,53 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v161 OBJEKT-ANKER: die Caption dockt am Gegenstand an.** Sagt jemand
+  "dieses Glas hier", setzt sich der Text NEBEN das Glas und bleibt daran
+  kleben, auch wenn die Kamera schwenkt.
+  ZWEI STUFEN, BEWUSST GETRENNT: GPT-5-Vision sagt EINMAL pro Moment, WAS
+  gemeint ist (Objektname, grober Mittelpunkt, Groesse). Wohin es wandert,
+  misst Optical Flow - jeden Frame, lokal, ohne einen einzigen Token. Ein
+  Vision-Aufruf je Frame waere weder bezahlbar noch stabil: das Modell raet
+  bei jedem Frame ein paar Pixel anders und der Text wuerde zittern.
+  DER ANKER UEBERLEBT DEN REGIE-CACHE (`parse_regie` liest ihn, der
+  Cache-Schreiber legt ihn ab). Ohne das waere er beim ZWEITEN Render
+  desselben Videos weg - genau der Fehler, der in v159 an anderer Stelle
+  gefunden wurde. Beim zweiten Render kostet der Anker dadurch nichts mehr.
+  NEBEN, NICHT DRAUF: eine Caption quer ueber dem Gegenstand verdeckt genau
+  das, worum es geht. Bevorzugt darunter (Bildunterschrift-Logik), sonst
+  darueber, sonst gar nicht.
+  DER WICHTIGSTE FUND: die Vorwaerts-Rueckwaerts-Probe. Der Status von
+  `calcOpticalFlowPyrLK` ist bei einem Schnitt WERTLOS - LK meldet keinen
+  Misserfolg, sondern rastet auf einer aehnlich aussehenden Stelle ein und
+  liefert eine kleine, voellig plausible Verschiebung. Im Test: das Objekt
+  sprang 200 px, LK meldete -3.6 px und "erfolgreich". Der Sprung-Riegel lief
+  damit ins Leere. Ein Punkt zaehlt jetzt erst, wenn er RUECKWAERTS wieder
+  dort landet, wo er herkam (Median-Flow-Standard, Schwelle 1 px). Danach:
+  Schnitt erkannt, Spur beendet, dx = 0.0.
+  WEITERE SPERREN: unter 8 Startpunkten kein Anker (ohne Ecken ist der Median
+  Rauschen, und Rauschen als Objektbewegung ist schlimmer als nichts). Eine
+  verlorene Spur FRIERT den Stand ein, sie springt nicht auf null zurueck -
+  ein Text, der bei jeder Verdeckung an seine Startstelle huepft, ist
+  schlimmer als einer, der kurz stehen bleibt. Halluzinierte Boxen
+  (ausserhalb des Bildes, ueber 0.60 Bildbreiten) werden verworfen. Auf
+  B-Roll kein Anker - dort gehoert der Text zur Szene, nicht zu einem
+  Gegenstand darin.
+  KEINE DOPPELBEWEGUNG: ein verankerter Text folgt NICHT zusaetzlich dem
+  Gesicht (`track_offset`) und bekommt die Szenen-Verankerung nicht obendrauf
+  (`scene_shift`) - die Objektspur enthaelt die Kamerafahrt bereits, sonst
+  wuerde jeder Schwenk zweimal angewandt.
+  BEWEIS (Selftest): Tracker misst 20.0 / 15.0 px bei echten 20 / 15.
+  Platzierung 1080x1920, Objekt bei 0.28 W / 0.55 H -> Text bei 0.354 W /
+  0.682 H (halbe Texthoehe 0.070 H, also sauber darunter). Ohne Anker
+  0.500 W / 0.450 H.
+  FEHLER GEFUNDEN UND BEHOBEN: die Platzierung prueft `arr` - der Look
+  'outline' legt sein Bild aber in `o_arr`. Der Anker wurde gesetzt und nie
+  angewandt, der Text blieb in der Bildmitte stehen. Nur im Selftest
+  aufgefallen, nicht am Code.
+  NUR AUF SYNTHETIK GEPRUEFT: der Tracker lief hier auf gebauten
+  Schachbrett-Frames, nicht auf echtem Material. Wie gut GPT-5-Vision ein
+  Objekt im echten Bild verortet, sieht Ismet erst live.
+  Abschaltbar ueber `effects.caption_objekt`.
 - **v160 ZEIGE-REGIE: die Caption landet, wohin der Sprecher zeigt.** Ismets
   Vorgabe: das Tool muss innovativ sein, sonst hat es am Markt keine Chance.
   Das Material dafuer lag seit v101j im Haus (MediaPipe-Hand-Landmarker) bzw.

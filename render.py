@@ -2305,6 +2305,194 @@ def paste_scene(canvas, rgba, cx, cy, W, H, scale=1.0, opacity=0.74, ripple=0.10
                   refract=refract, blur=blur, occ=occ, grain=grain,
                   grain_seed=grain_seed)
 
+# ---------------------------------------------------------------------------
+# v161 OBJEKT-ANKER
+# Sagt jemand "dieses Glas hier" oder "schau dir das an", dockt die Caption
+# AM OBJEKT an und bleibt daran kleben, auch wenn die Kamera schwenkt.
+#
+# Zwei Stufen, bewusst getrennt:
+#   1. WO ist das Objekt? -> GPT-5-Vision, EINMAL pro Moment. Ein
+#      Sprachmodell kann sagen "das Glas steht links unten"; eine exakte Box
+#      liefert es nicht zuverlaessig, deshalb wird nur ein grober Mittelpunkt
+#      plus Groesse verlangt.
+#   2. WOHIN wandert es? -> reiner Optical Flow, jeden Frame, lokal. Das ist
+#      praezise, deterministisch und kostet keinen einzigen Token. Die KI
+#      sagt, WAS gemeint ist; die Messung sagt, WO es gerade ist.
+# Ein Vision-Aufruf pro Frame waere weder bezahlbar noch stabil - er wuerde
+# bei jedem Frame ein paar Pixel anders raten und der Text wuerde zittern.
+# ---------------------------------------------------------------------------
+
+class ObjektAnker:
+    """Verfolgt EIN Bildgebiet ueber sparse Optical Flow (Lucas-Kanade).
+    Rueckgabe ist die aufsummierte Verschiebung seit dem Start in Pixeln des
+    VOLLBILDES. ok=False heisst: die Spur ist verloren (Schnitt, Verdeckung,
+    zu wenig Struktur) - dann bleibt der Text stehen, wo er war, statt
+    irgendwohin zu springen."""
+
+    def __init__(self, gray, cx, cy, r, W, H):
+        self.W, self.H = float(W), float(H)
+        self.sk = gray.shape[1] / max(float(W), 1.0)   # Arbeits- zu Vollbild
+        self.dx = self.dy = 0.0
+        self.ok = False
+        self.prev = None
+        self.pts = None
+        self._seed(gray, cx * self.sk, cy * self.sk, max(r * self.sk, 6.0))
+
+    def _seed(self, gray, x, y, r):
+        h, w = gray.shape[:2]
+        maske = np.zeros((h, w), np.uint8)
+        x0, y0 = int(max(x - r, 0)), int(max(y - r, 0))
+        x1, y1 = int(min(x + r, w)), int(min(y + r, h))
+        if x1 - x0 < 6 or y1 - y0 < 6:
+            return
+        maske[y0:y1, x0:x1] = 255
+        pts = cv2.goodFeaturesToTrack(gray, maxCorners=90, qualityLevel=0.01,
+                                      minDistance=4, mask=maske)
+        # Unter 8 Punkten ist der Median kein Median mehr, sondern Rauschen.
+        if pts is None or len(pts) < 8:
+            return
+        self.pts = pts.astype(np.float32)
+        self.prev = gray
+        self.ok = True
+
+    def step(self, gray):
+        """Ein Frame weiter. Rueckgabe (dx, dy) im Vollbild-Massstab."""
+        if not self.ok or self.prev is None or self.pts is None:
+            return self.dx, self.dy
+        nx, st, _ = cv2.calcOpticalFlowPyrLK(self.prev, gray, self.pts, None,
+                                             winSize=(17, 17), maxLevel=3)
+        if nx is None or st is None:
+            self.ok = False
+            return self.dx, self.dy
+        # VORWAERTS-RUECKWAERTS-PROBE. Ohne sie ist der Status von LK
+        # wertlos: bei einem Schnitt oder einem Sprung meldet LK nicht etwa
+        # Misserfolg, sondern rastet auf einer aehnlich aussehenden Stelle
+        # ein und liefert eine kleine, voellig plausible Verschiebung
+        # (im Test: -3.6 px, waehrend das Objekt 200 px gesprungen war).
+        # Ein Punkt zaehlt erst, wenn er auch RUECKWAERTS wieder dort landet,
+        # wo er herkam. Das ist der Median-Flow-Standard.
+        bk, st2, _ = cv2.calcOpticalFlowPyrLK(gray, self.prev, nx, None,
+                                              winSize=(17, 17), maxLevel=3)
+        gut = st.reshape(-1) == 1
+        if bk is not None and st2 is not None:
+            fb = np.abs(self.pts.reshape(-1, 2)
+                        - bk.reshape(-1, 2)).max(axis=1)
+            gut = gut & (st2.reshape(-1) == 1) & (fb < 1.0)
+        else:
+            gut = np.zeros_like(gut)
+        if int(gut.sum()) < 6:
+            self.ok = False
+            return self.dx, self.dy
+        alt = self.pts.reshape(-1, 2)[gut]
+        neu = nx.reshape(-1, 2)[gut]
+        vx = float(np.median(neu[:, 0] - alt[:, 0]))
+        vy = float(np.median(neu[:, 1] - alt[:, 1]))
+        # Ausreisser raus: was sich voellig anders bewegt als die Mehrheit,
+        # gehoert nicht mehr zum Objekt (Verdeckung, vorbeilaufende Hand).
+        rest = np.abs(neu - alt - np.array([vx, vy], np.float32)).max(axis=1)
+        behalten = rest < max(2.5, abs(vx) * 0.5 + abs(vy) * 0.5 + 2.0)
+        if int(behalten.sum()) >= 6:
+            neu = neu[behalten]
+            alt = alt[behalten]
+            vx = float(np.median(neu[:, 0] - alt[:, 0]))
+            vy = float(np.median(neu[:, 1] - alt[:, 1]))
+        # Ein Sprung ueber ein Viertel der Bildbreite ist kein Objekt, das
+        # wandert - das ist ein Schnitt. Spur beenden statt mitspringen.
+        if math.hypot(vx, vy) > gray.shape[1] * 0.25:
+            self.ok = False
+            return self.dx, self.dy
+        self.dx += vx / max(self.sk, 1e-6)
+        self.dy += vy / max(self.sk, 1e-6)
+        self.pts = neu.reshape(-1, 1, 2).astype(np.float32)
+        self.prev = gray
+        if len(self.pts) < 10:                # Spur duennt aus -> nachsaeen
+            self._seed(gray, alt[:, 0].mean() + vx, alt[:, 1].mean() + vy,
+                       max(gray.shape[1] * 0.06, 8.0))
+        return self.dx, self.dy
+
+
+OBJEKT_PROMPT = """Du bist Bildregisseur. Du bekommst pro MOMENT ein Standbild und den
+gesprochenen Satz. Frage: zeigt der Satz auf ein KONKRETES, im Bild SICHTBARES Objekt?
+
+JA nur bei einem echten Bezug auf etwas Sichtbares:
+"dieses Glas hier", "schau dir das an", "this thing right here", "der Knopf da".
+NEIN bei allem anderen - abstrakte Aussagen, Zahlen, Meinungen, allgemeine Saetze,
+oder wenn das gemeinte Objekt im Bild gar nicht zu sehen ist. Im Zweifel NEIN.
+Die Person selbst ist KEIN Objekt.
+
+Antworte NUR mit JSON:
+{"momente": [{"i": <Moment-Index>, "objekt": "<ein Wort>", "cx": <0..1>, "cy": <0..1>, "groesse": <0..1>}]}
+cx/cy = Mittelpunkt des Objekts im Bild (0 = links/oben, 1 = rechts/unten).
+groesse = Breite des Objekts als Anteil der Bildbreite.
+Momente ohne sichtbares Bezugsobjekt laesst du WEG."""
+
+
+def ai_objekt_anker(words, fx_map, video_path, model='gpt-5', min_power=2):
+    """v161: fragt GPT-5-Vision pro Moment nach einem sichtbaren Bezugsobjekt
+    und schreibt es als fx_map[i]['anker'] = {'objekt', 'cx', 'cy', 'groesse'}.
+    Ohne Key oder bei jedem Fehler passiert nichts - der Anker ist ein Extra,
+    kein Fundament."""
+    import requests
+    key = os.environ.get('OPENAI_API_KEY')
+    if not key or not fx_map:
+        return fx_map
+    idx = [i for i in sorted(fx_map)
+           if int(fx_map[i].get('power', 2)) >= min_power][:16]
+    content, sent = [], []
+    for i in idx:
+        b64 = _frame_b64(video_path, words[i]['start'] + 0.15)
+        if not b64:
+            continue
+        txt = ' '.join(clean(words[j]['word'])
+                       for j in range(max(i - 4, 0),
+                                      min(i + int(fx_map[i].get('n', 1)) + 4,
+                                          len(words))))
+        content.append({'type': 'text', 'text': f'MOMENT [{i}] Satz: "{txt}"'})
+        content.append({'type': 'image_url',
+                        'image_url': {'url': f'data:image/jpeg;base64,{b64}',
+                                      'detail': 'low'}})
+        sent.append(i)
+    if not sent:
+        return fx_map
+    try:
+        r = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}'},
+            json=_oai_json(model,
+                           [{'role': 'system', 'content': OBJEKT_PROMPT},
+                            {'role': 'user', 'content': content}],
+                           max_toks=900, temperature=0.1),
+            timeout=180)
+        r.raise_for_status()
+        data = json.loads(r.json()['choices'][0]['message']['content'])
+    except Exception as e:
+        print(f"Object anchor: vision skipped ({type(e).__name__})")
+        return fx_map
+    n = 0
+    for m in (data.get('momente') or []):
+        try:
+            i = int(m.get('i', -1))
+            cx = float(m.get('cx'))
+            cy = float(m.get('cy'))
+            gr = float(m.get('groesse', 0.15))
+        except (TypeError, ValueError):
+            continue
+        if i not in fx_map:
+            continue
+        # Ausserhalb des Bildes oder absurd gross: das ist kein Objekt mehr,
+        # sondern eine Halluzination. Lieber keinen Anker als einen falschen.
+        if not (0.02 <= cx <= 0.98 and 0.02 <= cy <= 0.98):
+            continue
+        if not (0.02 <= gr <= 0.60):
+            continue
+        fx_map[i]['anker'] = {'objekt': str(m.get('objekt', ''))[:24],
+                              'cx': cx, 'cy': cy, 'groesse': gr}
+        n += 1
+    if n:
+        print(f"Object anchor: {n} moments dock onto a visible object")
+    return fx_map
+
+
 def update_homography(prev_gray, gray, H_cum, mask_lower=0.30, region='boden',
                       exclude=None):
     """Ein Schritt planares Kamera-Tracking: verfolgt Features der Bodenebene
@@ -4384,6 +4572,20 @@ def parse_regie(text, words, language='de'):
                         entry['emoji'] = emo
                     if item.get('intent'):
                         entry['intent'] = True   # v99a: Ansage ueberlebt den Cache
+                    # v161: der Objekt-Anker ueberlebt den Cache genauso. Ohne
+                    # das waere er beim ZWEITEN Render desselben Videos weg -
+                    # und der Cache ist dort der Normalfall (siehe v159).
+                    _ak = item.get('anker')
+                    if isinstance(_ak, dict):
+                        try:
+                            _acx, _acy = float(_ak['cx']), float(_ak['cy'])
+                            _agr = float(_ak.get('groesse', 0.15))
+                        except (KeyError, TypeError, ValueError):
+                            _acx = None
+                        if _acx is not None and 0.02 <= _acx <= 0.98 \
+                                and 0.02 <= _acy <= 0.98 and 0.02 <= _agr <= 0.60:
+                            entry['anker'] = {'objekt': str(_ak.get('objekt', ''))[:24],
+                                              'cx': _acx, 'cy': _acy, 'groesse': _agr}
                     out[i] = entry
         return out or None
     except Exception:
@@ -7621,6 +7823,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # v80f: Emoji durchreichen (kommt aus KI-Regie oder Editor-Overrides)
             if isinstance(info, dict) and info.get('emoji'):
                 p['emoji'] = info['emoji']
+            # v161 OBJEKT-ANKER durchreichen. Auf B-Roll nicht: dort gehoert
+            # der Text zur Szene, nicht zu einem Gegenstand darin.
+            _ak = info.get('anker') if isinstance(info, dict) else None
+            if _ak and cfg['effects'].get('caption_objekt', True) and not broll:
+                p['_ank0'] = (float(_ak['cx']) * W, float(_ak['cy']) * H,
+                              max(float(_ak.get('groesse', 0.15)) * W * 0.5,
+                                  W * 0.03))
+                p['_ank_obj'] = str(_ak.get('objekt', ''))
             if cfg['effects'].get('anim', True):
                 _auto_anim = (info.get('anim') if isinstance(info, dict) else None)
                 if not _auto_anim:
@@ -8493,6 +8703,42 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         print(f"  Safe zone warning ({_pz['label']}): {len(_sz_warn)} Moment(e) "
               f"ragen ins UI - {_lst}")
 
+    # v161 OBJEKT-ANKER: den Text an sein Objekt setzen. NEBEN das Objekt,
+    # nicht darauf - eine Caption quer ueber dem Gegenstand, den sie meint,
+    # verdeckt genau das, worum es geht. Bevorzugt darunter (Bildunterschrift-
+    # Logik), sonst darueber. Die Seite bleibt die des Objekts.
+    _n_ank = 0
+    for p in plans:
+        _a0 = p.get('_ank0')
+        # Nicht jeder Look legt sein Bild in 'arr' - 'outline' benutzt
+        # 'o_arr'. Nur auf 'arr' zu pruefen hiess: der Anker wurde gesetzt,
+        # aber nie angewandt, und der Text blieb in der Bildmitte stehen.
+        _abild = p.get('arr')
+        if _abild is None:
+            _abild = p.get('o_arr')
+        if not _a0 or _abild is None:
+            continue
+        _ox, _oy, _or = _a0
+        _ah = float(_abild.shape[0])
+        _aw = float(_abild.shape[1])
+        _unten = _oy + _or + _ah * 0.62
+        _oben = _oy - _or - _ah * 0.62
+        _rand_u = (_pz['bottom'] if _pz is not None else H * 0.95)
+        _rand_o = (_pz['top'] if _pz is not None else H * 0.05)
+        if _unten + _ah * 0.5 <= _rand_u:
+            _ny = _unten
+        elif _oben - _ah * 0.5 >= _rand_o:
+            _ny = _oben
+        else:
+            continue                      # kein Platz neben dem Objekt
+        p['cx'] = clamp_cx(_ox, int(_aw))
+        if 'by' in p:
+            p['by'] = _ny
+        p['cy'] = _ny
+        _n_ank += 1
+    if _n_ank:
+        print(f"  Object anchor: {_n_ank} moment(s) placed next to their object")
+
     plans.sort(key=lambda p: p['start'])
     return plans
 
@@ -8606,6 +8852,10 @@ def camera_at(t, plans, words, cfg, W, H):
 def track_offset(p, face_xy, cfg):
     """Subtile Mitbewegung der Captions mit der Person (Caption-Tracking)."""
     if not cfg['effects'].get('tracking', True) or p.get('broll') or 'anchor' not in p:
+        return 0.0, 0.0
+    # v161: haengt der Text an einem OBJEKT, darf er nicht gleichzeitig dem
+    # Gesicht folgen. Zwei Ziele ergeben keine Bewegung, sondern Zittern.
+    if p.get('_ank0'):
         return 0.0, 0.0
     def soft(v, dead):
         return 0.0 if abs(v) < dead else (v - dead if v > 0 else v + dead)
@@ -9048,9 +9298,12 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         """Verankert Hintergrund-Texte in der Szene: sie wandern mit Kameraschwenks mit.
         Auf B-Roll (Drohne, FPV) darf der Text weiter wandern - er gehoert zur Welt.
         v101j: der Beruehrungs-Impuls (Hand-Kontakt) federt oben drauf."""
-        _hx = p.get('_hand_dx', 0.0)
-        _hy = p.get('_hand_dy', 0.0)
-        if not lock:
+        _hx = p.get('_hand_dx', 0.0) + p.get('_ank_dx', 0.0)
+        _hy = p.get('_hand_dy', 0.0) + p.get('_ank_dy', 0.0)
+        if not lock or p.get('_ank0'):
+            # v161: die Objekt-Spur enthaelt die Kamerabewegung bereits. Die
+            # Szenen-Verankerung obendrauf wuerde jeden Schwenk DOPPELT
+            # anwenden und den Text aus dem Bild schieben.
             return _hx, _hy
         if 's0' not in p:
             p['s0'] = scene_off
@@ -9320,6 +9573,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         # v101j: Beruehrungs-Impuls verschiebt den Text federnd
         tdx += p.get('_hand_dx', 0.0)
         tdy += p.get('_hand_dy', 0.0)
+        # v161: der Objekt-Anker zieht den Text mit seinem Gegenstand mit
+        tdx += p.get('_ank_dx', 0.0)
+        tdy += p.get('_ank_dy', 0.0)
         if p.get('front_layer') and p['tpl'] == 'ground':
             # Boden-Text VOR der Person (kein freier Boden im Bild): liegt
             # perspektivisch flach ueber allem - lesbar statt unsichtbar.
@@ -10092,6 +10348,15 @@ def main():
                                          cfg['keywords'].get('ai_model', 'gpt-5'),
                                          min_power=int(cfg['keywords'].get('vision_min_power', 2)),
                                          face_cover=face_cover)
+                # v161 OBJEKT-ANKER: gibt es zu einem Moment ein sichtbares
+                # Bezugsobjekt ("dieses Glas hier")? Laeuft im selben
+                # Vision-Zweig und landet mit im Regie-Cache - beim zweiten
+                # Render desselben Videos kostet er dadurch nichts mehr.
+                if cfg['effects'].get('caption_objekt', True):
+                    fx_map = ai_objekt_anker(
+                        words, fx_map, args.input,
+                        cfg['keywords'].get('ai_model', 'gpt-5'),
+                        min_power=int(cfg['keywords'].get('vision_min_power', 2)))
             elif fx_map:
                 # Vision aus, aber der Backstop soll trotzdem greifen.
                 fx_map = _behind_cover_backstop(fx_map, face_cover)
@@ -10102,7 +10367,8 @@ def main():
                                          **({'anim': v['anim']} if v.get('anim') else {}),
                                          **({'szene': v['szene']} if v.get('szene') else {}),
                                          **({'lage': v['lage']} if v.get('lage') else {}),
-                                         **({'intent': True} if v.get('intent') else {})}
+                                         **({'intent': True} if v.get('intent') else {}),
+                                         **({'anker': v['anker']} if v.get('anker') else {})}
                                         for i, v in sorted(fx_map.items())]},
                           open(regie_path, 'w', encoding='utf-8'))
     # v99 Selbstbezug-Backstop: "The captions are behind me" besteht komplett
@@ -10919,6 +11185,31 @@ def main():
             a = 0.35
             scene_smooth[0] += a * (scene_cum[0] - scene_smooth[0])
             scene_smooth[1] += a * (scene_cum[1] - scene_smooth[1])
+
+        # --- v161 OBJEKT-ANKER: aktive Anker Frame fuer Frame nachfuehren.
+        # Der Vision-Aufruf sagt EINMAL, wo das Objekt steht; wohin es
+        # wandert, misst Optical Flow - jeden Frame, lokal, ohne Token.
+        _ank_aktiv = [_p for _p in plans
+                      if _p.get('_ank0')
+                      and _p['start'] - 0.35 <= t <= _p['end'] + 0.40]
+        if _ank_aktiv:
+            _ag = cv2.cvtColor(
+                cv2.resize(frame.astype(np.uint8),
+                           (480, max(int(H * 480 / max(W, 1)) // 2 * 2, 2))),
+                cv2.COLOR_BGR2GRAY)
+            for _p in _ank_aktiv:
+                _trk = _p.get('_ank_trk')
+                if _trk is None:
+                    _ox, _oy, _orad = _p['_ank0']
+                    _trk = ObjektAnker(_ag, _ox, _oy, _orad, W, H)
+                    _p['_ank_trk'] = _trk
+                else:
+                    _trk.step(_ag)
+                # Verlorene Spur friert den Stand ein, sie springt nicht
+                # zurueck auf null - ein Text, der bei jeder Verdeckung an
+                # seine Startstelle huepft, ist schlimmer als einer, der
+                # kurz stehen bleibt.
+                _p['_ank_dx'], _p['_ank_dy'] = _trk.dx, _trk.dy
 
         # --- Planarer Kamera-Track (nur in Szenen-Text-Fenstern)
         # fa = absolute Frame-Nummer: bei Fenster-Renders (--window) zaehlt fi

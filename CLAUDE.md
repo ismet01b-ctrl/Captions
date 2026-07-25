@@ -19,7 +19,8 @@ Regie-Kontaktbogen (`/api/contact/{jid}`), Caption-Alpha-Export
 `/api/alpha/{jid}` für Käufer), World-Lock Wand (eigener Wand-Track),
 Hand-Kontakt (MediaPipe `models/hand.task`, Feder-Impuls + Occlusion),
 Depth-Bullet-Time (2.5D-Dolly in der Pause vor power-3),
-Zeige-Regie (Caption landet, wohin der Sprecher zeigt oder schaut). NICHT gebaut
+Zeige-Regie (Caption landet, wohin der Sprecher zeigt oder schaut),
+Objekt-Anker (Caption dockt am genannten Gegenstand an und bleibt daran). NICHT gebaut
 (bewusst): Tiefen-Fokuszug, persistente Welt-Anker (SLAM),
 Hook-A/B-Varianten.
 
@@ -147,6 +148,24 @@ Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
   Rest der Kosten bleibt. Ein Ziel bricht die Hysterese (`kalt`).
 - **Grenze:** ein breiter Block hat im Title-Safe kaum Spielraum (0.773 W bei
   0.84 W nutzbar). Die Regie wirkt, wo Platz ist.
+
+### Objekt-Anker (v161) — "Captions kleben am Gegenstand"
+`ai_objekt_anker()` fragt GPT-5-Vision **einmal pro Moment** nach einem
+sichtbaren Bezugsobjekt; `ObjektAnker` (Optical Flow) verfolgt es **jeden
+Frame** ohne Token. Die KI sagt WAS, die Messung sagt WO.
+- **Der Anker muss in den Regie-Cache** (`parse_regie` + Cache-Schreiber).
+  Sonst ist er beim zweiten Render weg — derselbe Fehlertyp wie v159.
+- **Der LK-Status ist bei einem Schnitt wertlos.** LK rastet auf einer
+  ähnlichen Stelle ein und meldet plausible Mini-Bewegung (gemessen: -3.6 px
+  bei 200 px Sprung). Nur die **Vorwärts-Rückwärts-Probe** (Median-Flow,
+  Schwelle 1 px) erkennt das. Wer hier etwas ändert, darf sie nicht
+  wegoptimieren.
+- **Verlorene Spur friert ein**, sie springt nicht auf null zurück.
+- **Neben das Objekt, nie darauf** — sonst verdeckt die Caption genau das,
+  worum es geht. Erst darunter, dann darüber, sonst gar nicht.
+- **Keine Doppelbewegung**: verankerte Plans bekommen weder `track_offset`
+  (Gesicht) noch `scene_shift` (Schwenk) obendrauf.
+- Nicht jeder Look legt sein Bild in `arr` — `outline` benutzt `o_arr`.
 
 ### Platzierungs-Regie (v143) — "Captions passen sich dem Bild an"
 Ein Textblock bekommt seine Position aus `spot()` in `build_plans`, nicht aus
@@ -340,7 +359,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **992/992 grün (Stand v160)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1008/1008 grün (Stand v161)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
