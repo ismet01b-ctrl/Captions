@@ -70,6 +70,13 @@ effects:
   # Flaeche verteilt, so wie in den Vorbildern. Deterministisch gewaehlt,
   # nicht zufaellig. 'clean' bleibt davon unberuehrt.
   caption_collage: true
+  # v152: die Collage haelt den GANZEN SATZ stehen (wie in den Vorbildern),
+  # statt ihn chunkweise auszutauschen. Die Chunk-Bildung selbst bleibt
+  # unangetastet - geschluckt wird nur fuer die Darstellung.
+  caption_satz_collage: true
+  # v152: das Schlusswort am Satzende darf links und rechts angeschnitten
+  # aus dem Bild laufen. Nur so erreicht es die Groesse der Vorbilder.
+  caption_bleed: true
   # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
   # power-3-Moment. 0 = aus.
   punch_silence: 0.34

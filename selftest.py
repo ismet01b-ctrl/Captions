@@ -2634,7 +2634,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v151-referenz-wirkt'" in _srv_m)
+          and "DVE_BUILD = 'v152-bleed-satz'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4734,6 +4734,88 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ============ v152: Randabfall + satzweise Collage ======================
+    import yaml as _y152
+    import render as R
+    _c152 = _y152.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _c152['look'] = 'creator'
+    _S152 = R.Sprites(_c152, 1080, 1920)
+
+    def _punchw(cfgx, txt):
+        _Sx = R.Sprites(cfgx, 1080, 1920)
+        _w = [{'word': x, 'start': i * 0.35, 'end': i * 0.35 + 0.3}
+              for i, x in enumerate(txt)]
+        _it, _, _ = R.compose_flow(list(range(len(_w))), _w, _Sx, 1080, 1920,
+                                   portrait=True, punch=True)
+        _p = [i for i in _it if i['role'] == 'punch']
+        return (_p[0]['sz'], _p[0]['w'], bool(_p[0].get('bleed'))) if _p else (0, 0, False)
+    _c152n = _y152.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _c152n['effects']['caption_bleed'] = False
+    _sz_b, _w_b, _bl_b = _punchw(_c152, ['das', 'ist', 'KRASS.'])
+    _sz_n, _w_n, _bl_n = _punchw(_c152n, ['das', 'ist', 'KRASS.'])
+    check('v152: Randabfall macht das Schlusswort wirklich groesser',
+          _sz_b > _sz_n * 1.15 and _bl_b and not _bl_n,
+          f'mit Anschnitt {_sz_b} px ({_w_b / 1080:.2f} W), '
+          f'ohne {_sz_n} px ({_w_n / 1080:.2f} W)')
+    check('v152: der Anschnitt bleibt begrenzt (Wort bleibt lesbar)',
+          1.0 < _w_b / 1080.0 <= 1.16,
+          f'{_w_b / 1080:.2f} W')
+    # Am gerenderten Streifen gemessen: bei 'GEHOERT' (7 Zeichen) frisst der
+    # Anschnitt links das G und rechts das T weg. Ab sechs Zeichen bleibt es
+    # deshalb beim Satzspiegel - das Vorbild schneidet 'this' an, nicht ein
+    # Wort dieser Laenge.
+    _sz_l, _w_l, _bl_l = _punchw(_c152, ['das', 'war', 'GEHOERT.'])
+    check('v152: lange Schlussworte werden NICHT angeschnitten',
+          not _bl_l and _w_l / 1080.0 <= 0.92,
+          f'GEHOERT {_w_l / 1080:.2f} W, Anschnitt {_bl_l}')
+    check('v152: Randabfall ist abschaltbar',
+          'caption_bleed' in open(os.path.join(HERE, 'config.yaml'),
+                                  encoding='utf-8').read())
+    _r152 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    # Das angeschnittene Wort darf die Blockbreite NICHT bestimmen, sonst
+    # findet die Platzierungs-Regie fuer 1.22 W nirgends Platz.
+    check('v152: das angeschnittene Wort bestimmt die Blockbreite nicht',
+          "_spans = [_ink_x(it) for it in items if not it.get('bleed')]" in _r152
+          and "it['cx'] = W / 2.0" in _r152)
+    # Satzweise Collage: der ganze Satz steht, statt chunkweise zu wechseln.
+    _wsz = []
+    _t152 = 0.0
+    for _wd in 'du hast das schon oft gehoert aber was wirklich dahinter steckt.'.split():
+        _wsz.append({'word': _wd, 'start': round(_t152, 2), 'end': round(_t152 + 0.28, 2)})
+        _t152 += 0.36
+    import io as _io152, contextlib as _cl152
+
+    def _plaene(satz_collage):
+        _cx = _y152.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+        _cx['look'] = 'creator'
+        _cx['effects']['caption_satz_collage'] = satz_collage
+        _Sx = R.Sprites(_cx, 1080, 1920)
+        with _cl152.redirect_stdout(_io152.StringIO()):
+            _pl = R.build_plans(_wsz, set(), _cx, _Sx, 1080, 1920,
+                                lambda a, b: True, {})
+        return [p for p in _pl if p.get('tpl') == 'flow']
+    _mit = _plaene(True)
+    _ohne = _plaene(False)
+    _mx_mit = max((len(p['front']) for p in _mit), default=0)
+    _mx_ohne = max((len(p['front']) for p in _ohne), default=0)
+    check('v152: die Collage haelt mehr Woerter des Satzes zusammen',
+          _mx_mit > _mx_ohne,
+          f'groesster Block {_mx_ohne} -> {_mx_mit} Woerter')
+    check('v152: dafuer laufen weniger Bloecke - der Satz wird EIN Bild',
+          len(_mit) < len(_ohne),
+          f'{_ohne and len(_ohne)} Bloecke -> {len(_mit)}')
+    # Kein Wort darf doppelt erscheinen, wenn Gruppen geschluckt werden.
+    _alle = [i['i'] for p in _mit for i in p['front']]
+    check('v152: kein Wort erscheint doppelt (used-Buchfuehrung stimmt)',
+          len(_alle) == len(set(_alle)), f'{len(_alle)} Woerter, '
+          f'{len(_alle) - len(set(_alle))} Dubletten')
+    check('v152: eine zu hohe Collage dreht erst die Erweiterung zurueck',
+          "if _lay == 'collage' and tot_h > H * 0.40 and _g_kurz:" in _r152
+          and 'used.discard(_i)' in _r152)
+    check('v152: ein Keyword-Moment wird NIE von einer Collage geschluckt',
+          'if any(i in kw for i in _nx):' in _r152)
+
     # ============ v151: die Referenz muss WIRKLICH durchschlagen =============
     # Ismets Befund: "Referenz hochgeladen, es aendert sich kaum was."
     # Ursache waren zwei Deckel und ein Leerlauf:
@@ -4873,14 +4955,22 @@ def _scenario_betrieb(tmp):
     check('v150: das Satzende knallt, ein offener Satz nicht',
           _gr_max(_ip) > _gr_max(_in) * 1.15,
           f'Satzende {_gr_max(_ip)} px gegen offen {_gr_max(_in)} px')
-    # Ein LANGES Schlusswort kann nicht beliebig wachsen - dort bindet die
-    # Breite, und das ist richtig so. Gepruefet wird deshalb nur, dass es im
-    # Bild bleibt. Mit dem ersten Deckel (0.96 W) ragte es bis 1.033 W
-    # heraus, weil der Block schon bei 0.07 W ansetzt.
-    _il, _, _ = _komp(['was', 'steckt', 'wirklich', 'DAHINTER.'], 'flow')
-    check('v150: der Knall bleibt im Satzspiegel',
-          all(i['cx'] + i['w'] / 2.0 <= 1080 * 0.98 for i in _il + _ip),
-          f"rechte Kante {max(i['cx'] + i['w'] / 2.0 for i in _il) / 1080:.3f} W")
+    # v152: OHNE Randabfall bleibt der Knall im Satzspiegel. Mit dem ersten
+    # Deckel (0.96 W) ragte er bis 1.033 W heraus, weil der Block schon bei
+    # 0.07 W ansetzt - das war unbeabsichtigt und ist etwas anderes als der
+    # gewollte Anschnitt.
+    _cfg_nb = _yaml150.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                      encoding='utf-8'))
+    _cfg_nb['look'] = 'creator'
+    _cfg_nb['effects']['caption_bleed'] = False
+    _S_nb = R.Sprites(_cfg_nb, 1080, 1920)
+    _wnb = [{'word': x, 'start': i * 0.35, 'end': i * 0.35 + 0.3}
+            for i, x in enumerate(['was', 'steckt', 'wirklich', 'DAHINTER.'])]
+    _inb, _, _ = R.compose_flow(list(range(4)), _wnb, _S_nb, 1080, 1920,
+                                portrait=True, punch=True)
+    check('v150: ohne Randabfall bleibt der Knall im Satzspiegel',
+          all(i['cx'] + i['w'] / 2.0 <= 1080 * 0.98 for i in _inb),
+          f"rechte Kante {max(i['cx'] + i['w'] / 2.0 for i in _inb) / 1080:.3f} W")
     _r150 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('v150: der Wechsel ist deterministisch, nicht zufaellig',
           'def _mix01' in _r150 and '_mix01(g[0] * 3) >= 0.42' in _r150

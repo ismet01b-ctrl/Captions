@@ -126,6 +126,15 @@ schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
 Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
 zwischen Regie und Zittern.
 
+### Randabfall + satzweise Collage (v152)
+Der Anschnitt am Satzende gilt nur bis **5 Zeichen** — bei 7 frisst er die
+Randglyphen und das Wort ist unlesbar (am Render gemessen). Das
+angeschnittene Wort darf die **Blockbreite nicht bestimmen** und wird auf die
+Bildmitte zentriert.
+Die satzweise Collage schluckt Folgegruppen über `used`; die **Chunk-Bildung
+bleibt unangetastet**. Keyword-Momente werden nie geschluckt. Passt es nicht
+in 0.40 H, wird erst die Erweiterung zurückgedreht, nicht das Layout.
+
 ### Referenz anwenden (v151) — klemmen, nicht verwerfen
 Ein gemessener Wert ausserhalb des Plausibilitaetsfensters wird **geklemmt**,
 nie verworfen. Verwerfen heisst: der Kunde laedt eine Referenz hoch und sieht
@@ -263,7 +272,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **917/917 grün (Stand v151)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **927/927 grün (Stand v152)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

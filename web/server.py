@@ -1704,7 +1704,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v151-referenz-wirkt'
+DVE_BUILD = 'v152-bleed-satz'
 
 
 @app.middleware('http')

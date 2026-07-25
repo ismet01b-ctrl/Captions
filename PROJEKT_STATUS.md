@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v152 Randabfall + satzweise Collage** (beides von Ismet beauftragt, um
+  naeher an die Vorbilder zu kommen).
+  - **RANDABFALL.** Das Vorbild laesst sein Schlusswort links und rechts aus
+    dem Bild laufen - nur deshalb kann es 0.18 H hoch stehen. Bei fuenf
+    Zeichen braeuchte diese Versalhoehe rund 1480 px Breite, das Bild hat
+    1080; ohne Anschnitt schrumpft `S.fit` es zwangslaeufig auf die Spalte.
+    Der Anschnitt gilt NUR am Satzende, nur bei unverengter Spalte und nur
+    bis 5 Zeichen: am gerenderten Streifen gemessen frisst er bei 'GEHOERT'
+    (7 Zeichen) links das G und rechts das T weg - das Wort war nicht mehr zu
+    lesen. Das Vorbild schneidet 'this' an, also vier Zeichen. Deckel 1.14 W.
+    Das angeschnittene Wort geht NICHT in die Blockbreite ein (sonst faende
+    die Platzierungs-Regie fuer 1.14 W nirgends Platz) und wird auf die
+    Bildmitte zentriert, damit der Anschnitt beidseitig gleich ist.
+    Messung: 'KRASS' 175 -> 300 px Grad.
+  - **SATZWEISE COLLAGE.** Im Vorbild bleibt der ganze Satz stehen und
+    waechst ueber rund zwei Sekunden zu einem Bild; bei uns wurde er
+    chunkweise ausgetauscht. Die Collage zieht jetzt die folgenden Gruppen
+    desselben Satzes mit herein (max. 8 Woerter, nur direkt anschliessend,
+    nur im selben Bildzustand). Die Chunk-Bildung selbst bleibt
+    UNANGETASTET - sie steuert Dichte, Tempo-Kurve und Pointen-Isolierung,
+    daran zu drehen haette Nebenwirkungen bis in die Kamera. Geschluckte
+    Woerter laufen ueber `used`, denselben Weg, den Phrasen schon nutzen.
+    Sperren: ein Keyword-Moment wird NIE geschluckt (der grosse Moment
+    gehoert ihm allein), und passt die Collage nicht in 0.40 H, wird ERST die
+    Erweiterung zurueckgedreht - ein 8-Wort-Chunk im Zeilensatz waere
+    schlechter als eine kurze Collage.
+  Tests 927 logic + 7/1/5/2 Renders + GUI gruen, Beweis-Streifen gerendert.
 - **v151 Die Referenz schlaegt jetzt wirklich durch.** Ismets Befund: "Ich
   habe ein Referenz Video hochgeladen, es aendert sich aber kaum was." Der
   Befund stimmte. Die MESSUNG war richtig (Versalhoehe 0.1836 H, Verhaeltnis

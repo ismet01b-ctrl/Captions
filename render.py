@@ -5978,13 +5978,32 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # Vorschlag. Ohne diese Unterscheidung deckelte der normale
             # Satzspiegel den Knall auf 156 statt 162 px weg - der Effekt
             # waere unsichtbar geblieben.
-            _deckel = (int(W * 0.89) if not colw else _colw) if punch else (
+            # v152 RANDABFALL. Das Vorbild laesst sein Schlusswort links und
+            # rechts aus dem Bild laufen - nur deshalb kann es 0.18 H hoch
+            # stehen. Bei fuenf Zeichen braeuchte diese Versalhoehe rund
+            # 1480 px Breite, das Bild hat 1080; ohne Anschnitt schrumpft
+            # S.fit es zwangslaeufig auf die Spalte. Der Anschnitt gilt NUR
+            # am Satzende und nur, wenn die Spalte nicht wegen eines Motivs
+            # verengt wurde. Erste und letzte Glyphe duerfen angeschnitten
+            # werden, das Wort bleibt lesbar.
+            # NUR KURZE WOERTER. Am gerenderten Streifen gemessen: bei
+            # 'GEHOERT' (7 Zeichen) frisst der Anschnitt links das G und
+            # rechts das T - das Wort ist dann nicht mehr zu lesen. Das
+            # Vorbild schneidet 'this' an, also vier Zeichen; dort verliert
+            # man nur Teile der Randglyphen. Ab sechs Zeichen bleibt es beim
+            # Satzspiegel.
+            _bleed = bool(punch and not colw and len(up) <= 5
+                          and (S.cfg.get('effects', {}) or {}).get(
+                              'caption_bleed', True))
+            _deckel = (int(W * (1.14 if _bleed else 0.89)) if not colw
+                       else _colw) if punch else (
                 min(int(W * 0.83), _colw) if portrait else _colw)
             sz = S.fit(up, int(sz_k * _kf), _deckel, font=S.f_sans_b, tracking=2)
             arr, tw, lets = S.text(up, sz, S.white, font=S.f_sans_b,
                                    glow=_glow_k, per_letter=True, tracking=2)
             items.append({'i': i, 'arr': arr, 'w': tw,
                           'role': 'punch' if punch else 'key', 'sz': sz,
+                          'bleed': bool(_bleed and tw > W * 0.90),
                           'letters': lets, 't': words[i]['start']})
         elif i == accent:
             cap = raw.lower().capitalize()
@@ -7599,6 +7618,44 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     and not _cw150 \
                     and _mix01(g[0] * 3) >= 0.42:
                 _lay = 'collage'
+            # v152 SATZWEISE COLLAGE. Im Vorbild bleibt der GANZE SATZ stehen
+            # und waechst ueber rund zwei Sekunden zu einem Bild; bei uns
+            # wurde er chunkweise ausgetauscht. Die Collage zieht deshalb die
+            # folgenden Gruppen desselben Satzes mit herein.
+            # Die Chunk-Bildung selbst bleibt unangetastet - sie steuert
+            # Dichte, Tempo-Kurve und Pointen-Isolierung, und daran zu drehen
+            # haette Nebenwirkungen bis in die Kamera. Geschluckte Woerter
+            # laufen ueber 'used', denselben Weg, den Phrasen schon nutzen.
+            _g_vor, _g_kurz = list(g), None
+            if _lay == 'collage' \
+                    and cfg['effects'].get('caption_satz_collage', True) \
+                    and hat_interpunktion:
+                _erw, _gj = list(g), gi + 1
+                while (_gj < len(groups) and len(_erw) < 8
+                       and not str(words[_erw[-1]]['word']).rstrip().endswith(
+                           ('.', '!', '?'))):
+                    _nx = [i for i in groups[_gj] if i not in used]
+                    if not _nx:
+                        break
+                    # Nur direkt anschliessend, nur im selben Bildzustand, und
+                    # NIE ueber ein Keyword hinweg: der grosse Moment gehoert
+                    # ihm allein, er darf nicht in einer Collage verschwinden.
+                    if words[_nx[0]]['start'] - words[_erw[-1]]['end'] > 0.60:
+                        break
+                    if any(i in kw for i in _nx):
+                        break
+                    if (not face_ok(words[_nx[0]]['start'],
+                                    words[_nx[-1]]['end'])) != broll:
+                        break
+                    _erw += _nx
+                    _gj += 1
+                if len(_erw) > len(g):
+                    for _i in _erw[len(g):]:
+                        used.add(_i)
+                    g = _erw
+                    end = words[g[-1]]['end']
+                    next_start = (g_starts[_gj] if _gj < len(groups) else 1e9)
+                    _g_kurz = list(_g_vor)
             # SATZENDE: nur dort darf das Schluesselwort auf Knall-Groesse.
             _punch = bool(str(words[g[-1]]['word']).rstrip().endswith(('.', '!', '?')))
             items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait, loud=loud,
@@ -7610,6 +7667,21 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # in den Bildrand druecken - dann ist das gewohnte Zeilenraster
             # die bessere Wahl. Gemessen: ein 10-Wort-Chunk ergibt 0.47 H,
             # ein normaler 4-Wort-Chunk bleibt klar darunter.
+            if _lay == 'collage' and tot_h > H * 0.40 and _g_kurz:
+                # Der ganze Satz passt nicht: erst die Erweiterung
+                # zurueckdrehen, nicht gleich das Layout. Ein 8-Wort-Chunk im
+                # Zeilensatz waere schlechter als eine kurze Collage.
+                for _i in g[len(_g_kurz):]:
+                    used.discard(_i)
+                g = _g_kurz
+                end = words[g[-1]]['end']
+                next_start = (g_starts[gi + 1] if gi + 1 < len(groups) else 1e9)
+                _punch = bool(str(words[g[-1]]['word']).rstrip()
+                              .endswith(('.', '!', '?')))
+                items, tot_h, anchor_i = compose_flow(
+                    g, words, S, W, H, portrait, loud=loud,
+                    flow_sel=(flow_map or {}).get(g[0]),
+                    colw=_cw150, layout='collage', punch=_punch)
             if _lay == 'collage' and tot_h > H * 0.40:
                 _lay = 'flow'
                 items, tot_h, anchor_i = compose_flow(
@@ -7637,7 +7709,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     return (_it['cx'], _it['cx'])
                 _o = _it['cx'] - _a.shape[1] / 2.0
                 return (_o + float(_c.min()), _o + float(_c.max()))
-            _spans = [_ink_x(it) for it in items]
+            # v152: ein randabfallendes Schlusswort darf die Blockbreite
+            # NICHT bestimmen. Sonst meldet der Block 1.22 W, die
+            # Platzierungs-Regie findet dafuer nirgends Platz und schiebt
+            # den ganzen Satz aus dem Bild.
+            _spans = [_ink_x(it) for it in items if not it.get('bleed')]
+            if not _spans:
+                _spans = [_ink_x(it) for it in items]
             _bl = min(sp[0] for sp in _spans)
             _br = max(sp[1] for sp in _spans)
             # v144: die Wunschzone kann aus einer gemessenen Referenz kommen.
@@ -7652,6 +7730,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             for it in items:
                 it['cx'] += _dx
                 it['cy'] += _sy
+            # Das randabfallende Wort wird auf die BILDMITTE zentriert -
+            # der Anschnitt soll links und rechts gleich viel wegnehmen.
+            for it in items:
+                if it.get('bleed'):
+                    it['cx'] = W / 2.0
             y0 = _sy
             # v143: der Kamera-Follow schiebt den Block zur Laufzeit. Die
             # Planung war korrekt und das FERTIGE Bild trotzdem bei 0.961 W -
