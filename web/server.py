@@ -6721,8 +6721,10 @@ def _admin_tax_calc():
             'regelung': 'Kleinunternehmer nach §19 UStG (small business scheme)',
             'ust_id': (os.environ.get('DVE_TAX_ID') or 'DE463613884').strip(),
             'ust_ausweis': False,
-            'hinweis': 'Never state VAT. Invoices carry the §19 note in the '
-                       'Stripe footer.',
+            'hinweis': 'Never show a VAT amount or rate on invoices (that is what '
+                       '"state VAT" means). The VAT ID itself DOES go on the '
+                       'invoice as an identifier, together with the §19 note - '
+                       'both are already in the Stripe footer.',
         },
         'jahr': jahr, 'jahre': jahre, 'monate': monate,
         'kleinunternehmer': kleinunternehmer,

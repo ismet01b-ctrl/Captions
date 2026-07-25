@@ -3804,6 +3804,15 @@ def _scenario_security(tmp):
           _tax['identitaet']['ust_id'] == 'DE463613884'
           and _tax['identitaet']['ust_ausweis'] is False
           and '19' in _tax['identitaet']['regelung'])
+    # v142a (Ismets Rueckfrage): "USt niemals ausweisen" != "USt-IdNr weglassen".
+    # Der Panel-Hinweis muss die BETRAG-Aussage machen (kein USt-Satz/-Betrag),
+    # nicht die Nummer verbieten - und die Nummer steht nachweislich im Footer
+    # (der Beleg dafuer liegt im v135-Test oben).
+    check('v142a: Panel unterscheidet USt-Betrag (nein) von USt-IdNr (ja)',
+          'VAT amount' in _tax['identitaet']['hinweis']
+          and 'VAT ID itself DOES go on the invoice' in _tax['identitaet']['hinweis']
+          and 'VAT ID on invoice' in _adm142
+          and 'Show a VAT amount' in _adm142)
     check('v142: §19-Ampel schlaegt ab 80 Prozent und ueber der Grenze an',
           _tax['kleinunternehmer']['laufend_lage'] == 'ok'
           and SV.KU_VORJAHR_CENT == 25_000_00 and SV.KU_LAUFEND_CENT == 100_000_00)
