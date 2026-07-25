@@ -65,6 +65,11 @@ effects:
   # v143: Platzierungs-Regie. true = der Textblock weicht Gesicht und
   # unruhigen Bildbereichen aus (Raum-Karte pro Shot). false = feste Zone.
   adaptive_place: true
+  # v150: Abwechslung im Satzbild. Neben dem gewohnten Zeilenraster streut
+  # die Engine eine COLLAGE ein - Woerter in eigener Groesse ueber die
+  # Flaeche verteilt, so wie in den Vorbildern. Deterministisch gewaehlt,
+  # nicht zufaellig. 'clean' bleibt davon unberuehrt.
+  caption_collage: true
   # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
   # power-3-Moment. 0 = aus.
   punch_silence: 0.34

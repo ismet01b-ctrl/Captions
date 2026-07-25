@@ -1704,7 +1704,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v149-resolution'
+DVE_BUILD = 'v151-referenz-wirkt'
 
 
 @app.middleware('http')
@@ -2293,6 +2293,10 @@ def build_config(look, overrides=None):
     quer durch alle Effekte, Kamera, Farben und Schrift. Nutzer kann alles
     einzeln nachtunen; die Defaults sind aber schon deploybar."""
     cfg = yaml.safe_load(open(os.path.join(ROOT, 'config.yaml'), encoding='utf-8'))
+    # v150: der gewaehlte Look muss in der Config stehen. Die Engine
+    # entscheidet daran, ob sie die Collage-Anordnung einstreuen darf -
+    # 'clean' bleibt bewusst schlicht.
+    cfg['look'] = str(look or 'creator')
 
     # --- 2026er High-End-Presets (voll ausgereizt, produktionsreif)
     PRESETS = {

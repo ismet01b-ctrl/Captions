@@ -3990,8 +3990,16 @@ def _apply_reference_params(cfg):
             cfg['camera']['strength'] = min(float(cfg['camera'].get('strength', 0.7)), 0.35)
             cfg['camera']['whip'] = False
             cfg['camera']['crash'] = min(float(cfg['camera'].get('crash', 0.0)), 0.20)
+        elif _k == 'bewegt':
+            # v151: 'bewegt' war ein LEERLAUF - nur 'ruhig' und 'wild' taten
+            # etwas. Ein Vorbild mit bewegter Kamera aenderte an unserer
+            # Kamera damit nichts, obwohl genau das gemessen wurde.
+            cfg['camera']['strength'] = max(
+                0.60, min(0.80, float(cfg['camera'].get('strength', 0.7))))
+            cfg['camera']['whip'] = True
         elif _k == 'wild':
             cfg['camera']['strength'] = max(float(cfg['camera'].get('strength', 0.7)), 0.85)
+            cfg['camera']['whip'] = True
         parts.append(f"kamera={_k}")
     # SCHNITT-TEMPO steuert, wie lange ein Chunk stehen bleibt. Schnelle
     # Einstellungen vertragen keine langen Standzeiten.
@@ -4021,17 +4029,47 @@ def _apply_reference_params(cfg):
     # BILDHOEHE, damit es zwischen 9:16 und 16:9 uebertragbar bleibt.
     # Bezugsgroesse ist unsere eigene Hausgroesse: Schriftgrad 0.098 H mal
     # cap/em 0.70 = 0.0686 H Versalhoehe.
+    # v151: GRENZEN KLEMMEN, NICHT VERWERFEN. Bis v150 fiel ein Messwert
+    # ausserhalb des Fensters einfach durch - und damit passierte GAR NICHTS.
+    # Genau das traf die auffaelligsten Vorbilder: das zweite Referenzvideo
+    # misst Versalhoehe 0.1836 H und Verhaeltnis 4.59, beides oberhalb der an
+    # v144 geeichten Fenster (0.140 / 4.0). Der Kunde lud eine Referenz hoch
+    # und sah nichts - obwohl die Messung stimmte. Das Fenster prueft jetzt
+    # nur noch auf groben Unsinn, der Rest wird an den Rand geklemmt.
     if p.get('key_hoehe'):
         _kh = float(p['key_hoehe'])
-        if 0.030 <= _kh <= 0.140:
-            _sk = round(max(0.75, min(1.35, _kh / 0.0686)), 3)
+        if 0.015 <= _kh <= 0.40:
+            # Deckel bis 2.6: das Vorbild ist 2.68x groesser als unser
+            # Hausmass. Mit dem alten Deckel 1.35 kam nicht einmal die
+            # Haelfte des Unterschieds an. S.fit deckelt weiterhin auf die
+            # Spaltenbreite, ein langes Wort schrumpft also von selbst.
+            _sk = round(max(0.70, min(2.60, _kh / 0.0686)), 3)
             cfg['effects']['caption_scale'] = _sk
             parts.append(f"grad={_kh:.3f}H")
     if p.get('verhaeltnis'):
         _vh = float(p['verhaeltnis'])
-        if 1.4 <= _vh <= 4.0:
-            cfg['effects']['caption_hierarchie'] = round(max(1.6, min(3.4, _vh)), 2)
+        if 1.1 <= _vh <= 8.0:
+            cfg['effects']['caption_hierarchie'] = round(max(1.5, min(4.6, _vh)), 2)
             parts.append(f"hierarchie={_vh:.1f}")
+    # v151: REVEAL-TEMPO aus dem Vorbild. Gemessen wird, in welchem Abstand
+    # neue Textflaeche dazukommt: der Buchstaben-Takt ist die Zeit je
+    # aufgedecktem Zeichen (Vorbild 0.087 s), der Wort-Takt der Abstand
+    # zwischen zwei Woertern. Bis v150 wurde beides gemessen und dann
+    # weggeworfen - dabei ist das Aufdeck-Tempo eines der ersten Dinge, die
+    # man beim Vergleich mit einem Vorbild sieht.
+    if p.get('buchstaben_takt'):
+        _bt = float(p['buchstaben_takt'])
+        if 0.02 <= _bt <= 0.30:
+            cfg['effects']['reveal_letter_s'] = round(_bt, 3)
+            parts.append(f"reveal={_bt:.3f}s")
+    # STRICHSTAERKE: wie fett die Referenz-Schrift steht (Stammbreite je
+    # Versalhoehe). Sie waehlt das Gewicht der Stuetzschrift.
+    if p.get('stamm_versal'):
+        _sv = float(p['stamm_versal'])
+        if 0.05 <= _sv <= 0.60:
+            cfg['effects']['caption_weight'] = int(
+                max(300, min(900, round(300 + (_sv - 0.10) * 2000, -1))))
+            parts.append(f"strich={_sv:.2f}")
     # GLOW / KONTUR direkt aus dem Vorbild
     if 'glow' in p:
         cfg['effects']['caption_glow'] = bool(p['glow'])
@@ -5775,8 +5813,15 @@ _FLOW_CONN = {'im', 'in', 'am', 'an', 'auf', 'aus', 'bei', 'der', 'die', 'das',
               'why', 'how', 'that', 'this', 'not', 'but', 'just', 'my', 'your'}
 
 
+def _mix01(n):
+    """Deterministische 0..1-Streuung aus einer ganzen Zahl (Knuth-Multiplikation).
+    Gleiche Eingabe -> gleiche Ausgabe, also reproduzierbar ueber Re-Renders,
+    aber ohne sichtbares Muster. Dieselbe Quelle wie die Anim-Staffelung."""
+    return (((int(n) + 3) * 2654435761) & 1023) / 1023.0
+
+
 def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
-                 colw=None):
+                 colw=None, layout='flow', punch=False):
     """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
     Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
       - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
@@ -5844,13 +5889,19 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     #     Display-Schrift, x-Hoehe/em 0.52 bei der Stuetzschrift. Deckel, weil
     #     eine Fehlmessung sonst den ganzen Satz sprengt.
     _ef = S.cfg.get('effects', {}) or {}
+    # v151: DER DECKEL SASS ZWEIMAL. _apply_reference_params klemmte den
+    # gemessenen Wert bereits auf einen sinnvollen Bereich - hier wurde er
+    # ein zweites Mal auf 1.35 gestutzt. Ergebnis: ein Vorbild mit 2.68x
+    # Hausmass kam mit 1.35 an, also gerade der halbe Unterschied, und der
+    # Kunde sah "es aendert sich kaum was". Hier nur noch die harte
+    # Sicherung gegen Unsinn, die Regie entscheidet davor.
     _skal = float(_ef.get('caption_scale') or 1.0)
-    _skal = max(0.75, min(1.35, _skal))
+    _skal = max(0.60, min(2.80, _skal))
     _hier = float(_ef.get('caption_hierarchie') or 0) or None
     pf = 1.35 if not portrait else 1.0
     sz_k = int(H * 0.098 * pf * _skal)
     if _hier:
-        _hier = max(1.6, min(3.4, _hier))
+        _hier = max(1.4, min(5.0, _hier))
         sz_n = int(sz_k * 0.70 / (0.52 * _hier))
     else:
         sz_n = int(H * 0.045 * pf * _skal)
@@ -5870,6 +5921,34 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     _trk_n = 6 if portrait else max(2, int(sz_n * 0.0625))
     # v144: Glow kann aus der gemessenen Referenz kommen (Standard: an).
     _glow_k = bool((S.cfg.get('effects', {}) or {}).get('caption_glow', True))
+    # v150 COLLAGE-VORAUSWAHL. Zwei Entscheidungen fallen VOR dem Setzen,
+    # weil sie die Groessen bestimmen:
+    # (1) Wie viele Woerter duerfen gross stehen. Im Vorbild sind es drei
+    #     ('have been asking') neben zwei kleinen. Duerften alle
+    #     Inhaltswoerter gross, waere der Block bei zehn Woertern 0.44 H
+    #     hoch - er passt dann neben keinem Kopf mehr vorbei, und die
+    #     Platzierungs-Regie muesste ihn in den Bildrand druecken.
+    # (2) Welche Woerter in die Schreibschrift gehen. Das Vorbild setzt eine
+    #     zusammenhaengende Verbinder-Kette ('how do I do') kursiv - ein
+    #     zweiter Schriftschnitt im selben Satz, und genau der macht den
+    #     Unterschied zwischen 'Untertitel' und 'gesetzt'.
+    _gross_ok, _skript_grp = set(), set()
+    if layout == 'collage':
+        _kand = [i for i in cont if i != accent and i != anchor]
+        _kand.sort(key=lambda i: -len(clean(words[i]['word'])))
+        _gross_ok = set(_kand[:4])
+        _kette, _best = [], []
+        for i in idxs:
+            if i in cont or i == anchor:
+                if len(_kette) > len(_best):
+                    _best = _kette
+                _kette = []
+            else:
+                _kette.append(i)
+        if len(_kette) > len(_best):
+            _best = _kette
+        if len(_best) >= 2:
+            _skript_grp = set(_best[:4])
     items = []
     for i in idxs:
         raw = clean(words[i]['word'])
@@ -5882,11 +5961,30 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # voll ist. Wurde sie wegen eines Motivs verengt, gewinnt die
             # Spalte - sonst spraengte das Schluesselwort den Block wieder
             # auf volle Breite und die Verengung waere wirkungslos.
-            sz = S.fit(up, sz_k, min(int(W * 0.83), _colw) if portrait else _colw,
-                       font=S.f_sans_b, tracking=2)
+            # v150 (C) SCHLUSSWORT-KNALL. Im Vorbild ist die Punchline
+            # gemessen 0.18 H hoch, das Groessenverhaeltnis zum Fliesstext
+            # 4.59 - bei uns lag es bei 2.2 bis 2.9. Ein Satzende darf
+            # deshalb deutlich groesser ansetzen; die Spaltenbreite deckelt
+            # es weiterhin, ein langes Wort schrumpft also von selbst
+            # zurueck. Nur am SATZENDE, sonst waere jedes Video wieder
+            # gleichfoermig - nur eben laut.
+            _kf = 1.60 if punch else 1.0
+            # Beim Knall darf die Zeile ueber den normalen Satzspiegel
+            # hinaus - im Vorbild laeuft das Schlusswort ueber die volle
+            # Breite. 0.89 W und nicht mehr: der Block SETZT bei x0 = 0.07 W
+            # an, mit 0.96 ragte die rechte Kante gemessen bis 1.033 W.
+            # Breite. ABER nur, wenn der Aufrufer die Spalte nicht wegen
+            # eines Motivs verengt hat: die Verengung ist eine Sperre, kein
+            # Vorschlag. Ohne diese Unterscheidung deckelte der normale
+            # Satzspiegel den Knall auf 156 statt 162 px weg - der Effekt
+            # waere unsichtbar geblieben.
+            _deckel = (int(W * 0.89) if not colw else _colw) if punch else (
+                min(int(W * 0.83), _colw) if portrait else _colw)
+            sz = S.fit(up, int(sz_k * _kf), _deckel, font=S.f_sans_b, tracking=2)
             arr, tw, lets = S.text(up, sz, S.white, font=S.f_sans_b,
                                    glow=_glow_k, per_letter=True, tracking=2)
-            items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'key',
+            items.append({'i': i, 'arr': arr, 'w': tw,
+                          'role': 'punch' if punch else 'key', 'sz': sz,
                           'letters': lets, 't': words[i]['start']})
         elif i == accent:
             cap = raw.lower().capitalize()
@@ -5901,10 +5999,39 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # greift nur die Groesse - immer noch stimmig).
             _m = (loud or {}).get(i)
             _sz = int(sz_n * (1.12 if _m == '!' else (0.92 if _m == '~' else 1.0)))
-            _wg = 800 if _m == '!' else (460 if _m == '~' else None)
+            # v151: Grundgewicht kann aus der gemessenen Referenz kommen
+            # (Stammbreite je Versalhoehe). Betonung bleibt relativ dazu.
+            _wb = int((S.cfg.get('effects', {}) or {}).get('caption_weight') or 0)
+            if _wb:
+                _wg = max(200, min(900, _wb + (140 if _m == '!' else
+                                               (-140 if _m == '~' else 0))))
+            else:
+                _wg = 800 if _m == '!' else (460 if _m == '~' else None)
+            # v150 (B) VARIATION: in der Collage sind die Fuellwoerter NICHT
+            # alle gleich gross. Im Vorbild traegt jedes Wort seine eigene
+            # Groesse - genau das nimmt dem Video die Gleichfoermigkeit.
+            # Inhaltswoerter stehen gross und rechts versetzt, echte
+            # Verbinder klein links. Die Stufe kommt deterministisch aus dem
+            # Wort-Index, damit ein Re-Render dasselbe Bild ergibt.
+            _gross = False
+            if layout == 'collage' and i in _skript_grp:
+                # Schreibschrift-Kette: klein, in Akzentfarbe, leicht schraeg.
+                _sz = int(sz_n * 1.15)
+                arr, tw = S.text(raw.lower(), _sz, S.accent, font=S.f_script)
+                items.append({'i': i, 'arr': rot_img(arr, -6), 'w': tw,
+                              'role': 'norm', 'gross': False, 'skript': True,
+                              'sz': _sz, 't': words[i]['start']})
+                continue
+            if layout == 'collage':
+                _gross = i in _gross_ok
+                if _gross:
+                    _sz = int(_sz * (1.75 + 0.35 * _mix01(i)))
+                else:
+                    _sz = int(_sz * (0.92 + 0.16 * _mix01(i * 7)))
             arr, tw = S.text(raw, _sz, S.white, tracking=_trk_n, font=S.f_sans,
                              wght=_wg)
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'norm',
+                          'gross': _gross, 'sz': _sz,
                           't': words[i]['start']})
     # Inline-Fluss mit Umbruch, Zeilen unten ausgerichtet (gemeinsame Grundlinie)
     max_w = _colw
@@ -5943,7 +6070,62 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             rows.append(cur)
 
     def _rsz(it):
-        return sz_k if it['role'] == 'key' else (sz_a if it['role'] == 'accent' else sz_n)
+        # Nur die Collage rechnet mit der WIRKLICH gesetzten Groesse. Im
+        # Zeilensatz bleibt die Sollgroesse massgeblich - sonst aendert sich
+        # dort die Zeilenhoehe und damit die ganze Platzierung, obwohl an
+        # diesem Layout gar nichts geaendert wurde.
+        if layout == 'collage' and it.get('sz'):
+            return it['sz']
+        return sz_k if it['role'] in ('key', 'punch') else (
+            sz_a if it['role'] == 'accent' else sz_n)
+
+    if layout == 'collage':
+        # v150 (A) KUMULATIVE COLLAGE. Der Unterschied zum Flow-Layout ist
+        # NICHT das Stehenbleiben - das konnte der Flow schon. Es ist die
+        # ANORDNUNG: im Vorbild steht jedes Wort an eigener Stelle und in
+        # eigener Groesse, kleine Woerter bilden links eine schmale Spalte,
+        # die Inhaltswoerter treppen rechts daneben nach unten weg. Der Satz
+        # wird dadurch zu einem Bild statt zu drei linksbuendigen Zeilen -
+        # und genau dieses Zeilenraster war die Ursache dafuer, dass alle
+        # unsere Videos gleich aussehen.
+        _lx = x0
+        _rx = int(x0 + max_w * 0.26)
+        _ly, _ry = 0, 0
+        for it in items:
+            _h = int(_rsz(it) * 1.16)
+            _breit = it['role'] in ('key', 'punch')
+            if _breit:
+                continue                       # kommt unten als eigener Block
+            if it['role'] == 'accent' or not it.get('gross'):
+                # kleine Spalte links
+                it['cx'] = _lx + it['adv'] / 2.0
+                it['cy'] = _ly + _h / 2.0
+                _ly += _h
+            else:
+                # grosse Treppe rechts, mit deterministischem Seitenversatz -
+                # eine exakt buendige Kante saehe wieder nach Raster aus.
+                _off = int(max_w * 0.06 * _mix01(it['i'] * 13))
+                it['cx'] = _rx + _off + it['adv'] / 2.0
+                it['cy'] = _ry + _h / 2.0
+                _ry += _h
+            # Der Satzspiegel ist bindend: was rechts herausragen wuerde,
+            # rutscht zurueck. Ohne das reisst ein langes Wort den Block auf
+            # und die Platzierungs-Regie bekommt eine falsche Breite.
+            _rand = x0 + max_w
+            if it['cx'] + it['adv'] / 2.0 > _rand:
+                it['cx'] = _rand - it['adv'] / 2.0
+        y = max(_ly, _ry)
+        # Schluesselwort / Punchline: eigener Block unter der Collage, ueber
+        # die volle Spalte. Im Vorbild ist das der Knall am Satzende.
+        for it in items:
+            if it['role'] in ('key', 'punch'):
+                _h = int(_rsz(it) * 1.16)
+                it['cx'] = x0 + it['adv'] / 2.0
+                it['cy'] = y + _h / 2.0
+                y += _h
+        total_h = max(y, 1)
+        return items, total_h, anchor
+
     y = 0
     for row in rows:
         line_h = int(max(_rsz(it) for it in row) * 1.20)
@@ -7391,9 +7573,49 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # seitlich oder fuellt sie das Bild, liefert _freie_breite eine
             # schmalere Spalte; der Block wird dann hoeher und schmaler und
             # findet neben dem Kopf Platz.
+            # v150 ABWECHSLUNG (Ismets Befund: 'zu monoton'). Bis v149 bekam
+            # JEDER Filler-Chunk dasselbe linksbuendige Zeilenraster - drei
+            # Zeilen, gleiche Kante, gleiche Groessen. Ueber ein ganzes Video
+            # sah damit jeder Moment gleich aus.
+            # Jetzt wechseln sich zwei Anordnungen ab: das gewohnte Zeilen-
+            # Layout und die COLLAGE (Woerter in eigener Groesse ueber die
+            # Flaeche verteilt). Der Wechsel ist deterministisch aus dem
+            # ersten Wort-Index - reproduzierbar ueber Re-Renders, aber ohne
+            # sichtbares Muster - und die Collage braucht genug Woerter,
+            # sonst hat sie nichts zu verteilen. 'clean' bleibt aussen vor,
+            # dort ist Schlichtheit das gewollte Ergebnis.
+            _lay = 'flow'
+            _cw150 = _freie_breite(start, end)
+            # Bei verengter Spalte (Nahaufnahme, Person fuellt das Bild)
+            # bleibt es beim Zeilensatz. Die Collage staffelt nach RECHTS -
+            # in einer schmalen Spalte hat sie dafuer keinen Platz und
+            # draengte den Block unter den Kopf, statt neben ihn.
+            # Drei Woerter reichen: die Chunk-Bildung liefert im Regelfall
+            # 2 bis 4 (words_per_group). Mit der Schwelle 4 lief die Collage
+            # im echten Render gemessen KEIN EINZIGES Mal an - der Beweis-
+            # Streifen zeigte acht Mal dasselbe Zeilenraster.
+            if len(g) >= 3 and str(cfg.get('look', '')).lower() != 'clean' \
+                    and cfg['effects'].get('caption_collage', True) \
+                    and not _cw150 \
+                    and _mix01(g[0] * 3) >= 0.42:
+                _lay = 'collage'
+            # SATZENDE: nur dort darf das Schluesselwort auf Knall-Groesse.
+            _punch = bool(str(words[g[-1]]['word']).rstrip().endswith(('.', '!', '?')))
             items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait, loud=loud,
                                                   flow_sel=(flow_map or {}).get(g[0]),
-                                                  colw=_freie_breite(start, end))
+                                                  colw=_cw150,
+                                                  layout=_lay, punch=_punch)
+            # Die Collage baut in die HOEHE. Wird sie zu hoch, passt sie an
+            # keinem Kopf mehr vorbei und die Platzierungs-Regie muesste sie
+            # in den Bildrand druecken - dann ist das gewohnte Zeilenraster
+            # die bessere Wahl. Gemessen: ein 10-Wort-Chunk ergibt 0.47 H,
+            # ein normaler 4-Wort-Chunk bleibt klar darunter.
+            if _lay == 'collage' and tot_h > H * 0.40:
+                _lay = 'flow'
+                items, tot_h, anchor_i = compose_flow(
+                    g, words, S, W, H, portrait, loud=loud,
+                    flow_sel=(flow_map or {}).get(g[0]),
+                    colw=_cw150, layout='flow', punch=_punch)
             # v143: Position kommt aus der Platzierungs-Regie statt aus einer
             # Konstanten. Wunschzone = wo der Block AM LIEBSTEN sitzt; spot()
             # weicht davon ab, wenn dort ein Gesicht oder ein unruhiger
@@ -7446,6 +7668,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # verankerten Caption. Filler bleibt ruhig (wie die Referenz); die
             # dramatischen Keyword-Momente behalten ihre Kamera.
             sp = {'tpl': 'flow', 'front': items, 'start': start, 'end': end,
+                  'layout': _lay, 'punch': _punch,
                   'side': 0, 'ccam': 'none',
                   'target': (int(_sx), int(y0 + tot_h / 2.0)),
                   'fol_lim': _fol_lim,
@@ -8571,9 +8794,16 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf
                 if dt < 0:
                     continue
-                if it.get('role') == 'key' and it.get('letters'):
+                if it.get('role') in ('key', 'punch') and it.get('letters'):
                     n = len(it['letters'])
-                    reveal = ease_out(dt / (0.17 * (1 + 0.08 * hand_jitter(it['i']))))
+                    # v151: Aufdeck-Tempo kann aus der gemessenen Referenz
+                    # kommen. 0.17 s je Wort ist unser Hausmass; das zweite
+                    # Vorbild deckt mit 0.087 s je ZEICHEN auf, also rund
+                    # doppelt so schnell bei einem 8-Zeichen-Wort.
+                    _rv = float((cfg.get('effects', {}) or {}).get(
+                        'reveal_letter_s') or 0)
+                    _rvd = max(0.06, min(0.40, _rv * n)) if _rv else 0.17
+                    reveal = ease_out(dt / (_rvd * (1 + 0.08 * hand_jitter(it['i']))))
                     vis_px = None
                     k_full = int(min(reveal * n, n))
                     if k_full < n:

@@ -2634,7 +2634,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v149-resolution'" in _srv_m)
+          and "DVE_BUILD = 'v151-referenz-wirkt'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4734,6 +4734,174 @@ def _scenario_betrieb(tmp):
           'USt-IdNr.: DE463613884' in _invd['invoice_data']['footer']
           and 'DE463613884' in _impr
           and 'no VAT identification number' not in _impr)
+    # ============ v151: die Referenz muss WIRKLICH durchschlagen =============
+    # Ismets Befund: "Referenz hochgeladen, es aendert sich kaum was."
+    # Ursache waren zwei Deckel und ein Leerlauf:
+    #  1. Messwerte ausserhalb eines an v144 geeichten Fensters wurden
+    #     VERWORFEN statt geklemmt - beim zweiten Vorbild (Versalhoehe
+    #     0.1836 H, Verhaeltnis 4.59) passierte deshalb GAR NICHTS.
+    #  2. Der Deckel sass zweimal: _apply_reference_params klemmte sauber,
+    #     compose_flow stutzte danach nochmal auf 1.35.
+    #  3. 'kamera: bewegt' war ein Leerlauf - nur ruhig/wild taten etwas.
+    import yaml as _y151
+    import render as R
+    _p151 = {'key_hoehe': 0.1836, 'verhaeltnis': 4.59, 'kamera': 'bewegt',
+             'buchstaben_takt': 0.087, 'stamm_versal': 0.17,
+             'zone_y': [0.182, 0.492], 'einstellung_s': 2.04}
+    _rf151 = os.path.join(tmp, 'refs151.json')
+    json.dump([{'name': 'v2', 'beispiel': 'x', 'params': _p151}],
+              open(_rf151, 'w', encoding='utf-8'))
+    _c151 = _y151.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _alt151 = os.environ.get('DVE_REFS_FILE')
+    try:
+        os.environ['DVE_REFS_FILE'] = _rf151
+        _ank151 = R._apply_reference_params(_c151)
+    finally:
+        if _alt151 is None:
+            os.environ.pop('DVE_REFS_FILE', None)
+        else:
+            os.environ['DVE_REFS_FILE'] = _alt151
+    check('v151: extreme Messwerte werden GEKLEMMT, nicht verworfen',
+          _c151['effects'].get('caption_scale')
+          and _c151['effects'].get('caption_hierarchie'),
+          f"scale {_c151['effects'].get('caption_scale')}, "
+          f"hierarchie {_c151['effects'].get('caption_hierarchie')}")
+    check('v151: eine 2.7x groessere Referenz kommt auch als deutlich groesser an',
+          float(_c151['effects']['caption_scale']) >= 2.0,
+          f"Faktor {_c151['effects'].get('caption_scale')} (alter Deckel war 1.35)")
+    check('v151: bewegte Referenz-Kamera bewegt auch UNSERE Kamera',
+          _c151['camera'].get('whip') is True
+          and 0.55 <= float(_c151['camera']['strength']) <= 0.85,
+          f"strength {_c151['camera']['strength']}, whip {_c151['camera'].get('whip')}")
+    check('v151: Aufdeck-Tempo und Strichstaerke werden angewandt',
+          abs(float(_c151['effects'].get('reveal_letter_s', 0)) - 0.087) < 0.001
+          and 300 <= int(_c151['effects'].get('caption_weight', 0)) <= 900,
+          f"reveal {_c151['effects'].get('reveal_letter_s')}, "
+          f"weight {_c151['effects'].get('caption_weight')}")
+    check('v151: der Anker nennt Grad, Hierarchie und Tempo',
+          all(x in _ank151 for x in ('grad=', 'hierarchie=', 'reveal=')), _ank151)
+
+    def _szn(cfgx):
+        _Sx = R.Sprites(cfgx, 1080, 1920)
+        _wx = [{'word': x, 'start': i * 0.35, 'end': i * 0.35 + 0.3}
+               for i, x in enumerate(['das', 'ist', 'KRASS.'])]
+        _it, _, _ = R.compose_flow(list(range(3)), _wx, _Sx, 1080, 1920,
+                                   portrait=True, punch=True)
+        return max(i['sz'] for i in _it if i['role'] == 'norm')
+    _haus151 = _szn(_y151.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                         encoding='utf-8')))
+    _ref151 = _szn(_c151)
+    check('v151: der zweite Deckel in compose_flow ist weg (Groesse kommt an)',
+          _ref151 >= _haus151 * 1.4,
+          f'Haus {_haus151} px -> Referenz {_ref151} px')
+    _r151 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v151: kein doppelter Deckel mehr im Composer',
+          'max(0.60, min(2.80, _skal))' in _r151
+          and 'max(0.75, min(1.35, _skal))' not in _r151)
+    check('v151: das gemessene Tempo steuert das Aufdecken wirklich',
+          "'reveal_letter_s'" in _r151 and '_rvd * (1 + 0.08 * hand_jitter' in _r151)
+    # Grober Unsinn muss weiterhin abprallen - sonst sprengt eine
+    # Fehlmessung den Satz.
+    _c151b = _y151.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    json.dump([{'name': 'x', 'beispiel': 'x',
+                'params': {'key_hoehe': 0.92, 'verhaeltnis': 40.0}}],
+              open(_rf151, 'w', encoding='utf-8'))
+    try:
+        os.environ['DVE_REFS_FILE'] = _rf151
+        R._apply_reference_params(_c151b)
+    finally:
+        if _alt151 is None:
+            os.environ.pop('DVE_REFS_FILE', None)
+        else:
+            os.environ['DVE_REFS_FILE'] = _alt151
+    check('v151: unsinnige Messwerte prallen weiterhin ab',
+          not _c151b['effects'].get('caption_scale')
+          and not _c151b['effects'].get('caption_hierarchie'),
+          str(_c151b['effects'].get('caption_scale')))
+
+    # ================= v150: Abwechslung im Satzbild =========================
+    # Ismets Befund am eigenen Ergebnis: "zu monoton". Bis v149 bekam JEDER
+    # Filler-Chunk dasselbe linksbuendige Zeilenraster - drei Zeilen, gleiche
+    # Kante, gleiche Groessen. Vorbild (@johnbucog_, gemessen): Woerter in
+    # eigener Groesse ueber die Flaeche verteilt, zweiter Schriftschnitt im
+    # selben Satz, Punchline mit Groessenverhaeltnis 4.59.
+    import yaml as _yaml150
+    import render as R
+    _cfg150 = _yaml150.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                      encoding='utf-8'))
+    _cfg150['look'] = 'creator'
+    _S150 = R.Sprites(_cfg150, 1080, 1920)
+
+    def _komp(txt, layout, punch=True):
+        _w = [{'word': x, 'start': i * 0.35, 'end': i * 0.35 + 0.3}
+              for i, x in enumerate(txt)]
+        return R.compose_flow(list(range(len(_w))), _w, _S150, 1080, 1920,
+                              portrait=True, layout=layout, punch=punch)
+    _sat = ['you', 'all', 'have', 'been', 'asking', 'how', 'do', 'I', 'THIS.']
+    _if, _hf, _ = _komp(_sat, 'flow')
+    _ic, _hc, _ = _komp(_sat, 'collage')
+    # Kernaussage: die Collage ist KEIN Zeilenraster mehr. Im Flow teilen sich
+    # die Woerter wenige gemeinsame Grundlinien, in der Collage steht fast
+    # jedes auf eigener Hoehe.
+    _zf = len({round(i['cy'], 1) for i in _if})
+    _zc = len({round(i['cy'], 1) for i in _ic})
+    check('v150: Collage loest das Zeilenraster auf',
+          _zc >= _zf * 2 and _zc >= len(_sat) - 2,
+          f'{_zf} Grundlinien im Zeilensatz -> {_zc} in der Collage')
+    # Kleine Woerter links, grosse rechts versetzt - das Bild des Vorbilds.
+    _kl = [i for i in _ic if not i.get('gross') and i['role'] == 'norm']
+    _gr = [i for i in _ic if i.get('gross')]
+    check('v150: kleine Woerter links, grosse Woerter rechts versetzt',
+          _gr and _kl and min(i['cx'] for i in _gr) > max(i['cx'] for i in _kl),
+          f"klein bis {max(i['cx'] for i in _kl) / 1080:.2f} W, "
+          f"gross ab {min(i['cx'] for i in _gr) / 1080:.2f} W")
+    check('v150: in der Collage stehen die Woerter in EIGENEN Groessen',
+          len({i['sz'] for i in _ic if i.get('sz')}) >= 4
+          and len({i['sz'] for i in _if if i.get('sz')}) <= 2,
+          f"{len({i['sz'] for i in _ic if i.get('sz')})} Groessen in der Collage")
+    # (B) Zweiter Schriftschnitt im selben Satz.
+    check('v150: eine Verbinder-Kette laeuft in Schreibschrift',
+          sum(1 for i in _ic if i.get('skript')) >= 2
+          and not any(i.get('skript') for i in _if),
+          f"{sum(1 for i in _ic if i.get('skript'))} Woerter kursiv")
+    # (C) Schlusswort-Knall: nur am Satzende, und wirklich groesser.
+    _ip, _, _ = _komp(['das', 'ist', 'KRASS.'], 'flow')
+    _in, _, _ = _komp(['das', 'ist', 'KRASS'], 'flow', punch=False)
+
+    def _gr_max(items):
+        return max((i.get('sz') or 0) for i in items)
+    check('v150: das Satzende knallt, ein offener Satz nicht',
+          _gr_max(_ip) > _gr_max(_in) * 1.15,
+          f'Satzende {_gr_max(_ip)} px gegen offen {_gr_max(_in)} px')
+    # Ein LANGES Schlusswort kann nicht beliebig wachsen - dort bindet die
+    # Breite, und das ist richtig so. Gepruefet wird deshalb nur, dass es im
+    # Bild bleibt. Mit dem ersten Deckel (0.96 W) ragte es bis 1.033 W
+    # heraus, weil der Block schon bei 0.07 W ansetzt.
+    _il, _, _ = _komp(['was', 'steckt', 'wirklich', 'DAHINTER.'], 'flow')
+    check('v150: der Knall bleibt im Satzspiegel',
+          all(i['cx'] + i['w'] / 2.0 <= 1080 * 0.98 for i in _il + _ip),
+          f"rechte Kante {max(i['cx'] + i['w'] / 2.0 for i in _il) / 1080:.3f} W")
+    _r150 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v150: der Wechsel ist deterministisch, nicht zufaellig',
+          'def _mix01' in _r150 and '_mix01(g[0] * 3) >= 0.42' in _r150
+          and 'random' not in _r150.split('def _mix01')[1][:400])
+    check('v150: eine zu hohe Collage faellt auf das Zeilenraster zurueck',
+          "if _lay == 'collage' and tot_h > H * 0.40:" in _r150)
+    check('v150: clean bleibt schlicht, Collage abschaltbar',
+          "str(cfg.get('look', '')).lower() != 'clean'" in _r150
+          and "cfg['effects'].get('caption_collage', True)" in _r150
+          and 'caption_collage' in open(os.path.join(HERE, 'config.yaml'),
+                                        encoding='utf-8').read())
+    check('v150: der Server reicht den Look an die Engine durch',
+          "cfg['look'] = str(look or 'creator')" in
+          open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read())
+    # Reproduzierbarkeit: gleicher Inhalt, gleiches Bild (Re-Render-Garantie).
+    _a150, _, _ = _komp(_sat, 'collage')
+    _b150, _, _ = _komp(_sat, 'collage')
+    check('v150: gleiche Eingabe ergibt exakt dasselbe Satzbild',
+          [(i['cx'], i['cy'], i.get('sz')) for i in _a150]
+          == [(i['cx'], i['cy'], i.get('sz')) for i in _b150])
+
     # ================= v149: Aufloesung + 4K =================================
     # Befund: 'output.height' wurde stur als BILDHOEHE genommen. Eine
     # 1080x1920-Aufnahme kam damit als 607x1080 heraus - schmaler als die

@@ -3,6 +3,85 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v151 Die Referenz schlaegt jetzt wirklich durch.** Ismets Befund: "Ich
+  habe ein Referenz Video hochgeladen, es aendert sich aber kaum was." Der
+  Befund stimmte. Die MESSUNG war richtig (Versalhoehe 0.1836 H, Verhaeltnis
+  4.59, Kamera bewegt, Buchstaben-Takt 0.087 s) - die ANWENDUNG hat sie
+  verschluckt. Drei Ursachen, alle nachgerechnet:
+  1. **Werte ausserhalb des Fensters wurden VERWORFEN statt geklemmt.** Die
+     Fenster in `_apply_reference_params` waren am ERSTEN Vorbild geeicht
+     (key_hoehe 0.030-0.140, verhaeltnis 1.4-4.0). Das zweite Vorbild liegt
+     mit 0.1836 und 4.59 knapp darueber - also passierte gar nichts. Genau
+     die auffaelligsten Vorbilder fielen so durch. Jetzt prueft das Fenster
+     nur noch auf groben Unsinn (0.015-0.40 bzw. 1.1-8.0), der Rest wird an
+     den Rand geklemmt.
+  2. **Der Deckel sass zweimal.** `_apply_reference_params` klemmte sauber,
+     `compose_flow` stutzte danach noch einmal auf 1.35. Ein Vorbild mit
+     2.68x Hausmass kam damit als 1.35 an, also knapp der halbe Unterschied.
+     Der Composer sichert jetzt nur noch gegen Unsinn (0.60-2.80), die Regie
+     entscheidet davor.
+  3. **`kamera: bewegt` war ein Leerlauf.** Nur 'ruhig' und 'wild' taten
+     etwas; eine bewegte Referenz aenderte an unserer Kamera nichts.
+  Zusaetzlich werden jetzt zwei bisher gemessene, aber weggeworfene Werte
+  angewandt: **Buchstaben-Takt** steuert das Aufdeck-Tempo des
+  Schluesselworts (`reveal_letter_s`, Vorbild 0.087 s je Zeichen gegen unser
+  Hausmass 0.17 s je Wort), **Stammbreite** das Grundgewicht der
+  Stuetzschrift (`caption_weight`).
+  BEWEIS: derselbe Clip zweimal gerendert, einmal ohne und einmal mit der
+  Referenz - Kleintext 86 -> 143 px (1.66x), Zone 0.25 H -> 0.34 H,
+  Schnitt leichter, Aufdecken schneller.
+  EHRLICHE GRENZE: die gemessene Versalhoehe ist bei LANGEN Woertern nicht
+  erreichbar. 0.1836 H bei fuenf Zeichen braeuchte rund 1480 px Breite, das
+  Bild hat 1080. `S.fit` schrumpft dann auf die Spalte - das Vorbild laesst
+  sein 'this' dagegen bewusst links und rechts aus dem Bild laufen. Randabfall
+  ist NICHT gebaut (Lesbarkeit), das ist der verbleibende Unterschied bei
+  langen Schlussworten.
+  Tests 917 logic + 7/1/5/2 Renders + GUI gruen.
+- **v150 Abwechslung im Satzbild (Ismets Befund: "zu monoton").** Bis v149
+  bekam JEDER Filler-Chunk dasselbe linksbuendige Zeilenraster: drei Zeilen,
+  gleiche Kante, gleiche Groessen. Ueber ein ganzes Video sah damit jeder
+  Moment gleich aus. Grundlage der Aenderung ist ein zweites Referenzvideo
+  (@johnbucog_, 1.96 s, 9:16), mit `measure_reference_video` vermessen:
+  Versalhoehe Schluesselwort **0.1836 H**, Groessenverhaeltnis **4.59**
+  (unseres lag bei 2.2-2.9), Zone 0.18-0.49 H, Kamera bewegt.
+  - **(A) COLLAGE.** Zweite Anordnung neben dem Zeilensatz: kleine Woerter
+    bilden links eine schmale Spalte, die Inhaltswoerter treppen rechts
+    daneben nach unten weg, jedes in eigener Groesse. Der Satz wird dadurch
+    zu einem Bild statt zu drei buendigen Zeilen. Der Wechsel kommt
+    deterministisch aus dem ersten Wort-Index (`_mix01`) - reproduzierbar
+    ueber Re-Renders, aber ohne sichtbares Muster.
+  - **(B) VARIATION.** Groessenstufen je Wort (Inhaltswoerter 1.75-2.10x,
+    Verbinder 0.92-1.08x) statt einer Einheitsgroesse, und eine
+    zusammenhaengende Verbinder-Kette laeuft in der Schreibschrift schraeg
+    mit - ein zweiter Schriftschnitt im selben Satz, wie im Vorbild
+    ("how do I do"). Hoechstens vier Woerter duerfen gross stehen, sonst
+    waere der Block bei zehn Woertern 0.44 H hoch und passte an keinem Kopf
+    mehr vorbei.
+  - **(C) SCHLUSSWORT-KNALL.** Am Satzende (Punkt/!/?) setzt das Ankerwort
+    1.60x groesser an und darf ueber die volle Breite laufen.
+  - **DREI KORREKTUREN, die der Beweis-Streifen erzwungen hat:**
+    1. Mit der Schwelle `len(g) >= 4` lief die Collage im echten Render KEIN
+       EINZIGES MAL an - die Chunk-Bildung liefert 2 bis 4 Woerter
+       (`words_per_group`). Der erste Streifen zeigte acht Mal dasselbe
+       Raster. Schwelle jetzt 3.
+    2. Der Knall-Deckel 0.96 W liess die rechte Kante bis **1.033 W** ragen,
+       weil der Block schon bei x0 = 0.07 W ansetzt. Jetzt 0.89 W.
+    3. `_rsz` nahm zuerst auch im Zeilensatz die WIRKLICH gesetzte Groesse
+       statt der Sollgroesse. Das aenderte dort die Zeilenhoehe und damit die
+       ganze Platzierung - der v143-Nahaufnahme-Test fiel sofort um. Die
+       echte Groesse gilt jetzt nur in der Collage.
+  - **Sperren:** bei verengter Spalte (Nahaufnahme, `_freie_breite`) bleibt es
+    beim Zeilensatz - die Collage staffelt nach RECHTS und haette den Block
+    unter den Kopf gedraengt statt neben ihn. Eine Collage ueber 0.40 H faellt
+    auf das Zeilenraster zurueck. `clean` bleibt schlicht, `caption_collage`
+    schaltet alles ab. Der Server reicht den gewaehlten Look jetzt als
+    `cfg['look']` an die Engine durch.
+  - **NICHT gebaut (bewusst, mit Ismet offen):** das satzweise Stehenbleiben.
+    Im Vorbild waechst der GANZE Satz ueber rund zwei Sekunden zu einem Bild;
+    bei uns steht der Text nur ueber seinen Chunk. Das zu aendern hiesse in
+    die Chunk-Bildung und damit in die Dichte-Regie eingreifen.
+  Tests 908 logic + 7/1/5/2 Renders + GUI gruen, Beweis-Streifen aus einem
+  echten Render (vier von acht Frames zeigen die Collage).
 - **v149 4K als bezahlte Stufe - und ein Aufloesungs-Fehler, der teurer war.**
   Ismets Frage 'warum hab ich da kein 4K Output' hat einen aelteren Fehler
   aufgedeckt: `output.height` wurde stur als BILDHOEHE genommen. Eine

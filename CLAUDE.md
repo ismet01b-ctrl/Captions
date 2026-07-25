@@ -126,6 +126,34 @@ schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
 Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
 zwischen Regie und Zittern.
 
+### Referenz anwenden (v151) — klemmen, nicht verwerfen
+Ein gemessener Wert ausserhalb des Plausibilitaetsfensters wird **geklemmt**,
+nie verworfen. Verwerfen heisst: der Kunde laedt eine Referenz hoch und sieht
+nichts — genau das ist bei den auffaelligsten Vorbildern passiert, weil die
+Fenster an einem einzigen Video geeicht waren.
+**Deckel nur an EINER Stelle.** `_apply_reference_params` entscheidet;
+`compose_flow` sichert danach nur noch gegen Unsinn. Zwei Deckel
+hintereinander halbieren die Wirkung, ohne dass es im Code auffaellt.
+Jeder Messwert, den `_reference_params()` durchreicht, muss auch angewandt
+werden — sonst ist er Zierde. Gegenprobe: Schluessel aus `_reference_params()`
+gegen die Nutzung in `_apply_reference_params` diffen.
+
+### Abwechslung im Satzbild (v150)
+Ein Filler-Chunk bekommt NICHT mehr immer dasselbe Zeilenraster. `compose_flow`
+kennt zwei Anordnungen (`layout='flow'|'collage'`): die Collage setzt kleine
+Woerter links in eine Spalte und treppt die Inhaltswoerter rechts daneben nach
+unten, jedes in eigener Groesse; eine Verbinder-Kette laeuft in Schreibschrift
+mit. Der Wechsel ist **deterministisch** (`_mix01`), nie zufaellig — ein
+Re-Render muss dasselbe Bild ergeben.
+Sperren, die man nicht aufweichen darf: verengte Spalte (Nahaufnahme) → immer
+Zeilensatz; Collage über 0.40 H → Rückfall auf Zeilensatz; `clean` bleibt
+schlicht. Schwelle ist `len(g) >= 3` — mit 4 lief die Collage im echten Render
+gar nicht an.
+Der Schlusswort-Knall (`punch`) greift nur am Satzende und ist auf 0.89 W
+gedeckelt, weil der Block bei x0 = 0.07 W ansetzt.
+**Bei jeder Änderung hier einen Frame-Streifen rendern.** Zwei der drei Fehler
+in v150 waren in der Komposition unsichtbar und erst im fertigen Bild zu sehen.
+
 ### Referenz-Funktion (v144) — gemessen, nicht geschaetzt
 `measure_reference_video()` in `render.py` liest den Stil eines hochgeladenen
 Vorbilds direkt aus Bild und Ton — deterministisch, ohne KI, ohne API-Key.
@@ -235,7 +263,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **897/897 grün (Stand v149)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **917/917 grün (Stand v151)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
