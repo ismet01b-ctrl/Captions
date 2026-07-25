@@ -2645,7 +2645,11 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v158-preis'" in _srv_m)
+          # v160: die Build-Kennung wird NICHT mehr woertlich gepinnt. Der
+          # Test schlug bei jeder Version fehl und wurde jedes Mal
+          # nachgezogen - das prueft die Pflege des Tests, nicht den Server.
+          # Gefordert ist, dass ueberhaupt eine Kennung gesetzt ist.
+          and re.search(r"DVE_BUILD = 'v[0-9][^']*'", _srv_m) is not None)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4838,6 +4842,144 @@ def _scenario_betrieb(tmp):
     check('v159: ohne Verneinung bleibt die Animation',
           R.anim_for('', 'Die Mieten steigen.') == 'anstieg'
           and R.anim_for('', 'Der Umsatz explodiert.') == 'explosion')
+
+    # ======= v160: ZEIGE-REGIE - die Caption landet, wohin gezeigt wird =====
+    # Reine Bildmessung aus Hand-Landmarks und Kopfdrehung. Getestet werden
+    # die Entscheidungen, nicht "laeuft durch": ein Zeigefinger MUSS ein Ziel
+    # in seiner Richtung ergeben, eine offene Hand KEINES, und ein Gesicht
+    # bleibt auch mit Zeige-Ziel tabu.
+    class _LM160:
+        __slots__ = ('x', 'y')
+
+        def __init__(self, x, y):
+            self.x, self.y = float(x), float(y)
+
+    def _hand160(streck):
+        """Baut eine Hand: Handgelenk unten, Finger nach oben. streck =
+        Liste von vier Bools (Zeige-, Mittel-, Ring-, kleiner Finger).
+        Ein gestreckter Finger ragt weit ueber sein Mittelgelenk hinaus,
+        ein eingerollter bleibt darunter - genau das misst _zeige_strahl."""
+        p = [_LM160(0.5, 0.9)] * 21
+        p = list(p)
+        p[0] = _LM160(0.50, 0.90)          # Handgelenk
+        p[9] = _LM160(0.50, 0.74)          # Mittelfinger-Grundgelenk (Massstab)
+        for k, (tip, pip) in enumerate(R._HAND_FINGER):
+            gx = 0.44 + 0.04 * k
+            p[pip] = _LM160(gx, 0.66)
+            p[tip] = _LM160(gx, 0.50 if streck[k] else 0.72)
+        p[5] = _LM160(0.44, 0.70)          # Zeigefinger-Grundgelenk
+        return p
+
+    _W160, _H160 = 1080, 1920
+    # Zeigefinger gestreckt, Rest eingerollt, Achse Grundgelenk -> Spitze
+    # zeigt nach OBEN. Das Ziel muss oberhalb der Fingerspitze liegen.
+    _zeig160 = R._zeige_strahl(_hand160([True, False, False, False]),
+                               _W160, _H160)
+    check('v160: ein gestreckter Zeigefinger ergibt ein Ziel in seiner Richtung',
+          _zeig160 is not None and _zeig160[1] < 0.50 * _H160)
+    check('v160: das Ziel bleibt im Bild',
+          _zeig160 is not None
+          and 0 <= _zeig160[0] <= _W160 and 0 <= _zeig160[1] <= _H160)
+    # Offene Hand = Geste, kein Zeigen. Ohne diese Sperre wuerde jedes
+    # Herumfuchteln die Captions durchs Bild schieben.
+    check('v160: eine offene Hand ist kein Zeigen',
+          R._zeige_strahl(_hand160([True, True, True, True]),
+                          _W160, _H160) is None)
+    check('v160: eine Faust ist kein Zeigen',
+          R._zeige_strahl(_hand160([False, False, False, False]),
+                          _W160, _H160) is None)
+    # Zeigt der Finger in die Kamera, ist seine Projektion kurz. Dann gibt es
+    # im Bild kein Ziel - Raten waere schlimmer als nichts.
+    _kam160 = _hand160([True, False, False, False])
+    _kam160[8] = _LM160(0.442, 0.695)      # Spitze fast auf dem Grundgelenk
+    check('v160: ein Finger Richtung Kamera ergibt KEIN Ziel',
+          R._zeige_strahl(_kam160, _W160, _H160) is None)
+
+    # BLICK. Frontal = niemand ist gemeint. Deutlich gedreht = Ziel auf der
+    # Seite, in die die Nase relativ zur Augenmitte gewandert ist.
+    _frontal = [_LM160(0.45, 0.40), _LM160(0.55, 0.40), _LM160(0.50, 0.46)]
+    check('v160: ein frontaler Kopf ergibt kein Blick-Ziel',
+          R._blick_strahl(_frontal, _W160, _H160) is None)
+    _rechts = [_LM160(0.45, 0.40), _LM160(0.55, 0.40), _LM160(0.56, 0.46)]
+    _bz = R._blick_strahl(_rechts, _W160, _H160)
+    check('v160: ein gedrehter Kopf zeigt zur Seite der Drehung',
+          _bz is not None and _bz[0] > 0.56 * _W160)
+    _links = [_LM160(0.45, 0.40), _LM160(0.55, 0.40), _LM160(0.44, 0.46)]
+    _bl = R._blick_strahl(_links, _W160, _H160)
+    check('v160: die Gegenrichtung ergibt das Gegen-Ziel',
+          _bl is not None and _bl[0] < 0.44 * _W160)
+
+    # Ohne Modelle bleibt das Feature still aus - kein Crash, kein Fake.
+    check('v160: ohne Zeitpunkte misst die Zeige-Regie gar nichts',
+          R.zeige_ziele('/nonexistent.mp4', [], 1080, 1920) == [])
+
+    # PLATZIERUNG. Der wichtigste Teil: das Ziel muss den Block wirklich
+    # bewegen - und ein Gesicht muss trotzdem gewinnen.
+    import yaml as _y160
+    _cfg160 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _S160 = R.Sprites(_cfg160, _W160, _H160)
+    # KURZE Woerter mit Absicht: ein breiter Textblock hat im Title-Safe kaum
+    # seitlichen Spielraum (gemessen 0.77 W Blockbreite bei 0.84 W nutzbarer
+    # Flaeche - da kann keine Geste mehr etwas verschieben). Die Zeige-Regie
+    # wirkt dort, wo es Platz gibt; das ist eine echte Grenze, keine Schwaeche
+    # des Tests.
+    _wrd160 = [{'word': _w, 'start': 1.0 + _i * 0.45, 'end': 1.35 + _i * 0.45}
+               for _i, _w in enumerate(['ja', 'nun', 'so', 'ist', 'es', 'ok'])]
+
+    def _block160(zeigen):
+        """Mittlere Blockposition (x, y) in Bildanteilen je Chunk."""
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            pl = R.build_plans(_wrd160, set(), _cfg160, _S160, _W160, _H160,
+                               lambda s_, e_: True, {},
+                               face_pos=lambda s_, e_: (_W160 * 0.50,
+                                                        _H160 * 0.35,
+                                                        _W160 * 0.13),
+                               zeigen=zeigen)
+        return [(sum(i['cx'] for i in q['front']) / len(q['front']) / _W160,
+                 sum(i['cy'] for i in q['front']) / len(q['front']) / _H160)
+                for q in pl if q.get('front')]
+
+    _ziel_l = [(_t, _W160 * 0.12, _H160 * 0.80, 'zeigen')
+               for _t in (1.0, 1.9, 2.8)]
+    _ziel_r = [(_t, _W160 * 0.88, _H160 * 0.80, 'zeigen')
+               for _t in (1.0, 1.9, 2.8)]
+    _b_ohne = _block160(None)
+    _b_links = _block160(_ziel_l)
+    _b_rechts = _block160(_ziel_r)
+    check('v160: die Zeige-Regie liefert ueberhaupt Bloecke',
+          len(_b_ohne) >= 2 and len(_b_links) == len(_b_ohne)
+          and len(_b_rechts) == len(_b_ohne))
+    check('v160: nach links zeigen legt JEDEN Block nach links',
+          all(x < 0.45 for (x, _) in _b_links),
+          f"x = {[round(x, 3) for (x, _) in _b_links]}")
+    check('v160: nach rechts zeigen legt JEDEN Block nach rechts',
+          all(x > 0.55 for (x, _) in _b_rechts),
+          f"x = {[round(x, 3) for (x, _) in _b_rechts]}")
+    check('v160: der Unterschied zwischen links und rechts ist deutlich',
+          min(x for (x, _) in _b_rechts) - max(x for (x, _) in _b_links) > 0.20,
+          f"links {[round(x, 3) for (x, _) in _b_links]} "
+          f"rechts {[round(x, 3) for (x, _) in _b_rechts]}")
+    # Die HOEHE gehoert genauso zum Ziel. Ein Zeigefinger nach unten, der nur
+    # die Seite aendert, waere eine halbe Umsetzung.
+    check('v160: das Ziel zieht den Block auch in der Hoehe',
+          all(y > 0.60 for (_, y) in _b_rechts)
+          and any(y < 0.40 for (_, y) in _b_ohne),
+          f"mit Ziel {[round(y, 3) for (_, y) in _b_rechts]} "
+          f"ohne {[round(y, 3) for (_, y) in _b_ohne]}")
+    # Das Gesicht sitzt bei 0.50 W / 0.35 H. Zeigt jemand mitten darauf, darf
+    # der Text NICHT dort landen: die Gesichtssperre kostet ab 2.5 aufwaerts,
+    # das volle Zeige-Gewicht erreicht 2.2. Text quer ueber dem Kopf des
+    # Sprechers waere kein erfuellter Zeigefinger, sondern ein Fehler.
+    _b_kopf = _block160([(_t, _W160 * 0.50, _H160 * 0.35, 'zeigen')
+                         for _t in (1.0, 1.9, 2.8)])
+    check('v160: ein Zeige-Ziel ueberrennt die Gesichtssperre NICHT',
+          all(abs(y - 0.35) > 0.12 or abs(x - 0.50) > 0.18
+              for (x, y) in _b_kopf),
+          f"{[(round(x, 3), round(y, 3)) for (x, y) in _b_kopf]}")
+    check('v160: die Zeige-Regie ist abschaltbar',
+          'caption_zeige' in open(os.path.join(HERE, 'config.yaml'),
+                                  encoding='utf-8').read())
 
     # ============ v158: der Preis am Button kennt 4K ========================
     # Ismets Befund: "wenn 4k angewaehlt ist, steht immer noch 1 credit".

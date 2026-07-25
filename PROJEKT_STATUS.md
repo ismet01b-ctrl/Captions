@@ -3,6 +3,49 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v160 ZEIGE-REGIE: die Caption landet, wohin der Sprecher zeigt.** Ismets
+  Vorgabe: das Tool muss innovativ sein, sonst hat es am Markt keine Chance.
+  Das Material dafuer lag seit v101j im Haus (MediaPipe-Hand-Landmarker) bzw.
+  seit v96 (Gesichts-Keypoints) - benutzt wurde es nur fuer Occlusion und
+  Kamera. Die Platzierungs-Regie hat es nie gelesen.
+  Jetzt zwei Quellen, in dieser Rangfolge:
+  1. ZEIGEN. Zeigefinger gestreckt, die anderen eingerollt. Gemessen wird
+     ueber die Distanz zum HANDGELENK (eine gestreckte Spitze ist weiter weg
+     als ihr eigenes Mittelgelenk) - unabhaengig davon, wie die Hand im Bild
+     gedreht liegt. Ein Vergleich gegen die Senkrechte waere das nicht.
+     Die Fingerachse Grundgelenk -> Spitze ist der Strahl, das Ziel liegt auf
+     halbem Weg zum Bildrand.
+  2. BLICK. Ohne Zeigen verraet die Kopfdrehung die Richtung: die Nasenspitze
+     wandert relativ zur Augenmitte in die Blickrichtung, Massstab ist der
+     Augenabstand. Erst ab 0.35 Augenabstaenden - wer in die Kamera spricht,
+     meint keinen Ort im Bild.
+  Beides ist reine BILDMESSUNG, kein API-Ruf, kein Modell-Rat. Gemessen wird
+  nur an den gewaehlten Momenten, drei kleine Frames je Moment, nicht ueber
+  das ganze Video.
+  BEWUSSTE SPERREN: eine offene Hand ist eine Geste, kein Zeigen (sonst
+  schiebt jedes Herumfuchteln die Captions durchs Bild). Ein Finger Richtung
+  Kamera hat im Bild kein Ziel - dann lieber keines als ein geratenes.
+  DAS GESICHT BLEIBT TABU. Das Zeige-Gewicht erreicht 2.2, eine
+  Gesichtsberuehrung kostet ab 2.5. Zeigt jemand auf seinen eigenen Kopf,
+  landet der Text daneben, nicht darauf - das ist kein erfuellter
+  Zeigefinger, sondern ein Fehler.
+  BEWEIS (Selftest, 1080x1920, Gesicht bei 0.50 W / 0.35 H, kurze Chunks):
+  nach links gezeigt -> Blockmitten 0.247 / 0.230 W, nach rechts gezeigt ->
+  0.647 / 0.674 W. Ohne Ziel 0.336 / 0.674 W. Die Hoehe zieht mit: 0.17 H
+  ohne Ziel, 0.72 H bei einem Ziel bei 0.80 H.
+  EHRLICHE GRENZE: ein BREITER Textblock hat im Title-Safe kaum seitlichen
+  Spielraum - gemessen 0.773 W Blockbreite bei 0.84 W nutzbarer Flaeche, da
+  verschiebt keine Geste mehr etwas. Die Zeige-Regie wirkt dort, wo Platz
+  ist. Das ist eine Eigenschaft der Bildflaeche, keine Schwaeche der Messung.
+  Abschaltbar ueber `effects.caption_zeige`.
+  NUR AUF SYNTHETIK GEPRUEFT: die Landmark-Auswertung selbst wurde hier mit
+  gebauten Hand-/Gesichts-Koordinaten getestet, nicht mit echtem Videomaterial
+  einer zeigenden Person. Wie zuverlaessig MediaPipe eine echte Zeigegeste
+  liefert, sieht Ismet erst live.
+  TESTKORREKTUR: der v130-Admin-Test pinnte die Build-Kennung woertlich
+  (`DVE_BUILD = 'v158-preis'`) und schlug damit bei JEDER Version fehl. Er
+  prueft jetzt per Regex, dass ueberhaupt eine Kennung gesetzt ist - das war
+  eine Pruefung der Test-Pflege, nicht des Servers.
 - **v159 Die Ansage gilt jetzt wirklich immer.** Ismets Wunsch: "die captions
   muessen auf jedenfall passen, was auch gesagt wird". Ein Audit ueber die
   semantische Regie hat drei echte Loecher gefunden, alle drei sind zu.

@@ -18,7 +18,8 @@ Regie-Kontaktbogen (`/api/contact/{jid}`), Caption-Alpha-Export
 (ProRes-4444-Ebene via Difference-Matting-Doppelpass, `--alpha-export`,
 `/api/alpha/{jid}` für Käufer), World-Lock Wand (eigener Wand-Track),
 Hand-Kontakt (MediaPipe `models/hand.task`, Feder-Impuls + Occlusion),
-Depth-Bullet-Time (2.5D-Dolly in der Pause vor power-3). NICHT gebaut
+Depth-Bullet-Time (2.5D-Dolly in der Pause vor power-3),
+Zeige-Regie (Caption landet, wohin der Sprecher zeigt oder schaut). NICHT gebaut
 (bewusst): Tiefen-Fokuszug, persistente Welt-Anker (SLAM),
 Hook-A/B-Varianten.
 
@@ -128,6 +129,24 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
   6 Zeichen Stichwortlänge, sonst schlug 'fall' in "FALLS" an.
   Verneinte Sätze bekommen KEINE Animation (`_hat_negation`): eine Anim, die
   die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
+
+### Zeige-Regie (v160) — "Captions landen, wohin gezeigt wird"
+`zeige_ziele()` misst an den Moment-Zeitpunkten, wohin der Sprecher **zeigt**
+(Hand-Landmarks) oder **schaut** (Kopfdrehung aus den Gesichts-Keypoints).
+Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
+`ziel` in `spot()` und als Seitenwahl in `pick_side()`.
+- **Gestreckt/eingerollt wird gegen das HANDGELENK gemessen**, nicht gegen die
+  Senkrechte. Sonst hängt das Ergebnis an der Handdrehung im Bild.
+- **Offene Hand = Geste, kein Zeigen.** Ohne diese Sperre schiebt jedes
+  Herumfuchteln die Captions durchs Bild.
+- **Finger Richtung Kamera → kein Ziel.** Kurze Projektion heißt: im Bild gibt
+  es keinen gemeinten Ort. Raten ist schlechter als nichts.
+- **Das Gesicht bleibt tabu.** Zeige-Gewicht 2.2, Gesichtsberührung ab 2.5.
+  Wer auf den eigenen Kopf zeigt, bekommt den Text daneben.
+- Bei gesetztem Ziel fallen Wunschzone und Wunschseite weg (`return k`), der
+  Rest der Kosten bleibt. Ein Ziel bricht die Hysterese (`kalt`).
+- **Grenze:** ein breiter Block hat im Title-Safe kaum Spielraum (0.773 W bei
+  0.84 W nutzbar). Die Regie wirkt, wo Platz ist.
 
 ### Platzierungs-Regie (v143) — "Captions passen sich dem Bild an"
 Ein Textblock bekommt seine Position aus `spot()` in `build_plans`, nicht aus
@@ -321,7 +340,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **976/976 grün (Stand v159)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **992/992 grün (Stand v160)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -87,6 +87,10 @@ effects:
   # v152: das Schlusswort am Satzende darf links und rechts angeschnitten
   # aus dem Bild laufen. Nur so erreicht es die Groesse der Vorbilder.
   caption_bleed: true
+  # v160 ZEIGE-REGIE: zeigt oder schaut der Sprecher irgendwohin, landet die
+  # Caption dort. Gemessen aus Hand-Landmarks und Kopfdrehung, kein API-Ruf.
+  # Ein Gesicht bleibt trotzdem tabu - der Text weicht ihm weiter aus.
+  caption_zeige: true
   # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
   # power-3-Moment. 0 = aus.
   punch_silence: 0.34

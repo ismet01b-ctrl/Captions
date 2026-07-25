@@ -2438,6 +2438,212 @@ def depth_dolly(freeze, depth_n, u, W, H, strength=1.0):
 HAND_TIPS = (4, 8, 12, 16, 20)      # Daumen-, Zeige-, Mittel-, Ring-, kleine Spitze
 
 
+# ---------------------------------------------------------------------------
+# v160 ZEIGE-REGIE
+# Zeigt oder schaut der Sprecher irgendwohin, landet die Caption GENAU DORT.
+# Das Material dafuer liegt seit v101j im Haus (Hand-Landmarker) bzw. seit
+# v96 (Gesichts-Keypoints), wurde aber nur fuer Occlusion und Kamera benutzt.
+# Die Regie las es nie.
+#
+# Zwei Quellen, in dieser Rangfolge:
+#   1. ZEIGEN. Der Zeigefinger ist gestreckt, die anderen sind eingerollt.
+#      Die Fingerachse (Grundgelenk -> Spitze) ist der Strahl, das Ziel liegt
+#      auf halbem Weg zum Bildrand.
+#   2. BLICK. Ist kein Zeigen da, verraet die Kopfdrehung die Richtung. Die
+#      Nasenspitze wandert relativ zur Augenmitte in die Blickrichtung.
+#      Nur bei DEUTLICHER Drehung - wer in die Kamera spricht, meint niemanden.
+# Beides ist eine reine Bildmessung, kein API-Aufruf, kein Modell-Rat.
+# ---------------------------------------------------------------------------
+
+# Landmark-Indizes des MediaPipe-Handmodells.
+_HAND_WRIST = 0
+_HAND_FINGER = ((8, 6), (12, 10), (16, 14), (20, 18))   # (Spitze, Mittelgelenk)
+
+
+def _frame_bgr(video_path, t, w=384):
+    """Einzelner Frame als BGR-Array. None, wenn ffmpeg nichts Brauchbares
+    liefert (Ende des Videos, kaputte Stelle)."""
+    try:
+        r = subprocess.run(
+            ['ffmpeg', '-v', 'error', '-ss', str(max(float(t), 0.0)),
+             '-i', video_path, '-frames:v', '1', '-vf', f'scale={int(w)}:-2',
+             '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'],
+            capture_output=True, timeout=25)
+    except Exception:
+        return None
+    buf = r.stdout
+    zeile = int(w) * 3
+    if len(buf) < zeile * 16 or len(buf) % zeile:
+        return None
+    return np.frombuffer(buf, dtype=np.uint8).reshape(-1, int(w), 3).copy()
+
+
+def _rand_ziel(ox, oy, dx, dy, W, H, anteil=0.55):
+    """Strahl (ox, oy) + s*(dx, dy) bis zum Bildrand verfolgen und einen Punkt
+    auf dem Weg dorthin zurueckgeben. Nicht den Rand selbst: dort waere kein
+    Platz fuer den Block, und gemeint ist die Richtung, nicht die Kante."""
+    s = None
+    for (komp, o, lo, hi) in ((dx, ox, 0.0, float(W)), (dy, oy, 0.0, float(H))):
+        if abs(komp) < 1e-9:
+            continue
+        for grenze in (lo, hi):
+            k = (grenze - o) / komp
+            if k > 1e-6 and (s is None or k < s):
+                s = k
+    if s is None:
+        return None
+    return (ox + dx * s * anteil, oy + dy * s * anteil)
+
+
+def _zeige_strahl(hand, W, H):
+    """Zeigt diese Hand? hand = Landmark-Liste des MediaPipe-Modells
+    (normierte Koordinaten). Rueckgabe (tx, ty) in Pixeln oder None.
+
+    Gestreckt/eingerollt wird ueber die Distanz zum HANDGELENK gemessen: eine
+    gestreckte Fingerspitze ist weiter vom Gelenk weg als ihr eigenes
+    Mittelgelenk, eine eingerollte naeher. Das ist unabhaengig davon, wie die
+    Hand im Bild gedreht liegt - ein Vergleich gegen die Senkrechte waere es
+    nicht."""
+    def d(a, b):
+        return math.hypot((a.x - b.x) * W, (a.y - b.y) * H)
+
+    wr = hand[_HAND_WRIST]
+    spanne = max(d(wr, hand[9]), 1e-6)          # Handflaeche als Massstab
+    gestreckt = [d(hand[tip], wr) > d(hand[pip], wr) * 1.12
+                 for (tip, pip) in _HAND_FINGER]
+    # Zeigefinger raus, hoechstens EIN weiterer daneben (der Zwei-Finger-Zeig
+    # ist genauso eindeutig). Eine offene Hand ist eine Geste, kein Zeigen.
+    if not gestreckt[0] or sum(1 for g in gestreckt[1:] if g) > 1:
+        return None
+    mcp, tip = hand[5], hand[8]
+    dx = (tip.x - mcp.x) * W
+    dy = (tip.y - mcp.y) * H
+    laenge = math.hypot(dx, dy)
+    # Zeigt der Finger in die Kamera, ist seine Projektion kurz - dann gibt es
+    # im Bild kein Ziel und Raten waere schlimmer als nichts.
+    if laenge < spanne * 0.45:
+        return None
+    return _rand_ziel(tip.x * W, tip.y * H, dx / laenge, dy / laenge, W, H)
+
+
+def _blick_strahl(kp, W, H):
+    """Kopfdrehung aus den sechs Gesichts-Keypoints des Detektors
+    (rechtes Auge, linkes Auge, Nase, Mund, zwei Ohren). Rueckgabe (tx, ty)
+    oder None.
+
+    Die Nasenspitze wandert bei einer Drehung relativ zur Augenmitte in die
+    Blickrichtung. Der Augenabstand ist dabei der Massstab, sonst haengt die
+    Schwelle an der Kopfgroesse im Bild."""
+    if len(kp) < 3:
+        return None
+    a_x = (kp[0].x + kp[1].x) / 2.0
+    a_y = (kp[0].y + kp[1].y) / 2.0
+    augen = abs(kp[0].x - kp[1].x)
+    if augen < 1e-4:
+        return None
+    yaw = (kp[2].x - a_x) / augen
+    # 0.35 Augenabstaende: darunter ist es Kopfhaltung, kein Hinsehen. Wer in
+    # die Kamera spricht, meint keinen Ort im Bild - dann lieber kein Ziel.
+    if abs(yaw) < 0.35:
+        return None
+    ri = 1.0 if yaw > 0 else -1.0
+    return _rand_ziel(kp[2].x * W, a_y * H, ri, 0.0, W, H, anteil=0.60)
+
+
+def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
+    """v160: misst zu jedem Moment-Zeitpunkt, wohin der Sprecher zeigt oder
+    schaut. Rueckgabe [(t, tx, ty, art)] mit art 'zeigen' | 'blick'.
+
+    Laeuft NUR auf den uebergebenen Zeitpunkten, nicht ueber das ganze Video -
+    drei kleine Frames je Moment. Ohne mediapipe oder ohne models/hand.task
+    bleibt die Liste leer und das Feature ist still aus."""
+    ziele = []
+    if not times:
+        return ziele
+    try:
+        import mediapipe as mp
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
+    except Exception:
+        return ziele
+    hpath = os.path.join(HERE, 'models/hand.task')
+    fpath = os.path.join(HERE, 'models/face.tflite')
+    lm = det = None
+    try:
+        if os.path.exists(hpath):
+            lm = mp_vision.HandLandmarker.create_from_options(
+                mp_vision.HandLandmarkerOptions(
+                    base_options=mp_python.BaseOptions(model_asset_path=hpath),
+                    num_hands=2, min_hand_detection_confidence=0.4))
+        if os.path.exists(fpath):
+            det = mp_vision.FaceDetector.create_from_options(
+                mp_vision.FaceDetectorOptions(
+                    base_options=mp_python.BaseOptions(model_asset_path=fpath),
+                    min_detection_confidence=0.4))
+    except Exception:
+        lm = det = None
+    if lm is None and det is None:
+        return ziele
+    n_z = n_b = 0
+    for t in times:
+        treffer = None
+        blick = None
+        for dt in proben:
+            fr = _frame_bgr(video_path, float(t) + dt)
+            if fr is None:
+                continue
+            fh, fw = fr.shape[:2]
+            try:
+                img = mp.Image(image_format=mp.ImageFormat.SRGB,
+                               data=np.ascontiguousarray(fr[..., ::-1]))
+            except Exception:
+                continue
+            if lm is not None and treffer is None:
+                try:
+                    res = lm.detect(img)
+                except Exception:
+                    res = None
+                for hand in ((res.hand_landmarks if res else None) or []):
+                    z = _zeige_strahl(hand, W, H)
+                    if z is not None:
+                        treffer = ('zeigen', z)
+                        break
+            if treffer is not None:
+                break
+            if det is not None and blick is None:
+                try:
+                    dres = det.detect(img)
+                except Exception:
+                    dres = None
+                for dd in ((dres.detections if dres else None) or []):
+                    b = _blick_strahl(list(getattr(dd, 'keypoints', []) or []),
+                                      W, H)
+                    if b is not None:
+                        blick = ('blick', b)
+                        break
+        # Zeigen schlaegt Blick: eine Hand ist eine Ansage, ein Kopf eine
+        # Tendenz.
+        wahl = treffer or blick
+        if wahl is None:
+            continue
+        art, (tx, ty) = wahl
+        ziele.append((float(t), float(tx), float(ty), art))
+        if art == 'zeigen':
+            n_z += 1
+        else:
+            n_b += 1
+    for obj in (lm, det):
+        try:
+            if obj is not None:
+                obj.close()
+        except Exception:
+            pass
+    if ziele:
+        print(f"Pointing direction: {n_z} pointing, {n_b} gaze targets "
+              f"out of {len(times)} moments")
+    return ziele
+
+
 class HandTracker:
     """MediaPipe-HandLandmarker, lazy + fehlertolerant. detect() liefert
     Fingerspitzen [(x, y, vx, vy)] in Voll-Pixeln; v in px/s aus dem letzten
@@ -6728,8 +6934,26 @@ def safe_zone_report(plans, pz, W, H):
 
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None, faces_at=None, flow_map=None,
-                loud=None, beat_times=None, light_dir=None, space_at=None):
+                loud=None, beat_times=None, light_dir=None, space_at=None,
+                zeigen=None):
     KW_FX = cfg['effects']['keyword_rotation']
+    # v160: gemessene Zeige-/Blick-Ziele [(t, tx, ty, art)]. Ein Ziel gilt fuer
+    # das Zeitfenster, in dem gezeigt wurde, plus einen kurzen Nachlauf - eine
+    # Zeigegeste haelt laenger an als der Moment, an dem sie gemessen wurde.
+    _zeig = sorted(zeigen or [], key=lambda z: z[0])
+
+    def ziel_at(start, end, vor=0.35, nach=1.20):
+        """Zeige-Ziel fuer ein Zeitfenster. Rueckgabe (tx, ty, art) oder None."""
+        if not _zeig:
+            return None
+        best = None
+        for (t, tx, ty, art) in _zeig:
+            if t - vor <= end and t + nach >= start:
+                # Naechstliegendes Ziel gewinnt, Zeigen schlaegt Blick.
+                rang = (0 if art == 'zeigen' else 1, abs(t - start))
+                if best is None or rang < best[0]:
+                    best = (rang, (tx, ty, art))
+        return best[1] if best else None
     CAM_FX = [m for m in (cfg['camera'].get('keyword_rotation') or []) if m and m != 'none']
     SIDE_MODES = [m for m in (cfg['camera'].get('side_rotation') or []) if m and m != 'none']
     side_every = int(cfg['camera'].get('side_every', 3))
@@ -6740,6 +6964,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     def pick_side(start, end, toggle):
         """Waehlt die freie Seite neben der Person und die Text-Position dort.
         Rueckgabe: (side -1/1, cx) - side -1 = links, 1 = rechts. Hochformat: zentriert."""
+        # v160: hat der Sprecher gezeigt, entscheidet nicht mehr die freie
+        # Seite, sondern die Zeigerichtung. Auch im Hochformat - dort war die
+        # Position bisher fest die Bildmitte, und ein Zeigefinger nach links
+        # blieb folgenlos. clamp_cx haelt den Block danach im sicheren Bereich.
+        _zl = ziel_at(start, end)
+        if _zl is not None:
+            _zx = min(max(float(_zl[0]), W * 0.15), W * 0.85)
+            return (-1 if _zx < W / 2 else 1), _zx
         if portrait:
             return 0, W / 2
         if face_pos is None:
@@ -6922,7 +7154,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             return None
         return breit
 
-    def spot(start, end, bw, bh, wunsch_y=None, kalt=False, wunsch_x=None):
+    def spot(start, end, bw, bh, wunsch_y=None, kalt=False, wunsch_x=None,
+             ziel=None):
         """Freie Stelle fuer einen Textblock (bw x bh). Rueckgabe (x0, y0)."""
         rand_x = W * 0.05 + 8                 # 5 % Title-Safe (SMPTE/EBU)
         oben = (_pz['top'] if _pz is not None else H * 0.05)
@@ -7002,6 +7235,23 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 j0 = int(max(0, min(gx - 1, x / W * gx)))
                 j1 = int(max(j0 + 1, min(gx, (x + bw) / W * gx)))
                 k += 1.6 * float(karte[i0:i1, j0:j1].mean())
+            # v160 ZEIGE-ZIEL. Anders als die Wunschseite ist das KEIN
+            # Tiebreaker: der Sprecher hat auf eine Stelle gezeigt, also
+            # gehoert der Text dorthin. Der Term wirkt auf BEIDE Achsen und
+            # wiegt schwerer als Wunschzone und Unruhe-Karte zusammen.
+            # Er ueberrennt trotzdem kein Gesicht: eine Beruehrung kostet ab
+            # 2.5 aufwaerts, das volle Zeige-Gewicht erreicht 2.2. Genau so
+            # soll es sein - Text quer ueber dem Kopf des Sprechers waere
+            # kein erfuellter Zeigefinger, sondern ein Fehler.
+            if ziel is not None:
+                k += 2.2 * (abs((x + bw / 2.0) - ziel[0]) / max(W, 1)
+                            + abs((y + bh / 2.0) - ziel[1]) / max(H, 1))
+            if ziel is not None:
+                # Wunschzone und Wunschseite sind Vorgaben fuer den Normalfall.
+                # Liegt eine gemessene Zeige-Geste vor, wuerden sie nur gegen
+                # sie ziehen - der Rest der Kosten (Gesicht, Atemluft, Unruhe)
+                # bleibt in Kraft.
+                return k
             if wunsch_y is not None:          # Template-Wunschzone, weich
                 k += 1.1 * abs((y + bh / 2.0) - wunsch_y) / max(H, 1)
             # Wunsch-SEITE, nur als TIEBREAKER. Sie darf ausschliesslich
@@ -7947,11 +8197,18 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # verhindern (v143) - ein bewusster Wechsel der Seite ist aber
             # kein Zittern, sondern die Regie. Ohne dieses 'kalt' blieb der
             # Block gemessen bei JEDEM Chunk links, obwohl die Seite wechselte.
-            _kalt = _shot_neu(start) or (spot_state.get('seite') != _seite)
+            # v160: ein Zeige-Ziel ist ebenfalls ein bewusster Wechsel, kein
+            # Zittern. Ohne 'kalt' haette die Hysterese den Block an der alten
+            # Stelle festgehalten und die Geste waere folgenlos geblieben.
+            _zl = ziel_at(start, end)
+            _kalt = (_shot_neu(start) or (spot_state.get('seite') != _seite)
+                     or (_zl is not None) != bool(spot_state.get('zeig')))
             spot_state['seite'] = _seite
+            spot_state['zeig'] = _zl is not None
             _sx, _sy = spot(start, end, _br - _bl, tot_h,
                             wunsch_y=_wunsch, kalt=_kalt,
-                            wunsch_x=_wx)
+                            wunsch_x=_wx,
+                            ziel=(_zl[:2] if _zl is not None else None))
             _dx = _sx - _bl
             for it in items:
                 it['cx'] += _dx
@@ -10087,6 +10344,19 @@ def main():
                   "(Raum-Karte pro Shot)")
         except Exception as _e:
             print(f"Placement director: space map skipped ({type(_e).__name__})")
+    # v160 ZEIGE-REGIE. Wohin zeigt oder schaut der Sprecher an den gewaehlten
+    # Momenten? Die Messung laeuft NUR auf diesen Zeitpunkten (drei kleine
+    # Frames je Moment), nicht ueber das ganze Video. Ohne models/hand.task
+    # bleibt sie leer und die Platzierung verhaelt sich wie bisher.
+    _zeigen = []
+    if cfg['effects'].get('caption_zeige', True):
+        try:
+            _zt = sorted({round(float(words[i]['start']), 2)
+                          for i in (fx_map or {}) if i < len(words)})[:40]
+            _zeigen = zeige_ziele(args.input, _zt, W, H)
+        except Exception as _e:
+            print(f"Pointing direction: skipped ({type(_e).__name__})")
+            _zeigen = []
     # v96b: Erzaehler-/Voiceover-Modus. Kaum Gesicht im Bild -> Captions NICHT
     # an einer (kaum vorhandenen) Person ausrichten, sondern zentriert-editorial
     # setzen (face_pos/faces_at = None laesst build_plans das freie, mittige
@@ -10152,13 +10422,13 @@ def main():
                             cut_times=cut_times, faces_at=None,
                             flow_map=flow_map, loud=loud_map,
                             beat_times=_beat_ts, light_dir=_light,
-                            space_at=space_at)
+                            space_at=space_at, zeigen=_zeigen)
     else:
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
                             palette_at, cut_times=cut_times, faces_at=faces_at,
                             flow_map=flow_map, loud=loud_map,
                             beat_times=_beat_ts, light_dir=_light,
-                            space_at=space_at)
+                            space_at=space_at, zeigen=_zeigen)
 
     # --- v101t Auto-Akzente: dezente Motion-Graphics-Akzente aufs Transkript.
     # Der Akzent-Plan wird bei der Momente-Ausgabe geschrieben (compute_accents,
