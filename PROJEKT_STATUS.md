@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v156 Gemessene Buendigkeit ist eine Tendenz, keine Schablone.** Ismets
+  Einwand auf v155: "Das Video war aber auch nicht so, dass da staendig die
+  Captions auf der linken Seite waren." Stimmt. Auch ein Vorbild, dessen
+  linke Kanten im Schnitt weniger streuen, setzt einzelne Bloecke anders -
+  sein zweites Referenzvideo misst sogar korrekt 'frei'. Ein gemessenes
+  'links' auf ALLE Chunks anzuwenden macht aus einer Tendenz eine Schablone.
+  Rund die Haelfte der Bloecke folgt jetzt der wechselnden Bildseite statt
+  der Messung, deterministisch ausgewaehlt. Mit einem Drittel (Schwelle
+  0.66) wechselte im echten Render nur EIN Block von sechs.
+  Eine ausdrueckliche Nutzerwahl im Regler bleibt absolut.
+  BEWEIS am echten Render, dieselbe linksbuendige Referenz: Blockmitten
+  0.27 bis 0.77 W (Spanne 0.50) statt 0.27 bis 0.53 W (Spanne 0.26).
+  TESTKORREKTUR: der v153-Test setzte `caption_align` und mass die
+  BILDSEITE - seit v155 sind das getrennte Schluessel, der Test prueft jetzt
+  `caption_seite`.
 - **v155 Buendigkeit ist NICHT die Bildseite.** Ismet: "es ist immer noch
   alles auf der linken Seite im Video" - obwohl v153 die Variation gebaut
   hatte und sie im Testrender messbar lief (Blockmitten 0.33 bis 0.81 W).

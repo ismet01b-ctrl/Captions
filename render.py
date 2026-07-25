@@ -7755,6 +7755,20 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # Die gemessene Buendigkeit gilt fuer den SATZ, nicht fuer die
             # Bildseite. 'mitte' ist die einzige, die beides festlegt - ein
             # zentrierter Satz an der Bildkante saehe nach Fehler aus.
+            #
+            # v156: und sie gilt als TENDENZ, nicht als Zwang. Ismets Einwand:
+            # "Das Video war aber auch nicht so, dass da staendig die Captions
+            # auf der linken Seite waren." Stimmt - auch ein Vorbild, dessen
+            # linke Kanten im Schnitt weniger streuen, setzt einzelne Bloecke
+            # anders. Ein gemessenes 'links' auf ALLE Chunks anzuwenden macht
+            # Rund die HAELFTE folgt deshalb der Bildseite statt der Messung;
+            # welche, ist deterministisch. Mit einem Drittel (Schwelle 0.66)
+            # wechselte im echten Render nur EIN Block von sechs.
+            # Nutzerwahl und 'mitte' bleiben absolut - wer im Regler links
+            # sagt, meint links.
+            if _buendig in ('links', 'rechts') and _sw == 'auto' \
+                    and _mix01(g[0] * 23) >= 0.50:
+                _buendig = None
             _bnd = _buendig or _seite
             if _buendig == 'mitte':
                 _seite = 'mitte'

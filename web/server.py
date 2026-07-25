@@ -1704,7 +1704,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v155-seite'
+DVE_BUILD = 'v156-tendenz'
 
 
 @app.middleware('http')

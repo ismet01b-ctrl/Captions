@@ -2645,7 +2645,7 @@ def _scenario_logic(clip, transcript, tmp):
           'gesperrtes Konto -> wie ausgeloggt' in _srv_m
           and 'This account is suspended' in _srv_m
           and "_HEARTBEAT['watchdog']" in _srv_m and "_HEARTBEAT['cleanup']" in _srv_m
-          and "DVE_BUILD = 'v155-seite'" in _srv_m)
+          and "DVE_BUILD = 'v156-tendenz'" in _srv_m)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
@@ -4775,6 +4775,19 @@ def _scenario_betrieb(tmp):
     check('v155: linksbuendiger Satz klebt trotzdem nicht an der linken Kante',
           max(_mb) - min(_mb) > 0.18 and max(_mb) > 0.55,
           'Mitten ' + ', '.join(f'{v:.2f}' for v in _mb))
+    # v156: die gemessene Buendigkeit ist eine TENDENZ, keine Schablone.
+    # Ismets Einwand: sein Vorbild setzt die Captions NICHT staendig links.
+    # Rund die Haelfte der Bloecke folgt deshalb der Bildseite statt der
+    # Messung - mit einem Drittel (Schwelle 0.66) wechselte im echten Render
+    # nur EIN Block von sechs.
+    check('v156: die gemessene Buendigkeit ist Tendenz, nicht Schablone',
+          "_mix01(g[0] * 23) >= 0.50" in _r155
+          and "_buendig in ('links', 'rechts') and _sw == 'auto'" in _r155)
+    check('v156: eine Nutzerwahl bleibt trotzdem absolut',
+          max(_mitten(align='links', seite='links'))
+          < min(_mitten(align='links', seite='rechts')) + 0.20,
+          f"links {max(_mitten(align='links', seite='links')):.2f} W, "
+          f"rechts {min(_mitten(align='links', seite='rechts')):.2f} W")
     check('v155: nur die ausdrueckliche Nutzerwahl nagelt die Seite fest',
           sum(_mitten(seite='links')) / len(_mitten(seite='links'))
           < sum(_mitten(seite='rechts')) / len(_mitten(seite='rechts')) - 0.10)
@@ -4890,11 +4903,14 @@ def _scenario_betrieb(tmp):
     check('v153: gleiche Eingabe bleibt gleich (Re-Render reproduzierbar)',
           [R._mix01(i) for i in range(20)] == [R._mix01(i) for i in range(20)])
 
-    def _seiten(align='auto'):
+    def _seiten(align='auto', seite=None):
         _c = _y153.safe_load(open(os.path.join(HERE, 'config.yaml'),
                                   encoding='utf-8'))
         _c['look'] = 'creator'
         _c['effects']['caption_align'] = align
+        # v155: die BILDSEITE haengt an caption_seite, nicht mehr an der
+        # gemessenen Buendigkeit. Der Test misst weiterhin die Bildseite.
+        _c['effects']['caption_seite'] = seite if seite else align
         _S = R.Sprites(_c, 1080, 1920)
         _t = ('du hast das schon oft gehoert aber was wirklich dahinter '
               'steckt. genau das zeige ich dir jetzt hier und heute.').split()
@@ -4910,8 +4926,8 @@ def _scenario_betrieb(tmp):
           max(_auto) - min(_auto) > 0.20
           and any(v > 0.55 for v in _auto) and any(v < 0.45 for v in _auto),
           'Blockmitten ' + ', '.join(f'{v:.2f}' for v in _auto))
-    _li = _seiten('links')
-    _re = _seiten('rechts')
+    _li = _seiten('auto', seite='links')
+    _re = _seiten('auto', seite='rechts')
     check('v153: eine feste Seite wird auch eingehalten',
           sum(_li) / len(_li) < sum(_re) / len(_re) - 0.10,
           f'links {sum(_li) / len(_li):.2f} W gegen '
