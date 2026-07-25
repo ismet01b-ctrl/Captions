@@ -126,6 +126,32 @@ schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
 Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
 zwischen Regie und Zittern.
 
+### Referenz-Funktion (v144) — gemessen, nicht geschaetzt
+`measure_reference_video()` in `render.py` liest den Stil eines hochgeladenen
+Vorbilds direkt aus Bild und Ton — deterministisch, ohne KI, ohne API-Key.
+GPT-5 Vision liefert nur noch die Prosa-Beschreibung; alle wirksamen Zahlen
+kommen aus der Messung. Erkennung von Schrift: Fuellgrad 0.14-0.74,
+Strichbreite 0.06-0.40 der Zeichenhoehe, Zeilen-Bindung, zeitliche
+Wasserzeichen-Karte (>85 % gleiche helle Stelle = Logo), Textband in zwei
+Durchgaengen. **Das Band muss wachsen**: das 70-Prozent-Fenster findet nur die
+schwerste Stelle, ein fettes Schluesselwort draengt die Fliesstext-Zeile sonst
+heraus und das Groessenverhaeltnis wird 1.0. Gewachsen wird nur entlang echter
+ZEILEN (>= 2 Teile auf einer Grundlinie), max. 1.6 Zeilenhoehen je Schritt,
+Deckel 0.40 H.
+Angewendet werden (`_apply_reference_params`): Kamera, `chunk_hold_min`,
+SFX-Pegel, `caption_zone`, `caption_align`, `caption_glow`, `caption_outline`,
+Akzentfarbe, `caption_scale`, `caption_hierarchie`. Groessen wandern als
+Anteil der BILDHOEHE (Formatausgleich `pf` bleibt davor), Umrechnung ueber
+cap/em 0.70 und x-Hoehe/em 0.52, beides gedeckelt.
+**Kein API-Key noetig** — `analyze_reference_video` misst zuerst und liefert
+auch ohne OpenAI einen Eintrag. `/api/style/learn` darf deshalb kein 503 mehr
+werfen. Der Kunde sieht die Messung im Konto als Klartext-Zeile (`gemessen`,
+englisch); Rohdaten bleiben auf dem Server.
+**Testvideos fuer die Messung nie mit `cv2.putText` bauen** — Hershey-Schriften
+haben weder Punzen noch Antialiasing und besitzen die geprueften Merkmale gar
+nicht. Echte Schriftdateien nehmen, Captions wechseln lassen (stehender Text
+gilt sonst als Wasserzeichen), Stoerer wandern lassen.
+
 ### Typografie-Regeln aus der Referenz (v143, gemessen)
 - Jeder Look setzt **eigene** `fonts.support`. Stammbreite/Versalhöhe ≥ 0.20
   (Referenz 0.22). `sans_l` = 0.102 ist nur für `clean` richtig.
@@ -187,7 +213,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **612/612 grün (Stand v101k)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **869/869 grün (Stand v144)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -3,6 +3,74 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v144 Referenz-Funktion: gemessen statt geschaetzt.** Die Stil-Referenz im
+  Konto uebernimmt jetzt nachpruefbar den Stil des hochgeladenen Vorbilds.
+  EHRLICHE URSACHE des alten Zustands: bis v143 lief das Stil-Lernen ueber
+  eine Prosa-Beschreibung von GPT-5 Vision (6 Frames, `detail: low`), aus der
+  eine ZWEITE Anfrage sechs Zahlen SCHAETZTE. Schriftgroesse, Hierarchie,
+  Position, Ausrichtung, Kamera, Schnitt-Tempo und Sounddesign kamen darin
+  ueberhaupt nicht vor. Die Referenz konnte also gar nicht aehnlich aussehen.
+  - **`measure_reference_video()`** rechnet den Stil direkt aus Bild und Ton,
+    deterministisch, ohne KI, ohne API-Key. Text wird nicht ueber eine
+    Helligkeitsschwelle gefunden (damit lieferte das Vorbild eine Zone bis
+    0.857 H und ein Groessenverhaeltnis von 4.66), sondern ueber Fuellgrad
+    0.14-0.74, Strichbreite 0.06-0.40 der Zeichenhoehe, Zeilen-Bindung
+    (Buchstaben haben Nachbarn auf der Grundlinie, ein Lampenreflex nicht),
+    eine zeitliche Wasserzeichen-Karte (was in >85 % der Frames an derselben
+    Stelle hell ist, ist Logo, nicht Caption) und ein zweistufiges
+    TEXTBAND. Gemessen werden: Versalhoehe des Schluesselworts, x-Hoehe des
+    Kleintexts, Verhaeltnis, Zone, Ausrichtung, Akzentfarbe, Glow/Kontur,
+    Stammbreite, Wort- und Buchstaben-Takt, dazu Kamera (Zoom/Pan/Unruhe),
+    Schnittdichte, mittlere Einstellungslaenge, Pegel, Stereobreite,
+    Musikbett ja/nein, Ton-auf-dem-Schnitt und dessen Vorlauf.
+  - **Band-Wachstum (der Fehler, den der Testbau aufdeckte).** Das
+    70-Prozent-Fenster findet die SCHWERSTE Stelle, nicht den ganzen Block:
+    ein fettes Schluesselwort traegt so viel Masse, dass die duenne
+    Fliesstext-Zeile darueber aus dem Band faellt - dann misst die Funktion
+    Schluessel gegen Schluessel und das Verhaeltnis wird 1.0. Das Band zieht
+    jetzt jede echte ZEILE (>= 2 Teile auf einer Grundlinie) nach, die
+    hoechstens 1.6 Zeilenhoehen entfernt steht, hart gedeckelt auf 0.40 H.
+    Einzelne Reflexe koennen das Band damit nicht aufziehen.
+  - **Ausrichtung ueber das Verhaeltnis, nicht ueber eine feste Differenz.**
+    Die alte Schwelle 0.01 W war an einem Video geeicht; ein Block, der seine
+    Breite nur wenig aendert, fiel auf 'frei' zurueck, obwohl die linken
+    Kanten exakt buendig standen. Jetzt Quotient (< 0.65) mit Rauschboden.
+  - **Was jetzt wirklich in der Config ankommt:** Kamerastaerke/Whip/Crash aus
+    der gemessenen Kamera, `chunk_hold_min` aus der Einstellungslaenge,
+    SFX-Pegel aus Musikbett + Schnitt-Ton, `caption_zone` aus der Textzone,
+    `caption_align`, `caption_glow`, `caption_outline`, Akzentfarbe - und NEU
+    `caption_scale` + `caption_hierarchie`, also Schriftgrad und
+    Groessenkontrast. Uebertragen wird der Anteil der BILDHOEHE, der
+    Formatausgleich `pf` (Querformat 1.35) bleibt davor, sonst schrumpfte der
+    Satz im 16:9 wieder zusammen. Umrechnung Versalhoehe -> Grad ueber
+    cap/em 0.70, x-Hoehe/em 0.52. Beides gedeckelt (0.75-1.35 bzw. 1.6-3.4),
+    damit eine Fehlmessung den Satz nicht sprengen kann.
+  - **Kein Hard-Stop mehr am API-Key.** `analyze_reference_video` misst zuerst
+    und braucht OpenAI nur noch fuer die Prosa-Beschreibung. Faellt die API
+    aus, entsteht der Eintrag trotzdem aus der Messung; `/api/style/learn`
+    gibt kein 503 mehr zurueck. Bis v143 sperrte ein API-Ausfall das ganze
+    Stil-Lernen aus, obwohl kein Messwert davon abhaengt.
+  - **Sichtbarer Beweis im Konto.** Jede Referenz zeigt jetzt eine
+    Klartext-Zeile der Messung, z. B. `Measured: key word 7.4% of frame
+    height, size contrast 3.0x, text zone 17-38% height, left aligned, accent
+    #f4bb33, calm camera, 1.50s average shot, no music bed, sound on the cut
+    (142 ms early)`. Rohdaten (`params`/`messung`) verlassen den Server nicht.
+  - **Testmaterial.** Das alte synthetische Testvideo war mit `cv2.putText`
+    gesetzt - Hershey-Strichschriften ohne Punzen und ohne Antialiasing, also
+    genau ohne die Merkmale, an denen die Messung Schrift erkennt. Es pruefte
+    damit nichts. Neu: echte Schriftdateien (poppins_b / sans_l), zwei
+    einander abloesende Caption-Bloecke (sonst haelt die Wasserzeichen-Karte
+    stehenden Text zu Recht fuer ein Logo), ein echter Schnitt, zwei WANDERNDE
+    helle Stoerer bei 0.60 und 0.74 H, und eine echte Tonspur mit
+    gestaltetem Schnitt-Ton (Zischer 115 ms, Tiefton-Impuls 30 ms vor dem
+    Schnitt). Die Messung findet daraus Zone 0.174-0.377, Verhaeltnis 2.96,
+    Ausrichtung links, Akzent #f4bb33 gegen gesetztes #f9bb26, Einstellung
+    1.50 s, Schnitt-Ton mit 142 ms Vorlauf.
+  - **Grenze, klar gesagt:** die 12/12-Uebereinstimmung mit Ismets echtem
+    Referenzvideo wurde vor dem Band-Wachstum und der neuen Ausrichtungsregel
+    gemessen; die Datei liegt nicht mehr im Container, die Gegenprobe steht
+    also noch aus. Alles hier ist Linux/CPU/synthetisch, ohne OpenAI-Key.
+  Tests 869 logic + 7/1/5/2 Renders gruen.
 - **v143b Schrift eine Stufe kleiner + Ausweich-Kosten korrigiert.** Ismets
   Befund am Frame-Streifen: das Schluesselwort war zu gross. Es sass mit
   Versalhoehe 0.081 H an der OBERKANTE des gemessenen Referenzbands

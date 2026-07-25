@@ -1643,7 +1643,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v143-editorial'
+DVE_BUILD = 'v144-referenz-messung'
 
 
 @app.middleware('http')
@@ -5812,9 +5812,10 @@ async def style_learn(request: Request, datei: UploadFile = File(...),
     ext = os.path.splitext(datei.filename or '')[1].lower() or '.mp4'
     if ext not in ('.mp4', '.mov', '.m4v', '.webm', '.mkv'):
         raise HTTPException(400, 'Only video files (mp4, mov, webm, mkv).')
-    if not os.environ.get('OPENAI_API_KEY'):
-        raise HTTPException(503, 'Style learning is briefly unavailable. '
-                                 'Try again shortly.')
+    # v144: KEIN Hard-Stop mehr ohne OpenAI-Key. Der wirksame Teil des
+    # Stil-Lernens ist die MESSUNG aus Bild und Ton (Groesse, Hierarchie,
+    # Zone, Satz, Farbe, Kamera, Schnitt, Sounddesign) - die laeuft lokal.
+    # Ein API-Ausfall darf den Kunden nicht mehr komplett aussperren.
     sid = uuid.uuid4().hex[:10]
     if not _reserve_credits(u['id'], STYLE_LEARN_COST, f'style_{sid}',
                             grund=f'Style learn style_{sid} ({STYLE_LEARN_COST}s)'):
@@ -5848,8 +5849,9 @@ async def style_learn(request: Request, datei: UploadFile = File(...),
             raise HTTPException(502, 'The analysis could not read this video. '
                                      'Try a shorter mp4 with visible captions.')
         return {'entry': {'name': entry.get('name', ''),
-                          'beispiel': entry.get('beispiel', '')},
-                'refs': _load_user_refs(u['id'])}
+                          'beispiel': entry.get('beispiel', ''),
+                          'gemessen': entry.get('gemessen', '')},
+                'refs': _style_public(_load_user_refs(u['id']))}
     except HTTPException:
         _refund_credits(u['id'], f'style_{sid}', STYLE_LEARN_COST,
                         resv_like=f'Style learn style_{sid} %')
@@ -5864,13 +5866,22 @@ async def style_learn(request: Request, datei: UploadFile = File(...),
             except OSError: pass
 
 
+def _style_public(refs):
+    """v144: was ein Konto von seinem gelernten Stil zu sehen bekommt. Neu
+    dabei ist 'gemessen' - die Klartext-Zeile der Messung. Ohne sie bleibt
+    'Stil gelernt' eine Behauptung, die der Kunde nicht pruefen kann.
+    Rohdaten (params/messung) gehen NICHT raus."""
+    return [{'name': str(r.get('name', '')),
+             'beispiel': str(r.get('beispiel', ''))[:240],
+             'gemessen': str(r.get('gemessen', ''))[:400]}
+            for r in (refs or []) if isinstance(r, dict)]
+
+
 @app.get('/api/style/list')
 def style_list(request: Request):
     """Eigene gelernte Stile (nur Name + Kurzbeschreibung, keine Rohdaten)."""
     u = _require_user(request)
-    return {'refs': [{'name': str(r.get('name', '')),
-                      'beispiel': str(r.get('beispiel', ''))[:240]}
-                     for r in _load_user_refs(u['id']) if isinstance(r, dict)],
+    return {'refs': _style_public(_load_user_refs(u['id'])),
             'max': STYLE_MAX, 'cost_credits': STYLE_LEARN_COST // 60}
 
 

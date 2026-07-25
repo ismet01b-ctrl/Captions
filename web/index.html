@@ -3817,6 +3817,7 @@ function renderStyleList(refs) {
     el.innerHTML = `<div style="flex:1; min-width:0;">
         <b style="font-size:13.5px;">${escHtml(r.name || 'Style ' + (i + 1))}</b>
         <p style="color:var(--mut); font-size:12.5px; margin-top:2px;">${escHtml(r.beispiel || '')}</p>
+        ${r.gemessen ? `<p style="color:var(--txt); font-size:12px; margin-top:4px; opacity:.85;">${escHtml(r.gemessen)}</p>` : ''}
       </div>
       <button class="btn secondary" data-stl-del="${i}" style="padding:6px 12px;">Delete</button>`;
     box.appendChild(el);
@@ -3852,7 +3853,8 @@ if ($('#btnStyleLearn')) $('#btnStyleLearn').addEventListener('click', async () 
     const d = await r.json().catch(() => ({}));
     if (r.ok) {
       stlSetStatus('Learned "' + ((d.entry && d.entry.name) || 'style') + '". '
-        + 'Your next renders will lean toward it.', 'ok');
+        + ((d.entry && d.entry.gemessen) ? d.entry.gemessen + ' '
+           : 'Your next renders will lean toward it.'), 'ok');
       renderStyleList(d.refs || []);
       if ($('#stlFile')) $('#stlFile').value = '';
       if ($('#stlName')) $('#stlName').value = '';

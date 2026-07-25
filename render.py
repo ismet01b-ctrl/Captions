@@ -3047,15 +3047,93 @@ def measure_reference_video(video_path, max_frames=160):
                 if luecke <= max(bh, bh2) * 1.6:
                     nachbar = True
                     break
-            if nachbar:
+            # Ein BREITES Teil ist auch ohne Nachbarn Schrift: ein ganzes Wort
+            # oder eine Zeile verschmilzt beim Schliessen zu einem Block.
+            # Reflexe sind dagegen rundlich. Ohne diese Ausnahme verwarf die
+            # Zeilen-Bindung ganze Caption-Zeilen.
+            if nachbar or bw >= bh * 2.5:
                 fest.append((x, y, bw, bh, a))
         return fest
+
+    # ZWEI DURCHGAENGE. Erst alle Kandidaten sammeln, dann das BAND finden,
+    # in dem die Textmasse wirklich liegt, und nur darin messen.
+    # Grund: einzelne Reflexe auf Gesicht und Lampe ueberstehen jeden lokalen
+    # Filter, weil sie lokal wie Schrift aussehen. Sie streuen aber ueber das
+    # ganze Bild, waehrend Captions in einem schmalen Band sitzen. Am
+    # Referenzvideo zog genau das die gemessene Zone von 0.36 auf 0.59 H.
+    _kand = []
+    _zeilen = []
+    for f in frames:
+        m, _b = maske(f)
+        ts = teile(m)
+        for (x, y, bw, bh, a) in ts:
+            _kand.append((y + bh / 2.0, a, bh))
+        # ZEILEN je Frame gruppieren: Teile auf gemeinsamer Grundlinie. Eine
+        # Zeile mit mindestens zwei Teilen ist sicher Schrift - ein einzelner
+        # Glanzpunkt bildet nie eine Zeile. Das ist der Anker fuers Wachsen.
+        for (x, y, bw, bh, a) in ts:
+            mi = y + bh / 2.0
+            gefaehrten = [t for t in ts
+                          if abs((t[1] + t[3] / 2.0) - mi) <= max(bh, t[3]) * 0.55]
+            if len(gefaehrten) >= 2:
+                _zeilen.append((float(np.mean([t[1] + t[3] / 2.0 for t in gefaehrten])),
+                                float(np.median([t[3] for t in gefaehrten]))))
+    band = None
+    if len(_kand) >= 20:
+        ys = np.array([k[0] for k in _kand], dtype=np.float32)
+        ws = np.array([k[1] for k in _kand], dtype=np.float32)
+        ordn = np.argsort(ys)
+        ys, ws = ys[ordn], ws[ordn]
+        ges = float(ws.sum())
+        kum = np.cumsum(ws)
+        best, bl, br = None, 0.0, float(H)
+        j = 0
+        for i in range(len(ys)):
+            while j < len(ys) and (kum[j] - (kum[i - 1] if i else 0.0)) < ges * 0.70:
+                j += 1
+            if j >= len(ys):
+                break
+            spanne = ys[j] - ys[i]
+            if best is None or spanne < best:
+                best, bl, br = spanne, float(ys[i]), float(ys[j])
+        if best is not None:
+            luft = max(H * 0.03, best * 0.25)
+            bl, br = bl - luft, br + luft
+            # BAND WACHSEN LASSEN. Das 70-Prozent-Fenster findet die
+            # SCHWERSTE Stelle, nicht den ganzen Block: ein fettes
+            # Schluesselwort traegt so viel Masse, dass die duenne
+            # Fliesstext-Zeile darueber aus dem Band faellt - dann misst die
+            # Funktion Schluessel gegen Schluessel und das Groessenverhaeltnis
+            # wird 1.0. Deshalb zieht das Band anschliessend jede echte ZEILE
+            # nach, die hoechstens 1.6 Zeilenhoehen entfernt steht.
+            # Nur Zeilen (>= 2 Teile auf einer Grundlinie) duerfen ziehen -
+            # ein einzelner Reflex auf Wange oder Lampe kann das Band damit
+            # nicht aufziehen. Zusaetzlich harte Deckelung auf 0.40 H.
+            if _zeilen:
+                for _ in range(6):
+                    drin = [z for z in _zeilen if bl <= z[0] <= br]
+                    mh = float(np.median([z[1] for z in drin])) if drin else float(best or H * 0.05)
+                    schritt = max(mh, H * 0.02) * 1.6
+                    nah = [z for z in _zeilen
+                           if bl - schritt <= z[0] <= br + schritt]
+                    if not nah:
+                        break
+                    nl = min(bl, min(z[0] - z[1] / 2.0 for z in nah))
+                    nr = max(br, max(z[0] + z[1] / 2.0 for z in nah))
+                    if nr - nl > H * 0.40:
+                        break
+                    if nl >= bl - 1.0 and nr <= br + 1.0:
+                        break
+                    bl, br = nl, nr
+            band = (bl, br)
 
     hoehen, zone_y, zone_x, flaechen = [], [], [], []
     akz_px, akz_anteil = [], []
     for f in frames:
         m, bunt = maske(f)
         ts = teile(m)
+        if band is not None:
+            ts = [t for t in ts if band[0] <= t[1] + t[3] / 2.0 <= band[1]]
         if not ts:
             flaechen.append(0)
             continue
@@ -3105,8 +3183,20 @@ def measure_reference_video(video_path, max_frames=160):
     # --- Ausrichtung: streuen die LINKEN Kanten weniger als die Mitten?
     l_streu = float(np.std(zx[:, 0]))
     m_streu = float(np.std((zx[:, 0] + zx[:, 1]) / 2.0))
-    res['ausrichtung'] = ('links' if l_streu + 0.01 < m_streu
-                          else ('mitte' if m_streu + 0.01 < l_streu else 'frei'))
+    # VERHAELTNIS statt fester Differenz. Die alte Schwelle von 0.01 W war an
+    # der Streuung EINES Videos geeicht: bei einem Block, der seine Breite nur
+    # wenig aendert, liegen beide Streuungen unter 0.01 und die Ausrichtung
+    # fiel auf 'frei' zurueck, obwohl die linken Kanten exakt buendig standen.
+    # Der Quotient ist massstabsfrei; der Boden verhindert nur, dass reines
+    # Messrauschen eine Aussage erzwingt.
+    if max(l_streu, m_streu) < 0.004:
+        res['ausrichtung'] = 'frei'
+    elif l_streu < m_streu * 0.65:
+        res['ausrichtung'] = 'links'
+    elif m_streu < l_streu * 0.65:
+        res['ausrichtung'] = 'mitte'
+    else:
+        res['ausrichtung'] = 'frei'
     # --- Akzentfarbe
     if akz_px:
         b, g, r = np.mean(np.array(akz_px), axis=0)
@@ -3120,7 +3210,13 @@ def measure_reference_video(video_path, max_frames=160):
             ein.append(i / fps)
     if len(ein) >= 3:
         d = np.diff(np.array(ein))
-        d = d[d > 0.04]                      # Buchstaben-Reveal rausrechnen
+        # Buchstaben-Reveal sauber abtrennen: die Referenz deckt mit rund
+        # 80 ms je Buchstabe auf, Woerter folgen mit 160-360 ms. Die alte
+        # Grenze von 40 ms liess die Buchstaben durch und zog den Wort-Takt
+        # auf 0.081 s herunter.
+        # Nur echte Wortabstaende: unter 0.12 s sind es Buchstaben, ueber
+        # 0.9 s ist es der Sprung zum naechsten Block oder Schnitt.
+        d = d[(d > 0.12) & (d < 0.9)]
         if len(d):
             res['wort_takt'] = round(float(np.median(d)), 3)
         fein = np.diff(np.array(ein))
@@ -3133,7 +3229,194 @@ def measure_reference_video(video_path, max_frames=160):
     st = _ref_strichstaerke(frames, maske, H, teile)
     if st:
         res['stamm_versal'] = st
+    # --- SCHNITT + KAMERA (fehlte der Stil-Analyse bis v143 komplett)
+    kam = _ref_kamera(frames, fps)
+    res.update(kam)
+    # --- TON (bis v143 nur ein Prosa-Satz)
+    res.update(_ref_ton(video_path))
+    if kam.get('schnitte_pro_s'):
+        _n = int(round(kam['schnitte_pro_s'] * (len(frames) / float(fps))))
+        _cz = [(_i + 1) / float(fps) for _i in range(len(frames) - 1)]
+        # Schnittzeiten aus derselben Differenzreihe wie _ref_kamera holen
+        _kl = [cv2.cvtColor(cv2.resize(f, (f.shape[1] // 3 or 1, f.shape[0] // 3 or 1)),
+                            cv2.COLOR_BGR2GRAY) for f in frames]
+        _d = np.array([float(np.mean(np.abs(_kl[i].astype(np.float32)
+                                            - _kl[i - 1].astype(np.float32))))
+                       for i in range(1, len(_kl))], dtype=np.float32)
+        _thr = max(float(np.median(_d) + 4.0 * np.std(_d)), 18.0)
+        _cuts = [(i + 1) / float(fps) for i in range(1, len(_d)) if _d[i] > _thr]
+        res.update(_ref_schnitt_ton(video_path, _cuts))
     return res
+
+
+def _ref_kamera(frames, fps):
+    """v144: misst SCHNITT und KAMERA eines Referenzvideos.
+
+    Beides fehlte der Stil-Analyse komplett - sie fragte GPT-5 nach Prosa und
+    leitete daraus 'ruhig/normal/wuchtig' ab, was dann pauschal die
+    Kamerastaerke verstellte. Am Referenzvideo waere das falsch gewesen:
+    gemessen ist die Kamera dort RUHIG (Zoom 0.994 je Sekunde, Pan-Streuung
+    0.83 %), die Energie kommt aus dem SCHNITT (0.54 Schnitte je Sekunde,
+    mittlere Einstellung 1.38 s). Wer daraus 'wuchtig' liest und die Kamera
+    aufdreht, trifft genau das Gegenteil des Vorbilds."""
+    if len(frames) < 8 or fps <= 0:
+        return {}
+    klein = [cv2.cvtColor(cv2.resize(f, (f.shape[1] // 3 or 1, f.shape[0] // 3 or 1)),
+                          cv2.COLOR_BGR2GRAY) for f in frames]
+    d = np.array([float(np.mean(np.abs(klein[i].astype(np.float32)
+                                       - klein[i - 1].astype(np.float32))))
+                  for i in range(1, len(klein))], dtype=np.float32)
+    if not len(d):
+        return {}
+    schwelle = max(float(np.median(d) + 4.0 * np.std(d)), 18.0)
+    cuts = [i for i in range(1, len(d)) if d[i] > schwelle]
+    # Frames rund um einen Schnitt sperren - der Sprung wuerde sonst als
+    # gigantische Kamerafahrt durchgehen (gemessen 171 % Pan an einem Schnitt).
+    sperr = set()
+    for c in cuts:
+        sperr.update(range(c - 3, c + 4))
+    zoom, pan = [], []
+    for i in range(1, len(klein)):
+        if i in sperr:
+            continue
+        p0 = cv2.goodFeaturesToTrack(klein[i - 1], 250, 0.01, 7)
+        if p0 is None:
+            continue
+        p1, st, _ = cv2.calcOpticalFlowPyrLK(klein[i - 1], klein[i], p0, None)
+        if p1 is None:
+            continue
+        ok = st.ravel() == 1
+        if ok.sum() < 15:
+            continue
+        M, _ = cv2.estimateAffinePartial2D(p0[ok].reshape(-1, 2),
+                                           p1[ok].reshape(-1, 2))
+        if M is None:
+            continue
+        zoom.append(float(np.sqrt(M[0, 0] ** 2 + M[0, 1] ** 2)))
+        pan.append(float(np.hypot(M[0, 2], M[1, 2])) / max(klein[0].shape[1], 1))
+    sek = len(frames) / float(fps)
+    res = {'schnitte_pro_s': round(len(cuts) / max(sek, 0.1), 3),
+           'einstellung_s': round(sek / (len(cuts) + 1), 2)}
+    if zoom:
+        res['zoom_pro_s'] = round(float(np.median(zoom)) ** fps, 4)
+        res['pan_pro_s'] = round(float(np.median(pan)) * fps, 4)
+        res['unruhe'] = round(float(np.std(pan)), 4)
+        res['kamera'] = ('ruhig' if res['unruhe'] < 0.012
+                         and abs(res['zoom_pro_s'] - 1.0) < 0.02
+                         else ('bewegt' if res['unruhe'] < 0.030 else 'wild'))
+    return res
+
+
+def _ref_ton(video_path):
+    """v144: misst das SOUNDDESIGN. Bis v143 gab es dazu nur einen Prosa-Satz
+    ueber 'Schlagdichte und Dynamik'. Gemessen wird jetzt, was man nachbauen
+    kann: liegt Musik drunter, sitzen Toene auf den Schnitten, laeuft der Ton
+    dem Bild voraus, wie laut ist gemischt."""
+    import wave as _wave
+    import tempfile as _tf
+    wavp = _tf.NamedTemporaryFile(suffix='.wav', delete=False).name
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', video_path,
+                        '-ac', '2', '-ar', '44100', wavp], check=True, timeout=90,
+                       capture_output=True)
+        with _wave.open(wavp, 'rb') as wf:
+            sr, n, ch = wf.getframerate(), wf.getnframes(), wf.getnchannels()
+            raw = wf.readframes(n)
+    except Exception:
+        return {}
+    finally:
+        try: os.remove(wavp)
+        except OSError: pass
+    x = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    if ch >= 2:
+        x = x.reshape(-1, 2)
+        M, S = (x[:, 0] + x[:, 1]) / 2.0, (x[:, 0] - x[:, 1]) / 2.0
+    else:
+        M, S = x, np.zeros_like(x)
+    if len(M) < sr:
+        return {}
+    res = {}
+    def db(v):
+        return 20.0 * math.log10(float(np.sqrt(np.mean(v ** 2))) + 1e-12)
+    res['pegel_db'] = round(db(M), 1)
+    res['breite_db'] = round(db(M) - db(S), 1)
+    # MUSIK: eine Musikspur haelt Stereo-Energie AUCH in Mitten und Hoehen.
+    # Reine Sprache plus Effekte hat Breite fast nur im Tiefton.
+    N = 2048
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    def spek(v):
+        return np.array([np.abs(np.fft.rfft(v[i:i + N] * np.hanning(N)))
+                         for i in range(0, len(v) - N, N)])
+    sS = spek(S)
+    if len(sS):
+        tief = (f >= 20) & (f < 250)
+        mitt = (f >= 800) & (f < 6000)
+        d_tief = 20.0 * math.log10(float(sS[:, tief].mean()) + 1e-12)
+        d_mitt = 20.0 * math.log10(float(sS[:, mitt].mean()) + 1e-12)
+        res['musik'] = bool(d_mitt > d_tief - 12.0 and d_mitt > -30.0)
+    # Stille-Anteil und Dynamik
+    hop = int(sr * 0.05)
+    rms = np.array([np.sqrt(np.mean(M[i:i + hop] ** 2) + 1e-12)
+                    for i in range(0, len(M) - hop, hop)])
+    ddb = 20.0 * np.log10(rms + 1e-12)
+    res['stille_anteil'] = round(float(np.mean(ddb < -45.0)), 3)
+    res['dynamik_db'] = round(float(np.percentile(ddb, 90) - np.percentile(ddb, 10)), 1)
+    return res
+
+
+def _ref_schnitt_ton(video_path, cut_zeiten):
+    """v144: sitzt auf den Schnitten wirklich ein Ton, und laeuft er dem Bild
+    voraus? Am Referenzvideo gemessen: Hochton steigt 115 ms vor dem Schnitt
+    um 28 dB, der Tiefton-Impuls liegt 30 ms davor. Genau das unterscheidet
+    gestalteten Schnitt-Ton von einer Tonspur, die einfach mitlaeuft."""
+    if not cut_zeiten:
+        return {}
+    import wave as _wave
+    import tempfile as _tf
+    wavp = _tf.NamedTemporaryFile(suffix='.wav', delete=False).name
+    try:
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', video_path,
+                        '-ac', '1', '-ar', '44100', wavp], check=True, timeout=90,
+                       capture_output=True)
+        with _wave.open(wavp, 'rb') as wf:
+            sr, n = wf.getframerate(), wf.getnframes()
+            raw = wf.readframes(n)
+    except Exception:
+        return {}
+    finally:
+        try: os.remove(wavp)
+        except OSError: pass
+    x = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    N, hop = 1024, 256
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    sp = np.array([np.abs(np.fft.rfft(x[i:i + N] * np.hanning(N)))
+                   for i in range(0, len(x) - N, hop)])
+    if not len(sp):
+        return {}
+    t = np.arange(len(sp)) * hop / float(sr)
+    hoch = sp[:, (f >= 4000) & (f < 14000)].mean(axis=1)
+    tief = sp[:, (f >= 20) & (f < 150)].mean(axis=1)
+    treffer, vorlauf = 0, []
+    for c in cut_zeiten:
+        a, b = np.searchsorted(t, c - 0.35), np.searchsorted(t, c + 0.10)
+        ruhe = np.searchsorted(t, max(0.0, c - 0.9)), a
+        if b - a < 4 or ruhe[1] - ruhe[0] < 4:
+            continue
+        basis = float(np.median(hoch[ruhe[0]:ruhe[1]]) + 1e-9)
+        spitze = float(np.max(hoch[a:b]))
+        anstieg = 20.0 * math.log10(spitze / basis) if basis > 0 else 0.0
+        b_basis = float(np.median(tief[ruhe[0]:ruhe[1]]) + 1e-9)
+        b_spitze = float(np.max(tief[a:b]))
+        b_anstieg = 20.0 * math.log10(b_spitze / b_basis) if b_basis > 0 else 0.0
+        if anstieg > 9.0 or b_anstieg > 9.0:
+            treffer += 1
+            reihe = hoch if anstieg >= b_anstieg else tief
+            vorlauf.append(float(c - t[a + int(np.argmax(reihe[a:b]))]))
+    if not treffer:
+        return {'schnitt_ton': False}
+    return {'schnitt_ton': True,
+            'schnitt_ton_anteil': round(treffer / float(len(cut_zeiten)), 2),
+            'ton_vorlauf_ms': round(float(np.median(vorlauf)) * 1000.0, 1)}
 
 
 def _kern_hoehe(f, x, y, bw, bh):
@@ -3146,10 +3429,21 @@ def _kern_hoehe(f, x, y, bw, bh):
     v = hsv[..., 2].astype(np.int16)
     s = hsv[..., 1].astype(np.int16)
     kern = ((v >= 250) & (s <= 18)) | ((v >= 215) & (s >= 165))
-    zeilen = np.where(kern.sum(axis=1) > max(1, bw * 0.04))[0]
-    if len(zeilen) < 2:
+    aktiv = kern.sum(axis=1) > max(1, bw * 0.04)
+    if aktiv.sum() < 2:
         return None
-    return int(zeilen.max() - zeilen.min() + 1)
+    # LAENGSTER ZUSAMMENHAENGENDER Lauf, nicht die Gesamtausdehnung. Die
+    # Referenz setzt sehr eng (Zeilenabstand 0.83 em); mit Glow verschmelzen
+    # zwei Zeilen zu EINER Komponente, und min-bis-max haette dann beide
+    # gemessen - gemessen 0.122 H statt der echten 0.085 H Versalhoehe.
+    best, lauf = 0, 0
+    for a_ in aktiv:
+        if a_:
+            lauf += 1
+            best = max(best, lauf)
+        else:
+            lauf = 0
+    return int(best) if best >= 2 else None
 
 
 def _ref_glow(frames, W, H, maske, teile=None):
@@ -3282,8 +3576,24 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
     Referenzen) statt in den globalen Store - der Server ruft das in-process
     auf, ein Env-Override waere dort nicht threadsicher."""
     key = os.environ.get('OPENAI_API_KEY')
-    if not key or not os.path.exists(video_path):
+    if not os.path.exists(video_path):
         return None
+    # v144: die MESSUNG zuerst, und zwar unabhaengig von OpenAI. Sie ist
+    # inzwischen die Substanz dieser Funktion - Groesse, Hierarchie, Zone,
+    # Satz, Farbe, Kamera, Schnitt und Sounddesign kommen aus den Pixeln und
+    # der Tonspur. Bis v143 stand ganz oben ein 'kein Key -> None': ein
+    # API-Ausfall liess damit das ganze Stil-Lernen ausfallen, obwohl kein
+    # einziger Messwert davon abhaengt.
+    try:
+        mess = measure_reference_video(video_path)
+    except Exception as e:
+        print(f"Stil-Messung uebersprungen ({type(e).__name__})")
+        mess = {}
+    if not key:
+        if not mess:
+            return None
+        return _reference_entry(video_path, name, '', None, mess, save,
+                                store_path)
     import requests
     try:
         dur = float(subprocess.run(
@@ -3316,18 +3626,80 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
         desc = r.json()['choices'][0]['message']['content'].strip()
     except Exception as e:
         print(f"Stil-Lernen nicht verfuegbar ({type(e).__name__})")
-        return None
+        desc = ''
     if not desc:
-        return None
+        # Prosa fehlt (Ausfall, Rate-Limit, leere Antwort). Die Messung
+        # traegt den Eintrag trotzdem - sie ist der Teil, der wirkt.
+        if not mess:
+            return None
+        return _reference_entry(video_path, name, '', None, mess, save,
+                                store_path)
     # v96v: Audio/SFX separat aus der Tonspur analysieren (Vision hoert nichts)
     aud = _ref_audio_summary(video_path)
     if aud:
         desc = desc + "\n" + aud
-    entry = {'name': (name or os.path.splitext(os.path.basename(video_path))[0])[:60],
-             'beispiel': desc}
     # v96y/z: MESSBARE Parameter aus Beschreibung + FRAMES ziehen (Farbe/Dichte
     # praezise) - die wirken deterministisch auf die Render-Config (sichtbar).
     params = _style_params_from_desc(desc, model, key, frames=frames)
+    # v144: GEMESSENE Werte schlagen geschaetzte. Bis v143 kamen alle
+    # Parameter aus einer zweiten GPT-Anfrage auf eine Prosa-Beschreibung -
+    # Kamera, Schnitt, Sounddesign und Caption-Geometrie kamen darin gar nicht
+    # vor. measure_reference_video() rechnet sie direkt aus Bild und Ton.
+    return _reference_entry(video_path, name, desc, params, mess, save,
+                            store_path)
+
+
+def _messung_klartext(mess):
+    """v144: die Messwerte als lesbare Zeile. Der Kunde soll SEHEN, was von
+    seinem Vorbild uebernommen wurde - sonst bleibt 'Stil gelernt' eine
+    Behauptung. Bewusst nur gemessene Groessen, keine Werbeworte."""
+    if not mess:
+        return ''
+    # ENGLISCH, weil dieser Text im Web-Produkt direkt beim Kunden landet.
+    t = []
+    if mess.get('key_hoehe'):
+        t.append(f"key word {mess['key_hoehe'] * 100:.1f}% of frame height")
+    if mess.get('verhaeltnis'):
+        t.append(f"size contrast {mess['verhaeltnis']:.1f}x")
+    z = mess.get('zone_y')
+    if isinstance(z, (list, tuple)) and len(z) == 2:
+        t.append(f"text zone {z[0] * 100:.0f}-{z[1] * 100:.0f}% height")
+    if mess.get('ausrichtung') in ('links', 'mitte'):
+        t.append('left aligned' if mess['ausrichtung'] == 'links' else 'centred')
+    if mess.get('akzent_hex'):
+        t.append(f"accent {mess['akzent_hex']}")
+    if mess.get('kamera'):
+        t.append({'ruhig': 'calm camera', 'bewegt': 'moving camera',
+                  'wild': 'restless camera'}.get(mess['kamera'], 'camera'))
+    if mess.get('einstellung_s'):
+        t.append(f"{mess['einstellung_s']:.2f}s average shot")
+    if 'musik' in mess:
+        t.append('music bed' if mess['musik'] else 'no music bed')
+    if mess.get('schnitt_ton'):
+        v = mess.get('ton_vorlauf_ms')
+        t.append('sound on the cut'
+                 + (f" ({v:.0f} ms early)" if isinstance(v, (int, float)) else ''))
+    return 'Measured: ' + ', '.join(t) if t else ''
+
+
+def _reference_entry(video_path, name, desc, params, mess, save, store_path):
+    """v144: baut den Referenz-Eintrag und legt ihn ab. Ausgelagert, weil er
+    jetzt aus DREI Wegen erreichbar ist: mit Prosa + Messung, ohne Key nur
+    Messung, und bei API-Ausfall ebenfalls nur Messung."""
+    entry = {'name': (name or os.path.splitext(os.path.basename(video_path))[0])[:60],
+             'beispiel': desc or ''}
+    if mess:
+        params = dict(params or {})
+        params.update({k: v for k, v in mess.items() if v is not None})
+        entry['messung'] = mess
+        klar = _messung_klartext(mess)
+        entry['gemessen'] = klar
+        if not entry['beispiel']:
+            entry['beispiel'] = klar
+        print(f"Stil gemessen: Schnitt {mess.get('einstellung_s', '?')}s, "
+              f"Kamera {mess.get('kamera', '?')}, "
+              f"Musik {'ja' if mess.get('musik') else 'nein'}, "
+              f"Zone {mess.get('zone_y', '?')}")
     if params:
         entry['params'] = params
     if save:
@@ -3506,6 +3878,34 @@ def _reference_params():
     de = [p.get('density') for p in ps if p.get('density')]
     if de:
         out['density'] = max(set(de), key=de.count)
+    # v144: die GEMESSENEN Merkmale durchreichen. Die Liste oben war eine
+    # feste Auswahl aus v96 - Kamera, Schnitt, Ton und Caption-Geometrie
+    # waeren sonst gemessen worden und dann im Filter haengengeblieben.
+    for k in ('schnitte_pro_s', 'einstellung_s', 'zoom_pro_s', 'unruhe',
+              'wort_takt', 'buchstaben_takt', 'key_hoehe', 'klein_hoehe',
+              'verhaeltnis', 'stamm_versal', 'ton_vorlauf_ms'):
+        vals = [p[k] for p in ps if isinstance(p.get(k), (int, float))]
+        if vals:
+            out[k] = sum(vals) / len(vals)
+    for k in ('kamera', 'ausrichtung'):
+        vs = [p.get(k) for p in ps if p.get(k)]
+        if vs:
+            out[k] = max(set(vs), key=vs.count)
+    for k in ('musik', 'schnitt_ton', 'glow', 'kontur'):
+        vs = [p[k] for p in ps if isinstance(p.get(k), bool)]
+        if vs:
+            out[k] = sum(vs) > len(vs) / 2.0
+    zs = [p['zone_y'] for p in ps
+          if isinstance(p.get('zone_y'), (list, tuple)) and len(p['zone_y']) == 2]
+    if zs:
+        out['zone_y'] = [sum(z[0] for z in zs) / len(zs),
+                         sum(z[1] for z in zs) / len(zs)]
+    # v144: gemessene Akzentfarbe schlaegt die geschaetzte
+    hx = [str(p.get('akzent_hex') or '').lstrip('#') for p in ps]
+    hx = [h for h in hx if re.fullmatch(r'[0-9a-fA-F]{6}', h)]
+    if hx:
+        cs = [tuple(int(h[k:k + 2], 16) for k in (0, 2, 4)) for h in hx]
+        out['accent'] = [int(sum(c[k] for c in cs) / len(cs)) for k in range(3)]
     return out
 
 
@@ -3551,6 +3951,69 @@ def _apply_reference_params(cfg):
     if p.get('density'):
         cfg['effects']['density'] = p['density']
         parts.append(f"dichte={p['density']}")
+
+    # ---------------- v144: GEMESSENE Merkmale anwenden ----------------
+    # KAMERA. Vorher wurde die Kamerastaerke aus dem Prosa-Wort 'wucht'
+    # abgeleitet. Am Referenzvideo waere das falsch herum gewesen: dort ist
+    # die Kamera RUHIG (Zoom 0.994/s, Pan-Streuung 0.83 %), die Energie kommt
+    # aus dem Schnitt. Jetzt entscheidet die Messung.
+    if p.get('kamera'):
+        _k = str(p['kamera'])
+        if _k == 'ruhig':
+            cfg['camera']['strength'] = min(float(cfg['camera'].get('strength', 0.7)), 0.35)
+            cfg['camera']['whip'] = False
+            cfg['camera']['crash'] = min(float(cfg['camera'].get('crash', 0.0)), 0.20)
+        elif _k == 'wild':
+            cfg['camera']['strength'] = max(float(cfg['camera'].get('strength', 0.7)), 0.85)
+        parts.append(f"kamera={_k}")
+    # SCHNITT-TEMPO steuert, wie lange ein Chunk stehen bleibt. Schnelle
+    # Einstellungen vertragen keine langen Standzeiten.
+    if p.get('einstellung_s'):
+        _e = float(p['einstellung_s'])
+        cfg['effects']['chunk_hold_min'] = round(max(0.55, min(1.30, _e * 0.55)), 2)
+        parts.append(f"schnitt={_e}s")
+    # SOUND. Kein Musikbett + Toene auf den Schnitten = Sounddesign traegt das
+    # Video. Dann darf unser SFX-Pegel hoch, sonst bleibt er zurueckhaltend.
+    if 'musik' in p:
+        if p.get('musik'):
+            cfg['effects']['sfx_volume'] = min(float(cfg['effects'].get('sfx_volume', 0.6)), 0.45)
+            parts.append('musikbett')
+        elif p.get('schnitt_ton'):
+            cfg['effects']['sfx_volume'] = max(float(cfg['effects'].get('sfx_volume', 0.6)), 0.75)
+            cfg['effects']['sfx'] = True
+            parts.append('schnitt-ton')
+    # TYPO-ZONE: oben, mittig oder unten - als Wunschzone der Platzierungsregie.
+    _z = p.get('zone_y')
+    if isinstance(_z, (list, tuple)) and len(_z) == 2:
+        _mitte = (float(_z[0]) + float(_z[1])) / 2.0
+        cfg['effects']['caption_zone'] = round(_mitte, 3)
+        parts.append(f"zone={_mitte:.2f}H")
+    # SCHRIFTGROESSE + HIERARCHIE. Das ist der Punkt, an dem man die
+    # Aehnlichkeit zuerst sieht: wie gross das Schluesselwort steht und wie
+    # weit es sich vom Fliesstext abhebt. Uebertragen wird der Anteil der
+    # BILDHOEHE, damit es zwischen 9:16 und 16:9 uebertragbar bleibt.
+    # Bezugsgroesse ist unsere eigene Hausgroesse: Schriftgrad 0.098 H mal
+    # cap/em 0.70 = 0.0686 H Versalhoehe.
+    if p.get('key_hoehe'):
+        _kh = float(p['key_hoehe'])
+        if 0.030 <= _kh <= 0.140:
+            _sk = round(max(0.75, min(1.35, _kh / 0.0686)), 3)
+            cfg['effects']['caption_scale'] = _sk
+            parts.append(f"grad={_kh:.3f}H")
+    if p.get('verhaeltnis'):
+        _vh = float(p['verhaeltnis'])
+        if 1.4 <= _vh <= 4.0:
+            cfg['effects']['caption_hierarchie'] = round(max(1.6, min(3.4, _vh)), 2)
+            parts.append(f"hierarchie={_vh:.1f}")
+    # GLOW / KONTUR direkt aus dem Vorbild
+    if 'glow' in p:
+        cfg['effects']['caption_glow'] = bool(p['glow'])
+    if p.get('kontur'):
+        cfg['effects']['caption_outline'] = True
+    # AUSRICHTUNG
+    if p.get('ausrichtung') in ('links', 'mitte'):
+        cfg['effects']['caption_align'] = p['ausrichtung']
+        parts.append(f"satz={p['ausrichtung']}")
     return 'Stil-Anker: ' + ', '.join(parts) if parts else ''
 
 
@@ -5344,10 +5807,27 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     #     flacht die Hierarchie wieder auf das ab, was v143 gerade behoben
     #     hat. Beide um denselben Faktor: x-Hoehe 0.030 H bleibt im
     #     Referenzband 0.023-0.033, Verhaeltnis bleibt bei 2.2.
+    # (d) v144: GEMESSENE Referenz uebersteuert die Hausgroesse. Die Messung
+    #     liefert Versalhoehe und Hierarchie als Anteil der Bildhoehe; genau
+    #     diese beiden Zahlen sind es, die man beim Vergleich mit dem Vorbild
+    #     als erstes sieht. Uebertragen wird als H-ANTEIL, nicht in Pixeln -
+    #     der Formatausgleich pf bleibt davor, sonst schrumpfte der Satz im
+    #     Querformat wieder zusammen (v143 gemessen).
+    #     Umrechnung Versalhoehe -> Schriftgrad ueber cap/em 0.70 bei der
+    #     Display-Schrift, x-Hoehe/em 0.52 bei der Stuetzschrift. Deckel, weil
+    #     eine Fehlmessung sonst den ganzen Satz sprengt.
+    _ef = S.cfg.get('effects', {}) or {}
+    _skal = float(_ef.get('caption_scale') or 1.0)
+    _skal = max(0.75, min(1.35, _skal))
+    _hier = float(_ef.get('caption_hierarchie') or 0) or None
     pf = 1.35 if not portrait else 1.0
-    sz_n = int(H * 0.045 * pf)
-    sz_k = int(H * 0.098 * pf)
-    sz_a = int(H * 0.056 * pf)
+    sz_k = int(H * 0.098 * pf * _skal)
+    if _hier:
+        _hier = max(1.6, min(3.4, _hier))
+        sz_n = int(sz_k * 0.70 / (0.52 * _hier))
+    else:
+        sz_n = int(H * 0.045 * pf * _skal)
+    sz_a = int(sz_n * 1.244)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
     # v143: die Spaltenbreite ist verhandelbar. Fuellt eine Person das Bild,
@@ -5361,6 +5841,8 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # 6.25 % em, dieselben 6 px bei geschrumpfter Querformat-Schrift ueber 25 %
     # em - der Satz fiel dort in Einzelbuchstaben auseinander.
     _trk_n = 6 if portrait else max(2, int(sz_n * 0.0625))
+    # v144: Glow kann aus der gemessenen Referenz kommen (Standard: an).
+    _glow_k = bool((S.cfg.get('effects', {}) or {}).get('caption_glow', True))
     items = []
     for i in idxs:
         raw = clean(words[i]['word'])
@@ -5376,7 +5858,7 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             sz = S.fit(up, sz_k, min(int(W * 0.83), _colw) if portrait else _colw,
                        font=S.f_sans_b, tracking=2)
             arr, tw, lets = S.text(up, sz, S.white, font=S.f_sans_b,
-                                   glow=True, per_letter=True, tracking=2)
+                                   glow=_glow_k, per_letter=True, tracking=2)
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'key',
                           'letters': lets, 't': words[i]['start']})
         elif i == accent:
@@ -6909,7 +7391,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             _spans = [_ink_x(it) for it in items]
             _bl = min(sp[0] for sp in _spans)
             _br = max(sp[1] for sp in _spans)
-            _wunsch = H * (0.25 if portrait else 0.72)
+            # v144: die Wunschzone kann aus einer gemessenen Referenz kommen.
+            # 0.25 hoch / 0.72 quer sind die Standardwerte; hat der Kunde ein
+            # Referenzvideo angelernt, sitzt sie dort, wo das Vorbild sie hat.
+            _cz = cfg['effects'].get('caption_zone')
+            _wunsch = (H * float(_cz) if _cz
+                       else H * (0.25 if portrait else 0.72))
             _sx, _sy = spot(start, end, _br - _bl, tot_h,
                             wunsch_y=_wunsch, kalt=_shot_neu(start))
             _dx = _sx - _bl

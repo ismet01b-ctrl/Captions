@@ -6,6 +6,7 @@ import copy
 import os
 import re
 import shutil
+import math
 import cv2
 import urllib.parse
 import subprocess
@@ -531,6 +532,281 @@ def _scenario_logic(clip, transcript, tmp):
     check('v143: ohne Sound-Pack bleibt es STUMM (Projektregel unangetastet)',
           'Kein Sound-Pack gefunden' in _sfxsrc
           and 'synthetischer Ersatzton waere schlechter als Stille' in _sfxsrc)
+
+    # ================================================================
+    # v144: Referenz-MESSUNG statt Prosa-Schaetzung.
+    # ================================================================
+    # Testvideo bauen: dunkler Grund, heller Text in einem schmalen Band oben,
+    # dazu ein grosser heller Fleck weiter unten als Stoerer (so wie ein
+    # Lampenreflex im echten Material). Die Messung muss den Text finden und
+    # den Fleck verwerfen.
+    # Das Testvideo wird mit ECHTEN Schriftdateien gesetzt, nicht mit
+    # cv2.putText: die Hershey-Strichschriften haben weder Punzen noch
+    # Antialiasing, also genau die Merkmale nicht, an denen die Messung
+    # Schrift von Flaeche unterscheidet. Ein Testbild, das die zu pruefende
+    # Eigenschaft gar nicht besitzt, prueft nichts.
+    _rv = os.path.join(tmp, 'ref_mess.mp4')
+    _RW, _RH, _RF, _RN = 540, 960, 24, 72
+    if not os.path.exists(_rv):
+        from PIL import Image as _PI, ImageDraw as _PD, ImageFont as _PF
+        _fk = _PF.truetype(os.path.join(HERE, 'fonts/poppins_b.ttf'), int(_RH * 0.105))
+        _fs = _PF.truetype(os.path.join(HERE, 'fonts/sans_l.ttf'), int(_RH * 0.045))
+        _stumm = os.path.join(tmp, 'ref_mess_stumm.mp4')
+        _vw = cv2.VideoWriter(_stumm, cv2.VideoWriter_fourcc(*'mp4v'), _RF, (_RW, _RH))
+        _rng = np.random.RandomState(7)
+        for _n in range(_RN):
+            # Ein SCHNITT in der Mitte: davor dunkel, danach hell. Damit hat
+            # die Messung ueberhaupt eine Einstellungslaenge zu finden.
+            _grund = 30 if _n < _RN // 2 else 78
+            _img = np.full((_RH, _RW, 3), _grund, np.uint8)
+            _img = cv2.add(_img, (_rng.rand(_RH, _RW, 3) * 14).astype(np.uint8))
+            # Zwei helle Stoerer TIEF im Bild - Lampe und Reflex. Sie sind
+            # hell und wenig gesaettigt, also fuer eine reine Schwelle
+            # ununterscheidbar von Schrift. Die Messung muss sie verwerfen.
+            # Sie WANDERN, damit die Wasserzeichen-Erkennung sie nicht schon
+            # vorher wegraeumt - der Test soll die Schrift-Merkmale pruefen,
+            # nicht den Zeitfilter.
+            _wan = int(_RW * 0.06 * math.sin(_n * 0.21))
+            cv2.circle(_img, (int(_RW * 0.5) + _wan, int(_RH * 0.74)),
+                       int(_RW * 0.13), (245, 245, 245), -1)
+            cv2.circle(_img, (int(_RW * 0.8) - _wan, int(_RH * 0.60)),
+                       int(_RW * 0.05), (250, 250, 250), -1)
+            _im = _PI.fromarray(cv2.cvtColor(_img, cv2.COLOR_BGR2RGB))
+            _dr = _PD.Draw(_im)
+            # ZWEI Caption-Bloecke, die einander abloesen. Kein Element darf
+            # laenger als 85 % der Frames an derselben Stelle stehen, sonst
+            # haelt die Messung es zu Recht fuer ein Wasserzeichen und
+            # loescht es - genau das passiert echten Sender-Logos.
+            _ph = 0 if _n < _RN // 2 else 1
+            _lok = _n % (_RN // 2)
+            _klein = [['warum', 'so', 'viele'], ['das', 'ist', 'der']][_ph]
+            _key = ['SCHEITERN', 'GRUND'][_ph]
+            _x = int(_RW * 0.10)
+            for _w in _klein[:min(3, 1 + _lok // 8)]:
+                _dr.text((_x, int(_RH * 0.16)), _w, font=_fs, fill=(255, 255, 255))
+                _x += int(_dr.textlength(_w + ' ', font=_fs))
+            if _lok >= 8:
+                _dr.text((int(_RW * 0.10), int(_RH * 0.23)), _key,
+                         font=_fk, fill=(255, 255, 255))
+            if _lok >= 20:
+                _dr.text((int(_RW * 0.10), int(_RH * 0.33)), 'daran',
+                         font=_fs, fill=(249, 187, 38))
+            _vw.write(cv2.cvtColor(np.array(_im), cv2.COLOR_RGB2BGR))
+        _vw.release()
+        # TONSPUR: Sprache (Tiefband-Rauschen) plus ein gestalteter
+        # Schnitt-Ton, der dem Bild VORAUSLAEUFT - Zischer 115 ms davor,
+        # Tiefton-Impuls 30 ms davor. Genau diese Rezeptur soll die Messung
+        # wiederfinden.
+        import wave as _wv
+        _sr = 44100
+        _sek = _RN / float(_RF)
+        _t = np.arange(int(_sr * _sek)) / float(_sr)
+        _rg2 = np.random.RandomState(3)
+        _sig = _rg2.randn(len(_t)).astype(np.float32)
+        _sig = np.convolve(_sig, np.ones(90, np.float32) / 90.0, 'same')  # dumpf
+        _sig *= 0.14 / (float(np.sqrt(np.mean(_sig ** 2))) + 1e-9)
+        _cut = (_RN // 2) / float(_RF)
+        def _burst(mitte, dauer, hoch, amp):
+            _i0 = int((mitte - dauer / 2) * _sr)
+            _nn = int(dauer * _sr)
+            _e = np.hanning(_nn).astype(np.float32)
+            _b = _rg2.randn(_nn).astype(np.float32)
+            if hoch:
+                _b = _b - np.convolve(_b, np.ones(24, np.float32) / 24.0, 'same')
+            else:
+                _b = np.convolve(_b, np.ones(300, np.float32) / 300.0, 'same')
+                _b *= 1.0 / (float(np.max(np.abs(_b))) + 1e-9)
+            _sig[_i0:_i0 + _nn] += _b * _e * amp
+        _burst(_cut - 0.115, 0.16, True, 1.6)
+        _burst(_cut - 0.030, 0.12, False, 1.6)
+        _wavp = os.path.join(tmp, 'ref_mess.wav')
+        with _wv.open(_wavp, 'wb') as _wf:
+            _wf.setnchannels(1); _wf.setsampwidth(2); _wf.setframerate(_sr)
+            _wf.writeframes((np.clip(_sig, -1, 1) * 32000).astype(np.int16).tobytes())
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', _stumm, '-i', _wavp,
+                        '-c:v', 'copy', '-c:a', 'aac', '-shortest', _rv],
+                       check=True, capture_output=True)
+    _mess = R.measure_reference_video(_rv)
+    check('v144: Messung liefert ueberhaupt Werte (ohne KI, ohne API-Key)',
+          bool(_mess) and 'zone_y' in _mess and 'key_hoehe' in _mess,
+          str(sorted(_mess.keys()))[:110])
+    check('v144: Textband gefunden, heller Stoerer verworfen',
+          _mess.get('zone_y') and _mess['zone_y'][1] < 0.55,
+          f"Zone {_mess.get('zone_y')} - die Stoerer sitzen bei 0.60 und 0.74 H")
+    check('v144: das Band reicht ueber den ganzen Textblock',
+          _mess.get('zone_y') and _mess['zone_y'][0] < 0.20
+          and _mess['zone_y'][1] > 0.34,
+          f"Zone {_mess.get('zone_y')} - Block steht 0.16 .. 0.38 H")
+    # Gesetzt sind 0.105 H und 0.045 H Schriftgrad. Gemessen wird die
+    # VERSALHOEHE, nicht der Grad - erwartet also rund 2.4 bis 3.2.
+    check('v144: Groessenverhaeltnis der Hierarchie stimmt (Soll ~2.9)',
+          2.1 <= (_mess.get('verhaeltnis') or 0) <= 3.6,
+          f"key {_mess.get('key_hoehe')} / klein {_mess.get('klein_hoehe')}"
+          f" = {_mess.get('verhaeltnis')}")
+    check('v144: linksbuendiger Satz wird als links erkannt',
+          _mess.get('ausrichtung') == 'links', str(_mess.get('ausrichtung')))
+    # Gesetzt ist #f9bb26. Toleranz, weil Videokompression die Farbe verzieht.
+    _ah = _mess.get('akzent_hex') or '#000000'
+    _ard = [abs(int(_ah[1 + 2 * _i:3 + 2 * _i], 16) - _v)
+            for _i, _v in enumerate((249, 187, 38))]
+    check('v144: Akzentfarbe wird aus dem Bild gemessen (Soll #f9bb26)',
+          max(_ard) <= 26, f"{_ah}, Abweichung {_ard}")
+    check('v144: Kamera und Schnitt werden gemessen',
+          'einstellung_s' in _mess and 'kamera' in _mess
+          and _mess.get('kamera') in ('ruhig', 'bewegt', 'wild'),
+          f"{_mess.get('kamera')}, Einstellung {_mess.get('einstellung_s')}s")
+    check('v144: der eine echte Schnitt wird gefunden (Soll ~1.5s Einstellung)',
+          1.1 <= (_mess.get('einstellung_s') or 0) <= 1.9,
+          f"Einstellung {_mess.get('einstellung_s')}s, "
+          f"{_mess.get('schnitte_pro_s')} Schnitte/s")
+    check('v144: ruhige Kamera wird nicht als bewegt gemeldet',
+          _mess.get('kamera') == 'ruhig',
+          f"unruhe {_mess.get('unruhe')}, zoom {_mess.get('zoom_pro_s')}")
+    check('v144: Ton wird gemessen, Musikbett korrekt verneint',
+          'pegel_db' in _mess and _mess.get('musik') is False,
+          f"pegel {_mess.get('pegel_db')} dB, musik {_mess.get('musik')}")
+    check('v144: gestalteter Schnitt-Ton erkannt, Vorlauf gemessen',
+          _mess.get('schnitt_ton') is True
+          and 20.0 <= (_mess.get('ton_vorlauf_ms') or 0) <= 260.0,
+          f"schnitt_ton {_mess.get('schnitt_ton')}, "
+          f"Vorlauf {_mess.get('ton_vorlauf_ms')} ms (gesetzt 115 ms)")
+    # Kaputte/leere Eingaben duerfen nicht knallen
+    check('v144: unbrauchbare Eingabe gibt sauber {} zurueck',
+          R.measure_reference_video('/gibt/es/nicht.mp4') == {}
+          and R.measure_reference_video(os.path.join(HERE, 'config.yaml')) == {})
+    # --- Anwenden: die Messung MUSS die Config wirklich verstellen
+    _cfg144 = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _cfg144['camera']['strength'] = 0.70
+    _cfg144['camera']['crash'] = 0.55
+    _cfg144['effects']['sfx_volume'] = 0.60
+    _p144 = {'kamera': 'ruhig', 'einstellung_s': 1.38, 'musik': False,
+             'schnitt_ton': True, 'zone_y': [0.145, 0.348], 'glow': True,
+             'ausrichtung': 'links', 'akzent_hex': '#f9bb26'}
+    _ref144 = os.path.join(tmp, 'ref144.json')
+    json.dump([{'name': 'm', 'beispiel': 'x', 'params': _p144}],
+              open(_ref144, 'w', encoding='utf-8'))
+    _alt_rf = os.environ.get('DVE_REFS_FILE')
+    try:
+        os.environ['DVE_REFS_FILE'] = _ref144
+        _anker = R._apply_reference_params(_cfg144)
+    finally:
+        if _alt_rf is None:
+            os.environ.pop('DVE_REFS_FILE', None)
+        else:
+            os.environ['DVE_REFS_FILE'] = _alt_rf
+    check('v144: ruhige Referenz-Kamera drosselt UNSERE Kamera',
+          _cfg144['camera']['strength'] <= 0.35 and _cfg144['camera']['crash'] <= 0.20,
+          f"strength {_cfg144['camera']['strength']}, crash {_cfg144['camera']['crash']}")
+    check('v144: kein Musikbett + Schnitt-Ton -> SFX traegt das Video',
+          _cfg144['effects']['sfx_volume'] >= 0.75
+          and _cfg144['effects'].get('sfx') is True,
+          f"sfx_volume {_cfg144['effects']['sfx_volume']}")
+    check('v144: Caption-Zone und Satz kommen aus dem Vorbild',
+          abs(float(_cfg144['effects'].get('caption_zone', 0)) - 0.246) < 0.02
+          and _cfg144['effects'].get('caption_align') == 'links'
+          and _cfg144['effects'].get('caption_glow') is True,
+          f"zone {_cfg144['effects'].get('caption_zone')}")
+    check('v144: gemessene Akzentfarbe schlaegt die Config-Farbe',
+          list(_cfg144['colors']['accent']) == [249, 187, 38]
+          and _cfg144['colors']['adaptive'] is False,
+          str(_cfg144['colors']['accent']))
+    # SCHRIFTGROESSE: die auffaelligste Eigenschaft eines Vorbilds. Sie muss
+    # als H-Anteil ankommen und im gesetzten Block wirklich messbar sein.
+    _cfg144b = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _p144b = dict(_p144, key_hoehe=0.0742, verhaeltnis=2.6)
+    json.dump([{'name': 'm', 'beispiel': 'x', 'params': _p144b}],
+              open(_ref144, 'w', encoding='utf-8'))
+    try:
+        os.environ['DVE_REFS_FILE'] = _ref144
+        R._apply_reference_params(_cfg144b)
+    finally:
+        if _alt_rf is None:
+            os.environ.pop('DVE_REFS_FILE', None)
+        else:
+            os.environ['DVE_REFS_FILE'] = _alt_rf
+    check('v144: gemessene Versalhoehe wird zum Schriftgrad-Faktor',
+          abs(float(_cfg144b['effects'].get('caption_scale', 0)) - 1.082) < 0.02
+          and abs(float(_cfg144b['effects'].get('caption_hierarchie', 0)) - 2.6) < 0.01,
+          f"scale {_cfg144b['effects'].get('caption_scale')}, "
+          f"hierarchie {_cfg144b['effects'].get('caption_hierarchie')}")
+
+    def _flowgroessen(cfgx):
+        _Sx = R.Sprites(cfgx, 1080, 1920)
+        _wx = [{'word': w, 'start': i * 0.4, 'end': i * 0.4 + 0.3}
+               for i, w in enumerate(['ja', 'NEU', 'ok'])]
+        _it, _th, _ai = R.compose_flow(list(range(len(_wx))), _wx, _Sx,
+                                       1080, 1920, portrait=True)
+        # Gemessen wird die SICHTBARE Hoehe der Sprite-Deckung, nicht der
+        # gesetzte Grad - genau das sieht man im fertigen Bild.
+        def _ih(it):
+            _a = it['arr']
+            _z = np.where(_a[..., 3].max(axis=1) > 80)[0]
+            return float(_z[-1] - _z[0] + 1) if len(_z) else 0.0
+        _gr = sorted(_ih(i) for i in _it)
+        return (_gr[-1] / 1920.0, _gr[0] / 1920.0) if _gr else (0, 0)
+    _g_haus = _flowgroessen(yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                               encoding='utf-8')))
+    _g_ref = _flowgroessen(_cfg144b)
+    check('v144: der gesetzte Block wird durch die Messung wirklich groesser',
+          _g_ref[0] > _g_haus[0] * 1.03,
+          f"Haus {_g_haus[0]:.4f} H -> Referenz {_g_ref[0]:.4f} H")
+    _cfg144c = copy.deepcopy(_cfg144b)
+    _cfg144c['effects']['caption_hierarchie'] = 1.8
+    _g_flach = _flowgroessen(_cfg144c)
+    check('v144: flachere gemessene Hierarchie hebt den Kleintext an',
+          _g_flach[1] > _g_ref[1] * 1.08,
+          f"Hierarchie 2.6 -> klein {_g_ref[1]:.4f} H, "
+          f"1.8 -> klein {_g_flach[1]:.4f} H")
+    check('v144: der Anker nennt die gemessenen Merkmale',
+          all(x in _anker for x in ('kamera=ruhig', 'schnitt=', 'zone=', 'satz=links')),
+          _anker)
+    # Die Wunschzone muss in der Platzierung wirklich ankommen
+    _cfgz = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _cfgz['effects']['caption_zone'] = 0.22
+    _Sz = R.Sprites(_cfgz, 1080, 1920)
+    _wz = [{'word': w, 'start': 1.0 + i * 0.4, 'end': 1.0 + i * 0.4 + 0.3}
+           for i, w in enumerate(['was', 'HINTER', 'diesen', 'Zahlen'])]
+    _plz = R.build_plans(_wz, set(), _cfgz, _Sz, 1080, 1920, lambda s, e: True, {},
+                         face_pos=lambda s, e: (540.0, 1920 * 0.62, 108.0))
+    _fy = None
+    for _p in _plz:
+        if _p.get('tpl') == 'flow' and _p.get('front'):
+            _fy = min(i['cy'] for i in _p['front']) / 1920.0
+            break
+    check('v144: die gemessene Zone steuert die echte Platzierung',
+          _fy is not None and _fy < 0.34,
+          f"Blockoberkante {_fy:.3f} H bei Wunschzone 0.22")
+    # OHNE OpenAI-Key muss das Stil-Lernen trotzdem etwas liefern - die
+    # Messung haengt an keiner API. Bis v143 gab es hier ein hartes None.
+    _alt_key = os.environ.pop('OPENAI_API_KEY', None)
+    try:
+        _e144 = R.analyze_reference_video(_rv, name='Vorbild', save=False)
+    finally:
+        if _alt_key is not None:
+            os.environ['OPENAI_API_KEY'] = _alt_key
+    check('v144: Stil-Lernen funktioniert auch OHNE OpenAI-Key (Messung traegt)',
+          isinstance(_e144, dict) and _e144.get('params', {}).get('key_hoehe'),
+          f"Eintrag {'ja' if _e144 else 'nein'}, "
+          f"{len((_e144 or {}).get('params', {}))} Parameter")
+    check('v144: der Kunde sieht die Messung im Klartext',
+          _e144 and 'Measured:' in (_e144.get('gemessen') or '')
+          and 'frame height' in _e144['gemessen']
+          and 'shot' in _e144['gemessen'],
+          str((_e144 or {}).get('gemessen'))[:150])
+    _srv144 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _ui144 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v144: Server sperrt das Stil-Lernen nicht mehr am API-Key aus',
+          'def _style_public' in _srv144
+          and "'gemessen': str(r.get('gemessen', ''))[:400]" in _srv144
+          and 'Style learning is briefly unavailable' not in _srv144)
+    check('v144: die Messung steht im Konto sichtbar an der Referenz',
+          'r.gemessen ?' in _ui144 and 'd.entry.gemessen' in _ui144)
+    check('v144: Rohdaten der Messung verlassen den Server nicht',
+          "'messung'" not in _srv144.split('def _style_public')[1][:600])
+    check('v144: Messung ist in analyze_reference_video verdrahtet',
+          'measure_reference_video(video_path)' in _rsrc143
+          and "entry['messung']" in _rsrc143
+          and "cfg['effects']['caption_zone']" in _rsrc143)
 
     # Nach build_plans darf kein Paar mit target ko-sichtbar+nah stehen
     def _codisplay(pl):
