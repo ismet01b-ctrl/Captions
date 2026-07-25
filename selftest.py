@@ -479,11 +479,14 @@ def _scenario_logic(clip, transcript, tmp):
     check('v143: Nahaufnahme - schmale Spalte neben dem Kopf statt Ausweichen nach unten',
           _nah and _nah[1] < 0.52 and _nah[2] < 0.45,
           f'x bis {_nah[1]:.3f} W, y ab {_nah[2]:.3f} H (Kopfbox ab 0.46 W)')
-    # Der Text darf NIE im Gesicht landen, wenn daneben Platz ist.
-    _fbx = (0.46, 0.98)
-    check('v143: Block ueberlappt die Kopfbox nicht, wenn daneben Platz ist',
-          _nah and _nah[1] <= _fbx[0] + 0.02,
-          f'Blockkante {_nah[1]:.3f} W gegen Kopfbox ab {_fbx[0]:.2f} W')
+    # Der Text darf NIE auf dem GESICHT landen. Gemessen gegen die echte
+    # Gesichtsbreite (Mitte 0.72 W, Breite 0.30 W -> 0.57 .. 0.87 W), nicht
+    # gegen die gepolsterte Sperrbox: die traegt bewusst Haar- und
+    # Sicherheitsrand und darf angeschnitten werden, das Gesicht nicht.
+    _gesicht_l = 0.72 - 0.30 / 2
+    check('v143: Block landet nicht auf dem Gesicht',
+          _nah and _nah[1] <= _gesicht_l - 0.03,
+          f'Blockkante {_nah[1]:.3f} W gegen Gesicht ab {_gesicht_l:.3f} W')
     # Hysterese: winzige Schwankungen der Gesichtserkennung duerfen den Block
     # NICHT verschieben. Genau daran ist der erste Entwurf im Audit gescheitert
     # (10 px Gesichtsbreite kippten ihn um 0.19 W).

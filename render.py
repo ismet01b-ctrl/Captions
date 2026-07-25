@@ -5815,6 +5815,23 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         rechts = (_pz['right_rail'] if _pz is not None else W - rand_x)
         x_lo, x_hi = rand_x, max(rand_x, rechts - bw)
         y_lo, y_hi = oben, max(oben, unten - bh)
+        # v143: die Kamera skaliert den FERTIGEN Frame, Captions eingeschlossen.
+        # Eine reine Planungs-Grenze greift dort nicht: gemessen lag der Block
+        # planerisch bei 0.921 W und im Render trotzdem bei 0.961 W. Der
+        # nutzbare Bereich wird deshalb um den Zoom zur Bildmitte gestaucht -
+        # ein Punkt bei Abstand d von der Mitte landet nach dem Zoom bei d*z.
+        # Referenz ist der ANHALTENDE Zoom (~1.10), nicht die Crash-Spitze
+        # (1.42): die dauert wenige Frames und ist ein gewollter Schlag.
+        _cz = 1.0 + 0.10 * min(1.0, float(cfg['camera'].get('strength', 0.7))
+                               + float(cfg['camera'].get('crash', 0.0)))
+        if _cz > 1.001:
+            _mx, _my = W / 2.0, H / 2.0
+            x_lo = max(x_lo, _mx - (_mx - rand_x) / _cz)
+            x_hi = min(x_hi, _mx + (rechts - _mx) / _cz - bw)
+            y_lo = max(y_lo, _my - (_my - oben) / _cz)
+            y_hi = min(y_hi, _my + (unten - _my) / _cz - bh)
+            x_hi = max(x_lo, x_hi)
+            y_hi = max(y_lo, y_hi)
         if x_hi < x_lo or y_hi < y_lo:        # Block groesser als die Flaeche
             return (max(x_lo, (W - bw) / 2.0), max(y_lo, (H - bh) / 2.0))
 
