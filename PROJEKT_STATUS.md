@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v167 Eine gehaltene Geste ist EINE Ansage.** Ismets Befund nach v166:
+  "immernoch" links, mit Screenshot. Der Screenshot zeigt die Ursache: der
+  Sprecher haelt den Arm ueber viele Momente in dieselbe Richtung, und die
+  Captions sitzen exakt dort. Das ist die Zeige-Regie, die tat, was gebaut
+  war - die HAND-Erkennung war bewusst absolut geblieben ("eine Geste ist
+  eine Ansage"). Haelt jemand die Pose aber ueber das halbe Video, wird aus
+  einer Ansage fuenfzehn, jedes Ziel ueberstimmt die Seiten-Abwechslung, und
+  alles klebt auf einer Seite. Gleicher Denkfehler wie beim Blick (v166),
+  eine Ebene tiefer.
+  FIX: `_ziel_dedupe()` am Ende von `zeige_ziele()`. Aufeinanderfolgende
+  Ziele am praktisch selben Ort (x-Abstand unter 0.12 W) sind EINE Gruppe;
+  von jeder Gruppe bleiben die ersten zwei Momente, danach ist die Ansage
+  erfuellt und die normale Abwechslung uebernimmt. Ein neues Ziel woanders
+  beginnt eine neue Gruppe: wer erst links und dann rechts hinzeigt, bekommt
+  beides. Einzelne, verschiedene Ziele bleiben alle erhalten.
+  Beweis (Selftest): 6 gehaltene Momente -> nur die ersten 2 tragen das
+  Ziel; links-dann-rechts -> 2 + 2; drei verschiedene Einzelziele -> alle 3.
+  NICHT LIVE VERIFIZIERT: ob SEIN Testclip damit wieder wechselnde Seiten
+  zeigt, sieht Ismet erst nach dem Deploy. Naechste Messstation bleibt die
+  Log-Zeile "Pointing direction: X pointing, Y gaze".
 - **v166 Blick ist ABWEICHUNG, nicht Haltung.** Ismets Befund nach v160:
   "es ist immer noch links die captions". EHRLICHE URSACHE: die Blick-Regie
   aus v160 arbeitete mit einer ABSOLUTEN Schwelle (0.35 Augenabstaende

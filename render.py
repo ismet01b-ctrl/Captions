@@ -2811,6 +2811,33 @@ def _blick_targets(cands, W, H):
     return out
 
 
+def _ziel_dedupe(ziele, W, halten=2):
+    """v167: eine GEHALTENE Geste ist EINE Ansage, nicht viele.
+
+    Ismets Befund (am Bild belegt): der Sprecher haelt den Arm ueber viele
+    Momente in dieselbe Richtung - jeder Moment bekam dasselbe Ziel, und weil
+    ein Ziel absichtlich Wunschzone und Seiten-Abwechslung ueberstimmt,
+    klebten ALLE Captions auf dieser Seite. Die Ansage ist nach dem ersten
+    Block laengst erfuellt; ab dann ist die gehaltene Pose Koerperhaltung,
+    keine Regie mehr.
+
+    Aufeinanderfolgende Ziele am praktisch selben Ort (x-Abstand unter
+    0.12 W) bilden eine Gruppe; von jeder Gruppe bleiben die ersten `halten`
+    Momente. Ein NEUES Ziel woanders beginnt eine neue Gruppe und zaehlt
+    wieder voll - wer erst links und dann rechts hinzeigt, bekommt beides."""
+    out = []
+    g_x = None
+    g_n = 0
+    for z in sorted(ziele, key=lambda q: q[0]):
+        if g_x is not None and abs(z[1] - g_x) < W * 0.12:
+            g_n += 1
+        else:
+            g_x, g_n = z[1], 1
+        if g_n <= halten:
+            out.append(z)
+    return out
+
+
 def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
     """v160: misst zu jedem Moment-Zeitpunkt, wohin der Sprecher zeigt oder
     schaut. Rueckgabe [(t, tx, ty, art)] mit art 'zeigen' | 'blick'.
@@ -2896,8 +2923,9 @@ def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
             blick_cands.append((float(t), blick[0], blick[1], blick[2]))
     blick_ziele = _blick_targets(blick_cands, W, H)
     ziele.extend(blick_ziele)
-    n_b = len(blick_ziele)
-    ziele.sort(key=lambda z: z[0])
+    ziele = _ziel_dedupe(ziele, W)
+    n_z = sum(1 for z in ziele if z[3] == 'zeigen')
+    n_b = len(ziele) - n_z
     for obj in (lm, det):
         try:
             if obj is not None:

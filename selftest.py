@@ -5179,6 +5179,35 @@ def _scenario_betrieb(tmp):
           '_blick_targets(blick_cands' in open(os.path.join(HERE, 'render.py'),
                                                encoding='utf-8').read())
 
+    # ======= v167: eine gehaltene Geste ist EINE Ansage ===================
+    # Ismets Befund (am Bild belegt): der Sprecher haelt den Arm ueber viele
+    # Momente in dieselbe Richtung -> jeder Moment bekam dasselbe Ziel, alle
+    # Captions klebten dort. Gleicher Denkfehler wie beim Blick (v166), eine
+    # Ebene tiefer.
+    _Wd = 1920
+    _halt167 = [(float(i), _Wd * 0.15 + (i % 2) * _Wd * 0.02, 500.0, 'zeigen')
+                for i in range(6)]
+    _dd = R._ziel_dedupe(_halt167, _Wd)
+    check('v167: eine gehaltene Geste zaehlt nur fuer die ersten Momente',
+          [z[0] for z in _dd] == [0.0, 1.0])
+    _wechsel167 = [(0.0, _Wd * 0.15, 500.0, 'zeigen'),
+                   (1.0, _Wd * 0.15, 500.0, 'zeigen'),
+                   (2.0, _Wd * 0.15, 500.0, 'zeigen'),
+                   (5.0, _Wd * 0.85, 500.0, 'zeigen'),
+                   (6.0, _Wd * 0.85, 500.0, 'zeigen'),
+                   (7.0, _Wd * 0.85, 500.0, 'zeigen')]
+    check('v167: ein Richtungswechsel beginnt eine neue Ansage',
+          [round(z[1] / _Wd, 2) for z in R._ziel_dedupe(_wechsel167, _Wd)]
+          == [0.15, 0.15, 0.85, 0.85])
+    _einz167 = [(0.0, _Wd * 0.2, 500.0, 'zeigen'),
+                (3.0, _Wd * 0.8, 500.0, 'blick'),
+                (6.0, _Wd * 0.3, 500.0, 'zeigen')]
+    check('v167: einzelne, verschiedene Ziele bleiben alle erhalten',
+          len(R._ziel_dedupe(_einz167, _Wd)) == 3)
+    check('v167: der Filter haengt wirklich in zeige_ziele',
+          'ziele = _ziel_dedupe(ziele, W)'
+          in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
     # ======= v162: ZWEI-SPRECHER-REGIE - der Text folgt dem Redner ========
     _cfg162 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
                                    encoding='utf-8'))
