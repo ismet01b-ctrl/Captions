@@ -114,6 +114,20 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
 - **`intent`-Flag = Ansage ist Gesetz.** Es schützt den Moment vor Degradierung
   durch Dichte-Limit, B-Roll-Gate, Mehrwort-Komposition, Nahaufnahme-Backstop
   und Editor-Roundtrip. NUR eine bewusste Nutzer-Änderung im Editor löscht es.
+- **Ansage-Erkennung läuft in ALLEN Pfaden (v159).** `_speech_intent` und
+  `_self_ref_intent` stehen in `main()` an der immer laufenden Stelle, NICHT
+  nur in `ai_direct`. Sonst fällt die Ansage weg, sobald kein Key da ist, die
+  API ausfällt **oder der Regie-Cache greift**, und der Cache ist der
+  Normalfall beim zweiten Render desselben Videos. Wer eine neue
+  Semantik-Prüfung baut, hängt sie dort hin, nicht in den KI-Zweig. Im
+  KI-Pfad läuft `_speech_intent` dadurch zweimal; der Riegel
+  `if fx_map[i].get('intent'): continue` hält das Log sauber.
+- **Vokabellisten treffen Verbformen (v159).** `ANIM_HINTS` steht in der
+  3. Person Singular, Transkripte sagen Infinitiv und Plural. `_anim_hit`
+  vergleicht deshalb über `_anim_stamm()`. Blindes `startswith` erst ab
+  6 Zeichen Stichwortlänge, sonst schlug 'fall' in "FALLS" an.
+  Verneinte Sätze bekommen KEINE Animation (`_hat_negation`): eine Anim, die
+  die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
 
 ### Platzierungs-Regie (v143) — "Captions passen sich dem Bild an"
 Ein Textblock bekommt seine Position aus `spot()` in `build_plans`, nicht aus
@@ -307,7 +321,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **941/941 grün (Stand v153)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **976/976 grün (Stand v159)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

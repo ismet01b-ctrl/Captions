@@ -4445,6 +4445,11 @@ def _speech_intent(fx_map, words):
     hat_punkt = any(_satzende(j) for j in range(n_w))
     hits = 0
     for i in list(fx_map):
+        # v159: schon gesetzte Ansagen bleiben, wie sie sind. Die Funktion
+        # laeuft jetzt in ALLEN Pfaden und damit im KI-Pfad zweimal - ohne
+        # diesen Riegel meldete das Log denselben Treffer doppelt.
+        if fx_map[i].get('intent'):
+            continue
         n = int(fx_map[i].get('n', 1))
         # Die Ansage gilt nur im SELBEN Satz wie das Keyword. Sonst zieht
         # "hinter mir." aus dem Vorsatz das naechste Wort mit um ("STREET"
@@ -6406,16 +6411,46 @@ ANIM_HINTS = (('glitch', ('glitch', 'hack', 'fehler', 'error', 'schock', 'crash'
                            'geprueft', 'geprüft')))
 
 
+# v159: deutsche Verbendungen. Die Vokabelliste ANIM_HINTS ist in der
+# 3. Person Singular geschrieben ('scheitert', 'zittert'). Ein Transkript
+# sagt aber genauso oft 'scheitern', 'zitterten', 'zittere'. Gemessen im
+# Audit: 39 von 52 geprueften Verbpaaren verloren ihre Animation, sobald
+# die -en-Form kam. Beide Seiten werden deshalb auf den Stamm gekuerzt.
+_VERB_END = ('endsten', 'endste', 'enden', 'ende', 'etest', 'etet', 'eten',
+             'ete', 'test', 'tet', 'ten', 'est', 'end', 'en', 'et', 'st',
+             'te', 'e', 't', 'n')
+
+
+def _anim_stamm(w):
+    """Wortstamm fuer den Vergleich: eine deutsche Verbendung abschneiden,
+    aber nur solange mindestens vier Zeichen stehen bleiben. Kuerzere Staemme
+    kollidieren ('fall' und 'falle' waeren noch tragbar, 'fa' nicht mehr)."""
+    for e in _VERB_END:
+        if w.endswith(e) and len(w) - len(e) >= 4:
+            return w[:-len(e)]
+    return w
+
+
 def _anim_hit(text, key):
     """Wortgenauer Treffer statt blinder Teilstring-Suche.
     'fällt' darf NICHT in 'gefällt' anschlagen ('das gefaellt mir' ist kein Sturz).
     Darum muss der Wortanfang passen. Nur richtig lange Stichwoerter (>=7 Zeichen)
     duerfen auch mitten in Komposita stecken ('Staatsschulden' -> schulden);
-    bei kurzen waere genau das die Falle."""
+    bei kurzen waere genau das die Falle.
+    v159: zusaetzlich Stamm-Vergleich, damit Plural und Infinitiv treffen.
+    Das reine startswith bleibt fuer Stichwoerter ab 6 Zeichen erhalten -
+    bei kuerzeren war es die Quelle von Fehlalarmen: 'fall' schlug in 'FALLS'
+    an und liess den Block samt Sturz-Sound kippen, obwohl im Satz nichts
+    faellt (im Audit gemessen)."""
+    ks = _anim_stamm(key)
     for tok in re.split(r"[^0-9A-Za-zÄÖÜäöüß]+", text.lower()):
         if not tok:
             continue
-        if tok.startswith(key) or (len(key) >= 7 and key in tok):
+        if len(key) >= 7 and key in tok:
+            return True
+        if len(key) >= 6 and tok.startswith(key):
+            return True
+        if tok == key or _anim_stamm(tok) == ks:
             return True
     return False
 
@@ -6437,6 +6472,25 @@ def anim_ctx(words, i, n=1):
     return ' '.join(clean(words[j].get('word', '')) for j in range(a0, b0))
 
 
+# v159: NEGATION. "Die Mieten steigen NICHT" bekam dieselbe
+# Aufwaerts-Animation wie "Die Mieten steigen" - samt Aufwaerts-Sound. Das
+# Video sagt dann das Gegenteil des Satzes. Steht eine Verneinung im
+# Umfeld des Treffers, wird die Animation verworfen: lieber keine als eine
+# falsche.
+_NEGATION = {'nicht', 'nie', 'niemals', 'kein', 'keine', 'keinen', 'keiner',
+             'keines', 'keinem', 'nichts', 'ohne', 'weder', 'kaum',
+             'no', 'not', "n't", 'never', 'none', 'without', 'neither',
+             'hardly', 'barely'}
+
+
+def _hat_negation(text):
+    """Verneint der Satz? Reine Wortliste, deutsch und englisch."""
+    for tok in re.split(r"[^0-9A-Za-zÄÖÜäöüß\']+", (text or '').lower()):
+        if tok in _NEGATION:
+            return True
+    return False
+
+
 def anim_for(txt, context=None):
     """Waehlt die Animation. Das Keyword allein reicht nicht: bei
     'Deutschland bricht seine Versprechen' steht das Keyword DEUTSCHLAND, aber
@@ -6444,6 +6498,11 @@ def anim_for(txt, context=None):
     das Keyword hat Vorrang, der Kontext entscheidet, wenn das Wort nichts sagt."""
     for src in (txt, context):
         if not src:
+            continue
+        # v159: in einem verneinten Satz ist die Handlung nicht passiert.
+        # Eine Animation, die sie trotzdem ausfuehrt, widerspricht dem
+        # Gesagten - und ihr Sound tut es hoerbar.
+        if _hat_negation(src):
             continue
         for name, keys in ANIM_HINTS:
             if any(_anim_hit(src, k) for k in keys):
@@ -9798,6 +9857,16 @@ def main():
     # v99a: _regie_wahl statt bool(fx_map) - besteht fx_map NUR aus
     # Selbstbezug-Momenten (KI aus/leer), muss die Auto-Heuristik anbleiben.
     _had_regie = _regie_wahl
+    # v159 ORTSANSAGE IN ALLEN PFADEN. Bis v158 hatte _speech_intent
+    # GENAU EINE Aufrufstelle - innerhalb ai_direct. ai_direct laeuft
+    # aber nicht, wenn (a) kein OPENAI_API_KEY gesetzt ist, (b) die API
+    # ausfaellt, oder (c) ein Regie-Cache greift - und (c) ist der
+    # Normalfall beim zweiten Render desselben Videos. In all diesen
+    # Faellen wurde "der Beweis steht HINTER MIR" komplett ignoriert,
+    # obwohl CLAUDE.md die Ansage als Gesetz fuehrt. _self_ref_intent
+    # stand aus genau diesem Grund schon hier; _speech_intent gehoert
+    # daneben.
+    fx_map = _speech_intent(fx_map, words)
     fx_map = _self_ref_intent(fx_map, words)
     if fx_map:
         kw = set(fx_map)

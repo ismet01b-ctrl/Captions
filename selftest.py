@@ -4781,6 +4781,64 @@ def _scenario_betrieb(tmp):
           SV._sanitize_overrides({'output': {'height': 2160}})
           == {'output': {'height': 2160}})
 
+    # ======= v159: Captions folgen dem, was gesagt wird (Audit-Batch) =======
+    # Ergebnis eines Audits mit 47 Agenten: 41 gemeldete Luecken, 29 haben die
+    # adversarische Gegenpruefung ueberlebt. Hier die drei schwersten.
+    import render as R
+    import io as _io159, contextlib as _cl159
+    _r159 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+
+    # (1) ORTSANSAGE. _speech_intent hatte GENAU EINE Aufrufstelle - in
+    # ai_direct. Ohne API-Key, bei API-Ausfall und bei Regie-Cache-Treffer
+    # (der Normalfall beim zweiten Render) lief es nie. "Der Beweis steht
+    # hinter mir" wurde dann komplett ignoriert.
+    _w159 = 'der BEWEIS steht hinter mir. das GELD lag auf dem boden.'.split()
+    _wl159 = [{'word': x, 'start': round(i * 0.4, 2),
+               'end': round(i * 0.4 + 0.3, 2)} for i, x in enumerate(_w159)]
+    _kw159 = {i for i, x in enumerate(_w159) if x.strip('.') in ('BEWEIS', 'GELD')}
+    _fx159 = {i: {'fx': 'cascade', 'power': 2, 'n': 1} for i in _kw159}
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _fx159 = R._speech_intent(_fx159, _wl159)
+    _bw = [v for i, v in _fx159.items() if _w159[i].strip('.') == 'BEWEIS'][0]
+    _gd = [v for i, v in _fx159.items() if _w159[i].strip('.') == 'GELD'][0]
+    check('v159: "hinter mir" setzt die Caption hinter die Person',
+          _bw.get('fx') == 'behind' and _bw.get('intent') is True, str(_bw))
+    check('v159: "auf dem Boden" legt sie auf den Boden',
+          _gd.get('fx') == 'ground' and _gd.get('szene') == 'boden'
+          and _gd.get('lage') == 'liegend' and _gd.get('intent') is True, str(_gd))
+    check('v159: die Ortsansage laeuft in ALLEN Pfaden, nicht nur mit API-Key',
+          _r159.count('_speech_intent(fx_map, words)') >= 1
+          and _r159.count('= _speech_intent(') >= 2,
+          f"{_r159.count('= _speech_intent(')} Aufrufstellen")
+    check('v159: eine gesetzte Ansage wird beim zweiten Lauf nicht doppelt gemeldet',
+          "if fx_map[i].get('intent'):\n            continue" in _r159)
+
+    # (2) VERBFORMEN. ANIM_HINTS steht in der 3. Person Singular; das
+    # Transkript sagt genauso oft den Infinitiv. Im Audit gemessen: 39 von 52
+    # Verbpaaren verloren die Animation, sobald die -en-Form kam.
+    check('v159: Plural und Infinitiv treffen dieselbe Animation',
+          R.anim_for('', 'Die Firmen scheitern reihenweise.') == 'bruch'
+          and R.anim_for('', 'Die Kurse steigen wieder.') == 'anstieg'
+          and R.anim_for('', 'Alles zittert.') == 'zittern')
+    # Gegenprobe: die Praefix-Suche hat frueher Fehlalarme ausgeloest.
+    check('v159: "falls" loest keine Sturz-Animation mehr aus',
+          R.anim_for('', 'Falls du jetzt aufgibst, verlierst du alles.') is None)
+    check('v159: "gefaellt" bleibt weiterhin kein Sturz',
+          R.anim_for('', 'Das gefaellt mir sehr.') is None)
+    check('v159: der Stamm-Vergleich laesst kurze Woerter nicht kollidieren',
+          R._anim_stamm('scheitern') == R._anim_stamm('scheitert')
+          and R._anim_stamm('fall') == 'fall' and R._anim_stamm('falls') == 'falls')
+
+    # (3) NEGATION. "Die Mieten steigen NICHT" bekam dieselbe
+    # Aufwaerts-Animation wie ohne das Wort - samt Aufwaerts-Sound.
+    check('v159: ein verneinter Satz bekommt keine bejahende Animation',
+          R.anim_for('', 'Die Mieten steigen nicht.') is None
+          and R.anim_for('', 'Das ist kein Absturz.') is None
+          and R.anim_for('', 'The prices are not rising.') is None)
+    check('v159: ohne Verneinung bleibt die Animation',
+          R.anim_for('', 'Die Mieten steigen.') == 'anstieg'
+          and R.anim_for('', 'Der Umsatz explodiert.') == 'explosion')
+
     # ============ v158: der Preis am Button kennt 4K ========================
     # Ismets Befund: "wenn 4k angewaehlt ist, steht immer noch 1 credit".
     # Der Preis wurde nur EINMAL beim Datei-Auswaehlen gerechnet und kannte

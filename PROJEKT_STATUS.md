@@ -3,6 +3,47 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v159 Die Ansage gilt jetzt wirklich immer.** Ismets Wunsch: "die captions
+  muessen auf jedenfall passen, was auch gesagt wird". Ein Audit ueber die
+  semantische Regie hat drei echte Loecher gefunden, alle drei sind zu.
+  1. ORTSANSAGE IN ALLEN PFADEN. `_speech_intent` hatte bis v158 GENAU EINE
+     Aufrufstelle: innerhalb von `ai_direct`. Die laeuft aber nicht ohne
+     `OPENAI_API_KEY`, nicht bei API-Ausfall und nicht, wenn der Regie-Cache
+     greift. Der Cache ist der NORMALFALL beim zweiten Render desselben
+     Videos. In all diesen Faellen wurde "der Beweis steht HINTER MIR"
+     komplett ignoriert, obwohl CLAUDE.md die Ansage als Gesetz fuehrt.
+     `_self_ref_intent` stand aus genau diesem Grund schon an der immer
+     laufenden Stelle; `_speech_intent` steht jetzt daneben. Ein Riegel
+     (`if fx_map[i].get('intent'): continue`) verhindert, dass der KI-Pfad
+     denselben Treffer doppelt ins Log schreibt.
+  2. VERBFORMEN. `ANIM_HINTS` ist in der 3. Person Singular geschrieben
+     ('scheitert', 'zittert'), ein Transkript sagt genauso oft 'scheitern'
+     oder 'zitterten'. GEMESSEN: 39 von 52 geprueften Verbpaaren verloren
+     ihre Animation, sobald die -en-Form kam. Beide Seiten werden jetzt ueber
+     `_anim_stamm()` auf den Wortstamm gekuerzt (Endung nur abschneiden,
+     solange >= 4 Zeichen stehen bleiben). Nebenbefund derselben Stelle: das
+     blinde `startswith` gilt jetzt erst ab 6 Zeichen Stichwortlaenge, denn
+     'fall' schlug in "FALLS du aufgibst" an und kippte den Block samt
+     Sturz-Sound, obwohl im Satz nichts faellt.
+  3. VERNEINUNG. "Die Mieten steigen NICHT" bekam dieselbe Aufwaerts-Animation
+     wie "Die Mieten steigen", samt Aufwaerts-Sound. Das Video sagte damit das
+     Gegenteil des Satzes. `_hat_negation()` (Wortliste DE+EN) verwirft die
+     Animation im verneinten Satz. Lieber keine als eine falsche.
+  BEWEIS (ohne API-Key, Heuristik-Pfad): "hinter mir" -> fx `behind`,
+  intent=True. "auf dem Boden" -> fx `ground`, szene `boden`, lage `liegend`.
+  "Die Firmen scheitern" -> `bruch` (vorher None). "Falls du aufgibst" -> None
+  (vorher `sturz`). "Die Mieten steigen nicht." -> None, "Die Mieten steigen."
+  -> `anstieg`.
+  EHRLICH: das Audit hat mehr gefunden, als hier drin ist. Offen bleiben
+  "links von mir"/"on my left" (wird nirgends erkannt), deutsche Zahlformate
+  (1.500 wird als 1,5 gelesen), und ohne API-Key ist die Keyword-Wahl bei
+  englischen Transkripten kaum brauchbar (Grossschreibungs-Heuristik). Das
+  sind eigene Baustellen, keine Nebenfixes.
+  Ebenfalls ehrlich: "Die Preise fallen stark." liefert jetzt `schub` statt
+  `sturz`, weil 'stark' in `ANIM_HINTS` frueher steht als 'fallen'. Die
+  Reihenfolge der Liste ist damit selbst eine Regie-Entscheidung, die noch
+  niemand getroffen hat.
+  TESTS: 976/976 logic gruen, Renders 7/1/5/2, GUI gruen.
 - **v158 Der Preis am Render-Button kennt 4K.** Ismets Befund: "wenn 4k
   angewaehlt ist, steht immer noch 1 credit". Der Preis wurde EINMAL beim
   Datei-Auswaehlen gerechnet (`Math.ceil(dur/60)`) und kannte die
