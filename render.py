@@ -3114,8 +3114,15 @@ def hand_contacts(plans, tips, t, W, H):
             _bv = max(tips, key=lambda q: math.hypot(q[2], q[3]))
             _bs = math.hypot(_bv[2], _bv[3])
             if _bs > W * 0.50:
-                _s = min(_bs, W * 1.2) / max(_bs, 1e-6)
+                # v178 WUCHT NACH ANSAGE. Der Deckel W*1.2 stammt aus
+                # v101j und ist fuer den ZUFAELLIGEN Kontakt gebaut: ein
+                # Handzucken darf das Layout nicht zerlegen. Am Render
+                # gemessen ergab er 27 px Ausschlag - ein Stups, kein
+                # "push them AWAY". Wer die Handlung ansagt, hat sie
+                # bestellt: eigener Deckel W*3.6 (dreifach).
+                _s = min(_bs, W * 3.6) / max(_bs, 1e-6)
                 p['_hand_hit'] = (_bv[2] * _s, _bv[3] * _s)
+                p['_hand_stark'] = True
                 p['_hand_cool'] = t
                 p['_hand_touch_t'] = t
                 n += 1
@@ -3161,20 +3168,30 @@ def hand_spring(p, t):
     hy = p.get('_hand_dy', 0.0)
     hvx = p.get('_hand_vx', 0.0)
     hvy = p.get('_hand_vy', 0.0)
+    _stark = bool(p.pop('_hand_stark', False)) or p.get('_hand_kraft')
     if hit is not None:
-        hvx += hit[0] * 0.9
-        hvy += hit[1] * 0.9
+        # v178: ein ANGESAGTER Wisch traegt weiter als ein Streifschuss.
+        _g = 2.2 if _stark else 0.9
+        hvx += hit[0] * _g
+        hvy += hit[1] * _g
+        if _stark:
+            p['_hand_kraft'] = True
     if not (hx or hy or hvx or hvy):
         p['_hand_t'] = t
         return 0.0, 0.0
     dt = min(max(t - p.get('_hand_t', t), 0.0), 0.08)
-    K, C = 120.0, 9.0                        # unterdaempft -> sichtbarer Overshoot
+    # v178: nach einer Ansage weichere Feder + weniger Daempfung -> der
+    # Block fliegt weiter weg und schwingt sichtbar zurueck, statt sofort
+    # einzurasten. Ohne Ansage bleibt es exakt bei den v101j-Werten.
+    K, C = ((52.0, 5.2) if p.get('_hand_kraft')
+            else (120.0, 9.0))               # unterdaempft -> sichtbarer Overshoot
     hvx += (-K * hx - C * hvx) * dt
     hvy += (-K * hy - C * hvy) * dt
     hx += hvx * dt
     hy += hvy * dt
     if abs(hx) < 0.15 and abs(hy) < 0.15 and abs(hvx) < 2 and abs(hvy) < 2:
         hx = hy = hvx = hvy = 0.0
+        p.pop('_hand_kraft', None)           # v178: Ruhelage -> Kraft-Modus aus
     p['_hand_dx'], p['_hand_dy'] = hx, hy
     p['_hand_vx'], p['_hand_vy'] = hvx, hvy
     p['_hand_t'] = t

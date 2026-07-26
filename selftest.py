@@ -5502,6 +5502,43 @@ def _scenario_betrieb(tmp):
           R.hand_contacts([_blk177(True)],
                           [(950.0, 520.0, -200.0, 40.0)],
                           8.0, 1280, 720) == 0)
+    # v178 WUCHT NACH ANSAGE. Der v101j-Deckel (W*1.2) ist fuer den
+    # ZUFAELLIGEN Kontakt gebaut - am Render gemessen ergab er 27 px
+    # Ausschlag, einen Stups statt "push them AWAY". Wer die Handlung
+    # ansagt, hat sie bestellt: eigener Deckel, weichere Feder, weniger
+    # Daempfung. Der beilaeufige Kontakt bleibt exakt beim Alten.
+    def _aus178(geste, tips):
+        _p = _blk177(geste)
+        R.hand_contacts([_p], tips, 8.0, 1280, 720)
+        _t, _mx = 8.0, 0.0
+        for _ in range(40):
+            _dx, _dy = R.hand_spring(_p, _t)
+            _mx = max(_mx, abs(_dx) + abs(_dy))
+            _t += 0.04
+        return _mx
+    _stark178 = _aus178(True, [(950.0, 520.0, -900.0, 180.0)])
+    _leicht178 = _aus178(False, [(290.0, 400.0, -400.0, 80.0)])
+    check('v178: der angesagte Wisch schleudert den Block wirklich weg',
+          _stark178 > 100.0, f"{_stark178:.0f} px Ausschlag")
+    check('v178: der beilaeufige Kontakt bleibt ein Stups',
+          _leicht178 < 40.0, f"{_leicht178:.0f} px Ausschlag")
+    check('v178: die Ansage wirkt mindestens dreimal so stark',
+          _stark178 > _leicht178 * 3.0,
+          f"angesagt {_stark178:.0f} px vs. Kontakt {_leicht178:.0f} px")
+    # Der Block muss zurueckkommen - ein Text, der weggeschoben bleibt,
+    # ist kein Effekt, sondern ein verlorener Satz.
+    _p178 = _blk177(True)
+    R.hand_contacts([_p178], [(950.0, 520.0, -900.0, 180.0)], 8.0, 1280, 720)
+    _t178 = 8.0
+    for _ in range(45):
+        _d178 = R.hand_spring(_p178, _t178)
+        _t178 += 0.04
+    check('v178: der Block schwingt zurueck in die Ruhelage',
+          abs(_d178[0]) + abs(_d178[1]) < 25.0,
+          f"nach 1.8 s noch {abs(_d178[0]) + abs(_d178[1]):.0f} px")
+    check('v178: der Kraft-Modus haengt an der Ansage, nicht am Zufall',
+          "p.get('_hand_kraft')"
+          in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
     check('v177: der Schub-Satz wird am Flow-Plan markiert',
           "'_hand_geste': any(_hand_aktion_hit(clean(words[j]['word']))"
           in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())

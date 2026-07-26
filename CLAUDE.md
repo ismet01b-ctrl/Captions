@@ -133,6 +133,10 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
   die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
 
 ### Hand-Regie (v174) — "der Text weicht der Hand, die ihn schubst"
+**Angesagt schlägt beiläufig (v177/v178).** Der angesagte Wisch hat eigene
+Werte (Deckel W*3.6, Impuls 2.2, Feder K=52/C=5.2 → ~143 px Spitze); der
+zufällige Kontakt bleibt bei v101j (~16 px). Wer daran dreht, muss BEIDE
+Wege prüfen — und dass der Block in die Ruhelage zurückkehrt.
 **Der angesagte Wisch braucht keine Berührung (v177).** Die Hand fährt vor
 dem eigenen Körper entlang — dort kann die Caption nie liegen (Gesichtssperre
 2.5 > Hand-Ziel 2.2, richtig so). Sagt der Satz die Handlung UND ist ein
@@ -426,7 +430,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1075/1075 grün (Stand v177)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1080/1080 grün (Stand v178)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v178 Wucht nach Ansage: aus dem Stups wird ein echter Schub.** v177
+  loeste den Impuls endlich aus - am Render gemessen aber nur 27 px
+  Ausschlag (Blockmitte 0.5995 -> 0.6365 H bei 8.30 s, zurueck auf 0.6001
+  bei 8.50 s). Ein Stups, kein "push them AWAY". Ursache: der Deckel
+  W*1.2 und die Feder K=120/C=9 stammen aus v101j und sind fuer den
+  ZUFAELLIGEN Kontakt gebaut - ein Handzucken darf das Layout nicht
+  zerlegen, das ist richtig.
+  Wer die Handlung ANSAGT, hat sie bestellt. Der angesagte Wisch bekommt
+  deshalb einen eigenen Satz Werte: Deckel W*3.6 (dreifach),
+  Impuls-Gewicht 2.2 statt 0.9, weichere Feder mit weniger Daempfung
+  (K=52, C=5.2). Der beilaeufige Kontakt bleibt EXAKT bei den
+  v101j-Werten - beide Wege sind getrennt getestet.
+  GEMESSENE KURVE: Spitze -143 px bei 0.16 s nach dem Stoss,
+  Nulldurchgang bei 0.44 s, Nachschwingen +38 px, Ruhelage nach rund 1 s.
+  Das ist eine unterdaempfte Feder mit sichtbarem Overshoot, kein Ruck.
+  Selftest: angesagt 172 px Gesamtausschlag, Kontakt 16 px - Faktor > 3
+  ist als Invariante festgeschrieben, ebenso die Rueckkehr in die
+  Ruhelage (ein Text, der weggeschoben BLEIBT, waere ein verlorener Satz
+  statt eines Effekts).
+  BEWEIS fuer v177 davor, am echten Render (Job 57c2fb53 gegen d70adb09):
+  vorher stand die Blockmitte drei Nachkommastellen lang still (0.5946 /
+  0.5945 / 0.5944 H), nachher schwang sie mit. Frame-Streifen an Ismet.
 - **v177 Der angesagte Wisch braucht keine Pixel-Beruehrung.** v176 hat
   gewirkt (Hand-Erkennung laeuft jetzt in Flow-Fenstern, Kontakt und Feder
   greifen), und trotzdem passierte im Render nichts. Ursache diesmal am
