@@ -97,6 +97,10 @@ effects:
   # groesser, die schon gesprochenen dimmen auf 70 %. Der dominante
   # Caption-Stil 2026 - bindet den Blick ans Wort statt an den Block.
   caption_aktivwort: true
+  # v184 PUNCH HINTER DER PERSON: das Schlusswort eines Satzes darf durch
+  # die Person laufen und wird von ihr verdeckt (Referenz-Grammatik der
+  # High-End-Vorbilder). Nur am Satzende, nie auf B-Roll. false = aus.
+  caption_hinter: true
   # v160 ZEIGE-REGIE: zeigt oder schaut der Sprecher irgendwohin, landet die
   # Caption dort. Gemessen aus Hand-Landmarks und Kopfdrehung, kein API-Ruf.
   # Ein Gesicht bleibt trotzdem tabu - der Text weicht ihm weiter aus.

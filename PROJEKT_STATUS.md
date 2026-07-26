@@ -3,6 +3,43 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v184 REFERENZ-GRAMMATIK (an Ismets drei High-End-Vorbildern gemessen).**
+  Ismet: "Das sind alles high end Animationen. Die habe ich dir schon 1000x
+  geschickt. Konntest es trotzdem nicht nachbauen." Drei Referenzen durch
+  die eigene Mess-Engine + Frame-Analyse gezogen (A @kram.visuals,
+  B @migs.visuals, C @johnbacog_). Gemeinsame Grammatik: Satz waechst Wort
+  fuer Wort und BLEIBT; jedes Wort schliesst raeumlich ans vorige an
+  (Lesepfad); Verbinder-Ketten in Schreibschrift INLINE; EIN riesiges
+  Schlusswort, das teils HINTER der Person verschwindet; Groessen: Band
+  0.074 H (B-Key) bis 0.184 H (C-Punch), Fliesstext-Band 0.040 H in ALLEN
+  DREI. Unsere Basis (0.053/0.018 H) war die Haelfte davon.
+  DREI UMBAUTEN:
+  1. CLUSTER-LESEPFAD ersetzt die v150-Spalten-Collage. Kurze Zeilen
+     (1-3 Woerter) mit deterministischem Treppen-Einzug, enger Zeilenfall
+     (1.06), gemeinsame GRUNDLINIE je Zeile (Vorbild 'add CREATORS'),
+     Schluesselwort IM Pfad mit hoechstens einem kleinen Wort davor.
+     EHRLICHE URSACHE des alten Looks: v150 stellte Verbinder in eine
+     EIGENE Spalte neben die Treppe - Lesereihenfolge und Raumfolge fielen
+     auseinander ('that/to/one'-Saeule neben STICKS). Neue Regel, an der
+     der Block haengt: RAUMFOLGE = LESEREIHENFOLGE.
+  2. REFERENZ-GROESSEN: key 0.076 -> 0.105 em (Versal ~0.074 H = Ref B),
+     Fliesstext 0.034 -> 0.050 em (Band ~0.040 H = alle drei Refs). Punch
+     2.25x ergibt ~0.165 H und trifft die C-Punchline. Die v153/v154-
+     Verkleinerungen galten der ALTEN Anordnung; die Viral-Faktoren sind
+     auf die neue Basis umgerechnet (Ziel unveraendert), zwei Alt-Tests
+     ehrlich nachgezogen (hier dokumentiert, nicht still).
+  3. PUNCH HINTER DER PERSON (Ref C 'this'): occlude_sprite() stanzt die
+     Personen-Silhouette pro Frame an der Zielposition aus der Sprite-
+     Alpha - Zeichenreihenfolge des Frames bleibt unangetastet. Nur am
+     Satzende, nie auf B-Roll, nie bei angesagtem Hand-Schub, Schalter
+     effects.caption_hinter. Sichtbar nur bei echter Ueberlappung.
+  BEWEIS: Cluster-Streifen Hochformat (ein/neues/Level/BRINGEN-Treppe,
+  das/MOMENTE/deines/Videos/Klar mit Script-Akzent) an Ismet geschickt;
+  Occlusion per Unit-Test belegt (Stanzung exakt auf der Personen-Seite).
+  EHRLICH: CPU/synthetisch/ohne Key; Occlusion auf echtem Material und die
+  Groessen-Wirkung prueft Ismet nach dem Deploy. Tests: v150-Anordnungs-
+  Checks durch Lesepfad-Invarianten ersetzt, +7 neue v184-Checks,
+  1126/1126 logic + Renders 7/1/5/2 + GUI gruen.
 - **v183a VIRAL-LOOK ZURUECKGESTUFT (Ismets Befund am Ergebnis).**
   "Jetzt hast du einfach das Standard-Template von CapCut und Opus
   kopiert." Stimmt: Versal-Montserrat + gelbes Karaoke-Wort IST das

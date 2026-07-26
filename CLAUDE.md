@@ -262,6 +262,25 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Referenz-Grammatik (v184) — der Massstab fuer "high level"
+An Ismets drei Referenz-Clips gemessen (kram.visuals/migs.visuals/
+johnbacog_), NICHT geschaetzt. Gemeinsame Grammatik der Vorbilder:
+- **RAUMFOLGE = LESEREIHENFOLGE.** Der Cluster-Lesepfad (compose_flow,
+  layout 'collage') setzt kurze Zeilen (1-3 Woerter) mit Treppen-Einzug,
+  engem Zeilenfall (1.06) und gemeinsamer GRUNDLINIE je Zeile. Die alte
+  v150-Anordnung (Verbinder-Spalte NEBEN der Treppe) riss Lese- und
+  Raumfolge auseinander - das war Ismets "keine high level Typografie".
+- **Groessen sind Referenzmass, kein Geschmack:** key 0.105 em (Versal
+  ~0.074 H), Fliesstext 0.050 em (Band ~0.040 H, in allen drei Refs
+  identisch), Punch 2.25x (~0.165 H). Die v153/v154-Verkleinerungen sind
+  damit UEBERHOLT - wer schrumpft, muss gegen die Referenzen messen.
+- **Punch hinter der Person** (`occlude_sprite`, effects.caption_hinter):
+  das Schlusswort laeuft durch die Person, die Silhouette wird pro Frame
+  an der Zielposition ausgestanzt. Nur Satzende, nie B-Roll, nie bei
+  angesagtem Hand-Schub. Die Zeichenreihenfolge des Frames bleibt.
+- Viral-Faktoren sind auf die neue Basis umgerechnet (1.55/2.00), das
+  absolute Viral-Ziel (0.163/0.099 em) ist unveraendert.
+
 ### Viral-Look (v183/v183a) — Option, NICHT das Gesicht des Produkts
 Look 'viral' (Server-Preset + Engine-Schalter `effects.caption_viral`):
 alles versal + extrabold (Montserrat XB), Schluesselwort 2.15x / Fliesstext
@@ -484,7 +503,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1117/1117 grün (Stand v183)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1126/1126 grün (Stand v184)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

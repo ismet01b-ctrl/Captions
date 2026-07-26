@@ -5700,9 +5700,19 @@ def _scenario_betrieb(tmp):
           any(t != t.upper() for t in _SN.calls))
     _nV = [i['sz'] for i in _itV if i.get('role') == 'norm']
     _nN = [i['sz'] for i in _itN if i.get('role') == 'norm']
-    check('v183: der Fliesstext steht auf Marktmass (~2.9x Haus)',
-          _nV and _nN and 2.5 <= (_nV[0] / max(_nN[0], 1)) <= 3.3,
+    # v184: die Hausbasis wurde auf die Referenz-Messung angehoben (0.034 ->
+    # 0.050 em) - das Viral-ZIEL (0.099 em) ist unveraendert, der Faktor
+    # darauf ist jetzt 2.00 statt 2.90.
+    check('v183: der Fliesstext-Faktor des Viral-Looks stimmt (Ziel 0.099 em)',
+          _nV and _nN and 1.7 <= (_nV[0] / max(_nN[0], 1)) <= 2.3,
           f"{_nV[0]} vs {_nN[0]}")
+    # v184 REFERENZ-GROESSEN der Hausbasis (an Ismets Vorbildern gemessen:
+    # Fliesstext-Band 0.040 H, Schluesselwort-Band 0.074 H).
+    check('v184: Fliesstext-Basis 0.050 em der Bildhoehe',
+          _nN and abs(_nN[0] - int(1920 * 0.050)) <= 4, f"{_nN[0]}")
+    _kN = [i['sz'] for i in _itN if i.get('role') in ('key', 'punch')]
+    check('v184: Schluesselwort-Basis 0.105 em der Bildhoehe',
+          _kN and abs(_kN[0] - int(1920 * 0.105)) <= 6, f"{_kN[0]}")
     check('v183: kein Schreibschrift-Akzent im Viral-Look',
           not any(i.get('role') == 'accent' for i in _itV)
           and any(i.get('role') == 'accent' for i in _itN))
@@ -5757,6 +5767,35 @@ def _scenario_betrieb(tmp):
           (not _dklm.any()) or
           float(np.abs(_tT[..., :3][_dklm].astype(int)
                        - _aT[..., :3][_dklm].astype(int)).mean()) < 1.0)
+
+    # ======= v184: Punchline hinter der Person (Referenz-Grammatik) =======
+    # In Ismets Referenz C laeuft das Schlusswort ('this') DURCH die Person
+    # und wird von ihr verdeckt. Flow-Punch bekommt dafuer eine pro-Frame
+    # abgetastete Silhouetten-Stanzung - die Zeichenreihenfolge bleibt.
+    check('v184: der Flow-Plan markiert die Punchline fuer die Occlusion',
+          "'hinter_ok': bool(_punch and not broll)" in _r182)
+    check('v184: angesagter Hand-Schub schaltet die Occlusion ab',
+          "if sp.get('_hand_geste'):" in _r182
+          and "sp['hinter_ok'] = False" in _r182)
+    check('v184: die Stanzung haengt am Schalter caption_hinter',
+          "cfg['effects'].get('caption_hinter', True)" in _r182
+          and 'caption_hinter' in open(os.path.join(HERE, 'config.yaml'),
+                                       encoding='utf-8').read())
+    _sp184 = np.zeros((40, 100, 4), np.uint8)
+    _sp184[..., 3] = 255
+    _sp184[..., :3] = 255
+    _ap184 = np.zeros((200, 200, 1), np.float32)
+    _ap184[:, 100:, 0] = 1.0
+    _oc184 = R.occlude_sprite(_sp184, 100, 100, 200, 200, 1.0, _ap184)
+    check('v184: occlude_sprite stanzt genau die Personen-Seite aus',
+          int(_oc184[..., 3][:, :45].min()) == 255
+          and int(_oc184[..., 3][:, 55:].max()) == 0,
+          f"links {int(_oc184[..., 3][:, :45].min())}, "
+          f"rechts {int(_oc184[..., 3][:, 55:].max())}")
+    check('v184: ohne Personen-Kontakt bleibt das Sprite unveraendert',
+          R.occlude_sprite(_sp184, 40, 100, 200, 200, 1.0,
+                           np.zeros((200, 200, 1), np.float32))
+          is _sp184)
 
     # ======= v180: Querformat steht MITTIG ================================
     # Ismets Frage: "ist es denn wirklich so professionell, wenn die
@@ -6109,8 +6148,14 @@ def _scenario_betrieb(tmp):
         return max(i['sz'] for i in _it if i['role'] == 'norm')
     _c154 = _y154.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
     _haus154 = _flow_sz(_c154)
-    check('v154: der Fliesstext ist kleiner geworden (Ismets Befund)',
-          _haus154 <= 70, f'{_haus154} px bei 1920 H (v153 waren 76)')
+    # v184 TESTKORREKTUR: die v153/v154-Verkleinerungen galten der ALTEN
+    # Anordnung. Ismets drei High-End-Referenzen messen ein Fliesstext-Band
+    # von 0.040 H (A/B/C uebereinstimmend) - die Hausbasis steht deshalb auf
+    # 0.050 em (= 96 px bei 1920 H). Die SUBSTANZ des v154-Befunds bleibt
+    # geprueft: der Fliesstext haengt NICHT an key_hoehe * Hierarchie (der
+    # Referenz-Test direkt darunter).
+    check('v154/v184: Fliesstext auf Referenzmass, nicht auf Punchline-Mass',
+          88 <= _haus154 <= 104, f'{_haus154} px bei 1920 H (Referenz 96)')
     # Kern des Befunds "Schriften zu gross": eine gemessene Referenz zog den
     # GANZEN Satz mit, weil sz_n ueber key_hoehe * Hierarchie lief. Gemessen
     # wird aber die PUNCHLINE des Vorbilds.
@@ -6223,10 +6268,14 @@ def _scenario_betrieb(tmp):
           and '_motiv = k' not in _r153)
     check('v153: ein Seitenwechsel durchbricht die Hysterese',
           "spot_state.get('seite') != _seite" in _r153)
-    # Schrift eine Stufe kleiner (Ismets Befund am fertigen Video).
-    check('v153: die Grundschrift ist eine Stufe kleiner',
-          "H * 0.076 * pf * _skal" in _r153 and "H * 0.034 * pf * _skn" in _r153
-          and 'H * 0.098 * pf' not in _r153 and 'H * 0.088 * pf' not in _r153)
+    # v184 TESTKORREKTUR: Grundschrift steht auf dem gemessenen REFERENZMASS
+    # (key 0.105 em, klein 0.050 em - Ismets drei Vorbilder). Die alten
+    # v153-Werte (0.076/0.034) und die noch aelteren (0.098/0.088) duerfen
+    # beide nicht zurueckkommen.
+    check('v153/v184: die Grundschrift steht auf dem Referenzmass',
+          "H * 0.105 * pf * _skal" in _r153 and "H * 0.050 * pf * _skn" in _r153
+          and 'H * 0.098 * pf' not in _r153 and 'H * 0.088 * pf' not in _r153
+          and 'H * 0.076 * pf' not in _r153)
     # Nutzer-Regler
     _ui153 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     # v155: der Seiten-Regler heisst caption_seite; caption_align ist die
@@ -6447,13 +6496,29 @@ def _scenario_betrieb(tmp):
     check('v150: Collage loest das Zeilenraster auf',
           _zc >= _zf * 2 and _zc >= len(_sat) - 2,
           f'{_zf} Grundlinien im Zeilensatz -> {_zc} in der Collage')
-    # Kleine Woerter links, grosse rechts versetzt - das Bild des Vorbilds.
-    _kl = [i for i in _ic if not i.get('gross') and i['role'] == 'norm']
-    _gr = [i for i in _ic if i.get('gross')]
-    check('v150: kleine Woerter links, grosse Woerter rechts versetzt',
-          _gr and _kl and min(i['cx'] for i in _gr) > max(i['cx'] for i in _kl),
-          f"klein bis {max(i['cx'] for i in _kl) / 1080:.2f} W, "
-          f"gross ab {min(i['cx'] for i in _gr) / 1080:.2f} W")
+    # v184 TESTKORREKTUR (Anordnung ersetzt, an Ismets drei Referenzen
+    # gelesen): nicht mehr "kleine Spalte links, Treppe rechts" - genau
+    # diese Trennung riss Lesereihenfolge und Raumfolge auseinander
+    # ("that/to/one"-Saeule neben STICKS). Die Vorbilder setzen EINEN
+    # Lesepfad: (a) Grundlinien folgen der Wortfolge, (b) kurze Zeilen mit
+    # hoechstens 3 Woertern, (c) innerhalb einer Zeile laeuft x nach rechts.
+    _mit_sz = [i for i in _ic if i.get('sz')]
+
+    def _grundlinie(i):
+        return i['cy'] + i['sz'] * 0.53
+    _bl150 = [_grundlinie(i) for i in _mit_sz]
+    check('v184: Raumfolge = Lesereihenfolge (Grundlinien monoton)',
+          all(_bl150[j + 1] >= _bl150[j] - 2.0
+              for j in range(len(_bl150) - 1)),
+          f"{[round(b) for b in _bl150]}")
+    _zl150 = {}
+    for i in _mit_sz:
+        _zl150.setdefault(round(_grundlinie(i)), []).append(i)
+    check('v184: kurze Zeilen (max. 3 Woerter), x laeuft nach rechts',
+          all(len(v) <= 3
+              and all(v[j + 1]['cx'] > v[j]['cx'] for j in range(len(v) - 1))
+              for v in _zl150.values()),
+          f"{[len(v) for v in _zl150.values()]} Woerter je Zeile")
     check('v150: in der Collage stehen die Woerter in EIGENEN Groessen',
           len({i['sz'] for i in _ic if i.get('sz')}) >= 4
           and len({i['sz'] for i in _if if i.get('sz')}) <= 2,

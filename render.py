@@ -2220,6 +2220,29 @@ def rot_img(arr, deg):
     return np.array(Image.fromarray(arr).rotate(deg, expand=True, resample=Image.BICUBIC))
 
 
+def occlude_sprite(arr, cx, cy, W, H, scale, alpha_p):
+    """v184: stanzt die Personen-Silhouette aus einem Text-Sprite aus, damit
+    ein Flow-Schlusswort HINTER der Person stehen kann (Referenz-Grammatik:
+    die Punchline laeuft durch die Person, Ref C 'this'). Die Maske wird an
+    der Zielposition des Sprites abgetastet - die Zeichenreihenfolge des
+    Frames bleibt unangetastet, nur die Sprite-Alpha wird beschnitten."""
+    h, w = arr.shape[:2]
+    tw, th = max(int(w * scale), 2), max(int(h * scale), 2)
+    x0i, y0i = int(cx - tw / 2.0), int(cy - th / 2.0)
+    xa, ya = max(0, x0i), max(0, y0i)
+    xb, yb = min(W, x0i + tw), min(H, y0i + th)
+    if xb <= xa or yb <= ya:
+        return arr
+    m = np.zeros((th, tw), np.float32)
+    m[ya - y0i:yb - y0i, xa - x0i:xb - x0i] = alpha_p[ya:yb, xa:xb, 0]
+    if m.max() < 0.02:
+        return arr
+    m = cv2.resize(m, (w, h), interpolation=cv2.INTER_LINEAR)
+    out = arr.copy()
+    out[..., 3] = (out[..., 3].astype(np.float32) * (1.0 - m)).astype(np.uint8)
+    return out
+
+
 def tint_glyph(arr, rgb):
     """v183: faerbt den HELLEN Glyphenkoerper eines Text-Sprites in den
     gegebenen Ton, ohne die dunkle Kontur (v181) oder den Schatten
@@ -6672,19 +6695,25 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # gross"). 0.088 -> 0.076 em ergibt bei cap/em 0.70 eine Versalhoehe von
     # 0.053 H. Der Fliesstext geht mit (0.040 -> 0.034 em, x-Hoehe 0.018 H).
     pf = 1.35 if not portrait else 1.0
-    sz_k = int(H * 0.076 * pf * _skal)
+    # v184 REFERENZ-GROESSEN. An Ismets drei High-End-Vorbildern gemessen
+    # (measure_reference_video): Schluesselwort-Band 0.074 H (B) bis 0.184 H
+    # (C-Punchline), Fliesstext-Band 0.040 H in BEIDEN - unsere 0.034 em
+    # (x-Hoehe 0.018 H) waren die Haelfte davon. Neu: key 0.105 em (Versal
+    # ~0.074 H), Fliesstext 0.050 em (Band ~0.040 H). Der Punch-Faktor 2.25
+    # ergibt 0.236 em = Versal ~0.165 H und trifft die C-Punchline (0.184
+    # Band inkl. Saum). Die v154-Verkleinerungen galten der ALTEN Anordnung;
+    # massgeblich sind jetzt die gemessenen Referenzen.
+    sz_k = int(H * 0.105 * pf * _skal)
     if _hier and not _ef.get('caption_scale_klein'):
         _hier = max(1.4, min(5.0, _hier))
         sz_n = int(sz_k * 0.70 / (0.52 * _hier))
     else:
-        sz_n = int(H * 0.034 * pf * _skn)
+        sz_n = int(H * 0.050 * pf * _skn)
     if _viral:
-        # Schluesselwort 0.076 -> 0.163 em (Versalhoehe ~0.115 H), Fliesstext
-        # 0.034 -> 0.099 em (versal gesetzt ~0.069 H). Verhaeltnis ~1.65 -
-        # der Markt fahert eine FLACHE Hierarchie, die Wucht kommt aus der
-        # Grundgroesse, nicht aus dem Kontrast der Stufen.
-        sz_k = int(sz_k * 2.15)
-        sz_n = int(sz_n * 2.90)
+        # Ziel unveraendert (Schluesselwort 0.163 em, Fliesstext 0.099 em) -
+        # nur die Faktoren sind auf die neue v184-Basis umgerechnet.
+        sz_k = int(sz_k * 1.55)
+        sz_n = int(sz_n * 2.00)
     sz_a = int(sz_n * 1.244)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
@@ -6910,74 +6939,59 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             sz_a if it['role'] == 'accent' else sz_n)
 
     if layout == 'collage':
-        # v150 (A) KUMULATIVE COLLAGE. Der Unterschied zum Flow-Layout ist
-        # NICHT das Stehenbleiben - das konnte der Flow schon. Es ist die
-        # ANORDNUNG: im Vorbild steht jedes Wort an eigener Stelle und in
-        # eigener Groesse, kleine Woerter bilden links eine schmale Spalte,
-        # die Inhaltswoerter treppen rechts daneben nach unten weg. Der Satz
-        # wird dadurch zu einem Bild statt zu drei linksbuendigen Zeilen -
-        # und genau dieses Zeilenraster war die Ursache dafuer, dass alle
-        # unsere Videos gleich aussehen.
-        # v153 SEITE. Bis v152 sass der Satzspiegel IMMER links - ueber ein
-        # ganzes Video klebte damit jede Caption an derselben Kante. Bei
-        # 'rechts' wird die Collage gespiegelt: die kleine Spalte steht
-        # rechts aussen, die grosse Treppe laeuft nach links weg.
+        # v184 CLUSTER-LESEPFAD (an Ismets drei High-End-Referenzen gelesen,
+        # ersetzt die v150-Spalten-Anordnung). Die Vorbilder setzen den Satz
+        # als EINEN Pfad: jedes Wort schliesst raeumlich an das vorige an,
+        # kurze Zeilen (1-3 Woerter) mit eigenem Treppen-Einzug, enger
+        # Zeilenfall, gemeinsame Grundlinie je Zeile, jedes Wort in eigener
+        # Groesse, Verbinder-Ketten in Schreibschrift INLINE im Pfad, das
+        # Schluesselwort IM Pfad (mit hoechstens einem kleinen Wort davor,
+        # wie 'add CREATORS' im Vorbild), die Punchline am Ende.
+        # Die v150-Anordnung stellte Verbinder in eine EIGENE Spalte neben
+        # die Treppe - Lesereihenfolge und Raumfolge fielen auseinander
+        # ('that/to/one'-Saeule neben STICKS, Ismets Befund: "keine high
+        # level Typografie"). Raumfolge = Lesereihenfolge ist die Regel,
+        # an der dieser Block haengt. Wer hier umbaut, muss sie halten.
         _re = (seite == 'rechts')
-        _lx = x0
-        _rx = int(x0 + max_w * 0.26)
-        _ly, _ry = 0, 0
+        _sp = max(2, int(space * 0.60))        # Vorbilder setzen eng
+        _cap = max_w * 0.62
+        _zeilen, _cur, _cw = [], [], 0.0
         for it in items:
-            _h = int(_rsz(it) * 1.16)
+            aw = it['adv']
             _breit = it['role'] in ('key', 'punch')
+            _passt = (not _cur) or (_cw + _sp + aw <= _cap and len(_cur) < 3)
+            if not _passt or (_breit and len(_cur) > 1):
+                _zeilen.append(_cur)
+                _cur, _cw = [], 0.0
+            _cur.append(it)
+            _cw += (_sp if len(_cur) > 1 else 0) + aw
             if _breit:
-                continue                       # kommt unten als eigener Block
-            if it['role'] == 'accent' or not it.get('gross'):
-                # kleine Spalte NEBEN der Treppe. Bis v168 stand sie bei
-                # 'rechts' an der fernen Spiegel-Aussenkante - zwischen
-                # Treppe und Spalte klaffte ein Loch von ~0.15 Spiegel-
-                # breiten, die Spalte wirkte verwaist und hing an Ismets
-                # hellem Fenster (gemessen an seinem Video, 8s). Jetzt
-                # startet sie direkt an der Treppen-Innenkante.
-                if _re:
-                    # Spalte beginnt an fester Kante und waechst nach aussen.
-                    # Die alte Form (rechte Kante minus Wortbreite) schob
-                    # breite Woerter in die Treppe hinein - am Render
-                    # gemessen: 'and i' lag 0.016 Spiegelbreiten AUF 'can'.
-                    it['cx'] = x0 + max_w * 0.82 + it['adv'] / 2.0
-                else:
-                    it['cx'] = _lx + it['adv'] / 2.0
-                it['cy'] = _ly + _h / 2.0
-                _ly += _h
+                _zeilen.append(_cur)
+                _cur, _cw = [], 0.0
+        if _cur:
+            _zeilen.append(_cur)
+        y = 0.0
+        for _ln, _row in enumerate(_zeilen):
+            _rh = max(int(_rsz(it) * 1.06) for it in _row)   # enger Fall
+            _rw = sum(it['adv'] for it in _row) + _sp * (len(_row) - 1)
+            # Treppen-Einzug: deterministisch je Zeile, nie zufaellig.
+            _ind = max_w * (0.03 + 0.16 * _mix01(idxs[0] * 17 + _ln * 5))
+            _ind = max(0.0, min(_ind, max_w - _rw))
+            if _rw >= max_w:
+                x = max(W * 0.035, x0 + (max_w - _rw) / 2.0)
+            elif _re:
+                x = x0 + max_w - _ind - _rw
             else:
-                # grosse Treppe nach innen, mit deterministischem
-                # Seitenversatz - eine exakt buendige Kante saehe wieder nach
-                # Raster aus.
-                _off = int(max_w * 0.06 * _mix01(it['i'] * 13))
-                if _re:
-                    it['cx'] = (x0 + max_w * 0.74) - _off - it['adv'] / 2.0
-                else:
-                    it['cx'] = _rx + _off + it['adv'] / 2.0
-                it['cy'] = _ry + _h / 2.0
-                _ry += _h
-            # Der Satzspiegel ist bindend: was rechts herausragen wuerde,
-            # rutscht zurueck. Ohne das reisst ein langes Wort den Block auf
-            # und die Platzierungs-Regie bekommt eine falsche Breite.
-            _rand = x0 + max_w
-            if it['cx'] + it['adv'] / 2.0 > _rand:
-                it['cx'] = _rand - it['adv'] / 2.0
-            if it['cx'] - it['adv'] / 2.0 < x0:
-                it['cx'] = x0 + it['adv'] / 2.0
-        y = max(_ly, _ry)
-        # Schluesselwort / Punchline: eigener Block unter der Collage, ueber
-        # die volle Spalte. Im Vorbild ist das der Knall am Satzende.
-        for it in items:
-            if it['role'] in ('key', 'punch'):
-                _h = int(_rsz(it) * 1.16)
-                it['cx'] = ((x0 + max_w - it['adv'] / 2.0) if _re
-                            else (x0 + it['adv'] / 2.0))
-                it['cy'] = y + _h / 2.0
-                y += _h
-        total_h = max(y, 1)
+                x = x0 + _ind
+            for it in _row:
+                it['cx'] = x + it['adv'] / 2.0
+                # gemeinsame GRUNDLINIE statt Zeilenmitte: grosse und kleine
+                # Woerter einer Zeile stehen auf demselben Fuss (Vorbild
+                # 'add CREATORS'), sonst schwimmt die Zeile.
+                it['cy'] = y + _rh - _rsz(it) * 0.53
+                x += it['adv'] + _sp
+            y += _rh
+        total_h = max(int(y), 1)
         return items, total_h, anchor
 
     y = 0
@@ -9064,11 +9078,19 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                   # v183: Akzentton der Kompositions-Palette festhalten - die
                   # Draw-Schleife faerbt damit das AKTIVE Wort (Karaoke).
                   'acc_rgb': tuple(S.accent),
+                  # v184: die Punchline darf HINTER der Person stehen
+                  # (Referenz-Grammatik, Ref C 'this'). Nur am Satzende,
+                  # nie auf B-Roll, nie bei angesagtem Hand-Schub - und
+                  # sichtbar wird es ohnehin nur, wo die Person das Wort
+                  # wirklich ueberlappt (occlude_sprite tastet die Maske ab).
+                  'hinter_ok': bool(_punch and not broll),
                   # v177: Sagt der Satz, dass die Hand die Captions schiebt?
                   # Dann darf eine gemessene Wisch-Bewegung den Block auch
                   # OHNE Pixel-Beruehrung stossen - siehe hand_contacts.
                   '_hand_geste': any(_hand_aktion_hit(clean(words[j]['word']))
                                      for j in g)}
+            if sp.get('_hand_geste'):
+                sp['hinter_ok'] = False
             # v141: echte Textposition fuer den Ueberlappungs-Schutz. 'target'
             # bleibt das Kamera-Ziel - die beiden duerfen nicht verwechselt
             # werden, sonst zieht die Kamera wieder in die Bildmitte.
@@ -10300,11 +10322,21 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     # dezenter Settle: Keyword landet minimal groesser und
                     # setzt sich weich auf 1.0 (gezielte, ruhige Bewegung)
                     k_settle = 1.0 + 0.05 * (1 - smoothstep(min(dt / 0.42, 1.0)))
-                    paste(comp, _arr,
-                          it['cx'] + fdx - (0 if vis_px is None
-                                            else (_arr.shape[1] - vis_px) / 2),
-                          it['cy'] + fdy + x_dv * _arr.shape[0],
-                          W, H, scale=x_sc * k_settle * _pop,
+                    _pcx = it['cx'] + fdx - (0 if vis_px is None
+                                             else (_arr.shape[1] - vis_px) / 2)
+                    _pcy = it['cy'] + fdy + x_dv * _arr.shape[0]
+                    _psc = x_sc * k_settle * _pop
+                    # v184: die Punchline steht HINTER der Person (Ref C).
+                    # Die Silhouette wird pro Frame an der Zielposition aus
+                    # der Sprite-Alpha gestanzt - Person bewegt sich, die
+                    # Ueberdeckung folgt ihr.
+                    if (p.get('hinter_ok') and it.get('role') == 'punch'
+                            and alpha is not None
+                            and cfg['effects'].get('caption_hinter', True)):
+                        _arr = occlude_sprite(_arr, _pcx, _pcy, W, H,
+                                              _psc, alpha_p)
+                    paste(comp, _arr, _pcx, _pcy,
+                          W, H, scale=_psc,
                           opacity=g_out * _dim, crop_w=vis_px)
                 else:
                     e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
