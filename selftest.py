@@ -5416,18 +5416,20 @@ def _scenario_betrieb(tmp):
     # als der Kontakt: hoehere Geschwindigkeit UND Richtung zum Text.
     _p174 = {'kw_i': 1, 'arr': np.zeros((100, 400, 4), np.float32),
              'cx': 300.0, 'cy': 500.0, 'start': 1.0, 'end': 2.0}
-    _tips_zu = [(300.0 + 260.0, 500.0, -900.0, 0.0)]     # fliegt auf den Text zu
-    check('v174: eine schnelle Hand trifft den Text aus kurzer Distanz',
-          R.hand_contacts([dict(_p174)], _tips_zu, 1.5, 1280, 720) == 1)
-    _tips_weg = [(300.0 + 260.0, 500.0, 900.0, 0.0)]     # fliegt WEG vom Text
-    check('v174: eine Hand, die wegfliegt, trifft nicht',
-          R.hand_contacts([dict(_p174)], _tips_weg, 1.5, 1280, 720) == 0)
-    _tips_lahm = [(300.0 + 260.0, 500.0, -120.0, 0.0)]   # zu langsam fuer Distanz
-    check('v174: eine langsame Hand traegt nicht ueber die Distanz',
-          R.hand_contacts([dict(_p174)], _tips_lahm, 1.5, 1280, 720) == 0)
+    # v179 KORREKTUR: der Naeherungs-Treffer aus v174 ist wieder RAUS. Er
+    # war ein Notbehelf gegen den damals unmoeglichen Kontakt; seit v176
+    # laufen aber ALLE Flow-Chunks durch diese Pruefung, und wer beim
+    # Sprechen gestikuliert, liess damit JEDE Caption zucken (Ismets
+    # Befund). Den angesagten Schub traegt seit v177/v178 die Ansage.
+    _tips_nah = [(300.0 + 260.0, 500.0, -900.0, 0.0)]    # schnell, knapp daneben
+    check('v179: eine Geste NEBEN dem Text laesst ihn in Ruhe',
+          R.hand_contacts([dict(_p174)], _tips_nah, 1.5, 1280, 720) == 0)
     _tips_drin = [(300.0, 500.0, 200.0, 0.0)]            # Beruehrung wie v101j
     check('v174: die echte Beruehrung funktioniert weiter wie in v101j',
           R.hand_contacts([dict(_p174)], _tips_drin, 1.5, 1280, 720) == 1)
+    check('v179: der Naeherungs-Code ist wirklich weg',
+          '_reich = W * 0.075'
+          not in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
     # (2) HAND-AKTIONS-WOERTER ziehen die Caption in Reichweite der Hand.
     check('v174: "push them away" ist eine Hand-Aktion',
           R._hand_aktion_hit('push') and R._hand_aktion_hit('pushed')
@@ -5464,6 +5466,11 @@ def _scenario_betrieb(tmp):
     # Weit weg und langsam bleibt weiterhin folgenlos.
     check('v176: eine ferne, langsame Hand laesst den Flow-Block in Ruhe',
           R.hand_contacts([_flow176()], [(200.0, 200.0, 40.0, 0.0)],
+                          8.0, 1280, 720) == 0)
+    # v179: und eine SCHNELLE Hand knapp daneben ebenfalls - sonst zuckt
+    # bei einem gestikulierenden Sprecher jede einzelne Caption.
+    check('v179: eine schnelle Geste neben dem Flow-Block bleibt folgenlos',
+          R.hand_contacts([_flow176()], [(1000.0, 500.0, -900.0, 0.0)],
                           8.0, 1280, 720) == 0)
     # Der Keyword-Pfad (v101j) bleibt unveraendert.
     check('v176: der Keyword-Kontakt funktioniert weiter',

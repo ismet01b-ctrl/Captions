@@ -3127,27 +3127,20 @@ def hand_contacts(plans, tips, t, W, H):
                 p['_hand_touch_t'] = t
                 n += 1
                 continue
-        # v174 REICHWEITE: eine schnelle Hand, die auf den Text ZUFLIEGT,
-        # trifft ihn auch aus kurzer Distanz. Nur exakte Pixel-Beruehrung
-        # zu verlangen hiess: die Platzierungs-Regie legt den Text von der
-        # Person weg, die Beruehrung passiert nie, und Ismets Schub-Geste
-        # ("I can just push them away") lief sichtbar ins Leere. Der
-        # Naeherungs-Treffer verlangt dafuer ZWEI Dinge mehr als der
-        # Kontakt: hoehere Geschwindigkeit UND Bewegungsrichtung ZUM Text.
-        _reich = W * 0.075
+        # v179 NUR ECHTE BERUEHRUNG. Der Naeherungs-Treffer aus v174
+        # (Reichweite 0.075 W) war ein Notbehelf: damals passierte gar
+        # kein Kontakt, weil die Caption nie unter der Hand lag. Seit
+        # v176 pruefen wir aber ALLE Flow-Chunks, und wer beim Sprechen
+        # gestikuliert - also fast jeder - liess damit JEDE Caption im
+        # Video zucken (Ismets Befund: "alle captions sind jetzt etwas
+        # davon betroffen"). Der angesagte Schub braucht die Naeherung
+        # seit v177/v178 nicht mehr; er laeuft oben ueber die Ansage.
+        # Also gilt wieder die klare v101j-Regel: es zaehlt, was die Hand
+        # WIRKLICH beruehrt.
         for (x, y, vx, vy) in tips:
-            _in_box = abs(x - cx) < w and abs(y - cy) < h
-            _nah = (not _in_box and abs(x - cx) < w + _reich
-                    and abs(y - cy) < h + _reich)
-            if not (_in_box or _nah):
+            if not (abs(x - cx) < w and abs(y - cy) < h):
                 continue
             speed = math.hypot(vx, vy)
-            if _nah:
-                # Richtung zum Text: Skalarprodukt Geschwindigkeit x Abstand.
-                _zx, _zy = cx - x, cy - y
-                _d = math.hypot(_zx, _zy)
-                if _d < 1e-6 or speed < W * 0.25                         or (vx * _zx + vy * _zy) / (speed * _d) < 0.5:
-                    continue
             if speed > W * 0.10 and t - p.get('_hand_cool', -9.0) > 0.35:
                 # Impuls gedeckelt: auch ein Wisch bleibt ein Stups
                 _s = min(speed, W * 1.2) / max(speed, 1e-6)

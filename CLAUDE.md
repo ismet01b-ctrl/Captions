@@ -145,6 +145,11 @@ Wisch > 0.50 W/s messbar, bekommt der Block den Impuls ohne Trefferprüfung.
 `hand_contacts` und die Feder gelten auch für Flow-Chunks — Schub-Sätze
 sind fast immer Füllwort-Chunks ohne Keyword. Dreimal derselbe Fehlertyp
 (v159/v170/v176): ein Riegel am falschen Gate.
+**Drei Stufen, sauber getrennt (v179):** angesagter Wisch → voller Schub
+(~143 px), echte Berührung → Stups (~16 px), Geste daneben → NICHTS. Der
+v174-Näherungstreffer ist raus: zusammen mit v176 (alle Flow-Chunks) ließ
+er bei einem gestikulierenden Sprecher jede Caption zucken. Ein Notbehelf
+muss zurückgebaut werden, sobald die richtige Lösung steht.
 `hand_ziele()` zieht die Caption bei Hand-Aktions-Wörtern (push/shove/
 wegschieben/wischen, `_HAND_AKTION`) in Reichweite der Hand; `hand_contacts`
 trifft zusätzlich per **Näherung** (0.075 W), wenn die Hand schnell

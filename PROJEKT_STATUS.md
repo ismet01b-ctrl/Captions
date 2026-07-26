@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v179 Nur noch die angesagte Caption wird geschubst.** Ismets Abnahme
+  von v178: "jetzt ist es schon sehr gut. Das Problem: alle captions sind
+  jetzt etwas davon betroffen." Zu Recht - und die Ursache war eine
+  Wechselwirkung meiner eigenen letzten drei Versionen:
+  - v174 hatte einen NAEHERUNGS-Treffer eingebaut (Reichweite 0.075 W,
+    schnelle Hand in Richtung Text). Das war ein Notbehelf, weil damals
+    ueberhaupt kein Kontakt zustande kam.
+  - v176 hat die Pruefung dann auf ALLE Flow-Chunks ausgeweitet.
+  Zusammen hiess das: wer beim Sprechen gestikuliert - also praktisch
+  jeder - loeste an JEDER Caption im Video ein Zucken aus.
+  Der Naeherungs-Treffer ist jetzt RAUS. Er wird nicht mehr gebraucht:
+  den angesagten Schub traegt seit v177/v178 die Ansage plus der
+  gemessene Wisch, voellig unabhaengig von der Entfernung. Fuer alles
+  andere gilt wieder die klare v101j-Regel: es zaehlt, was die Hand
+  WIRKLICH beruehrt.
+  Damit stehen drei saubere Stufen: angesagter Wisch -> voller Schub
+  (~143 px), echte Beruehrung -> Stups (~16 px), Geste daneben -> nichts.
+  Als Invarianten im Selftest festgeschrieben, inklusive der Gegenprobe,
+  dass der Naeherungs-Code wirklich verschwunden ist.
+  LEHRE: ein Notbehelf muss zurueckgebaut werden, sobald die richtige
+  Loesung steht. Sonst addieren sich beide zu einem neuen Fehler.
 - **v178 Wucht nach Ansage: aus dem Stups wird ein echter Schub.** v177
   loeste den Impuls endlich aus - am Render gemessen aber nur 27 px
   Ausschlag (Blockmitte 0.5995 -> 0.6365 H bei 8.30 s, zurueck auf 0.6001
