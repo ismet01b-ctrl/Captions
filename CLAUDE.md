@@ -262,6 +262,15 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Querformat steht mittig (v180)
+**16:9 = unten mittig**, das ist die Konvention für eingebrannten Text
+(Netflix TTSG, BBC, SMPTE). Links/rechts geparkt ist Lower-Third-Sprache.
+Die Seiten-Abwechslung (v168) gilt **nur im Hochformat** — sie war gegen
+"immer links" bei 9:16 gebaut und lief vorher als Nebeneffekt auch quer.
+Mitte ist ein **Wunsch, keine Fessel**: `spot()` weicht weiter aus (Person
+unten mittig → Block auf 0.75 W gemessen), Zeige-Ziel, Hand-Geste,
+Sprecherwechsel und `caption_seite` überstimmen sie.
+
 ### Seite als Entscheidung (v168) — NACH v153 lesen
 "Immer links, egal was" hatte drei gemessene Ursachen: (1) der Seiten-Wurf
 pro Chunk (~40-45 % rechts, erster Chunk immer links, lange Ketten normal) →
@@ -435,7 +444,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1080/1080 grün (Stand v178)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1085/1085 grün (Stand v180)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

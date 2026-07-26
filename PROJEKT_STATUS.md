@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v180 Querformat steht MITTIG.** Ismets Frage: "ist es denn wirklich so
+  professionell, wenn die captions bei einem 16:9 video immer unten links
+  oder unten rechts sind?" Nein - und im Code nachgesehen: die
+  Seiten-Abwechslung aus v168 war NICHT aufs Hochformat begrenzt. Sie war
+  gegen sein "immer links" bei 9:16 gebaut und lief als Nebeneffekt auch
+  bei 16:9.
+  WARUM MITTIG RICHTIG IST:
+  - Fuer eingebrannten Text im Querformat ist unten MITTIG die Konvention
+    (Netflix TTSG, BBC-Subtitle-Guidelines, SMPTE Title-Safe). Links oder
+    rechts geparkt ist die Sprache von Lower-Third-Namensgrafiken, nicht
+    von gesprochenem Text.
+  - 16:9 hat wenig Hoehe, die Person sitzt fast immer mittig - seitlicher
+    Text rutscht an den unruhigen Bildrand (in Ismets Clip genau ins
+    Fenster).
+  - Im Querformat ruht der Blick mittig; wechselnde Seiten zwingen den
+    Zuschauer, den Text zu suchen.
+  MITTE IST EIN WUNSCH, KEINE FESSEL: `spot()` darf weiter ausweichen.
+  Gemessen (1920x1080): Person oben mittig -> Bloecke bei 0.49/0.49/0.49/
+  0.44 W; Person UNTEN mittig, also im Weg -> 0.75/0.74/0.75/0.70 W. Das
+  v143-Ausweichen ist unberuehrt, ebenso Zeige-Ziel, Hand-Geste,
+  Sprecherwechsel und die ausdrueckliche Nutzerwahl (`caption_seite`,
+  geprueft mit 'rechts' -> 0.66 W).
+  HOCHFORMAT UNVERAENDERT: dort wechselt die Seite weiter wie in v168
+  (gemessen 0.34 / 0.67 / 0.33 / 0.77 W).
+  TESTKORREKTUR: die v168-Nachweise liefen auf 1920x1080 und pruefen jetzt
+  im Hochformat - die Querformat-Regel deckt v180 ab. Kein Verhalten
+  verloren, nur die Zustaendigkeit sauber getrennt.
 - **v179 Nur noch die angesagte Caption wird geschubst.** Ismets Abnahme
   von v178: "jetzt ist es schon sehr gut. Das Problem: alle captions sind
   jetzt etwas davon betroffen." Zu Recht - und die Ursache war eine

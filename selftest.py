@@ -5550,6 +5550,65 @@ def _scenario_betrieb(tmp):
           "'_hand_geste': any(_hand_aktion_hit(clean(words[j]['word']))"
           in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
 
+    # ======= v180: Querformat steht MITTIG ================================
+    # Ismets Frage: "ist es denn wirklich so professionell, wenn die
+    # captions bei einem 16:9 video immer unten links oder unten rechts
+    # sind?" Nein. Die Seiten-Abwechslung aus v168 war gegen "immer links"
+    # im HOCHFORMAT gebaut und lief als Nebeneffekt auch bei 16:9. Fuer
+    # eingebrannten Text im Querformat ist unten MITTIG die Konvention
+    # (Netflix TTSG, BBC-Subtitle-Guidelines, SMPTE Title-Safe); seitlich
+    # geparkt ist die Sprache von Lower-Third-Namensgrafiken.
+    _cfg180 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _ws180 = [{'word': _w, 'start': 1.0 + _i * 0.45, 'end': 1.35 + _i * 0.45}
+              for _i, _w in enumerate(['ja', 'nun', 'so', 'ist', 'es', 'ok',
+                                       'na', 'da', 'wo', 'wie'])]
+
+    def _mitte180(W_, H_, fx_=0.50, fy_=0.30):
+        _S = R.Sprites(_cfg180, W_, H_)
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            pl = R.build_plans(_ws180, set(), _cfg180, _S, W_, H_,
+                               lambda s_, e_: True, {},
+                               face_pos=lambda s_, e_: (W_ * fx_, H_ * fy_,
+                                                        W_ * 0.09))
+        return [sum(i['cx'] for i in q['front']) / len(q['front']) / W_
+                for q in pl if q.get('front')]
+
+    _quer180 = _mitte180(1920, 1080)
+    check('v180: im Querformat stehen die Bloecke mittig',
+          _quer180 and all(0.40 <= _x <= 0.60 for _x in _quer180),
+          f"x = {[round(_x, 3) for _x in _quer180]}")
+    check('v180: im Querformat gibt es keinen Seitenwechsel mehr',
+          max(_quer180) - min(_quer180) < 0.10,
+          f"Spanne {max(_quer180) - min(_quer180):.3f} W")
+    # Das Ausweichen (v143) MUSS bleiben: steht die Person unten in der
+    # Mitte, gehoert der Text daneben - 'mitte' ist ein Wunsch, keine Fessel.
+    _imweg = _mitte180(1920, 1080, 0.50, 0.74)
+    check('v180: steht die Person unten mittig, weicht der Block aus',
+          _imweg and all(_x > 0.62 or _x < 0.38 for _x in _imweg),
+          f"x = {[round(_x, 3) for _x in _imweg]}")
+    # Hochformat bleibt KOMPLETT unveraendert (v168 wechselt weiter).
+    _hoch180 = _mitte180(1080, 1920)
+    check('v180: im Hochformat wechselt die Seite weiter wie in v168',
+          max(_hoch180) - min(_hoch180) > 0.20,
+          f"x = {[round(_x, 3) for _x in _hoch180]}")
+    # Eine ausdrueckliche Nutzerwahl gilt auch im Querformat.
+    _cfg180b = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                    encoding='utf-8'))
+    _cfg180b['effects']['caption_seite'] = 'rechts'
+    _S180b = R.Sprites(_cfg180b, 1920, 1080)
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl180b = R.build_plans(_ws180, set(), _cfg180b, _S180b, 1920, 1080,
+                                lambda s_, e_: True, {},
+                                face_pos=lambda s_, e_: (1920 * 0.5,
+                                                         1080 * 0.30,
+                                                         1920 * 0.09))
+    _rechts180 = [sum(i['cx'] for i in q['front']) / len(q['front']) / 1920
+                  for q in _pl180b if q.get('front')]
+    check('v180: die ausdrueckliche Nutzerwahl "rechts" gilt weiterhin',
+          _rechts180 and max(_rechts180) > 0.55,
+          f"x = {[round(_x, 3) for _x in _rechts180]}")
+
     # ======= v168: die Seite ist eine Entscheidung, kein Wuerfelwurf ======
     # Ismets Befund, dritter Anlauf: "die captions sind immer auf der linken
     # seite, egal was passiert". Am eigenen Render nachgemessen, ZWEI
@@ -5559,7 +5618,11 @@ def _scenario_betrieb(tmp):
     # (Ismets Betonwand links) gewann jedes Mal.
     _cfg168 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
                                    encoding='utf-8'))
-    _W168, _H168 = 1920, 1080
+    # v180 TESTKORREKTUR (kein Verhaltensverlust): die Seiten-Abwechslung
+    # gilt seit v180 nur noch im HOCHFORMAT - im Querformat steht der Text
+    # mittig (Konvention fuer eingebrannten Text). Der v168-Nachweis
+    # gehoert damit ins Hochformat; die Querformat-Regel prueft v180.
+    _W168, _H168 = 1080, 1920
     _S168 = R.Sprites(_cfg168, _W168, _H168)
     _w168 = [{'word': _w, 'start': 0.8 + _i * 0.42, 'end': 1.1 + _i * 0.42}
              for _i, _w in enumerate(['ja', 'gut', 'so', 'ist', 'es', 'ok',
@@ -5570,15 +5633,15 @@ def _scenario_betrieb(tmp):
     # Unruhe-Karte wie in Ismets Video: links spiegelglatt, rechts unruhig.
     # Vorher zog GENAU DAS jeden Block nach links.
     _karte168 = np.zeros((16, 12), np.float32)
-    _karte168[:, 6:] = 0.85
+    _karte168[:, 6:] = 0.85     # rechte Bildhaelfte unruhig, linke glatt
 
     def _seiten168():
         with _cl159.redirect_stdout(_io159.StringIO()):
             pl = R.build_plans(_w168, set(), _cfg168, _S168, _W168, _H168,
                                lambda s_, e_: True, {},
                                face_pos=lambda s_, e_: (_W168 * 0.5,
-                                                        _H168 * 0.40,
-                                                        _W168 * 0.055),
+                                                        _H168 * 0.32,
+                                                        _W168 * 0.095),
                                space_at=lambda t_: _karte168)
         return [sum(i['cx'] for i in q['front']) / len(q['front']) / _W168
                 for q in pl if q.get('front')]

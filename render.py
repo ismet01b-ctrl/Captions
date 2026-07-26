@@ -8690,6 +8690,23 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 _seite = 'rechts'
             elif _sw in ('mitte', 'center', 'centre'):
                 _seite = 'mitte'
+            elif not portrait:
+                # v180 QUERFORMAT STEHT MITTIG. Die Seiten-Abwechslung aus
+                # v168 war gegen "immer links" im HOCHFORMAT gebaut und lief
+                # als Nebeneffekt auch bei 16:9 - dort ist sie falsch:
+                #  - Konvention fuer eingebrannten Text im Querformat ist
+                #    unten MITTIG (Netflix TTSG, BBC-Subtitle-Guidelines,
+                #    SMPTE Title-Safe). Links/rechts geparkt ist die Sprache
+                #    von Lower-Third-Namensgrafiken, nicht von Sprechtext.
+                #  - 16:9 hat wenig Hoehe, die Person sitzt fast immer
+                #    mittig - seitlicher Text rutscht an den unruhigen Rand.
+                #  - Im Querformat ruht der Blick mittig; wechselnde Seiten
+                #    zwingen den Zuschauer, den Text zu suchen.
+                # Ausweichen bleibt trotzdem moeglich: spot() darf den Block
+                # weiterhin zur Seite schieben, wenn dort das MOTIV steht -
+                # 'mitte' ist der Wunsch, keine Fessel. Zeige-Ziel,
+                # Hand-Geste und Sprecherwechsel ueberstimmen ihn ohnehin.
+                _seite = 'mitte'
             else:
                 # v168 ECHTER WECHSEL statt Wuerfeln (Ismets Befund, dritter
                 # Anlauf: "die captions sind immer auf der linken seite,
