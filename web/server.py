@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v184-referenz'
+DVE_BUILD = 'v185-maengel'
 
 
 @app.middleware('http')
@@ -2377,11 +2377,13 @@ def build_config(look, overrides=None):
                 'keyword_rotation': ['punch', 'push', 'caption'],
                 'side_rotation': ['capzoom', 'drift'],
             },
-            # Feste Farbwelt: reines Weiss + ein harter Gelb-Akzent. Adaptive
-            # Szenen-Toene wuerden die Karaoke-Farbe pro Moment verschieben -
-            # der Look lebt von der KONSTANZ des einen Akzents.
-            'colors': {'style': 'auto', 'adaptive': False,
-                       'text': [255, 255, 255], 'accent': [255, 214, 10]},
+            # v185: KEIN fester Gelb-Akzent mehr (Ismets Urteil am Ergebnis:
+            # "ausgelutscht"). Gelb auf dem gesprochenen Wort ist der Marker
+            # jedes CapCut/Opus-Templates. Die Emphase traegt jetzt Groesse
+            # und Deckkraft; die Farbwelt kommt wieder aus der Szene, damit
+            # der Look zum Material gehoert statt zur Vorlage.
+            'colors': {'style': 'auto', 'adaptive': True,
+                       'text': [255, 255, 255]},
             'fonts': {
                 'display': 'fonts/montserrat_xb.ttf',
                 'italic': 'fonts/montserrat_xb.ttf',

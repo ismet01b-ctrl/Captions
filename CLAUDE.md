@@ -270,6 +270,31 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Ein Moment, ein Bild + kein Wort faellt weg (v185)
+- **Der Solo-Riegel rechnet mit dem AUSKLINGEN, nicht mit dem Ende.** Ein
+  Plan bleibt nach `end` noch bis 0.40 s im Bild (`active`-Fenster). Mit dem
+  blossen Ende gerechnet melden die Zahlen "keine Ueberschneidung", waehrend
+  im Bild zwei Texte uebereinander liegen. Gedraengte Karten bekommen ein
+  eigenes kurzes `aus` am Plan; die Zeichenschleife liest es.
+- **Solange eine Keyword-Karte steht, raeumt jeder andere Textplan.** Die
+  Karte hat Vorrang bis 0.80 s Mindestlesezeit, danach raeumt sie selbst.
+  Vorher galt "Karte oben, Block unten" als saubere Neben-Platzierung - das
+  ergab fuenf Elemente in vier Stilen gleichzeitig.
+- **Dichte 'durchgehend' ist eine Zusage: JEDES gesprochene Wort steht im
+  Bild.** Deshalb dort keine Atempause nach Keyword-Momenten, plus ein
+  Luecken-Netz am Ende von `build_plans`. In 'akzente'/'sparsam' sind
+  Textpausen dagegen die gewollte Handschrift - das Netz laeuft dort nicht.
+  Der v170-Riegel (Ein-Wort-Rest nach Pause) gilt auch im Netz.
+- **Keine Farb-Karaoke.** Gelb auf dem gesprochenen Wort ist der Marker des
+  CapCut/Opus-Templates (Ismet: "ausgelutscht") und landet auf Fuellwoertern.
+  Emphase = Groessen-Pop plus Dimmen auf 70 %, in allen Looks.
+- **Wortabstand haengt am Schriftgrad** (mind. ein Drittel Geviert), Zeilen
+  um das Schluesselwort brechen um, ein zu langes Wort schrumpft per `S.fit`
+  in die Spalte. Ohne diese drei ragten Woerter bis 1.57 W aus dem Bild.
+- **Motion-Grafik-Akzente sind wieder an** (`accents.auto`). Sie sind in den
+  High-End-Referenzen tragende Elemente; dosiert werden sie von
+  `sanitize_accents` (Dichte-Deckel + 3.5 s Abstand), nicht per Schalter.
+
 ### Referenz-Grammatik (v184) — der Massstab fuer "high level"
 An Ismets drei Referenz-Clips gemessen (kram.visuals/migs.visuals/
 johnbacog_), NICHT geschaetzt. Gemeinsame Grammatik der Vorbilder:
@@ -511,7 +536,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1126/1126 grün (Stand v184)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1142/1142 grün (Stand v185)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

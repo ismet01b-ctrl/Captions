@@ -42,12 +42,15 @@ keywords:
   include: []
   exclude: []
   ai_vision: true
-# v139 AKZENTE: Motion-Graphics-Akzente (Counter/Chip/Badge/Pop) kommen NICHT
-# mehr automatisch ins Video (Ismets Ansage: Captions pur). auto:false =
-# keine KI-/Heuristik-Vorschlaege mehr. Gerendert wird NUR, was der Nutzer im
-# Momente-Editor selbst anlegt (_accents.json via '+ Add accent').
+# v185 AKZENTE WIEDER AN. v139 hatte sie abgeschaltet ("Captions pur").
+# Ismets High-End-Referenz (lolo) enthaelt aber genau diese Elemente als
+# tragende Bestandteile: hochlaufender Views-Counter mit Icon, Badge "7X",
+# Namens-Karte mit Pfeil. Ohne sie sieht ein Render nach nacktem Text aus,
+# und das war ein Teil des "sieht nicht high end aus".
+# Dosiert bleibt es durch sanitize_accents: harte Dichte-Obergrenze plus
+# 3.5 s Mindestabstand. Der Momente-Editor ueberschreibt weiterhin alles.
 accents:
-  auto: false
+  auto: true
   ai_model: gpt-5
   intensity: 1.0
 effects:

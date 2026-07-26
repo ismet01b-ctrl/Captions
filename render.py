@@ -2243,20 +2243,6 @@ def occlude_sprite(arr, cx, cy, W, H, scale, alpha_p):
     return out
 
 
-def tint_glyph(arr, rgb):
-    """v183: faerbt den HELLEN Glyphenkoerper eines Text-Sprites in den
-    gegebenen Ton, ohne die dunkle Kontur (v181) oder den Schatten
-    anzufassen. Multiplikativ - Antialiasing-Kanten bleiben weich."""
-    out = arr.copy()
-    body = out[..., :3].astype(np.float32)
-    mask = (out[..., 3] > 0) & (body.max(axis=2) > 150)
-    if not mask.any():
-        return out
-    f = np.asarray(rgb, np.float32) / 255.0
-    body[mask] *= f
-    out[..., :3] = np.clip(body, 0, 255).astype(np.uint8)
-    return out
-
 # --- Emoji (v81e): Noto Color Emoji rendert nur in fester Bitmap-Groesse (109),
 # wird danach auf Zielhoehe skaliert. Ergebnis wird gecacht (pro Emoji+Hoehe).
 _EMOJI_FONT_PATH = None
@@ -6884,18 +6870,31 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
                 # Fehler, nicht als Dynamik. Tracking eng wie beim Anker.
                 raw = raw.upper()
                 _wg = 880 if _m == '!' else (720 if _m == '~' else 800)
-                arr, tw = S.text(raw, _sz, S.white, tracking=2,
-                                 font=S.f_sans, wght=_wg)
+                _trk_v = 2
             else:
-                arr, tw = S.text(raw, _sz, S.white, tracking=_trk_n,
-                                 font=S.f_sans, wght=_wg)
+                _trk_v = _trk_n
+            # v185 EIN WORT DARF NIE BREITER ALS DIE SPALTE SEIN. Bis v184
+            # bekam nur das Schluesselwort ein S.fit; normale Woerter wurden
+            # in der Sollgroesse gesetzt und ragten bei langen Woertern aus
+            # dem Bild (am Testrender gemessen: 'Momente' von 0.12 bis
+            # 1.14 W). Genau das meint die Referenz mit "gross ansetzen, nur
+            # das LANGE Wort schrumpft in die Zeile".
+            _sz = S.fit(raw, _sz, _colw, font=S.f_sans, tracking=_trk_v)
+            arr, tw = S.text(raw, _sz, S.white, tracking=_trk_v,
+                             font=S.f_sans, wght=_wg)
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'norm',
                           'gross': _gross, 'sz': _sz,
                           't': words[i]['start']})
     # Inline-Fluss mit Umbruch, Zeilen unten ausgerichtet (gemeinsame Grundlinie)
     max_w = _colw
     x0 = int(W * 0.07)
-    space = int(W * (0.032 if portrait else 0.020))
+    # v185 WORTABSTAND HAENGT AM GRAD, nicht nur an der Bildbreite. Fest
+    # 0.032 W waren bei Hausgroesse in Ordnung; mit den Referenz-Groessen
+    # (v184) und erst recht im Viral-Look (doppelter Fliesstext) sank der
+    # Abstand auf unter 0.17 em und die Woerter klebten aneinander
+    # ("SINDDIE", "AUFEIN" - am Testrender gemessen). Satztechnisches Mass
+    # fuer eine Wortluecke ist rund ein Drittel Geviert.
+    space = int(max(W * (0.032 if portrait else 0.020), sz_n * 0.30))
     # STRUKTUR wie in der Referenz: klare Zeilen nach ROLLE statt wildem
     # Breiten-Umbruch. Verbinder-vor-Keyword = Zeile 1, das KEYWORD = eigene
     # Zeile, Rest (inkl. Kursiv-Akzent) = Zeile darunter. Alles LINKS buendig,
@@ -6903,30 +6902,33 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # echter Textbreite; zentriert wird das symmetrisch gepolsterte Sprite.
     for it in items:
         it['adv'] = it['w']
-    rows = []
-    if anchor is not None:
-        pos = idxs.index(anchor)
-        pre = items[:pos]
-        key = [items[pos]]
-        post = items[pos + 1:]
-        if pre:
-            rows.append(pre)
-        rows.append(key)
-        if post:
-            rows.append(post)
-    else:
-        cur = []
-        cur_w = 0
-        for it in items:
+    def _umbruch(seq):
+        """Bricht eine Wortfolge am Satzspiegel um. v185: das galt bisher NUR
+        fuer den Fall ohne Schluesselwort. Mit Anker liefen Vor- und Nachlauf
+        als EINE Zeile durch, egal wie breit - am Testrender gemessen stand
+        'Level' bei 1.15 W und 'deines' bei 1.57 W, also weit ausserhalb des
+        Bildes. Mit den Referenz-Groessen (v184) und im Viral-Look passiert
+        das bei jedem dritten Chunk."""
+        out, cur, cur_w = [], [], 0
+        for it in seq:
             aw = it['adv']
             if cur and cur_w + space + aw > max_w:
-                rows.append(cur)
-                cur = []
-                cur_w = 0
+                out.append(cur)
+                cur, cur_w = [], 0
             cur.append(it)
             cur_w += (space if len(cur) > 1 else 0) + aw
         if cur:
-            rows.append(cur)
+            out.append(cur)
+        return out
+
+    rows = []
+    if anchor is not None:
+        pos = idxs.index(anchor)
+        rows += _umbruch(items[:pos])
+        rows.append([items[pos]])
+        rows += _umbruch(items[pos + 1:])
+    else:
+        rows = _umbruch(items)
 
     def _rsz(it):
         # Nur die Collage rechnet mit der WIRKLICH gesetzten Groesse. Im
@@ -8125,7 +8127,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             g_kw = [i for i in g_kw if zrel(i) <= 0]
 
         # Rhythmus: direkt nach einem Keyword-Moment eine Atempause ohne Text
-        if breathing and prev_was_keyword and not g_kw:
+        # v185: NICHT bei Dichte 'durchgehend'. Dort heisst die Ansage
+        # "jedes Wort steht auf dem Schirm" - die Atempause loeschte die
+        # ganze Folgegruppe und riss zusammen mit dem Keyword-Moment (der nur
+        # EIN Wort zeigt) mehrsekundige Loecher. An Ismets Render gemessen:
+        # 4.0 s von 15 s ohne jeden Text, dazu 4 von 30 Woertern nie sichtbar.
+        if (breathing and prev_was_keyword and not g_kw
+                and str(cfg['effects'].get('density', 'akzente')) != 'durchgehend'):
             prev_was_keyword = False
             continue
 
@@ -8311,12 +8319,26 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if _cnt and fx == 'cascade':
                 fx = 'outline'          # Zahlen zaehlen immer hoch: Cascade kann das
                                         # nicht tragen -> Zahlen-Buehne ist outline
+            # v185 STUETZZEILE IM HAUSMASS. Bis v184 lief sie hart auf
+            # 0.043 H mit Tracking 14 - gesperrte Mikroversalien, die zu
+            # keinem Look gehoerten (Ismets Befund am Render: "THESE FORM"
+            # sieht aus wie aus einem anderen Produkt). Sie nimmt jetzt
+            # dieselbe Groesse und dieselbe Laufweite wie der Fliesstext der
+            # Flow-Caption, inklusive Referenz-Skalierung und Viral-Faktor.
+            _pf5 = 1.35 if not portrait else 1.0
+            _sk5 = float(cfg['effects'].get('caption_scale') or 1.0)
+            _sk5 = max(0.60, min(2.80, _sk5))
+            _skn5 = float(cfg['effects'].get('caption_scale_klein') or 0) or None
+            _skn5 = max(0.60, min(1.30, _skn5)) if _skn5 else _sk5
+            _viral5 = bool(cfg['effects'].get('caption_viral'))
+            _sz5 = int(H * 0.050 * _pf5 * _skn5 * (2.00 if _viral5 else 1.0))
+            _trk5 = 2 if _viral5 else (6 if portrait else max(2, int(_sz5 * 0.0625)))
             small = []
             for i2 in ([] if (cfg['effects'].get('density', 'akzente') == 'akzente'
                               and not in_intro)
                        else [x for x in g if x not in phrase]):
-                a2, tw = S.text(clean(words[i2]['word']).upper(), int(H * 0.043), S.white,
-                                tracking=14, font=S.f_sans)
+                a2, tw = S.text(clean(words[i2]['word']).upper(), _sz5, S.white,
+                                tracking=_trk5, font=S.f_sans)
                 small.append({'i': i2, 'arr': a2, 'w': tw})
             p = {'tpl': fx, 'kw_i': i, 'kw_txt': txt, 'small': small, 'start': start, 'end': end,
                  'tilt': rng(i, 4) * 3 - 1.5, 'side': 0, 'broll': broll}
@@ -9075,9 +9097,6 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                   'target': (int(_sx), int(y0 + tot_h / 2.0)),
                   'fol_lim': _fol_lim,
                   'broll': broll,
-                  # v183: Akzentton der Kompositions-Palette festhalten - die
-                  # Draw-Schleife faerbt damit das AKTIVE Wort (Karaoke).
-                  'acc_rgb': tuple(S.accent),
                   # v184: die Punchline darf HINTER der Person stehen
                   # (Referenz-Grammatik, Ref C 'this'). Nur am Satzende,
                   # nie auf B-Roll, nie bei angesagtem Hand-Schub - und
@@ -9143,6 +9162,74 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 prev_was_keyword_sentence = False
             elif not satz_offen:
                 prev_was_keyword_sentence = False
+
+    # ---------------------------------------------------------- v185 LUECKEN
+    # SICHERHEITSNETZ bei Dichte 'durchgehend': dort ist "jedes gesprochene
+    # Wort steht irgendwann auf dem Schirm" eine Zusage, kein Stil. Mehrere
+    # Wege koennen Woerter verschlucken (Keyword-Moment zeigt nur EIN Wort
+    # seiner Gruppe, B-Roll-Gate, Zahl-Bremse, Ein-Wort-Rest). Statt jeden
+    # einzelnen Weg zu flicken, wird am Ende geprueft, WAS fehlt, und der
+    # Rest bekommt eine schlichte Flow-Caption. Nur 'durchgehend' - in
+    # 'akzente'/'sparsam' sind Textpausen die gewollte Handschrift.
+    if str(cfg['effects'].get('density', 'akzente')) == 'durchgehend' and words:
+        _gezeigt = set()
+        for _p in plans:
+            for _k in ('front', 'small'):
+                for _it in (_p.get(_k) or []):
+                    if isinstance(_it, dict) and _it.get('i') is not None:
+                        _gezeigt.add(_it['i'])
+            if _p.get('kw_i') is not None:
+                _gezeigt.add(_p['kw_i'])
+        _fehlt = [i for i in range(len(words)) if i not in _gezeigt
+                  and clean(words[i]['word']).strip()]
+        # Zu Laeufen buendeln: nur zusammenhaengende Woerter ohne grosse
+        # Sprechpause dazwischen ergeben einen lesbaren Block.
+        _laeufe, _cur = [], []
+        for i in _fehlt:
+            if _cur and (i != _cur[-1] + 1
+                         or words[i]['start'] - words[_cur[-1]]['end'] > 0.7):
+                _laeufe.append(_cur)
+                _cur = []
+            _cur.append(i)
+        if _cur:
+            _laeufe.append(_cur)
+        _nach = 0
+        for _lauf in _laeufe:
+            _s0 = words[_lauf[0]]['start']
+            _e0 = words[_lauf[-1]]['end']
+            # v170 BLEIBT GUELTIG: ein einzelnes kurzes Wort nach langer
+            # Pause ist ein Rest, kein Moment (Ismets "is" am Videoende).
+            # Das Netz darf ihn nicht durch die Hintertuer zurueckholen.
+            _i0 = _lauf[0]
+            _pv = (_s0 - words[_i0 - 1]['end']) if _i0 > 0 else 9.0
+            if (len(_lauf) == 1 and len(clean(words[_i0]['word'])) <= 4
+                    and _pv >= 1.2):
+                continue
+            if not face_ok(_s0, _e0) and not cfg['effects'].get('broll_captions', False):
+                continue                     # B-Roll bleibt textfrei
+            S.set_palette(palette_at(_s0 + 0.2) if palette_at else None)
+            _it2, _th2, _an2 = compose_flow(_lauf, words, S, W, H, portrait,
+                                            layout='flow', punch=False,
+                                            seite='mitte')
+            _cz2 = cfg['effects'].get('caption_zone')
+            _wy2 = (H * float(_cz2) if _cz2 else H * (0.25 if portrait else 0.72))
+            _bl2 = min(i2['cx'] - i2['w'] / 2.0 for i2 in _it2)
+            _br2 = max(i2['cx'] + i2['w'] / 2.0 for i2 in _it2)
+            _sx2, _sy2 = spot(_s0, _e0, _br2 - _bl2, _th2, wunsch_y=_wy2,
+                              kalt=True, wunsch_x=W * 0.5)
+            for i2 in _it2:
+                i2['cx'] += _sx2 - _bl2
+                i2['cy'] += _sy2
+            plans.append({'tpl': 'flow', 'front': _it2, 'start': _s0,
+                          'end': _e0, 'layout': 'flow', 'punch': False,
+                          'side': 0, 'ccam': 'none', 'broll': False,
+                          'target': (int(_sx2), int(_sy2 + _th2 / 2.0)),
+                          'fol_lim': 0.0,
+                          'hinter_ok': False,
+                          'vpos': (_sx2 + (_br2 - _bl2) / 2.0, _sy2 + _th2 / 2.0)})
+            _nach += len(_lauf)
+        if _nach:
+            print(f"  Gap guard: {_nach} spoken word(s) had no caption, added")
 
     # HOOK v48: Sofort-Hook. 65-71% entscheiden in den ersten 3 Sekunden, ob sie
     # bleiben. Das staerkste fruehe Statement wird zur Hook-Karte: sie steht ab
@@ -9247,6 +9334,75 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     _n_ovl = resolve_overlaps(plans, W, H)
     if _n_ovl:
         print(f"  Overlap guard: {_n_ovl} moment(s) pulled forward")
+
+    # v185 EIN MOMENT, EIN BILD. resolve_overlaps raeumt nur auf, wenn zwei
+    # Texte AN DERSELBEN STELLE stehen - eine Keyword-Karte oben und ein
+    # Flow-Block unten galten als saubere Neben-Platzierung. Am echten Render
+    # sah das so aus: BEHIND, Me, RIGHT, WORDS und THESE FORM gleichzeitig,
+    # in vier verschiedenen Schriftschnitten. Fuenf Elemente sind kein Layout,
+    # das ist ein Stapel. In ALLEN Referenzen (Ismets drei TikToks und das
+    # lolo-Video) traegt ein grosser Moment das Bild ALLEIN.
+    # Regel: solange eine Keyword-Karte steht, raeumt jeder andere Textplan.
+    # Der frueher gestartete wird beendet, der spaeter startende faengt erst
+    # nach der Karte an. Kein Plan wird geloescht - Woerter gehen nicht
+    # verloren, das Luecken-Netz oben bleibt gueltig.
+    if cfg['effects'].get('caption_solo', True):
+        _kwp = sorted([p for p in plans if p.get('kw_i') is not None
+                       and 'target' in p], key=lambda p: p.get('t0', p['start']))
+        _txt = sorted([p for p in plans if 'target' in p and p.get('front')],
+                      key=lambda p: p.get('t0', p['start']))
+        _n_solo = 0
+        # Die KARTE hat Vorrang, nicht der Fliesstext: sie ist der dramatische
+        # Moment und braucht Lesezeit. Unter 0.8 s ist ein grosses Wort nicht
+        # gelesen, sondern geblinzelt - deshalb weicht der Flow, nicht sie.
+        # Erst wenn die Karte ihre Mindestzeit hat, darf sie selbst kuerzen.
+        # v185b GERECHNET WIRD MIT DEM AUSKLINGEN, NICHT MIT DEM ENDE. Ein
+        # Plan bleibt nach 'end' noch 0.40 s im Bild (Exit-Fenster, siehe
+        # 'active' in der Zeichenschleife). Mit dem blossen Ende gerechnet
+        # sagten die Zahlen "keine Ueberschneidung", waehrend das Bild eine
+        # zeigte: die ZEIG-Karte stand bis 1.2 s, der Block wuchs ab 0.81 s
+        # darueber, 'WIR' lag auf 'ZEIG' (am Render Frame fuer Frame belegt).
+        _AUS = 0.40
+        _KW_MIN = 0.80
+        for _k in _kwp:
+            _ks = _k.get('t0', _k['start'])
+            for _b in _txt:
+                _bs = _b.get('t0', _b['start'])
+                _ke = _k['end']
+                if _bs >= _ke + _AUS or _b['end'] + _AUS <= _ks:
+                    continue                     # wirklich keine Ueberschneidung
+                if _bs <= _ks:
+                    # Der Block laeuft schon: er raeumt VOR der Karte, sein
+                    # Ausklingen muss dafuer ebenfalls fertig sein.
+                    _neu = max(_bs + 0.25, _ks - _AUS)
+                    if _neu < _b['end'] - 1e-3:
+                        _b['end'] = _neu
+                        _n_solo += 1
+                    continue
+                # Der Block will waehrend der Karte starten. Die Karte hat
+                # Vorrang bis zu ihrer Mindestlesezeit; darueber hinaus
+                # raeumt sie. Reicht das nicht, wartet der Block.
+                _ke_soll = max(_ks + _KW_MIN, min(_ke, _bs - _AUS))
+                if _ke_soll < _ke - 1e-3:
+                    _k['end'] = _ke = _ke_soll
+                    _n_solo += 1
+                if _bs < _ke + _AUS:
+                    _spaet = _ke + _AUS
+                    if _b['end'] - _spaet >= 0.20:
+                        _b['t0'] = _b['start'] = _spaet
+                        _n_solo += 1
+                    else:
+                        # Der Block ist zu kurz zum Warten. Dann raeumt die
+                        # Karte, notfalls unter ihrer Mindestlesezeit - und
+                        # sie bekommt ein KURZES Ausklingen mit, sonst fadet
+                        # sie 0.40 s lang in den Block hinein (genau die
+                        # Kollision, die im Bild zu sehen war).
+                        _k['end'] = _ke = max(_ks + 0.20, _bs - 0.16)
+                        _k['aus'] = 0.12
+                        _n_solo += 1
+        if _n_solo:
+            print(f"  Solo guard: {_n_solo} moment(s) trimmed so the "
+                  f"keyword card stands alone")
 
     # v85: SCHNITT-DISZIPLIN (Broadcast-Regel, BBC/Netflix). Ein Untertitel darf
     # nicht ueber einen harten Schnitt hinweg stehen bleiben - das ist der
@@ -9892,7 +10048,10 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             obj['o_arr'], obj['f_arr'] = res
         else:
             obj['arr'] = res
-    active = [p for p in plans if p['start'] <= t < p['end'] + 0.40]   # v82: Exit-Fenster
+    # v185: das Exit-Fenster ist plan-eigen. Eine gedraengte Keyword-Karte
+    # bekommt vom Solo-Riegel ein kuerzeres 'aus' und raeumt dadurch
+    # wirklich, statt 0.40 s lang in den naechsten Block hineinzufaden.
+    active = [p for p in plans if p['start'] <= t < p['end'] + p.get('aus', 0.40)]
     # v101j: Beruehrungs-Feder pro aktivem Moment einmal pro Frame ticken.
     for _hp in active:
         if '_hand_hit' in _hp or _hp.get('_hand_dx') or _hp.get('_hand_vx') \
@@ -10205,7 +10364,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         ah = _a.shape[0] if _a is not None else H * 0.06
         # v97: Flow-Caption raeumt knackig, damit ein Satz weg ist, bevor der
         # naechste an derselben Stelle steht (kein Doppel-Stack im Fluss).
-        x_dur = 0.15 if p['tpl'] == 'flow' else 0.20 + 0.12 * min(ah / (H * 0.15), 1.0)
+        x_dur = (p.get('aus') if p.get('aus') is not None else
+                 (0.15 if p['tpl'] == 'flow' else
+                  0.20 + 0.12 * min(ah / (H * 0.15), 1.0)))
         over = t - p['end']
         if p.get('power', 2) >= 3:
             over -= 0.04
@@ -10274,11 +10435,15 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 if _kand:
                     _akt_i = max(_kand,
                                  key=lambda q: words[q['i']]['start'])['i']
-            # v183 VIRAL-KARAOKE: im Viral-Look wandert die AKZENTFARBE mit
-            # dem gesprochenen Wort (der Markt-Standard), vergangene Woerter
-            # bleiben voll weiss - die Farbe traegt die Emphase, nicht das
-            # Dimmen. Pop kraeftiger (0.10 statt 0.055): auf 0.07-0.115 H
-            # Versalhoehe ist der Haus-Pop nicht mehr sichtbar.
+            # v185 KEINE FARB-KARAOKE MEHR. Bis v184 faerbte der Viral-Look
+            # das gesprochene Wort in einen festen Gelb-Ton. Ismets Urteil am
+            # Ergebnis: "Gelbakzent, die sind ausgelutscht." Stimmt - das ist
+            # der Marker jedes CapCut/Opus-Templates, und der Akzent landete
+            # ausserdem auf Fuellwoertern (AND, THAT, TO, IS), wo er nichts
+            # betont. Die Emphase traegt jetzt in ALLEN Looks das Paar
+            # Groessen-Pop (aktiv) und Dimmen auf 70 % (vergangen), ohne
+            # Farbwechsel. Der Pop bleibt im Viral-Look kraeftiger, weil er
+            # auf 0.07-0.115 H Versalhoehe sonst untergeht.
             _viral = bool(cfg['effects'].get('caption_viral'))
             for it in p['front']:
                 wd = words[it['i']]
@@ -10295,14 +10460,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     if _ist_akt:
                         _pop = 1.0 + (0.10 if _viral else 0.055) \
                             * (1 - smoothstep(min(dt / 0.22, 1.0)))
-                    elif it.get('role') not in ('key', 'punch') and not _viral:
+                    elif it.get('role') not in ('key', 'punch'):
                         _dim = 0.70
                 _arr = it['arr']
-                if _viral and _ist_akt and p.get('acc_rgb'):
-                    _arr = it.get('_akt_arr')
-                    if _arr is None:
-                        _arr = tint_glyph(it['arr'], p['acc_rgb'])
-                        it['_akt_arr'] = _arr
                 if it.get('role') in ('key', 'punch') and it.get('letters'):
                     n = len(it['letters'])
                     # v151: Aufdeck-Tempo kann aus der gemessenen Referenz

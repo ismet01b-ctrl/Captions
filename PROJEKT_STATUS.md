@@ -3,6 +3,63 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v185 DIE VIER GEMESSENEN MAENGEL - plus drei Folgefunde.**
+  Ismets Viral-Render (Build v184) durchgemessen statt beurteilt. Was
+  objektiv falsch war, ist behoben; an "sieht aus wie lolo" wurde NICHT
+  gearbeitet (in dieser Referenz stecken zwei Kameras, B-Roll und eine
+  Titelsequenz - das kann kein Renderer erzeugen, siehe unten).
+  (1) VIER SEKUNDEN LOCH von 15 s, dazu 4 von 30 Woertern nie im Bild.
+      URSACHE (reproduziert): die Atempause nach einem Keyword-Moment
+      loeschte die KOMPLETTE Folgegruppe, und eine Keyword-Karte zeigt nur
+      EIN Wort ihrer Gruppe. Zusammen ergab das mehrsekundige Leere.
+      Die Atempause gilt jetzt nicht mehr bei Dichte 'durchgehend' (dort
+      ist "jedes Wort steht im Bild" eine Zusage, kein Stil), dazu ein
+      LUECKEN-NETZ als letzte Sicherung: was am Ende kein Plan zeigt,
+      bekommt eine schlichte Flow-Caption. Der v170-Riegel (Ein-Wort-Rest
+      nach langer Pause faellt weg) bleibt davon unberuehrt.
+  (2) FUENF ELEMENTE IN VIER STILEN gleichzeitig (BEHIND, Me, RIGHT,
+      WORDS, THESE FORM). resolve_overlaps raeumte nur bei gleicher
+      Position auf - Karte oben plus Block unten galt als saubere
+      Neben-Platzierung. In ALLEN Referenzen traegt ein grosser Moment das
+      Bild allein. Neuer Solo-Riegel: solange eine Keyword-Karte steht,
+      raeumt jeder andere Textplan. Gerechnet wird mit dem AUSKLINGEN
+      (0.40 s Exit-Fenster), nicht mit dem Ende - mit dem blossen Ende
+      sagten die Zahlen "keine Ueberschneidung", waehrend im Bild 'WIR'
+      auf 'ZEIG' lag (Frame fuer Frame belegt). Gedraengte Karten bekommen
+      zusaetzlich ein kurzes eigenes Ausklingen ('aus' am Plan).
+  (3) MIKROVERSALIEN: die Stuetzzeile lief hart auf 0.043 H mit Tracking
+      14 - gesperrte Winzversalien, die zu keinem Look gehoerten. Sie
+      nimmt jetzt Groesse und Laufweite des Fliesstexts, inklusive
+      Referenz- und Viral-Skalierung.
+  (4) GELB-AKZENT RAUS (Ismet: "ausgelutscht"). Die Farb-Karaoke ist
+      komplett entfernt (tint_glyph, acc_rgb, feste Akzentfarbe im
+      Preset). Sie war der Marker jedes CapCut/Opus-Templates und landete
+      ausserdem auf Fuellwoertern (AND, THAT, TO, IS). Die Emphase traegt
+      jetzt in allen Looks Groessen-Pop plus Dimmen auf 70 %.
+  FOLGEFUNDE aus derselben Messung, alle behoben:
+  - Woerter ausserhalb des Bildes ('Level' bei 1.15 W, 'deines' bei
+    1.57 W): die Zeilen um das Schluesselwort wurden nie umbrochen, und
+    ein einzelnes langes Wort bekam kein S.fit. Beides jetzt da.
+  - Klebende Wortabstaende ("SINDDIE", "AUFEIN"): der Abstand hing nur an
+    der Bildbreite und fiel mit den v184-Groessen unter 0.17 em. Jetzt
+    mindestens ein Drittel Geviert.
+  - MOTION-GRAFIK-AKZENTE wieder AN (accents.auto). v139 hatte sie auf
+    Ismets Ansage abgeschaltet ("Captions pur") - seine eigene High-End-
+    Referenz traegt aber genau diese Elemente (Views-Counter mit Icon,
+    Badge "7X", Namens-Karte mit Pfeil). Dosiert bleiben sie durch
+    sanitize_accents (Dichte-Deckel plus 3.5 s Mindestabstand).
+  BEWEIS: Testrender Hochformat, gemessen - kein Gelb mehr, keine
+  Textluecke ueber 0.8 s, nie zwei Textebenen gleichzeitig, nichts
+  ausserhalb des Bildes, Chip-Akzent laeuft.
+  EHRLICH: CPU, synthetischer Grau-Clip, ohne Key. Die Wirkung auf echtem
+  Material prueft Ismet nach dem Deploy. Tests: +17 neue v185-Checks;
+  vier Alt-Checks ehrlich nachgezogen (v139 Akzente jetzt an, v150
+  Zeilenschwelle durch den neuen Umbruch, v182/v183 Farb-Karaoke raus).
+  1142/1142 logic + Renders 7/1/5/2 + GUI gruen.
+  NICHT GEBAUT und warum: die lolo-Referenz enthaelt 15 Schnitte in
+  23.7 s, Multikamera, B-Roll, Screen-Recordings, eine designte
+  Titelsequenz und Farbkorrektur. Captions sind darin rund 20 % des
+  Eindrucks. Diesen Teil kann Software liefern, den Rest nicht.
 - **v184 REFERENZ-GRAMMATIK (an Ismets drei High-End-Vorbildern gemessen).**
   Ismet: "Das sind alles high end Animationen. Die habe ich dir schon 1000x
   geschickt. Konntest es trotzdem nicht nachbauen." Drei Referenzen durch

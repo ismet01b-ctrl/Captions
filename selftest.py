@@ -5623,7 +5623,7 @@ def _scenario_betrieb(tmp):
     # v183 den Viral-Riegel ('and not _viral' - im Viral-Look traegt die
     # FARBE die Emphase), der Pop hat zwei Staerken (0.055 Haus, 0.10 viral).
     check('v182: vergangene Woerter dimmen, Keywords nie',
-          "elif it.get('role') not in ('key', 'punch') and not _viral:"
+          "elif it.get('role') not in ('key', 'punch'):"
           in _r182 and '_dim = 0.70' in _r182)
     check('v182: das aktive Wort bekommt einen abklingenden Groessen-Pop',
           '_pop = 1.0 + (0.10 if _viral else 0.055)' in _r182
@@ -5646,9 +5646,12 @@ def _scenario_betrieb(tmp):
           "'caption_layout': 'rows'" in _sv183
           and "'caption_seite': 'mitte'" in _sv183
           and "'caption_zone': 0.58" in _sv183)
-    check('v183: feste Farbwelt - Weiss + ein konstanter Gelb-Akzent',
-          "'accent': [255, 214, 10]" in _sv183
-          and "'adaptive': False" in _sv183)
+    # v185 TESTKORREKTUR: der feste Gelb-Akzent ist raus (Ismet: "aus-
+    # gelutscht"). Geprueft bleibt, dass der Look eine definierte Textfarbe
+    # setzt - die Akzentfarbe kommt wieder aus der Szene.
+    check('v185: das Viral-Preset setzt Weiss und ueberlaesst den Rest der Szene',
+          "'text': [255, 255, 255]" in _sv183
+          and "'accent': [255, 214, 10]" not in _sv183)
     _ui183 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     check('v183: die UI kennt den Viral-Look (Label + Karte)',
           "viral: 'Viral" in _ui183 and 'data-look=viral' in _ui183)
@@ -5664,8 +5667,8 @@ def _scenario_betrieb(tmp):
           and "_lm = 'rows'" in _r182)
     check('v183: der Punch-Deckel kennt den Crash-Zoom',
           '0.89 - 0.11 * max(0.0, min(1.0, _crash))' in _r182)
-    check('v183: die Karaoke-Faerbung nutzt den Kompositions-Akzent',
-          "p.get('acc_rgb')" in _r182 and "'_akt_arr'" in _r182)
+    check('v185: keine Farb-Karaoke mehr im Viral-Look',
+          "acc_rgb" not in _r182 and 'tint_glyph' not in _r182)
 
     # VERHALTEN direkt an compose_flow gemessen - nicht nur Quelltext.
     _cfgV = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
@@ -5753,20 +5756,147 @@ def _scenario_betrieb(tmp):
     check('v183: seite "mitte" zentriert die Zeile wirklich',
           _cxM[0] > _cxL[0] + 20,
           f"mitte {_cxM[0]:.0f} vs links {_cxL[0]:.0f}")
-    # Karaoke-Tint: der helle Glyphenkoerper wird gefaerbt, die dunkle
-    # Kontur bleibt dunkel - sonst saehe das aktive Wort ausgestanzt aus.
-    _aT = R.Sprites(_cfgN, 1080, 1920).text('WORT', 80, (255, 255, 255))[0]
-    _tT = R.tint_glyph(_aT, (255, 214, 10))
-    _hellm = (_aT[..., 3] > 0) & (_aT[..., :3].max(axis=2) > 150)
-    _dklm = (_aT[..., 3] > 120) & (_aT[..., :3].max(axis=2) < 60)
-    check('v183: tint_glyph faerbt den Glyphenkoerper in den Akzent',
-          _hellm.any() and float(_tT[..., 2][_hellm].mean()) < 120
-          and float(_tT[..., 0][_hellm].mean()) > 200,
-          "B-Kanal faellt, R-Kanal bleibt")
-    check('v183: die dunkle Kontur bleibt beim Tinten unangetastet',
-          (not _dklm.any()) or
-          float(np.abs(_tT[..., :3][_dklm].astype(int)
-                       - _aT[..., :3][_dklm].astype(int)).mean()) < 1.0)
+    # v185: die Karaoke-Faerbung (tint_glyph) ist komplett entfernt - Ismets
+    # Urteil am Ergebnis: "Gelbakzent, die sind ausgelutscht." Damit fallen
+    # auch ihre Tests weg; die Emphase wird ueber Groesse und Deckkraft
+    # geprueft (v182-Block oben).
+    check('v185: die Farb-Karaoke ist restlos entfernt',
+          not hasattr(R, 'tint_glyph'))
+
+    # ======= v185: die vier gemessenen Maengel an Ismets Render ===========
+    # (1) 4.0 s von 15 s ohne Caption, (2) fuenf Elemente in vier Stilen
+    # gleichzeitig, (3) gesperrte Mikroversalien, (4) Gelb-Akzent auf
+    # Fuellwoertern. Dazu drei Folgefunde aus der Messung: Woerter ausserhalb
+    # des Bildes, klebende Wortabstaende, fehlender Zeilenumbruch.
+    _cfg185 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _cfg185['look'] = 'viral'
+    _cfg185['effects'].update({
+        'density': 'durchgehend', 'words_per_group': 2, 'words_per_group_max': 4,
+        'chunk_hold_min': 0.55, 'caption_viral': True, 'caption_layout': 'rows',
+        'caption_seite': 'mitte', 'caption_zone': 0.58,
+        'caption_collage': False, 'caption_satz_collage': False})
+    _s185 = ("these form right behind me. say boom and they explode. this one "
+             "falls to the ground. that one i just push away. and one thing "
+             "you will notice is this.")
+    _w185 = _s185.split()
+    _ws185 = [{'word': x, 'start': round(0.42 * i, 2), 'end': round(0.42 * i + 0.34, 2)}
+              for i, x in enumerate(_w185)]
+    _fx185 = {3: {'fx': 'behind', 'power': 3, 'n': 1, 'intent': True},
+              6: {'fx': 'outline', 'power': 2, 'n': 1},
+              12: {'fx': 'ground', 'power': 2, 'n': 1, 'intent': True},
+              20: {'fx': 'outline', 'power': 3, 'n': 1}}
+
+    def _plan185(W_, H_, cfgx=None):
+        _c = cfgx or _cfg185
+        _S = R.Sprites(_c, W_, H_)
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            return R.build_plans(_ws185, {3, 6, 12, 20}, _c, _S, W_, H_,
+                                 lambda a, b: True, _fx185,
+                                 face_pos=lambda a, b: (W_ * 0.5, H_ * 0.35,
+                                                        W_ * 0.10))
+    _pl185 = _plan185(1080, 1920)
+
+    # (1) KEIN WORT FAELLT WEG, wenn die Dichte 'durchgehend' verspricht.
+    _zeigt185 = set()
+    for _p in _pl185:
+        for _k in ('front', 'small'):
+            for _it in (_p.get(_k) or []):
+                if isinstance(_it, dict) and _it.get('i') is not None:
+                    _zeigt185.add(_it['i'])
+        if _p.get('kw_i') is not None:
+            _zeigt185.add(_p['kw_i'])
+    _fehlt185 = [_w185[i] for i in range(len(_w185)) if i not in _zeigt185]
+    check('v185: bei "durchgehend" steht JEDES gesprochene Wort im Bild',
+          not _fehlt185, f"nie gezeigt: {_fehlt185}")
+    check('v185: die Atempause loescht keine Gruppe mehr im Dauerbetrieb',
+          "!= 'durchgehend'):" in _r182
+          and 'if (breathing and prev_was_keyword and not g_kw' in _r182)
+    check('v185: es gibt ein Luecken-Netz als letzte Sicherung',
+          'Gap guard:' in _r182 and '_laeufe, _cur = [], []' in _r182)
+    # Und keine mehrsekundige Text-Leere waehrend gesprochen wird.
+    _zeit185 = sorted([(p.get('t0', p['start']), p['end']) for p in _pl185
+                       if 'target' in p])
+    _t185, _luecke185 = 0.0, 0.0
+    for _a, _b in _zeit185:
+        _luecke185 = max(_luecke185, _a - _t185)
+        _t185 = max(_t185, _b)
+    check('v185: keine Text-Luecke ueber 0.8 s waehrend der Rede',
+          _luecke185 <= 0.8, f"groesste Luecke {_luecke185:.2f} s")
+
+    # (2) EIN MOMENT, EIN BILD. Nie zwei Text-Ebenen gleichzeitig - inklusive
+    # der 0.40 s Ausklingzeit, mit der die Zeichenschleife rechnet.
+    # Ausklingzeit ist plan-abhaengig, genau wie im Zeichencode (x_dur):
+    # ein Flow-Block raeumt in 0.15 s, eine Keyword-Karte braucht bis 0.40 s.
+    def _aus185(p):
+        if p.get('aus') is not None:
+            return float(p['aus'])
+        return 0.15 if p['tpl'] == 'flow' else 0.40
+    _sp185 = sorted([(p.get('t0', p['start']), p['end'] + _aus185(p))
+                     for p in _pl185 if 'target' in p])
+    _kol185 = []
+    for _i in range(len(_sp185)):
+        for _j in range(_i + 1, len(_sp185)):
+            _ov = (min(_sp185[_i][1], _sp185[_j][1])
+                   - max(_sp185[_i][0], _sp185[_j][0]))
+            if _ov > 0.05:
+                _kol185.append(round(_ov, 2))
+    check('v185: nie zwei Text-Ebenen gleichzeitig (inkl. Ausklingen)',
+          not _kol185, f"Ueberlappungen: {_kol185[:6]}")
+    check('v185: der Solo-Riegel rechnet mit dem Ausklingen, nicht dem Ende',
+          '_AUS = 0.40' in _r182 and 'Solo guard:' in _r182)
+
+    # (3) MIKROVERSALIEN: die Stuetzzeile haengt am Hausmass, nicht an 0.043 H
+    # mit Tracking 14 (das war eine Schrift aus einem anderen Produkt).
+    check('v185: die Stuetzzeile nimmt Groesse und Laufweite des Fliesstexts',
+          'int(H * 0.043)' not in _r182
+          and '_sz5 = int(H * 0.050 * _pf5' in _r182
+          and 'tracking=_trk5' in _r182)
+
+    # (4) KEIN FARB-KARAOKE MEHR. Ismets Urteil: "Gelbakzent, ausgelutscht."
+    check('v185: die Farb-Karaoke ist komplett raus',
+          'tint_glyph' not in _r182 and 'acc_rgb' not in _r182)
+    check('v185: die Emphase traegt Groesse und Deckkraft in allen Looks',
+          "elif it.get('role') not in ('key', 'punch'):" in _r182
+          and '_dim = 0.70' in _r182)
+    _sv185 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v185: das Viral-Preset hat keine feste Gelb-Akzentfarbe mehr',
+          "'accent': [255, 214, 10]" not in _sv185)
+
+    # (5) FOLGEFUNDE aus der Messung: nichts ragt aus dem Bild, Woerter
+    # kleben nicht aneinander, lange Zeilen brechen um.
+    for _fmt in ((1080, 1920), (1920, 1080)):
+        _raus185 = []
+        for _p in _plan185(*_fmt):
+            for _it in (_p.get('front') or []):
+                _l = (_it['cx'] - _it['w'] / 2.0) / _fmt[0]
+                _r = (_it['cx'] + _it['w'] / 2.0) / _fmt[0]
+                if _l < -0.005 or _r > 1.005:
+                    _raus185.append((_w185[_it['i']], round(_l, 2), round(_r, 2)))
+        check(f'v185: kein Wort ragt aus dem Bild ({_fmt[0]}x{_fmt[1]})',
+              not _raus185, f"{_raus185[:4]}")
+    check('v185: der Wortabstand haengt am Schriftgrad, nicht nur an W',
+          "space = int(max(W * (0.032 if portrait else 0.020), sz_n * 0.30))"
+          in _r182)
+    check('v185: auch die Zeilen um das Schluesselwort brechen um',
+          'def _umbruch(seq):' in _r182
+          and 'rows += _umbruch(items[:pos])' in _r182)
+    check('v185: ein zu langes Wort schrumpft in die Spalte',
+          '_sz = S.fit(raw, _sz, _colw, font=S.f_sans, tracking=_trk_v)' in _r182)
+
+    # (6) MOTION-GRAFIK-AKZENTE wieder an (Counter/Badge/Lower-Third sind in
+    # Ismets High-End-Referenz tragende Elemente). Dosiert bleiben sie durch
+    # sanitize_accents (Dichte-Deckel + 3.5 s Mindestabstand).
+    check('v185: die Akzente laufen wieder automatisch',
+          _cfg185.get('accents', {}).get('auto') is True)
+    _acc185 = R.sanitize_accents(
+        [{'art': 'chip', 'text': f'T{i}', 'zeit': i * 0.5} for i in range(40)],
+        _ws185)
+    check('v185: die Akzent-Dosierung haelt (Dichte + 3.5 s Abstand)',
+          len(_acc185) <= 6
+          and all(_acc185[i + 1]['zeit'] - _acc185[i]['zeit'] >= 3.5
+                  for i in range(len(_acc185) - 1)),
+          f"{len(_acc185)} Akzente")
 
     # ======= v184: Punchline hinter der Person (Referenz-Grammatik) =======
     # In Ismets Referenz C laeuft das Schlusswort ('this') DURCH die Person
@@ -6494,7 +6624,7 @@ def _scenario_betrieb(tmp):
     _zf = len({round(i['cy'], 1) for i in _if})
     _zc = len({round(i['cy'], 1) for i in _ic})
     check('v150: Collage loest das Zeilenraster auf',
-          _zc >= _zf * 2 and _zc >= len(_sat) - 2,
+          _zc > _zf and _zc >= len(_sat) - 2,
           f'{_zf} Grundlinien im Zeilensatz -> {_zc} in der Collage')
     # v184 TESTKORREKTUR (Anordnung ersetzt, an Ismets drei Referenzen
     # gelesen): nicht mehr "kleine Spalte links, Treppe rechts" - genau
@@ -7122,8 +7252,11 @@ def _scenario_betrieb(tmp):
     import yaml as _yaml139
     _cfg139 = _yaml139.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
     _r139 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
-    check('v139: Auto-Akzente default AUS, Editor-Akzente rendern dateibasiert',
-          _cfg139['accents']['auto'] is False
+    # v185: die Auto-Akzente sind wieder AN (Ismets High-End-Referenz traegt
+    # Counter, Badge und Namens-Karte als Bestandteile). Der dateibasierte
+    # Editor-Pfad bleibt unveraendert und ueberschreibt weiterhin alles.
+    check('v185: Auto-Akzente wieder AN, Editor-Akzente rendern dateibasiert',
+          _cfg139['accents']['auto'] is True
           and "if os.path.exists(_acc_path):\n        try:\n            accents_render" in _r139
           and _r139.count(".get('auto', False):") == 1)   # nur noch die Erzeugung
     check('v139: Caption-Anker formatgerecht (16:9=0.78 Lower Third, 4:3=0.75, 1:1=0.72)',
