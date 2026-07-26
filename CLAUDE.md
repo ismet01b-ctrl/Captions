@@ -262,7 +262,7 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
-### Viral-Look (v183) — Markt-Standard als Preset, Default fuer 9:16
+### Viral-Look (v183/v183a) — Option, NICHT das Gesicht des Produkts
 Look 'viral' (Server-Preset + Engine-Schalter `effects.caption_viral`):
 alles versal + extrabold (Montserrat XB), Schluesselwort 2.15x / Fliesstext
 2.90x Hausmass, enge 2-4-Wort-Bloecke mittig-unten (caption_zone 0.58),
@@ -276,10 +276,16 @@ vergangene Woerter dimmen NICHT, Pop 10 %. Kein Schreibschrift-Akzent.
   dem Bild (gemessen 0.999 W). Wer am Deckel dreht, muss den Zoom mitdenken.
 - **'mitte'-Zeilen und Zeilen breiter als der Satzspiegel werden ZENTRIERT**
   (alle Looks) - buendig bei x0 war der halbe Anschnitt.
-- Hochformat-Upload waehlt in der UI Viral vor; `State.lookChosen` schuetzt
-  jede bewusste Wahl. Editorial & Co. bleiben unveraendert waehlbar.
 - Viral-Groessen sind MULTIPLIKATOREN auf die Hausmasse - eine gelernte
   Referenz (caption_scale) skaliert weiter relativ, v151-Kaskade intakt.
+- **v183a: KEIN Auto-Default.** Ismets Befund am Ergebnis: Versal-
+  Montserrat + gelbes Karaoke-Wort ist das CapCut/Opus-Standard-Template
+  ("KEINE STANDARD MUELL", v181-Briefing). "Marktniveau" heisst die
+  GROESSEN und die Handwerks-Qualitaet des Markts, NICHT sein
+  meistkopierter Stil. Der Look bleibt waehlbare Option (wer das Template
+  will, kriegt es), steht aber nicht vorn und wird nie vorgewaehlt. Die
+  Produkt-Identitaet ist Editorial - was "high level" konkret heisst,
+  entscheidet Ismet (Referenzen messen statt raten).
 
 ### Lesbarkeit + aktives Wort (v181/v182)
 **Kontur ist Pflicht, nicht Deko.** Ein versetzter Schlagschatten trägt auf

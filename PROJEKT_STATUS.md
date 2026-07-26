@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v183a VIRAL-LOOK ZURUECKGESTUFT (Ismets Befund am Ergebnis).**
+  "Jetzt hast du einfach das Standard-Template von CapCut und Opus
+  kopiert." Stimmt: Versal-Montserrat + gelbes Karaoke-Wort IST das
+  meistkopierte Caption-Design - genau das "KEINE STANDARD MUELL" aus dem
+  v181-Briefing, und ich habe es trotzdem zum Default gemacht. EHRLICHE
+  URSACHE: "Marktniveau" wurde mit "Markt-Template" verwechselt. Die
+  GROESSEN-Messung (0.10-0.15 H) war richtig, die STIL-Kopie war falsch.
+  Konsequenz: der Auto-Default fuer 9:16 ist RAUS (kein Kunde landet
+  ungefragt im Template), der Look steht nicht mehr an erster Stelle im
+  Katalog. Er bleibt als waehlbare Option - wer das Template will, kriegt
+  es. Die beiden globalen v183-Fixes (zoom-sicherer Punch-Deckel,
+  Mitte-Zentrierung) bleiben - das waren echte Fehler, kein Stil.
+  OFFEN: was "high level" fuer DouchkoVE heisst, entscheidet Ismet
+  (Referenz-Clips angefragt statt drittes Raten).
 - **v183 VIRAL-LOOK (Markt-Standard als Preset, Default fuer 9:16).**
   Ismets Urteil: "Das Produkt selbst ist nicht mal ansatzweise so gut. Es
   ist keine High-Level-Typografie/Captions." Erst gemessen: sein Render

@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v183-viral'
+DVE_BUILD = 'v183a-option'
 
 
 @app.middleware('http')
@@ -2115,8 +2115,8 @@ LOCK = threading.Lock()
 
 # Presets als Startpunkt. Der Nutzer kann alles individuell nachjustieren.
 LOOKS = {
-    'viral':     {'name': 'Viral', 'desc': 'Big bold caps, karaoke accent. The short-form standard.'},
     'tiktok':    {'name': 'TikTok', 'desc': 'Word by word, bold, loud.'},
+    'viral':     {'name': 'Viral', 'desc': 'Big bold caps, karaoke accent.'},
     'creator':   {'name': 'Creator', 'desc': 'Talking-head & business.'},
     'editorial': {'name': 'Editorial', 'desc': 'Magazine serif, calm, high-end.'},
     'poster':    {'name': 'Poster', 'desc': 'Big condensed caps, hard statements.'},

@@ -2437,7 +2437,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 'use strict';
 const State = {
   code: null, codeName: '', codeRest: null, codeLimit: null,
-  file: null, look: 'creator', lookChosen: false,   // v183: Auto-Default 9:16 -> viral
+  file: null, look: 'creator', lookChosen: false,
   cfg: null, cfgBase: null,
   srcShort: 0, srcDur: 0,   // v158: Quell-Kurzkante + Dauer fuer den Preis
   jid: null, moments: null, history: null,
@@ -2736,7 +2736,7 @@ async function buildLooks() {
       el.querySelectorAll('.look-card').forEach(x => x.classList.remove('on'));
       c.classList.add('on');
       State.look = id;
-      State.lookChosen = true;      // v183: bewusste Wahl, kein Auto-Default mehr
+      State.lookChosen = true;
       c.style.opacity = '0.6';
       await loadDefaults();
       rebuildAllWidgets();
@@ -4462,19 +4462,9 @@ function setFile(f) {
       // 1 credit, obwohl der Server das Doppelte abbucht (Ismets Befund).
       State.srcShort = Math.min(v.videoWidth || 0, v.videoHeight || 0);
       State.srcDur = dur;
-      // v183: Hochformat-Upload -> Viral-Look vorwaehlen (der Markt-Standard
-      // fuer 9:16). NUR solange der Nutzer noch keinen Look angeklickt hat -
-      // eine bewusste Wahl wird nie ueberschrieben. Querformat bleibt Creator.
-      if ((v.videoHeight || 0) > (v.videoWidth || 0)
-          && !State.lookChosen && State.look === 'creator') {
-        State.look = 'viral';
-        loadDefaults().then(() => {
-          rebuildAllWidgets();
-          document.querySelectorAll('.look-card').forEach(x =>
-            x.classList.toggle('on', x.dataset.look === 'viral'));
-          toast('Portrait video: "Viral" look preselected. Change it anytime in step 2.', 'ok', 3500);
-        }).catch(() => {});
-      }
+      // v183a: der Viral-Look wird NICHT mehr automatisch vorgewaehlt
+      // (Ismets Befund: das ist das CapCut/Opus-Standard-Template - es darf
+      // als Option existieren, aber nicht das Gesicht des Produkts sein).
       updateRenderCost();
       // Warnung wenn Guthaben nicht reicht
       if (State.balanceSec != null && dur > State.balanceSec) {

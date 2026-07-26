@@ -5652,9 +5652,13 @@ def _scenario_betrieb(tmp):
     _ui183 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     check('v183: die UI kennt den Viral-Look (Label + Karte)',
           "viral: 'Viral" in _ui183 and 'data-look=viral' in _ui183)
-    check('v183: Hochformat-Upload waehlt Viral vor, bewusste Wahl gewinnt',
-          'State.lookChosen' in _ui183
-          and "State.look = 'viral'" in _ui183)
+    # v183a: Ismets Befund am Ergebnis - "das ist das Standard-Template von
+    # CapCut und Opus". Der Look bleibt als OPTION, aber er ist NICHT mehr
+    # der Auto-Default fuer 9:16 und steht nicht mehr an erster Stelle.
+    check('v183a: KEIN Auto-Default mehr auf den Viral-Look',
+          "State.look = 'viral'" not in _ui183)
+    check('v183a: der Katalog fuehrt nicht mit dem Standard-Template',
+          _sv183.find("'tiktok':") < _sv183.find("'viral':"))
     check('v183: der Zeilensatz-Riegel sitzt an der immer laufenden Stelle',
           "if cfg['effects'].get('caption_viral'):" in _r182
           and "_lm = 'rows'" in _r182)
