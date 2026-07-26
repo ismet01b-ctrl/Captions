@@ -5441,6 +5441,41 @@ def _scenario_betrieb(tmp):
           'hand_ziele(args.input, _ht, W, H)'
           in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
 
+    # ======= v176: der Hand-Kontakt erreicht auch Flow-Chunks =============
+    # Am ECHTEN Render gemessen (Job 8ff7812b): die Hand kreuzt x = 0.58 ->
+    # 0.19 W, der Text steht bei 0.47 W - der Kontakt WAERE da gewesen.
+    # Er kam nicht, weil das ganze Hand-System an 'kw_i' haengt: need_hands
+    # schaltete den Tracker in Fuellwort-Fenstern gar nicht ein, und
+    # hand_contacts uebersprang Plaene ohne kw_i. Ismets Schub-Satz
+    # ("and i just can push them away") ist genau so ein Chunk.
+    _arr176 = np.zeros((60, 120, 4), np.float32)
+    def _flow176():
+        return {'tpl': 'flow', 'start': 7.0, 'end': 9.0,
+                'front': [{'i': 0, 'arr': _arr176, 'cx': 560.0, 'cy': 500.0},
+                          {'i': 1, 'arr': _arr176, 'cx': 700.0, 'cy': 500.0}]}
+    _p176 = _flow176()
+    check('v176: eine Hand, die den Flow-Block kreuzt, loest Kontakt aus',
+          R.hand_contacts([_p176], [(640.0, 500.0, -1300.0, 0.0)],
+                          8.0, 1280, 720) == 1
+          and '_hand_hit' in _p176)
+    check('v176: der Stoss bewegt den Flow-Block wirklich',
+          abs(R.hand_spring(_p176, 8.0)[0]) >= 0.0
+          and abs(R.hand_spring(_p176, 8.05)[0]) > 5.0)
+    # Weit weg und langsam bleibt weiterhin folgenlos.
+    check('v176: eine ferne, langsame Hand laesst den Flow-Block in Ruhe',
+          R.hand_contacts([_flow176()], [(200.0, 200.0, 40.0, 0.0)],
+                          8.0, 1280, 720) == 0)
+    # Der Keyword-Pfad (v101j) bleibt unveraendert.
+    check('v176: der Keyword-Kontakt funktioniert weiter',
+          R.hand_contacts([{'kw_i': 1, 'arr': np.zeros((100, 400, 4), np.float32),
+                            'cx': 300.0, 'cy': 500.0, 'start': 1.0, 'end': 2.0}],
+                          [(300.0, 500.0, 200.0, 0.0)], 1.5, 1280, 720) == 1)
+    _r176 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v176: die Hand-Erkennung ist auch in Flow-Fenstern scharf',
+          "if 'kw_i' in p or p.get('front'):" in _r176)
+    check('v176: die Feder wirkt auf den Flow-Block',
+          "fdx += p.get('_hand_dx', 0.0)" in _r176)
+
     # ======= v168: die Seite ist eine Entscheidung, kein Wuerfelwurf ======
     # Ismets Befund, dritter Anlauf: "die captions sind immer auf der linken
     # seite, egal was passiert". Am eigenen Render nachgemessen, ZWEI

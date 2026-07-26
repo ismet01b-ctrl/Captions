@@ -133,6 +133,10 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
   die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
 
 ### Hand-Regie (v174) — "der Text weicht der Hand, die ihn schubst"
+**Das Hand-System darf NIE an `kw_i` hängen (v176).** `need_hands`,
+`hand_contacts` und die Feder gelten auch für Flow-Chunks — Schub-Sätze
+sind fast immer Füllwort-Chunks ohne Keyword. Dreimal derselbe Fehlertyp
+(v159/v170/v176): ein Riegel am falschen Gate.
 `hand_ziele()` zieht die Caption bei Hand-Aktions-Wörtern (push/shove/
 wegschieben/wischen, `_HAND_AKTION`) in Reichweite der Hand; `hand_contacts`
 trifft zusätzlich per **Näherung** (0.075 W), wenn die Hand schnell
@@ -418,7 +422,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1064/1064 grün (Stand v174)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1070/1070 grün (Stand v176)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

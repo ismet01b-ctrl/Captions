@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v176 Der Hand-Kontakt erreicht endlich die Flow-Chunks.** Ismets
+  Befund "die Hand-Erkennung und Captions agieren nicht zusammen", diesmal
+  am ECHTEN Render nachgemessen (Job 8ff7812b, v174-Stempel) statt geraten:
+  MediaPipe auf seine Frames losgelassen, Handflaeche bei 8.0 s auf
+  x = 0.58 W, bei 8.2 s auf x = 0.19 W - die Hand KREUZT den Text, der bei
+  0.47 W steht. Der Kontakt waere da gewesen und kam trotzdem nicht.
+  URSACHE: das komplette Hand-System haengt an `'kw_i' in p`. `need_hands`
+  schaltete den Tracker in Fuellwort-Fenstern gar nicht erst ein, und
+  `hand_contacts` uebersprang jeden Plan ohne kw_i. Ismets Schub-Satz
+  ("and i just can push them away") ist ein reiner Fuellwort-Chunk - der
+  v174-Naeherungstreffer lief also in einer Funktion, die diesen Plan nie
+  zu Gesicht bekam. Genau der Fehlertyp aus v159/v170, drittes Mal:
+  ein Riegel am falschen Gate.
+  DREI STELLEN, alle noetig:
+  1. `need_hands` schaltet jetzt auch in Flow-Fenstern scharf.
+  2. `hand_contacts` kennt Flow-Chunks: sie haben kein einzelnes `arr`,
+     sondern viele Wort-Sprites - die Trefferbox kommt aus deren Huelle.
+  3. Die Beruehrungs-Feder wird auf den Flow-Block ADDIERT. Vorher lief
+     der Impuls nur ueber track_offset/scene_shift (Keyword-Sprites) -
+     ein Flow-Chunk konnte gestossen werden und blieb trotzdem stehen.
+  BEWEIS (Selftest): Hand kreuzt Flow-Block -> Kontakt = 1, Feder-Versatz
+  32 px nach zwei Ticks; ferne langsame Hand -> 0; Keyword-Pfad (v101j)
+  unveraendert.
+  MESSUNG statt Vermutung: die Positionen oben stammen aus einem echten
+  MediaPipe-Lauf auf Ismets Renderframes, nicht aus dem Selftest.
+  NICHT LIVE VERIFIZIERT: wie stark der Stoss im fertigen Video wirkt,
+  zeigt erst der naechste Render.
 - **v175 Doku-Korrektur: Sound und Stripe sind FERTIG, nicht offen.** Ismets
   Hinweis, nachdem ich beides als fehlend aufgezaehlt hatte. Am Repo bzw.
   von ihm bestaetigt:

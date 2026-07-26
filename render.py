@@ -3075,16 +3075,32 @@ def hand_contacts(plans, tips, t, W, H):
     Rueckgabe: Anzahl neuer Kontakte."""
     n = 0
     for p in plans:
-        if 'kw_i' not in p or p.get('arr') is None:
-            continue
-        cx = p.get('cx')
-        cy = p.get('cy', p.get('by'))
-        if cx is None or cy is None:
-            continue
         if not (p['start'] - 0.05 <= t <= p['end'] + 0.3):
             continue
-        w = p['arr'].shape[1] * 0.55 + 20
-        h = p['arr'].shape[0] * 0.55 + 20
+        if p.get('arr') is not None and 'kw_i' in p:
+            cx = p.get('cx')
+            cy = p.get('cy', p.get('by'))
+            if cx is None or cy is None:
+                continue
+            w = p['arr'].shape[1] * 0.55 + 20
+            h = p['arr'].shape[0] * 0.55 + 20
+        elif p.get('front'):
+            # v176: Flow-Chunk. Er hat kein einzelnes 'arr', sondern viele
+            # Wort-Sprites - die Box kommt aus deren Huelle. Ohne diesen
+            # Zweig konnte ein Fuellwort-Block nie beruehrt werden, und
+            # genau dort sass Ismets "push them away".
+            _its = [it for it in p['front'] if it.get('arr') is not None]
+            if not _its:
+                continue
+            _x0 = min(it['cx'] - it['arr'].shape[1] / 2.0 for it in _its)
+            _x1 = max(it['cx'] + it['arr'].shape[1] / 2.0 for it in _its)
+            _y0 = min(it['cy'] - it['arr'].shape[0] / 2.0 for it in _its)
+            _y1 = max(it['cy'] + it['arr'].shape[0] / 2.0 for it in _its)
+            cx, cy = (_x0 + _x1) / 2.0, (_y0 + _y1) / 2.0
+            w = (_x1 - _x0) * 0.55 + 20
+            h = (_y1 - _y0) * 0.55 + 20
+        else:
+            continue
         # v174 REICHWEITE: eine schnelle Hand, die auf den Text ZUFLIEGT,
         # trifft ihn auch aus kurzer Distanz. Nur exakte Pixel-Beruehrung
         # zu verlangen hiess: die Platzierungs-Regie legt den Text von der
@@ -10019,6 +10035,12 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 lim = float(p.get('fol_lim', W * 0.045))
                 fdx = max(-lim, min(fp[0] * 0.6, lim))
                 fdy = max(-lim * 0.5, min(fp[1] * 0.5, lim * 0.5))
+            # v176: Beruehrungs-Feder auf den Flow-Block. Der Impuls wurde
+            # bisher NUR auf Keyword-Sprites addiert (track_offset /
+            # scene_shift) - ein Flow-Chunk konnte gestossen werden und
+            # blieb trotzdem stehen.
+            fdx += p.get('_hand_dx', 0.0)
+            fdy += p.get('_hand_dy', 0.0)
             for it in p['front']:
                 wd = words[it['i']]
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf
@@ -11434,7 +11456,15 @@ def main():
     hand_tracker = None
     if cfg['effects'].get('hand_contact', True):
         for p in plans:
-            if 'kw_i' in p:
+            # v176: FLOW-CHUNKS ZAEHLEN MIT. Bis v174 lief die
+            # Hand-Erkennung nur in Keyword-Fenstern - Ismets Schub-Satz
+            # ("and i just can push them away") ist aber ein reiner
+            # Fuellwort-Chunk ohne kw_i. Dort war der Tracker gar nicht an,
+            # und der v174-Naeherungstreffer lief in einer Funktion, die
+            # diesen Plan nie zu sehen bekam. Am echten Render gemessen:
+            # die Hand kreuzt x = 0.58 -> 0.19 W, der Text steht bei
+            # 0.47 W - der Kontakt WAERE da gewesen.
+            if 'kw_i' in p or p.get('front'):
                 a = max(int((p['start'] - 0.2) * fps), 0)
                 b = min(int((p['end'] + 0.4) * fps) + 1, total_est)
                 need_hands[a:b] = True
