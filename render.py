@@ -11708,7 +11708,16 @@ def main():
                     '-map', '0:v', '-map', '[aout]']
         else:
             mux += ['-map', '0:v', '-map', '1:a:0?']
-        mux += ['-c:v', 'copy'] + acodec + ['-shortest', out_path]
+        mux += ['-c:v', 'copy'] + acodec + ['-shortest']
+        # v171 HERKUNFT IN DIE DATEI. Vier byte-identische "neue" Renders
+        # in Folge, und niemand konnte sehen, WELCHER Job eine Datei erzeugt
+        # hat - der Download hiess immer gleich. Der Job-Stempel (Build +
+        # Job-ID, vom Server per Env gesetzt) wandert in die MP4-Metadaten:
+        # ffprobe zeigt sofort, aus welchem Render eine Datei stammt.
+        _tag = os.environ.get('DVE_JOB_TAG', '').strip()
+        if _tag:
+            mux += ['-metadata', f'comment={_tag[:120]}']
+        mux += [out_path]
         print("Building the audio track ...")
         r_mux = subprocess.run(mux, capture_output=True, text=True)
         if r_mux.returncode != 0 or not os.path.exists(out_path):

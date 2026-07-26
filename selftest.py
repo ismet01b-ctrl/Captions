@@ -5273,6 +5273,21 @@ def _scenario_betrieb(tmp):
         check('v169: kleine Spalte sitzt NEBEN der Treppe, kein Loch',
               False, 'Collage ohne kleine/grosse Woerter')
 
+    # ======= v171: Herkunft in Datei und Dateinamen =======================
+    # Vier byte-identische "neue" Renders in Folge - niemand konnte sehen,
+    # welcher Job eine Datei erzeugt hat. Jetzt: Job-Stempel in den
+    # MP4-Metadaten (Engine, via Env) + Job-ID im Download-Namen (Server).
+    _srv171 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _r171 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v171: der Server stempelt Build + Job-ID in die Render-Umgebung',
+          "env['DVE_JOB_TAG'] = f'DouchkoVE {DVE_BUILD} job {jid}'" in _srv171)
+    check('v171: die Engine schreibt den Stempel in die MP4-Metadaten',
+          "os.environ.get('DVE_JOB_TAG'" in _r171
+          and "f'comment={_tag[:120]}'" in _r171)
+    check('v171: der Download-Name traegt die Job-ID',
+          "filename=f'DouchkoVE_{jid[:8]}.mp4'" in _srv171
+          and "filename='DouchkoVE_Captions.mp4'" not in _srv171)
+
     # ======= v170: die v169-Fixe griffen im falschen Pfad =================
     # Am ZWEITEN echten Render belegt: Spalte gedockt (v169/3 wirkt), aber
     # "is" und "EXPLODE" unveraendert. Ursache 1: Ismets Job lief mit

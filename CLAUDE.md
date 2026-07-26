@@ -404,7 +404,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1047/1047 grün (Stand v170)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1050/1050 grün (Stand v171)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

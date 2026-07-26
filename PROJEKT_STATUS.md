@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v171 Herkunft in Datei und Dateinamen.** Vier byte-identische "neue"
+  Renders in Folge (MD5 gleich) - und weder Ismet noch der Support konnten
+  sehen, WELCHER Job eine heruntergeladene Datei erzeugt hat: jeder
+  Download hiess "DouchkoVE_Captions.mp4", der Browser zaehlte nur _1/_2
+  hoch. Jetzt:
+  1. Der Server stempelt Build + Job-ID in die Render-Umgebung
+     (DVE_JOB_TAG), die Engine schreibt sie in die MP4-Metadaten
+     (comment-Feld). `ffprobe` zeigt sofort, aus welchem Render und
+     welchem Build eine Datei stammt - auch bei Dateien, die ein Kunde
+     per Mail schickt.
+  2. Der Download-Name traegt die Job-ID: DouchkoVE_<jobid>.mp4. Zwei
+     Downloads desselben Jobs sind sofort als solche erkennbar.
+  Desktop (gui.py) unveraendert: ohne DVE_JOB_TAG kein Metadaten-Feld.
+  Offen bleibt die eigentliche Frage, WARUM Ismets Downloads viermal
+  dieselbe Datei waren (Library-Doppel-Download, nie gestarteter Job oder
+  haengendes Deploy) - genau das macht dieser Stempel ab jetzt sichtbar.
 - **v170 Die v169-Fixe griffen im falschen Pfad** (am zweiten echten Render
   belegt: Collage-Spalte gedockt, aber "is" und "EXPLODE" unveraendert).
   EHRLICHE URSACHEN, beide reproduziert:

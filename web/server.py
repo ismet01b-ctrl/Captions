@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v170-pfade'
+DVE_BUILD = 'v171-stempel'
 
 
 @app.middleware('http')
@@ -2711,6 +2711,11 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
     _urp, _rsrc = _refs_for_job(j.get('user_id'))
     env['DVE_REFS_FILE'] = _urp
     env['DVE_REFS_SOURCE'] = _rsrc
+    # v171: Herkunfts-Stempel in die Datei (Build + Job-ID in den
+    # MP4-Metadaten). Vier byte-identische "neue" Renders in Folge, und
+    # weder Ismet noch der Support konnten sehen, welcher Job eine Datei
+    # erzeugt hat.
+    env['DVE_JOB_TAG'] = f'DouchkoVE {DVE_BUILD} job {jid}'
 
     # v88b: Transkript aus dem Cache holen, falls dasselbe Video (gleicher
     # Nutzer, gleiche Sprache) schon einmal transkribiert wurde. render.py
@@ -5265,8 +5270,12 @@ def video(jid: str, request: Request, download: int = 0):
         raise HTTPException(404, 'Not ready yet.')
     # download=1 erzwingt den Speichern-Dialog; sonst inline (Library-Player).
     if download:
+        # v171: die Job-ID gehoert in den Dateinamen. Vorher hiess JEDER
+        # Download gleich - der Browser zaehlte nur _1/_2 hoch, und niemand
+        # konnte unterscheiden, ob eine Datei aus einem neuen Render stammt
+        # oder derselbe alte Download ist.
         return FileResponse(p, media_type='video/mp4',
-                            filename='DouchkoVE_Captions.mp4')
+                            filename=f'DouchkoVE_{jid[:8]}.mp4')
     # v142: der Library-Player spult und laedt Bereiche nach. 'private' - das
     # Video gehoert einem Konto und darf in keinem geteilten Cache landen.
     # Kurze Frist, weil ein Kauf das Wasserzeichen entfernt und dieselbe URL
