@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v175 Doku-Korrektur: Sound und Stripe sind FERTIG, nicht offen.** Ismets
+  Hinweis, nachdem ich beides als fehlend aufgezaehlt hatte. Am Repo bzw.
+  von ihm bestaetigt:
+  - `sfx/pack` ist VOLLSTAENDIG: 14/14 Slots belegt (impact, whoosh,
+    whoosh_soft, riser, tick, counter, boom, crack, fall, rise, turn,
+    press, vanish, slam) plus Manifest `pack.json`, alle Eintraege mit
+    Ismets eigener Lizenz, alles git-getrackt. Gegenprobe:
+    `python -c "import sfx_pack; print(sfx_pack.pack_status())"` ->
+    belegt 14, gesamt 14. Videos sind NICHT stumm.
+  - **Stripe laeuft im LIVE-Modus.**
+  Beide Punkte standen noch in CLAUDE.md unter "Offene echte Punkte" und im
+  Geschaefts-Abschnitt - daher habe ich sie wiederholt als fehlend genannt,
+  statt nachzusehen. Beide Stellen sind jetzt korrigiert und ausdruecklich
+  als ERLEDIGT markiert, damit kein neuer Chat denselben Fehler macht.
+  LEHRE (dieselbe wie beim Standbild-Fehlurteil in v174): erst MESSEN, dann
+  behaupten - auch bei der eigenen Doku. Eine Zeile in CLAUDE.md ist kein
+  Beweis fuer den heutigen Stand.
 - **v174 Hand und Captions agieren zusammen** (Ismets Befund am
   v173-Render: Schub-Geste bei "push them away", der Text stand am anderen
   Bildrand und reagierte nicht). Zwei Teile:

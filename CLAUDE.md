@@ -414,8 +414,8 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - Betrieb: `/api/health` (für externen Uptime-Pinger), Admin-Störungsmails
   (1/h/Schlüssel), Watchdog killt hängende Renders (45min) + erstattet,
   Offsite-DB-Backup per Mail, Warm-Preview-Daemon (~0.5s statt 2s).
-- OFFEN (Ismet): Stripe Live-Modus scharfstellen, Demo-Video in den Hero,
-  UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
+- OFFEN (Ismet): Demo-Video in den Hero, UptimeRobot auf /api/health,
+  Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
 Gesamt **1064/1064 grün (Stand v174)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
@@ -450,7 +450,8 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 
 ## Wichtige Prinzipien (aus der Historie)
 - **Sound:** nur echte CC0-Library-Sounds (Freesound), kein Synthetik-Fallback.
-  Stille ist besser als billiger Ton. Ohne `sfx/pack` laufen Videos STUMM.
+  Stille ist besser als billiger Ton. Ohne `sfx/pack` liefe alles STUMM —
+  der Pack IST da (14/14 Slots, v175 geprüft), also klingt es.
   SFX sitzen auf Wort-Onsets, nicht auf Anim-Phasen.
 - **B-Roll:** in ALLEN Systemen ausschließen (auch Kamera-Impulse) — AUSSER
   explizit angesagte (`intent`) Szenen-Texte, die dort hingehören.
@@ -462,8 +463,15 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
   im Hero), keine Konkurrenz-Namen, kein Datenschutz-Block (gehört in /privacy).
 
 ## Offene echte Punkte
-- Sound-Pack: Ismet wählt/schickt CC0-Zip → ohne Pack stumm.
 - Windows-Test mit echtem Material + Maskenqualität 'hoch' + MOV-Import Premiere.
-- Stripe Live-Modus (Keys + Webhook, zum Schluss).
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
   Heuristik/CPU/synthetisch getestet).
+
+**ERLEDIGT, nicht mehr als offen behandeln (v175, am Repo/Live geprüft):**
+- **Sound-Pack liegt vollständig im Repo**: `sfx/pack` 14/14 Slots belegt
+  (impact, whoosh, whoosh_soft, riser, tick, counter, boom, crack, fall,
+  rise, turn, press, vanish, slam), Manifest `pack.json`, alle mit Ismets
+  eigener Lizenz. Prüfen mit `python -c "import sfx_pack; print(sfx_pack.pack_status())"`.
+  Videos sind NICHT stumm.
+- **Stripe ist im Live-Modus** (Ismets Bestätigung). Keine Live-Umstellung
+  mehr planen oder als offenen Punkt nennen.
