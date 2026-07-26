@@ -2072,7 +2072,7 @@ class Sprites:
 
     def text(self, txt, size, color, tracking=4, glow=False, outline=False,
              per_letter=False, font=None, extrude=False, flat_light=False,
-             wght=None):
+             wght=None, kontur=None):
         """Rendert in doppelter Aufloesung und rechnet mit INTER_AREA herunter (Supersampling).
         wght setzt - falls ein variabler Schnitt vorliegt - die echte Gewichts-Achse."""
         font = font or self.f_serif
@@ -2132,7 +2132,13 @@ class Sprites:
         # entspricht bei Hausmass-Captions rund 2-4 px im fertigen Bild - der
         # Bereich, den die Praxis als lesbar UND unaufdringlich fuehrt.
         # Ueber effects.caption_kontur abschaltbar (0) oder skalierbar.
-        _kf = (self.cfg.get('effects', {}) or {}).get('caption_kontur', 1.0)
+        # v189: kontur=False schaltet den Saum fuer diesen Aufruf ab. Grosse
+        # Woerter tragen ihren Kontrast ueber die Flaeche; ein Umriss macht
+        # sie plakativ statt gesetzt (Ismets Ansage: "bei den grossen
+        # Woertern den Umriss weg"). Fliesstext behaelt ihn - dort ist er
+        # der Lesbarkeits-Garant aus v181.
+        _kf = (0.0 if kontur is False
+               else (self.cfg.get('effects', {}) or {}).get('caption_kontur', 1.0))
         try:
             _kf = float(_kf)
         except (TypeError, ValueError):
@@ -6730,6 +6736,10 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # Hausgroesse, kein Ersatz: eine gelernte Referenz (caption_scale)
     # skaliert weiter relativ dazu, die v151-Kaskade bleibt intakt.
     _viral = bool(_ef.get('caption_viral'))
+    # v189: Umriss am Schluesselwort/Knall. Standard aus - grosse Woerter
+    # brauchen ihn nicht und wirken damit plakativ. Ueber
+    # effects.caption_kontur_key wieder zuschaltbar.
+    _kontur_key = None if _ef.get('caption_kontur_key') else False
     # v153: eine Stufe kleiner (Ismets Befund am fertigen Video). 0.098 ->
     # 0.088 em ergibt bei cap/em 0.70 eine Versalhoehe von 0.062 H statt
     # 0.069 H. sz_n geht ueber die Hierarchie automatisch mit - wuerde nur
@@ -6915,8 +6925,12 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
                 # Zeilenumbruch des Knalls. Beides waere schlechter als ein
                 # etwas kleineres Wort. Kurze Schlussworte bekommen ihren
                 # vollen Knall, lange nicht - das ist Physik, kein Bug.
+            # v189: das grosse Wort ohne Umriss (Ismets Ansage). Der Glow
+            # und die Flaeche tragen dort den Kontrast; der Saum liess es
+            # plakativ wirken. Der Fliesstext behaelt ihn.
             arr, tw, lets = S.text(up, sz, S.white, font=S.f_sans_b,
-                                   glow=_glow_k, per_letter=True, tracking=2)
+                                   glow=_glow_k, per_letter=True, tracking=2,
+                                   kontur=_kontur_key)
             items.append({'i': i, 'arr': arr, 'w': tw,
                           'role': 'punch' if punch else 'key', 'sz': sz,
                           'bleed': bool(_bleed and tw > W * 0.90),

@@ -2855,7 +2855,17 @@ async function buildFontGrid() {
     const activate = () => {
       el.querySelectorAll('.fonttile').forEach(x => x.classList.remove('on'));
       t.classList.add('on');
+      // v189: die Auswahl gilt fuer den GANZEN Satz. Vorher wurde nur
+      // fonts.display gesetzt - das Schluesselwort nahm die gewaehlte
+      // Schrift, der Fliesstext blieb beim Preset-Font. Der Kunde waehlte
+      // eine Schrift und sah zwei. Die Referenzen benutzen EINE Familie in
+      // zwei Groessen, das passt auch inhaltlich zusammen.
       setDeep(State.cfg, 'fonts.display', f.file);
+      setDeep(State.cfg, 'fonts.support', f.file);
+      setDeep(State.cfg, 'fonts.italic', f.file);
+      setDeep(State.cfg, 'fonts.strong', f.file);
+      // Die Schreibschrift ist ein eigener Schnitt (Akzentwort) und bleibt,
+      // sofern die Kachel keine eigene mitbringt.
       if (f.script) setDeep(State.cfg, 'fonts.script', f.script);
     };
     t.addEventListener('click', activate);

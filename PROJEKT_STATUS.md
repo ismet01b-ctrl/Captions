@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v188/v189 AKZENTE RAUS, SCHRIFTWAHL GANZ, UMRISS NUR AM FLIESSTEXT.**
+  Drei Befunde Ismets am Ergebnis, alle umgesetzt.
+  v188: die Auto-Motion-Grafik ist wieder AUS. v185 hatte sie eingeschaltet,
+  weil die lolo-Referenz Counter und Namens-Karten enthaelt. Am Ergebnis
+  war es falsch - dort gehoeren sie zu einer AGENTUR-Produktion mit
+  Multikamera und Schnitt; im nackten Talking-Head wirkt die Pille als
+  Fremdkoerper. Gerendert wird wieder nur, was im Momente-Editor steht.
+  v189 SCHRIFTWAHL: die Font-Kachel setzte nur `fonts.display`. Das
+  Schluesselwort nahm die gewaehlte Schrift, der Fliesstext blieb beim
+  Preset-Font - der Kunde waehlte EINE Schrift und sah ZWEI. Jetzt setzt
+  die Auswahl display, support, italic und strong; die Schreibschrift
+  (Akzentwort) bleibt ein eigener Schnitt. Passt auch zur Referenz-
+  Grammatik: EINE Familie in zwei Groessen.
+  v189 UMRISS: das grosse Schluesselwort laeuft ohne Kontur (Ismets Ansage).
+  Dort traegt die Flaeche den Kontrast; der Saum machte das Wort plakativ
+  statt gesetzt. Der FLIESSTEXT behaelt ihn - dort ist er der
+  Lesbarkeits-Garant aus v181. Umschaltbar ueber
+  `effects.caption_kontur_key` (Standard false).
+  BEWEIS: Frame-Vergleich mit/ohne Umriss, dunkle Randpixel am grossen
+  Wort von 11132 auf 2027.
+  TESTKORREKTUR, ehrlich begruendet: die v143-Groessenmessung verglich
+  Alpha-Boxen - seit das grosse Wort keinen Saum mehr traegt, der
+  Fliesstext aber schon, fiel das gemessene Verhaeltnis scheinbar von 2.2
+  auf 1.82, obwohl sich an den Glyphen nichts geaendert hat. `_kern` misst
+  jetzt den hellen Glyphenkoerper, genau wie `_ink_x` in der Engine.
+  1179/1179 logic + Renders 7/1/5/2 + GUI gruen.
 - **v186/v187 PRESET-AUDIT + LIVE-VORSCHAU.**
   Alle neun Looks in beiden Formaten gerendert und vermessen, danach
   adversarisch gegengeprueft: von 50 gemeldeten Positionen blieben 13

@@ -275,6 +275,21 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Schriftwahl + Umriss (v189)
+- **Eine Nutzer-Schriftwahl gilt fuer den GANZEN Satz.** Die Font-Kachel
+  setzt display, support, italic und strong. Nur `fonts.display` zu setzen
+  ergab zwei Schriften im selben Block (Schluesselwort gewaehlt,
+  Fliesstext vom Preset). Die Schreibschrift bleibt ein eigener Schnitt.
+- **Der Umriss gehoert dem Fliesstext, nicht dem grossen Wort.** Dort
+  traegt die Flaeche den Kontrast; der Saum wirkt plakativ. Schalter
+  `effects.caption_kontur_key` (Standard aus), Parameter `kontur=` an
+  `Sprites.text`. Wer Groessen misst, muss den hellen GLYPHENKOERPER
+  nehmen - eine Alpha-Box vergleicht sonst Glyphe gegen Glyphe-plus-Saum.
+- **Auto-Motion-Grafik bleibt AUS** (`accents.auto`). In den High-End-
+  Referenzen gehoert sie zu einer Agentur-Produktion mit Multikamera und
+  Schnitt; im nackten Talking-Head ist sie ein Fremdkoerper. Was der
+  Nutzer im Momente-Editor anlegt, wird weiterhin gerendert.
+
 ### Plattform-Korridor + Vorschau (v186/v187)
 - **Der Satzspiegel haengt am Korridor, nicht an einer Konstanten.**
   `_korridor()` liefert die zoom-bereinigte nutzbare Breite (Title-Safe,
@@ -567,7 +582,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1173/1173 grün (Stand v187)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1179/1179 grün (Stand v189)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

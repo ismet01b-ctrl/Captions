@@ -408,8 +408,15 @@ def _scenario_logic(clip, transcript, tmp):
     # v143: Groessenhierarchie + Platzierungs-Regie.
     # ================================================================
     def _kern(arr, thr=200):
-        """Buchstabenkern OHNE Glow - sonst misst man den Aussenschein mit."""
-        _ys, _xs = np.where(arr[..., 3] > thr)
+        """Buchstabenkern OHNE Glow - sonst misst man den Aussenschein mit.
+        v189: und OHNE Kontur. Seit das grosse Wort keinen Umriss mehr traegt
+        (der Fliesstext schon), verglich die Alpha-Messung Glyphe gegen
+        Glyphe-plus-Saum und das Groessenverhaeltnis fiel scheinbar von 2.2
+        auf 1.82. Gemessen wird deshalb der helle Glyphenkoerper, genau wie
+        in _ink_x der Engine."""
+        _al = arr[..., 3] > thr
+        _hell = _al & (arr[..., :3].max(axis=2) > 150)
+        _ys, _xs = np.where(_hell if _hell.any() else _al)
         return ((_ys.max() - _ys.min() + 1, _xs.max() - _xs.min() + 1)
                 if len(_ys) else (0, 0))
 
@@ -5764,6 +5771,34 @@ def _scenario_betrieb(tmp):
     # geprueft (v182-Block oben).
     check('v185: die Farb-Karaoke ist restlos entfernt',
           not hasattr(R, 'tint_glyph'))
+
+    # ======= v189: Schriftwahl gilt ganz, Umriss nur am Fliesstext ========
+    _ui189 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v189: die Schriftwahl setzt ALLE Slots, nicht nur display',
+          "setDeep(State.cfg, 'fonts.support', f.file)" in _ui189
+          and "setDeep(State.cfg, 'fonts.strong', f.file)" in _ui189
+          and "setDeep(State.cfg, 'fonts.italic', f.file)" in _ui189)
+    _r189 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v189: Sprites.text kann den Umriss pro Aufruf abschalten',
+          'wght=None, kontur=None):' in _r189
+          and '_kf = (0.0 if kontur is False' in _r189)
+    check('v189: das grosse Wort laeuft ohne Umriss, umschaltbar',
+          'kontur=_kontur_key)' in _r189
+          and "_kontur_key = None if _ef.get('caption_kontur_key') else False" in _r189)
+    _c189 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    check('v189: der Schalter steht in der Config und ist standardmaessig aus',
+          _c189['effects'].get('caption_kontur_key') is False)
+    # Und es wirkt messbar: dunkle Randpixel am grossen Wort brechen ein.
+    _S189 = R.Sprites(_c189, 1080, 1920)
+    _mit = _S189.text('HEUTE', 180, (245, 245, 245), kontur=None)[0]
+    _ohne = _S189.text('HEUTE', 180, (245, 245, 245), kontur=False)[0]
+    _dm = float(((_mit[..., :3].max(axis=2) < 60) & (_mit[..., 3] > 120)).sum())
+    _do = float(((_ohne[..., :3].max(axis=2) < 60) & (_ohne[..., 3] > 120)).sum())
+    check('v189: ohne Umriss bleiben deutlich weniger dunkle Randpixel',
+          _do < _dm * 0.5, f"mit {_dm:.0f} vs ohne {_do:.0f}")
+    check('v189: der Fliesstext behaelt seinen Umriss (v181 bleibt)',
+          float(((_S189.text('heute', 60, (245, 245, 245))[0][..., :3].max(axis=2) < 60)
+                 & (_S189.text('heute', 60, (245, 245, 245))[0][..., 3] > 120)).sum()) > 50)
 
     # ======= v187: Preset-Audit, 13 gemessene Maengel ======================
     # Neun Looks gerendert und vermessen, danach adversarisch gegengeprueft.

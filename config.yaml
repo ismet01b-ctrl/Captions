@@ -97,6 +97,10 @@ effects:
   # allein reicht auf grauem Stoff oder Beton nicht (gemessen 1.5-3.1:1,
   # Norm ist 4.5:1). 1.0 = Hausmass, 0 = aus, bis 2.5 dicker.
   caption_kontur: 1.0
+  # v189: Umriss auch am grossen Schluesselwort? Standard AUS - dort traegt
+  # die Flaeche den Kontrast, der Saum machte das Wort plakativ statt
+  # gesetzt. true = Umriss auch dort (Alt-Verhalten v181-v188).
+  caption_kontur_key: false
   # v182 AKTIVES WORT: das gerade gesprochene Wort steht voll und leicht
   # groesser, die schon gesprochenen dimmen auf 70 %. Der dominante
   # Caption-Stil 2026 - bindet den Blick ans Wort statt an den Block.
