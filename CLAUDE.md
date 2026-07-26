@@ -262,6 +262,25 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Viral-Look (v183) — Markt-Standard als Preset, Default fuer 9:16
+Look 'viral' (Server-Preset + Engine-Schalter `effects.caption_viral`):
+alles versal + extrabold (Montserrat XB), Schluesselwort 2.15x / Fliesstext
+2.90x Hausmass, enge 2-4-Wort-Bloecke mittig-unten (caption_zone 0.58),
+Karaoke: die Akzentfarbe (fest Gelb, adaptive AUS - Konstanz ist der Look)
+wandert mit dem gesprochenen Wort (`tint_glyph`, Kontur bleibt dunkel),
+vergangene Woerter dimmen NICHT, Pop 10 %. Kein Schreibschrift-Akzent.
+- **Der Zeilensatz-Riegel sitzt in build_plans** (immer laufende Stelle,
+  v159-Lehre), nicht nur im Preset.
+- **Der Punch-Deckel kennt den Crash-Zoom** (0.89 W - 0.11 W * crash, alle
+  Looks): der Zoom sitzt genau auf Punch-Momenten und schob die Kante aus
+  dem Bild (gemessen 0.999 W). Wer am Deckel dreht, muss den Zoom mitdenken.
+- **'mitte'-Zeilen und Zeilen breiter als der Satzspiegel werden ZENTRIERT**
+  (alle Looks) - buendig bei x0 war der halbe Anschnitt.
+- Hochformat-Upload waehlt in der UI Viral vor; `State.lookChosen` schuetzt
+  jede bewusste Wahl. Editorial & Co. bleiben unveraendert waehlbar.
+- Viral-Groessen sind MULTIPLIKATOREN auf die Hausmasse - eine gelernte
+  Referenz (caption_scale) skaliert weiter relativ, v151-Kaskade intakt.
+
 ### Lesbarkeit + aktives Wort (v181/v182)
 **Kontur ist Pflicht, nicht Deko.** Ein versetzter Schlagschatten trägt auf
 grauem Stoff nicht — gemessen 1.5 bis 3.1:1, Norm ist 4.5:1. `caption_kontur`
@@ -459,7 +478,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1099/1099 grün (Stand v182)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1117/1117 grün (Stand v183)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

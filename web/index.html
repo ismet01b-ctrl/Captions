@@ -376,6 +376,8 @@ body {
   color: white; font-weight: 900; letter-spacing: -.5px;
   font-size: 22px; padding: 4px 10px; border-radius: 4px;
 }
+.look-card[data-look=viral] .lp-preview span { background: #ffd60a; color: #000;
+  font-weight: 900; letter-spacing: .02em; }
 .look-card[data-look=tiktok] .lp-preview span { background: white; color: black; }
 .look-card[data-look=creator] .lp-preview span { color: white; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
 .look-card[data-look=elegant] .lp-preview span { color: white; font-family: 'f-inter', sans-serif;
@@ -2435,7 +2437,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 'use strict';
 const State = {
   code: null, codeName: '', codeRest: null, codeLimit: null,
-  file: null, look: 'creator',
+  file: null, look: 'creator', lookChosen: false,   // v183: Auto-Default 9:16 -> viral
   cfg: null, cfgBase: null,
   srcShort: 0, srcDur: 0,   // v158: Quell-Kurzkante + Dauer fuer den Preis
   jid: null, moments: null, history: null,
@@ -2532,7 +2534,7 @@ function applyTemplate(name) {
     .then(d => {
       const t = (d.templates || []).find(x => x.name === name);
       if (!t) return;
-      if (t.settings.look) State.look = t.settings.look;
+      if (t.settings.look) { State.look = t.settings.look; State.lookChosen = true; }
       if (t.settings.cfg) State.cfg = JSON.parse(JSON.stringify(t.settings.cfg));
       State.savedCfg = JSON.parse(JSON.stringify(State.cfg));   // v94: gilt als sauber
       toast(`Setup "${name}" geladen.`, 'ok');
@@ -2734,6 +2736,7 @@ async function buildLooks() {
       el.querySelectorAll('.look-card').forEach(x => x.classList.remove('on'));
       c.classList.add('on');
       State.look = id;
+      State.lookChosen = true;      // v183: bewusste Wahl, kein Auto-Default mehr
       c.style.opacity = '0.6';
       await loadDefaults();
       rebuildAllWidgets();
@@ -4459,6 +4462,19 @@ function setFile(f) {
       // 1 credit, obwohl der Server das Doppelte abbucht (Ismets Befund).
       State.srcShort = Math.min(v.videoWidth || 0, v.videoHeight || 0);
       State.srcDur = dur;
+      // v183: Hochformat-Upload -> Viral-Look vorwaehlen (der Markt-Standard
+      // fuer 9:16). NUR solange der Nutzer noch keinen Look angeklickt hat -
+      // eine bewusste Wahl wird nie ueberschrieben. Querformat bleibt Creator.
+      if ((v.videoHeight || 0) > (v.videoWidth || 0)
+          && !State.lookChosen && State.look === 'creator') {
+        State.look = 'viral';
+        loadDefaults().then(() => {
+          rebuildAllWidgets();
+          document.querySelectorAll('.look-card').forEach(x =>
+            x.classList.toggle('on', x.dataset.look === 'viral'));
+          toast('Portrait video: "Viral" look preselected. Change it anytime in step 2.', 'ok', 3500);
+        }).catch(() => {});
+      }
       updateRenderCost();
       // Warnung wenn Guthaben nicht reicht
       if (State.balanceSec != null && dur > State.balanceSec) {
@@ -5017,6 +5033,7 @@ const FX_NAMES = {
   outline: 'Umriss', ground: 'In der Szene',
 };
 const LOOK_LABELS = {
+  viral: 'Viral · Big bold, karaoke',
   tiktok: 'TikTok · Word by word, loud',
   creator: 'Creator · Talking-head',
   elegant: 'Elegant · Dense + classy',

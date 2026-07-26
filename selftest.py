@@ -5619,13 +5619,140 @@ def _scenario_betrieb(tmp):
     _r182 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('v182: es gibt eine Wahl des aktiven Wortes',
           '_akt_i = max(_kand,' in _r182)
+    # v183 TESTANPASSUNG (Substanz unveraendert): das Dimmen traegt seit
+    # v183 den Viral-Riegel ('and not _viral' - im Viral-Look traegt die
+    # FARBE die Emphase), der Pop hat zwei Staerken (0.055 Haus, 0.10 viral).
     check('v182: vergangene Woerter dimmen, Keywords nie',
-          "elif it.get('role') not in ('key', 'punch'):" in _r182
-          and '_dim = 0.70' in _r182)
+          "elif it.get('role') not in ('key', 'punch') and not _viral:"
+          in _r182 and '_dim = 0.70' in _r182)
     check('v182: das aktive Wort bekommt einen abklingenden Groessen-Pop',
-          '_pop = 1.0 + 0.055 * (1 - smoothstep(min(dt / 0.22, 1.0)))' in _r182)
+          '_pop = 1.0 + (0.10 if _viral else 0.055)' in _r182
+          and '(1 - smoothstep(min(dt / 0.22, 1.0)))' in _r182)
     check('v182: Deckkraft und Skalierung wirken auf BEIDE Zeichenwege',
           _r182.count('* _pop') >= 2 and _r182.count('* _dim') >= 2)
+
+    # ======= v183: Viral-Look (Markt-Standard als Preset) =================
+    # Ismets Befund am eigenen Render, nachgemessen: Keywords 0.078-0.096 H
+    # Versalhoehe, Fliesstext bis 0.014 H, Streu-Collage ohne Lesereihen-
+    # folge - der Markt (Submagic/Hormozi-Schule) faehrt 0.10-0.15 H versal
+    # in engen Bloecken, die Akzentfarbe wandert mit dem gesprochenen Wort.
+    # Der Viral-Look liefert genau das als Preset; Editorial bleibt waehlbar.
+    _sv183 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v183: der Look "viral" existiert im Katalog',
+          "'viral':     {'name': 'Viral'" in _sv183)
+    check('v183: das Preset setzt den Engine-Schalter caption_viral',
+          "'caption_viral': True" in _sv183)
+    check('v183: das Preset erzwingt Zeilensatz, Mitte und Markt-Zone',
+          "'caption_layout': 'rows'" in _sv183
+          and "'caption_seite': 'mitte'" in _sv183
+          and "'caption_zone': 0.58" in _sv183)
+    check('v183: feste Farbwelt - Weiss + ein konstanter Gelb-Akzent',
+          "'accent': [255, 214, 10]" in _sv183
+          and "'adaptive': False" in _sv183)
+    _ui183 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v183: die UI kennt den Viral-Look (Label + Karte)',
+          "viral: 'Viral" in _ui183 and 'data-look=viral' in _ui183)
+    check('v183: Hochformat-Upload waehlt Viral vor, bewusste Wahl gewinnt',
+          'State.lookChosen' in _ui183
+          and "State.look = 'viral'" in _ui183)
+    check('v183: der Zeilensatz-Riegel sitzt an der immer laufenden Stelle',
+          "if cfg['effects'].get('caption_viral'):" in _r182
+          and "_lm = 'rows'" in _r182)
+    check('v183: der Punch-Deckel kennt den Crash-Zoom',
+          '0.89 - 0.11 * max(0.0, min(1.0, _crash))' in _r182)
+    check('v183: die Karaoke-Faerbung nutzt den Kompositions-Akzent',
+          "p.get('acc_rgb')" in _r182 and "'_akt_arr'" in _r182)
+
+    # VERHALTEN direkt an compose_flow gemessen - nicht nur Quelltext.
+    _cfgV = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                 encoding='utf-8'))
+    _cfgV['fonts'] = {k: 'fonts/montserrat_xb.ttf'
+                     for k in ('display', 'italic', 'script', 'support')}
+    import copy as _cp183
+    _cfgN = _cp183.deepcopy(_cfgV)
+    _cfgV['effects']['caption_viral'] = True
+
+    class _SRec183(R.Sprites):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self.calls = []
+
+        def text(self, txt, size, color, **kw):
+            self.calls.append(str(txt))
+            return super().text(txt, size, color, **kw)
+
+    _wv = [{'word': w, 'start': i * 0.4, 'end': i * 0.4 + 0.3}
+           for i, w in enumerate(['und', 'dann', 'kommt', 'alles', 'zusammen'])]
+    _SV = _SRec183(_cfgV, 1080, 1920)
+    _SN = _SRec183(_cfgN, 1080, 1920)
+    _itV = R.compose_flow(list(range(5)), _wv, _SV, 1080, 1920, True,
+                          flow_sel={'kw': 2})[0]
+    _itN = R.compose_flow(list(range(5)), _wv, _SN, 1080, 1920, True,
+                          flow_sel={'kw': 2})[0]
+    check('v183: im Viral-Look laufen ALLE Woerter versal',
+          all(t == t.upper() for t in _SV.calls),
+          f"{_SV.calls}")
+    check('v183: ohne Viral bleibt die gemischte Schreibung',
+          any(t != t.upper() for t in _SN.calls))
+    _nV = [i['sz'] for i in _itV if i.get('role') == 'norm']
+    _nN = [i['sz'] for i in _itN if i.get('role') == 'norm']
+    check('v183: der Fliesstext steht auf Marktmass (~2.9x Haus)',
+          _nV and _nN and 2.5 <= (_nV[0] / max(_nN[0], 1)) <= 3.3,
+          f"{_nV[0]} vs {_nN[0]}")
+    check('v183: kein Schreibschrift-Akzent im Viral-Look',
+          not any(i.get('role') == 'accent' for i in _itV)
+          and any(i.get('role') == 'accent' for i in _itN))
+    # Punch-Faktor: viral 1.30 statt 2.25 - die Grundgroesse traegt schon.
+    _wp = [{'word': 'na', 'start': 0.0, 'end': 0.3},
+           {'word': 'wow.', 'start': 0.4, 'end': 0.7}]
+    _pV = R.compose_flow([0, 1], _wp, _SRec183(_cfgV, 1080, 1920), 1080, 1920,
+                         True, flow_sel={'kw': 1}, punch=True)[0]
+    _kV = R.compose_flow([0, 1], _wp, _SRec183(_cfgV, 1080, 1920), 1080, 1920,
+                         True, flow_sel={'kw': 1}, punch=False)[0]
+    _szP = next(i['sz'] for i in _pV if i['role'] in ('key', 'punch'))
+    _szK = next(i['sz'] for i in _kV if i['role'] in ('key', 'punch'))
+    check('v183: der Punch-Faktor im Viral-Look ist 1.30, nicht 2.25',
+          _szP < _szK * 1.6,
+          f"punch {_szP} vs key {_szK}")
+    # Zoom-sicherer Deckel: mit vollem Crash-Zoom bleibt die Punch-Zeile
+    # schmaler als mit ruhender Kamera (0.78 W statt 0.89 W).
+    _wl = [{'word': 'ja', 'start': 0.0, 'end': 0.3},
+           {'word': 'ausgerechnet.', 'start': 0.4, 'end': 0.7}]
+    _cfgC0 = _cp183.deepcopy(_cfgN); _cfgC0['camera']['crash'] = 0.0
+    _cfgC1 = _cp183.deepcopy(_cfgN); _cfgC1['camera']['crash'] = 1.0
+    _twC0 = max(i['w'] for i in R.compose_flow(
+        [0, 1], _wl, R.Sprites(_cfgC0, 1080, 1920), 1080, 1920, True,
+        flow_sel={'kw': 1}, punch=True)[0])
+    _twC1 = max(i['w'] for i in R.compose_flow(
+        [0, 1], _wl, R.Sprites(_cfgC1, 1080, 1920), 1080, 1920, True,
+        flow_sel={'kw': 1}, punch=True)[0])
+    check('v183: der Punch-Deckel weicht dem Crash-Zoom aus',
+          _twC1 < _twC0,
+          f"crash1 {_twC1:.0f} vs crash0 {_twC0:.0f} px")
+    # Zeilen-Zentrierung: 'mitte' zentriert die Zeile im Satzspiegel.
+    _cxM = [i['cx'] for i in R.compose_flow(
+        [0], [_wv[0]], R.Sprites(_cfgN, 1080, 1920), 1080, 1920, True,
+        seite='mitte')[0]]
+    _cxL = [i['cx'] for i in R.compose_flow(
+        [0], [_wv[0]], R.Sprites(_cfgN, 1080, 1920), 1080, 1920, True,
+        seite='links')[0]]
+    check('v183: seite "mitte" zentriert die Zeile wirklich',
+          _cxM[0] > _cxL[0] + 20,
+          f"mitte {_cxM[0]:.0f} vs links {_cxL[0]:.0f}")
+    # Karaoke-Tint: der helle Glyphenkoerper wird gefaerbt, die dunkle
+    # Kontur bleibt dunkel - sonst saehe das aktive Wort ausgestanzt aus.
+    _aT = R.Sprites(_cfgN, 1080, 1920).text('WORT', 80, (255, 255, 255))[0]
+    _tT = R.tint_glyph(_aT, (255, 214, 10))
+    _hellm = (_aT[..., 3] > 0) & (_aT[..., :3].max(axis=2) > 150)
+    _dklm = (_aT[..., 3] > 120) & (_aT[..., :3].max(axis=2) < 60)
+    check('v183: tint_glyph faerbt den Glyphenkoerper in den Akzent',
+          _hellm.any() and float(_tT[..., 2][_hellm].mean()) < 120
+          and float(_tT[..., 0][_hellm].mean()) > 200,
+          "B-Kanal faellt, R-Kanal bleibt")
+    check('v183: die dunkle Kontur bleibt beim Tinten unangetastet',
+          (not _dklm.any()) or
+          float(np.abs(_tT[..., :3][_dklm].astype(int)
+                       - _aT[..., :3][_dklm].astype(int)).mean()) < 1.0)
 
     # ======= v180: Querformat steht MITTIG ================================
     # Ismets Frage: "ist es denn wirklich so professionell, wenn die

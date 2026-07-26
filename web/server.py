@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v182-lesbar'
+DVE_BUILD = 'v183-viral'
 
 
 @app.middleware('http')
@@ -2115,6 +2115,7 @@ LOCK = threading.Lock()
 
 # Presets als Startpunkt. Der Nutzer kann alles individuell nachjustieren.
 LOOKS = {
+    'viral':     {'name': 'Viral', 'desc': 'Big bold caps, karaoke accent. The short-form standard.'},
     'tiktok':    {'name': 'TikTok', 'desc': 'Word by word, bold, loud.'},
     'creator':   {'name': 'Creator', 'desc': 'Talking-head & business.'},
     'editorial': {'name': 'Editorial', 'desc': 'Magazine serif, calm, high-end.'},
@@ -2335,6 +2336,61 @@ def build_config(look, overrides=None):
 
     # --- 2026er High-End-Presets (voll ausgereizt, produktionsreif)
     PRESETS = {
+        'viral': {
+            'effects': {
+                # v183: Der Markt-Standard 2026 (Submagic/Hormozi-Schule).
+                # ALLE Woerter versal + extrabold auf ~0.07-0.115 H, enge
+                # 2-4-Wort-Bloecke unten mittig, die Akzentfarbe wandert mit
+                # dem gesprochenen Wort (Karaoke). Kern-Schalter ist
+                # caption_viral - er steuert Groesse, Versalsatz und die
+                # Karaoke-Faerbung in der Engine. Default fuer 9:16-Uploads.
+                'density': 'durchgehend', 'text_style': '3d',
+                'hook_seconds': 10, 'hook_strength': 0.70, 'instant_hook': True,
+                'pattern_interrupt': 7, 'retention_gap': 9,
+                'words_per_group': 2, 'words_per_group_max': 4,
+                'chunk_hold_min': 0.55,
+                'dim_behind': 0.40, 'dim_blurin': 0.32,
+                'beat_sync': 0.85, 'music_beat': 0.70, 'person_shadow': 0.55,
+                'zahl_gap': 10,
+                'bg_blur': 0.50, 'freeze_frame': 0.40, 'trail': 0.0,
+                'counter_ring': 0.45, 'split_screen': 0.0, 'env_shadow': 0.20,
+                'emerge': 'auto', 'anim': True,
+                'keyword_rotation': ['behind', 'outline', 'ground'],
+                'sfx_volume': 0.55, 'sfx': True,
+                'reflection': True, 'occlusion': True, 'track3d': True,
+                'safe_zone': True,
+                'caption_viral': True,
+                'caption_aktivwort': True,
+                'caption_collage': False,
+                'caption_satz_collage': False,
+                'caption_layout': 'rows',
+                'caption_seite': 'mitte',
+                'caption_kontur': 1.5,
+                'caption_flow': True,
+                # Markt-Zone: mittig-unten (0.58 H). Die Haus-Zone 0.25 H
+                # ("ueber dem Kopf") liest sich im Viral-Kontext wie ein
+                # Titel, nicht wie Sprechtext. spot() weicht weiter aus.
+                'caption_zone': 0.58,
+            },
+            'camera': {
+                'strength': 0.80, 'crash': 0.80, 'whip': False, 'side_every': 3,
+                'keyword_rotation': ['punch', 'push', 'caption'],
+                'side_rotation': ['capzoom', 'drift'],
+            },
+            # Feste Farbwelt: reines Weiss + ein harter Gelb-Akzent. Adaptive
+            # Szenen-Toene wuerden die Karaoke-Farbe pro Moment verschieben -
+            # der Look lebt von der KONSTANZ des einen Akzents.
+            'colors': {'style': 'auto', 'adaptive': False,
+                       'text': [255, 255, 255], 'accent': [255, 214, 10]},
+            'fonts': {
+                'display': 'fonts/montserrat_xb.ttf',
+                'italic': 'fonts/montserrat_xb.ttf',
+                'script': 'fonts/montserrat_xb.ttf',
+                'support': 'fonts/montserrat_xb.ttf',    # eine Familie, v143
+            },
+            'output': {'platform': 'tiktok'},
+            'matting_quality': 'hoch',
+        },
         'tiktok': {
             'effects': {
                 # Wortweise, dicht, energisch - Reels/Shorts-Kern-Modus 2026

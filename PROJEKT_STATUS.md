@@ -3,6 +3,54 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v183 VIRAL-LOOK (Markt-Standard als Preset, Default fuer 9:16).**
+  Ismets Urteil: "Das Produkt selbst ist nicht mal ansatzweise so gut. Es
+  ist keine High-Level-Typografie/Captions." Erst gemessen: sein Render
+  (creator-Look) faehrt Keywords bei 0.078-0.096 H Versalhoehe, Fliesstext
+  bis 0.014 H, Streu-Collage ohne klare Lesereihenfolge, Akzente klein in
+  Schreibschrift. Der Markt (Submagic/Hormozi-Schule, Recherche Juli 2026)
+  faehrt 0.10-0.15 H VERSAL fuer praktisch alle Woerter, enge 2-4-Wort-
+  Bloecke mittig-unten, EINE harte Akzentfarbe die mit dem gesprochenen
+  Wort wandert. Das ist ein anderer STIL, keine bessere Technik - aber es
+  ist der Stil, der 2026 als "high level captions" verkauft wird.
+  NEUER LOOK 'viral' (Server-Preset + Engine-Schalter `caption_viral`):
+  - ALLE Woerter versal + extrabold (Montserrat XB, eine Familie). Groesse
+    als MULTIPLIKATOR auf die Hausmasse: Schluesselwort 2.15x (0.163 em,
+    ~0.115 H Versal), Fliesstext 2.90x (0.099 em, ~0.069 H). Kurze Woerter
+    stehen voll, lange schrumpfen in die Zeile (v143-Prinzip). Eine
+    gelernte Referenz (caption_scale) skaliert weiter relativ dazu.
+  - KARAOKE-AKZENT: die Akzentfarbe (fest Gelb 255/214/10, adaptive aus -
+    der Look lebt von der Konstanz) wandert mit dem gesprochenen Wort
+    (`tint_glyph` faerbt den Glyphenkoerper, die v181-Kontur bleibt
+    dunkel). Vergangene Woerter dimmen im Viral-Look NICHT - die Farbe
+    traegt die Emphase. Pop 10 % statt 5.5 % (auf Marktgroesse sonst
+    unsichtbar). Kein Schreibschrift-Akzent - zwei Akzent-Systeme
+    nebeneinander entwerten sich.
+  - Zeilensatz statt Collage (Riegel an der immer laufenden Stelle in
+    build_plans, v159-Lehre - ein User-Override caption_layout=collage
+    saehe zerrissen aus), Bloecke mittig (caption_seite mitte), Markt-Zone
+    0.58 H statt Haus-Zone 0.25 H. spot() weicht weiter aus.
+  - words_per_group 2/4, density durchgehend, chunk_hold 0.55, Kontur 1.5.
+  ZWEI GLOBALE FIXES (alle Looks, am Testrender belegt):
+  - Zeilen mit seite 'mitte' und Zeilen BREITER als der Satzspiegel werden
+    im Spiegel ZENTRIERT (Netflix-Konvention; buendig bei x0 lag die
+    Punch-Kante bei 0.96 W).
+  - Der Punch-Deckel kennt den CRASH-ZOOM: 0.89 W minus 0.11 W mal
+    camera.crash. Der Zoom sitzt genau auf Punch-Momenten und schob die
+    0.89-W-Kante aus dem Bild (gemessen 0.999 W = angeschnitten, MOMENTE-
+    Fall). crash 0 = Alt-Verhalten. Der gewollte Randabfall (bleed, <= 5
+    Zeichen) bleibt bei 1.14 W.
+  DEFAULT-REGEL: Hochformat-Upload waehlt in der Web-UI 'Viral' vor
+  (State.lookChosen schuetzt jede bewusste Wahl; Querformat bleibt
+  Creator). Editorial und alle anderen Looks bleiben unveraendert waehlbar.
+  BEWEIS: Hochformat- und Querformat-Testrender (Frame-Streifen an Ismet):
+  Versalien mit Karaoke-Gelb, keine Rand-Anschnitte mehr (Text-Spanne
+  gemessen max 0.964 W unter vollem Crash-Zoom, vorher 0.999 W = Kontakt).
+  EHRLICH: CPU/synthetisch/ohne Key - die echte Optik prueft Ismet nach
+  dem Deploy auf echtem Material. Tests: +18 (Preset/UI-Garantien,
+  compose_flow-Verhalten: Versalsatz, 2.9x-Mass, kein Script-Akzent,
+  Punch 1.30, Zoom-Deckel, Mitte-Zentrierung, tint_glyph-Farbmessung);
+  zwei v182-String-Checks ehrlich nachgezogen (Substanz unveraendert).
 - **v181/v182 LESBARKEIT + AKTIVES WORT.** Ismets Urteil am v180-Render:
   "Grundgeruest steht. Es ist aber noch nicht high end." Erst gemessen,
   dann recherchiert.

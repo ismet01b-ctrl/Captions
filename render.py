@@ -2219,6 +2219,21 @@ def rot_img(arr, deg):
     if abs(deg) < 0.2: return arr
     return np.array(Image.fromarray(arr).rotate(deg, expand=True, resample=Image.BICUBIC))
 
+
+def tint_glyph(arr, rgb):
+    """v183: faerbt den HELLEN Glyphenkoerper eines Text-Sprites in den
+    gegebenen Ton, ohne die dunkle Kontur (v181) oder den Schatten
+    anzufassen. Multiplikativ - Antialiasing-Kanten bleiben weich."""
+    out = arr.copy()
+    body = out[..., :3].astype(np.float32)
+    mask = (out[..., 3] > 0) & (body.max(axis=2) > 150)
+    if not mask.any():
+        return out
+    f = np.asarray(rgb, np.float32) / 255.0
+    body[mask] *= f
+    out[..., :3] = np.clip(body, 0, 255).astype(np.uint8)
+    return out
+
 # --- Emoji (v81e): Noto Color Emoji rendert nur in fester Bitmap-Groesse (109),
 # wird danach auf Zielhoehe skaliert. Ergebnis wird gecacht (pro Emoji+Hoehe).
 _EMOJI_FONT_PATH = None
@@ -6585,6 +6600,11 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         raw_last = clean(words[last]['word'])
         if last != anchor and raw_last[:1].islower() and len(raw_last) >= 3:
             accent = last
+    # v183: der Viral-Look kennt KEINE Schreibschrift-Akzente. Die Akzentfarbe
+    # gehoert dort dem GESPROCHENEN Wort (Karaoke, siehe Draw-Schleife) - ein
+    # zweites, stehendes Akzent-System daneben wuerde beide entwerten.
+    if bool((S.cfg.get('effects', {}) or {}).get('caption_viral')):
+        accent = None
     # v143 GROESSENHIERARCHIE + QUERFORMAT.
     # (a) pf war im Querformat 0.62, also eine VERKLEINERUNG. Im 16:9 ist H
     #     ohnehin die kurze Kante, die H-Bruchteile schrumpfen dadurch schon
@@ -6636,6 +6656,13 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     _skn = float(_ef.get('caption_scale_klein') or 0) or None
     _skn = max(0.60, min(1.30, _skn)) if _skn else _skal
     _hier = float(_ef.get('caption_hierarchie') or 0) or None
+    # v183 VIRAL-LOOK. Der Markt-Standard 2026 (Submagic/Hormozi-Schule):
+    # ALLE Woerter gross, fett, versal, eng gebuendelt - gemessen 0.10-0.15 H
+    # Versalhoehe gegen unsere 0.078-0.096 H (Ismets Render) und 0.014 H
+    # Fliesstext-Minimum. Der Viral-Modus ist ein MULTIPLIKATOR auf die
+    # Hausgroesse, kein Ersatz: eine gelernte Referenz (caption_scale)
+    # skaliert weiter relativ dazu, die v151-Kaskade bleibt intakt.
+    _viral = bool(_ef.get('caption_viral'))
     # v153: eine Stufe kleiner (Ismets Befund am fertigen Video). 0.098 ->
     # 0.088 em ergibt bei cap/em 0.70 eine Versalhoehe von 0.062 H statt
     # 0.069 H. sz_n geht ueber die Hierarchie automatisch mit - wuerde nur
@@ -6651,6 +6678,13 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         sz_n = int(sz_k * 0.70 / (0.52 * _hier))
     else:
         sz_n = int(H * 0.034 * pf * _skn)
+    if _viral:
+        # Schluesselwort 0.076 -> 0.163 em (Versalhoehe ~0.115 H), Fliesstext
+        # 0.034 -> 0.099 em (versal gesetzt ~0.069 H). Verhaeltnis ~1.65 -
+        # der Markt fahert eine FLACHE Hierarchie, die Wucht kommt aus der
+        # Grundgroesse, nicht aus dem Kontrast der Stufen.
+        sz_k = int(sz_k * 2.15)
+        sz_n = int(sz_n * 2.90)
     sz_a = int(sz_n * 1.244)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
@@ -6722,7 +6756,11 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # (0.088 -> 0.076 em); mit 1.95 rutschte der Knall auf 1.01 W und
             # der Abstand zum normalen Schluesselwort schrumpfte auf 1.14x -
             # der Effekt waere kaum noch zu sehen gewesen.
-            _kf = 2.25 if punch else 1.0
+            # v183: im Viral-Look setzt die Grundschrift schon auf Marktmass
+            # an (2.15x Haus) - der volle Knall-Faktor 2.25 obendrauf ergaebe
+            # 0.26 H und spraengte jede Zeile. 1.30 haelt den Satzende-Akzent
+            # sichtbar, ohne den Block zu sprengen.
+            _kf = (1.30 if _viral else 2.25) if punch else 1.0
             # Beim Knall darf die Zeile ueber den normalen Satzspiegel
             # hinaus - im Vorbild laeuft das Schlusswort ueber die volle
             # Breite. 0.89 W und nicht mehr: der Block SETZT bei x0 = 0.07 W
@@ -6749,7 +6787,16 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             _bleed = bool(punch and not colw and len(up) <= 5
                           and (S.cfg.get('effects', {}) or {}).get(
                               'caption_bleed', True))
-            _deckel = (int(W * (1.14 if _bleed else 0.89)) if not colw
+            # v183 ZOOM-SICHERER DECKEL. 0.89 W galt fuer ein ruhendes Bild -
+            # der Crash-Zoom sitzt aber GENAU auf solchen Punch-Momenten und
+            # schiebt die Kante ueber den Rand (MOMENTE-Anschnitt, am Render
+            # belegt: Kante bei 0.999 W trotz zentrierter Zeile). Der Deckel
+            # zieht deshalb den konfigurierten Zoom ab: crash 0 -> 0.89 W
+            # (Alt-Verhalten), crash 1.0 -> 0.78 W. Der gewollte Randabfall
+            # (_bleed) bleibt bei 1.14 W - dort IST der Anschnitt das Bild.
+            _crash = float((S.cfg.get('camera', {}) or {}).get('crash') or 0)
+            _pd = 0.89 - 0.11 * max(0.0, min(1.0, _crash))
+            _deckel = (int(W * (1.14 if _bleed else _pd)) if not colw
                        else _colw) if punch else (
                 min(int(W * 0.83), _colw) if portrait else _colw)
             sz = S.fit(up, int(sz_k * _kf), _deckel, font=S.f_sans_b, tracking=2)
@@ -6801,8 +6848,18 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
                     _sz = int(_sz * (1.75 + 0.35 * _mix01(i)))
                 else:
                     _sz = int(_sz * (0.92 + 0.16 * _mix01(i * 7)))
-            arr, tw = S.text(raw, _sz, S.white, tracking=_trk_n, font=S.f_sans,
-                             wght=_wg)
+            if _viral:
+                # v183: versal + durchgehend schwer. Die Betonung (loud)
+                # bleibt als Nuance erhalten, faellt aber nie unter Bold -
+                # ein leichtes Wort in einem Versal-Block liest sich als
+                # Fehler, nicht als Dynamik. Tracking eng wie beim Anker.
+                raw = raw.upper()
+                _wg = 880 if _m == '!' else (720 if _m == '~' else 800)
+                arr, tw = S.text(raw, _sz, S.white, tracking=2,
+                                 font=S.f_sans, wght=_wg)
+            else:
+                arr, tw = S.text(raw, _sz, S.white, tracking=_trk_n,
+                                 font=S.f_sans, wght=_wg)
             items.append({'i': i, 'arr': arr, 'w': tw, 'role': 'norm',
                           'gross': _gross, 'sz': _sz,
                           't': words[i]['start']})
@@ -6929,7 +6986,21 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         # v153: Zeilen koennen an der RECHTEN Kante ausgerichtet werden.
         # Der Satzspiegel bleibt derselbe, nur die buendige Kante wechselt.
         _rw = sum(it['adv'] for it in row) + space * (len(row) - 1)
-        x = (x0 + max_w - _rw) if seite == 'rechts' else x0
+        # v183 SYMMETRIE. Zwei Faelle zentrieren die Zeile im Satzspiegel:
+        # (a) seite 'mitte' - zentrierte Zeilen sind die Konvention fuer
+        #     mittigen Sprechtext (Netflix TTSG); linksbuendige Zeilen in
+        #     einem mittig gesetzten Block sahen nach Fehler aus.
+        # (b) die Zeile ist BREITER als der Satzspiegel (Punch-Deckel 0.89 W
+        #     gegen 0.86/0.55 W Spiegel): buendig bei x0 lag die rechte
+        #     Kante bei 0.96 W, und der Crash-Zoom - der genau auf solchen
+        #     Momenten sitzt - schob sie aus dem Bild (MOMENTE-Anschnitt,
+        #     am Testrender belegt). Symmetrische Raender halten auch da.
+        if seite == 'mitte' or _rw > max_w:
+            x = max(W * 0.035, x0 + (max_w - _rw) / 2.0)
+        elif seite == 'rechts':
+            x = x0 + max_w - _rw
+        else:
+            x = x0
         for it in row:
             it['cx'] = x + it['adv'] / 2.0
             it['cy'] = y + line_h / 2.0           # in der Zeilen-Mitte
@@ -8693,6 +8764,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # v153: der Nutzer kann die Anordnung festlegen. 'auto' laesst
             # die Regie wechseln (Standard), 'rows'/'collage' erzwingen eine.
             _lm = str(cfg['effects'].get('caption_layout') or 'auto').lower()
+            # v183 RIEGEL an der immer laufenden Stelle (v159-Lehre): der
+            # Viral-Look kennt nur den Zeilensatz. Die Collage staffelt in
+            # Einzelgroessen ueber die Flaeche - das Gegenteil des engen
+            # Versal-Blocks. Nur am Preset zu haengen reichte nicht: ein
+            # User-Override (caption_layout collage) saehe sonst zerrissen aus.
+            if cfg['effects'].get('caption_viral'):
+                _lm = 'rows'
             _lay = 'flow'
             _cw150 = _freie_breite(start, end)
             # Bei verengter Spalte (Nahaufnahme, Person fuellt das Bild)
@@ -8983,6 +9061,9 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                   'target': (int(_sx), int(y0 + tot_h / 2.0)),
                   'fol_lim': _fol_lim,
                   'broll': broll,
+                  # v183: Akzentton der Kompositions-Palette festhalten - die
+                  # Draw-Schleife faerbt damit das AKTIVE Wort (Karaoke).
+                  'acc_rgb': tuple(S.accent),
                   # v177: Sagt der Satz, dass die Hand die Captions schiebt?
                   # Dann darf eine gemessene Wisch-Bewegung den Block auch
                   # OHNE Pixel-Beruehrung stossen - siehe hand_contacts.
@@ -10171,6 +10252,12 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 if _kand:
                     _akt_i = max(_kand,
                                  key=lambda q: words[q['i']]['start'])['i']
+            # v183 VIRAL-KARAOKE: im Viral-Look wandert die AKZENTFARBE mit
+            # dem gesprochenen Wort (der Markt-Standard), vergangene Woerter
+            # bleiben voll weiss - die Farbe traegt die Emphase, nicht das
+            # Dimmen. Pop kraeftiger (0.10 statt 0.055): auf 0.07-0.115 H
+            # Versalhoehe ist der Haus-Pop nicht mehr sichtbar.
+            _viral = bool(cfg['effects'].get('caption_viral'))
             for it in p['front']:
                 wd = words[it['i']]
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf
@@ -10184,9 +10271,16 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 _pop = 1.0
                 if _akt_i is not None:
                     if _ist_akt:
-                        _pop = 1.0 + 0.055 * (1 - smoothstep(min(dt / 0.22, 1.0)))
-                    elif it.get('role') not in ('key', 'punch'):
+                        _pop = 1.0 + (0.10 if _viral else 0.055) \
+                            * (1 - smoothstep(min(dt / 0.22, 1.0)))
+                    elif it.get('role') not in ('key', 'punch') and not _viral:
                         _dim = 0.70
+                _arr = it['arr']
+                if _viral and _ist_akt and p.get('acc_rgb'):
+                    _arr = it.get('_akt_arr')
+                    if _arr is None:
+                        _arr = tint_glyph(it['arr'], p['acc_rgb'])
+                        it['_akt_arr'] = _arr
                 if it.get('role') in ('key', 'punch') and it.get('letters'):
                     n = len(it['letters'])
                     # v151: Aufdeck-Tempo kann aus der gemessenen Referenz
@@ -10206,17 +10300,17 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     # dezenter Settle: Keyword landet minimal groesser und
                     # setzt sich weich auf 1.0 (gezielte, ruhige Bewegung)
                     k_settle = 1.0 + 0.05 * (1 - smoothstep(min(dt / 0.42, 1.0)))
-                    paste(comp, it['arr'],
+                    paste(comp, _arr,
                           it['cx'] + fdx - (0 if vis_px is None
-                                            else (it['arr'].shape[1] - vis_px) / 2),
-                          it['cy'] + fdy + x_dv * it['arr'].shape[0],
+                                            else (_arr.shape[1] - vis_px) / 2),
+                          it['cy'] + fdy + x_dv * _arr.shape[0],
                           W, H, scale=x_sc * k_settle * _pop,
                           opacity=g_out * _dim, crop_w=vis_px)
                 else:
                     e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
-                    paste(comp, it['arr'],
+                    paste(comp, _arr,
                           it['cx'] + fdx,
-                          it['cy'] + fdy + (1 - e) * H * 0.020 + x_dv * it['arr'].shape[0],
+                          it['cy'] + fdy + (1 - e) * H * 0.020 + x_dv * _arr.shape[0],
                           W, H, scale=(0.86 + 0.14 * e) * x_sc * _pop,
                           opacity=min(dt / 0.10, 1) * g_out * _dim)
             continue
