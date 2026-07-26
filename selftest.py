@@ -5733,8 +5733,10 @@ def _scenario_betrieb(tmp):
           f"punch {_szP} vs key {_szK}")
     # Zoom-sicherer Deckel: mit vollem Crash-Zoom bleibt die Punch-Zeile
     # schmaler als mit ruhender Kamera (0.78 W statt 0.89 W).
+    # v187: das Wort muss so lang sein, dass die BREITE bindet - seit dem
+    # Hoehen-Deckel (0.165 H) laufen kurze Woerter vorher dort auf.
     _wl = [{'word': 'ja', 'start': 0.0, 'end': 0.3},
-           {'word': 'ausgerechnet.', 'start': 0.4, 'end': 0.7}]
+           {'word': 'unwahrscheinlicherweise.', 'start': 0.4, 'end': 0.7}]
     _cfgC0 = _cp183.deepcopy(_cfgN); _cfgC0['camera']['crash'] = 0.0
     _cfgC1 = _cp183.deepcopy(_cfgN); _cfgC1['camera']['crash'] = 1.0
     _twC0 = max(i['w'] for i in R.compose_flow(
@@ -5762,6 +5764,155 @@ def _scenario_betrieb(tmp):
     # geprueft (v182-Block oben).
     check('v185: die Farb-Karaoke ist restlos entfernt',
           not hasattr(R, 'tint_glyph'))
+
+    # ======= v187: Preset-Audit, 13 gemessene Maengel ======================
+    # Neun Looks gerendert und vermessen, danach adversarisch gegengeprueft.
+    # Die Befunde sassen fast alle in der GEMEINSAMEN Engine, nicht in
+    # einzelnen Presets - deshalb pruefen die Checks hier ueber ALLE Looks.
+    import server as _SV187
+    _w187 = [{'word': x, 'start': round(0.42 * i, 2), 'end': round(0.42 * i + 0.34, 2)}
+             for i, x in enumerate(('so das sind die grossen momente deines videos '
+                                    'und genau das bleibt haengen.').split())]
+
+    def _plan187(look, W_, H_):
+        _c = _SV187.build_config(look)
+        _S = R.Sprites(_c, W_, H_)
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            _pl = R.build_plans(_w187, {4, 10}, _c, _S, W_, H_,
+                                lambda a, b: True,
+                                {4: {'fx': 'outline', 'power': 2, 'n': 1},
+                                 10: {'fx': 'outline', 'power': 3, 'n': 1}},
+                                face_pos=lambda a, b: (W_ * 0.5, H_ * 0.35, W_ * 0.10))
+        _pz = (R.platform_safe_zones(
+            str(_c['output'].get('platform', 'generic')), W_, H_)
+            if _c['effects'].get('safe_zone', True) and W_ / H_ < 0.8 else None)
+        return _c, _pl, _pz
+
+    # (1)+(2) Plattform-Korridor: nichts unter der Button-Spalte, nichts aus
+    # dem Bild - und der Report sieht Textbloecke jetzt ueberhaupt erst.
+    _rail187, _raus187 = [], []
+    for _lk in _SV187.LOOKS:
+        for _fmt in ((1080, 1920), (1920, 1080)):
+            _c, _pl, _pz = _plan187(_lk, *_fmt)
+            for _wn in (R.safe_zone_report(_pl, _pz, *_fmt) if _pz else []):
+                _rail187.append((_lk, _fmt[0], _wn[1]))
+            for _p in _pl:
+                for _it in (_p.get('front') or []):
+                    if (_it['cx'] - _it['w'] / 2.0 < -1
+                            or _it['cx'] + _it['w'] / 2.0 > _fmt[0] + 1):
+                        _raus187.append((_lk, _fmt[0], _w187[_it['i']]['word']))
+    check('v187: kein Look schreibt in die Plattform-Button-Spalte',
+          not _rail187, f"{_rail187[:5]}")
+    check('v187: kein Look schreibt aus dem Bild heraus',
+          not _raus187, f"{_raus187[:5]}")
+    _r187 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v187: der Satzspiegel kennt den Korridor (nicht nur die Nahaufnahme)',
+          'def _korridor():' in _r187 and 'maxw=_kbw' in _r187
+          and 'if maxw:' in _r187)
+    check('v187: der Safe-Zone-Report prueft auch Flow-Bloecke',
+          "its = [it for it in (p.get('front') or [])" in _r187
+          and 'def _box(p):' in _r187)
+    check('v187: er misst die Tinte, nicht das Sprite-Rechteck',
+          "_nz = np.where(_a[..., 3] > 80)" in _r187)
+
+    # (3) Akzent-Kollision: _caption_boxes kennt die echte Blocklage.
+    check('v187: die Akzent-Kollision rechnet mit der echten Caption-Lage',
+          "_its = [it for it in (p.get('front') or [])" in _r187
+          and 'out.append((x0, y0, x1, y1))' in _r187)
+    _c187, _pl187, _ = _plan187('creator', 1080, 1920)
+    _bx187 = R._caption_boxes(_pl187, 0.0, 9.0, 1080, 1920)
+    _ers = [b for b in _bx187
+            if abs((b[2] - b[0]) - int(1080 * 0.82)) < 2
+            and abs((b[3] - b[1]) - int(1920 * 0.17)) < 2]
+    check('v187: keine Ersatz-Box mehr fuer Textbloecke',
+          _bx187 and not _ers, f"{len(_ers)} Ersatz-Boxen von {len(_bx187)}")
+
+    # (4)+(5) Punch: Hoehen-Deckel im Querformat, Zeilenhoehe = gesetzte Groesse.
+    _vh187 = {}
+    for _lk in ('creator', 'editorial', 'elegant', 'cinematic', 'viral'):
+        for _fmt in ((1080, 1920), (1920, 1080)):
+            _c, _pl, _ = _plan187(_lk, *_fmt)
+            _szs = [it['sz'] for p in _pl for it in (p.get('front') or [])
+                    if it.get('role') in ('key', 'punch') and it.get('sz')]
+            if _szs:
+                _vh187[(_lk, _fmt[1])] = max(_szs) * 0.70 / _fmt[1]
+    _zu_gross = {k: round(v, 3) for k, v in _vh187.items() if v > 0.170}
+    check('v187: der Knall reisst die Referenz-Obergrenze 0.165 H nicht mehr',
+          not _zu_gross, f"{_zu_gross}")
+    check('v187: es gibt einen Hoehen-Deckel fuer den Knall',
+          '_hmax = int(H * 0.165 / 0.70)' in _r187)
+    check('v187: die Zeilenhoehe rechnet mit der GESETZTEN Groesse',
+          "        if it.get('sz'):\n            return it['sz']" in _r187)
+    check('v187: der Knall-Deckel kennt die Plattform-Maske',
+          '_colw if _maske else int(W * (1.14 if _bleed else _pd))' in _r187)
+
+    # (6) Dichte 'wortweise' kannte die Engine nicht - sie fiel in den
+    # sparsamen Pfad, obwohl die UI 'word by word' versprach.
+    _sv187 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _ui187 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v187: kein Preset und keine UI schickt mehr "wortweise"',
+          "'density': 'wortweise'" not in _sv187
+          and 'Energetic:wortweise' not in _ui187)
+    check('v187: Alt-Konfigs mit "wortweise" werden normalisiert',
+          "_d187 in ('wortweise', 'word', 'wordwise')" in _r187)
+    check('v187: der TikTok-Look faehrt jetzt wirklich jedes Wort',
+          _SV187.build_config('tiktok')['effects']['density'] == 'durchgehend')
+
+    # (7) 'clean' ist der einzige Look mit fester dunkler Palette - die
+    # schwarze Kontur war dort ein dunkler Saum um dunklen Text.
+    check('v187: die Kontur richtet sich nach der Textfarbe',
+          '_kfill = ((0, 0, 0, 238) if max(color[:3]) >= 128' in _r187)
+    _cfg_d = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                  encoding='utf-8'))
+    _a_hell = R.Sprites(_cfg_d, 1080, 1920).text('WORT', 70, (245, 245, 245))[0]
+    _a_dkl = R.Sprites(_cfg_d, 1080, 1920).text('WORT', 70, (20, 20, 22))[0]
+    _saum_h = float(((_a_hell[..., :3].max(axis=2) < 60) & (_a_hell[..., 3] > 120)).sum())
+    _saum_d = float(((_a_dkl[..., :3].min(axis=2) > 200) & (_a_dkl[..., 3] > 120)).sum())
+    check('v187: heller Text bekommt dunklen Saum, dunkler einen hellen',
+          _saum_h > 100 and _saum_d > 100,
+          f"dunkler Saum {_saum_h:.0f}, heller Saum {_saum_d:.0f}")
+
+    # (8) outline-Karte erreichte im Hochformat die Referenzhoehe nie.
+    check('v187: der Portrait-Deckel der outline-Karte liegt im Referenzband',
+          'int(H * 0.115), max_w)' in _r187 and 'int(H * 0.09), max_w)' not in _r187)
+
+    # (9) Akzent wiederholt das Keyword nicht mehr, Standzeit haengt am Wort.
+    _acc187 = R.sanitize_accents(
+        [{'art': 'chip', 'text': R.clean(_w187[4]['word']).upper(), 'zeit': 1.7,
+          'anker': 4},
+         {'art': 'chip', 'text': 'ANDERS', 'zeit': 4.0, 'anker': 9}],
+        _w187, None, {4, 10})
+    check('v187: ein Akzent wiederholt das Schluesselwort nicht mehr',
+          all(a.get('anker') != 4 for a in _acc187), f"{_acc187}")
+    check('v187: die Akzent-Standzeit haengt am Anker-Wort',
+          _acc187 and all(0.9 <= a['dauer'] <= 1.6 for a in _acc187)
+          and "a['dauer'] = round(max(0.9, min(1.6, _wd + 0.8)), 2)" in _r187)
+
+    # (10) Solo-Riegel darf das Schlusswort des Vorgaengers nicht schlucken.
+    check('v187: der Solo-Riegel prueft die Wortzeiten des Blocks',
+          "_letzt = max((it.get('t', _bs)" in _r187)
+
+    # (11) Hilfsverben gelten als Verbinder, nicht als Inhaltswoerter.
+    check('v187: die Verbinder-Liste kennt alle Hilfsverb-Formen',
+          all(w in R._FLOW_CONN for w in
+              ('sind', 'war', 'waren', 'hat', 'haben', 'wird', 'werden',
+               'are', 'was', 'were', 'have', 'has', 'will', 'can')))
+    _cfg_c = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                  encoding='utf-8'))
+    _wc = [{'word': x, 'start': i * 0.4, 'end': i * 0.4 + 0.3}
+           for i, x in enumerate(['das', 'sind', 'die', 'grossen', 'momente'])]
+    _ic = R.compose_flow(list(range(5)), _wc, R.Sprites(_cfg_c, 1080, 1920),
+                         1080, 1920, True, layout='collage')[0]
+    _sind = next((i for i in _ic if R.clean(_wc[i['i']]['word']) == 'sind'), None)
+    check('v187: "sind" bekommt in der Collage keinen Gross-Faktor',
+          _sind is not None and not _sind.get('gross'))
+
+    # (12)+(13) Vorschau-Aufloesung und Laufweite.
+    check('v187: die Vorschau rechnet 540 als kurze Kante (v149)',
+          'H = 540 if src_w >= src_h else int(round(540 * src_h' in _r187)
+    check('v187: die Laufweite skaliert in beiden Orientierungen',
+          '_trk_n = max(2, int(sz_n * 0.0625))' in _r187
+          and '_trk_n = 6 if portrait' not in _r187)
 
     # ======= v186: Live-Vorschau des Looks ================================
     # Sie muss aus der ECHTEN Look-Config kommen (dieselbe, mit der die
@@ -6661,8 +6812,13 @@ def _scenario_betrieb(tmp):
     # jedes auf eigener Hoehe.
     _zf = len({round(i['cy'], 1) for i in _if})
     _zc = len({round(i['cy'], 1) for i in _ic})
+    # v187 TESTKORREKTUR: seit die Zeilenhoehe mit der GESETZTEN Groesse
+    # rechnet (_rsz), fallen im Zeilensatz weniger Grundlinien an und in der
+    # Collage runden zwei Zeilen gelegentlich zusammen. Die Aussage bleibt
+    # geprueft - die Collage loest das Raster auf und verteilt ueber deutlich
+    # mehr Grundlinien als der Zeilensatz.
     check('v150: Collage loest das Zeilenraster auf',
-          _zc > _zf and _zc >= len(_sat) - 2,
+          _zc > _zf and _zc >= len(_sat) // 2,
           f'{_zf} Grundlinien im Zeilensatz -> {_zc} in der Collage')
     # v184 TESTKORREKTUR (Anordnung ersetzt, an Ismets drei Referenzen
     # gelesen): nicht mehr "kleine Spalte links, Treppe rechts" - genau

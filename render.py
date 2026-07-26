@@ -2168,8 +2168,16 @@ class Sprites:
                 # Sie liegt auf der HINTEREN Ebene, damit das Studio-Licht
                 # der Frontflaeche sie nicht aufhellt.
                 if _kontur:
+                    # v187: die Kontur richtet sich nach der TEXTFARBE. Hart
+                    # schwarz war ein dunkler Saum um dunklen Text - genau
+                    # der Fall im Look 'clean', der als einziger eine feste
+                    # dunkle Palette faehrt (gemessen 1.37:1 auf dunklem
+                    # Material). Ein heller Text behaelt den schwarzen Saum,
+                    # ein dunkler bekommt einen hellen.
+                    _kfill = ((0, 0, 0, 238) if max(color[:3]) >= 128
+                              else (255, 255, 255, 238))
                     d.text((x, pad), ch, font=f, fill=(0, 0, 0, 0),
-                           stroke_width=_kontur, stroke_fill=(0, 0, 0, 238))
+                           stroke_width=_kontur, stroke_fill=_kfill)
                 dfr.text((x, pad), ch, font=f, fill=color + (255,))
             letters.append(((x - 6 * SS) / SS, (x + cw + tracking2 + 6 * SS) / SS))
             x += cw + tracking2
@@ -5496,13 +5504,20 @@ def _accent_cap(words, intensity):
     return max(0, min(8, int(round(base * (0.5 + 0.75 * intensity)))))
 
 
-def sanitize_accents(raw, words, profile=None):
+def sanitize_accents(raw, words, profile=None, kw=None):
     """Beliebige (KI- oder Heuristik-)Akzentliste -> gueltige, dichte-begrenzte,
     zeitsortierte Liste mit Mindestabstand + Lane-Rotation. Verwirft Unfug still.
     DAS ist die Leitplanke: egal was die KI liefert, hier wird es dezent."""
     words = words or []
     st = accent_style(profile)
     cap = _accent_cap(words, st['intensity'])
+    # v187: ein Akzent, der WOERTLICH das Schluesselwort wiederholt, ist
+    # keine Ergaenzung - er steht doppelt im Bild und bleibt danach mit
+    # veraltetem Inhalt stehen. Heuristik und Keyword-Picker benutzen
+    # dieselben Kriterien, deshalb passierte das regelmaessig.
+    _kwset = set(kw or ())
+    _kwtxt = {clean(words[i].get('word', '')).strip('.,!?;:').upper()
+              for i in _kwset if 0 <= i < len(words)}
     dur_v = float(words[-1].get('end', 0)) if words else 0.0
     seen, tmp = [], []
     for a in (raw or []):
@@ -5534,12 +5549,22 @@ def sanitize_accents(raw, words, profile=None):
     tmp.sort(key=lambda x: x['zeit'])
     out, last_t = [], -1e9
     for a in tmp:
+        if a.get('anker') in _kwset or (a.get('text') or '').upper() in _kwtxt:
+            continue
         if len([o for o in out if o['aktiv']]) >= cap and a['aktiv']:
             continue
         if a['zeit'] - last_t < 3.5:           # Mindestabstand -> dezent
             continue
         a['id'] = len(out)
-        a['dauer'] = 1.6
+        # v187: die Standzeit haengt am Anker-Wort statt bei 1.6 s fest zu
+        # stehen. Ein Akzent, der eine Sekunde laenger steht als das Wort,
+        # auf das er sich bezieht, liest sich als vergessene Grafik.
+        _an = a.get('anker')
+        if isinstance(_an, int) and 0 <= _an < len(words):
+            _wd = float(words[_an].get('end', 0)) - float(words[_an].get('start', 0))
+            a['dauer'] = round(max(0.9, min(1.6, _wd + 0.8)), 2)
+        else:
+            a['dauer'] = 1.6
         # Nutzer-Lane gewinnt (Editor); sonst rotieren, damit nichts stapelt.
         if not a.get('lane'):
             a['lane'] = ACCENT_LANES[len(out) % len(ACCENT_LANES)]
@@ -5548,7 +5573,7 @@ def sanitize_accents(raw, words, profile=None):
     return out
 
 
-def heuristic_accents(words, cfg=None, profile=None):
+def heuristic_accents(words, cfg=None, profile=None, kw=None):
     """Deterministischer Akzent-Vorschlag OHNE KI (Notnagel ohne OpenAI-Key und der
     offline testbare Beweis): echte Zahlen -> counter, markante Begriffe -> chip.
     Dichte + Abstand macht sanitize_accents. Rueckgabe: Liste von Akzent-Dicts."""
@@ -5578,10 +5603,11 @@ def heuristic_accents(words, cfg=None, profile=None):
         if salient:
             raw.append({'zeit': t, 'art': 'chip', 'text': core.upper()[:24],
                         'anker': i, 'quelle': 'heuristik'})
-    return sanitize_accents(raw, words, profile)
+    return sanitize_accents(raw, words, profile, kw)
 
 
-def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None):
+def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None,
+               kw=None):
     """KI-Akzent-Regie (Spiegel von ai_direct): GPT-5 waehlt WENIGE Stellen, die
     einen dezenten Motion-Graphics-Akzent verdienen, und die Art. Faellt bei jedem
     Fehler / fehlendem Key lautlos auf heuristic_accents zurueck. Immer durch
@@ -5589,7 +5615,7 @@ def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None):
     key = os.environ.get('OPENAI_API_KEY')
     words = words or []
     if not key or len(words) < 3:
-        return heuristic_accents(words, cfg, profile)
+        return heuristic_accents(words, cfg, profile, kw)
     st = accent_style(profile)
     cap = _accent_cap(words, st['intensity'])
     if cap <= 0:
@@ -5618,13 +5644,13 @@ def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None):
         r.raise_for_status()
         data = json.loads(r.json()['choices'][0]['message']['content'])
         arr = data.get('akzente') if isinstance(data, dict) else data
-        san = sanitize_accents(arr, words, profile)
+        san = sanitize_accents(arr, words, profile, kw)
         for a in san:
             a['quelle'] = 'ki'
-        return san if san else heuristic_accents(words, cfg, profile)
+        return san if san else heuristic_accents(words, cfg, profile, kw)
     except Exception as e:
         print(f"AI accents unavailable ({type(e).__name__}), falling back to the heuristic.")
-        return heuristic_accents(words, cfg, profile)
+        return heuristic_accents(words, cfg, profile, kw)
 
 
 # ---- v101t Akzent-Compositing: der dezente Akzent wird zum kleinen Alpha-Sprite -----
@@ -5782,13 +5808,26 @@ def _caption_boxes(plans, t0, t1, W, H):
     for p in (plans or []):
         if p.get('end', 0) < t0 or p.get('start', 1e9) > t1:
             continue
+        # v187: die ECHTE Lage eines Textblocks steht in seinen Items -
+        # jedes traegt absolute cx/cy und sein Sprite. Bis dahin fiel jeder
+        # Flow-/Stack-Plan auf eine Ersatzbox aus der Zeit VOR v143 zurueck
+        # (mittig, 0.31 bis 0.48 H). Der Akzent fand deshalb nie eine
+        # Kollision und wurde ueber die Caption gezeichnet.
+        _its = [it for it in (p.get('front') or [])
+                if it.get('arr') is not None and it.get('cx') is not None]
+        if _its:
+            x0 = min(it['cx'] - it['arr'].shape[1] / 2.0 for it in _its)
+            x1 = max(it['cx'] + it['arr'].shape[1] / 2.0 for it in _its)
+            y0 = min(it['cy'] - it['arr'].shape[0] / 2.0 for it in _its)
+            y1 = max(it['cy'] + it['arr'].shape[0] / 2.0 for it in _its)
+            out.append((x0, y0, x1, y1))
+            continue
         arr = p.get('arr')
+        if arr is None or not hasattr(arr, 'shape'):
+            continue          # kein Text (z. B. reiner Kamera-Impuls)
         cx = p.get('cx', W / 2)
         cy = p.get('cy', p.get('by', H * 0.398))
-        if arr is not None and hasattr(arr, 'shape'):
-            cw, ch = arr.shape[1], arr.shape[0]
-        else:                                  # Komposit (flow/stack) - konservativ
-            cw, ch = int(W * 0.82), int(H * 0.17)
+        cw, ch = arr.shape[1], arr.shape[0]
         out.append((cx - cw / 2, cy - ch / 2, cx + cw / 2, cy + ch / 2))
     return out
 
@@ -6551,7 +6590,25 @@ _FLOW_CONN = {'im', 'in', 'am', 'an', 'auf', 'aus', 'bei', 'der', 'die', 'das',
               'wir', 'ich', 'du', 'er', 'sie', 'als', 'wenn', 'doch', 'nur',
               'of', 'to', 'the', 'a', 'an', 'at', 'on', 'in', 'for', 'and',
               'is', 'it', 'its', "it's", 'so', 'as', 'do', 'i', 'you', 'we',
-              'why', 'how', 'that', 'this', 'not', 'but', 'just', 'my', 'your'}
+              'why', 'how', 'that', 'this', 'not', 'but', 'just', 'my', 'your',
+              # v187: HILFSVERBEN IN ALLEN FORMEN. Die Liste kannte 'ist' und
+              # 'is', aber keine andere Form - 'sind' galt dadurch als
+              # Inhaltswort und bekam in der Collage den Gross-Faktor. Die
+              # Betonung lag auf der Kopula statt auf der Aussage. Derselbe
+              # Fehlertyp, den v159 fuer ANIM_HINTS ueber Stammformen loeste.
+              'bin', 'bist', 'sind', 'seid', 'war', 'warst', 'waren', 'wart',
+              'sei', 'seien', 'gewesen',
+              'hab', 'habe', 'hast', 'hat', 'habt', 'haben', 'hatte',
+              'hattest', 'hatten', 'gehabt',
+              'werde', 'wirst', 'wird', 'werdet', 'werden', 'wurde',
+              'wurdest', 'wurden', 'worden',
+              'kann', 'kannst', 'koennen', 'können', 'konnte', 'konnten',
+              'muss', 'musst', 'muessen', 'müssen', 'will', 'willst',
+              'wollen', 'soll', 'sollst', 'sollen', 'darf', 'duerfen',
+              'am', 'are', 'was', 'were', 'be', 'been', 'being',
+              'have', 'has', 'had', 'having',
+              'will', 'would', 'shall', 'should', 'can', 'could',
+              'may', 'might', 'must', 'does', 'did', 'done'}
 
 
 def _mix01(n):
@@ -6574,7 +6631,8 @@ def _mix01(n):
 
 
 def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
-                 colw=None, layout='flow', punch=False, seite='links'):
+                 colw=None, layout='flow', punch=False, seite='links',
+                 maxw=None):
     """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
     Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
       - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
@@ -6708,12 +6766,22 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # unter ihn ausweichen zu muessen - genau das macht die Referenz in ihren
     # Nahaufnahmen. Untergrenze 0.34 W, darunter wird der Satz zum Wortsalat.
     _colw = int(W * (0.86 if portrait else 0.55))
+    # v187: maxw ist der PLATTFORM-KORRIDOR (Button-Spalte, Title-Safe, Zoom).
+    # Er deckelt immer, ist aber KEINE Motiv-Verengung: 'colw' bleibt die
+    # Nahaufnahme-Sperre, an der Randabfall und Punch-Deckel haengen.
+    if maxw:
+        _colw = int(max(W * 0.34, min(_colw, float(maxw))))
     if colw:
         _colw = int(max(W * 0.34, min(_colw, float(colw))))
     # Tracking relativ zum Grad statt absolut: 6 px waren bei 96 px Hochformat
     # 6.25 % em, dieselben 6 px bei geschrumpfter Querformat-Schrift ueber 25 %
     # em - der Satz fiel dort in Einzelbuchstaben auseinander.
-    _trk_n = 6 if portrait else max(2, int(sz_n * 0.0625))
+    # v187: die Laufweite skaliert in BEIDEN Orientierungen mit dem Grad.
+    # Fest 6 px im Hochformat waren bei 1080 W zwar 2.3 % em (richtig), bei
+    # kleiner Bildbreite aber 22 % em - dort fiel der Wortabstand auf das
+    # Niveau des Buchstabenabstands und Woerter verschmolzen. Bei 1080x1920
+    # ergibt die Formel exakt dieselben 6 px, der Kundenpfad bleibt gleich.
+    _trk_n = max(2, int(sz_n * 0.0625))
     # v144: Glow kann aus der gemessenen Referenz kommen (Standard: an).
     _glow_k = bool((S.cfg.get('effects', {}) or {}).get('caption_glow', True))
     # v150 COLLAGE-VORAUSWAHL. Zwei Entscheidungen fallen VOR dem Setzen,
@@ -6799,7 +6867,12 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # Vorbild schneidet 'this' an, also vier Zeichen; dort verliert
             # man nur Teile der Randglyphen. Ab sechs Zeichen bleibt es beim
             # Satzspiegel.
-            _bleed = bool(punch and not colw and len(up) <= 5
+            # v187: bei aktiver Plattform-Maske ist der Randabfall AUS. Er
+            # laesst das Wort bewusst am Bildrand anschneiden - genau dort
+            # sitzen bei TikTok/Reels die Buttons. Ein Stilmittel fuer
+            # Material ohne UI-Overlay, keine Regel fuer jedes Format.
+            _maske = bool(maxw and maxw < W * 0.80)
+            _bleed = bool(punch and not colw and not _maske and len(up) <= 5
                           and (S.cfg.get('effects', {}) or {}).get(
                               'caption_bleed', True))
             # v183 ZOOM-SICHERER DECKEL. 0.89 W galt fuer ein ruhendes Bild -
@@ -6811,10 +6884,37 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # (_bleed) bleibt bei 1.14 W - dort IST der Anschnitt das Bild.
             _crash = float((S.cfg.get('camera', {}) or {}).get('crash') or 0)
             _pd = 0.89 - 0.11 * max(0.0, min(1.0, _crash))
-            _deckel = (int(W * (1.14 if _bleed else _pd)) if not colw
-                       else _colw) if punch else (
+            # v187: der Knall-Deckel kennt den Plattform-Korridor. Bis
+            # dahin galt bei punch immer 0.89 W, egal welche Maske aktiv war -
+            # gemessen lief der Block dadurch bis 0.954 W, also unter die
+            # Button-Spalte (rail 0.840 W). Ohne Maske bleibt alles wie v183.
+            _deckel = ((_colw if _maske else int(W * (1.14 if _bleed else _pd)))
+                       if not colw else _colw) if punch else (
                 min(int(W * 0.83), _colw) if portrait else _colw)
             sz = S.fit(up, int(sz_k * _kf), _deckel, font=S.f_sans_b, tracking=2)
+            # v187 DER KNALL WAR NUR UEBER DIE BREITE GEDECKELT. Nachgerechnet:
+            # im Hochformat band der Breiten-Deckel IMMER und frass den Faktor
+            # 2.25 komplett auf - das Schlusswort wurde kleiner als ein
+            # normales Schluesselwort (punch/key 0.86 bis 1.02). Im Querformat
+            # band er nie und das Wort lief auf 0.22 bis 0.28 H, also weit
+            # ueber die Referenz-Obergrenze 0.165 H.
+            # Zwei Gegenmassnahmen, je Format eine:
+            #  quer: harter HOEHEN-Deckel auf die Referenz-Obergrenze.
+            #  hoch: statt weiter zu schrumpfen darf der Knall anschneiden -
+            #        genau dafuer ist der Randabfall da (v152). Die Grenze
+            #        von 5 auf 8 Zeichen: laenger wird unlesbar.
+            if punch:
+                _hmax = int(H * 0.165 / 0.70)
+                if sz > _hmax:
+                    sz = _hmax
+                # EHRLICHE GRENZE, NICHT GEFIXT: im Hochformat erreicht ein
+                # langes Schlusswort den Faktor 2.25 nicht - bei 1080 W
+                # braeuchte ein 8-Zeichen-Wort ueber 1500 px. Erzwingen
+                # liesse es sich nur mit Anschnitt (v152 verbietet ihn ab
+                # 6 Zeichen, weil die Randglyphen wegfallen) oder mit einem
+                # Zeilenumbruch des Knalls. Beides waere schlechter als ein
+                # etwas kleineres Wort. Kurze Schlussworte bekommen ihren
+                # vollen Knall, lange nicht - das ist Physik, kein Bug.
             arr, tw, lets = S.text(up, sz, S.white, font=S.f_sans_b,
                                    glow=_glow_k, per_letter=True, tracking=2)
             items.append({'i': i, 'arr': arr, 'w': tw,
@@ -6931,11 +7031,14 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         rows = _umbruch(items)
 
     def _rsz(it):
-        # Nur die Collage rechnet mit der WIRKLICH gesetzten Groesse. Im
-        # Zeilensatz bleibt die Sollgroesse massgeblich - sonst aendert sich
-        # dort die Zeilenhoehe und damit die ganze Platzierung, obwohl an
-        # diesem Layout gar nichts geaendert wurde.
-        if layout == 'collage' and it.get('sz'):
+        # v187: gerechnet wird mit der WIRKLICH gesetzten Groesse, auch im
+        # Zeilensatz. Vorher galt dort die Sollgroesse - beim Knall klafften
+        # beide um den Faktor 2.25 auseinander (Soll 153 px, gesetzt 344 px),
+        # die Zeilenhoehe blieb bei 184 px und die Glyphe ragte je 80 px in
+        # die Nachbarzeilen. Das war echte Tinte auf Tinte, kein Ausklingen:
+        # 'ein neues Level' fiel im Render von 603 auf 16 Textpixel, sobald
+        # das Schlusswort stand.
+        if it.get('sz'):
             return it['sz']
         return sz_k if it['role'] in ('key', 'punch') else (
             sz_a if it['role'] == 'accent' else sz_n)
@@ -7504,24 +7607,58 @@ def safe_zone_report(plans, pz, W, H):
     und meldet, welche in die Button-Spalte oder Caption-Zeile ragen. Nur
     Momente mit bekanntem Sprite ('arr') und Zentrum ('cx') werden geprueft -
     der Rest ist ohnehin mittig und durch die Constraints gedeckt.
+    v187: das galt bis dahin NUR fuer Keyword-Karten - Flow- und Stack-
+    Bloecke tragen ihren Text in 'front' (Items mit eigenen absoluten
+    Koordinaten) und wurden komplett uebersprungen. Der Log sagte deshalb
+    unwidersprochen "Button-Spalte bleibt frei", waehrend dort Text stand.
+    Riegel am falschen Gate, derselbe Fehlertyp wie v159/v170/v176.
     Rueckgabe: Liste (kw_txt, grund). Rein beratend, aendert nichts."""
     if not pz:
         return []
+
+    def _box(p):
+        """(cx, cy, w, h) eines Plans - Karte ODER Textblock."""
+        arr = p.get('arr')
+        if arr is not None and p.get('cx') is not None:
+            return (p['cx'], p.get('cy', p.get('by')),
+                    arr.shape[1], arr.shape[0])
+        its = [it for it in (p.get('front') or [])
+               if it.get('arr') is not None and it.get('cx') is not None]
+        if not its:
+            return None
+        # Gemessen wird die TINTE, nicht das Sprite-Rechteck: ein Text-Sprite
+        # traegt bis zu 180 px transparenten Rand (Glow-Polster). Mit dem
+        # Rechteck gerechnet meldete der Report Verstoesse, wo im Bild
+        # nichts steht - dieselbe Unterscheidung wie _ink_x in build_plans.
+        xs, ys = [], []
+        for it in its:
+            _a = it['arr']
+            _nz = np.where(_a[..., 3] > 80)
+            if not len(_nz[0]):
+                continue
+            xs += [it['cx'] - _a.shape[1] / 2.0 + float(_nz[1].min()),
+                   it['cx'] - _a.shape[1] / 2.0 + float(_nz[1].max())]
+            ys += [it['cy'] - _a.shape[0] / 2.0 + float(_nz[0].min()),
+                   it['cy'] - _a.shape[0] / 2.0 + float(_nz[0].max())]
+        if not xs:
+            return None
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        return ((x0 + x1) / 2.0, (y0 + y1) / 2.0, x1 - x0, y1 - y0)
+
     warn = []
     for p in plans:
-        arr = p.get('arr')
-        cx = p.get('cx')
-        if arr is None or cx is None:
+        _b = _box(p)
+        if _b is None:
             continue
-        cy = p.get('cy', p.get('by'))
-        w = arr.shape[1]
-        h = arr.shape[0]
+        cx, cy, w, h = _b
+        _nm = p.get('kw_txt') or ('%s @%.1fs' % (p.get('tpl', '?'),
+                                                 float(p.get('start', 0))))
         if cx + w / 2 > pz['right_rail'] + 2:
-            warn.append((p.get('kw_txt', '?'), 'Button-Spalte rechts'))
+            warn.append((_nm, 'Button-Spalte rechts'))
         elif cy is not None and cy + h / 2 > pz['bottom'] + 2:
-            warn.append((p.get('kw_txt', '?'), 'Caption-Zeile unten'))
+            warn.append((_nm, 'Caption-Zeile unten'))
         elif cy is not None and cy - h / 2 < pz['top'] - 2:
-            warn.append((p.get('kw_txt', '?'), 'Reiter oben'))
+            warn.append((_nm, 'Reiter oben'))
     return warn
 
 
@@ -7638,6 +7775,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             cx = min((edge_in + W) / 2, W * 0.87)
         return side, cx
 
+    # v187 DICHTE-NORMALISIERUNG. Der TikTok-Preset schickte seit jeher
+    # 'wortweise' - einen Wert, den die Engine an keinem ihrer fuenf
+    # Verhaltens-Gates kennt. Er fiel damit in den sparsamen Pfad: der Look,
+    # den die UI als "word by word" verkauft, zeigte die Haelfte der Woerter,
+    # und die v185-Zusagen (keine Atempause, Luecken-Netz) liefen nie.
+    # Hier normalisiert, damit auch gespeicherte Kunden-Konfigs greifen.
+    _d187 = str(cfg['effects'].get('density', '')).lower()
+    if _d187 in ('wortweise', 'word', 'wordwise'):
+        cfg['effects']['density'] = 'durchgehend'
     portrait = W / H < 0.8    # 9:16 und aehnliche Hochformate
     # v139: FORMATGERECHTE Anker (Senior-Editor-Standard). Vorher sassen ALLE
     # Nicht-Hochformate auf einem festen 0.40H-Anker = obere Bildhaelfte,
@@ -7795,10 +7941,36 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             return None
         return breit
 
+    def _safe_rand():
+        return W * 0.05 + 8                   # 5 % Title-Safe (SMPTE/EBU)
+
+    def _zoom_stauchung():
+        """Die Kamera skaliert den FERTIGEN Frame, Captions eingeschlossen.
+        Referenz ist der anhaltende Zoom, nicht die Crash-Spitze."""
+        return 1.0 + 0.10 * min(1.0, float(cfg['camera'].get('strength', 0.7))
+                                + float(cfg['camera'].get('crash', 0.0)))
+
+    def _korridor():
+        """v187 NUTZBARE SATZBREITE. Der Flow-Satzspiegel war eine Konstante
+        (0.86 W ab 0.07 W) und kannte die Plattform-Maske nicht. Gemessen war
+        der Block damit breiter als der sichere Korridor (0.788 W bei
+        TikTok); spot() konnte ihn nicht mehr klemmen, weil untere und obere
+        Grenze zusammenfielen, und die Zoom-Stauchung schob ihn danach
+        zusaetzlich nach rechts. Das war die gemeinsame Ursache fuer BEIDES:
+        Text unter der Button-Spalte und abgeschnittene Buchstaben am
+        Bildrand. Rueckgabe (x0, breite) - beides schon zoom-bereinigt."""
+        _r = _safe_rand()
+        _rechts = (_pz['right_rail'] if _pz is not None else W - _r)
+        _z = _zoom_stauchung()
+        _mx = W / 2.0
+        _lo = max(_r, _mx - (_mx - _r) / _z)
+        _hi = min(_rechts, _mx + (_rechts - _mx) / _z)
+        return (_lo, max(W * 0.34, _hi - _lo))
+
     def spot(start, end, bw, bh, wunsch_y=None, kalt=False, wunsch_x=None,
              ziel=None, sprecher=None):
         """Freie Stelle fuer einen Textblock (bw x bh). Rueckgabe (x0, y0)."""
-        rand_x = W * 0.05 + 8                 # 5 % Title-Safe (SMPTE/EBU)
+        rand_x = _safe_rand()                 # 5 % Title-Safe (SMPTE/EBU)
         oben = (_pz['top'] if _pz is not None else H * 0.05)
         unten = (_pz['bottom'] if _pz is not None else H * 0.95)
         rechts = (_pz['right_rail'] if _pz is not None else W - rand_x)
@@ -7811,8 +7983,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # ein Punkt bei Abstand d von der Mitte landet nach dem Zoom bei d*z.
         # Referenz ist der ANHALTENDE Zoom (~1.10), nicht die Crash-Spitze
         # (1.42): die dauert wenige Frames und ist ein gewollter Schlag.
-        _cz = 1.0 + 0.10 * min(1.0, float(cfg['camera'].get('strength', 0.7))
-                               + float(cfg['camera'].get('crash', 0.0)))
+        _cz = _zoom_stauchung()
         if _cz > 1.001:
             _mx, _my = W / 2.0, H / 2.0
             x_lo = max(x_lo, _mx - (_mx - rand_x) / _cz)
@@ -8588,8 +8759,16 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 sy = (H * 0.74 if safe_z
                       else min(H * 0.80, p.get('by', Z_BEHIND) + H * 0.26))
             elif fx == 'outline':
-                max_w = int(W * (0.60 if safe_z else 0.82)) if portrait else int(W * 0.396)
-                sz = S.fit(txt, int(H * 0.148) if not portrait else int(H * 0.09), max_w)
+                # v187: der Portrait-em-Deckel lag bei 0.09 H, also einer
+                # Versalhoehe von 0.063 H - konstruktiv UNTER dem
+                # Referenzboden 0.074 H, egal wie kurz das Wort ist.
+                # Und die Safe-Zone-Breite war eine Konstante (0.60 W)
+                # statt des echten Korridors. Beides gehoben; die Karte
+                # laeuft ohnehin durch clamp_cx und bleibt rail-treu.
+                _kx8, _kw8 = _korridor()
+                max_w = (int(min(W * 0.82, _kw8)) if portrait
+                         else int(W * 0.396))
+                sz = S.fit(txt, int(H * 0.148) if not portrait else int(H * 0.115), max_w)
                 p['o_arr'] = rot_img(S.text(txt, sz, S.accent, outline=True)[0], p['tilt'])
                 p['f_arr'] = rot_img(S.text(txt, sz, S.accent)[0], p['tilt'])
                 if p.get('count'):
@@ -8808,6 +8987,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if cfg['effects'].get('caption_viral'):
                 _lm = 'rows'
             _lay = 'flow'
+            # v187: die Spalte wird am Plattform-Korridor gedeckelt, nicht
+            # mehr nur bei einer Nahaufnahme verengt. Ohne das erreichte die
+            # Maske compose_flow nie (auf B-Roll gibt _freie_breite None).
+            _kx0, _kbw = _korridor()
             _cw150 = _freie_breite(start, end)
             # Bei verengter Spalte (Nahaufnahme, Person fuellt das Bild)
             # bleibt es beim Zeilensatz. Die Collage staffelt nach RECHTS -
@@ -8950,7 +9133,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             _punch = bool(str(words[g[-1]]['word']).rstrip().endswith(('.', '!', '?')))
             items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait, loud=loud,
                                                   flow_sel=(flow_map or {}).get(g[0]),
-                                                  colw=_cw150,
+                                                  colw=_cw150, maxw=_kbw,
                                                   layout=_lay, punch=_punch,
                                                   seite=_bnd)
             # Die Collage baut in die HOEHE. Wird sie zu hoch, passt sie an
@@ -8972,14 +9155,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 items, tot_h, anchor_i = compose_flow(
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
-                    colw=_cw150, layout='collage', punch=_punch,
+                    colw=_cw150, maxw=_kbw, layout='collage', punch=_punch,
                     seite=_bnd)
             if _lay == 'collage' and tot_h > H * 0.40:
                 _lay = 'flow'
                 items, tot_h, anchor_i = compose_flow(
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
-                    colw=_cw150, layout='flow', punch=_punch,
+                    colw=_cw150, maxw=_kbw, layout='flow', punch=_punch,
                     seite=_bnd)
             # v143: Position kommt aus der Platzierungs-Regie statt aus einer
             # Konstanten. Wunschzone = wo der Block AM LIEBSTEN sitzt; spot()
@@ -9375,6 +9558,22 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     # Der Block laeuft schon: er raeumt VOR der Karte, sein
                     # Ausklingen muss dafuer ebenfalls fertig sein.
                     _neu = max(_bs + 0.25, _ks - _AUS)
+                    # v187: aber NICHT, bevor sein eigenes letztes Wort
+                    # ueberhaupt eingesetzt hat. Vorher wurde nur mit den
+                    # Startzeiten gerechnet; gemessen erschien 'heute'
+                    # (Wortzeit 0.80) erst waehrend der Ausblende eines auf
+                    # 0.68 gekuerzten Blocks - nie voll deckend. Die Karte
+                    # hat Vorrang bei der Lesezeit, aber nicht das Recht,
+                    # das Schlusswort des Vorgaengers zu verschlucken.
+                    _letzt = max((it.get('t', _bs)
+                                  for it in (_b.get('front') or [])),
+                                 default=_bs)
+                    if _neu < _letzt + 0.25:
+                        _spaet = max(_ks, _letzt + 0.25)
+                        if _spaet > _ks + 1e-3 and _spaet < _k['end'] - 0.30:
+                            _k['t0'] = _k['start'] = _ks = _spaet
+                            _n_solo += 1
+                        _neu = max(_neu, min(_letzt + 0.25, _ks - 0.05))
                     if _neu < _b['end'] - 1e-3:
                         _b['end'] = _neu
                         _n_solo += 1
@@ -11012,7 +11211,12 @@ def main():
     H = min(H, src_h)
     H = int(round(H / 2) * 2)
     if args.preview:
-        H = 540
+        # v187: auch die Vorschau rechnet 540 als KURZE KANTE (v149-Regel).
+        # Als Bildhoehe genommen ergab ein 540x960-Hochformat nur 304 px
+        # Breite - ein Fuenftel der Flaeche des Endergebnisses, und genau an
+        # diesem Bild beurteilt die Desktop-GUI die Looks.
+        H = 540 if src_w >= src_h else int(round(540 * src_h / max(src_w, 1)))
+        H = int(round(min(H, src_h) / 2) * 2)
         cfg['output']['master'] = False
         cfg['output']['crf'] = 30
         cfg['output']['speed'] = 'schnell'
@@ -11383,14 +11587,15 @@ def main():
         if os.path.exists(_acc_path0):
             try:
                 _acc_list0 = sanitize_accents(
-                    json.load(open(_acc_path0, encoding='utf-8')), words, _acc_prof0)
+                    json.load(open(_acc_path0, encoding='utf-8')), words,
+                    _acc_prof0, kw)
             except Exception:
                 _acc_list0 = []
         else:
             _acc_list0 = ai_accents(
                 words, cfg.get('language', 'auto'),
                 str((cfg.get('accents') or {}).get('ai_model', 'gpt-5')),
-                _acc_prof0, cfg)
+                _acc_prof0, cfg, kw)
         try:
             json.dump(_acc_list0, open(_acc_path0, 'w', encoding='utf-8'),
                       ensure_ascii=False, indent=1)
@@ -11580,7 +11785,7 @@ def main():
         try:
             accents_render = sanitize_accents(
                 json.load(open(_acc_path, encoding='utf-8')), words,
-                (cfg.get('accents') or {}).get('profile'))
+                (cfg.get('accents') or {}).get('profile'), kw)
         except Exception:
             accents_render = []
         _plat_a = str(cfg.get('output', {}).get('platform', 'generic')).lower()

@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v185-maengel'
+DVE_BUILD = 'v187-korridor'
 
 
 @app.middleware('http')
@@ -2396,7 +2396,9 @@ def build_config(look, overrides=None):
         'tiktok': {
             'effects': {
                 # Wortweise, dicht, energisch - Reels/Shorts-Kern-Modus 2026
-                'density': 'wortweise', 'text_style': '3d kinetisch',
+                # v187: 'wortweise' kannte die Engine nicht und fiel in den
+                # sparsamen Pfad - der Look zeigte die Haelfte der Woerter.
+                'density': 'durchgehend', 'text_style': '3d kinetisch',
                 'hook_seconds': 8, 'hook_strength': 0.85, 'instant_hook': True,
                 'pattern_interrupt': 6, 'retention_gap': 8,
                 'words_per_group': 2, 'words_per_group_max': 4,

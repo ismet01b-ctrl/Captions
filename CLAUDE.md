@@ -275,6 +275,32 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Plattform-Korridor + Vorschau (v186/v187)
+- **Der Satzspiegel haengt am Korridor, nicht an einer Konstanten.**
+  `_korridor()` liefert die zoom-bereinigte nutzbare Breite (Title-Safe,
+  Button-Spalte, Kamera-Stauchung). compose_flow bekommt sie als `maxw`.
+  `colw` bleibt getrennt davon die NAHAUFNAHME-Sperre - haengt beides am
+  selben Parameter, greifen Randabfall und Punch-Deckel nie wieder.
+- **Jeder Report muss Flow-Bloecke kennen.** `safe_zone_report` und
+  `_caption_boxes` lasen cx/cy vom Plan; Flow-Bloecke tragen ihren Text in
+  `front`. Beide fielen dadurch still durch (Log sagte "Button-Spalte
+  frei", Akzent legte sich auf die Caption). Wer eine neue Pruefung baut,
+  muss BEIDE Plan-Formen abdecken. Gemessen wird die TINTE, nicht das
+  Sprite-Rechteck (bis 180 px Glow-Polster).
+- **Dichte-Werte sind ein geschlossener Satz:** sparsam / akzente /
+  durchgehend. 'wortweise' kannte die Engine nie und fiel in den sparsamen
+  Pfad - der TikTok-Look zeigte jahrelang die Haelfte der Woerter. Neue
+  Werte gehoeren an ALLE fuenf Gates oder gar nicht in die UI.
+- **Der Knall ist in H gedeckelt (0.165 H), nicht nur in W.** Im
+  Hochformat bleibt er bei langen Woertern unter dem Faktor 2.25 - das ist
+  Physik (1080 W reichen nicht), kein Bug. Nicht mit Anschnitt erzwingen,
+  v152 verbietet ihn ab 6 Zeichen.
+- **Die Kontur richtet sich nach der Textfarbe.** Hart schwarz war im Look
+  'clean' (feste dunkle Palette) ein dunkler Saum um dunklen Text.
+- **Die Look-Vorschau kommt aus der echten Config** (`/api/default_config`,
+  dieselben Hausmasse wie compose_flow). Sie zeigt bewusst nur Typografie
+  und sagt das auch - eine geschoente Attrappe waere schlimmer als keine.
+
 ### Ein Moment, ein Bild + kein Wort faellt weg (v185)
 - **Der Solo-Riegel rechnet mit dem AUSKLINGEN, nicht mit dem Ende.** Ein
   Plan bleibt nach `end` noch bis 0.40 s im Bild (`active`-Fenster). Mit dem
@@ -541,7 +567,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1142/1142 grün (Stand v185)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1173/1173 grün (Stand v187)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -3,6 +3,80 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v186/v187 PRESET-AUDIT + LIVE-VORSCHAU.**
+  Alle neun Looks in beiden Formaten gerendert und vermessen, danach
+  adversarisch gegengeprueft: von 50 gemeldeten Positionen blieben 13
+  echte Maengel, 7 davon schwer. Fast alle sassen in der GEMEINSAMEN
+  Engine, nicht in einzelnen Presets - deshalb wirken die Fixes ueberall.
+  SCHWER (alle behoben und nachgemessen):
+  1. DER FLOW-SATZSPIEGEL KANNTE DIE PLATTFORM-MASKE NICHT. Feste 0.86 W
+     ab 0.07 W gegen einen sicheren Korridor von 0.788 W. spot() konnte
+     nicht mehr klemmen (untere und obere Grenze fielen zusammen), der
+     Laufzeit-Zoom schob den Block danach zusaetzlich nach rechts. EINE
+     Ursache fuer BEIDE Symptome: Text unter den TikTok-Buttons (9 von 17
+     Woertern, bis 0.957 W) UND am Bildrand abgeschnittene Buchstaben.
+     Neu: `_korridor()` liefert die zoom-bereinigte nutzbare Breite,
+     compose_flow bekommt sie als `maxw` - getrennt von `colw`, das die
+     Nahaufnahme-Sperre bleibt (sonst haetten Randabfall und Punch-Deckel
+     nie wieder gegriffen). Der Knall-Deckel kennt die Maske ebenfalls.
+     Gemessen ueber alle 9 Looks x 2 Formate: 0 Verstoesse, 0 Ausreisser.
+  2. DER LOG SAGTE DAS GEGENTEIL. `safe_zone_report` prueft nur Plaene mit
+     'arr'/'cx', also ausschliesslich Keyword-Karten - jeder Flow-Block
+     fiel durch. Deshalb hat nie jemand gewarnt. Riegel am falschen Gate,
+     derselbe Fehlertyp wie v159/v170/v176. Jetzt mit Flow-Zweig, und er
+     misst die TINTE statt des Sprite-Rechtecks (bis 180 px Glow-Polster
+     haetten sonst Fehlalarme erzeugt).
+  3. DIE AKZENT-PILLE LAG AUF DER CAPTION. Die Kollisionspruefung gibt es,
+     aber `_caption_boxes` las cx/cy vom Plan - die haben Flow-Bloecke
+     nicht - und fiel auf eine Ersatzbox aus der Zeit VOR v143 zurueck
+     (mittig, 0.31 bis 0.48 H). Jetzt Union-Box aus den Items. Direkte
+     Folge davon, dass v185 die Akzente wieder eingeschaltet hat.
+  4. DER SCHLUSSWORT-KNALL WAR NUR UEBER DIE BREITE GEDECKELT. Querformat
+     lief auf 0.22 bis 0.28 H (Referenz-Obergrenze 0.165 H). Jetzt harter
+     Hoehen-Deckel. EHRLICHE GRENZE, NICHT GEFIXT: im Hochformat erreicht
+     ein langes Wort den Faktor 2.25 nie - bei 1080 W braeuchte ein
+     8-Zeichen-Wort ueber 1500 px. Erzwingbar nur mit Anschnitt (v152
+     verbietet ihn ab 6 Zeichen, am Render belegt) oder Zeilenumbruch.
+     Beides waere schlechter als ein etwas kleineres Wort.
+  5. DIE ZEILENHOEHE RECHNETE MIT DER NOMINALEN GROESSE. Beim Knall klafften
+     Soll (153 px) und gesetzt (344 px) um Faktor 2.25 auseinander, die
+     Glyphe ragte je 80 px in die Nachbarzeilen - echte Tinte auf Tinte.
+     `_rsz` nimmt jetzt immer die gesetzte Groesse.
+  6. DER TIKTOK-PRESET WAR KAPUTT. Er schickte `density: wortweise`, einen
+     Wert, den die Engine an keinem ihrer fuenf Gates kennt - er fiel in
+     den sparsamen Pfad. Der Look, den die UI als "word by word" verkauft,
+     zeigte die Haelfte der Woerter, und die v185-Zusagen liefen dort nie.
+     Preset und UI auf 'durchgehend', plus Normalisierung in der Engine
+     fuer bereits gespeicherte Kunden-Konfigs.
+  7. CLEAN HATTE KEINE KONTRAST-GARANTIE. Als einziger Look feste dunkle
+     Palette mit adaptive:false, damit laeuft `fit_caption_color` nicht -
+     und die Kontur war hart schwarz, also dunkler Saum um dunklen Text
+     (gemessen 1.37:1). Die Kontur richtet sich jetzt nach der Textfarbe.
+  MITTEL (alle behoben): outline-Karte erreichte im Hochformat konstruktiv
+  nie die Referenzhoehe (Deckel 0.09 -> 0.115 em, Breite am echten
+  Korridor); Auto-Akzent wiederholte woertlich das Schluesselwort und
+  stand mit veralteter Standzeit weiter (Keyword-Menge wird jetzt bis in
+  `sanitize_accents` durchgereicht, Standzeit haengt am Anker-Wort);
+  Solo-Riegel kappte Bloecke, bevor ihr letztes Wort ueberhaupt einsetzte;
+  Verbinder-Liste kannte 'ist', aber nicht sind/war/hat/wird - die
+  Betonung landete auf Hilfsverben; Vorschau-Modus nahm 540 als Bildhoehe
+  statt als kurze Kante (v149-Regel); Laufweite skalierte im Hochformat
+  nicht mit dem Schriftgrad.
+  VERWORFEN (11 Meldungen): Standbild-Artefakte aus Aufbau- und
+  Ausklingphasen, Einheitenfehler, Eigenheiten des gesichtslosen
+  Grau-Testclips, Doppelmeldungen desselben Codefehlers.
+  v186 LIVE-VORSCHAU: unter der Look-Auswahl laeuft eine 9:16-Buehne mit
+  einer echten Caption-Sequenz, gebaut aus der ECHTEN Look-Config
+  (`/api/default_config`) - Schriftdatei, Hausmasse 0.105/0.050 em,
+  Viral-Faktoren, Kontur, Woerter je Block, Standzeit, Aktivwort-Emphase,
+  Versalsatz. Dazu Fakten-Chips und der ausdrueckliche Hinweis, dass
+  Kamera, Freistellung und Effekte NICHT gezeigt werden - eine geschoente
+  Attrappe waere schlimmer als keine Vorschau. Browser-getestet ueber alle
+  Looks, keine JS-Fehler.
+  EHRLICH: Linux/CPU, synthetischer Grau-Clip ohne Gesicht, ohne Key.
+  Occlusion, Zwei-Sprecher-Regie und Hand-Kontakt liessen sich damit nicht
+  pruefen. Tests: +30 neue Checks (v186/v187), fuenf Alt-Checks ehrlich
+  nachgezogen. 1173/1173 logic + Renders 7/1/5/2 + GUI gruen.
 - **v185 DIE VIER GEMESSENEN MAENGEL - plus drei Folgefunde.**
   Ismets Viral-Render (Build v184) durchgemessen statt beurteilt. Was
   objektiv falsch war, ist behoben; an "sieht aus wie lolo" wurde NICHT
