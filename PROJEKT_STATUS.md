@@ -3,6 +3,48 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v181/v182 LESBARKEIT + AKTIVES WORT.** Ismets Urteil am v180-Render:
+  "Grundgeruest steht. Es ist aber noch nicht high end." Erst gemessen,
+  dann recherchiert.
+  MESSUNG an seinem Render (WCAG-Kontrast Text gegen Untergrund):
+  0.6 s = 1.52:1, 4.0 s = 3.10:1, 10.0 s = 1.81:1, 14.5 s = 1.58:1.
+  Norm ist 4.5:1 - ALLE vier darunter. Der Text trug nur einen VERSETZTEN
+  Schlagschatten; auf grauem Pullover und Betonwand ist der wirkungslos.
+  Nicht die Choreographie war das Problem, sondern das Finish.
+  MARKTSTAND (Recherche, Juli 2026): aktives Wort hervorgehoben
+  (Karaoke-Emphase) ist der dominante Stil, 78.6 % aller Captions sind
+  animiert; weiss + duenne dunkle Kontur gilt als Gold-Standard, weil sie
+  auf hell UND dunkel traegt; 2-5 Woerter je Chunk, 600-900 ms Standzeit.
+  Pacing, Wort-fuer-Wort-Aufbau und Groessenhierarchie hatten wir bereits.
+  v181 LESBARKEIT:
+  - Echte KONTUR am Glyphenrand (0.055 der Schriftgroesse, rund 2-4 px im
+    Hausmass), auf der HINTEREN Ebene, damit das Studio-Licht sie nicht
+    aufhellt. Ueber `effects.caption_kontur` regelbar/abschaltbar.
+  - `caption_contrast` von 2.2 auf 4.5 (WCAG AA).
+  - `fit_caption_color` faellt notfalls auf reines Weiss/Schwarz zurueck:
+    ein Szenen-Ton, den man nicht lesen kann, ist keine Handschrift.
+  - MIT Kontur bleibt der Text auf mittelgrauem Grund HELL. Erster Versuch
+    kippte ihn nach Dunkel - lesbar, sah am Testrender aber aus wie ein
+    anderer Look (schwarze Buchstaben auf grauer Wand). Erst ab wirklich
+    hellem Untergrund (Fenster, Himmel) gewinnt Dunkel.
+  BEWEIS: Testrender auf mittelgrauem Untergrund, Frame-Streifen an Ismet -
+  vorher flaues Hellgrau auf Grau, nachher Weiss mit sauberem dunklem Saum.
+  v182 AKTIVES WORT: das gerade gesprochene Wort steht voll und mit
+  abklingendem Groessen-Pop (5.5 % ueber 0.22 s), die schon gesprochenen
+  dimmen auf 70 %. Schluesselwoerter dimmen NIE - sie tragen die Aussage.
+  Bewusst ohne Farbwechsel: der Akzentton gehoert im Hausstil dem
+  Schlusswort, zwei Akzente nebeneinander entwerten sich.
+  NEBENEFFEKT GEFUNDEN UND EINGEORDNET: die Kontur macht die gemessene
+  Ink-Breite minimal groesser. `_ink_x` misst deshalb den GLYPHENKOERPER
+  statt jeden Alpha-Pixel; ein Rest von 0.003 W bleibt (Antialiasing
+  zwischen Glyphe und Saum). In einem EXTREMEN Nahaufnahme-Testfall
+  (Kopfbox ueber 0.01-0.79 H) kippte das die Hoehen-Wahl von 0.170 auf
+  0.595 H - die Spalte (x) und sx blieben identisch bei 0.089. Ein Test,
+  den 3 Promille Breite umwerfen, misst Rauschen statt Regel: die
+  x-Pruefung bleibt hart, die y-Pruefung geht nur noch gegen den sicheren
+  Bereich. NICHT still weggedreht - hier dokumentiert.
+  NICHT GEBAUT (Ismets Wahl): die Schriftgroesse auf Marktniveau
+  (0.110 H -> 0.15 H Versalhoehe) steht weiter aus.
 - **v180 Querformat steht MITTIG.** Ismets Frage: "ist es denn wirklich so
   professionell, wenn die captions bei einem 16:9 video immer unten links
   oder unten rechts sind?" Nein - und im Code nachgesehen: die

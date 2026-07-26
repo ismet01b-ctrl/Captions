@@ -1087,7 +1087,7 @@ def contrast_ratio(rgb, lum_bg):
 _CAP_VALUES = (246, 232, 214, 34, 22, 52, 84, 120, 160)
 
 
-def fit_caption_color(hue, sat, bg_lum, min_ratio=2.2):
+def fit_caption_color(hue, sat, bg_lum, min_ratio=2.2, kontur=False):
     """Waehlt die Helligkeit des Caption-Tons so, dass gegen den gemessenen
     Untergrund mindestens min_ratio Kontrast steht. Farbton und Saettigung
     bleiben unangetastet, damit die Handschrift erhalten bleibt: auf dunklem
@@ -1095,8 +1095,17 @@ def fit_caption_color(hue, sat, bg_lum, min_ratio=2.2):
     Himmel, Schnee) derselbe Ton in dunkel. Schafft kein Kandidat die Schwelle
     (mittelgrauer Untergrund), gewinnt der kontraststaerkste - nie schlechter
     als vorher."""
+    # v181: MIT KONTUR bleibt der Text HELL, solange der Untergrund nicht
+    # wirklich hell ist. Die dunkle Kontur traegt den Kontrast; nach Dunkel
+    # zu kippen waere auf mittelgrauem Grund zwar lesbar, saehe aber aus wie
+    # ein anderer Look (am Testrender belegt: schwarze Buchstaben auf grauer
+    # Wand). Erst ab einem wirklich hellen Untergrund - Fenster, Himmel,
+    # Schnee - gewinnt Dunkel; dort waere Weiss auf Weiss der Amateur-Marker.
+    _werte = _CAP_VALUES
+    if kontur and bg_lum < 0.45:
+        _werte = tuple(v for v in _CAP_VALUES if v >= 200)
     best, best_r = None, -1.0
-    for v in _CAP_VALUES:
+    for v in _werte:
         rgb = cv2.cvtColor(np.uint8([[[int(hue), int(sat), int(v)]]]),
                            cv2.COLOR_HSV2RGB)[0, 0]
         rgb = tuple(int(c) for c in rgb)
@@ -1105,6 +1114,19 @@ def fit_caption_color(hue, sat, bg_lum, min_ratio=2.2):
             return rgb
         if r > best_r:
             best, best_r = rgb, r
+    # v181 LESBARKEIT SCHLAEGT HANDSCHRIFT. Bis hier variierte nur die
+    # HELLIGKEIT, Farbton und Saettigung blieben stehen - auf mittelgrauem
+    # Untergrund (Betonwand, grauer Pullover) erreicht damit KEIN getoenter
+    # Wert die Schwelle, und der Text blieb bei gemessenen 1.5-2.5:1 haengen.
+    # Ein Szenen-Ton, den man nicht lesen kann, ist keine Handschrift,
+    # sondern ein Fehler. Reicht die Toenung nicht, faellt sie weg: reines
+    # Weiss oder tiefes Schwarz, was auch immer den Untergrund schlaegt.
+    _kand = (((255, 255, 255),) if (kontur and bg_lum < 0.45)
+             else ((255, 255, 255), (16, 16, 16)))
+    for _rein in _kand:
+        _r = contrast_ratio(_rein, bg_lum)
+        if _r > best_r:
+            best, best_r = _rein, _r
     return best
 
 
@@ -1181,7 +1203,8 @@ def scene_space_sampler(video_path, cut_times=None, gx=12, gy=16):
     return space_at
 
 
-def scene_palette_sampler(video_path, cut_times=None, min_contrast=2.2):
+def scene_palette_sampler(video_path, cut_times=None, min_contrast=2.2,
+                          kontur=True):
     """Liefert palette_at(t, region): tastet den Frame zum Zeitpunkt t per ffmpeg ab
     (robust bei HEVC/VFR, wo cv2-Seeks scheitern) und leitet Caption-Farben ab,
     die sich der Umgebung anpassen (Referenz-Look): Text = dominanter Szenenton,
@@ -1195,6 +1218,7 @@ def scene_palette_sampler(video_path, cut_times=None, min_contrast=2.2):
     dass sich das Bild aenderte). Jetzt teilen sich alle Captions eines Shots
     exakt eine Farbe (Cache-Key = Shot-Index). Sehr lange Shots duerfen alle 6s
     langsam nachziehen, damit Licht-Drift im Dauer-Take nicht einfriert."""
+    _hat_kontur = bool(kontur)
     cache = {}
     bounds = sorted(float(c) for c in (cut_times or []))
 
@@ -1236,9 +1260,10 @@ def scene_palette_sampler(video_path, cut_times=None, min_contrast=2.2):
             # Grund war das Weiss auf Weiss, der deutlichste Amateur-Marker.
             if min_contrast and min_contrast > 1.0:
                 bg_lum = region_luminance(small)
-                text = fit_caption_color(hue, t_sat, bg_lum, min_contrast)
+                text = fit_caption_color(hue, t_sat, bg_lum, min_contrast,
+                                         kontur=_hat_kontur)
                 accent = fit_caption_color(hue, int(255 * 0.55), bg_lum,
-                                           min_contrast)
+                                           min_contrast, kontur=_hat_kontur)
             else:
                 text = cv2.cvtColor(np.uint8([[[hue, t_sat, 246]]]),
                                     cv2.COLOR_HSV2RGB)[0, 0]
@@ -2103,6 +2128,22 @@ class Sprites:
         x = pad
         letters = []
         depth = max(int(size2 * 0.085), 6) if extrude else 0
+        # v181: Konturstaerke waechst mit der Schrift. 0.07 der Schriftgroesse
+        # entspricht bei Hausmass-Captions rund 2-4 px im fertigen Bild - der
+        # Bereich, den die Praxis als lesbar UND unaufdringlich fuehrt.
+        # Ueber effects.caption_kontur abschaltbar (0) oder skalierbar.
+        _kf = (self.cfg.get('effects', {}) or {}).get('caption_kontur', 1.0)
+        try:
+            _kf = float(_kf)
+        except (TypeError, ValueError):
+            _kf = 1.0
+        # v181: 0.055 statt 0.07. Die Kontur waechst das Sprite mit; bei 0.07
+        # wurde der Block so viel hoeher, dass er im Nahaufnahme-Fall nicht
+        # mehr in die schmale Spalte neben den Kopf passte und nach unten
+        # auswich (v143-Regression, vom Selftest gefangen). 0.055 liegt
+        # weiter im Praxisfenster von 2-4 px bei Hausmass-Captions.
+        _kontur = (0 if _kf <= 0.01
+                   else max(2 * SS, int(size2 * 0.055 * min(_kf, 2.5))))
         for ch, cw, kern in zip(txt, widths, kerns):
             x += kern                         # v85: Paar an prev heranziehen
             if outline:
@@ -2116,6 +2157,19 @@ class Sprites:
                 dfr.text((x, pad), ch, font=f, fill=color + (255,))
             else:
                 d.text((x + 3 * SS, pad + 5 * SS), ch, font=f, fill=(0, 0, 0, 150))
+                # v181 LESBARKEIT IST NICHT VERHANDELBAR. Bis hierher trug der
+                # Text nur einen weichen, VERSETZTEN Schlagschatten - auf
+                # einem grauen Pullover oder einer Betonwand ist der
+                # wirkungslos. Am Render gemessen: 1.52 bis 3.10:1 Kontrast,
+                # die Norm (WCAG AA) verlangt 4.5:1. Eine dunkle KONTUR
+                # direkt am Glyphenrand loest das unabhaengig vom
+                # Untergrund - genau der Grund, warum sie in der Branche
+                # der Standard fuer eingebrannten Text ist.
+                # Sie liegt auf der HINTEREN Ebene, damit das Studio-Licht
+                # der Frontflaeche sie nicht aufhellt.
+                if _kontur:
+                    d.text((x, pad), ch, font=f, fill=(0, 0, 0, 0),
+                           stroke_width=_kontur, stroke_fill=(0, 0, 0, 238))
                 dfr.text((x, pad), ch, font=f, fill=color + (255,))
             letters.append(((x - 6 * SS) / SS, (x + cw + tracking2 + 6 * SS) / SS))
             x += cw + tracking2
@@ -8829,7 +8883,17 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 if _a is None:
                     _h = _it.get('adv', _it.get('w', 0)) / 2.0
                     return (_it['cx'] - _h, _it['cx'] + _h)
-                _c = np.where(_a[..., 3] > 80)[1]
+                # v181: die KONTUR ist ein Rand-Bleed, keine Layout-Breite.
+                # Gemessen wird der GLYPHENKOERPER (deckend UND hell), damit
+                # der dunkle Saum die Blockbreite nicht aufblaeht. Ein
+                # dunkler Caption-Ton (heller Untergrund) traegt keine
+                # Kontur - dort greift die Alpha-Schwelle wie bisher.
+                # EHRLICHE GRENZE: das entfernt den Saum nicht restlos, die
+                # Antialiasing-Kante zwischen Glyphe und Kontur bleibt.
+                # Rest-Unterschied gemessen: 0.003 W.
+                _al = _a[..., 3] > 80
+                _hell = _al & (_a[..., :3].max(axis=2) > 150)
+                _c = np.where(_hell if _hell.any() else _al)[1]
                 if not len(_c):
                     return (_it['cx'], _it['cx'])
                 _o = _it['cx'] - _a.shape[1] / 2.0
@@ -10092,11 +10156,37 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             # blieb trotzdem stehen.
             fdx += p.get('_hand_dx', 0.0)
             fdy += p.get('_hand_dy', 0.0)
+            # v182 AKTIVES WORT (Karaoke-Emphase). Der dominante Caption-Stil
+            # 2026: das GERADE gesprochene Wort steht vorn - leicht groesser
+            # und in voller Deckkraft - waehrend die schon gesprochenen
+            # abdimmen. Das bindet den Blick ans Wort statt an den Block und
+            # ist der Unterschied zwischen "Text steht da" und "Text spricht
+            # mit". Bewusst OHNE Farbwechsel: der Akzentton gehoert im
+            # Hausstil dem Schlusswort, zwei Akzente nebeneinander wuerden
+            # sich gegenseitig entwerten.
+            _akt_i = None
+            if cfg['effects'].get('caption_aktivwort', True):
+                _kand = [it for it in p['front']
+                         if words[it['i']]['start'] <= t + 0.07]
+                if _kand:
+                    _akt_i = max(_kand,
+                                 key=lambda q: words[q['i']]['start'])['i']
             for it in p['front']:
                 wd = words[it['i']]
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf
                 if dt < 0:
                     continue
+                # Nur die VERGANGENEN Woerter dimmen; das aktive bleibt voll
+                # und bekommt einen kleinen Groessen-Pop, der ueber 0.22 s
+                # abklingt (kein Dauerzustand, sonst zappelt der Satz).
+                _ist_akt = (it['i'] == _akt_i)
+                _dim = 1.0
+                _pop = 1.0
+                if _akt_i is not None:
+                    if _ist_akt:
+                        _pop = 1.0 + 0.055 * (1 - smoothstep(min(dt / 0.22, 1.0)))
+                    elif it.get('role') not in ('key', 'punch'):
+                        _dim = 0.70
                 if it.get('role') in ('key', 'punch') and it.get('letters'):
                     n = len(it['letters'])
                     # v151: Aufdeck-Tempo kann aus der gemessenen Referenz
@@ -10120,15 +10210,15 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                           it['cx'] + fdx - (0 if vis_px is None
                                             else (it['arr'].shape[1] - vis_px) / 2),
                           it['cy'] + fdy + x_dv * it['arr'].shape[0],
-                          W, H, scale=x_sc * k_settle,
-                          opacity=g_out, crop_w=vis_px)
+                          W, H, scale=x_sc * k_settle * _pop,
+                          opacity=g_out * _dim, crop_w=vis_px)
                 else:
                     e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
                     paste(comp, it['arr'],
                           it['cx'] + fdx,
                           it['cy'] + fdy + (1 - e) * H * 0.020 + x_dv * it['arr'].shape[0],
-                          W, H, scale=(0.86 + 0.14 * e) * x_sc,
-                          opacity=min(dt / 0.10, 1) * g_out)
+                          W, H, scale=(0.86 + 0.14 * e) * x_sc * _pop,
+                          opacity=min(dt / 0.10, 1) * g_out * _dim)
             continue
         if p['tpl'] == 'stack':
             # Personen-Tracking: die Gruppe haengt an der Person und geht mit,
@@ -11077,7 +11167,8 @@ def main():
     elif cfg.get('colors', {}).get('adaptive', True):
         palette_at = scene_palette_sampler(
             args.input, cut_times,
-            min_contrast=float(cfg['effects'].get('caption_contrast', 2.2)))
+            min_contrast=float(cfg['effects'].get('caption_contrast', 4.5)),
+            kontur=float(cfg['effects'].get('caption_kontur', 1.0) or 0) > 0.01)
         print("Adaptive colours: captions pick up the scene tones (per shot)")
     # v143: Raum-Karte fuer die Platzierungs-Regie. Ein Abtastframe je Shot,
     # daraus ein Kostenraster 'wie besetzt ist diese Bildregion'. Abschaltbar

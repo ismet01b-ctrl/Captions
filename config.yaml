@@ -61,7 +61,8 @@ effects:
   # v140 KONTRAST-GARANTIE: Mindest-Kontrast (WCAG-Verhaeltnis) zwischen
   # Caption-Ton und gemessenem Untergrund. Reicht Hell nicht, kippt derselbe
   # Farbton nach Dunkel. 0 = aus (Alt-Verhalten, immer fast weiss).
-  caption_contrast: 2.2
+  # v181: WCAG-AA-Norm ist 4.5:1, nicht 2.2.
+  caption_contrast: 4.5
   # v143: Platzierungs-Regie. true = der Textblock weicht Gesicht und
   # unruhigen Bildbereichen aus (Raum-Karte pro Shot). false = feste Zone.
   adaptive_place: true
@@ -87,6 +88,15 @@ effects:
   # v152: das Schlusswort am Satzende darf links und rechts angeschnitten
   # aus dem Bild laufen. Nur so erreicht es die Groesse der Vorbilder.
   caption_bleed: true
+  # v181 LESBARKEIT: dunkle Kontur am Glyphenrand. Sie garantiert den
+  # Kontrast unabhaengig vom Untergrund - ein versetzter Schlagschatten
+  # allein reicht auf grauem Stoff oder Beton nicht (gemessen 1.5-3.1:1,
+  # Norm ist 4.5:1). 1.0 = Hausmass, 0 = aus, bis 2.5 dicker.
+  caption_kontur: 1.0
+  # v182 AKTIVES WORT: das gerade gesprochene Wort steht voll und leicht
+  # groesser, die schon gesprochenen dimmen auf 70 %. Der dominante
+  # Caption-Stil 2026 - bindet den Blick ans Wort statt an den Block.
+  caption_aktivwort: true
   # v160 ZEIGE-REGIE: zeigt oder schaut der Sprecher irgendwohin, landet die
   # Caption dort. Gemessen aus Hand-Landmarks und Kopfdrehung, kein API-Ruf.
   # Ein Gesicht bleibt trotzdem tabu - der Text weicht ihm weiter aus.

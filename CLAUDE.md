@@ -262,6 +262,21 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Lesbarkeit + aktives Wort (v181/v182)
+**Kontur ist Pflicht, nicht Deko.** Ein versetzter Schlagschatten trägt auf
+grauem Stoff nicht — gemessen 1.5 bis 3.1:1, Norm ist 4.5:1. `caption_kontur`
+zeichnet einen dunklen Saum auf der HINTEREN Ebene (0.055 der Schriftgröße);
+`caption_contrast` steht auf 4.5.
+- **Mit Kontur bleibt der Text hell**, bis der Untergrund wirklich hell ist
+  (bg_lum ≥ 0.45). Nach Dunkel zu kippen ist lesbar, sieht aber aus wie ein
+  anderer Look.
+- `fit_caption_color` fällt notfalls auf reines Weiß/Schwarz — ein Szenen-Ton,
+  den man nicht lesen kann, ist keine Handschrift.
+- **Die Kontur zählt nicht zur Layout-Breite** (`_ink_x` misst den
+  Glyphenkörper). Rest 0.003 W durch Antialiasing bleibt.
+- **v182 aktives Wort:** gesprochenes Wort voll + Pop, vergangene auf 70 %,
+  Keywords dimmen NIE. Kein Farbwechsel — der Akzent gehört dem Schlusswort.
+
 ### Querformat steht mittig (v180)
 **16:9 = unten mittig**, das ist die Konvention für eingebrannten Text
 (Netflix TTSG, BBC, SMPTE). Links/rechts geparkt ist Lower-Third-Sprache.
@@ -444,7 +459,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1085/1085 grün (Stand v180)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1099/1099 grün (Stand v182)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

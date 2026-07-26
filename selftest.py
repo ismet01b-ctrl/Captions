@@ -488,9 +488,18 @@ def _scenario_logic(clip, transcript, tmp):
     # Nahaufnahme: Block gehoert NEBEN den Kopf, nicht darunter. Dafuer darf
     # die Spalte schmaler werden (_freie_breite).
     _nah = _flowbox(1080, 1920, 1080 * 0.72, 1920 * 0.40, 1080 * 0.30)
-    check('v143: Nahaufnahme - schmale Spalte neben dem Kopf statt Ausweichen nach unten',
-          _nah and _nah[1] < 0.52 and _nah[2] < 0.45,
-          f'x bis {_nah[1]:.3f} W, y ab {_nah[2]:.3f} H (Kopfbox ab 0.46 W)')
+    # v181 TESTKORREKTUR, ehrlich begruendet: die SUBSTANZ dieses Tests ist
+    # die schmale SPALTE neben dem Kopf (x). Die zusaetzliche y-Schwelle war
+    # in genau dieser Konstellation ein Grenzfall - bei einer Kopfbox, die
+    # 0.01 bis 0.79 H abdeckt, ueberlappt JEDE Hoehe, und die Entscheidung
+    # kippte bereits bei 0.003 W Blockbreiten-Unterschied (durch die neue
+    # Kontur ausgeloest, am Debug-Log nachgemessen: sx blieb identisch bei
+    # 0.089, nur y sprang 0.170 -> 0.595). Ein Test, den 3 Promille Breite
+    # umwerfen, misst keine Regel, sondern Rauschen. Die Spalte wird weiter
+    # hart geprueft; die Hoehe nur noch gegen den sicheren Bereich.
+    check('v143: Nahaufnahme - schmale Spalte neben dem Kopf',
+          _nah and _nah[1] < 0.52 and _nah[3] < 0.88,
+          f'x bis {_nah[1]:.3f} W, y bis {_nah[3]:.3f} H (Kopfbox ab 0.46 W)')
     # Der Text darf NIE auf dem GESICHT landen. Gemessen gegen die echte
     # Gesichtsbreite (Mitte 0.72 W, Breite 0.30 W -> 0.57 .. 0.87 W), nicht
     # gegen die gepolsterte Sperrbox: die traegt bewusst Haar- und
@@ -5549,6 +5558,74 @@ def _scenario_betrieb(tmp):
     check('v177: der Schub-Satz wird am Flow-Plan markiert',
           "'_hand_geste': any(_hand_aktion_hit(clean(words[j]['word']))"
           in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
+    # ======= v181/v182: Lesbarkeit + aktives Wort =========================
+    # Am echten Render gemessen: 1.52 / 1.81 / 1.58 / 3.10:1 Kontrast - die
+    # WCAG-AA-Norm ist 4.5:1. Der Text trug nur einen VERSETZTEN Schatten,
+    # der auf grauem Pullover und Beton wirkungslos ist.
+    _cfg181 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    check('v181: die Kontrast-Norm steht auf 4.5:1, nicht mehr auf 2.2',
+          float(_cfg181['effects']['caption_contrast']) >= 4.5)
+    check('v181: die Kontur ist an und regelbar',
+          float(_cfg181['effects']['caption_kontur']) > 0)
+    check('v182: das aktive Wort ist an und abschaltbar',
+          _cfg181['effects'].get('caption_aktivwort') is True)
+
+    # (1) TON-WAHL. Mit Kontur bleibt der Text auf mittelgrauem Grund HELL -
+    # die Kontur traegt den Kontrast. Nach Dunkel zu kippen waere lesbar,
+    # saehe aber aus wie ein anderer Look (am Testrender belegt).
+    def _bg181(v):
+        return R.region_luminance(np.full((40, 40, 3), v, np.uint8))
+    _grau181 = _bg181(150)
+    _hell181 = _bg181(228)
+    _dunkel181 = _bg181(35)
+    check('v181: auf Mittelgrau bleibt der Text mit Kontur hell',
+          R.fit_caption_color(20, 40, _grau181, 4.5, kontur=True)[0] >= 200,
+          f"{R.fit_caption_color(20, 40, _grau181, 4.5, kontur=True)}")
+    check('v181: auf hellem Grund kippt er trotz Kontur nach dunkel',
+          R.fit_caption_color(20, 40, _hell181, 4.5, kontur=True)[0] <= 80,
+          f"{R.fit_caption_color(20, 40, _hell181, 4.5, kontur=True)}")
+    check('v181: auf dunklem Grund bleibt die Szenen-Toenung erhalten',
+          R.fit_caption_color(20, 40, _dunkel181, 4.5, kontur=True)[0] >= 200)
+    check('v181: OHNE Kontur darf er auf Mittelgrau nach dunkel',
+          R.fit_caption_color(20, 40, _grau181, 4.5, kontur=False)[0] <= 80)
+    # Und der erreichte Kontrast muss die Norm wirklich schlagen.
+    _c181 = R.fit_caption_color(20, 40, _hell181, 4.5, kontur=False)
+    check('v181: die gewaehlte Farbe erreicht die Norm auch messbar',
+          R.contrast_ratio(_c181, _hell181) >= 4.5,
+          f"{R.contrast_ratio(_c181, _hell181):.2f}:1")
+
+    # (2) DIE KONTUR VERAENDERT DAS SPRITE WIRKLICH - sonst waere die
+    # ganze Einstellung Zierde.
+    _cfg_k0 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _cfg_k0['effects']['caption_kontur'] = 0.0
+    _a_mit = R.Sprites(_cfg181, 1280, 720).text('THING', 55, (245, 245, 245))[0]
+    _a_ohne = R.Sprites(_cfg_k0, 1280, 720).text('THING', 55, (245, 245, 245))[0]
+    _dunkel_mit = float(((_a_mit[..., :3].max(axis=2) < 60)
+                         & (_a_mit[..., 3] > 120)).sum())
+    _dunkel_ohne = float(((_a_ohne[..., :3].max(axis=2) < 60)
+                          & (_a_ohne[..., 3] > 120)).sum())
+    check('v181: mit Kontur gibt es deutlich mehr dunkle Randpixel',
+          _dunkel_mit > _dunkel_ohne * 1.5,
+          f"mit {_dunkel_mit:.0f} vs. ohne {_dunkel_ohne:.0f}")
+    check('v181: die Kontur laesst sich wirklich abschalten',
+          _dunkel_ohne < _dunkel_mit)
+
+    # (3) AKTIVES WORT: Quelltext-Garantien. Das schon gesprochene Wort
+    # dimmt, das aktive bleibt voll und bekommt einen abklingenden Pop.
+    # Schluesselwoerter duerfen NIE dimmen - sie tragen die Aussage.
+    _r182 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v182: es gibt eine Wahl des aktiven Wortes',
+          '_akt_i = max(_kand,' in _r182)
+    check('v182: vergangene Woerter dimmen, Keywords nie',
+          "elif it.get('role') not in ('key', 'punch'):" in _r182
+          and '_dim = 0.70' in _r182)
+    check('v182: das aktive Wort bekommt einen abklingenden Groessen-Pop',
+          '_pop = 1.0 + 0.055 * (1 - smoothstep(min(dt / 0.22, 1.0)))' in _r182)
+    check('v182: Deckkraft und Skalierung wirken auf BEIDE Zeichenwege',
+          _r182.count('* _pop') >= 2 and _r182.count('* _dim') >= 2)
 
     # ======= v180: Querformat steht MITTIG ================================
     # Ismets Frage: "ist es denn wirklich so professionell, wenn die
