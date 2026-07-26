@@ -6076,8 +6076,11 @@ def _scenario_betrieb(tmp):
     # (6) MOTION-GRAFIK-AKZENTE wieder an (Counter/Badge/Lower-Third sind in
     # Ismets High-End-Referenz tragende Elemente). Dosiert bleiben sie durch
     # sanitize_accents (Dichte-Deckel + 3.5 s Mindestabstand).
-    check('v185: die Akzente laufen wieder automatisch',
-          _cfg185.get('accents', {}).get('auto') is True)
+    # v188: wieder AUS. Am Ergebnis war die Pille ein Fremdkoerper im
+    # Caption-Video (Ismets Befund). In der lolo-Referenz gehoeren solche
+    # Elemente zu einer Agentur-Produktion mit Multikamera und Schnitt.
+    check('v188: die Auto-Akzente sind wieder aus',
+          _cfg185.get('accents', {}).get('auto') is False)
     _acc185 = R.sanitize_accents(
         [{'art': 'chip', 'text': f'T{i}', 'zeit': i * 0.5} for i in range(40)],
         _ws185)
@@ -7449,8 +7452,8 @@ def _scenario_betrieb(tmp):
     # v185: die Auto-Akzente sind wieder AN (Ismets High-End-Referenz traegt
     # Counter, Badge und Namens-Karte als Bestandteile). Der dateibasierte
     # Editor-Pfad bleibt unveraendert und ueberschreibt weiterhin alles.
-    check('v185: Auto-Akzente wieder AN, Editor-Akzente rendern dateibasiert',
-          _cfg139['accents']['auto'] is True
+    check('v188: Auto-Akzente AUS, Editor-Akzente rendern dateibasiert',
+          _cfg139['accents']['auto'] is False
           and "if os.path.exists(_acc_path):\n        try:\n            accents_render" in _r139
           and _r139.count(".get('auto', False):") == 1)   # nur noch die Erzeugung
     check('v139: Caption-Anker formatgerecht (16:9=0.78 Lower Third, 4:3=0.75, 1:1=0.72)',

@@ -42,15 +42,16 @@ keywords:
   include: []
   exclude: []
   ai_vision: true
-# v185 AKZENTE WIEDER AN. v139 hatte sie abgeschaltet ("Captions pur").
-# Ismets High-End-Referenz (lolo) enthaelt aber genau diese Elemente als
-# tragende Bestandteile: hochlaufender Views-Counter mit Icon, Badge "7X",
-# Namens-Karte mit Pfeil. Ohne sie sieht ein Render nach nacktem Text aus,
-# und das war ein Teil des "sieht nicht high end aus".
-# Dosiert bleibt es durch sanitize_accents: harte Dichte-Obergrenze plus
-# 3.5 s Mindestabstand. Der Momente-Editor ueberschreibt weiterhin alles.
+# v188 AKZENTE WIEDER AUS. v185 hatte sie eingeschaltet, weil Ismets
+# lolo-Referenz Counter und Namens-Karten enthaelt. Am Ergebnis war es
+# falsch: die Pille wirkt im Caption-Video wie ein Fremdkoerper, nicht wie
+# Regie ("die motion graphic ist wieder drin, mach das raus"). In lolo
+# gehoeren diese Elemente zu einer AGENTUR-Produktion mit Multikamera und
+# Schnitt - dort tragen sie, bei nacktem Talking-Head nicht.
+# Gerendert wird wieder NUR, was der Nutzer im Momente-Editor selbst
+# anlegt (_accents.json via '+ Add accent').
 accents:
-  auto: true
+  auto: false
   ai_model: gpt-5
   intensity: 1.0
 effects:
