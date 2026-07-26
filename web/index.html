@@ -397,6 +397,54 @@ body {
 .look-card[data-look=retro] .lp-preview { background: linear-gradient(135deg, #3a1f4d, #241633); }
 .look-card[data-look=retro] .lp-preview span { font-family: 'f-right', sans-serif;
   color: #ffd6f5; letter-spacing: 1px; text-shadow: 0 0 12px rgba(255,120,220,.6); }
+/* v186 LIVE-VORSCHAU. 9:16-Buehne mit einer echten Caption-Sequenz, gebaut
+   aus der Look-Config (Schrift, Groessen, Kontur, Tempo, Emphase). */
+.lookprev {
+  display: flex; gap: 22px; align-items: center; flex-wrap: wrap;
+  background: var(--surf); border-radius: var(--r-lg);
+  padding: 18px; margin: 18px 0 0;
+}
+.lookprev .lp-stage { flex: 0 0 auto; }
+.lookprev .lp-frame {
+  width: 176px; height: 313px; border-radius: 12px; position: relative;
+  overflow: hidden; background: #4a4a4a;
+  background-image:
+    radial-gradient(120% 90% at 72% 18%, rgba(255,255,255,.20), transparent 62%),
+    linear-gradient(160deg, #5a5a58 0%, #3d3d3c 55%, #2c2c2b 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+}
+.lookprev .lp-cap {
+  position: absolute; left: 7%; right: 7%;
+  display: flex; flex-direction: column; gap: 2px;
+  transform: translateY(-50%);
+}
+.lookprev .lp-cap .lp-row { display: flex; flex-wrap: wrap; gap: .28em; }
+.lookprev .lp-cap .lp-w {
+  line-height: 1.06; white-space: nowrap;
+  opacity: 0; transform: scale(.88) translateY(6px);
+  transition: opacity .16s ease, transform .2s cubic-bezier(.2,1.4,.4,1);
+}
+.lookprev .lp-cap .lp-w.on { opacity: 1; transform: none; }
+.lookprev .lp-cap .lp-w.past { opacity: .70; }
+.lookprev .lp-cap .lp-w.pop { transform: scale(1.10); }
+.lookprev .lp-side { flex: 1 1 260px; min-width: 240px; }
+.lookprev .lp-side h4 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.lookprev .lp-note { font-size: 12.5px; color: var(--mut); line-height: 1.5; }
+.lookprev .lp-facts {
+  list-style: none; margin: 12px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.lookprev .lp-facts li {
+  font-size: 11.5px; color: var(--mut);
+  background: rgba(255,255,255,.06); border-radius: 999px; padding: 4px 10px;
+}
+@media (max-width: 560px) {
+  .lookprev { gap: 14px; }
+  .lookprev .lp-frame { width: 132px; height: 235px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lookprev .lp-cap .lp-w { transition: none; }
+}
 .look-card h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
 .look-card p { font-size: 13px; color: var(--mut); }
 .look-card .checkmark {
@@ -1988,6 +2036,18 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         </select>
       </div>
       <div class="look-grid" id="looks"></div>
+      <!-- v186: Live-Vorschau des gewaehlten Looks. Die Werte kommen aus
+           /api/default_config, also aus derselben Config, mit der die Engine
+           spaeter rendert - keine gemalte Attrappe. -->
+      <div id="lookPreview" class="lookprev hidden" aria-live="polite">
+        <div class="lp-stage"><div class="lp-frame"><div class="lp-cap"></div></div></div>
+        <div class="lp-side">
+          <h4>Live preview</h4>
+          <p class="lp-note">Built from this look's real settings: font, sizes, outline,
+             word pacing and emphasis. Your footage, camera moves and effects are not shown.</p>
+          <ul class="lp-facts"></ul>
+        </div>
+      </div>
       <div class="wiz-nav">
         <button class="btn secondary" data-back="1">Back</button>
         <div class="grow"></div>
@@ -2812,6 +2872,135 @@ async function loadDefaults() {
   const r = await fetch('/api/default_config?look=' + State.look);
   State.cfg = await r.json();
   State.cfgBase = JSON.parse(JSON.stringify(State.cfg));
+  renderLookPreview();
+}
+
+/* --------- v186 Live-Vorschau des Looks -------------------------------
+   Die Vorschau wird aus der ECHTEN Look-Config gebaut (dieselbe, mit der
+   die Engine rendert): Schriftdatei, Groessenverhaeltnis, Kontur,
+   Woerter je Block, Standzeit, Emphase, Versalsatz. Sie zeigt bewusst
+   NUR die Typografie - Kamera, Freistellung und Effekte kann eine
+   HTML-Buehne nicht ehrlich nachstellen, und eine geschoente Attrappe
+   waere schlimmer als keine Vorschau. */
+const LP_FONTS = {
+  'archivo.ttf': "'f-kino'", 'tiktok_bold.ttf': "'f-tiktok'",
+  'montserrat_xb.ttf': "'f-montse'", 'inter_black.ttf': "'f-inter'",
+  'anton.ttf': "'f-anton'", 'bebas.ttf': "'f-bebas'",
+  'poppins_b.ttf': "'f-poppins'", 'staatliches.ttf': "'f-staat'",
+  'alfaslab.ttf': "'f-alfa'", 'yeseva.ttf': "'f-yeseva'",
+  'bangers.ttf': "'f-bangers'", 'righteous.ttf': "'f-right'",
+  'lobster.ttf': "'f-lobster'", 'marker.ttf': "'f-marker'",
+  'sans_l.ttf': "'f-poppins'", 'serif.ttf': "'f-yeseva'",
+  'serif_i.ttf': "'f-yeseva'", 'playfair_i.ttf': "'f-yeseva'",
+};
+const LP_SATZ = [
+  ['this', 'is', 'the', 'ONE', 'thing'],
+  ['that', 'changes', 'EVERYTHING'],
+  ['and', 'it', 'takes', 'one', 'MINUTE'],
+];
+let _lpTimer = null;
+
+function _lpFont(path) {
+  const base = String(path || '').split('/').pop();
+  return (LP_FONTS[base] || "'f-montse'") + ', sans-serif';
+}
+
+function renderLookPreview() {
+  const box = $('#lookPreview');
+  if (!box || !State.cfg) return;
+  if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+  const e = State.cfg.effects || {}, f = State.cfg.fonts || {};
+  const H = box.querySelector('.lp-frame').clientHeight || 313;
+  const viral = !!e.caption_viral;
+  const skal = Math.max(0.6, Math.min(2.8, parseFloat(e.caption_scale) || 1));
+  const skn = Math.max(0.6, Math.min(1.3, parseFloat(e.caption_scale_klein) || skal));
+  // v184-Hausmasse, dieselben Zahlen wie in compose_flow
+  const szKey = H * 0.105 * skal * (viral ? 1.55 : 1);
+  const szNorm = H * 0.050 * skn * (viral ? 2.00 : 1);
+  const kontur = Math.max(0, Math.min(2.5, parseFloat(e.caption_kontur) ?? 1));
+  const zone = parseFloat(e.caption_zone) || 0.25;
+  const wpg = Math.max(1, parseInt(e.words_per_group, 10) || 3);
+  const hold = Math.max(0.35, parseFloat(e.chunk_hold_min) || 0.75);
+  const aktiv = e.caption_aktivwort !== false;
+  const flow = e.caption_flow !== false;
+  const acc = (State.cfg.colors || {}).accent || [255, 122, 26];
+  const cap = box.querySelector('.lp-cap');
+  cap.style.top = (zone * 100).toFixed(1) + '%';
+  const stroke = kontur ? `${(szNorm * 0.055 * Math.min(kontur, 2.5)).toFixed(1)}px` : '0';
+
+  // Saetze in Bloecke nach words_per_group schneiden
+  const bloecke = [];
+  LP_SATZ.forEach(s => {
+    for (let i = 0; i < s.length; i += wpg) bloecke.push(s.slice(i, i + wpg));
+  });
+
+  let bi = 0;
+  const zeigeBlock = () => {
+    const g = bloecke[bi % bloecke.length];
+    bi++;
+    cap.innerHTML = '';
+    const keyIdx = g.findIndex(w => w === w.toUpperCase() && w.length > 2);
+    const rows = [];
+    if (flow && keyIdx >= 0) {
+      if (keyIdx > 0) rows.push(g.slice(0, keyIdx));
+      rows.push([g[keyIdx]]);
+      if (keyIdx < g.length - 1) rows.push(g.slice(keyIdx + 1));
+    } else {
+      rows.push(g);
+    }
+    const spans = [];
+    rows.forEach(r => {
+      const rw = document.createElement('div');
+      rw.className = 'lp-row';
+      r.forEach(w => {
+        const isKey = flow && w === w.toUpperCase() && w.length > 2;
+        const s = document.createElement('span');
+        s.className = 'lp-w';
+        s.textContent = viral ? w.toUpperCase() : w;
+        s.style.fontFamily = _lpFont(isKey ? (f.strong || f.display) : f.support);
+        s.style.fontSize = (isKey ? szKey : szNorm).toFixed(1) + 'px';
+        s.style.color = '#fff';
+        s.style.fontWeight = isKey ? '900' : '700';
+        if (kontur) {
+          s.style.webkitTextStroke = stroke + ' rgba(0,0,0,.93)';
+          s.style.paintOrder = 'stroke fill';
+        }
+        rw.appendChild(s);
+        spans.push({ el: s, key: isKey });
+      });
+      cap.appendChild(rw);
+    });
+    // Wortweiser Aufbau mit Emphase: aktives Wort voll + Pop, vergangene 70 %
+    const schritt = Math.max(150, hold * 1000 / Math.max(spans.length, 1));
+    spans.forEach((sp, i) => {
+      setTimeout(() => {
+        sp.el.classList.add('on');
+        if (aktiv) {
+          sp.el.classList.add('pop');
+          setTimeout(() => sp.el.classList.remove('pop'), 200);
+          spans.slice(0, i).forEach(p => {
+            if (!p.key) p.el.classList.add('past');
+          });
+        }
+      }, i * schritt);
+    });
+    _lpTimer = setTimeout(zeigeBlock, spans.length * schritt + hold * 1000 + 420);
+  };
+  box.classList.remove('hidden');
+  zeigeBlock();
+
+  const dichte = { wortweise: 'word by word', durchgehend: 'every word',
+                   akzente: 'accents', sparsam: 'sparse' }[e.density] || e.density;
+  const facts = [
+    `${dichte}`,
+    `${wpg} words per block`,
+    `${hold.toFixed(2)}s hold`,
+    kontur ? 'outline on' : 'no outline',
+    aktiv ? 'active word emphasis' : 'no word emphasis',
+    viral ? 'all caps' : 'mixed case',
+  ];
+  box.querySelector('.lp-facts').innerHTML =
+    facts.map(t => `<li>${escHtml(t)}</li>`).join('');
 }
 
 /* --------- Login --------- */

@@ -5763,6 +5763,44 @@ def _scenario_betrieb(tmp):
     check('v185: die Farb-Karaoke ist restlos entfernt',
           not hasattr(R, 'tint_glyph'))
 
+    # ======= v186: Live-Vorschau des Looks ================================
+    # Sie muss aus der ECHTEN Look-Config kommen (dieselbe, mit der die
+    # Engine rendert) und dieselben Hausmasse benutzen - eine gemalte
+    # Attrappe waere ein Versprechen, das der Render nicht haelt.
+    _ui186 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v186: es gibt eine Vorschau-Buehne im Look-Schritt',
+          'id="lookPreview"' in _ui186 and '.lookprev .lp-frame' in _ui186)
+    check('v186: die Vorschau wird nach dem Laden der Look-Config gebaut',
+          'renderLookPreview();' in _ui186
+          and _ui186.index('State.cfgBase = JSON.parse') <
+              _ui186.index('renderLookPreview();\n}'))
+    check('v186: sie liest Schrift, Kontur, Tempo und Emphase aus der Config',
+          'e.caption_kontur' in _ui186 and 'e.chunk_hold_min' in _ui186
+          and 'e.words_per_group' in _ui186 and 'e.caption_aktivwort' in _ui186
+          and 'e.caption_viral' in _ui186 and 'f.support' in _ui186)
+    check('v186: sie benutzt die v184-Hausmasse und die Viral-Faktoren',
+          'H * 0.105 * skal' in _ui186 and 'H * 0.050 * skn' in _ui186
+          and '1.55' in _ui186 and '2.00' in _ui186)
+    check('v186: die Vorschau sagt ehrlich, was sie NICHT zeigt',
+          'camera moves and effects are not shown' in _ui186)
+    check('v186: jede Look-Schriftdatei hat eine CSS-Entsprechung',
+          all(f"'{_fn}'" in _ui186 for _fn in
+              ('montserrat_xb.ttf', 'tiktok_bold.ttf', 'poppins_b.ttf',
+               'yeseva.ttf', 'staatliches.ttf', 'righteous.ttf',
+               'inter_black.ttf', 'sans_l.ttf', 'serif.ttf', 'archivo.ttf')))
+    # Und die Zuordnung muss ALLE Looks abdecken - sonst faellt einer still
+    # auf die Ersatzschrift zurueck und die Vorschau luegt.
+    import server as _SV186
+    _fehlt186 = []
+    for _lk in _SV186.LOOKS:
+        _c186 = _SV186.build_config(_lk)
+        for _rolle in ('display', 'support'):
+            _bn = os.path.basename(str(_c186['fonts'].get(_rolle, '')))
+            if _bn and f"'{_bn}'" not in _ui186:
+                _fehlt186.append((_lk, _rolle, _bn))
+    check('v186: kein Look faellt in der Vorschau auf eine Ersatzschrift',
+          not _fehlt186, f"{_fehlt186}")
+
     # ======= v185: die vier gemessenen Maengel an Ismets Render ===========
     # (1) 4.0 s von 15 s ohne Caption, (2) fuenf Elemente in vier Stilen
     # gleichzeitig, (3) gesperrte Mikroversalien, (4) Gelb-Akzent auf
