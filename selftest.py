@@ -5201,8 +5201,10 @@ def _scenario_betrieb(tmp):
           and _kw169[0].get('anim') in R._VISIBLE_ANIM,
           f"tpl={_kw169[0]['tpl'] if _kw169 else '?'} "
           f"anim={_kw169[0].get('anim') if _kw169 else '?'}")
-    # Die ausdrueckliche Ansage bleibt Gesetz: intent-behind wird NICHT
-    # umgezogen, auch wenn eine sichtbare Anim daran haengt.
+    # v172 KORREKTUR der v169-Erwartung: sagt der Satz die HANDLUNG
+    # ("boom they explode"), gewinnt sie auch gegen intent - das ist die
+    # dokumentierte v99-Regel (sichtbar vorn, nie behind). Eine
+    # ORTS-Ansage ohne Aktionsverb ("right BEHIND me") bleibt Gesetz.
     with _cl159.redirect_stdout(_io159.StringIO()):
         _pl169b = R.build_plans(_w169, {1}, _cfg169, _S169, _W169, _H169,
                                 lambda s_, e_: True,
@@ -5212,8 +5214,49 @@ def _scenario_betrieb(tmp):
                                                          _H169 * 0.40,
                                                          _W169 * 0.10))
     _kw169b = [p for p in _pl169b if 'kw_i' in p]
-    check('v169: die Ansage "behind" bleibt trotz Anim Gesetz',
-          _kw169b and _kw169b[0]['tpl'] == 'behind')
+    check('v172: die Handlung gewinnt auch gegen intent (v99-Regel)',
+          _kw169b and _kw169b[0]['tpl'] == 'outline')
+    _w172 = [{'word': 'right', 'start': 1.0, 'end': 1.3},
+             {'word': 'BEHIND', 'start': 1.4, 'end': 1.8},
+             {'word': 'me', 'start': 1.9, 'end': 2.1}]
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl172 = R.build_plans(_w172, {1}, _cfg169, _S169, _W169, _H169,
+                               lambda s_, e_: True,
+                               {1: {'fx': 'behind', 'power': 3, 'n': 1,
+                                    'intent': True}},
+                               face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                        _H169 * 0.40,
+                                                        _W169 * 0.10))
+    _kw172 = [p for p in _pl172 if 'kw_i' in p]
+    check('v172: die Orts-Ansage "BEHIND me" bleibt Gesetz',
+          _kw172 and _kw172[0]['tpl'] == 'behind')
+    # v172: die Sichtbarkeit haengt am WORT, nicht an der Anim-Wahl der
+    # Regie. Falsches Anim, kein Anim, Animationen aus - alles egal.
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl172b = R.build_plans(_w169, {1}, _cfg169, _S169, _W169, _H169,
+                                lambda s_, e_: True,
+                                {1: {'fx': 'behind', 'power': 3, 'n': 1,
+                                     'anim': 'puls'}},
+                                face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                         _H169 * 0.40,
+                                                         _W169 * 0.10))
+    _kw172b = [p for p in _pl172b if 'kw_i' in p]
+    check('v172: auch mit falsch gewaehltem Anim steht das Aktionswort vorn',
+          _kw172b and _kw172b[0]['tpl'] == 'outline')
+    _cfg172 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _cfg172['effects']['anim'] = False
+    _S172 = R.Sprites(_cfg172, _W169, _H169)
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl172c = R.build_plans(_w169, {1}, _cfg172, _S172, _W169, _H169,
+                                lambda s_, e_: True,
+                                {1: {'fx': 'behind', 'power': 3, 'n': 1}},
+                                face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                         _H169 * 0.40,
+                                                         _W169 * 0.10))
+    _kw172c = [p for p in _pl172c if 'kw_i' in p]
+    check('v172: auch mit Animationen AUS steht das Aktionswort vorn',
+          _kw172c and _kw172c[0]['tpl'] == 'outline')
 
     # (2) Kein Ein-Wort-Rest nach einer Sprechpause. "And the one THING"
     # (Keyword, Satz offen), dann 3.5 s Pause, dann ein einzelnes "is".

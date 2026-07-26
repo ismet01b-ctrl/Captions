@@ -149,10 +149,13 @@ Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
   aufeinanderfolgenden Zielen am selben Ort nur die ersten zwei Momente
   durch. Sonst nagelt ein über das halbe Video gehaltener Arm alle Captions
   auf eine Seite (Ismets Befund, am Bild belegt).
-- **Sichtbare Anim schlägt `behind` UND `ground` (v169/v170).** Der Riegel
-  sitzt in `build_plans` (Auto-Wahl), nicht nur in parse_regie/Ansage-Pfad —
-  v159-Lehre. Szenen-Text (`ground`) verdeckt genauso wie `behind`. Nur
-  `intent` (wörtliche Ansage) und B-Roll (keine Person) bleiben.
+- **Sichtbarkeit hängt am WORT (v172), nicht an der Anim-Wahl.**
+  `anim_for(txt)` in `_VISIBLE_ANIM` → nie behind/ground — unabhängig davon,
+  welches Anim die Regie wählte und ob `effects.anim` an ist. Der Riegel
+  sitzt in `build_plans` außerhalb des Anim-Blocks (v159-Lehre). Rangfolge:
+  die HANDLUNG im Satz gewinnt auch gegen intent; eine ORTS-Ansage
+  ("behind me") hat kein Aktionsverb und bleibt dadurch Gesetz. B-Roll
+  behält Szenen-Text (keine Person, die verdeckt).
 - **Ein-Wort-Rest nach Pause fällt in ALLEN Dichte-Pfaden weg (v170).**
   Der Riegel steht VOR den Pfad-Weichen (akzente/intro/durchgehend/forts) —
   er saß erst nur in satz_offen, und Ismets Job lief mit 'durchgehend'.
@@ -404,7 +407,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1050/1050 grün (Stand v171)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1053/1053 grün (Stand v172)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

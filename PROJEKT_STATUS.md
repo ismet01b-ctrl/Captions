@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v172 Sichtbarkeit haengt am WORT, nicht an der Anim-Wahl.** Erster
+  eindeutig belegter Neu-Render (v171-Stempel, Job 4ab2692c): "EXPLODE"
+  stand IMMER NOCH hinter der Person. Der v169/v170-Riegel prueft die
+  GEWAEHLTE Animation - waehlt die KI-Regie ein anderes Anim (oder keins,
+  oder sind Animationen im Job aus), feuert er nie. Ob ein Wort eine
+  sichtbare Handlung IST, sagt das Wort selbst: `anim_for(txt)` in
+  _VISIBLE_ANIM -> nie behind/ground, unabhaengig von der Regie-Wahl und
+  von `effects.anim`. Der Riegel sitzt ausserhalb des Anim-Blocks.
+  RANGFOLGE GEKLAERT (dokumentierte v99-Regel): sagt der Satz die
+  HANDLUNG ("boom they explode"), gewinnt sie auch gegen intent - eine
+  ORTS-Ansage ("right BEHIND me") hat kein Aktionsverb und bleibt dadurch
+  automatisch Gesetz. Der v169-Test hatte das falsch herum erwartet
+  (intent-behind trotz Aktionswort) und wurde korrigiert.
+  ENTWARNUNG "is" (14s): KEIN Fehler. Die Frames bei 14.5/14.8 zeigen
+  "is this" - der Flow-Chunk waechst wortweise, der Clip endet mitten im
+  Satz. Das Standbild hat getaeuscht. Der Orphan-Riegel (v169/v170)
+  bleibt fuer den echten Fall (Einzelwort nach Pause), hier war keiner.
+  FEINSCHLIFF Collage: die kleine Spalte beginnt jetzt an fester Kante
+  und waechst nach AUSSEN - die alte Form (rechte Kante minus Wortbreite)
+  schob breite Woerter in die Treppe (gemessen: 'and i' lag 0.016
+  Spiegelbreiten AUF 'can'). Neue Luecke: +0.052 W.
+  ABNAHME des gestempelten Renders sonst: BEHIND Me sauber (Gold-Akzent
+  neben dem Kopf), Seiten wechseln (rechts/links-Collage 6s links, 8s
+  rechts, 10s rechts), Sprechpausen korrekt textfrei.
 - **v171 Herkunft in Datei und Dateinamen.** Vier byte-identische "neue"
   Renders in Folge (MD5 gleich) - und weder Ismet noch der Support konnten
   sehen, WELCHER Job eine heruntergeladene Datei erzeugt hat: jeder

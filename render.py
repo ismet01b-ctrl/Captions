@@ -6693,7 +6693,11 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
                 # hellem Fenster (gemessen an seinem Video, 8s). Jetzt
                 # startet sie direkt an der Treppen-Innenkante.
                 if _re:
-                    it['cx'] = x0 + max_w * 0.80 - it['adv'] / 2.0
+                    # Spalte beginnt an fester Kante und waechst nach aussen.
+                    # Die alte Form (rechte Kante minus Wortbreite) schob
+                    # breite Woerter in die Treppe hinein - am Render
+                    # gemessen: 'and i' lag 0.016 Spiegelbreiten AUF 'can'.
+                    it['cx'] = x0 + max_w * 0.82 + it['adv'] / 2.0
                 else:
                     it['cx'] = _lx + it['adv'] / 2.0
                 it['cy'] = _ly + _h / 2.0
@@ -8061,6 +8065,26 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # v80f: Emoji durchreichen (kommt aus KI-Regie oder Editor-Overrides)
             if isinstance(info, dict) and info.get('emoji'):
                 p['emoji'] = info['emoji']
+            # v172 SICHTBARKEIT HAENGT AM WORT, nicht an der Anim-Wahl.
+            # Der v169/v170-Riegel prueft die GEWAEHLTE Animation - waehlt
+            # die KI-Regie fuer "EXPLODE" ein anderes Anim (oder keins,
+            # oder sind Animationen im Job aus), feuert er nie, und die
+            # Punchline steht weiter hinter der Person (Ismets Render,
+            # dritter Beweis am gestempelten Job). Ob ein Wort eine
+            # sichtbare Handlung IST, sagt das Wort selbst (anim_for) -
+            # unabhaengig davon, was die Regie daraus macht.
+            # Eine ORTS-Ansage ("behind me") hat kein Aktionsverb und
+            # bleibt dadurch automatisch Gesetz; sagt der Satz die Handlung
+            # ("boom they explode"), gewinnt die Handlung auch gegen
+            # intent - exakt die dokumentierte v99-Regel: sichtbar vorn,
+            # nie behind.
+            _wort_anim = anim_for(txt, anim_ctx(words, i, len(phrase)))
+            if (_wort_anim in _VISIBLE_ANIM and not broll
+                    and fx in ('behind', 'ground')):
+                fx = 'outline'
+                p['tpl'] = 'outline'
+                print(f"  Visibility: '{txt}' is an action ({_wort_anim}) "
+                      f"-> in front, not behind the person")
             # v161 OBJEKT-ANKER durchreichen. Auf B-Roll nicht: dort gehoert
             # der Text zur Szene, nicht zu einem Gegenstand darin.
             _ak = info.get('anker') if isinstance(info, dict) else None
