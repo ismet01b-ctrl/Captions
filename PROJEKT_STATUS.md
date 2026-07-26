@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v173 blurin ist der DRITTE verdeckende Effekt.** Der v172-Render
+  (Stempel-Job 34dcd388) zeigte "EXPLODE" unveraendert hinter der Person -
+  und der 4s-Frame war PIXEL-IDENTISCH mit dem Vorjob, obwohl 8s sich
+  komplett unterschied. Das bewies: der Moment laeuft durch einen Pfad,
+  den keiner der Riegel beruehrt. Es ist `blurin`: sein grosses Wort wird
+  VOR dem Person-Overlay gezeichnet (`comp = person * alpha_p + ...`) und
+  steht damit genauso hinter der Person wie behind und ground. Genau
+  diesen fx hatte die KI-Regie fuer "EXPLODE" gewaehlt - in beiden Jobs
+  gleich, daher die identischen Pixel. Alle drei Riegel (Wort-Riegel
+  v172, Anim-Riegel v169/v170, Cache-Riegel parse_regie) kennen jetzt
+  blurin. Ein neutrales Wort ("CHAPTER") behaelt den blurin-Look - der
+  Themenwechsel-Effekt ist fuer ruhige Woerter gebaut und bleibt.
+  Damit sind ALLE personengebundenen fx abgedeckt; die Liste der
+  verdeckenden Effekte steht jetzt an einer Stelle im Kopf: behind,
+  ground (mit Person), blurin.
+  Der 8s-Moment des v172-Renders ist abgenommen: Spalte frei (+0.05 W
+  Luecke), Seite wechselt, kein Fenster-Kontakt.
 - **v172 Sichtbarkeit haengt am WORT, nicht an der Anim-Wahl.** Erster
   eindeutig belegter Neu-Render (v171-Stempel, Job 4ab2692c): "EXPLODE"
   stand IMMER NOCH hinter der Person. Der v169/v170-Riegel prueft die

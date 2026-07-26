@@ -4668,7 +4668,8 @@ def parse_regie(text, words, language='de'):
                         # v94: Sichtbarkeit erzwingen (kein Anim-Zwang, nur
                         # Platzierung). Eine bewegte Aktion hinter der Person
                         # ("behind") sieht man nicht -> nach vorn holen.
-                        if anim in _VISIBLE_ANIM and entry['fx'] == 'behind':
+                        if anim in _VISIBLE_ANIM and entry['fx'] in (
+                                'behind', 'blurin'):
                             entry['fx'] = 'outline'
                     emo = str(item.get('emoji', '')).strip()
                     # nur echte Emoji-Bereiche zulassen, kein Text/HTML
@@ -8079,8 +8080,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # intent - exakt die dokumentierte v99-Regel: sichtbar vorn,
             # nie behind.
             _wort_anim = anim_for(txt, anim_ctx(words, i, len(phrase)))
+            # v173: 'blurin' gehoert dazu. Sein grosses Wort wird VOR dem
+            # Person-Overlay gezeichnet (Zeile 'comp = person * alpha_p
+            # + ...') und steht damit genauso hinter der Person wie behind
+            # und ground. Genau diesen fx hatte die Regie fuer Ismets
+            # "EXPLODE" gewaehlt - pixel-identisch in zwei Jobs, und alle
+            # bisherigen Riegel prueften nur behind/ground.
             if (_wort_anim in _VISIBLE_ANIM and not broll
-                    and fx in ('behind', 'ground')):
+                    and fx in ('behind', 'ground', 'blurin')):
                 fx = 'outline'
                 p['tpl'] = 'outline'
                 print(f"  Visibility: '{txt}' is an action ({_wort_anim}) "
@@ -8114,7 +8121,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # der v169-Riegel prueft nur 'behind'). Auf B-Roll bleibt
                 # ground: dort gibt es keine Person, die verdeckt.
                 if (_auto_anim in _VISIBLE_ANIM and not broll
-                        and fx in ('behind', 'ground')
+                        and fx in ('behind', 'ground', 'blurin')
                         and not (isinstance(info, dict) and info.get('intent'))):
                     fx = 'outline'
                     p['tpl'] = 'outline'

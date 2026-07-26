@@ -5257,6 +5257,37 @@ def _scenario_betrieb(tmp):
     _kw172c = [p for p in _pl172c if 'kw_i' in p]
     check('v172: auch mit Animationen AUS steht das Aktionswort vorn',
           _kw172c and _kw172c[0]['tpl'] == 'outline')
+    # v173: blurin ist der DRITTE verdeckende Effekt. Sein grosses Wort
+    # wird vor dem Person-Overlay gezeichnet und steht hinter der Person -
+    # genau diesen fx hatte die Regie fuer Ismets "EXPLODE" gewaehlt
+    # (pixel-identisch in zwei gestempelten Jobs), und alle bisherigen
+    # Riegel prueften nur behind/ground.
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl173 = R.build_plans(_w169, {1}, _cfg169, _S169, _W169, _H169,
+                               lambda s_, e_: True,
+                               {1: {'fx': 'blurin', 'power': 3, 'n': 1}},
+                               face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                        _H169 * 0.40,
+                                                        _W169 * 0.10))
+    _kw173 = [p for p in _pl173 if 'kw_i' in p]
+    check('v173: ein explodierendes Wort als blurin kommt ebenfalls nach vorn',
+          _kw173 and _kw173[0]['tpl'] == 'outline')
+    # Ein neutrales Wort darf blurin bleiben - der Themenwechsel-Look ist
+    # fuer ruhige Kapitel-Woerter gebaut und bleibt erhalten.
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl173b = R.build_plans([{'word': 'CHAPTER', 'start': 1.0,
+                                  'end': 1.5}],
+                                {0}, _cfg169, _S169, _W169, _H169,
+                                lambda s_, e_: True,
+                                {0: {'fx': 'blurin', 'power': 2, 'n': 1}},
+                                face_pos=lambda s_, e_: (_W169 * 0.5,
+                                                         _H169 * 0.40,
+                                                         _W169 * 0.10))
+    check('v173: ein neutrales Wort behaelt den blurin-Look',
+          [p['tpl'] for p in _pl173b if 'kw_i' in p] == ['blurin'])
+    check('v173: auch der Cache-Riegel kennt blurin',
+          "entry['fx'] in (\n                                'behind', 'blurin')"
+          in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
 
     # (2) Kein Ein-Wort-Rest nach einer Sprechpause. "And the one THING"
     # (Keyword, Satz offen), dann 3.5 s Pause, dann ein einzelnes "is".

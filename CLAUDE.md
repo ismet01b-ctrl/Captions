@@ -150,7 +150,8 @@ Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
   durch. Sonst nagelt ein über das halbe Video gehaltener Arm alle Captions
   auf eine Seite (Ismets Befund, am Bild belegt).
 - **Sichtbarkeit hängt am WORT (v172), nicht an der Anim-Wahl.**
-  `anim_for(txt)` in `_VISIBLE_ANIM` → nie behind/ground — unabhängig davon,
+  `anim_for(txt)` in `_VISIBLE_ANIM` → nie behind/ground/**blurin** (alle
+  drei zeichnen vor dem Person-Overlay, v173) — unabhängig davon,
   welches Anim die Regie wählte und ob `effects.anim` an ist. Der Riegel
   sitzt in `build_plans` außerhalb des Anim-Blocks (v159-Lehre). Rangfolge:
   die HANDLUNG im Satz gewinnt auch gegen intent; eine ORTS-Ansage
@@ -407,7 +408,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1053/1053 grün (Stand v172)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1056/1056 grün (Stand v173)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
