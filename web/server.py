@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v176-flowhand'
+DVE_BUILD = 'v177-wisch'
 
 
 @app.middleware('http')

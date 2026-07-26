@@ -5476,6 +5476,36 @@ def _scenario_betrieb(tmp):
     check('v176: die Feder wirkt auf den Flow-Block',
           "fdx += p.get('_hand_dx', 0.0)" in _r176)
 
+    # ======= v177: der angesagte Wisch braucht keine Pixel-Beruehrung =====
+    # Am echten Render gemessen (Job d70adb09): der Sprecher wischt mit
+    # 861 px/s quer durchs Bild - aber SEIN KOERPER steht dort, wo die Hand
+    # entlangfaehrt. Die Caption kann dort gar nicht liegen: das Hand-Ziel
+    # wiegt 2.2, die Gesichtssperre 2.5, und das ist richtig so. Auf
+    # Pixel-Beruehrung zu warten hiess also: die Geste bleibt fuer immer
+    # folgenlos. Sagt der Satz die Handlung UND ist ein schneller Wisch
+    # messbar, bekommt der Block den Impuls - Ansage plus Messung.
+    def _blk177(geste):
+        return {'tpl': 'flow', 'start': 7.0, 'end': 9.0,
+                '_hand_geste': geste,
+                'front': [{'i': 0, 'arr': _arr176, 'cx': 220.0, 'cy': 400.0},
+                          {'i': 1, 'arr': _arr176, 'cx': 360.0, 'cy': 400.0}]}
+    _fern177 = [(950.0, 520.0, -900.0, 180.0)]     # schnell, aber weit weg
+    _p177 = _blk177(True)
+    check('v177: ein angesagter Wisch stoesst den Block auch aus der Ferne',
+          R.hand_contacts([_p177], _fern177, 8.0, 1280, 720) == 1
+          and _p177.get('_hand_hit') is not None)
+    check('v177: der Impuls zeigt in die Wisch-Richtung',
+          _p177['_hand_hit'][0] < 0)          # Wisch nach links -> Stoss links
+    check('v177: OHNE Ansage passiert aus der Ferne weiterhin nichts',
+          R.hand_contacts([_blk177(False)], _fern177, 8.0, 1280, 720) == 0)
+    check('v177: eine Ansage ohne echten Wisch loest nichts aus',
+          R.hand_contacts([_blk177(True)],
+                          [(950.0, 520.0, -200.0, 40.0)],
+                          8.0, 1280, 720) == 0)
+    check('v177: der Schub-Satz wird am Flow-Plan markiert',
+          "'_hand_geste': any(_hand_aktion_hit(clean(words[j]['word']))"
+          in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
     # ======= v168: die Seite ist eine Entscheidung, kein Wuerfelwurf ======
     # Ismets Befund, dritter Anlauf: "die captions sind immer auf der linken
     # seite, egal was passiert". Am eigenen Render nachgemessen, ZWEI

@@ -3101,6 +3101,25 @@ def hand_contacts(plans, tips, t, W, H):
             h = (_y1 - _y0) * 0.55 + 20
         else:
             continue
+        # v177 ANGESAGTER WISCH. Am echten Render gemessen (Job d70adb09):
+        # der Sprecher wischt bei 861 px/s quer durchs Bild, aber SEIN
+        # KOERPER steht dort, wo die Hand entlangfaehrt - die Caption kann
+        # dort gar nicht liegen (Gesichtssperre 2.5 schlaegt das
+        # Hand-Ziel 2.2, und das ist richtig so). Auf Pixel-Beruehrung zu
+        # warten heisst deshalb: die Geste bleibt fuer immer folgenlos.
+        # Sagt der Satz die Handlung ("I can just push them away") UND ist
+        # ein schneller Wisch messbar, bekommt der Block den Impuls in
+        # Wisch-Richtung - Ansage plus Messung, nichts geraten.
+        if p.get('_hand_geste') and t - p.get('_hand_cool', -9.0) > 0.35:
+            _bv = max(tips, key=lambda q: math.hypot(q[2], q[3]))
+            _bs = math.hypot(_bv[2], _bv[3])
+            if _bs > W * 0.50:
+                _s = min(_bs, W * 1.2) / max(_bs, 1e-6)
+                p['_hand_hit'] = (_bv[2] * _s, _bv[3] * _s)
+                p['_hand_cool'] = t
+                p['_hand_touch_t'] = t
+                n += 1
+                continue
         # v174 REICHWEITE: eine schnelle Hand, die auf den Text ZUFLIEGT,
         # trifft ihn auch aus kurzer Distanz. Nur exakte Pixel-Beruehrung
         # zu verlangen hiess: die Platzierungs-Regie legt den Text von der
@@ -8872,7 +8891,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                   'side': 0, 'ccam': 'none',
                   'target': (int(_sx), int(y0 + tot_h / 2.0)),
                   'fol_lim': _fol_lim,
-                  'broll': broll}
+                  'broll': broll,
+                  # v177: Sagt der Satz, dass die Hand die Captions schiebt?
+                  # Dann darf eine gemessene Wisch-Bewegung den Block auch
+                  # OHNE Pixel-Beruehrung stossen - siehe hand_contacts.
+                  '_hand_geste': any(_hand_aktion_hit(clean(words[j]['word']))
+                                     for j in g)}
             # v141: echte Textposition fuer den Ueberlappungs-Schutz. 'target'
             # bleibt das Kamera-Ziel - die beiden duerfen nicht verwechselt
             # werden, sonst zieht die Kamera wieder in die Bildmitte.

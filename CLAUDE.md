@@ -133,6 +133,10 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
   die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
 
 ### Hand-Regie (v174) — "der Text weicht der Hand, die ihn schubst"
+**Der angesagte Wisch braucht keine Berührung (v177).** Die Hand fährt vor
+dem eigenen Körper entlang — dort kann die Caption nie liegen (Gesichtssperre
+2.5 > Hand-Ziel 2.2, richtig so). Sagt der Satz die Handlung UND ist ein
+Wisch > 0.50 W/s messbar, bekommt der Block den Impuls ohne Trefferprüfung.
 **Das Hand-System darf NIE an `kw_i` hängen (v176).** `need_hands`,
 `hand_contacts` und die Feder gelten auch für Flow-Chunks — Schub-Sätze
 sind fast immer Füllwort-Chunks ohne Keyword. Dreimal derselbe Fehlertyp
@@ -422,7 +426,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1070/1070 grün (Stand v176)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1075/1075 grün (Stand v177)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

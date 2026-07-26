@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v177 Der angesagte Wisch braucht keine Pixel-Beruehrung.** v176 hat
+  gewirkt (Hand-Erkennung laeuft jetzt in Flow-Fenstern, Kontakt und Feder
+  greifen), und trotzdem passierte im Render nichts. Ursache diesmal am
+  Job d70adb09 GEMESSEN, mit MediaPipe auf den echten Frames:
+  - Die Fingerspitzen wischen von x = 0.72 auf 0.64 W mit 690-861 px/s,
+    dann verliert der Detektor die Hand (Bewegungsunschaerfe) und findet
+    sie erst wieder bei (0.17, 0.95) - also am unteren Bildrand.
+  - `hand_ziele` liefert korrekt Ziele bei 0.63 und 0.69 W. Angewandt
+    wurden sie NICHT: dort steht der Sprecher. Das Hand-Ziel wiegt 2.2,
+    die Gesichtssperre 2.5 - der Block bleibt bei 0.17 W. Das ist
+    RICHTIG so, Text quer ueber dem Kopf waere ein Fehler.
+  Damit war die Lage klar: die Hand faehrt vor dem eigenen Koerper
+  entlang, die Caption kann dort per Definition nicht liegen, und auf
+  Pixel-Beruehrung zu warten heisst, dass die Geste FUER IMMER folgenlos
+  bleibt. Kein Riegel-Fehler mehr, sondern eine falsche Grundannahme.
+  NEU: sagt der Satz die Handlung ("I can just push them away", erkannt
+  ueber `_HAND_AKTION`) UND ist ein schneller Wisch messbar (> 0.50 W/s),
+  bekommt der Block den Impuls in Wisch-Richtung - ohne Beruehrungspruefung.
+  Ansage plus Messung, nichts geraten. Ohne Ansage bleibt alles beim
+  Alten (Beruehrung bzw. Naeherung aus v174), eine Ansage ohne echten
+  Wisch loest nichts aus.
+  Beweis (Selftest): Wisch weit weg + Ansage -> Impuls, Richtung stimmt;
+  ohne Ansage -> 0; Ansage ohne Wisch -> 0.
+  LEHRE: erst messen, wo die Bewegung wirklich verlaeuft. Drei Versionen
+  lang habe ich Gates repariert, obwohl die Geometrie das Problem war.
 - **v176 Der Hand-Kontakt erreicht endlich die Flow-Chunks.** Ismets
   Befund "die Hand-Erkennung und Captions agieren nicht zusammen", diesmal
   am ECHTEN Render nachgemessen (Job 8ff7812b, v174-Stempel) statt geraten:
