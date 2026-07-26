@@ -5408,6 +5408,39 @@ def _scenario_betrieb(tmp):
     check('v170: auf B-Roll bleibt der Szenen-Text liegen',
           _kw170c and _kw170c[0]['tpl'] == 'ground')
 
+    # ======= v174: Hand und Captions agieren zusammen =====================
+    # Ismets Befund am v173-Render: die Schub-Geste ("push them away") kam,
+    # der Text stand am anderen Bildrand und reagierte nicht. Zwei Teile:
+    # (1) NAEHERUNGS-Treffer: eine schnelle Hand, die auf den Text
+    # ZUFLIEGT, trifft auch ohne Pixel-Beruehrung. Zwei Bedingungen mehr
+    # als der Kontakt: hoehere Geschwindigkeit UND Richtung zum Text.
+    _p174 = {'kw_i': 1, 'arr': np.zeros((100, 400, 4), np.float32),
+             'cx': 300.0, 'cy': 500.0, 'start': 1.0, 'end': 2.0}
+    _tips_zu = [(300.0 + 260.0, 500.0, -900.0, 0.0)]     # fliegt auf den Text zu
+    check('v174: eine schnelle Hand trifft den Text aus kurzer Distanz',
+          R.hand_contacts([dict(_p174)], _tips_zu, 1.5, 1280, 720) == 1)
+    _tips_weg = [(300.0 + 260.0, 500.0, 900.0, 0.0)]     # fliegt WEG vom Text
+    check('v174: eine Hand, die wegfliegt, trifft nicht',
+          R.hand_contacts([dict(_p174)], _tips_weg, 1.5, 1280, 720) == 0)
+    _tips_lahm = [(300.0 + 260.0, 500.0, -120.0, 0.0)]   # zu langsam fuer Distanz
+    check('v174: eine langsame Hand traegt nicht ueber die Distanz',
+          R.hand_contacts([dict(_p174)], _tips_lahm, 1.5, 1280, 720) == 0)
+    _tips_drin = [(300.0, 500.0, 200.0, 0.0)]            # Beruehrung wie v101j
+    check('v174: die echte Beruehrung funktioniert weiter wie in v101j',
+          R.hand_contacts([dict(_p174)], _tips_drin, 1.5, 1280, 720) == 1)
+    # (2) HAND-AKTIONS-WOERTER ziehen die Caption in Reichweite der Hand.
+    check('v174: "push them away" ist eine Hand-Aktion',
+          R._hand_aktion_hit('push') and R._hand_aktion_hit('pushed')
+          and R._hand_aktion_hit('wegschieben') and R._hand_aktion_hit('wischt'))
+    check('v174: normale Woerter sind keine Hand-Aktion',
+          not R._hand_aktion_hit('important')
+          and not R._hand_aktion_hit('Zahlen'))
+    check('v174: ohne Zeitpunkte misst hand_ziele nichts',
+          R.hand_ziele('/nonexistent.mp4', [], 1280, 720) == [])
+    check('v174: die Hand-Ziele laufen durch denselben Dedupe wie das Zeigen',
+          'hand_ziele(args.input, _ht, W, H)'
+          in open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
     # ======= v168: die Seite ist eine Entscheidung, kein Wuerfelwurf ======
     # Ismets Befund, dritter Anlauf: "die captions sind immer auf der linken
     # seite, egal was passiert". Am eigenen Render nachgemessen, ZWEI

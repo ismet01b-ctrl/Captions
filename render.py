@@ -2838,6 +2838,77 @@ def _ziel_dedupe(ziele, W, halten=2):
     return out
 
 
+# v174: Woerter, mit denen der Sprecher die Captions ANFASST. Sagt er sie,
+# gehoert der Text in Reichweite der Hand - sonst laeuft die Geste ins
+# Leere (Ismets Befund: "die hand erkennung und captions agieren nicht
+# zusammen" - der Schub kam, der Text stand am anderen Bildrand).
+_HAND_AKTION = ('push', 'pushes', 'pushed', 'shove', 'shoves', 'swipe',
+                'swipes', 'schiebt', 'schieben', 'wegschieben', 'wischt',
+                'wischen', 'anfasst', 'anfassen', 'beruehrt', 'beruehren')
+
+
+def _hand_aktion_hit(text):
+    """Beschreibt der Text eine Hand-Aktion an den Captions?"""
+    return any(_anim_hit(text, k) for k in _HAND_AKTION)
+
+
+def hand_ziele(video_path, times, W, H, proben=(0.05, 0.25, 0.45)):
+    """v174: Position der HAND an den uebergebenen Zeitpunkten - fuer
+    Momente, in denen der Sprecher die Captions anfasst ("push them away").
+    Anders als beim Zeigen zaehlt hier JEDE erkannte Hand, nicht nur der
+    gestreckte Finger: wer schiebt, hat die Hand offen.
+    Rueckgabe [(t, x, y, 'zeigen')] - als Zeige-Ziel, damit Platzierung,
+    Dedupe und Hysterese denselben Weg nehmen wie in v160/v167."""
+    ziele = []
+    if not times:
+        return ziele
+    try:
+        import mediapipe as mp
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
+    except Exception:
+        return ziele
+    hpath = os.path.join(HERE, 'models/hand.task')
+    if not os.path.exists(hpath):
+        return ziele
+    try:
+        lm = mp_vision.HandLandmarker.create_from_options(
+            mp_vision.HandLandmarkerOptions(
+                base_options=mp_python.BaseOptions(model_asset_path=hpath),
+                num_hands=2, min_hand_detection_confidence=0.4))
+    except Exception:
+        return ziele
+    for t in times:
+        pos = None
+        for dt in proben:
+            fr = _frame_bgr(video_path, float(t) + dt)
+            if fr is None:
+                continue
+            try:
+                img = mp.Image(image_format=mp.ImageFormat.SRGB,
+                               data=np.ascontiguousarray(fr[..., ::-1]))
+                res = lm.detect(img)
+            except Exception:
+                continue
+            for hand in ((res.hand_landmarks if res else None) or []):
+                # Handflaechen-Mitte (Mittelfinger-Grundgelenk) statt einer
+                # Fingerspitze: die Spitze zittert, das Gelenk steht.
+                pos = (hand[9].x * W, hand[9].y * H)
+                break
+            if pos is not None:
+                break
+        if pos is not None:
+            ziele.append((float(t), float(pos[0]), float(pos[1]), 'zeigen'))
+    try:
+        lm.close()
+    except Exception:
+        pass
+    if ziele:
+        print(f"Hand action: {len(ziele)} caption(s) placed within reach "
+              f"of the hand")
+    return ziele
+
+
 def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
     """v160: misst zu jedem Moment-Zeitpunkt, wohin der Sprecher zeigt oder
     schaut. Rueckgabe [(t, tx, ty, art)] mit art 'zeigen' | 'blick'.
@@ -3014,17 +3085,35 @@ def hand_contacts(plans, tips, t, W, H):
             continue
         w = p['arr'].shape[1] * 0.55 + 20
         h = p['arr'].shape[0] * 0.55 + 20
+        # v174 REICHWEITE: eine schnelle Hand, die auf den Text ZUFLIEGT,
+        # trifft ihn auch aus kurzer Distanz. Nur exakte Pixel-Beruehrung
+        # zu verlangen hiess: die Platzierungs-Regie legt den Text von der
+        # Person weg, die Beruehrung passiert nie, und Ismets Schub-Geste
+        # ("I can just push them away") lief sichtbar ins Leere. Der
+        # Naeherungs-Treffer verlangt dafuer ZWEI Dinge mehr als der
+        # Kontakt: hoehere Geschwindigkeit UND Bewegungsrichtung ZUM Text.
+        _reich = W * 0.075
         for (x, y, vx, vy) in tips:
-            if abs(x - cx) < w and abs(y - cy) < h:
-                speed = math.hypot(vx, vy)
-                if speed > W * 0.10 and t - p.get('_hand_cool', -9.0) > 0.35:
-                    # Impuls gedeckelt: auch ein Wisch bleibt ein Stups
-                    _s = min(speed, W * 1.2) / max(speed, 1e-6)
-                    p['_hand_hit'] = (vx * _s, vy * _s)
-                    p['_hand_cool'] = t
-                    p['_hand_touch_t'] = t
-                    n += 1
-                break
+            _in_box = abs(x - cx) < w and abs(y - cy) < h
+            _nah = (not _in_box and abs(x - cx) < w + _reich
+                    and abs(y - cy) < h + _reich)
+            if not (_in_box or _nah):
+                continue
+            speed = math.hypot(vx, vy)
+            if _nah:
+                # Richtung zum Text: Skalarprodukt Geschwindigkeit x Abstand.
+                _zx, _zy = cx - x, cy - y
+                _d = math.hypot(_zx, _zy)
+                if _d < 1e-6 or speed < W * 0.25                         or (vx * _zx + vy * _zy) / (speed * _d) < 0.5:
+                    continue
+            if speed > W * 0.10 and t - p.get('_hand_cool', -9.0) > 0.35:
+                # Impuls gedeckelt: auch ein Wisch bleibt ein Stups
+                _s = min(speed, W * 1.2) / max(speed, 1e-6)
+                p['_hand_hit'] = (vx * _s, vy * _s)
+                p['_hand_cool'] = t
+                p['_hand_touch_t'] = t
+                n += 1
+            break
     return n
 
 
@@ -10939,6 +11028,17 @@ def main():
             _zt = sorted({round(float(words[i]['start']), 2)
                           for i in (fx_map or {}) if i < len(words)})[:40]
             _zeigen = zeige_ziele(args.input, _zt, W, H)
+            # v174: Hand-Aktions-Woerter ("push them away") ziehen die
+            # Caption in Reichweite der Hand - erst dadurch kann der
+            # Beruehrungs-Impuls (v101j) ueberhaupt treffen. Laeuft ueber
+            # ALLE Woerter, nicht nur Keywords: der Schub-Satz war bei
+            # Ismet ein Fuellwort-Chunk.
+            _ht = sorted({round(float(w_['start']), 2) for w_ in words
+                          if _hand_aktion_hit(clean(w_.get('word', '')))})[:12]
+            if _ht:
+                _zeigen = _ziel_dedupe(
+                    sorted(_zeigen + hand_ziele(args.input, _ht, W, H),
+                           key=lambda z: z[0]), W)
         except Exception as _e:
             print(f"Pointing direction: skipped ({type(_e).__name__})")
             _zeigen = []

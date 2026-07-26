@@ -132,6 +132,16 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
   Verneinte Sätze bekommen KEINE Animation (`_hat_negation`): eine Anim, die
   die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
 
+### Hand-Regie (v174) — "der Text weicht der Hand, die ihn schubst"
+`hand_ziele()` zieht die Caption bei Hand-Aktions-Wörtern (push/shove/
+wegschieben/wischen, `_HAND_AKTION`) in Reichweite der Hand; `hand_contacts`
+trifft zusätzlich per **Näherung** (0.075 W), wenn die Hand schnell
+(≥0.25 W/s) und in RICHTUNG des Texts fliegt. Ohne Nähe-Platzierung läuft
+jede Schub-Geste ins Leere — die Platzierungs-Regie legt Text sonst von der
+Person weg. **Abnahme-Lehre: nie einen Einzelframe bewerten** — Exit-Blenden
+und wortweiser Aufbau sehen im Standbild wie Fehler aus (zweimal passiert:
+"is", "EXPLODE").
+
 ### Zeige-Regie (v160) — "Captions landen, wohin gezeigt wird"
 `zeige_ziele()` misst an den Moment-Zeitpunkten, wohin der Sprecher **zeigt**
 (Hand-Landmarks) oder **schaut** (Kopfdrehung aus den Gesichts-Keypoints).
@@ -408,7 +418,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   UptimeRobot auf /api/health, Kontaktadresse vereinheitlichen.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1056/1056 grün (Stand v173)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1064/1064 grün (Stand v174)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

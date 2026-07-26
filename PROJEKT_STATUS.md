@@ -3,6 +3,34 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v174 Hand und Captions agieren zusammen** (Ismets Befund am
+  v173-Render: Schub-Geste bei "push them away", der Text stand am anderen
+  Bildrand und reagierte nicht). Zwei Teile:
+  1. NAEHERUNGS-TREFFER im Hand-Kontakt (v101j): eine schnelle Hand, die
+     auf den Text ZUFLIEGT, trifft auch ohne Pixel-Beruehrung (Reichweite
+     0.075 W). Dafuer zwei Bedingungen mehr als beim echten Kontakt:
+     hoehere Mindestgeschwindigkeit (0.25 W/s statt 0.10) UND die
+     Bewegungsrichtung muss ZUM Text zeigen (Skalarprodukt >= 0.5). Eine
+     wegfliegende oder lahme Hand trifft weiter nichts.
+  2. HAND-AKTIONS-WOERTER ziehen die Caption in Reichweite: sagt der
+     Sprecher push/shove/swipe/wegschieben/wischen/anfassen, misst
+     `hand_ziele()` die Handposition an diesen Wort-Zeitpunkten
+     (Handflaechen-Mitte, Landmark 9 - die Spitze zittert, das Gelenk
+     steht) und speist sie als Zeige-Ziel ein. Gleicher Weg wie v160/v167:
+     Platzierung, Dedupe, Hysterese identisch. Laeuft ueber ALLE Woerter,
+     nicht nur Keywords - der Schub-Satz war bei Ismet ein
+     Fuellwort-Chunk.
+  EHRLICHE KORREKTUR im selben Zug: "EXPLODE" war NIE verdeckt. Der
+  Frame-Verlauf (3.4/3.7/4.0/4.3 s) zeigt das Wort voll deckend vorn;
+  mein Standbild bei exakt 4.0 s traf die EXIT-BLENDE und ich habe drei
+  Versionen lang (v169/v170/v172/v173) eine Ausblend-Phase als
+  "hinter der Person" fehlgedeutet - derselbe Standbild-Fehler wie beim
+  "is" (v172). Die gebauten Riegel bleiben drin: es sind echte, getestete
+  Luecken (Cache-, Anim-, Wort-, blurin-Pfad), nur der Ausloeser war
+  keiner. Lehre fuer die Abnahme: NIE einen Einzelframe bewerten, immer
+  den Verlauf ueber die Moment-Lebensdauer.
+  NICHT LIVE VERIFIZIERT: ob MediaPipe die Schub-Hand im echten Clip
+  zuverlaessig findet, zeigt erst der naechste Render.
 - **v173 blurin ist der DRITTE verdeckende Effekt.** Der v172-Render
   (Stempel-Job 34dcd388) zeigte "EXPLODE" unveraendert hinter der Person -
   und der 4s-Frame war PIXEL-IDENTISCH mit dem Vorjob, obwohl 8s sich
