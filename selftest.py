@@ -5273,6 +5273,52 @@ def _scenario_betrieb(tmp):
         check('v169: kleine Spalte sitzt NEBEN der Treppe, kein Loch',
               False, 'Collage ohne kleine/grosse Woerter')
 
+    # ======= v170: die v169-Fixe griffen im falschen Pfad =================
+    # Am ZWEITEN echten Render belegt: Spalte gedockt (v169/3 wirkt), aber
+    # "is" und "EXPLODE" unveraendert. Ursache 1: Ismets Job lief mit
+    # Dichte 'durchgehend' - dort rendert JEDE Gruppe, der Orphan-Riegel
+    # sass nur im satz_offen-Pfad. Ursache 2: EXPLODE kam als WAND-Text
+    # (fx ground) aus der Vision-Regie, der Riegel prueft nur 'behind'.
+    _cfg170 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _cfg170['effects']['density'] = 'durchgehend'
+    _S170 = R.Sprites(_cfg170, 1280, 720)
+    _w170 = ([{'word': x, 'start': 9.4 + i * 0.3, 'end': 9.65 + i * 0.3}
+              for i, x in enumerate(['And', 'the', 'one', 'THING'])]
+             + [{'word': 'is', 'start': 13.9, 'end': 14.1}])
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl170 = R.build_plans(_w170, {3}, _cfg170, _S170, 1280, 720,
+                               lambda s_, e_: True,
+                               {3: {'fx': 'outline', 'power': 3, 'n': 1}},
+                               face_pos=lambda s_, e_: (640.0, 288.0, 115.0))
+    check('v170: der Ein-Wort-Rest faellt auch bei Dichte durchgehend weg',
+          not any(p.get('start', 0) > 13.0 for p in _pl170))
+    check('v170: die Gruppen davor bleiben erhalten',
+          any(p.get('front') for p in _pl170))
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl170b = R.build_plans(
+            [{'word': 'they', 'start': 1.0, 'end': 1.3},
+             {'word': 'EXPLODE', 'start': 1.4, 'end': 1.9}],
+            {1}, _cfg169, _S169, _W169, _H169, lambda s_, e_: True,
+            {1: {'fx': 'ground', 'power': 3, 'n': 1,
+                 'szene': 'wand', 'lage': 'stehend'}},
+            face_pos=lambda s_, e_: (_W169 * 0.5, _H169 * 0.40, _W169 * 0.10))
+    _kw170 = [p for p in _pl170b if 'kw_i' in p]
+    check('v170: ein explodierender WAND-Text kommt ebenfalls nach vorn',
+          _kw170 and _kw170[0]['tpl'] == 'outline')
+    # Auf B-Roll bleibt ground: dort verdeckt keine Person.
+    with _cl159.redirect_stdout(_io159.StringIO()):
+        _pl170c = R.build_plans(
+            [{'word': 'they', 'start': 1.0, 'end': 1.3},
+             {'word': 'EXPLODE', 'start': 1.4, 'end': 1.9}],
+            {1}, _cfg169, _S169, _W169, _H169, lambda s_, e_: False,
+            {1: {'fx': 'ground', 'power': 3, 'n': 1, 'intent': True,
+                 'szene': 'boden', 'lage': 'liegend'}},
+            face_pos=None)
+    _kw170c = [p for p in _pl170c if 'kw_i' in p]
+    check('v170: auf B-Roll bleibt der Szenen-Text liegen',
+          _kw170c and _kw170c[0]['tpl'] == 'ground')
+
     # ======= v168: die Seite ist eine Entscheidung, kein Wuerfelwurf ======
     # Ismets Befund, dritter Anlauf: "die captions sind immer auf der linken
     # seite, egal was passiert". Am eigenen Render nachgemessen, ZWEI

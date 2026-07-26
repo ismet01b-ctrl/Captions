@@ -7916,6 +7916,19 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         if g[0] > 0 else 0.0)
         _winzig = (len(g) == 1
                    and len(clean(words[g[0]].get('word', ''))) <= 4)
+        # v170: der Ein-Wort-Rest fiel nur im Akzente-Pfad weg. Ismets Job
+        # lief mit Dichte 'durchgehend' - dort (und im Hook-Intro) rendert
+        # JEDE Gruppe, und das einsame "is" stand wieder im Bild. Der Riegel
+        # gehoert VOR die Pfad-Weichen, nicht in eine davon (v159-Lehre).
+        # Ausdrueckliche Momente (intent/user_pick) bleiben unantastbar.
+        if (_winzig and _pause_davor >= 1.2 and not is_kw_group
+                and not any(isinstance((fx_map or {}).get(i), dict)
+                            and (fx_map[i].get('intent')
+                                 or fx_map[i].get('user_pick'))
+                            for i in g)):
+            print(f"  Orphan word after a pause skipped: "
+                  f"'{clean(words[g[0]].get('word', ''))}'")
+            continue
         satz_offen = (prev_was_keyword_sentence
                       and hat_interpunktion
                       and not is_kw_group
@@ -8071,7 +8084,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # KI-Frischwahl), stand ein "EXPLODE" hinter der Person und
                 # der Koerper verdeckte die Punchline (Ismets Video, 4s).
                 # Eine ausdrueckliche Ansage ("behind me") bleibt Gesetz.
-                if (_auto_anim in _VISIBLE_ANIM and fx == 'behind'
+                # v170: auch 'ground' verdeckt - Szenen-Text steht HINTER
+                # der Person (Ismets "EXPLODE" kam als Wand-Text aus der
+                # Vision-Regie und der Koerper verdeckte die Punchline;
+                # der v169-Riegel prueft nur 'behind'). Auf B-Roll bleibt
+                # ground: dort gibt es keine Person, die verdeckt.
+                if (_auto_anim in _VISIBLE_ANIM and not broll
+                        and fx in ('behind', 'ground')
                         and not (isinstance(info, dict) and info.get('intent'))):
                     fx = 'outline'
                     p['tpl'] = 'outline'

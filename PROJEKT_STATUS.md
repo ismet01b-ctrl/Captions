@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v170 Die v169-Fixe griffen im falschen Pfad** (am zweiten echten Render
+  belegt: Collage-Spalte gedockt, aber "is" und "EXPLODE" unveraendert).
+  EHRLICHE URSACHEN, beide reproduziert:
+  1. Ismets Job lief mit Dichte 'durchgehend'. Dort (und im Hook-Intro)
+     rendert JEDE Gruppe - der Orphan-Riegel sass aber nur im
+     satz_offen-Pfad. Lokal nachgestellt: mit 'durchgehend' erschien das
+     einsame "is" wieder. Der Riegel steht jetzt VOR den Pfad-Weichen
+     (v159-Lehre: ein Schutz, der nicht an der immer laufenden Stelle
+     haengt, ist keiner): ein Ein-Wort-Haeppchen (<=4 Zeichen) nach einer
+     Pause >=1.2 s faellt in ALLEN Dichte-Pfaden weg. intent/user_pick
+     bleiben unantastbar.
+  2. EXPLODE kam als WAND-Text (fx ground, szene wand) aus der
+     Vision-Regie - der v169-Riegel prueft nur 'behind'. Szenen-Text steht
+     genauso HINTER der Person. Jetzt: sichtbare Anim + behind ODER ground
+     -> outline. AUSNAHMEN mit Absicht: auf B-Roll bleibt ground (keine
+     Person, die verdeckt), und die woertliche Ansage (intent) bleibt
+     Gesetz.
+  Beweis (Selftest): durchgehend + "is" nach 3.5 s Pause -> kein Plan mehr;
+  EXPLODE als Wand-Text -> outline + explosion; B-Roll-Boden-Text bleibt
+  ground.
+  NICHT LIVE VERIFIZIERT: das Ergebnis am echten Clip sieht Ismet nach dem
+  Deploy - dritter Anlauf an diesem Video, diesmal mit dem Pfad, den sein
+  Job wirklich nimmt.
 - **v169 Drei Befunde aus Ismets ECHTEM Video behoben** (erste Abnahme am
   fertigen Produkt-Render, 15s-Testclip; "behind me" hat er ausdruecklich
   als gut abgenommen).
