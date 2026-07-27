@@ -257,7 +257,8 @@ Das **Schluesselwort und der Fliesstext haben getrennte Referenz-Faktoren**
 (`caption_scale` aus `key_hoehe`, `caption_scale_klein` aus `klein_hoehe`).
 Den Fliesstext ueber key_hoehe mal Hierarchie abzuleiten war der Grund, warum
 eine Referenz mit grosser Punchline den ganzen Satz aufblies.
-Hausmass: 0.076 em Schluesselwort, 0.034 em Fliesstext. **Wer daran dreht,
+Hausmass aktuell (v192): **0.089 em Schluesselwort, 0.043 em Fliesstext**
+(v154 stand auf 0.076/0.034, v184 auf 0.105/0.050). **Wer daran dreht,
 muss den Punch-Faktor mitziehen** — sonst faellt der Randabfall (v152) unter
 die Bildbreite und ist unsichtbar.
 Jeder Keyword-Moment bekommt eine Animation; `anim_for()` liefert bei
@@ -380,6 +381,9 @@ johnbacog_), NICHT geschaetzt. Gemeinsame Grammatik der Vorbilder:
   ~0.074 H), Fliesstext 0.050 em (Band ~0.040 H, in allen drei Refs
   identisch), Punch 2.25x (~0.165 H). Die v153/v154-Verkleinerungen sind
   damit UEBERHOLT - wer schrumpft, muss gegen die Referenzen messen.
+  **v192 ist genau so ein bewusster Schritt darunter** (Faktor 0.85 ->
+  0.089/0.043 em, Ismets Ansage). Der Referenzwert bleibt der Massstab,
+  die gelieferte Groesse ist eine Nutzer-Entscheidung.
 - **Punch hinter der Person** (`occlude_sprite`, effects.caption_hinter):
   das Schlusswort laeuft durch die Person, die Silhouette wird pro Frame
   an der Zielposition ausgestanzt. Nur Satzende, nie B-Roll, nie bei
@@ -609,7 +613,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1190/1190 grün (Stand v191)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1190/1190 grün (Stand v192)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -6757,12 +6757,17 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # ergibt 0.236 em = Versal ~0.165 H und trifft die C-Punchline (0.184
     # Band inkl. Saum). Die v154-Verkleinerungen galten der ALTEN Anordnung;
     # massgeblich sind jetzt die gemessenen Referenzen.
-    sz_k = int(H * 0.105 * pf * _skal)
+    # v192: eine Stufe kleiner auf Ismets Ansage ("mach es ruhig etwas
+    # kleiner"). Faktor 0.85 auf die v184-Referenzmasse: Schluesselwort
+    # 0.105 -> 0.089 em (Versalhoehe 0.062 H), Fliesstext 0.050 -> 0.043 em.
+    # Damit liegt das Schluesselwort knapp UNTER dem gemessenen Referenzband
+    # (0.074 bis 0.165 H) - bewusste Nutzer-Entscheidung, kein Messfehler.
+    sz_k = int(H * 0.089 * pf * _skal)
     if _hier and not _ef.get('caption_scale_klein'):
         _hier = max(1.4, min(5.0, _hier))
         sz_n = int(sz_k * 0.70 / (0.52 * _hier))
     else:
-        sz_n = int(H * 0.050 * pf * _skn)
+        sz_n = int(H * 0.043 * pf * _skn)
     if _viral:
         # Ziel unveraendert (Schluesselwort 0.163 em, Fliesstext 0.099 em) -
         # nur die Faktoren sind auf die neue v184-Basis umgerechnet.

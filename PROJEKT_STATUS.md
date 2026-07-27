@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v192 EINE STUFE KLEINER (Nutzer-Entscheidung, keine Messkorrektur).**
+  Ismets Ansage nach dem v191-Render: "mach es ruhig etwas kleiner".
+  Faktor 0.85 auf die v184-Referenzmasse, in `compose_flow`:
+  Schluesselwort 0.105 -> 0.089 em (Versalhoehe rund 0.062 H),
+  Fliesstext 0.050 -> 0.043 em. Die Kaskade bleibt intakt: `pf`
+  (Formatausgleich), `caption_scale`/`caption_scale_klein` aus einer
+  gelernten Referenz und der Viral-Multiplikator rechnen weiter relativ
+  auf die neue Basis.
+  EHRLICH: das Schluesselwort liegt damit knapp UNTER dem an Ismets drei
+  Referenz-Clips gemessenen Band (0.074 bis 0.165 H Versalhoehe). Das ist
+  eine bewusste Geschmacks-Entscheidung des Nutzers, kein korrigierter
+  Messfehler - wer spaeter "zurueck auf Referenz" will, dreht die beiden
+  Konstanten auf 0.105/0.050.
+  Vier Selftest-Schwellen wurden ehrlich auf das neue Ziel gezogen
+  (v184-Basis key/klein, v154-Fliesstext-Fenster, v153-Konstanten-Grep),
+  jede mit Begruendung im Testcode.
+  BEWEIS: `v192_vgl.jpg`, 4-Kachel-Streifen alt/neu am selben Frame.
+  Tests: logic 1190/1190, render1 7/7, render2a 1/1, render2b 5/5,
+  render2c 2/2, GUI_OK.
 - **v191 REGLER-ANZEIGE + behind-Wort NICHT MEHR ZERSCHNITTEN.**
   Zwei Befunde Ismets, beide am Beleg nachgerechnet.
   (a) REGLER LOGEN. Die Screenshots zeigten "Caption size 6000 %" und

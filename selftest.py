@@ -5720,11 +5720,14 @@ def _scenario_betrieb(tmp):
           f"{_nV[0]} vs {_nN[0]}")
     # v184 REFERENZ-GROESSEN der Hausbasis (an Ismets Vorbildern gemessen:
     # Fliesstext-Band 0.040 H, Schluesselwort-Band 0.074 H).
-    check('v184: Fliesstext-Basis 0.050 em der Bildhoehe',
-          _nN and abs(_nN[0] - int(1920 * 0.050)) <= 4, f"{_nN[0]}")
+    # v192: eine Stufe kleiner auf Ismets Ansage (Faktor 0.85 auf die
+    # v184-Referenzmasse). Die Kaskade bleibt geprueft, nur der Zielwert
+    # wandert mit.
+    check('v184/v192: Fliesstext-Basis 0.043 em der Bildhoehe',
+          _nN and abs(_nN[0] - int(1920 * 0.043)) <= 4, f"{_nN[0]}")
     _kN = [i['sz'] for i in _itN if i.get('role') in ('key', 'punch')]
-    check('v184: Schluesselwort-Basis 0.105 em der Bildhoehe',
-          _kN and abs(_kN[0] - int(1920 * 0.105)) <= 6, f"{_kN[0]}")
+    check('v184/v192: Schluesselwort-Basis 0.089 em der Bildhoehe',
+          _kN and abs(_kN[0] - int(1920 * 0.089)) <= 6, f"{_kN[0]}")
     check('v183: kein Schreibschrift-Akzent im Viral-Look',
           not any(i.get('role') == 'accent' for i in _itV)
           and any(i.get('role') == 'accent' for i in _itN))
@@ -6582,8 +6585,8 @@ def _scenario_betrieb(tmp):
     # 0.050 em (= 96 px bei 1920 H). Die SUBSTANZ des v154-Befunds bleibt
     # geprueft: der Fliesstext haengt NICHT an key_hoehe * Hierarchie (der
     # Referenz-Test direkt darunter).
-    check('v154/v184: Fliesstext auf Referenzmass, nicht auf Punchline-Mass',
-          88 <= _haus154 <= 104, f'{_haus154} px bei 1920 H (Referenz 96)')
+    check('v154/v192: Fliesstext auf dem gewaehlten Mass, nicht auf Punchline-Mass',
+          76 <= _haus154 <= 90, f'{_haus154} px bei 1920 H (Ziel 82)')
     # Kern des Befunds "Schriften zu gross": eine gemessene Referenz zog den
     # GANZEN Satz mit, weil sz_n ueber key_hoehe * Hierarchie lief. Gemessen
     # wird aber die PUNCHLINE des Vorbilds.
@@ -6700,10 +6703,9 @@ def _scenario_betrieb(tmp):
     # (key 0.105 em, klein 0.050 em - Ismets drei Vorbilder). Die alten
     # v153-Werte (0.076/0.034) und die noch aelteren (0.098/0.088) duerfen
     # beide nicht zurueckkommen.
-    check('v153/v184: die Grundschrift steht auf dem Referenzmass',
-          "H * 0.105 * pf * _skal" in _r153 and "H * 0.050 * pf * _skn" in _r153
-          and 'H * 0.098 * pf' not in _r153 and 'H * 0.088 * pf' not in _r153
-          and 'H * 0.076 * pf' not in _r153)
+    check('v153/v192: die Grundschrift steht auf dem gewaehlten Mass',
+          "H * 0.089 * pf * _skal" in _r153 and "H * 0.043 * pf * _skn" in _r153
+          and 'H * 0.098 * pf' not in _r153 and 'H * 0.076 * pf' not in _r153)
     # Nutzer-Regler
     _ui153 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     # v155: der Seiten-Regler heisst caption_seite; caption_align ist die
