@@ -5781,6 +5781,268 @@ def _scenario_betrieb(tmp):
     check('v185: die Farb-Karaoke ist restlos entfernt',
           not hasattr(R, 'tint_glyph'))
 
+    # ======= v194: Animationen tun, was ihr Name sagt ====================
+    # Ismets Frage: "Tut die Explosion wirklich das, was sie hergibt?"
+    # Gemessen wurde jede Animation direkt an anim_apply() - das ist eine
+    # reine Funktion auf einem Sprite, dafuer braucht es kein Video.
+    import numpy as _np194
+    import yaml as _y194
+    import render as _R194
+    _R194.BEAT_SYNC = 0.0
+    _c194 = _y194.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _S194 = _R194.Sprites(_c194, 1080, 1920)
+    _b194, _ = _S194.text('BOOM', 90, (255, 255, 255))
+
+    def _lage194(anim, t, LW=900, LH=600):
+        """Wo sitzt die Tinte, wenn der Zeichenpfad das Sprite MITTIG setzt?
+        Genau so landet es im Video - eine Messung im Sprite-Array allein
+        wuerde eine einseitig gewachsene Leinwand nicht bemerken."""
+        import cv2 as _cv194
+        arr, dx, dy, sc, op = _R194.anim_apply(
+            {'anim': anim, 'start': 0.0, 'kw_i': 3}, _b194.copy(),
+            (0.5, 0.4, 0.0), t)
+        cv = _np194.zeros((LH, LW), _np194.float32)
+        h, w = arr.shape[:2]
+        nw, nh = max(1, int(w * sc)), max(1, int(h * sc))
+        a2 = _cv194.resize(arr, (nw, nh))
+        x, y = int(LW / 2 - nw / 2 + dx), int(LH / 2 - nh / 2 + dy)
+        x0, y0 = max(0, x), max(0, y)
+        x1, y1 = min(LW, x + nw), min(LH, y + nh)
+        if x1 <= x0 or y1 <= y0:
+            return None
+        sub = a2[y0 - y:y1 - y, x0 - x:x1 - x]
+        al = sub[:, :, 3] / 255.0 * max(0.0, min(1.0, op))
+        g = _cv194.cvtColor(sub[:, :, :3], _cv194.COLOR_BGR2GRAY).astype(_np194.float32)
+        cv[y0:y1, x0:x1] = g * al
+        m = cv > 25
+        if not m.any():
+            return None
+        ys, xs = _np194.nonzero(m)
+        return float(xs.mean()), float(ys.mean())
+
+    _soll194 = _lage194('', 3.0)
+
+    # (a) REGEN faellt von OBEN und landet auf der berechneten Stelle.
+    # Bis v193 wuchs die Leinwand nur nach unten: der Streifen stieg von
+    # unten herauf (genau andersherum als das Label sagt) und der fertige
+    # Text sass danach dauerhaft 53 px zu hoch - 30 % der Worthoehe.
+    _rg_frueh = _lage194('regen', 0.15)
+    _rg_ende = _lage194('regen', 2.5)
+    check('v194 regen: faellt wirklich VON OBEN herab',
+          _rg_frueh is not None and _rg_frueh[1] < _soll194[1] - 40,
+          f"start y {_rg_frueh[1] if _rg_frueh else None} vs soll {_soll194[1]:.0f}")
+    check('v194 regen: landet auf der berechneten Stelle (nicht daneben)',
+          _rg_ende is not None and abs(_rg_ende[1] - _soll194[1]) < 4,
+          f"ende y {_rg_ende[1] if _rg_ende else None} vs soll {_soll194[1]:.0f}")
+
+    # (b) RUTSCHE kommt von RECHTS und landet auf der berechneten Stelle.
+    # Bis v193 wuchs die Leinwand nur nach rechts -> 92 px zu weit links,
+    # also 23 % der Wortbreite. Das verfehlt die Bildseite (v168) und den
+    # Plattform-Korridor (v187).
+    _ru_frueh = _lage194('rutsche', 0.06)
+    _ru_ende = _lage194('rutsche', 2.5)
+    check('v194 rutsche: kommt wirklich VON RECHTS',
+          _ru_frueh is not None and _ru_frueh[0] > _soll194[0] + 5,
+          f"start x {_ru_frueh[0] if _ru_frueh else None} vs soll {_soll194[0]:.0f}")
+    check('v194 rutsche: landet auf der berechneten Stelle (nicht daneben)',
+          _ru_ende is not None and abs(_ru_ende[0] - _soll194[0]) < 4,
+          f"ende x {_ru_ende[0] if _ru_ende else None} vs soll {_soll194[0]:.0f}")
+
+    # (c) Beide polstern jetzt SYMMETRISCH - das ist die Bauweise, die
+    # explosion und magnet seit je richtig machen. Quelltext-Garantie,
+    # damit ein spaeterer Umbau nicht in dieselbe Falle laeuft.
+    _r194 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v194: regen polstert symmetrisch',
+          'out = np.zeros((h + 2 * pad_y, w, 4), base.dtype)' in _r194)
+    check('v194: rutsche polstert symmetrisch',
+          'out = np.zeros((h, w + 2 * pad_x, 4), base.dtype)' in _r194)
+
+    # (d) KEINE Animation darf den Text unbemerkt verschieben. Ausgenommen
+    # sind die, die per Bauart eine neue Ruhelage haben (sturz faellt und
+    # bleibt liegen, anstieg steigt und bleibt oben) und die Dauer-
+    # Animationen, die bei t=2.5 s einfach mitten in ihrer Schwingung sind.
+    _erlaubt194 = {'sturz', 'anstieg', 'bruch', 'schwund',
+                   'schweben', 'wackel', 'druck'}
+    _versetzt194 = []
+    for _a194 in _R194.ANIM_LIST:
+        if _a194 in _erlaubt194:
+            continue
+        _e194 = _lage194(_a194, 2.5)
+        if _e194 is None:
+            _versetzt194.append((_a194, 'keine Tinte'))
+            continue
+        if (abs(_e194[0] - _soll194[0]) > 3.5
+                or abs(_e194[1] - _soll194[1]) > 3.5):
+            _versetzt194.append((_a194,
+                                 f"{_e194[0] - _soll194[0]:+.0f}/"
+                                 f"{_e194[1] - _soll194[1]:+.0f}"))
+    check('v194: keine Animation laesst den Text daneben stehen',
+          not _versetzt194, f"{_versetzt194}")
+
+    # (e) Und jede Animation muss ueberhaupt etwas tun. Audio-getriebene
+    # bekommen dafuer ein sprech-aehnliches Signal - mit einem konstanten
+    # Wert gemessen stehen sie still, und das ist ein MESSFEHLER, kein Bug
+    # (genau darauf bin ich beim Pruefen selbst hereingefallen).
+    import math as _m194
+
+    def _aud194(t):
+        ph = (t % 0.33) / 0.33
+        return (0.30 + 0.45 * abs(_m194.sin(t * _m194.pi / 0.33)),
+                0.20 + 0.40 * abs(_m194.sin(t * _m194.pi / 0.66)),
+                max(0.0, 1.0 - ph * 4.0))
+
+    # (f) KIPPEN dreht um die QUERachse (nach vorn), WENDE um die HOCHachse
+    # (umblaettern). Bis v193 bekamen beide ihren Winkel als 'ay' -
+    # _persp3d(arr, ax, ay) - und machten damit exakt dieselbe Bewegung.
+    # Der eigene Kommentar von 'kippen' sagte seit je "Tilt um X-Achse",
+    # das Argument sass nur an der falschen Stelle.
+    def _bb194(arr):
+        m = arr[:, :, 3] > 60
+        ys, xs = _np194.nonzero(m)
+        return (xs.max() - xs.min() + 1, ys.max() - ys.min() + 1)
+
+    _bw194, _bh194 = _bb194(_b194)
+
+    def _form194(anim, t):
+        arr, _, _, _, _ = _R194.anim_apply(
+            {'anim': anim, 'start': 0.0, 'kw_i': 3}, _b194.copy(),
+            (0.5, 0.4, 0.0), t)
+        w, h = _bb194(arr)
+        return w / _bw194, h / _bh194
+
+    _kb, _kh = _form194('kippen', 0.03)
+    _wb, _wh = _form194('wende', 0.10)
+    check('v194 kippen: staucht die HOEHE (kippt nach vorn), nicht die Breite',
+          _kh < 0.90 and _kb > 0.95, f"Breite {_kb:.2f}x Hoehe {_kh:.2f}x")
+    check('v194 wende: staucht die BREITE (blaettert um), nicht die Hoehe',
+          _wb < 0.80 and _wh > 0.95, f"Breite {_wb:.2f}x Hoehe {_wh:.2f}x")
+    check('v194: kippen und wende sind nicht mehr dieselbe Bewegung',
+          '_persp3d(base, tilt, 0.0, 0.14)' in _r194
+          and '_persp3d(base, 0.0, ang, 0.18)' in _r194)
+    # Und die Kippung muss lang genug stehen, um lesbar zu sein. Bei der
+    # alten Zeitbasis war sie nach 0.10 s vorbei = drei Bilder bei 30 fps.
+    check('v194 kippen: die Kippung ist lange genug sichtbar (> 0.20 s)',
+          _form194('kippen', 0.17)[1] < 0.97,
+          f"Hoehe bei 0.17 s: {_form194('kippen', 0.17)[1]:.2f}x")
+
+    # (g) SCHWUND loest sich WIRKLICH auf. Bis v193 stand im Code ein
+    # Alpha-Boden (0.42 + 0.58 * keep) - das Wort blieb dauerhaft bei 42 %
+    # Deckkraft stehen (gemessen noch bei t = 6 s). Eine Animation namens
+    # "Fade (dissolves)" darf nicht bei halb sichtbar einfrieren.
+    _a0194 = float(_b194[:, :, 3].astype(_np194.float32).sum())
+
+    def _rest194(t):
+        arr, _, _, _, _ = _R194.anim_apply(
+            {'anim': 'schwund', 'start': 0.0, 'kw_i': 3}, _b194.copy(),
+            (0.5, 0.4, 0.0), t)
+        return float(arr[:, :, 3].astype(_np194.float32).sum()) / _a0194
+
+    check('v194 schwund: loest sich wirklich ganz auf',
+          _rest194(1.5) < 0.02 and _rest194(0.3) > 0.9,
+          f"t=0.3: {_rest194(0.3)*100:.0f} %  t=1.5: {_rest194(1.5)*100:.1f} %")
+    # Die ZUWEISUNG pruefen, nicht den Dateitext - der erklaerende Kommentar
+    # zitiert die alte Formel absichtlich, damit spaeter niemand denselben
+    # Boden wieder einbaut.
+    check('v194 schwund: kein Alpha-Boden mehr in der Zuweisung',
+          "* keep).astype(base.dtype)" in _r194
+          and "(0.42 + 0.58 * keep)).astype(base.dtype)" not in _r194)
+
+    # (h) GEWICHT reagiert stufenlos auf den Bass. Der Morphologie-Kernel war
+    # eine ungerade GANZzahl - die ganze Bass-Spanne 0.0 bis 0.8 ergab
+    # denselben Kernel und damit eine STATISCHE Verdickung.
+    import cv2 as _cv2g
+
+    def _strich194(arr):
+        m = (arr[:, :, 3] > 100).astype(_np194.uint8)
+        if not m.any():
+            return 0.0
+        d = _cv2g.distanceTransform(m, _cv2g.DIST_L2, 5)
+        return float(d[m > 0].mean() * 2)
+
+    _s0194 = _strich194(_b194)
+    _kurve194 = []
+    for _bs194 in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
+        _ag, _, _, _, _ = _R194.anim_apply(
+            {'anim': 'gewicht', 'start': 0.0, 'kw_i': 3}, _b194.copy(),
+            (0.5, _bs194, 0.0), 0.40)
+        _kurve194.append(_strich194(_ag) / _s0194)
+    check('v194 gewicht: der Strich waechst mit dem Bass (keine tote Zone)',
+          all(_kurve194[i] >= _kurve194[i - 1] - 0.002
+              for i in range(1, len(_kurve194)))
+          and _kurve194[-1] - _kurve194[0] > 0.10,
+          f"{[round(x, 3) for x in _kurve194]}")
+    check('v194 gewicht: zwischen zwei Kernelgroessen wird gemischt',
+          'misch = max(0.0, min(1.0, (roh - k_lo) / 2.0))' in _r194)
+
+    # (i) FOKUS: die Unschaerfe muss bei VOLLER Deckkraft stehen. Bis v193
+    # lag sie in der Einblendung (op < 1) und war nach 0.10 s vorbei - bei
+    # 30 fps drei Bilder, davon zwei halbtransparent.
+    def _fok194(t):
+        arr, _, _, _, op = _R194.anim_apply(
+            {'anim': 'fokus', 'start': 0.0, 'kw_i': 3}, _b194.copy(),
+            (0.5, 0.4, 0.0), t)
+        g = _cv2g.cvtColor(arr[:, :, :3], _cv2g.COLOR_BGR2GRAY)
+        return float(_cv2g.Laplacian(g, _cv2g.CV_64F).var()), op
+
+    _f_mitte = _fok194(0.20)
+    _f_ende = _fok194(0.55)
+    check('v194 fokus: noch bei 0.20 s unscharf UND voll sichtbar',
+          _f_mitte[0] < _f_ende[0] * 0.1 and _f_mitte[1] > 0.99,
+          f"Schaerfe {_f_mitte[0]:.1f} bei Deckkraft {_f_mitte[1]:.2f}, "
+          f"scharf {_f_ende[0]:.1f}")
+    check('v194 fokus: monotone Kurve statt Feder (ein Rack Focus schwingt nicht)',
+          'e = smoothstep(min(dt / 0.42, 1.0))' in _r194
+          and _r194.count('blur = (1.0 - e) * min(base.shape[0]') == 1)
+
+    # (j) WACKEL: "cartoon bounce" heisst Squash & Stretch, die erste der
+    # 12 Disney-Regeln. Bis v193 gab es nur einen GLEICHFOERMIGEN Skalen-Puls
+    # von 1.5 % - ein Groessen-Zappeln, kein Cartoon. Jetzt gegenlaeufig auf
+    # beiden Achsen und an den Umkehrpunkt der Bewegung gekoppelt.
+    def _wk194(t):
+        arr, _, dy, _, _ = _R194.anim_apply(
+            {'anim': 'wackel', 'start': 0.0, 'kw_i': 3}, _b194.copy(),
+            (0.5, 0.4, 0.0), t)
+        w, h = _bb194(arr)
+        return dy, w / _bw194, h / _bh194
+
+    _unten = _wk194(0.12)     # dy positiv = unten
+    _oben = _wk194(0.37)      # dy negativ = oben
+    check('v194 wackel: unten breit und flach (Aufprall)',
+          _unten[0] > 0 and _unten[1] > 1.03 and _unten[2] < 0.97,
+          f"dy {_unten[0]:.1f} B {_unten[1]:.3f} H {_unten[2]:.3f}")
+    check('v194 wackel: oben schmal und hoch (Streckung)',
+          _oben[0] < 0 and _oben[1] < 0.97 and _oben[2] > 1.03,
+          f"dy {_oben[0]:.1f} B {_oben[1]:.3f} H {_oben[2]:.3f}")
+    check('v194 wackel: volumenerhaltend (Breite rauf = Hoehe runter)',
+          abs(_unten[1] * _unten[2] - 1.0) < 0.05
+          and abs(_oben[1] * _oben[2] - 1.0) < 0.05,
+          f"{_unten[1]*_unten[2]:.3f} / {_oben[1]*_oben[2]:.3f}")
+
+    _tot194 = []
+    for _a194 in _R194.ANIM_LIST:
+        _p194 = {'anim': _a194, 'start': 0.0, 'kw_i': 3}
+        _sig = []
+        for _k194 in range(0, 90, 2):
+            _t194 = _k194 / 60.0
+            _arr, _dx, _dy, _sc, _op = _R194.anim_apply(
+                _p194, _b194.copy(), _aud194(_t194), _t194)
+            # Der Fingerabdruck muss die FORM erfassen, nicht nur die
+            # Gesamtmenge Tinte. Erster Entwurf nahm die Alpha-Summe - eine
+            # Welle verschiebt die Tinte nur seitlich, die Summe bleibt
+            # gleich, und der Test meldete 'welle' faelschlich als tot
+            # (gemessen bewegt sie 8 bis 14 px und 20 bis 30 % der Tinte).
+            _al = _arr[:, :, 3]
+            _sp = tuple(int(v // 400) for v in
+                        _al[::max(1, _al.shape[0] // 6)].sum(axis=1)) + \
+                  tuple(int(v // 400) for v in
+                        _al[:, ::max(1, _al.shape[1] // 8)].sum(axis=0))
+            _sig.append((round(_dx, 1), round(_dy, 1), round(_sc, 3),
+                         round(_op, 3), _arr.shape[0], _arr.shape[1], _sp))
+        if len(set(_sig)) <= 1:
+            _tot194.append(_a194)
+    check('v194: jede der 26 Animationen bewegt ueberhaupt etwas',
+          not _tot194, f"regungslos: {_tot194}")
+
     # ======= v193: BLOCK-EDITOR ==========================================
     # Ismets Ansage: "Es soll voll einstellbar sein und diese Einstellungen
     # MUESSEN auch uebernommen werden." Genau darum steht hier nicht nur

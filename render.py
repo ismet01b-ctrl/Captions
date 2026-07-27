@@ -253,14 +253,43 @@ def _weight_morph(arr, amt):
     hier optisch ueber Morphologie, damit kein Font pro Frame neu gerendert wird."""
     if abs(amt) < 0.06 or arr is None:
         return arr
-    k = max(int(round(abs(amt) * 4)) | 1, 3)
-    ker = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    # v194 STUFENLOS. Bis v193 war der Kernel eine ungerade GANZE Zahl:
+    #   k = max(int(round(abs(amt) * 4)) | 1, 3)
+    # Damit lieferte die ganze Spanne amt = 0.06 bis 0.87 denselben Kernel 3,
+    # und der "atmende" Strich war in Wahrheit eine STATISCHE Verdickung.
+    # Gemessen am Sprite: Strichbreite 1.177x fuer Bass 0.0 bis 0.8, erst bei
+    # Bass 1.0 sprang sie auf 1.257x. Ein Regler, der ueber 80 % seines
+    # Bereichs nichts tut, ist kein Regler.
+    # Jetzt wird zwischen den beiden benachbarten Kernelgroessen GEMISCHT -
+    # dazwischen liegende Werte ergeben eine echte Zwischenstufe.
+    roh = max(abs(amt) * 4.0, 1.0)
+    # k_lo muss die groesste UNGERADE Zahl <= roh sein. 'floor(roh) | 1'
+    # rundet bei geraden Werten nach OBEN (2 -> 3) und liegt dann ueber roh -
+    # die Mischung wird negativ und wieder auf 0 geklemmt, also blieb eine
+    # Stufe stehen (gemessen: Bass 0.4 bis 0.8 wieder identisch).
+    k_lo = int(math.floor(roh))
+    if k_lo % 2 == 0:
+        k_lo -= 1
+    k_lo = max(k_lo, 1)
+    k_hi = k_lo + 2
+    misch = max(0.0, min(1.0, (roh - k_lo) / 2.0))
     out = arr.copy()
+
+    def _morph(kanal, k):
+        if k <= 1:
+            return kanal
+        ker = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+        return (cv2.dilate(kanal, ker) if amt > 0 else cv2.erode(kanal, ker))
+
+    a_lo = _morph(arr[..., 3], k_lo).astype(np.float32)
+    a_hi = _morph(arr[..., 3], k_hi).astype(np.float32)
+    out[..., 3] = np.clip(a_lo * (1.0 - misch) + a_hi * misch,
+                          0, 255).astype(arr.dtype)
     if amt > 0:
-        out[..., 3] = cv2.dilate(arr[..., 3], ker)
-        out[..., :3] = cv2.dilate(arr[..., :3], ker)
-    else:
-        out[..., 3] = cv2.erode(arr[..., 3], ker)
+        c_lo = _morph(arr[..., :3], k_lo).astype(np.float32)
+        c_hi = _morph(arr[..., :3], k_hi).astype(np.float32)
+        out[..., :3] = np.clip(c_lo * (1.0 - misch) + c_hi * misch,
+                               0, 255).astype(arr.dtype)
     return out
 
 
@@ -669,8 +698,16 @@ def _anim_core(p, base, aud, dt):
                 p['_schwund'] = key
             arr = base.copy()
             keep = np.clip((key - e * 1.15) * 6.0 + 0.5, 0.0, 1.0)   # loest sich fleckig
+            # v194: DER BODEN MUSSTE WEG. Bis v193 stand hier
+            #   alpha = base_alpha * (0.42 + 0.58 * keep)
+            # und damit fror das Wort bei 42 % Deckkraft ein - fuer immer.
+            # Gemessen: 41.8 % Restdeckkraft noch bei t = 6 s. Eine Animation,
+            # die "Fade (dissolves)" heisst und das Wort dauerhaft halb
+            # sichtbar stehen laesst, loest sich nicht auf, sie wird blass.
+            # Die Regie waehlt sie fuer Woerter wie weg/verloren/vorbei -
+            # dort ist Verschwinden die ganze Aussage.
             arr[..., 3] = (base[..., 3].astype(np.float32)
-                           * (0.42 + 0.58 * keep)).astype(base.dtype)
+                           * keep).astype(base.dtype)
             dy = -base.shape[0] * 0.06 * e   # steigt leicht auf wie Rauch
     elif a == 'knall':                       # Punchline: knallt hin und federt aus
         # Feder statt Ease-Out: schiesst minimal ueber und pendelt sich ein.
@@ -711,12 +748,22 @@ def _anim_core(p, base, aud, dt):
     elif a == 'fokus':                       # Rack Focus: kommt scharf ins Bild
         # Der Klassiker aus dem Kino, in 2026 der Marker fuer teure Captions:
         # kein Zappeln, nur Schaerfe, die sich setzt.
-        e = spring(min(dt / 0.38, 1.6), freq=1.8, damp=6.5)
-        blur = (1.0 - min(e, 1.0)) * min(base.shape[0], base.shape[1]) * 0.09
+        # v194: Der Scharfzug war nach 0.10 s vorbei - bei 30 fps drei Bilder,
+        # und die beiden unschaerfsten davon standen bei 20 % bzw. 50 %
+        # Deckkraft, waren also praktisch nicht im Bild. Gemessen sprang die
+        # Kantenschaerfe zwischen t = 0.05 und t = 0.10 von 1.8 auf 1075.
+        # Ursache war spring(): mit freq 1.8 erreicht die Feder ihr Ziel beim
+        # ersten Kosinus-Nulldurchgang, also schon bei x = 0.28 -> dt = 0.10 s.
+        # Fuer einen Rack Focus ist eine Feder ohnehin falsch, die Schaerfe
+        # soll sich SETZEN, nicht ueberschwingen. Jetzt monoton ueber 0.42 s,
+        # und die Blende ist vorher fertig (0.06 s), damit die unscharfe
+        # Phase wirklich zu sehen ist.
+        e = smoothstep(min(dt / 0.42, 1.0))
+        blur = (1.0 - e) * min(base.shape[0], base.shape[1]) * 0.09
         if blur > 0.6:
             arr = cv2.GaussianBlur(base, (0, 0), blur)
-        sc = 1.055 - 0.055 * min(e, 1.0)
-        op = min(dt / 0.10, 1.0)
+        sc = 1.055 - 0.055 * e
+        op = min(dt / 0.06, 1.0)
 
     elif a == 'enthuellen':                  # weiche Kante wischt das Wort frei
         e = smoothstep(min(dt / 0.42, 1.0))
@@ -759,9 +806,23 @@ def _anim_core(p, base, aud, dt):
     elif a == 'kippen':                       # Wort kippt nach vorn wie ein Buch das aufklappt
         # Tilt um X-Achse: obere Kante entfernt sich, untere kommt entgegen.
         # Federt aus, bleibt stehen. Kein Wackeln danach.
-        e = spring(min(dt / 0.50, 1.4), freq=2.1, damp=6.0)
+        # v194: Die Kippung war nach 0.10 s vorbei - bei 30 fps sind das DREI
+        # Bilder, das liest niemand als "klappt nach vorn". Ursache war nicht
+        # die Daempfung, sondern die FREQUENZ: spring() erreicht 1.0 beim
+        # ersten Nulldurchgang des Kosinus, also bei x = 1/(2*freq) = 0.238.
+        # Mit der alten Zeitbasis 0.50 s lag der genau bei dt = 0.12 s.
+        # Zeitbasis 1.40 s schiebt ihn auf dt = 0.33 s - dieselbe Groessen-
+        # ordnung wie 'wende' (0.40 s), das man klar als Drehung liest.
+        e = spring(min(dt / 1.40, 1.4), freq=2.1, damp=4.0)
         tilt = -0.85 * (1.0 - min(e, 1.0))    # startet stark tilted, geht auf 0
-        arr, _px, _py = _persp3d(base, 0.0, tilt, 0.14)
+        # v194: DIE ACHSEN WAREN VERTAUSCHT. _persp3d(arr, ax, ay) dreht mit
+        # ax um die QUERachse (nach vorn kippen) und mit ay um die HOCHachse
+        # (umblaettern). Uebergeben wurde tilt als ay - also drehte 'kippen'
+        # um die Hochachse und war damit dieselbe Bewegung wie 'wende'.
+        # Der eigene Kommentar direkt darueber sagt seit je "Tilt um X-Achse:
+        # obere Kante entfernt sich, untere kommt entgegen" - die Absicht war
+        # klar, nur das Argument sass an der falschen Stelle.
+        arr, _px, _py = _persp3d(base, tilt, 0.0, 0.14)
         op = min(dt / 0.06, 1.0)
 
     elif a == 'explosion':                    # radialer Aufschlag: Streifen fliegen weg + zurueck
@@ -844,15 +905,37 @@ def _anim_core(p, base, aud, dt):
         # - ein nackter Einzelsinus ist als synthetisch erkennbar.
         amp = base.shape[0] * (0.020 + 0.015 * a_rms)
         ph = math.pi * hand_jitter(p.get('kw_i', 0))
-        dy = amp * (math.sin(dt * 12.0) + 0.30 * math.sin(dt * 20.4 + ph))
-        sc = 1.0 + 0.015 * math.sin(dt * 12.0 + math.pi / 2)
+        wl = math.sin(dt * 12.0)
+        dy = amp * (wl + 0.30 * math.sin(dt * 20.4 + ph))
+        # v194 SQUASH & STRETCH. Bis v193 stand hier nur ein GLEICHFOERMIGER
+        # Skalen-Puls von 1.5 % - das ist ein Groessen-Zappeln, kein Cartoon.
+        # Squash und Stretch sind die erste der 12 Disney-Regeln und genau
+        # das, was "Wobble (cartoon bounce)" verspricht: unten breit und
+        # flach (Aufprall), in der Bewegung schmal und hoch (Streckung).
+        # Deshalb GEGENLAEUFIG auf beiden Achsen und an den Umkehrpunkt der
+        # Bewegung gekoppelt (wl, nicht 90 Grad daneben), und volumen-
+        # erhaltend: was in der Breite dazukommt, geht in der Hoehe ab.
+        q = 0.055 * wl
+        arr = cv2.resize(base,
+                         (max(int(base.shape[1] * (1.0 + q)), 2),
+                          max(int(base.shape[0] * (1.0 - q)), 2)),
+                         interpolation=cv2.INTER_LINEAR)
 
     elif a == 'regen':                        # Buchstaben-Streifen fallen von oben nacheinander
         h, w = base.shape[:2]
         n_col = max(int(w / 34), 4)
         cw = max(w // n_col, 6)
+        # v194: SYMMETRISCH polstern. Bis v193 wuchs die Leinwand nur UNTEN
+        # (h + pad_y). Das Wort landete am Ende bei y_off = 0, also am OBEREN
+        # Rand der Leinwand - und weil der Zeichenpfad das Sprite mittig
+        # setzt, sass der fertige Text danach dauerhaft pad_y/2 zu hoch.
+        # Gemessen: 53 px bei einem 178 px hohen Wort, also 30 % seiner Hoehe.
+        # Die Platzierungs-Regie hatte die Stelle vorher genau berechnet
+        # (Gesichtsbox, Title-Safe, Plattform-Maske) - diese Verschiebung
+        # hebelte das aus. explosion/magnet polstern seit je symmetrisch,
+        # deshalb sitzen sie richtig; das hier ist dieselbe Bauweise.
         pad_y = int(h * 0.55) + 8
-        out = np.zeros((h + pad_y, w, 4), base.dtype)
+        out = np.zeros((h + 2 * pad_y, w, 4), base.dtype)
         for i in range(n_col):
             x0 = i * cw
             x1 = min(x0 + cw, w)
@@ -869,7 +952,12 @@ def _anim_core(p, base, aud, dt):
             bounce = 0.0
             if x > 1.0:
                 bounce = math.exp(-(x - 1.0) * 6.0) * math.sin((x - 1.0) * 22.0) * 0.05
-            y_off = int(max((1.0 - fall) * pad_y - bounce * h, 0))
+            # v194: Die Ruhelage ist jetzt y_off = pad_y (Mitte der Leinwand),
+            # der Start liegt DARUEBER bei y_off = 0. Damit faellt der Streifen
+            # wirklich von oben herab, statt wie bis v193 von unten
+            # heraufzusteigen - gemessen war die Bewegung genau andersherum
+            # als das Label "Rain (falls from above)" verspricht.
+            y_off = int(max(fall * pad_y + bounce * h, 0))
             seg = base[:, x0:x1]
             gh = seg.copy()
             gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * min(x * 2.2, 1.0),
@@ -893,8 +981,14 @@ def _anim_core(p, base, aud, dt):
         h, w = base.shape[:2]
         n_col = max(int(w / 34), 4)
         cw = max(w // n_col, 6)
+        # v194: SYMMETRISCH polstern, gleicher Fehler wie bei 'regen'. Bis
+        # v193 wuchs die Leinwand nur RECHTS; der Streifen landete bei
+        # x_off = 0, also am linken Rand, und der fertige Text sass danach
+        # dauerhaft pad_x/2 zu weit links. Gemessen: 92 px bei 397 px
+        # Wortbreite, also 23 % - genug, um die berechnete Bildseite
+        # (v168) und den Plattform-Korridor (v187) zu verfehlen.
         pad_x = int(w * 0.45) + 8
-        out = np.zeros((h, w + pad_x, 4), base.dtype)
+        out = np.zeros((h, w + 2 * pad_x, 4), base.dtype)
         for i in range(n_col):
             x0 = i * cw
             x1 = min(x0 + cw, w)
@@ -908,7 +1002,10 @@ def _anim_core(p, base, aud, dt):
             if x <= 0.0:
                 continue
             e = spring(min(x, 1.4), freq=2.5, damp=5.6)
-            x_off = int((1.0 - e) * pad_x)
+            # Ruhelage = pad_x (Mitte), Start = 2*pad_x (rechts davon).
+            # Damit kommt der Streifen wirklich VON RECHTS, so wie das Label
+            # sagt, und steht am Ende an der berechneten Stelle.
+            x_off = int(pad_x + (1.0 - e) * pad_x)
             seg = base[:, x0:x1]
             gh = seg.copy()
             gh[..., 3] = np.clip(seg[..., 3].astype(np.float32) * min(x * 2.5, 1.0),

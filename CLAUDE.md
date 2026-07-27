@@ -252,6 +252,37 @@ schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
 Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
 zwischen Regie und Zittern.
 
+### Animationen pruefen (v194) — Name ist eine Zusage
+`anim_apply()` ist eine REINE FUNKTION auf einem Sprite. Wer eine Animation
+pruefen will, ruft sie direkt ueber eine Zeitreihe auf und misst — kein
+Video noetig. Gemessen wird die TINTE (Breite, Hoehe, Teile, Streuung,
+Strichstaerke ueber Distanztransform), nicht das Sprite-Rechteck.
+- **Einseitig polstern ist ein Positionsfehler.** Wer die Leinwand nur auf
+  einer Seite wachsen laesst, verschiebt den fertigen Text um die halbe
+  Polsterbreite — der Zeichenpfad setzt das Sprite mittig. `regen` sass
+  53 px zu hoch, `rutsche` 92 px zu weit links. `explosion`/`magnet`
+  polstern symmetrisch und sind der Massstab.
+- **`_persp3d(arr, ax, ay)`: ax = Querachse (nach vorn kippen), ay =
+  Hochachse (umblaettern).** Vertauscht macht `kippen` dasselbe wie `wende`.
+- **`spring()` endet frueher, als die Zeitkonstante suggeriert.** Sie
+  erreicht 1.0 beim ersten Kosinus-Nulldurchgang, also bei x = 1/(2*freq) —
+  nicht bei x = 1. Fuer monotone Rampen (Blur, Kippung) ist sie das falsche
+  Werkzeug; dort gehoert `smoothstep` hin.
+- **Ganzzahlige Morphologie-Kernel quantisieren einen Regler tot.**
+  `k = int(round(amt*4)) | 1` ergab fuer die ganze Bass-Spanne denselben
+  Kernel. Zwischen zwei Kernelgroessen mischen.
+- **Neun Animationen sind AUDIO-getrieben** (glitch, puls, welle, zittern,
+  neon, schub, druck, gewicht, wackel). Mit einem konstanten Audio-Wert
+  gemessen stehen sie still — das ist ein Messfehler, kein Bug. Immer ein
+  sprech-aehnliches Signal anlegen.
+- **Ein Fingerabdruck aus der Alpha-SUMME ist blind fuer Verformung.**
+  Eine Welle verschiebt Tinte nur seitlich; die Summe bleibt gleich. Form
+  messen (Zeilen-/Spaltenprofil), nicht Menge.
+- **Nicht jeder Restversatz ist ein Fehler:** `sturz` bleibt unten liegen,
+  `anstieg` oben — das ist ihre Bauart. Dauer-Animationen (schweben,
+  wackel, puls, welle) sind bei einer Stichprobe einfach mitten in ihrer
+  Schwingung.
+
 ### Block-Editor (v193) — "eine Zeile, ein Block, und die Einstellung gilt"
 `_bloecke.json` ist die **Quelle der Chunk-Bildung**, kein Nachschlagen
 obendrauf. Liegt ein Nutzerplan vor, gibt `groups_for` ihn zurueck und
@@ -652,7 +683,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1238/1238 grün (Stand v193)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1259/1259 grün (Stand v194)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

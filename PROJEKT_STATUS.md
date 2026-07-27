@@ -3,6 +3,68 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v194 ANIMATIONEN GEPRUEFT: 5 von 26 taten nicht, was ihr Name sagt.**
+  Ismets Frage: "Tut die Explosion wirklich das, was sie hergibt?"
+  Geprueft wurde JEDE der 26 Animationen - Code gelesen UND gemessen.
+  Gemessen wurde direkt an `anim_apply()`; das ist eine reine Funktion auf
+  einem Sprite, dafuer braucht es kein Video. 21 Animationen sind sauber.
+  (1) **kippen war dieselbe Bewegung wie wende.** `_persp3d(arr, ax, ay)`
+      dreht mit ax um die QUERachse und mit ay um die HOCHachse. Uebergeben
+      wurde der Winkel als ay - also drehte "Tilt (folds forward)" um die
+      Hochachse, genau wie "Flip (turns over)". Der eigene Kommentar sagte
+      seit je "Tilt um X-Achse", nur das Argument sass falsch. Dazu war die
+      Kippung nach 0.10 s vorbei (3 Bilder bei 30 fps) - Ursache war nicht
+      die Daempfung, sondern die FREQUENZ: spring() erreicht sein Ziel beim
+      ersten Kosinus-Nulldurchgang, x = 1/(2*freq) = 0.238.
+      JETZT: Hoehe 0.70x -> 1.00x ueber 0.30 s, wende bleibt Breite 0.56x.
+  (2) **schwund loeste sich nie auf.** Ein Alpha-Boden (0.42 + 0.58*keep)
+      fror das Wort bei 42 % Deckkraft ein - gemessen noch bei t = 6 s.
+      "Fade (dissolves)" wurde blass statt zu verschwinden.
+      JETZT: 100 % -> 0 % in 1.1 s.
+  (3) **regen stieg von UNTEN auf.** Die Leinwand wuchs nur nach unten, der
+      Streifen landete am oberen Rand - und weil der Zeichenpfad mittig
+      setzt, sass der fertige Text dauerhaft 53 px zu hoch (30 % der
+      Worthoehe). "Rain (falls from above)" lief also in die Gegenrichtung.
+      JETZT: startet 104 px darueber, landet exakt auf der Sollposition.
+  (4) **rutsche kam von LINKS und blieb 92 px daneben stehen** (23 % der
+      Wortbreite) - derselbe einseitige Polster-Fehler. Das verfehlt die
+      berechnete Bildseite (v168) und den Plattform-Korridor (v187).
+      JETZT: kommt von rechts, landet exakt auf der Sollposition.
+      explosion und magnet polstern seit je symmetrisch und waren richtig -
+      das ist die Bauweise, die beide jetzt uebernehmen.
+  (5) **gewicht pumpte nicht, es verdickte einmal.** Der Morphologie-Kernel
+      war eine ungerade GANZzahl: die ganze Bass-Spanne 0.0 bis 0.8 ergab
+      denselben Kernel. Gemessen: Strichbreite 1.177x konstant, erst bei
+      Bass 1.0 ein Sprung. Ein Regler, der ueber 80 % seines Bereichs nichts
+      tut, ist kein Regler. JETZT: zwischen zwei Kernelgroessen gemischt,
+      monoton steigend.
+      EHRLICH: das ist der FALLBACK-Weg. Wo eine echte Variable-Font-Achse
+      vorliegt (viral/creator/elegant/cinematic), schwingt der Strich rund
+      1.9x; der Fallback schafft rund 1.2x. Die anderen fuenf Looks haben
+      keinen variablen Schnitt - das ist eine Font-Frage, keine Code-Frage,
+      und Ismets Entscheidung.
+  (6) **wackel hatte kein Squash & Stretch.** "Cartoon bounce" ohne die
+      erste der 12 Disney-Regeln war ein gleichfoermiger 1.5-%-Skalen-Puls.
+      JETZT: gegenlaeufig und an den Umkehrpunkt gekoppelt - unten 5 %
+      breiter und 5.5 % flacher, oben 5 % schmaler und 4 % hoeher,
+      volumenerhaltend.
+  EIGENER MESSFEHLER, ehrlich notiert: im ersten Durchgang stand `schub`
+  bei 0.00 % Aenderung da und sah tot aus. Ursache war MEINE Messung - die
+  Animation haengt am Audio-Onset, und ich hatte einen konstanten Wert
+  eingespeist. Mit einem sprech-aehnlichen Signal bewegt sie 9.9 px und
+  8.4 % Skalierung. Neun Animationen sind audio-getrieben; wer sie misst,
+  muss ein echtes Signal anlegen. Derselbe Fehler steckte in meinem ersten
+  Test-Fingerabdruck: er nahm die Alpha-SUMME, und eine Welle verschiebt
+  Tinte nur seitlich - `welle` wurde faelschlich als tot gemeldet, obwohl
+  sie 8 bis 14 px und 25 % der Tinte bewegt.
+  OFFEN, bewusst nicht angefasst: sturz endet 53 px tiefer und anstieg
+  43 px hoeher als die berechnete Stelle. Der Code sagt ausdruecklich, dass
+  sie fallen bzw. steigen und DORT stehen bleiben - das ist Absicht, aber
+  es umgeht die Platzierungs-Regie. Ismet entscheidet, ob sie zurueckfedern
+  sollen.
+  BEWEIS: `v194_beweis.jpg` (alt gegen neu, 5 Animationen im Streifen).
+  Tests: 15 neue Pruefungen, logic 1259/1259, render1 7/7, render2a 1/1,
+  render2b 5/5, render2c 2/2, GUI_OK.
 - **v193 BLOCK-EDITOR: Captions sind jetzt wirklich editierbar.**
   Ismets Ansage: "Wie in Premiere Pro editierbar. Simple und uebersichtlich.
   Ein Editor statt Momente. Voll einstellbar, und diese Einstellungen
