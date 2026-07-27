@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v194c MAIL-DECKEL RICHTIG GEZOGEN (Ismets Einwand: "was ist wenn jemand
+  100 Videos macht").**
+  Er hatte recht. Der Tages-Deckel aus v194b half nur gegen den Ausbruch,
+  nicht gegen den Dauerregen: Videos laufen LAUFEND ab, also haette ein
+  Nutzer, der taeglich rendert, jeden Tag eine Mail bekommen - 30 im Monat,
+  nur eben gebuendelt. Ein Deckel, der pro Tag zaehlt, deckelt bei taeglicher
+  Nutzung nichts.
+  ZWEI RIEGEL STATT EINES:
+  (a) **Wer ohnehin da ist, bekommt gar keine Erinnerung.** War der Nutzer
+      in den letzten 48 h aktiv (Login oder ein Job), faellt die Mail weg -
+      er sieht die Library. Die Mail ist ein Rueckkehr-Trigger fuer Leute,
+      die es vergessen haben, kein Statusbericht.
+  (b) **Rollender Mindestabstand von einer ganzen Aufbewahrungs-Periode**
+      (`_mail_abstand_ok`, 7 Tage). Damit gibt es hoechstens EINE Erinnerung
+      je Zyklus, egal wie viele Videos ablaufen.
+  Dazu ist die Liste gedeckelt: hoechstens zehn Zeilen, danach "and N more",
+  und gleiche Dateinamen werden ueber die GANZE Liste zusammengefasst (nicht
+  nur nebeneinanderliegende).
+  GEMESSEN am Testfall "100 Videos": aktiver Nutzer 0 Mails; inaktiver
+  Nutzer 1 Mail mit 7 Zeilen statt 100; am naechsten Tag weitere 100
+  ablaufende Videos -> immer noch 0 zusaetzliche Mails.
+  Tests: 5 neue Pruefungen, darunter der 100-Video-Fall als Verhaltens-Test.
+  logic 1274/1274, render1 7/7, render2a 1/1, render2b 5/5, render2c 2/2,
+  GUI_OK.
 - **v194b MAIL-FLUT GESTOPPT (Ismets Screenshot: 3 Mails, 2 in derselben
   Minute fuer dieselbe Datei).**
   URSACHE: Der Deckel gegen Doppel-Mails sass am JOB (`expiry_mail` im

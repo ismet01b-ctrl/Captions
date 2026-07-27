@@ -656,8 +656,17 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   Mail je Nutzer mit allen ablaufenden Videos.
 - Zusaetzlich `mail_log`-Schluessel `expiry-YYYY-MM-DD`: hoechstens eine
   Ablauf-Mail pro Nutzer und Tag.
-- Wer eine neue Kunden-Mail baut, deckelt sie ueber `_log_mail_once(uid, …)`.
-  Ausnahme: der Kaufbeleg ist ein Rechnungsdokument und geht pro Kauf raus.
+- **Ein Tages-Deckel deckelt bei taeglicher Nutzung nichts (v194c).** Videos
+  laufen laufend ab; wer taeglich rendert, bekaeme taeglich Post. Richtig
+  sind zwei Riegel: **aktive Nutzer** (Login oder Job in 48 h) bekommen die
+  Erinnerung gar nicht, und der Abstand ist eine ganze Aufbewahrungs-Periode
+  (`_mail_abstand_ok`, rollend statt Tagesschluessel).
+- **Listen in Mails deckeln.** Zehn Zeilen, dann "and N more"; gleiche Namen
+  ueber die GANZE Liste gruppieren, nicht nur nebeneinanderliegende.
+- Wer eine neue Kunden-Mail baut, deckelt sie ueber `_mail_abstand_ok(uid, …)`
+  bzw. `_log_mail_once(uid, …)` und prueft, ob der Empfaenger ueberhaupt
+  weg war. Ausnahme: der Kaufbeleg ist ein Rechnungsdokument und geht pro
+  Kauf raus.
 
 ## Betriebs-Meldungen (v147)
 Render-Fehler und Job-Timeouts gehen **nicht** mehr per Mail raus, sondern nur
@@ -706,7 +715,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1270/1270 grün (Stand v194b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1274/1274 grün (Stand v194c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -827,6 +827,46 @@ def _expire_credits(uid):
         con.close()
 
 
+def _mail_abstand_ok(uid, key, abstand_s):
+    """True, wenn seit der letzten Mail dieser Art mindestens `abstand_s`
+    vergangen sind - und merkt sich dabei den neuen Zeitpunkt.
+
+    v194c: Der Tages-Schluessel aus v194b war zu schwach. Er deckelt auf
+    EINE Mail pro Tag, aber Videos laufen laufend ab: wer taeglich rendert,
+    bekaeme 30 Mails im Monat. Ein rollender Mindestabstand deckelt wirklich.
+    """
+    now = int(time.time())
+    con = _db()
+    try:
+        row = con.execute("SELECT sent_at FROM mail_log WHERE user_id = ? "
+                          "AND key = ?", (uid, key)).fetchone()
+        if row and now - int(row['sent_at']) < abstand_s:
+            return False
+        con.execute("INSERT INTO mail_log (user_id, key, sent_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(user_id, key) DO UPDATE SET sent_at = excluded.sent_at",
+                    (uid, key, now))
+        con.commit()
+        return True
+    finally:
+        con.close()
+
+
+def _letzter_login(uid):
+    """Sekunden seit dem letzten Login. Sehr grosse Zahl, wenn keiner bekannt
+    ist. Zusammen mit dem neuesten Job ist das der Test 'ist der Kunde
+    gerade ohnehin da' - wer taeglich rendert, braucht keine Erinnerung,
+    dass Dateien ablaufen. Er sieht die Library."""
+    con = _db()
+    try:
+        row = con.execute("SELECT MAX(created_at) AS t FROM sessions "
+                          "WHERE user_id = ?", (uid,)).fetchone()
+        return (time.time() - float(row['t'])) if (row and row['t']) else 1e9
+    except Exception:
+        return 1e9
+    finally:
+        con.close()
+
+
 def _log_mail_once(uid, key):
     """True genau beim ersten Mal pro (User, Schluessel), sonst False."""
     con = _db()
@@ -1709,7 +1749,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v194b-mails'
+DVE_BUILD = 'v194c-maildeckel'
 
 
 @app.middleware('http')
@@ -3585,20 +3625,34 @@ def _expiry_sammeln(jid, d, mtime, cutoff, eimer):
     eimer.setdefault(uid, []).append((jid, j.get('name') or 'your video', hours))
 
 
-def _expiry_mails(eimer):
+def _expiry_mails(eimer, _aktiv=None):
     """Eine Mail je Nutzer, mit ALLEN ablaufenden Videos darin.
 
     Zusaetzlicher Riegel ueber `mail_log`: hoechstens eine Ablauf-Mail pro
     Nutzer und Tag. Der Job-Flag allein reicht nicht - er zaehlt Jobs, und
     genau das war das Problem."""
     base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    _aktiv = _aktiv or {}
     for uid, posten in eimer.items():
         u = _find_user_by_id(uid)
         if not u or not u['verified']:
             continue
-        # Tages-Schluessel: ein Kunde bekommt hoechstens eine Erinnerung am
-        # Tag, egal wie viele Videos gleichzeitig ablaufen.
-        if not _log_mail_once(uid, 'expiry-' + time.strftime('%Y-%m-%d')):
+        # v194c ZWEI RIEGEL statt eines Tages-Schluessels.
+        # (a) Wer gerade ohnehin da ist, braucht keine Erinnerung. Er sieht
+        #     die Library. Ein Vielrenderer bekaeme sonst dauerhaft Post,
+        #     weil bei ihm JEDEN Tag etwas ablaeuft - bei 100 Videos waeren
+        #     das 30 Mails im Monat, nur eben gebuendelt.
+        # (b) Rollender Mindestabstand von einer RETENTION-Periode. Damit
+        #     kann es hoechstens eine Erinnerung je Aufbewahrungs-Zyklus
+        #     geben, egal wie viele Videos ablaufen.
+        _still = min(_letzter_login(uid), _aktiv.get(uid, 1e9))
+        if _still < 48 * 3600:
+            for jid, _n, _h in posten:
+                set_state(jid, expiry_mail=True)       # abhaken, nicht mailen
+            print(f'Ablauf-Mail: User {uid} war vor {_still/3600:.0f}h aktiv '
+                  f'- keine Erinnerung noetig')
+            continue
+        if not _mail_abstand_ok(uid, 'expiry', RETENTION_DAYS * 86400):
             for jid, _n, _h in posten:
                 set_state(jid, expiry_mail=True)       # trotzdem abhaken
             continue
@@ -3609,15 +3663,26 @@ def _expiry_mails(eimer):
         # Gleicher Dateiname mehrfach = mehrere Renders derselben Quelle.
         # Das sind echte, getrennte Eintraege in der Library, aber als Liste
         # gelesen wirkt es wie ein Fehler. Also zusammenfassen mit Anzahl.
-        namen = []
+        # Ueber die GANZE Liste gruppieren, nicht nur nebeneinanderliegende
+        # Eintraege - sonst steht derselbe Dateiname mehrfach da, sobald ein
+        # anderes Video dazwischenliegt.
+        _grp = {}
         for _j, n, h in posten:
-            if namen and namen[-1][0] == n:
-                namen[-1][1] += 1
+            if n in _grp:
+                _grp[n][1] += 1
+                _grp[n][2] = min(_grp[n][2], h)
             else:
-                namen.append([n, 1, h])
+                _grp[n] = [n, 1, h]
+        namen = sorted(_grp.values(), key=lambda x: x[2])
+        # Deckel: bei 100 ablaufenden Videos will niemand 100 Zeilen lesen.
+        # Die ersten zehn stehen da, der Rest wird gezaehlt.
+        _zeig = namen[:10]
         liste = '\n'.join(
             f'  - {n}' + (f' ({c} versions)' if c > 1 else '') + f' - {h}h left'
-            for n, c, h in namen)
+            for n, c, h in _zeig)
+        if len(namen) > len(_zeig):
+            _rest = sum(c for _n, c, _h in namen[len(_zeig):])
+            liste += f'\n  - and {_rest} more'
         if len(posten) == 1:
             zeile = f'"{posten[0][1]}" in your DouchkoVE library will be'
             rest = f' deleted in about {knapp} hours.'
@@ -3655,6 +3720,7 @@ def _cleanup_worker():
         try:
             cutoff = _t.time() - retention * 86400
             _abl = {}                        # v194b: uid -> ablaufende Videos
+            _akt = {}                        # v194c: uid -> Sekunden seit Job
             if os.path.isdir(JOBS_DIR):
                 for jid in os.listdir(JOBS_DIR):
                     d = os.path.join(JOBS_DIR, jid)
@@ -3675,6 +3741,11 @@ def _cleanup_worker():
                     # v194b: nur SAMMELN - verschickt wird gebuendelt, nachdem
                     # alle Jobs durchgesehen sind.
                     try:
+                        _j194 = JOBS.get(jid)
+                        if _j194 and _j194.get('user_id'):
+                            _u194 = _j194['user_id']
+                            _akt[_u194] = min(_akt.get(_u194, 1e9),
+                                              _t.time() - mtime)
                         _expiry_sammeln(jid, d, mtime, cutoff, _abl)
                     except Exception:
                         pass
@@ -3691,7 +3762,7 @@ def _cleanup_worker():
                             pass
             if _abl:
                 try:
-                    _expiry_mails(_abl)
+                    _expiry_mails(_abl, _akt)
                 except Exception as e:
                     print(f'Ablauf-Mails uebersprungen: {type(e).__name__}: {e}')
             # v88b: Transkript-Cache aufraeumen (Dateien > 30 Tage). Winzig,

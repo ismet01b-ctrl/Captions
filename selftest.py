@@ -6060,10 +6060,21 @@ def _scenario_betrieb(tmp):
     check('v194b: Ablauf-Mails werden gesammelt, nicht je Job verschickt',
           'def _expiry_sammeln(' in _sv194b and 'def _expiry_mails(' in _sv194b
           and 'def _expiry_warn(' not in _sv194b)
-    check('v194b: hoechstens EINE Ablauf-Mail pro Nutzer und Tag',
-          "_log_mail_once(uid, 'expiry-' + time.strftime('%Y-%m-%d'))" in _sv194b)
+    # v194c: der Tages-Schluessel war zu schwach. Wer taeglich rendert, hat
+    # taeglich ablaufende Videos - das waeren 30 Mails im Monat, nur eben
+    # gebuendelt. Jetzt zwei Riegel: aktive Nutzer bekommen gar keine
+    # Erinnerung, und der Abstand ist eine ganze Aufbewahrungs-Periode.
+    check('v194c: aktive Nutzer bekommen gar keine Ablauf-Erinnerung',
+          '_still < 48 * 3600' in _sv194b and 'def _letzter_login(' in _sv194b)
+    check('v194c: rollender Mindestabstand statt Tages-Schluessel',
+          "_mail_abstand_ok(uid, 'expiry', RETENTION_DAYS * 86400)" in _sv194b
+          and 'def _mail_abstand_ok(' in _sv194b)
+    check('v194c: die Liste ist gedeckelt (nicht 100 Zeilen)',
+          '_zeig = namen[:10]' in _sv194b and "and {_rest} more" in _sv194b)
+    # v194c: der Versand bekommt zusaetzlich die Aktivitaets-Karte mit.
     check('v194b: die Sammelstelle wird nach der Job-Schleife geleert',
-          '_expiry_mails(_abl)' in _sv194b and '_abl = {}' in _sv194b)
+          '_expiry_mails(_abl, _akt)' in _sv194b and '_abl = {}' in _sv194b
+          and '_akt = {}' in _sv194b)
 
     # Verhaltens-Test: drei Jobs eines Nutzers -> genau EINE Mail, und beim
     # zweiten Durchlauf am selben Tag gar keine mehr.
@@ -6096,14 +6107,14 @@ def _scenario_betrieb(tmp):
                                         'name': 'Sequence.mp4'}
                 _SV194b._expiry_sammeln(_j194b, _dir194b, _cut194b + 10 * 3600,
                                         _cut194b, _eim194b)
-            _SV194b._expiry_mails(_eim194b)
+            _SV194b._expiry_mails(_eim194b, {_uid194b: 1e9})
             _erste = len(_mails194b)
             _eim2 = {}
             for _n194b in range(3):
                 _SV194b.JOBS[f'ST194B{_n194b}']['expiry_mail'] = False
                 _SV194b._expiry_sammeln(f'ST194B{_n194b}', _dir194b,
                                         _cut194b + 10 * 3600, _cut194b, _eim2)
-            _SV194b._expiry_mails(_eim2)
+            _SV194b._expiry_mails(_eim2, {_uid194b: 1e9})
             check('v194b: drei ablaufende Videos ergeben genau EINE Mail',
                   _erste == 1, f"{_erste} Mail(s)")
             check('v194b: am selben Tag kommt keine zweite Mail',
@@ -6113,6 +6124,31 @@ def _scenario_betrieb(tmp):
                       '3 videos' in _mails194b[0][1]
                       and '(3 versions)' in _mails194b[0][2],
                       _mails194b[0][2][:200])
+            # v194c: 100 Videos, und der Nutzer war gerade aktiv -> KEINE Mail.
+            _vor194c = len(_mails194b)
+            _eim3 = {}
+            for _n194b in range(100):
+                _j3 = f'ST194C{_n194b}'
+                _SV194b.JOBS[_j3] = {'status': 'fertig', 'user_id': _uid194b,
+                                     'name': f'clip_{_n194b % 7}.mp4'}
+                _SV194b._expiry_sammeln(_j3, _dir194b, _cut194b + 10 * 3600,
+                                        _cut194b, _eim3)
+            _SV194b._expiry_mails(_eim3, {_uid194b: 6 * 3600})
+            check('v194c: ein gerade aktiver Nutzer bekommt KEINE Erinnerung',
+                  len(_mails194b) == _vor194c,
+                  f"{len(_mails194b) - _vor194c} Mail(s) trotz Aktivitaet")
+            # Inaktiv, aber der Abstand ist noch nicht um -> immer noch keine.
+            _eim4 = {}
+            for _n194b in range(100):
+                _SV194b.JOBS[f'ST194C{_n194b}']['expiry_mail'] = False
+                _SV194b._expiry_sammeln(f'ST194C{_n194b}', _dir194b,
+                                        _cut194b + 10 * 3600, _cut194b, _eim4)
+            _SV194b._expiry_mails(_eim4, {_uid194b: 1e9})
+            check('v194c: innerhalb der Aufbewahrungs-Periode keine zweite Mail',
+                  len(_mails194b) == _vor194c,
+                  f"{len(_mails194b) - _vor194c} Mail(s)")
+            for _n194b in range(100):
+                _SV194b.JOBS.pop(f'ST194C{_n194b}', None)
             for _n194b in range(3):
                 _SV194b.JOBS.pop(f'ST194B{_n194b}', None)
         _c2194b = _SV194b._db()
