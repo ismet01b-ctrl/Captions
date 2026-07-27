@@ -6318,10 +6318,216 @@ def pace_power_map(fx_map):
     return out
 
 
-def groups_for(words, cfg, fx_map=None):
+# --- v193 BLOCK-EDITOR ------------------------------------------------------
+# Ein Block ist das, was gleichzeitig im Bild steht. Bis v192 entstand er bei
+# JEDEM Render neu aus Pausen, Satzzeichen, Sprechtempo und der KI-Wucht
+# (build_groups) - er hatte keine Identitaet, die ein Nutzer haette anfassen
+# koennen. Der Blockplan dreht das um: liegt eine Nutzer-Aufteilung vor, IST
+# sie die Aufteilung. Nicht ein Nachschlagen obendrauf, sondern die Quelle.
+#
+# Warum ein eigenes Sidecar und nicht ein Feld in _momente.json:
+#   * _momente.json ist ueber Keyword-Wortindizes verschluesselt und wird bei
+#     jedem Lauf aus 'for i in sorted(kw)' neu gebaut. Ein Fliess-Block hat
+#     dort keinen Platz, und faellt ein Index aus kw, waeren die Nutzerdaten
+#     still weg.
+#   * Der Regie-Cache kennt nur acht Keyword-Schluessel. Alles andere ist beim
+#     zweiten Render verschwunden (v159-Fehlertyp).
+# Der Blockplan haengt deshalb an KEINER Regie-Struktur, sondern nur am
+# Wortstrom, und wird an der immer laufenden Stelle geladen.
+BLOCK_KEYS = ('i0', 'i1', 'aktiv', 'text', 'anim', 'fx', 'power',
+              'groesse', 'start', 'end')
+
+
+class _SchattenWorte:
+    """Wortliste mit ueberschriebenem TEXT bei unveraenderten ZEITEN.
+
+    Der Block-Editor laesst den Nutzer den Text einer Zeile umschreiben.
+    Die Zeiten duerfen dabei nicht wandern - an ihnen haengen Karaoke-Emphase,
+    SFX-Onsets, Beat-Grid und der Solo-Riegel. Eine echte Kopie der ganzen
+    Wortliste je Block waere bei 500 Woertern und 150 Bloecken 75000
+    Dict-Kopien; dieser Zugriffs-Wrapper kostet nichts und aendert nur das,
+    was wirklich anders ist."""
+
+    __slots__ = ('_w', '_t')
+
+    def __init__(self, words, texte):
+        self._w = words
+        self._t = texte or {}
+
+    def __len__(self):
+        return len(self._w)
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            return [self[j] for j in range(*i.indices(len(self._w)))]
+        w = self._w[i]
+        neu = self._t.get(i if i >= 0 else len(self._w) + i)
+        if neu is None:
+            return w
+        d = dict(w)
+        d['word'] = neu
+        return d
+
+    def __iter__(self):
+        for i in range(len(self._w)):
+            yield self[i]
+
+
+def block_texte(blk, g, words):
+    """Nutzer-Text eines Blocks auf seine Wortindizes verteilen.
+
+    Der Nutzer tippt eine ZEILE, die Engine denkt in Woertern. Stimmen die
+    Anzahlen nicht ueberein, wird verteilt statt abgelehnt:
+      * mehr getippte Woerter als Indizes -> der Rest haengt am letzten Index
+        (die Woerter erscheinen dann gemeinsam, so wie sie gesprochen werden).
+      * weniger -> die uebrigen Indizes bekommen leeren Text und fallen aus
+        dem Satz. Ein Wort loeschen muss moeglich sein.
+    Rueckgabe: ({index: text}, [sichtbare indizes])."""
+    roh = str((blk or {}).get('text') or '').strip()
+    if not roh or not g:
+        return {}, list(g)
+    tok = [t for t in roh.split() if t]
+    if not tok:
+        return {}, list(g)
+    if len(tok) > len(g):
+        tok = tok[:len(g) - 1] + [' '.join(tok[len(g) - 1:])] if len(g) > 1 \
+            else [' '.join(tok)]
+    aus, sicht = {}, []
+    for n, i in enumerate(g):
+        if n < len(tok):
+            aus[i] = tok[n]
+            sicht.append(i)
+        else:
+            aus[i] = ''
+    return aus, sicht
+
+
+def _block_norm(roh, n_words):
+    """Blockplan pruefen und in eine lueckenlose, sortierte Liste bringen.
+
+    Ein kaputter Eintrag darf nie den ganzen Plan kippen (das ist heute der
+    Fehler bei _momente.json: EIN falscher Wert verwirft still alle
+    Nutzer-Einstellungen des Videos). Deshalb faengt die Pruefung pro Eintrag,
+    nicht global.
+    Rueckgabe: (bloecke, meldungen)."""
+    if not isinstance(roh, list) or not n_words:
+        return [], []
+    out, warn = [], []
+    for nr, b in enumerate(roh):
+        if not isinstance(b, dict):
+            warn.append(f'block {nr}: not an object')
+            continue
+        try:
+            i0 = int(b.get('i0'))
+            i1 = int(b.get('i1'))
+        except (TypeError, ValueError):
+            warn.append(f'block {nr}: word range missing')
+            continue
+        i0 = max(0, min(i0, n_words))
+        i1 = max(0, min(i1, n_words))
+        if i1 <= i0:
+            warn.append(f'block {nr}: empty word range')
+            continue
+        e = {'i0': i0, 'i1': i1, 'aktiv': b.get('aktiv', True) is not False}
+        # Jedes Feld einzeln - ein unbrauchbarer Wert kostet nur dieses Feld.
+        t = b.get('text')
+        if isinstance(t, str) and t.strip():
+            e['text'] = t.strip()[:200]
+        a = str(b.get('anim') or '').strip().lower()
+        if a in ANIM_LIST:
+            e['anim'] = a
+        elif a and a not in ('', 'auto'):
+            warn.append(f'block {nr}: unknown animation {a!r}')
+        f = str(b.get('fx') or '').strip().lower()
+        if f in ('behind', 'cascade', 'blurin', 'outline', 'ground'):
+            e['fx'] = f
+        elif f and f != 'auto':
+            warn.append(f'block {nr}: unknown effect {f!r}')
+        try:
+            p = int(b.get('power') or 0)
+            if p in (1, 2, 3):
+                e['power'] = p
+        except (TypeError, ValueError):
+            warn.append(f'block {nr}: power not a number')
+        try:
+            gr = float(b.get('groesse') or 0)
+            if gr > 0:
+                e['groesse'] = max(0.5, min(2.0, gr))
+        except (TypeError, ValueError):
+            warn.append(f'block {nr}: size not a number')
+        for k in ('start', 'end'):
+            v = b.get(k)
+            if v is None or v == '':
+                continue
+            try:
+                e[k] = max(0.0, float(v))
+            except (TypeError, ValueError):
+                warn.append(f'block {nr}: {k} not a number')
+        if 'start' in e and 'end' in e and e['end'] <= e['start']:
+            # Unbrauchbares Zeitpaar: lieber die Wortzeiten nehmen als einen
+            # Block zu zeigen, der nie endet.
+            e.pop('start'); e.pop('end')
+            warn.append(f'block {nr}: end before start, using word timing')
+        out.append(e)
+    out.sort(key=lambda x: (x['i0'], x['i1']))
+    # Ueberlappungen aufloesen: ein Wort gehoert genau einem Block. Sonst
+    # stuenden zwei Bloecke gleichzeitig mit demselben Wort im Bild.
+    sauber, letzte = [], -1
+    for e in out:
+        if e['i0'] < letzte:
+            e['i0'] = letzte
+            if e['i1'] <= e['i0']:
+                warn.append('overlapping block dropped')
+                continue
+        letzte = e['i1']
+        sauber.append(e)
+    return sauber, warn
+
+
+def load_bloecke(pfad, n_words):
+    """Blockplan von der Platte holen. Fehlt er oder ist er unbrauchbar,
+    gilt die Engine-Aufteilung - der Nutzer verliert nie mehr als seine
+    eigene Aenderung."""
+    if not pfad or not os.path.exists(pfad):
+        return []
+    try:
+        roh = json.load(open(pfad, encoding='utf-8'))
+    except Exception as e:
+        print(f"Block plan ignored ({type(e).__name__})")
+        return []
+    bl, warn = _block_norm(roh, n_words)
+    for w in warn[:6]:
+        print(f"Block plan: {w}")
+    if warn and len(warn) > 6:
+        print(f"Block plan: {len(warn) - 6} more notes")
+    return bl
+
+
+def bloecke_groups(bloecke, n_words):
+    """Nutzer-Bloecke -> Wortgruppen, genau wie build_groups sie liefert.
+    Abgeschaltete Bloecke fallen raus; Woerter, die in KEINEM Block liegen
+    (z.B. weil der Nutzer einen Block geloescht hat), bleiben ebenfalls weg -
+    das ist die Ansage 'hier soll kein Text stehen'."""
+    out = []
+    for b in bloecke:
+        if not b.get('aktiv', True):
+            continue
+        g = [i for i in range(b['i0'], min(b['i1'], n_words))]
+        if g:
+            out.append(g)
+    return out
+
+
+def groups_for(words, cfg, fx_map=None, bloecke=None):
     """EINE Quelle fuer die Chunk-Bildung. build_plans und der Flow-Cache
     muessen exakt dieselben Gruppen sehen, sonst zeigen die Flow-Indizes auf
-    den falschen Chunk."""
+    den falschen Chunk.
+
+    v193: liegt ein Nutzer-Blockplan vor, gewinnt er vollstaendig. Bewusst
+    OHNE Nachbearbeitung durch build_groups - eine Nutzer-Aufteilung, die
+    danach noch vom Merge-Pass zusammengelegt wird, ist keine."""
+    if bloecke:
+        return bloecke_groups(bloecke, len(words))
     eff = (cfg or {}).get('effects', {})
     return list(build_groups(
         words, eff.get('words_per_group', 3),
@@ -6638,7 +6844,7 @@ def _mix01(n):
 
 def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
                  colw=None, layout='flow', punch=False, seite='links',
-                 maxw=None):
+                 maxw=None, groesse=None, texte=None):
     """v97: Flow-Caption nach den Referenz-Videos (@migs.visuals). Der ganze
     Chunk baut sich INLINE auf (Wort fuer Wort, stehend), mit Hierarchie:
       - Verbinder = Support-Font, normal, weiss (Kleinschreibung wie gesprochen)
@@ -6648,6 +6854,11 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     Nutzt die LOOK-Fonts + Akzentfarbe (Hybrid: Filler fliesst, Dramatik bleibt).
     Rueckgabe: (items, total_h, anchor_index_or_None). items tragen absolute
     cx/cy relativ zu einem Block-Ursprung y=0 (Aufrufer verschiebt vertikal)."""
+    # v193: Nutzer-Text aus dem Block-Editor. Nur der TEXT wird getauscht,
+    # die Zeiten bleiben die gemessenen - an ihnen haengen Karaoke, SFX,
+    # Beat-Grid und Solo-Riegel.
+    if texte:
+        words = _SchattenWorte(words, texte)
     idxs = list(g)
     cont = [i for i in idxs
             if clean(words[i]['word']).lower().strip(".,!?;:") not in _FLOW_CONN
@@ -6773,6 +6984,18 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         # nur die Faktoren sind auf die neue v184-Basis umgerechnet.
         sz_k = int(sz_k * 1.55)
         sz_n = int(sz_n * 2.00)
+    # v193 GROESSE PRO BLOCK. Bis v192 gab es nur die globalen Regler
+    # caption_scale / caption_scale_klein - ein einzelner Block liess sich
+    # gar nicht groesser machen. Der Faktor sitzt bewusst NACH allen anderen
+    # Faktoren und ist auf 0.5 bis 2.0 geklemmt (in _block_norm), damit die
+    # Nutzerwahl relativ zum Look bleibt und die v151-Kaskade intakt haelt.
+    # WICHTIG: das ist NICHT 'power'. Power ist die dramaturgische Wucht
+    # (Kamera, SFX, Tempo-Kurve); Groesse ist der Schriftgrad. Beides in
+    # einen Regler zu legen war der v155/v156-Fehler.
+    if groesse:
+        _gf = max(0.5, min(2.0, float(groesse)))
+        sz_k = max(8, int(sz_k * _gf))
+        sz_n = max(6, int(sz_n * _gf))
     sz_a = int(sz_n * 1.244)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.
@@ -7684,7 +7907,7 @@ def safe_zone_report(plans, pz, W, H):
 def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 palette_at=None, cut_times=None, faces_at=None, flow_map=None,
                 loud=None, beat_times=None, light_dir=None, space_at=None,
-                zeigen=None):
+                zeigen=None, bloecke=None):
     KW_FX = cfg['effects']['keyword_rotation']
     # v160: gemessene Zeige-/Blick-Ziele [(t, tx, ty, art)]. Ein Ziel gilt fuer
     # das Zeitfenster, in dem gezeigt wurde, plus einen kurzen Nachlauf - eine
@@ -8268,10 +8491,21 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     # bei jeder Zahl - und genau das soll es NICHT.
     zahl_gap = float(cfg['effects'].get('zahl_gap', 15))
     prev_was_keyword = False
-    groups = groups_for(words, cfg, fx_map)      # v140: Tempo-Kurve
-    # v101n: mehrere erzwungene Woerter in EINER Phrase -> Phrase auftrennen,
-    # damit jedes markierte Wort ein eigenes Highlight bekommt.
-    groups = split_forced_groups(groups, fx_map)
+    # v193: Nutzer-Blockplan schlaegt die Engine-Aufteilung. Er kommt als
+    # Parameter herein (nicht ueber cfg), damit build_plans testbar bleibt.
+    _bl = list(bloecke or [])
+    _bl_akt = [b for b in _bl if b.get('aktiv', True)]
+    groups = groups_for(words, cfg, fx_map, bloecke=_bl)
+    if _bl_akt:
+        # Die Nutzer-Aufteilung ist Gesetz: kein nachtraegliches Auftrennen.
+        # split_forced_groups wuerde eine bewusst gesetzte Blockgrenze wieder
+        # verschieben, und danach zeigt jeder Block-Schluessel daneben.
+        _blk_at = {b['i0']: b for b in _bl_akt}
+    else:
+        # v101n: mehrere erzwungene Woerter in EINER Phrase -> Phrase
+        # auftrennen, damit jedes markierte Wort ein eigenes Highlight bekommt.
+        groups = split_forced_groups(groups, fx_map)
+        _blk_at = {}
     g_starts = [words[g[0]]['start'] for g in groups]
     # Randfall: nirgends ein Sprecher-Gesicht (Voiceover, Screen-Recording).
     # Dann duerfen die Captions nicht komplett wegfallen -> szenen-verankert zeigen.
@@ -8286,6 +8520,18 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         if not g:
             continue
         start, end = words[g[0]]['start'], words[g[-1]]['end']
+        # v193: der Block, den der Nutzer angelegt hat. Er ist ueber den
+        # ERSTEN Wortindex adressiert, und weil die Nutzer-Aufteilung selbst
+        # die Gruppen bildet, kann dieser Schluessel nicht danebenzeigen -
+        # anders als flow_map, das auf g[0] einer frisch berechneten
+        # Aufteilung sitzt und bei jeder Grenzverschiebung still verfaellt.
+        _ublk = _blk_at.get(g[0]) if _blk_at else None
+        if _ublk:
+            # Nutzer-Zeiten gewinnen ueber die Wortzeiten.
+            if _ublk.get('start') is not None:
+                start = float(_ublk['start'])
+            if _ublk.get('end') is not None:
+                end = max(float(_ublk['end']), start + 0.10)
         next_start = g_starts[gi + 1] if gi + 1 < len(groups) else 1e9
         broll = not face_ok(start, end)
         # Adaptive Farben: Caption-Toene greifen die Szene dieses Moments auf
@@ -8296,9 +8542,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # Kamera auf den Boden schwenkt: kein Gesicht im Bild, aber GENAU
             # dort gehoert der Text hin. Der Szenen-Text braucht die Person
             # nicht (ground/liegend ist fuer B-Roll gebaut).
-            if not any(isinstance((fx_map or {}).get(i), dict)
-                       and (fx_map[i].get('intent') or fx_map[i].get('user_pick'))
-                       for i in g):
+            # v193: ein vom Nutzer angelegter Block ueberlebt das Gate genauso.
+            # Er hat den Block bewusst dort hingesetzt und sieht im Editor die
+            # Vorschau des Bildes - wenn er dort Text will, bekommt er Text.
+            if not _ublk and not any(
+                    isinstance((fx_map or {}).get(i), dict)
+                    and (fx_map[i].get('intent') or fx_map[i].get('user_pick'))
+                    for i in g):
                 prev_was_keyword = False
                 continue                   # Szenen ohne Sprecher bleiben textfrei
         # Hook: Laenge frei einstellbar (0 = aus), Staerke steuert die Dichte.
@@ -8322,7 +8572,9 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # ganze Folgegruppe und riss zusammen mit dem Keyword-Moment (der nur
         # EIN Wort zeigt) mehrsekundige Loecher. An Ismets Render gemessen:
         # 4.0 s von 15 s ohne jeden Text, dazu 4 von 30 Woertern nie sichtbar.
-        if (breathing and prev_was_keyword and not g_kw
+        # v193: ein Nutzer-Block ist kein Rhythmus-Vorschlag, sondern eine
+        # Ansage. Die Atempause darf ihn nicht wegraeumen.
+        if (breathing and prev_was_keyword and not g_kw and not _ublk
                 and str(cfg['effects'].get('density', 'akzente')) != 'durchgehend'):
             prev_was_keyword = False
             continue
@@ -8397,7 +8649,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # JEDE Gruppe, und das einsame "is" stand wieder im Bild. Der Riegel
         # gehoert VOR die Pfad-Weichen, nicht in eine davon (v159-Lehre).
         # Ausdrueckliche Momente (intent/user_pick) bleiben unantastbar.
-        if (_winzig and _pause_davor >= 1.2 and not is_kw_group
+        # v193: hat der Nutzer diesen Ein-Wort-Block selbst angelegt, ist er
+        # gewollt. Der Riegel ist gegen ZUFAELLIGE Reste gebaut, nicht gegen
+        # eine Entscheidung.
+        if (_winzig and _pause_davor >= 1.2 and not is_kw_group and not _ublk
                 and not any(isinstance((fx_map or {}).get(i), dict)
                             and (fx_map[i].get('intent')
                                  or fx_map[i].get('user_pick'))
@@ -8421,10 +8676,35 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
 
         # Plattform-Dichte: YouTube/Ausgewogen zeigen nur Akzent-Momente.
         # Im Hook-Intro laufen die Captions durchgehend fuer die Watchtime.
+        # v193: DAS ist das Gate, an dem eine Nutzer-Aufteilung ohne Schutz
+        # zerbrechen wuerde. Wer im Editor einen Block anlegt, hat 'akzente'
+        # meist gar nicht bewusst gewaehlt - der Block waere trotzdem still
+        # verschwunden, und die Dichte-Einstellung haette die sichtbare
+        # Nutzer-Entscheidung ueberstimmt. Der Nutzer steht ueber dem Preset.
         if (cfg['effects'].get('density', 'akzente') != 'durchgehend'
-                and not is_kw_group and not in_intro and not satz_offen):
+                and not is_kw_group and not in_intro and not satz_offen
+                and not _ublk):
             continue
 
+        # v193: Vorpruefung der Mindest-Buehnenzeit BEI NUTZER-BLOECKEN.
+        # Der Riegel weiter unten laesst den ganzen Chunk fallen, wenn die
+        # Keyword-Karte keine Sekunde bekommt. Bei einem selbst angelegten
+        # Block waere das der schlimmste Fall fuer einen Editor: der Nutzer
+        # legt einen Block an, und im Video steht dort nichts. Also faellt
+        # hier nur die KARTE weg - der Block laeuft als Fliesstext weiter.
+        if _ublk and is_kw_group and g_kw:
+            _kt0 = words[g_kw[0]]['start']
+            _de = min(max(end, _kt0 + 1.2), end + 1.5)
+            if (_de > end and not voiceover and not broll
+                    and not face_ok(end, _de)):
+                _de = end
+            if _de - _kt0 < 1.0:
+                print(f"  Block {g[0]}: no stage time for the keyword card, "
+                      f"showing it as running text")
+                is_kw_group = False
+                prev_was_keyword = False
+                last_kw_end = prev_budget
+                g_kw = []
         if is_kw_group:
             i = g_kw[0]                       # bestes Keyword der Gruppe (Score)
             if zrel(i) > 0:
@@ -8456,6 +8736,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             phrase = [i]
             for j in range(i + 1, min(i + n_ph, len(words))):
                 gap = words[j]['start'] - words[j - 1]['end']
+                # v193: eine Phrase darf ueber eine ENGINE-Chunkgrenze
+                # greifen, aber niemals ueber eine vom Nutzer gezogene. Sonst
+                # frisst der Keyword-Moment Woerter aus dem naechsten Block,
+                # und der Block, den der Nutzer angelegt hat, ist im Video
+                # kuerzer als im Editor.
+                if _ublk and j >= _ublk['i1']:
+                    break
                 if j in g or gap <= 0.35:   # zusammenhaengend gesprochen
                     phrase.append(j)
                 else:
@@ -8532,6 +8819,25 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 small.append({'i': i2, 'arr': a2, 'w': tw})
             p = {'tpl': fx, 'kw_i': i, 'kw_txt': txt, 'small': small, 'start': start, 'end': end,
                  'tilt': rng(i, 4) * 3 - 1.5, 'side': 0, 'broll': broll}
+            # v193 WUCHT AN DEN PLAN. Bis v192 stand 'power' ausschliesslich in
+            # fx_map - SIEBEN Leser im Zeichner lasen p.get('power', 2) und
+            # bekamen darum immer 2. Dadurch liefen Depth-Bullet-Time, die
+            # Stille vor dem Einschlag, der Split-Screen, der Freeze-Frame und
+            # zwei Timing-Regeln nie an. Ohne das Feld am Plan koennte auch die
+            # Wucht aus dem Block-Editor nichts bewirken.
+            p['power'] = int((fx_map or {}).get(i, {}).get('power', 2)
+                             if isinstance((fx_map or {}).get(i), dict) else 2)
+            if _ublk:
+                p['_user'] = True
+                if _ublk.get('power'):
+                    p['power'] = int(_ublk['power'])
+                if _ublk.get('start') is not None:
+                    p['_user_t'] = True
+            # v193 Groesse pro Block, auch auf der Keyword-Karte. Der Faktor
+            # geht in die ZIELgroesse von S.fit, nicht auf das Ergebnis -
+            # sonst waere die Breiten-Klemmung von fit ausgehebelt und ein
+            # langes Wort liefe wieder aus dem Bild (v152).
+            _ugrf = float((_ublk or {}).get('groesse') or 1.0)
             # Einflug variiert gemischt statt stur reihum - nie zweimal derselbe
             p['entr'] = (rot_entr_safe if safe_z else rot_entr).next()
             # HERAUSSCHIEBEN steuerbar: 'auto' = nur ab und zu (Abwechslung),
@@ -8679,7 +8985,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         p['by'] = max(min(float(_fp[1]) - H * 0.055, H * 0.62),
                                       H * 0.10)
                 _bh_limit = int(W * (0.62 if safe_z else 0.94) if portrait else W * 0.885)
-                sz = S.fit(txt, int(H * 0.213) if not portrait else int(H * 0.11), _bh_limit)
+                sz = S.fit(txt, int((H * 0.213 if not portrait else H * 0.11) * _ugrf), _bh_limit)
 
                 def _build_behind(_s):
                     if S.kinetic and not p.get('count'):
@@ -8777,7 +9083,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                       else min(H * 0.80, p.get('by', Z_BEHIND) + H * 0.26))
             elif fx == 'cascade':
                 max_w = int(W * (0.60 if safe_z else 0.82)) if portrait else int(W * 0.396)
-                sz = S.fit(txt, int(H * 0.139) if not portrait else int(H * 0.085), max_w, font=S.f_italic)
+                sz = S.fit(txt, int((H * 0.139 if not portrait else H * 0.085) * _ugrf), max_w, font=S.f_italic)
                 arr, tw, letters = S.text(txt, sz, S.white, per_letter=True, font=S.f_italic)
                 p['arr'], p['letters'] = arr, letters
                 p['side'], p['cx'] = pick_side(start, end, side_toggle)
@@ -8786,7 +9092,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['cy'] = v_zone(start, end) if portrait else Z_MAIN
                 sy = p['cy'] + (H * 0.128 if portrait else H * 0.139)
             elif fx == 'blurin':
-                sz = S.fit(txt, int(H * 0.199) if not portrait else int(H * 0.10), int(W * (0.62 if safe_z else 0.86) if portrait else W * 0.78), tracking=6)
+                sz = S.fit(txt, int((H * 0.199 if not portrait else H * 0.10) * _ugrf), int(W * (0.62 if safe_z else 0.86) if portrait else W * 0.78), tracking=6)
                 p['arr'] = rot_img(S.text(txt, sz, S.white, tracking=6, extrude=S.ex)[0], p['tilt'] * 0.5)
                 if p.get('count'):
                     p['builder'] = (lambda s, _sz=sz, _tl=p['tilt']:
@@ -9143,7 +9449,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if _buendig == 'mitte':
                 _seite = 'mitte'
             _g_vor, _g_kurz = list(g), None
-            if _lay == 'collage' \
+            # v193: die satzweise Collage legt zwei Chunks zu EINEM Block
+            # zusammen. Bei einer Nutzer-Aufteilung ist genau das verboten -
+            # der Editor zeigt zwei Zeilen, das Video zeigte sonst eine.
+            # Wer zusammenlegen will, tut das im Editor.
+            if _lay == 'collage' and not _ublk \
                     and cfg['effects'].get('caption_satz_collage', True) \
                     and hat_interpunktion:
                 _erw, _gj = list(g), gi + 1
@@ -9174,11 +9484,21 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     _g_kurz = list(_g_vor)
             # SATZENDE: nur dort darf das Schluesselwort auf Knall-Groesse.
             _punch = bool(str(words[g[-1]]['word']).rstrip().endswith(('.', '!', '?')))
+            # v193: Nutzer-Groesse und Nutzer-Text dieses Blocks. Beides muss
+            # an ALLE vier compose_flow-Aufrufe - der Rueckfall auf Zeilensatz
+            # und das Luecken-Netz bauen den Block sonst ohne die Einstellung
+            # neu, und die Nutzerwahl waere je nach Layout mal da, mal weg.
+            _ugr = (_ublk or {}).get('groesse')
+            _utx, _usicht = block_texte(_ublk, g, words)
+            if _utx and _usicht and len(_usicht) < len(g):
+                g = _usicht
+                end = words[g[-1]]['end']
             items, tot_h, anchor_i = compose_flow(g, words, S, W, H, portrait, loud=loud,
                                                   flow_sel=(flow_map or {}).get(g[0]),
                                                   colw=_cw150, maxw=_kbw,
                                                   layout=_lay, punch=_punch,
-                                                  seite=_bnd)
+                                                  seite=_bnd,
+                                                  groesse=_ugr, texte=_utx)
             # Die Collage baut in die HOEHE. Wird sie zu hoch, passt sie an
             # keinem Kopf mehr vorbei und die Platzierungs-Regie muesste sie
             # in den Bildrand druecken - dann ist das gewohnte Zeilenraster
@@ -9199,14 +9519,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
                     colw=_cw150, maxw=_kbw, layout='collage', punch=_punch,
-                    seite=_bnd)
+                    seite=_bnd, groesse=_ugr, texte=_utx)
             if _lay == 'collage' and tot_h > H * 0.40:
                 _lay = 'flow'
                 items, tot_h, anchor_i = compose_flow(
                     g, words, S, W, H, portrait, loud=loud,
                     flow_sel=(flow_map or {}).get(g[0]),
                     colw=_cw150, maxw=_kbw, layout='flow', punch=_punch,
-                    seite=_bnd)
+                    seite=_bnd, groesse=_ugr, texte=_utx)
             # v143: Position kommt aus der Platzierungs-Regie statt aus einer
             # Konstanten. Wunschzone = wo der Block AM LIEBSTEN sitzt; spot()
             # weicht davon ab, wenn dort ein Gesicht oder ein unruhiger
@@ -9336,6 +9656,18 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                                      for j in g)}
             if sp.get('_hand_geste'):
                 sp['hinter_ok'] = False
+            # v193: Nutzer-Block. Das Flag schuetzt den Block in der
+            # Nachbearbeitung (Solo-Riegel, Schnitt-Disziplin, Zeiten) und
+            # traegt die Animation, die es bis v192 fuer Fliess-Bloecke gar
+            # nicht gab.
+            if _ublk:
+                sp['_user'] = True
+                if _ublk.get('anim'):
+                    sp['anim'] = _ublk['anim']
+                if _ublk.get('power'):
+                    sp['power'] = int(_ublk['power'])
+                if _ublk.get('start') is not None:
+                    sp['_user_t'] = True
             # v141: echte Textposition fuer den Ueberlappungs-Schutz. 'target'
             # bleibt das Kamera-Ziel - die beiden duerfen nicht verwechselt
             # werden, sonst zieht die Kamera wieder in die Bildmitte.
@@ -9397,7 +9729,13 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     # einzelnen Weg zu flicken, wird am Ende geprueft, WAS fehlt, und der
     # Rest bekommt eine schlichte Flow-Caption. Nur 'durchgehend' - in
     # 'akzente'/'sparsam' sind Textpausen die gewollte Handschrift.
-    if str(cfg['effects'].get('density', 'akzente')) == 'durchgehend' and words:
+    # v193: Bei einer Nutzer-Aufteilung ist das Netz aus. Wer einen Block
+    # abschaltet oder ein Wort aus einer Zeile loescht, sagt "hier soll nichts
+    # stehen" - das Netz wuerde es kommentarlos wieder hinstellen und die
+    # Loeschung waere wirkungslos. Die Zusage 'jedes Wort' gilt fuer die
+    # AUTOMATIK, nicht gegen eine Entscheidung.
+    if str(cfg['effects'].get('density', 'akzente')) == 'durchgehend' \
+            and words and not _bl_akt:
         _gezeigt = set()
         for _p in plans:
             for _k in ('front', 'small'):
@@ -9663,6 +10001,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             en = p.get('end')
             if st is None or en is None:
                 continue
+            # v193: hat der Nutzer die Zeiten dieses Blocks selbst gesetzt,
+            # bleiben sie stehen. Die Schnitt-Disziplin ist eine Regel gegen
+            # ueber den Schnitt haengende Automatik-Captions, kein Veto gegen
+            # eine eingetippte Endzeit.
+            if p.get('_user_t'):
+                continue
             nxt = next((c for c in cts if c > st + MIN_SHOWN), None)
             if nxt is None:
                 continue
@@ -9683,8 +10027,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         bts = sorted(float(b) for b in beat_times)
         n_snap = 0
         for p in plans:
-            if 'kw_i' not in p or p.get('broll'):
-                continue
+            if 'kw_i' not in p or p.get('broll') or p.get('_user_t'):
+                continue                    # v193: Nutzer-Zeit bleibt Nutzer-Zeit
             st, en = p.get('start'), p.get('end')
             if st is None or en is None:
                 continue
@@ -10688,6 +11032,19 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             # auf 0.07-0.115 H Versalhoehe sonst untergeht.
             _viral = bool(cfg['effects'].get('caption_viral'))
             _ruhig = bool(cfg['effects'].get('caption_ruhig', True))
+            # v193 ANIMATION AUF DEM FLIESS-BLOCK. Bis v192 lief anim_apply
+            # ausschliesslich auf Keyword-Karten (p['arr'] / p['f_arr']) - ein
+            # Fliess-Block KONNTE gar keine Animation tragen, egal was
+            # eingestellt war. Genau das war die Luecke, die den Block-Editor
+            # bis hierher unmoeglich machte.
+            # Umsetzung: jedes Wort des Blocks bekommt einen eigenen
+            # Zustandstraeger, aber ALLE rechnen gegen dieselbe Blockzeit.
+            # Dadurch bewegt sich der Block als Einheit (gleiche Kurve), waehrend
+            # die Feder-/Tremor-Streuung je Wort natuerlich bleibt. Ein
+            # gemeinsames dict waere falsch: _anim_core haelt seinen Zufalls-
+            # zustand am Objekt und wuerde je Frame N-mal weitergetickt.
+            _banim = p.get('anim') if p.get('_user') else None
+            _bdt = t - float(p.get('start', 0.0))
             for it in p['front']:
                 wd = words[it['i']]
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf
@@ -10742,6 +11099,21 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     # Die Silhouette wird pro Frame an der Zielposition aus
                     # der Sprite-Alpha gestanzt - Person bewegt sich, die
                     # Ueberdeckung folgt ihr.
+                    _kop = 1.0
+                    if _banim:
+                        # v193: auch das Anker-/Schlusswort des Blocks folgt
+                        # der gewaehlten Animation. Sonst animierte der Block
+                        # um sein wichtigstes Wort herum.
+                        _ap = it.get('_a')
+                        if _ap is None:
+                            _ap = {'anim': _banim, 'start': float(p['start']),
+                                   'kw_i': int(it['i'])}
+                            it['_a'] = _ap
+                        _arr, _kdx, _kdy, _ksc, _kop = anim_apply(
+                            _ap, _arr, aud, _bdt)
+                        _pcx += _kdx
+                        _pcy += _kdy
+                        _psc *= _ksc
                     if (p.get('hinter_ok') and it.get('role') == 'punch'
                             and alpha is not None
                             and cfg['effects'].get('caption_hinter', True)):
@@ -10749,7 +11121,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                               _psc, alpha_p)
                     paste(comp, _arr, _pcx, _pcy,
                           W, H, scale=_psc,
-                          opacity=g_out * _dim, crop_w=vis_px)
+                          opacity=g_out * _dim * _kop, crop_w=vis_px)
                 else:
                     # v190 RUHE. Bis v189 flog JEDES Wort ein: 2 % Bildhoehe
                     # von unten, von 86 % hochskaliert, mit ease_back-
@@ -10767,12 +11139,22 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     else:
                         e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
                         _dy_in, _sc_in = (1 - e) * H * 0.020, 0.86 + 0.14 * e
+                    _adx = _ady = 0.0
+                    _asc = _aop = 1.0
+                    if _banim:
+                        _ap = it.get('_a')
+                        if _ap is None:
+                            _ap = {'anim': _banim, 'start': float(p['start']),
+                                   'kw_i': int(it['i'])}
+                            it['_a'] = _ap
+                        _arr, _adx, _ady, _asc, _aop = anim_apply(
+                            _ap, _arr, aud, _bdt)
                     paste(comp, _arr,
-                          it['cx'] + fdx,
-                          it['cy'] + fdy + _dy_in + x_dv * _arr.shape[0],
-                          W, H, scale=_sc_in * x_sc * _pop,
+                          it['cx'] + fdx + _adx,
+                          it['cy'] + fdy + _dy_in + _ady + x_dv * _arr.shape[0],
+                          W, H, scale=_sc_in * x_sc * _pop * _asc,
                           opacity=min(dt / (0.16 if _ruhig else 0.10), 1)
-                          * g_out * _dim)
+                          * g_out * _dim * _aop)
             continue
         if p['tpl'] == 'stack':
             # Personen-Tracking: die Gruppe haengt an der Person und geht mit,
@@ -11670,8 +12052,57 @@ def main():
                       ensure_ascii=False, indent=1)
         except Exception:
             pass
+    # --- v193 BLOCK-EDITOR: Bloecke exportieren und Nutzer-Plan anwenden -----
+    # Der Analyse-Lauf (--plan-only) endete bis v192, BEVOR groups_for je lief.
+    # Der Editor konnte darum nur Keyword-Momente zeigen; Bloecke gab es in
+    # der Ausgabe schlicht nicht. Der Export steht deshalb VOR dem Ausstieg -
+    # und er benutzt dieselbe groups_for-Konfiguration wie der spaetere
+    # Voll-Render, sonst zeigt der Editor eine andere Aufteilung als das Video.
+    blk_path = os.path.splitext(args.input)[0] + '_bloecke.json'
+    _bloecke = load_bloecke(blk_path, len(words))
+    _b_groups = groups_for(words, cfg, fx_map, bloecke=_bloecke)
+    _b_alt = {b['i0']: b for b in _bloecke}
+    _b_export = []
+    for _g in _b_groups:
+        if not _g:
+            continue
+        _e = {'i0': _g[0], 'i1': _g[-1] + 1, 'aktiv': True,
+              'text': ' '.join(clean(words[j]['word']) for j in _g),
+              'start': round(float(words[_g[0]]['start']), 2),
+              'end': round(float(words[_g[-1]]['end']), 2),
+              'anim': '', 'fx': '', 'power': 0, 'groesse': 0,
+              # Zur Anzeige: hat dieser Block ein Keyword? Dann zeigt der
+              # Editor die Moment-Bedienfelder an dieser Zeile.
+              'kw': next((j for j in _g if j in kw), None)}
+        _vor = _b_alt.get(_g[0])
+        if _vor:
+            for _k in ('aktiv', 'text', 'anim', 'fx', 'power', 'groesse',
+                       'start', 'end'):
+                if _k in _vor:
+                    _e[_k] = _vor[_k]
+        _b_export.append(_e)
+    # Abgeschaltete Bloecke stehen NICHT in _b_groups (sie bilden ja keine
+    # Gruppe). Sie muessen trotzdem in den Export, sonst waeren sie beim
+    # naechsten Oeffnen des Editors verschwunden statt nur ausgeschaltet.
+    for _i0, _vor in _b_alt.items():
+        if _vor.get('aktiv', True):
+            continue
+        _g = list(range(_vor['i0'], min(_vor['i1'], len(words))))
+        if not _g:
+            continue
+        _e = dict(_vor)
+        _e.setdefault('text', ' '.join(clean(words[j]['word']) for j in _g))
+        _e['kw'] = next((j for j in _g if j in kw), None)
+        _b_export.append(_e)
+    _b_export.sort(key=lambda x: x['i0'])
+    try:
+        json.dump(_b_export, open(blk_path, 'w', encoding='utf-8'),
+                  ensure_ascii=False, indent=1)
+    except Exception as _be:
+        print(f"Block export failed ({type(_be).__name__})")
     if args.plan_only:
         print(f"Moments exported: {mom_path}")
+        print(f"Blocks exported: {len(_b_export)}")
         sys.exit(0)
     if os.path.exists(mom_path):
         try:
@@ -11687,7 +12118,16 @@ def main():
                     # v141: 'nah' (angesagte Nahaufnahme) gehoert dazu - ohne
                     # das Flag rutschte der Text nach einem Editor-Roundtrip
                     # wieder weg vom Kopf.
-                    for k_v in ('szene', 'lage', 'nah'):
+                    # v193: 'anker' und 'user_pick' KAMEN NIE MIT. Der
+                    # Roundtrip baute fx_map[i] als frisches dict und kopierte
+                    # nur drei Felder zurueck. Folge, an dieser Datei belegt:
+                    # der Objekt-Anker (v161) erreichte build_plans bei JEDEM
+                    # Render nicht, und eine erzwungene Nutzer-Markierung
+                    # (user_pick) verlor nach dem ersten Speichern ihren
+                    # Schutz gegen Dichte- und B-Roll-Gate. Beides ist genau
+                    # der Fehlertyp, gegen den der Block-Editor gebaut ist -
+                    # deshalb hier mitgezogen.
+                    for k_v in ('szene', 'lage', 'nah', 'anker', 'user_pick'):
                         if isinstance(e, dict) and e.get(k_v):
                             fx_map[i][k_v] = e[k_v]     # Vision-Regie ueberlebt Edits
                     # v99a: Sprecher-Ansage ueberlebt den Editor-Roundtrip -
@@ -11712,6 +12152,55 @@ def main():
             print(f"Moment editor: {len(kw)} active moments applied")
         except Exception as e:
             print(f"Moments file ignored ({type(e).__name__})")
+
+    # --- v193: Block-Einstellungen in die Regie spiegeln ---------------------
+    # Reihenfolge ist Absicht: der Blockplan laeuft NACH dem Momente-Editor.
+    # Wer eine Zeile im Block-Editor anfasst, hat zuletzt entschieden.
+    # Ein Block mit Effekt oder Wucht wird zum Moment - hat er noch kein
+    # Keyword, wird eines bestimmt. Damit braucht der Nutzer nicht zu wissen,
+    # was intern eine 'Karte' und was 'Fliesstext' ist: er stellt etwas ein,
+    # und es passiert.
+    if _bloecke:
+        fx_map = fx_map or {}
+        _b_moment = 0
+        for _b in _bloecke:
+            if not _b.get('aktiv', True):
+                continue
+            _g = list(range(_b['i0'], min(_b['i1'], len(words))))
+            if not _g:
+                continue
+            _will = bool(_b.get('fx')) or int(_b.get('power') or 0) >= 3
+            _ki = next((j for j in _g if j in kw), None)
+            if _ki is None and _will:
+                # Bestes Wort des Blocks: kein Fuellwort, moeglichst lang.
+                _kand = [j for j in _g
+                         if clean(words[j].get('word', '')).lower() not in STOPWORDS
+                         and len(clean(words[j].get('word', ''))) >= 3]
+                _ki = max(_kand or _g,
+                          key=lambda j: len(clean(words[j].get('word', ''))))
+                kw = set(kw) | {_ki}
+                _b_moment += 1
+            if _ki is None:
+                continue
+            _e = fx_map.get(_ki) if isinstance(fx_map.get(_ki), dict) else {}
+            _e = dict(_e)
+            if _b.get('fx'):
+                _e['fx'] = _b['fx']
+                # Eine bewusste Nutzerwahl braucht denselben Schutz wie eine
+                # gesprochene Ansage - sonst setzen die Sichtbarkeits-Riegel
+                # sie still auf 'outline' zurueck (am Code belegt).
+                _e['user_pick'] = True
+            if _b.get('power'):
+                _e['power'] = int(_b['power'])
+                _e['user_pick'] = True
+            if _b.get('anim'):
+                _e['anim'] = _b['anim']
+            if _b.get('text'):
+                _e['txt'] = _b['text']
+            fx_map[_ki] = _e
+        if _b_moment:
+            print(f"Block editor: {_b_moment} block(s) promoted to a moment")
+        print(f"Block editor: {len(_bloecke)} user block(s) applied")
     palette_at = None
     # Farbwelt: 'auto' = adaptiv aus der Szene. 'schwarz'/'weiss' = feste
     # High-End-Palette; die Szenen-Toene werden dann bewusst NICHT aufgegriffen,
@@ -11776,7 +12265,10 @@ def main():
     # Video, gecacht neben dem Input (_flow3.json). Fallback: Heuristik.
     flow_map = None
     if cfg['effects'].get('caption_flow', True) and cfg['keywords'].get('ai', True):
-        _fgroups = groups_for(words, cfg, fx_map)    # v140: identisch zu build_plans
+        # v193: der Flow-Cache MUSS denselben Blockplan sehen wie
+        # build_plans - sonst sind die Anker-Schluessel (g[0]) einer
+        # anderen Aufteilung und verfallen still (v161-Fehlertyp).
+        _fgroups = groups_for(words, cfg, fx_map, bloecke=_bloecke)
         flow_path = os.path.splitext(args.input)[0] + '_flow3.json'
         if os.path.exists(flow_path):
             try:
@@ -11831,13 +12323,15 @@ def main():
                             cut_times=cut_times, faces_at=None,
                             flow_map=flow_map, loud=loud_map,
                             beat_times=_beat_ts, light_dir=_light,
-                            space_at=space_at, zeigen=_zeigen)
+                            space_at=space_at, zeigen=_zeigen,
+                            bloecke=_bloecke)
     else:
         plans = build_plans(words, kw, cfg, S, W, H, face_ok, fx_map, face_pos,
                             palette_at, cut_times=cut_times, faces_at=faces_at,
                             flow_map=flow_map, loud=loud_map,
                             beat_times=_beat_ts, light_dir=_light,
-                            space_at=space_at, zeigen=_zeigen)
+                            space_at=space_at, zeigen=_zeigen,
+                            bloecke=_bloecke)
 
     # --- v101t Auto-Akzente: dezente Motion-Graphics-Akzente aufs Transkript.
     # Der Akzent-Plan wird bei der Momente-Ausgabe geschrieben (compute_accents,

@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v192-groesse'
+DVE_BUILD = 'v193-blockeditor'
 
 
 @app.middleware('http')
@@ -2172,6 +2172,10 @@ ANIM_LABELS = {
     'rutsche': 'Slide (from the right)',
     'stempel': 'Stamp (slams down)',
 }
+# v193: erlaubte Animations-IDs fuer die serverseitige Pruefung des
+# Blockplans. Aus derselben Quelle wie die UI-Labels, damit beide nie
+# auseinanderlaufen.
+ANIM_IDS = frozenset(k for k in ANIM_LABELS if k)
 
 
 # ---------------------------------------------------------------- Zugangscodes
@@ -5442,6 +5446,87 @@ def get_moments(jid: str, request: Request):
     return json.load(open(mom_path, encoding='utf-8'))
 
 
+@app.get('/api/blocks/{jid}')
+def get_blocks(jid: str, request: Request):
+    """v193 Block-Editor: die Textbloecke eines Jobs, so wie sie im Video
+    stehen werden. Eine Zeile im Editor = ein Eintrag hier."""
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This job belongs to another account.')
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    blk = os.path.splitext(j['input'])[0] + '_bloecke.json'
+    if not os.path.exists(blk):
+        raise HTTPException(404, 'Blocks not analyzed yet.')
+    try:
+        return json.load(open(blk, encoding='utf-8'))
+    except Exception:
+        raise HTTPException(404, 'Blocks not readable.')
+
+
+# v193: erlaubte Werte. Der Riegel steht SERVERSEITIG, nicht nur in der
+# Engine. /api/moments schrieb Nutzer-JSON bis v192 unveraendert auf die
+# Platte - bei einem Editor mit zehn Feldern je Zeile ist das keine
+# theoretische Luecke mehr, sondern der Normalfall.
+_BLK_FX = ('', 'behind', 'cascade', 'blurin', 'outline', 'ground')
+_BLK_MAX = 4000            # Bloecke je Job (3 Min Sprache sind rund 200)
+
+
+def sanitize_blocks(roh, max_i=10 ** 6):
+    """Blockplan auf erlaubte Werte reduzieren. Unbekannte Felder fallen weg,
+    kaputte Eintraege werden uebersprungen - aber ein einzelner Fehler darf
+    nie den ganzen Plan verwerfen (genau das passiert heute in render.py mit
+    der Momente-Datei: EIN falscher Wert, und alle Nutzer-Einstellungen des
+    Videos sind still weg)."""
+    if not isinstance(roh, list):
+        return []
+    aus = []
+    for b in roh[:_BLK_MAX]:
+        if not isinstance(b, dict):
+            continue
+        try:
+            i0, i1 = int(b.get('i0')), int(b.get('i1'))
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= i0 < i1 <= max_i):
+            continue
+        e = {'i0': i0, 'i1': i1, 'aktiv': b.get('aktiv', True) is not False}
+        t = b.get('text')
+        if isinstance(t, str) and t.strip():
+            e['text'] = t.strip()[:200]
+        a = str(b.get('anim') or '').strip().lower()
+        if a and a in ANIM_IDS:
+            e['anim'] = a
+        f = str(b.get('fx') or '').strip().lower()
+        if f in _BLK_FX and f:
+            e['fx'] = f
+        try:
+            p = int(b.get('power') or 0)
+            if p in (1, 2, 3):
+                e['power'] = p
+        except (TypeError, ValueError):
+            pass
+        try:
+            g = float(b.get('groesse') or 0)
+            if g > 0:
+                e['groesse'] = round(max(0.5, min(2.0, g)), 3)
+        except (TypeError, ValueError):
+            pass
+        for k in ('start', 'end'):
+            v = b.get(k)
+            if v in (None, ''):
+                continue
+            try:
+                e[k] = round(max(0.0, min(36000.0, float(v))), 3)
+            except (TypeError, ValueError):
+                pass
+        if 'start' in e and 'end' in e and e['end'] <= e['start']:
+            e.pop('start'), e.pop('end')
+        aus.append(e)
+    aus.sort(key=lambda x: (x['i0'], x['i1']))
+    return aus
+
+
 @app.get('/api/accents/{jid}')
 def get_accents(jid: str, request: Request):
     """v101t: Auto-Akzent-Plan eines Jobs (dezente Motion-Graphics) fuer den
@@ -5674,7 +5759,14 @@ async def save_transcript(request: Request, jid: str,
         except Exception:
             pass
     # Caches weg - Regie + Momente basieren auf altem Text
-    for suffix in ('_regie3.json', '_momente.json'):
+    # v193: '_flow3.json' MUSS mit weg. Es ist ueber den ersten Wortindex
+    # eines Chunks verschluesselt; nach einer Transkript-Korrektur kann sich
+    # die Chunk-Bildung verschieben (Interpunktion, Wortlaenge), und die
+    # gecachten Anker zeigen dann auf den falschen Block. _parse_flow_sel
+    # verwirft das still - der Kunde verliert die KI-Anker, ohne es zu
+    # merken. Der Blockplan bleibt bewusst STEHEN: er ist Nutzerarbeit, und
+    # die Wortindizes aendern sich beim reinen Umschreiben eines Wortes nicht.
+    for suffix in ('_regie3.json', '_momente.json', '_flow3.json'):
         try:
             os.remove(base + suffix)
         except OSError:
@@ -5777,7 +5869,7 @@ def _capture_corrections(old_mom_path, edited, uid=None):
 @app.post('/api/moments/{jid}')
 async def save_and_render(request: Request, jid: str,
                           moments: str = Form(...), code: str = Form(''),
-                          accents: str = Form('')):
+                          accents: str = Form(''), blocks: str = Form('')):
     """Momente speichern und Voll-Render starten."""
     ok, msg = check_auth(code, request)
     if not ok:
@@ -5812,6 +5904,33 @@ async def save_and_render(request: Request, jid: str,
         print(f"Korrektur-Erfassung uebersprungen ({type(e).__name__})")
     json.dump(mom, open(mom_path, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=1)
+    # v193 BLOCK-EDITOR: die Blockliste mitspeichern. Leerer String heisst
+    # "nicht angefasst" (Alt-Clients, Momente-only-Aufrufe); "[]" heisst
+    # ausdruecklich "keine Nutzer-Bloecke mehr, zurueck zur Automatik" -
+    # dann wird die Datei geloescht statt eine leere Liste zu schreiben,
+    # sonst haette der Nutzer ein Video ganz ohne Text.
+    if blocks:
+        try:
+            _blk_roh = json.loads(blocks)
+        except Exception:
+            raise HTTPException(400, 'Blocks JSON invalid.')
+        _blk = sanitize_blocks(_blk_roh)
+        _blk_path = base + '_bloecke.json'
+        if _blk:
+            json.dump(_blk, open(_blk_path, 'w', encoding='utf-8'),
+                      ensure_ascii=False, indent=1)
+        elif os.path.exists(_blk_path):
+            os.remove(_blk_path)
+        # Die Blockgrenzen bestimmen die Chunks. Der Flow-Cache ist ueber den
+        # ERSTEN Wortindex eines Chunks verschluesselt - nach einer
+        # Verschiebung zeigen seine Anker auf den falschen Block und fallen
+        # still weg. Also mit wegwerfen, statt eine Altlast weiterzuschleppen.
+        _f3 = base + '_flow3.json'
+        if os.path.exists(_f3):
+            try:
+                os.remove(_f3)
+            except OSError:
+                pass
     # v101t: editierte Auto-Akzente mitspeichern (leerer String = unveraendert;
     # "[]" = der Nutzer hat bewusst alle entfernt). render.py laedt die Datei.
     if accents:

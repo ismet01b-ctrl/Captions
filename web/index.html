@@ -962,6 +962,71 @@ body {
   width: 20px; height: 20px; accent-color: var(--acc); cursor: pointer;
 }
 
+/* ---- v193 Block-Editor: eine Zeile = ein Textblock ----
+   Bewusst EINE Spalte statt der neunspaltigen Momente-Tabelle. Der Text ist
+   das Wichtige und bekommt die volle Breite; alles andere klappt bei Bedarf
+   auf. Damit funktioniert dieselbe Zeile auch auf dem Handy, ohne dass
+   Spalten per hide-mob verschwinden - also ohne dass Einstellungen dort
+   unerreichbar sind. */
+.blk {
+  background: var(--surf); border: 1px solid transparent; border-radius: 10px;
+  margin-bottom: 6px; padding: 8px 10px;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.blk:hover { border-color: var(--acc-soft); }
+.blk.off { opacity: .45; }
+.blk.off .blk-txt { text-decoration: line-through; }
+.blk-head { display: flex; align-items: center; gap: 8px; }
+.blk-head input[type=checkbox] {
+  width: 20px; height: 20px; accent-color: var(--acc); cursor: pointer; flex: none;
+}
+.blk-t {
+  font-size: 11.5px; color: var(--mut); font-variant-numeric: tabular-nums;
+  font-weight: 600; white-space: nowrap; flex: none; min-width: 86px;
+}
+.blk-t i { font-style: normal; opacity: .5; margin: 0 3px; }
+.blk-txt {
+  flex: 1 1 auto; min-width: 0;
+  background: var(--surf2); border: 1px solid transparent; color: var(--fg);
+  padding: 9px 11px; border-radius: 8px; font-size: 14px; outline: none;
+  font-family: inherit; transition: border-color var(--t-fast);
+}
+.blk-txt:focus { border-color: var(--acc); }
+.blk-kw { color: var(--acc); font-size: 13px; flex: none; }
+.blk-b {
+  flex: none; background: var(--surf2); border: 1px solid transparent;
+  color: var(--mut); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+.blk-b:hover:not(:disabled) { color: var(--fg); border-color: var(--acc-soft); }
+.blk-b:disabled { opacity: .35; cursor: default; }
+.blk-b.on { color: var(--acc); border-color: var(--acc); }
+.blk-more-box {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; padding: 12px 2px 4px; margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.blk-more-box label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 11.5px; color: var(--mut); font-weight: 600;
+  letter-spacing: .3px; text-transform: uppercase;
+}
+.blk-more-box select, .blk-more-box input[type=text] {
+  background: var(--surf2); border: 1px solid transparent; color: var(--fg);
+  padding: 8px 10px; border-radius: 8px; font-size: 13px; outline: none;
+  font-family: inherit; text-transform: none; letter-spacing: 0;
+}
+.blk-more-box select:focus, .blk-more-box input[type=text]:focus {
+  border-color: var(--acc);
+}
+.blk-more-box input[type=range] { accent-color: var(--acc); width: 100%; }
+.blk-grv { color: var(--fg); font-weight: 700; }
+@media (max-width: 620px) {
+  .blk-head { flex-wrap: wrap; }
+  .blk-txt { order: 5; flex-basis: 100%; }
+}
+
 /* Vorschau-Kachel: kleines Video-Frame-Placeholder mit Text-Wortartrepraesentation */
 .ob-row {
   display: flex; align-items: center; gap: 10px; font-size: 14px;
@@ -2467,11 +2532,14 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
      aria-labelledby="momTitle">
   <div class="modal">
     <div class="head">
-      <h3 id="momTitle">Edit moments <span id="hookScore" style="display:none;
+      <h3 id="momTitle">Edit captions <span id="hookScore" style="display:none;
         margin-left:10px; padding:4px 12px; border-radius:999px; font-size:13px;
         font-weight:800; vertical-align:middle;"></span></h3>
-      <p>Type text, pick effect/size/animation, uncheck = remove.
-        Ctrl+Z / Ctrl+Y</p>
+      <p>One row = one block of text on screen. Edit the words, put the
+        cursor where it should break and hit <b>Split</b>, or <b>Merge</b>
+        two rows into one. <b>Style</b> opens effect, animation, size and
+        timing for that block. Unchecked rows are not shown at all.
+        Ctrl+Z / Ctrl+Y to undo.</p>
     </div>
     <div id="momTimeline" class="mom-timeline" aria-hidden="true"></div>
     <div class="body" id="momBody"></div>
@@ -2501,6 +2569,9 @@ const State = {
   cfg: null, cfgBase: null,
   srcShort: 0, srcDur: 0,   // v158: Quell-Kurzkante + Dauer fuer den Preis
   jid: null, moments: null, history: null,
+  // v193 Block-Editor: die Blockliste, der aufgeklappte Index und die
+  // einmal geladenen Beschriftungen (Effekte/Animationen).
+  blocks: [], blkOpen: null, fxLabels: null, animLabels: null,
   currentStep: 1, renderStart: 0,
 };
 
@@ -5316,91 +5387,217 @@ function buildSummary() {
 }
 
 /* --------- Momente-Editor --------- */
+/* ===================== v193 BLOCK-EDITOR ==============================
+   Eine Zeile = ein Textblock, so wie er im Video steht. Das ersetzt den
+   alten Momente-Editor: der zeigte NUR Schluesselwort-Momente, und
+   Fliesswoerter waren ueberhaupt nicht editierbar. Wer einen Umbruch
+   schlecht fand, konnte nur an globalen Reglern drehen und neu rendern.
+
+   Die Moment-Bedienfelder (Effekt, Wucht, Animation) sind nicht
+   verschwunden - sie klappen an der Zeile auf, zu der sie gehoeren.
+   Damit gibt es EINEN Ort statt zwei, und der Nutzer muss nicht wissen,
+   was intern eine 'Karte' und was 'Fliesstext' ist.
+   ==================================================================== */
 async function openMomentsEditor() {
   try {
     const r = await fetch('/api/moments/' + State.jid);
     State.moments = await r.json();
   } catch (e) { toast('Could not load moments.', 'err'); return; }
   try {
+    const rb = await fetch('/api/blocks/' + State.jid);
+    State.blocks = rb.ok ? await rb.json() : [];
+  } catch (e) { State.blocks = []; }
+  if (!Array.isArray(State.blocks)) State.blocks = [];
+  try {
     const ra = await fetch('/api/accents/' + State.jid);
     State.accents = ra.ok ? await ra.json() : [];
   } catch (e) { State.accents = []; }
   if (!Array.isArray(State.accents)) State.accents = [];
   State.history = new EditorHistory();
-  const [fxLabels, animLabels] = await Promise.all([
-    fetch('/api/fx_labels').then(r => r.json()),
-    fetch('/api/anim_labels').then(r => r.json()),
-  ]);
-  const fxOpts = fxLabels.map(([id, l]) => `<option value="${id}">${l}</option>`).join('');
-  const powerOpts = ['Subtle:1','Normal:2','Big:3'].map(p => {
-    const [l, v] = p.split(':'); return `<option value="${v}">${l}</option>`;
-  }).join('');
-  const animOpts = Object.entries(animLabels).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-  const szeneLbl = {auto:'auto', wasser:'water', boden:'floor', wand:'wall', person:'person'};
-  const lageLbl = {auto:'auto', liegend:'lying', stehend:'standing', frei:'free'};
-  const szeneOpts = Object.entries(szeneLbl).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-  const lageOpts = Object.entries(lageLbl).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-  const body = $('#momBody');
-  body.innerHTML = `<div class="mom-row head" aria-hidden="true">
-    <div>On</div><div>Time</div><div>Preview</div><div>Text</div><div>Effect</div><div>Size</div>
-    <div class="hide-mob">Animation</div><div class="hide-mob">Scene</div><div class="hide-mob">Position</div>
-  </div>`;
-  State.moments.forEach((m, i) => {
-    if (!m || typeof m !== 'object' || !('i' in m)) return;
-    const row = document.createElement('div');
-    row.className = 'mom-row';
-    row.innerHTML = `
-      <input type="checkbox" data-i="${i}" data-k="aktiv" ${m.aktiv !== false ? 'checked' : ''}>
-      <div class="zeit">${(m.zeit || 0).toFixed(1)}s</div>
-      <div class="mom-preview" data-i="${i}"><div class="txt"></div><img class="mom-cut" alt=""><span class="play-hint">tap ▶</span></div>
-      <input type="text" data-i="${i}" data-k="text" value="${(m.text || '').replace(/"/g, '&quot;')}">
-      <select data-i="${i}" data-k="fx">${fxOpts}</select>
-      <select data-i="${i}" data-k="power">${powerOpts}</select>
-      <select data-i="${i}" data-k="anim" class="hide-mob">${animOpts}</select>
-      <select data-i="${i}" data-k="szene" class="hide-mob">${szeneOpts}</select>
-      <select data-i="${i}" data-k="lage" class="hide-mob">${lageOpts}</select>`;
-    body.appendChild(row);
-    row.querySelector('[data-k=fx]').value = m.fx || 'behind';
-    row.querySelector('[data-k=power]').value = String(m.power || 2);
-    row.querySelector('[data-k=anim]').value = m.anim || '';
-    row.querySelector('[data-k=szene]').value = m.szene || 'auto';
-    row.querySelector('[data-k=lage]').value = m.lage || 'auto';
-    updatePreview(row, m);
-    // v96f: Klick auf die Vorschau spielt die aktuell gewaehlte Animation neu ab
-    const pvEl = row.querySelector('.mom-preview');
-    if (pvEl) pvEl.addEventListener('click', () => playAnim(pvEl, pvEl.dataset.anim || ''));
-  });
-  let debTimer;
-  body.querySelectorAll('input, select').forEach(el => {
-    const isText = el.tagName === 'INPUT' && el.type === 'text';
-    el.addEventListener(isText ? 'input' : 'change', () => {
-      // Vorschau sofort updaten (Debounce nur fuer History)
-      const rowEl = el.closest('.mom-row');
-      const iIdx = parseInt(el.dataset.i);
-      if (rowEl && State.moments[iIdx]) {
-        const liveM = Object.assign({}, State.moments[iIdx]);
-        rowEl.querySelectorAll('input, select').forEach(x => {
-          if (x.type === 'checkbox') liveM[x.dataset.k] = x.checked;
-          else if (x.dataset.k === 'power') liveM[x.dataset.k] = parseInt(x.value);
-          else liveM[x.dataset.k] = x.value;
-        });
-        updatePreview(rowEl, liveM);
-      }
-      if (isText) {
-        clearTimeout(debTimer);
-        debTimer = setTimeout(() => { syncFromDom(); pushSnap(); renderTimeline(); }, 400);
-      } else {
-        syncFromDom(); pushSnap(); renderTimeline(); showHookScore();
-      }
-    });
-  });
-  syncFromDom(); pushSnap();
+  if (!State.animLabels) {
+    const [fxL, anL] = await Promise.all([
+      fetch('/api/fx_labels').then(r => r.json()),
+      fetch('/api/anim_labels').then(r => r.json()),
+    ]);
+    State.fxLabels = fxL; State.animLabels = anL;
+  }
+  renderBlocks();
+  renderAccents();
   renderTimeline();
   showHookScore();
-  renderAccents();
+  pushSnap();
   $('#momEditor').classList.remove('hidden');
-  aBtn(false);
-  aStat('');
+}
+
+/* Zeit als mm:ss.s - Sekunden allein liest sich bei laengeren Videos schlecht */
+function fmtT(s) {
+  s = Math.max(0, +s || 0);
+  const m = Math.floor(s / 60);
+  return (m ? m + ':' + String(Math.floor(s % 60)).padStart(2, '0') : Math.floor(s) + '')
+    + '.' + Math.floor((s * 10) % 10);
+}
+
+function blockText(b) {
+  return (b && typeof b.text === 'string') ? b.text : '';
+}
+
+function renderBlocks() {
+  const body = $('#momBody');
+  const list = State.blocks || [];
+  if (!list.length) {
+    body.innerHTML = '<div class="acc-empty">No text blocks found for this video.</div>';
+    return;
+  }
+  const fxOpts = ['<option value="">auto (the AI decides)</option>']
+    .concat((State.fxLabels || []).map(([id, l]) => `<option value="${id}">${l}</option>`))
+    .join('');
+  const animOpts = Object.entries(State.animLabels || {})
+    .map(([v, l]) => `<option value="${v}">${v ? l : 'auto (the AI decides)'}</option>`).join('');
+  body.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  list.forEach((b, i) => {
+    const row = document.createElement('div');
+    row.className = 'blk' + (b.aktiv === false ? ' off' : '');
+    row.dataset.i = i;
+    const gr = Math.round((+b.groesse || 1) * 100);
+    const offen = State.blkOpen === i;
+    row.innerHTML = `
+      <div class="blk-head">
+        <input type="checkbox" class="blk-on" data-i="${i}" ${b.aktiv === false ? '' : 'checked'}
+               title="Uncheck to hide this block" aria-label="Show this block">
+        <span class="blk-t">${fmtT(b.start)}<i>→</i>${fmtT(b.end)}</span>
+        <input type="text" class="blk-txt" data-i="${i}"
+               value="${blockText(b).replace(/"/g, '&quot;')}"
+               aria-label="Block text" spellcheck="false">
+        ${b.kw !== null && b.kw !== undefined ? '<span class="blk-kw" title="This block carries a highlighted keyword">★</span>' : ''}
+        <button type="button" class="blk-b blk-split" data-i="${i}"
+                title="Split at the cursor in the text field">Split</button>
+        <button type="button" class="blk-b blk-merge" data-i="${i}"
+                title="Merge with the block below"${i >= list.length - 1 ? ' disabled' : ''}>Merge</button>
+        <button type="button" class="blk-b blk-more${offen ? ' on' : ''}" data-i="${i}"
+                title="Effect, animation, size, timing">Style</button>
+      </div>
+      <div class="blk-more-box${offen ? '' : ' hidden'}" data-i="${i}">
+        <label>Effect<select class="blk-f" data-i="${i}">${fxOpts}</select></label>
+        <label>Animation<select class="blk-a" data-i="${i}">${animOpts}</select></label>
+        <label>Impact<select class="blk-p" data-i="${i}">
+          <option value="0">auto</option><option value="1">subtle</option>
+          <option value="2">normal</option><option value="3">big</option></select></label>
+        <label>Size <b class="blk-grv">${gr}%</b>
+          <input type="range" class="blk-g" data-i="${i}" min="50" max="200" step="5" value="${gr}"></label>
+        <label>Start<input type="text" class="blk-s" data-i="${i}" inputmode="decimal"
+               value="${b.start === null || b.start === undefined ? '' : (+b.start).toFixed(2)}"></label>
+        <label>End<input type="text" class="blk-e" data-i="${i}" inputmode="decimal"
+               value="${b.end === null || b.end === undefined ? '' : (+b.end).toFixed(2)}"></label>
+      </div>`;
+    frag.appendChild(row);
+  });
+  body.appendChild(frag);
+  list.forEach((b, i) => {
+    const box = body.querySelector(`.blk-more-box[data-i="${i}"]`);
+    if (!box) return;
+    box.querySelector('.blk-f').value = b.fx || '';
+    box.querySelector('.blk-a').value = b.anim || '';
+    box.querySelector('.blk-p').value = String(b.power || 0);
+  });
+  bindBlockEvents();
+}
+
+function bindBlockEvents() {
+  const body = $('#momBody');
+  const push = () => { pushSnap(); };
+  body.querySelectorAll('.blk-txt').forEach(el => {
+    el.addEventListener('input', () => {
+      const b = State.blocks[+el.dataset.i]; if (b) b.text = el.value;
+    });
+    el.addEventListener('change', push);
+  });
+  body.querySelectorAll('.blk-on').forEach(el => {
+    el.addEventListener('change', () => {
+      const i = +el.dataset.i, b = State.blocks[i]; if (!b) return;
+      b.aktiv = el.checked;
+      el.closest('.blk').classList.toggle('off', !el.checked);
+      push(); renderTimeline();
+    });
+  });
+  body.querySelectorAll('.blk-more').forEach(el => {
+    el.addEventListener('click', () => {
+      const i = +el.dataset.i;
+      State.blkOpen = (State.blkOpen === i) ? null : i;
+      renderBlocks();
+    });
+  });
+  const setz = (sel, feld, umw) => body.querySelectorAll(sel).forEach(el => {
+    el.addEventListener('change', () => {
+      const b = State.blocks[+el.dataset.i]; if (!b) return;
+      b[feld] = umw(el.value); push();
+    });
+  });
+  setz('.blk-f', 'fx', v => v || '');
+  setz('.blk-a', 'anim', v => v || '');
+  setz('.blk-p', 'power', v => parseInt(v) || 0);
+  setz('.blk-s', 'start', v => (v.trim() === '' ? null : (parseFloat(v) || 0)));
+  setz('.blk-e', 'end', v => (v.trim() === '' ? null : (parseFloat(v) || 0)));
+  body.querySelectorAll('.blk-g').forEach(el => {
+    el.addEventListener('input', () => {
+      const b = State.blocks[+el.dataset.i]; if (!b) return;
+      b.groesse = (+el.value) / 100;
+      const lab = el.parentElement.querySelector('.blk-grv');
+      if (lab) lab.textContent = el.value + '%';
+    });
+    el.addEventListener('change', push);
+  });
+  body.querySelectorAll('.blk-split').forEach(el => {
+    el.addEventListener('click', () => splitBlock(+el.dataset.i));
+  });
+  body.querySelectorAll('.blk-merge').forEach(el => {
+    el.addEventListener('click', () => mergeBlock(+el.dataset.i));
+  });
+}
+
+/* Teilen an der Schreibmarke. Genau so trennt man Untertitel in Premiere
+   oder CapCut: Cursor dahin, wo der Umbruch hin soll, und trennen. Ohne
+   Bezug auf die Schreibmarke muesste der Nutzer raten, wo geteilt wird. */
+function splitBlock(i) {
+  const b = State.blocks[i]; if (!b) return;
+  const feld = $('#momBody').querySelector(`.blk-txt[data-i="${i}"]`);
+  const txt = feld ? feld.value : blockText(b);
+  const pos = feld ? (feld.selectionStart || 0) : 0;
+  const links = txt.slice(0, pos).trim();
+  const rechts = txt.slice(pos).trim();
+  if (!links || !rechts) {
+    toast('Put the cursor where the block should break.', 'err');
+    return;
+  }
+  // Wortindizes proportional zur Wortzahl aufteilen - der Block behaelt
+  // seinen Wortbereich, er wird nur an einer Wortgrenze getrennt.
+  const nLinks = links.split(/\s+/).length;
+  const spanne = b.i1 - b.i0;
+  const schnitt = Math.max(b.i0 + 1, Math.min(b.i1 - 1, b.i0 + Math.min(nLinks, spanne - 1)));
+  const dauer = (+b.end || 0) - (+b.start || 0);
+  const anteil = spanne > 0 ? (schnitt - b.i0) / spanne : 0.5;
+  const mitte = (+b.start || 0) + dauer * anteil;
+  const a = Object.assign({}, b, { i1: schnitt, text: links, end: +mitte.toFixed(2) });
+  const c = Object.assign({}, b, { i0: schnitt, text: rechts, start: +mitte.toFixed(2), kw: null });
+  State.blocks.splice(i, 1, a, c);
+  State.blkOpen = null;
+  pushSnap();
+  renderBlocks(); renderTimeline();
+}
+
+function mergeBlock(i) {
+  const a = State.blocks[i], b = State.blocks[i + 1];
+  if (!a || !b) return;
+  const zus = Object.assign({}, a, {
+    i1: b.i1,
+    text: (blockText(a) + ' ' + blockText(b)).trim(),
+    end: b.end,
+    kw: (a.kw !== null && a.kw !== undefined) ? a.kw : b.kw,
+  });
+  State.blocks.splice(i, 2, zus);
+  State.blkOpen = null;
+  pushSnap();
+  renderBlocks(); renderTimeline();
 }
 
 const ACC_ARTS = [['counter','123 Counter'],['chip','Chip'],['badge','Badge ✓'],['pop','Emphasis']];
@@ -5500,29 +5697,30 @@ function showHookScore() {
 function renderTimeline() {
   const tl = $('#momTimeline');
   if (!tl) return;
-  const moms = State.moments || [];
-  if (!moms.length) { tl.innerHTML = ''; return; }
+  // v193: die Leiste zeigt BLOECKE, nicht mehr nur Keyword-Momente. Sie war
+  // an '.mom-row' gebunden - die Zeilenklasse des alten Editors, die es
+  // nicht mehr gibt. Ein Report, der auf eine verschwundene Struktur zeigt,
+  // faellt still durch (derselbe Fehler wie bei safe_zone_report in v187).
+  const bl = State.blocks || [];
+  if (!bl.length) { tl.innerHTML = ''; return; }
   const track = document.createElement('div');
   track.className = 'tl-track';
-  moms.forEach((m, idx) => {
-    if (!m || !('i' in m)) return;
-    const b = document.createElement('div');
-    const fx = m.fx || 'behind';
-    const pw = m.power || 2;
-    b.className = 'tl-block fx-' + fx + ' p-' + pw + (m.aktiv === false ? ' off' : '');
-    const txt = (m.text || '').split(' ').slice(0, 2).join(' ');
-    b.textContent = txt || '·';
-    b.title = `${(m.zeit || 0).toFixed(1)}s · ${fx} · P${pw}`;
-    b.addEventListener('click', () => {
-      const rows = $('#momBody').querySelectorAll('.mom-row');
-      const row = rows[idx + 1];               // +1 fuer Header-Zeile
+  bl.forEach((b, idx) => {
+    const el = document.createElement('div');
+    const fx = b.fx || 'behind';
+    el.className = 'tl-block fx-' + fx + ' p-' + (b.power || 2)
+                 + (b.aktiv === false ? ' off' : '');
+    el.textContent = (b.text || '').split(' ').slice(0, 2).join(' ') || '\u00b7';
+    el.title = fmtT(b.start) + 's \u00b7 ' + (b.text || '');
+    el.addEventListener('click', () => {
+      const row = $('#momBody').querySelectorAll('.blk')[idx];
       if (row) {
         row.scrollIntoView({behavior: 'smooth', block: 'center'});
         row.style.outline = '2px solid var(--acc)';
         setTimeout(() => { row.style.outline = ''; }, 1200);
       }
     });
-    track.appendChild(b);
+    track.appendChild(el);
   });
   tl.innerHTML = '';
   tl.appendChild(track);
@@ -5614,7 +5812,11 @@ function syncFromDom() {
   });
 }
 function pushSnap() {
-  State.history.push(JSON.parse(JSON.stringify(State.moments)));
+  // v193: der Schnappschuss traegt BEIDES. Bis v192 sicherte Undo nur die
+  // Momente; im Block-Editor waere ein versehentliches Teilen oder ein
+  // geloeschter Block damit unwiderruflich gewesen.
+  State.history.push(JSON.parse(JSON.stringify(
+    {m: State.moments || [], b: State.blocks || []})));
   refreshHistBtns();
 }
 function refreshHistBtns() {
@@ -5622,14 +5824,12 @@ function refreshHistBtns() {
   $('#momRedo').disabled = !State.history.canRedo();
 }
 function applySnap(snap) {
-  State.moments = JSON.parse(JSON.stringify(snap));
-  $('#momBody').querySelectorAll('input, select').forEach(el => {
-    const i = parseInt(el.dataset.i); const k = el.dataset.k;
-    if (!State.moments[i]) return;
-    if (el.type === 'checkbox') el.checked = !!State.moments[i][k];
-    else if (k === 'power') el.value = String(State.moments[i][k] || 2);
-    else el.value = State.moments[i][k] || (k === 'szene' || k === 'lage' ? 'auto' : '');
-  });
+  const d = JSON.parse(JSON.stringify(snap));
+  State.moments = Array.isArray(d) ? d : (d.m || []);
+  if (!Array.isArray(d)) State.blocks = d.b || [];
+  renderBlocks();
+  renderTimeline();
+  showHookScore();
 }
 $('#momUndo').addEventListener('click', () => {
   State.history.quiet = true;
@@ -5683,6 +5883,10 @@ $('#momSave').addEventListener('click', async () => {
     fd.append('moments', JSON.stringify(State.moments));
     fd.append('code', State.code);
     fd.append('accents', JSON.stringify(State.accents || []));
+    // v193: Blockplan mitschicken. Leerer String hiesse "nicht angefasst" -
+    // hier wird immer bewusst gesendet, auch eine leere Liste (= zurueck zur
+    // Automatik), damit ein Zuruecksetzen im Editor wirklich ankommt.
+    fd.append('blocks', JSON.stringify(State.blocks || []));
     const r = await fetch('/api/moments/' + State.jid, { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok || !d.ok) { toast('Error: ' + (d.detail || d.msg || 'unknown'), 'err'); return; }

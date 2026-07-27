@@ -252,6 +252,45 @@ schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
 Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
 zwischen Regie und Zittern.
 
+### Block-Editor (v193) — "eine Zeile, ein Block, und die Einstellung gilt"
+`_bloecke.json` ist die **Quelle der Chunk-Bildung**, kein Nachschlagen
+obendrauf. Liegt ein Nutzerplan vor, gibt `groups_for` ihn zurueck und
+`build_groups` laeuft gar nicht erst — eine Aufteilung, die danach vom
+Merge-Pass wieder zusammengelegt wird, ist keine.
+- **Ein Block hat nur ueber den Wortbereich Identitaet.** Der alte Weg
+  (Schluessel = erster Wortindex einer FRISCH berechneten Aufteilung, so wie
+  `flow_map`) verfaellt still, sobald sich eine Grenze verschiebt. Weil der
+  Nutzerplan die Gruppen SELBST bildet, kann sein Schluessel nicht danebenzeigen.
+- **Acht Gates muessen den Nutzer-Block kennen** (`_ublk` / `_bl_akt`):
+  B-Roll, Atempause, Ein-Wort-Rest, Dichte-Weiche, Satz-Collage,
+  Luecken-Netz, Schnitt-Disziplin, Beat-Grid. Wer ein neues Gate baut, haengt
+  den Riegel dort hin. Die Dichte-Weiche ist die gefaehrlichste: mit
+  'akzente' (Standard) verschwaende der Block sonst ohne jede Meldung.
+- **Das Luecken-Netz ist bei Nutzer-Bloecken AUS.** Die Zusage "jedes Wort
+  steht im Bild" gilt der Automatik, nicht gegen eine Loeschung.
+- **Fliess-Bloecke konnten bis v192 gar nicht animieren** — alle neun
+  `anim_apply`-Aufrufe hingen an `p['arr']` (Keyword-Karten). Der
+  Fliess-Pfad hat jetzt einen eigenen Aufruf: **eigener Zustandstraeger je
+  Wort, gemeinsame BLOCK-Zeit**. Ein gemeinsames dict waere falsch,
+  `_anim_core` haelt seinen Zufallszustand am Objekt und wuerde je Frame
+  N-mal weitergetickt.
+- **Groesse ist NICHT power.** Power ist Dramaturgie (Kamera, SFX,
+  Tempo-Kurve, `pace_power_map`), Groesse ist der Schriftgrad. Beides in
+  einen Regler zu legen waere der v155/v156-Fehler. Der `groesse`-Parameter
+  muss an ALLE VIER `compose_flow`-Aufrufe (auch Rueckfall und Luecken-Netz).
+- **Der Analyse-Lauf muss die Bloecke exportieren**, bevor `--plan-only`
+  aussteigt — und mit derselben `groups_for`-Konfiguration wie der
+  Voll-Render, sonst zeigt der Editor eine andere Aufteilung als das Video.
+- **Serverseitig sanitisieren** (`sanitize_blocks`), nicht erst in der
+  Engine. Und **pro Eintrag fangen**: ein kaputter Wert darf nie den ganzen
+  Plan verwerfen (genau das passiert bei `_momente.json`).
+- **`_flow3.json` muss mit weg**, wenn sich Blockgrenzen oder das Transkript
+  aendern. Sonst zeigen die gecachten Anker auf den falschen Chunk und
+  verfallen still.
+- Mitgenommene Alt-Fehler: der Momente-Roundtrip verlor `anker` und
+  `user_pick` bei JEDEM Render; `p['power']` wurde nie an einen Plan
+  geschrieben (sieben Leser bekamen konstant 2, sechs Effekte liefen nie an).
+
 ### Schriftgroessen (v154)
 Das **Schluesselwort und der Fliesstext haben getrennte Referenz-Faktoren**
 (`caption_scale` aus `key_hoehe`, `caption_scale_klein` aus `klein_hoehe`).
@@ -613,7 +652,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1190/1190 grün (Stand v192)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1238/1238 grün (Stand v193)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

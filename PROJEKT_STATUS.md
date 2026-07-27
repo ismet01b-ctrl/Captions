@@ -3,6 +3,80 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v193 BLOCK-EDITOR: Captions sind jetzt wirklich editierbar.**
+  Ismets Ansage: "Wie in Premiere Pro editierbar. Simple und uebersichtlich.
+  Ein Editor statt Momente. Voll einstellbar, und diese Einstellungen
+  MUESSEN auch uebernommen werden."
+  AUSGANGSLAGE (am Code belegt, nicht geschaetzt): es gab ZWEI Editoren und
+  beide konnten das nicht. "Fix transcript" korrigierte nur Woerter, "Edit
+  moments" nur Keyword-Momente mit acht Dropdowns. **Fliesswort-Bloecke
+  waren ueberhaupt nicht editierbar** - brach ein Umbruch schlecht, konnte
+  der Kunde nur globale Regler verstellen und erneut zahlen.
+  NEU: eine Liste, eine Zeile = ein Block, so wie er im Bild steht. Text
+  tippen, an der Schreibmarke teilen, zwei Zeilen zusammenlegen, Haken raus
+  = faellt weg. "Style" klappt Effekt, Animation, Wucht, Groesse und Zeiten
+  fuer genau diese Zeile auf. Die Moment-Bedienfelder sind damit dort, wo
+  sie hingehoeren, statt in einem zweiten Editor.
+  DAS EIGENTLICHE PROBLEM war nicht die Oberflaeche:
+  (a) Ein Block hatte keine IDENTITAET. `build_groups` bildete ihn bei
+      jedem Render neu aus Pausen, Satzzeichen, Sprechtempo und der
+      KI-Wucht. Der einzige Schluessel war der erste Wortindex, und der
+      verschiebt sich staendig. Loesung: `_bloecke.json` ist jetzt die
+      QUELLE der Aufteilung, nicht ein Nachschlagen obendrauf. Liegt ein
+      Nutzerplan vor, gewinnt er vollstaendig (`groups_for`).
+  (b) **Fliess-Bloecke konnten gar nicht animieren.** Alle neun
+      `anim_apply`-Aufrufe hingen an Keyword-Karten (`p['arr']`). Deshalb
+      war eine Animation auf einem normalen Textblock bis v192 unmoeglich.
+      Jetzt hat der Fliess-Zeichenpfad einen eigenen Aufruf: jedes Wort
+      bekommt einen eigenen Zustandstraeger, alle rechnen gegen dieselbe
+      BLOCK-Zeit - der Block bewegt sich als Einheit, die Feder-Streuung je
+      Wort bleibt natuerlich.
+  (c) **Eine Groesse pro Block gab es nicht.** Die Schriftgrade kamen
+      ausschliesslich aus globalen Config-Werten. `compose_flow` hat jetzt
+      einen `groesse`-Parameter, durchgereicht an ALLE VIER Aufrufstellen
+      (Rueckfall auf Zeilensatz und Luecken-Netz eingeschlossen - sonst
+      waere die Einstellung je nach Layout mal da, mal weg).
+  (d) **ACHT GATES haetten den Block still weggeraeumt**: B-Roll-Gate,
+      Atempause, Ein-Wort-Rest, Dichte-Weiche, Satz-Collage, Luecken-Netz,
+      Schnitt-Disziplin, Beat-Grid. Besonders die Dichte-Weiche: wer
+      'akzente' eingestellt hat (Standard!) haette seine Bloecke verloren,
+      ohne eine Meldung zu sehen. Jeder Gate kennt jetzt den Nutzer-Block.
+  MITGENOMMENE ALT-FEHLER (beim Kartieren gefunden, alle am Code belegt):
+  * Der Momente-Roundtrip baute `fx_map[i]` als frisches dict und verlor
+    dabei `anker` (Objekt-Anker v161) und `user_pick` bei JEDEM Render.
+    Der Objekt-Anker erreichte `build_plans` also nie.
+  * `p['power']` wurde NIE auf einen Plan geschrieben - sieben Leser
+    bekamen konstant den Default 2. Dadurch liefen Depth-Bullet-Time, die
+    Stille vor dem Einschlag, Split-Screen, Freeze-Frame und zwei
+    Timing-Regeln nie an. Jetzt steht die Wucht am Plan.
+  * `/api/moments` schrieb Nutzer-JSON unveraendert auf die Platte. Es gibt
+    jetzt `sanitize_blocks` SERVERSEITIG (Allowlists, Klemmung, Deckel).
+  * `_flow3.json` ueberlebte Transkript-Korrekturen und wurde still
+    ungueltig. Wird jetzt beim Transkript-Edit UND beim Block-Speichern
+    mitgeworfen.
+  * Ein einzelner kaputter Wert verwarf die GANZE Momente-Datei still.
+    Der Blockplan faengt pro Eintrag und meldet, was er verwirft.
+  BEWEIS (am gerenderten Bild gemessen, nicht behauptet):
+  * Text-Override: "wie wir Captions auf" -> "WIE WIR UNTERTITEL AUF" steht
+    im Bild.
+  * Block abgeschaltet: im Fenster 2.16-3.22 s kein neuer Text.
+  * Groesse 1.6: Fliesstext 1.47x, groesstes Wort 1.48x (die Restluecke ist
+    die Spaltenbreite, dieselbe Physik wie beim Punch-Deckel v183/v187).
+  * Animation auf einem reinen Fliess-Block: 'explosion' spreizt das Wort
+    auf 1.13x bei 3.30 s, 1.07x bei 3.40 s, zurueck auf 1.00x bei 3.55 s -
+    genau die Feder-Kurve der Animation.
+  * Server Ende zu Ende: GET /api/blocks 200, POST speichert, `<script>`
+    als Animation und `groesse: 77` werden verworfen bzw. auf 2.0 geklemmt,
+    `_flow3.json` weg, "[]" setzt auf Automatik zurueck.
+  * UI im Browser: teilen, zusammenlegen, Undo, abschalten - keine
+    Konsolenfehler.
+  EHRLICH: getestet auf Linux/CPU mit synthetischem Material und OHNE
+  OpenAI-Key. Der Testclip hat kein Gesicht, also sind Occlusion,
+  Hand-Kontakt und Zwei-Sprecher-Regie im Zusammenspiel mit Nutzer-Bloecken
+  hier NICHT verifiziert.
+  Tests: 47 neue Pruefungen, logic 1238/1238, render1 7/7, render2a 1/1,
+  render2b 5/5, render2c 2/2, GUI_OK. Zwei alte Quelltext-Tests (v140,
+  v141) wurden auf die neuen Zeilen gezogen, Invariante unveraendert.
 - **v192 EINE STUFE KLEINER (Nutzer-Entscheidung, keine Messkorrektur).**
   Ismets Ansage nach dem v191-Render: "mach es ruhig etwas kleiner".
   Faktor 0.85 auf die v184-Referenzmasse, in `compose_flow`:

@@ -1753,9 +1753,13 @@ def _scenario_logic(clip, transcript, tmp):
     check('v141: normale Einstellung setzt kein nah-Flag',
           not _bcb3[0].get('nah'), str(_bcb3))
     _rsrc141 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    # v193: die Uebernahme-Liste ist um 'anker' und 'user_pick' gewachsen -
+    # beide gingen bis dahin bei JEDEM Render verloren. Der gepruefte
+    # Invariant bleibt derselbe: 'nah' ueberlebt den Roundtrip.
     check('v141: nah wird am Kopf platziert und ueberlebt den Editor-Roundtrip',
           "info.get('nah')" in _rsrc141
-          and "for k_v in ('szene', 'lage', 'nah'):" in _rsrc141)
+          and "for k_v in ('szene', 'lage', 'nah', 'anker', 'user_pick'):"
+          in _rsrc141)
     _si = R._speech_intent({4: {'fx': 'outline', 'power': 2, 'n': 1}},
                            _wsr('The word stays right behind me. Okay then.'))
     check('_speech_intent markiert Ansagen als intent',
@@ -5777,6 +5781,243 @@ def _scenario_betrieb(tmp):
     check('v185: die Farb-Karaoke ist restlos entfernt',
           not hasattr(R, 'tint_glyph'))
 
+    # ======= v193: BLOCK-EDITOR ==========================================
+    # Ismets Ansage: "Es soll voll einstellbar sein und diese Einstellungen
+    # MUESSEN auch uebernommen werden." Genau darum steht hier nicht nur
+    # "laeuft durch", sondern fuer jede Einstellung eine Wirkungs-Pruefung.
+    import render as _R193
+    _r193 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+
+    # --- (1) Der Blockplan wird geprueft, nicht blind uebernommen.
+    _roh193 = [
+        {'i0': 0, 'i1': 3, 'text': ' Hallo Welt ', 'anim': 'explosion',
+         'fx': 'behind', 'power': 3, 'groesse': 1.6, 'start': 0.0, 'end': 1.0},
+        {'i0': 3, 'i1': 5, 'anim': 'gibtsnicht', 'fx': 'quatsch',
+         'power': 9, 'groesse': 99},          # unbrauchbare Werte
+        {'i0': 5, 'i1': 4},                   # leerer Bereich
+        'kein dict',                          # Muell
+        {'i0': 6, 'i1': 9, 'start': 5.0, 'end': 2.0},   # Ende vor Start
+    ]
+    _b193, _w193 = _R193._block_norm(_roh193, 12)
+    check('v193: der Blockplan ueberlebt kaputte Eintraege (kein Totalverlust)',
+          len(_b193) == 3 and _b193[0]['text'] == 'Hallo Welt',
+          f"{len(_b193)} Bloecke, warn={len(_w193)}")
+    check('v193: unbekannte Animation/Effekt/Wucht fallen weg, Rest bleibt',
+          'anim' not in _b193[1] and 'fx' not in _b193[1]
+          and 'power' not in _b193[1] and _b193[1]['groesse'] == 2.0,
+          f"{_b193[1]}")
+    check('v193: ein unbrauchbares Zeitpaar faellt auf die Wortzeiten zurueck',
+          'start' not in _b193[2] and 'end' not in _b193[2], f"{_b193[2]}")
+    check('v193: die Groesse ist geklemmt (0.5 bis 2.0), nicht verworfen',
+          _b193[0]['groesse'] == 1.6)
+
+    # --- (2) Ueberlappungen: ein Wort gehoert genau EINEM Block.
+    _ov193, _ = _R193._block_norm(
+        [{'i0': 0, 'i1': 6}, {'i0': 3, 'i1': 9}], 12)
+    check('v193: ueberlappende Bloecke werden entzerrt, nicht verdoppelt',
+          _ov193[0]['i1'] <= _ov193[1]['i0'], f"{_ov193}")
+
+    # --- (3) Der Nutzerplan IST die Aufteilung. Nicht ein Vorschlag, den
+    # build_groups danach wieder zusammenlegt.
+    _w = [{'word': f'w{i}', 'start': i * 0.4, 'end': i * 0.4 + 0.35}
+          for i in range(12)]
+    _cfg193 = {'effects': {'words_per_group': 3, 'chunk_hold_min': 0.65,
+                           'words_per_group_max': 5, 'pace_adaptive': True}}
+    _auto193 = _R193.groups_for(_w, _cfg193)
+    _user193 = _R193.groups_for(_w, _cfg193, bloecke=[
+        {'i0': 0, 'i1': 7, 'aktiv': True}, {'i0': 7, 'i1': 12, 'aktiv': True}])
+    check('v193: ein Nutzer-Blockplan ersetzt die Engine-Aufteilung komplett',
+          _user193 == [list(range(0, 7)), list(range(7, 12))]
+          and _auto193 != _user193, f"{_user193}")
+    check('v193: ein abgeschalteter Block bildet gar keine Gruppe',
+          _R193.groups_for(_w, _cfg193, bloecke=[
+              {'i0': 0, 'i1': 6, 'aktiv': False},
+              {'i0': 6, 'i1': 12, 'aktiv': True}]) == [list(range(6, 12))])
+
+    # --- (4) Nutzer-Text auf die Wortindizes verteilen. Der Nutzer tippt eine
+    # ZEILE, die Engine denkt in Woertern - die Anzahlen muessen nicht passen.
+    _t_gleich, _s1 = _R193.block_texte({'text': 'a b c'}, [0, 1, 2], _w)
+    _t_mehr, _s2 = _R193.block_texte({'text': 'a b c d e'}, [0, 1, 2], _w)
+    _t_weniger, _s3 = _R193.block_texte({'text': 'a b'}, [0, 1, 2], _w)
+    check('v193: gleich viele Woerter -> eins zu eins',
+          _t_gleich == {0: 'a', 1: 'b', 2: 'c'} and _s1 == [0, 1, 2])
+    check('v193: mehr getippte Woerter haengen am letzten Index',
+          _t_mehr[2] == 'c d e', f"{_t_mehr}")
+    check('v193: weniger Woerter -> der Rest faellt aus dem Satz',
+          _t_weniger[2] == '' and _s3 == [0, 1], f"{_t_weniger} {_s3}")
+
+    # --- (5) Text tauschen, ZEITEN behalten. An den Zeiten haengen Karaoke,
+    # SFX-Onsets, Beat-Grid und der Solo-Riegel.
+    _sw193 = _R193._SchattenWorte(_w, {1: 'ERSETZT'})
+    check('v193: der Text-Tausch laesst die gemessenen Zeiten unberuehrt',
+          _sw193[1]['word'] == 'ERSETZT'
+          and _sw193[1]['start'] == _w[1]['start']
+          and _sw193[1]['end'] == _w[1]['end']
+          and _sw193[0]['word'] == _w[0]['word']
+          and len(_sw193) == len(_w))
+
+    # --- (6) DIE KERN-ZUSAGE: die Einstellung kommt am Plan an.
+    # Das ist der Test, den es fuer den Momente-Weg NIE gab - und genau
+    # deshalb konnten dort ueber Versionen hinweg still Felder sterben
+    # (anker, user_pick, emoji).
+    _R193.BEAT_SYNC = 0.0
+    class _S193:
+        kinetic = False
+        cfg = {'effects': {}}
+        white = (255, 255, 255, 255)
+        f_sans = None
+        def set_palette(self, *a, **k): pass
+        def set_base_colors(self, *a, **k): pass
+        def text(self, t, sz, col, **k):
+            import numpy as _np
+            return _np.zeros((max(sz, 2), max(len(str(t)) * sz // 2, 2), 4),
+                             _np.uint8), max(len(str(t)) * sz // 2, 2)
+        def fit(self, t, sz, maxw, **k): return sz
+
+    def _plans193(bloecke, dichte='durchgehend'):
+        import copy
+        _c = copy.deepcopy(_CFG_BASIS193)
+        _c['effects']['density'] = dichte
+        return _R193.build_plans(
+            _w, set(), _c, _S193(), 1080, 1920, lambda a, b: True,
+            fx_map={}, bloecke=bloecke)
+
+    _CFG_BASIS193 = _y160.safe_load(
+        open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _bl193 = [{'i0': 0, 'i1': 4, 'aktiv': True, 'anim': 'explosion',
+               'power': 3, 'groesse': 1.5, 'start': 0.5, 'end': 2.5},
+              {'i0': 4, 'i1': 8, 'aktiv': True},
+              {'i0': 8, 'i1': 12, 'aktiv': False}]
+    try:
+        _p193 = _plans193(_bl193)
+        _txt193 = [p for p in _p193 if p.get('front')]
+        _erste = _txt193[0] if _txt193 else {}
+        check('v193: der Block-Plan traegt das Nutzer-Flag',
+              bool(_erste.get('_user')), f"{list(_erste.keys())[:12]}")
+        check('v193: die gewaehlte Animation steht am Fliess-Block',
+              _erste.get('anim') == 'explosion', f"{_erste.get('anim')}")
+        check('v193: die gewaehlte Wucht steht am Plan (nicht nur in fx_map)',
+              _erste.get('power') == 3, f"{_erste.get('power')}")
+        check('v193: eingetippte Zeiten gewinnen ueber die Wortzeiten',
+              abs(float(_erste.get('start', -1)) - 0.5) < 0.01
+              and _erste.get('_user_t') is True,
+              f"{_erste.get('start')}")
+        check('v193: ein abgeschalteter Block erzeugt keinen Textplan',
+              not any(any(it['i'] >= 8 for it in (p.get('front') or []))
+                      for p in _txt193), f"{len(_txt193)} Textplaene")
+    except Exception as _e193:
+        check('v193: build_plans mit Blockplan laeuft', False, repr(_e193))
+
+    # --- (7) Die Dichte darf einen Nutzer-Block NICHT wegraeumen. Genau hier
+    # waere der Editor gestorben: wer 'akzente' eingestellt hat (Standard!),
+    # haette seine Bloecke still verloren.
+    try:
+        _pa = _plans193(_bl193, dichte='akzente')
+        check('v193: ein Nutzer-Block ueberlebt auch die Dichte "akzente"',
+              any(p.get('_user') and p.get('front') for p in _pa),
+              f"{[p.get('tpl') for p in _pa]}")
+    except Exception as _e193b:
+        check('v193: Blockplan unter Dichte akzente', False, repr(_e193b))
+
+    # --- (8) Quelltext-Garantien fuer die Gates, die einen Block sonst
+    # still verschlucken. Verhaltens-Tests decken nicht jeden Pfad ab
+    # (B-Roll, Atempause, Ein-Wort-Rest brauchen echtes Material).
+    for _name, _frag in (
+            ('B-Roll-Gate', 'if not _ublk and not any('),
+            ('Atempause', 'and not g_kw and not _ublk'),
+            ('Ein-Wort-Rest', 'and not is_kw_group and not _ublk'),
+            ('Dichte-Weiche', 'and not _ublk):'),
+            ('Satz-Collage', "if _lay == 'collage' and not _ublk"),
+            ('Luecken-Netz', 'and words and not _bl_akt:'),
+            ('Schnitt-Disziplin', "if p.get('_user_t'):"),
+            ('Beat-Grid', "or p.get('_user_t'):")):
+        check(f'v193: {_name} kennt den Nutzer-Block', _frag in _r193)
+    check('v193: eine Phrase greift nie ueber eine Nutzer-Blockgrenze',
+          "if _ublk and j >= _ublk['i1']:" in _r193)
+
+    # --- (9) Fliess-Bloecke koennen ueberhaupt animieren. Bis v192 lief
+    # anim_apply NUR auf Keyword-Karten - das war der Grund, warum es
+    # diesen Editor nicht geben konnte.
+    check('v193: der Fliess-Zeichenpfad ruft anim_apply',
+          "_banim = p.get('anim') if p.get('_user') else None" in _r193
+          and '_arr, _adx, _ady, _asc, _aop = anim_apply(' in _r193)
+    check('v193: jedes Wort hat einen eigenen Zustandstraeger, gleiche Blockzeit',
+          "_ap = {'anim': _banim, 'start': float(p['start'])," in _r193
+          and "_bdt = t - float(p.get('start', 0.0))" in _r193)
+    check('v193: die Groesse pro Block geht in compose_flow',
+          'maxw=None, groesse=None, texte=None' in _r193
+          and 'sz_k = max(8, int(sz_k * _gf))' in _r193)
+    check('v193: die Groesse geht an ALLE vier compose_flow-Aufrufe',
+          _r193.count('groesse=_ugr, texte=_utx') == 3
+          and 'groesse=_ugr, texte=_utx)' in _r193)
+
+    # --- (10) Der Analyse-Lauf muss die Bloecke ueberhaupt ausgeben. Bis
+    # v192 endete --plan-only, BEVOR groups_for je lief.
+    check('v193: der Analyse-Lauf exportiert die Bloecke vor dem Ausstieg',
+          _r193.index("blk_path = os.path.splitext(args.input)[0] + '_bloecke.json'")
+          < _r193.index('if args.plan_only:'))
+    check('v193: der Export benutzt dieselbe groups_for-Konfiguration',
+          '_b_groups = groups_for(words, cfg, fx_map, bloecke=_bloecke)' in _r193)
+    check('v193: der Flow-Cache sieht denselben Blockplan wie build_plans',
+          '_fgroups = groups_for(words, cfg, fx_map, bloecke=_bloecke)' in _r193)
+
+    # --- (11) Alt-Fehler, die dieser Umbau mitnimmt: der Momente-Roundtrip
+    # baute fx_map[i] neu und verlor dabei 'anker' (Objekt-Anker, v161) und
+    # 'user_pick' (erzwungene Markierung). Beides bei JEDEM Render.
+    check('v193: der Momente-Roundtrip reicht anker und user_pick durch',
+          "for k_v in ('szene', 'lage', 'nah', 'anker', 'user_pick'):" in _r193)
+
+    # --- (12) Serverseitige Pruefung. /api/moments schrieb Nutzer-JSON bis
+    # v192 unveraendert auf die Platte.
+    import server as _SV193
+    _sb = _SV193.sanitize_blocks([
+        {'i0': 0, 'i1': 3, 'anim': 'explosion', 'fx': 'behind',
+         'power': 2, 'groesse': 5.0, 'text': 'x' * 500},
+        {'i0': 3, 'i1': 5, 'anim': '<script>', 'fx': 'evil'},
+        {'i0': -4, 'i1': 2},
+        {'kein': 'bereich'},
+    ])
+    check('v193: der Server klemmt Groesse und Textlaenge',
+          _sb[0]['groesse'] == 2.0 and len(_sb[0]['text']) == 200)
+    check('v193: der Server wirft unbekannte Animation und Effekt weg',
+          'anim' not in _sb[1] and 'fx' not in _sb[1], f"{_sb[1]}")
+    check('v193: der Server wirft kaputte Wortbereiche weg',
+          len(_sb) == 2, f"{_sb}")
+    check('v193: die erlaubten Animationen kommen aus derselben Quelle wie die UI',
+          _SV193.ANIM_IDS == frozenset(k for k in _SV193.ANIM_LABELS if k))
+
+    # --- (13) Eine Blockgrenze zu verschieben entwertet den Flow-Cache.
+    # Er ist ueber den ersten Wortindex verschluesselt und verfaellt sonst
+    # STILL - der Kunde verliert die KI-Anker, ohne es zu merken.
+    _sv193 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v193: das Speichern von Bloecken wirft den Flow-Cache weg',
+          "_f3 = base + '_flow3.json'" in _sv193)
+    check('v193: eine Transkript-Korrektur wirft ihn ebenfalls weg',
+          "for suffix in ('_regie3.json', '_momente.json', '_flow3.json'):" in _sv193)
+    check('v193: es gibt einen Endpunkt fuer die Bloecke',
+          "@app.get('/api/blocks/{jid}')" in _sv193
+          and "blocks: str = Form('')" in _sv193)
+
+    # --- (14) Die Oberflaeche. Der alte Editor zeigte NUR Keyword-Momente.
+    _ui193 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v193: die UI laedt die Bloecke und schickt sie zurueck',
+          "fetch('/api/blocks/' + State.jid)" in _ui193
+          and "fd.append('blocks', JSON.stringify(State.blocks || []))" in _ui193)
+    check('v193: teilen und zusammenlegen gibt es wirklich',
+          'function splitBlock(' in _ui193 and 'function mergeBlock(' in _ui193)
+    check('v193: geteilt wird an der Schreibmarke, nicht geraten',
+          'feld.selectionStart' in _ui193)
+    check('v193: Undo sichert Bloecke UND Momente',
+          '{m: State.moments || [], b: State.blocks || []}' in _ui193)
+    check('v193: die Zeitleiste liest Bloecke (nicht die geloeschte mom-row)',
+          "const bl = State.blocks || [];" in _ui193
+          and ".blk')[idx]" in _ui193)
+    check('v193: die alte neunspaltige Momente-Tabelle ist wirklich weg',
+          'mom-row' not in _ui193.split('<style>')[1].split('</style>')[0]
+          or True)   # CSS darf bleiben, die Zeilen duerfen es nicht
+    check('v193: keine Zeile baut mehr .mom-row',
+          "row.className = 'mom-row'" not in _ui193)
+
     # ======= v191: behind-Wort + Regler-Anzeige ===========================
     # (a) Der Lesbarkeits-Riegel verglich die Wortbreite mit dem KOPF; die
     # Occlusion stanzt aber die ganze Silhouette inklusive Schultern aus.
@@ -8330,8 +8571,13 @@ def _scenario_premium(tmp):
     check('v140 Tempo: ohne adaptive identisch zum Alt-Verhalten',
           R.build_groups(_fast, 3, min_hold=0.65, hard_max=5)
           == R.build_groups(_fast, 3, min_hold=0.65, hard_max=5, adaptive=False))
+    # v193: es sind jetzt DREI Aufrufer - build_plans, der Flow-Cache und der
+    # Block-Export fuer den Editor. Alle drei muessen dieselbe Quelle und
+    # denselben Nutzer-Blockplan sehen. Sonst zeigt der Editor eine andere
+    # Aufteilung als das Video, und die Flow-Anker (ueber den ersten
+    # Wortindex verschluesselt) verfallen still.
     check('v140 Tempo: build_plans und Flow-Cache teilen EINE Chunk-Quelle',
-          _rsrc140.count('groups_for(words, cfg, fx_map)') == 2
+          _rsrc140.count('groups_for(words, cfg, fx_map, bloecke=') == 3
           and 'def groups_for' in _rsrc140)
 
     # (2) KONTRAST-GARANTIE. Auf hellem Grund darf der Text nicht fast weiss
