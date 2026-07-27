@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v194b MAIL-FLUT GESTOPPT (Ismets Screenshot: 3 Mails, 2 in derselben
+  Minute fuer dieselbe Datei).**
+  URSACHE: Der Deckel gegen Doppel-Mails sass am JOB (`expiry_mail` im
+  Job-State). Er verhinderte nur die zweite Mail zum SELBEN Job. Wer
+  dasselbe Video dreimal gerendert hat, hatte drei Jobs - und bekam drei
+  identische Mails. Der Cleanup laeuft stuendlich ueber ALLE Jobs, also war
+  das kein Randfall, sondern der Normalfall fuer jeden aktiven Nutzer.
+  NEU: `_expiry_sammeln` sammelt je Durchlauf ein, `_expiry_mails` schickt
+  danach EINE Mail je Nutzer mit allen ablaufenden Videos darin. Zusaetzlich
+  ein Riegel ueber `mail_log`: hoechstens eine Ablauf-Mail pro Nutzer und
+  TAG. Mehrere Renders derselben Datei werden in der Liste zu einer Zeile
+  mit Anzahl zusammengefasst ("Sequence.mp4 (3 versions)").
+  GEPRUEFT: alle anderen Kunden-Mails haben schon einen Deckel oder duerfen
+  keinen haben - Willkommen und Verfall-Warnung ueber `mail_log`, der
+  Kaufbeleg ist ein Rechnungsdokument und muss pro Kauf rausgehen.
+  Tests: 6 neue Pruefungen, darunter ein Verhaltens-Test (drei ablaufende
+  Videos -> genau eine Mail, zweiter Durchlauf am selben Tag -> keine).
+  logic 1270/1270, render1 7/7, render2a 1/1, render2b 5/5, render2c 2/2,
+  GUI_OK.
 - **v194a EDITOR-EFFEKTE KOMMEN JETZT WIRKLICH AN.**
   Ismets Befund nach v193: "Die Effekte beim Editor wurden nicht uebernommen,
   ist immer noch dasselbe."

@@ -2555,7 +2555,11 @@ def _scenario_logic(clip, transcript, tmp):
           'def _ensure_ref_code' in _srv_m and 'def _grant_referral' in _srv_m
           and "ref: str = Form('')" in _srv_m and '_grant_referral(uid)' in _srv_m
           and 'Reload bonus' in _srv_m and "balance_sec'] < 120" in _srv_m
-          and 'def _expiry_warn' in _srv_m and '_expiry_warn(jid, d, mtime, cutoff)' in _srv_m
+          # v194b: aus _expiry_warn (eine Mail JE JOB) wurde die Sammelstelle
+          # _expiry_sammeln + der gebuendelte Versand _expiry_mails. Geprueft
+          # wird unveraendert, dass die Ablauf-Erinnerung verdrahtet ist.
+          and 'def _expiry_sammeln' in _srv_m
+          and '_expiry_sammeln(jid, d, mtime, cutoff, _abl)' in _srv_m
           and 'def _hook_score' in _srv_m and "'hook_score':" in _srv_m
           and "'ref_code':" in _srv_m and "'style_prefs':" in _srv_m
           and 'uid=None' in _srv_m)                        # Korrekturen pro User markiert
@@ -6042,6 +6046,82 @@ def _scenario_betrieb(tmp):
             _tot194.append(_a194)
     check('v194: jede der 26 Animationen bewegt ueberhaupt etwas',
           not _tot194, f"regungslos: {_tot194}")
+
+    # ======= v194b: keine Mail-Flut mehr beim Ablauf ====================
+    # Ismets Screenshot: drei "Your video will be deleted soon"-Mails, zwei
+    # davon in derselben Minute fuer dieselbe Datei. Ursache: der Deckel sass
+    # am JOB (`expiry_mail` im Job-State) und verhinderte nur die zweite Mail
+    # zum selben Job. Wer dasselbe Video dreimal gerendert hat, hatte drei
+    # Jobs - und bekam drei Mails. Der Cleanup laeuft stuendlich ueber alle
+    # Jobs, also war das der Normalfall fuer jeden aktiven Nutzer.
+    import time as _tm194b
+    import server as _SV194b
+    _sv194b = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v194b: Ablauf-Mails werden gesammelt, nicht je Job verschickt',
+          'def _expiry_sammeln(' in _sv194b and 'def _expiry_mails(' in _sv194b
+          and 'def _expiry_warn(' not in _sv194b)
+    check('v194b: hoechstens EINE Ablauf-Mail pro Nutzer und Tag',
+          "_log_mail_once(uid, 'expiry-' + time.strftime('%Y-%m-%d'))" in _sv194b)
+    check('v194b: die Sammelstelle wird nach der Job-Schleife geleert',
+          '_expiry_mails(_abl)' in _sv194b and '_abl = {}' in _sv194b)
+
+    # Verhaltens-Test: drei Jobs eines Nutzers -> genau EINE Mail, und beim
+    # zweiten Durchlauf am selben Tag gar keine mehr.
+    _mails194b = []
+    _alt_send = _SV194b._send_mail
+    _alt_state = _SV194b.set_state
+    _SV194b._send_mail = lambda to, sub, body, **k: _mails194b.append((to, sub, body))
+    _SV194b.set_state = lambda jid, **k: _SV194b.JOBS.setdefault(jid, {}).update(k)
+    try:
+        # Eigenen Nutzer anlegen statt einen vorauszusetzen - sonst wird der
+        # ganze Block still uebersprungen und der Test meldet trotzdem
+        # "gruen", ohne je gelaufen zu sein.
+        _con194b = _SV194b._db()
+        _con194b.execute(
+            "INSERT INTO users (email, pw_hash, name, balance_sec, created_at, "
+            "verified) VALUES (?, ?, ?, ?, ?, 1)",
+            ('spam194b@test.local', 'x', 'Spamtest', 0, int(_tm194b.time())))
+        _con194b.commit()
+        _uid194b = _con194b.execute(
+            "SELECT id FROM users WHERE email='spam194b@test.local'").fetchone()[0]
+        _con194b.close()
+        if True:
+            _dir194b = tempfile.mkdtemp()
+            open(os.path.join(_dir194b, 'fertig.mp4'), 'w').write('x')
+            _cut194b = _tm194b.time() - 7 * 86400
+            _eim194b = {}
+            for _n194b in range(3):
+                _j194b = f'ST194B{_n194b}'
+                _SV194b.JOBS[_j194b] = {'status': 'fertig', 'user_id': _uid194b,
+                                        'name': 'Sequence.mp4'}
+                _SV194b._expiry_sammeln(_j194b, _dir194b, _cut194b + 10 * 3600,
+                                        _cut194b, _eim194b)
+            _SV194b._expiry_mails(_eim194b)
+            _erste = len(_mails194b)
+            _eim2 = {}
+            for _n194b in range(3):
+                _SV194b.JOBS[f'ST194B{_n194b}']['expiry_mail'] = False
+                _SV194b._expiry_sammeln(f'ST194B{_n194b}', _dir194b,
+                                        _cut194b + 10 * 3600, _cut194b, _eim2)
+            _SV194b._expiry_mails(_eim2)
+            check('v194b: drei ablaufende Videos ergeben genau EINE Mail',
+                  _erste == 1, f"{_erste} Mail(s)")
+            check('v194b: am selben Tag kommt keine zweite Mail',
+                  len(_mails194b) == _erste, f"{len(_mails194b)} gesamt")
+            if _mails194b:
+                check('v194b: die Mail nennt alle Videos und fasst Dubletten zusammen',
+                      '3 videos' in _mails194b[0][1]
+                      and '(3 versions)' in _mails194b[0][2],
+                      _mails194b[0][2][:200])
+            for _n194b in range(3):
+                _SV194b.JOBS.pop(f'ST194B{_n194b}', None)
+        _c2194b = _SV194b._db()
+        _c2194b.execute("DELETE FROM mail_log WHERE user_id = ?", (_uid194b,))
+        _c2194b.execute("DELETE FROM users WHERE id = ?", (_uid194b,))
+        _c2194b.commit(); _c2194b.close()
+    finally:
+        _SV194b._send_mail = _alt_send
+        _SV194b.set_state = _alt_state
 
     # ======= v194a: die Editor-Effekte kommen wirklich im Bild an ========
     # Ismets Befund nach v193: "Die Effekte beim Editor wurden nicht

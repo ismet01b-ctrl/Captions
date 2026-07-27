@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v194a-editor-effekte'
+DVE_BUILD = 'v194b-mails'
 
 
 @app.middleware('http')
@@ -3562,10 +3562,17 @@ def _mail_backup_offsite(dest):
         print(f'Backup-Mail fehlgeschlagen: {type(e).__name__}: {e}')
 
 
-def _expiry_warn(jid, d, mtime, cutoff):
-    """v124: Einmalige Erinnerung, bevor ein fertiges Library-Video geloescht
-    wird (< 48h Restzeit). Nur an verifizierte Konten, Flag im Job-State
-    verhindert Doppel-Mails. Mail-Fehler bleiben leise (Cleanup laeuft weiter)."""
+def _expiry_sammeln(jid, d, mtime, cutoff, eimer):
+    """v194b: Ablaufende Videos EINSAMMELN statt sofort mailen.
+
+    Bis v194a ging pro JOB eine Mail raus. Der Deckel (`expiry_mail` im
+    Job-State) verhinderte nur die zweite Mail zum SELBEN Job - wer dasselbe
+    Video dreimal gerendert hat, bekam drei Jobs und damit drei identische
+    Mails, alle in derselben Minute (Ismets Screenshot: 2x "Sequence.mp4"
+    um 18:35). Der Cleanup laeuft stuendlich ueber ALLE Jobs, also war das
+    kein Randfall, sondern der Normalfall fuer jeden aktiven Nutzer.
+    Jetzt wird je Durchlauf gesammelt und danach EINE Mail je Nutzer
+    geschickt."""
     if mtime >= cutoff + 48 * 3600:                    # noch > 48h Restzeit
         return
     j = JOBS.get(jid)
@@ -3574,25 +3581,63 @@ def _expiry_warn(jid, d, mtime, cutoff):
     uid = j.get('user_id')
     if not uid or not os.path.exists(os.path.join(d, 'fertig.mp4')):
         return
-    u = _find_user_by_id(uid)
-    if not u or not u['verified']:
-        return
-    set_state(jid, expiry_mail=True)                   # vor dem Senden: nie doppelt
     hours = max(1, int((mtime + RETENTION_DAYS * 86400 - time.time()) / 3600))
-    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
-    name = j.get('name') or 'your video'
-    try:
-        _send_mail(u['email'], 'Your video will be deleted soon',
-                   f'Hi{" " + u["name"] if u["name"] else ""},\n\n'
-                   f'"{name}" in your DouchkoVE library will be deleted in about '
-                   f'{hours} hours. Files are removed automatically after '
-                   f'{RETENTION_DAYS:.0f} days.\n\n'
-                   f'Download it here while it lasts:\n{base}/app#library\n\n'
-                   f'DouchkoVE')
-        print(f'Ablauf-Mail: {jid} an User {uid} ({hours}h Rest)')
-    except Exception as e:
-        print(f'Ablauf-Mail fehlgeschlagen ({jid}): {type(e).__name__}: {e}')
+    eimer.setdefault(uid, []).append((jid, j.get('name') or 'your video', hours))
 
+
+def _expiry_mails(eimer):
+    """Eine Mail je Nutzer, mit ALLEN ablaufenden Videos darin.
+
+    Zusaetzlicher Riegel ueber `mail_log`: hoechstens eine Ablauf-Mail pro
+    Nutzer und Tag. Der Job-Flag allein reicht nicht - er zaehlt Jobs, und
+    genau das war das Problem."""
+    base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    for uid, posten in eimer.items():
+        u = _find_user_by_id(uid)
+        if not u or not u['verified']:
+            continue
+        # Tages-Schluessel: ein Kunde bekommt hoechstens eine Erinnerung am
+        # Tag, egal wie viele Videos gleichzeitig ablaufen.
+        if not _log_mail_once(uid, 'expiry-' + time.strftime('%Y-%m-%d')):
+            for jid, _n, _h in posten:
+                set_state(jid, expiry_mail=True)       # trotzdem abhaken
+            continue
+        for jid, _n, _h in posten:
+            set_state(jid, expiry_mail=True)           # vor dem Senden
+        posten.sort(key=lambda x: x[2])
+        knapp = posten[0][2]
+        # Gleicher Dateiname mehrfach = mehrere Renders derselben Quelle.
+        # Das sind echte, getrennte Eintraege in der Library, aber als Liste
+        # gelesen wirkt es wie ein Fehler. Also zusammenfassen mit Anzahl.
+        namen = []
+        for _j, n, h in posten:
+            if namen and namen[-1][0] == n:
+                namen[-1][1] += 1
+            else:
+                namen.append([n, 1, h])
+        liste = '\n'.join(
+            f'  - {n}' + (f' ({c} versions)' if c > 1 else '') + f' - {h}h left'
+            for n, c, h in namen)
+        if len(posten) == 1:
+            zeile = f'"{posten[0][1]}" in your DouchkoVE library will be'
+            rest = f' deleted in about {knapp} hours.'
+        else:
+            zeile = f'{len(posten)} videos in your DouchkoVE library will be'
+            rest = (f' deleted soon, the first one in about {knapp} hours:\n\n'
+                    f'{liste}')
+        betreff = ('Your video will be deleted soon' if len(posten) == 1
+                   else f'{len(posten)} videos will be deleted soon')
+        try:
+            _send_mail(u['email'], betreff,
+                       f'Hi{" " + u["name"] if u["name"] else ""},\n\n'
+                       f'{zeile}{rest}\n\n'
+                       f'Files are removed automatically after '
+                       f'{RETENTION_DAYS:.0f} days.\n\n'
+                       f'Download them here while they last:\n{base}/app#library\n\n'
+                       f'DouchkoVE')
+            print(f'Ablauf-Mail: {len(posten)} Video(s) an User {uid}')
+        except Exception as e:
+            print(f'Ablauf-Mail fehlgeschlagen (User {uid}): {type(e).__name__}: {e}')
 
 def _cleanup_worker():
     """v80g: Alte Job-Verzeichnisse loeschen. Standard 7 Tage, ueber
@@ -3609,6 +3654,7 @@ def _cleanup_worker():
             print(f'Verfall-Sweep uebersprungen: {type(e).__name__}: {e}')
         try:
             cutoff = _t.time() - retention * 86400
+            _abl = {}                        # v194b: uid -> ablaufende Videos
             if os.path.isdir(JOBS_DIR):
                 for jid in os.listdir(JOBS_DIR):
                     d = os.path.join(JOBS_DIR, jid)
@@ -3626,8 +3672,10 @@ def _cleanup_worker():
                     # v124 Ablauf-Mail: laeuft ein fertiges Video in < 48h ab,
                     # einmalig erinnern (Service-Mail: die Datei wird real
                     # geloescht). Rueckkehr-Trigger, nichts erfunden.
+                    # v194b: nur SAMMELN - verschickt wird gebuendelt, nachdem
+                    # alle Jobs durchgesehen sind.
                     try:
-                        _expiry_warn(jid, d, mtime, cutoff)
+                        _expiry_sammeln(jid, d, mtime, cutoff, _abl)
                     except Exception:
                         pass
                     # ProRes-MOVs sind ~90MB - frueher raus als die MP4s
@@ -3641,6 +3689,11 @@ def _cleanup_worker():
                             print(f"Cleanup: MOV {jid} nach {mov_h:.0f}h entfernt")
                         except OSError:
                             pass
+            if _abl:
+                try:
+                    _expiry_mails(_abl)
+                except Exception as e:
+                    print(f'Ablauf-Mails uebersprungen: {type(e).__name__}: {e}')
             # v88b: Transkript-Cache aufraeumen (Dateien > 30 Tage). Winzig,
             # aber soll nicht ewig wachsen.
             tcut = _t.time() - 30 * 86400

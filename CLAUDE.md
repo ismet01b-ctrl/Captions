@@ -647,6 +647,18 @@ deutsch. Wer eine Log-Zeile aendert, muss BEIDE Leser mitziehen:
 und `gui.py` (Desktop-Statuszeile). Die alten deutschen Marker stehen als
 Fallback daneben — gecachte Logs von vor v148 sollen weiter lesbar bleiben.
 
+## Kunden-Mails (v194b) — ein Deckel je NUTZER, nicht je Job
+Die Ablauf-Erinnerung ging bis v194a pro JOB raus. Der Deckel (`expiry_mail`
+im Job-State) verhinderte nur die zweite Mail zum selben Job — wer dasselbe
+Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
+(Ismets Screenshot). **Ein Deckel, der Jobs zaehlt, deckelt nichts.**
+- `_expiry_sammeln` sammelt, `_expiry_mails` verschickt gebuendelt: EINE
+  Mail je Nutzer mit allen ablaufenden Videos.
+- Zusaetzlich `mail_log`-Schluessel `expiry-YYYY-MM-DD`: hoechstens eine
+  Ablauf-Mail pro Nutzer und Tag.
+- Wer eine neue Kunden-Mail baut, deckelt sie ueber `_log_mail_once(uid, …)`.
+  Ausnahme: der Kaufbeleg ist ein Rechnungsdokument und geht pro Kauf raus.
+
 ## Betriebs-Meldungen (v147)
 Render-Fehler und Job-Timeouts gehen **nicht** mehr per Mail raus, sondern nur
 in die Tabelle `alerts` und den Admin-Tab **Alerts**. `_notify_admin(...,
@@ -694,7 +706,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1264/1264 grün (Stand v194a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1270/1270 grün (Stand v194b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
