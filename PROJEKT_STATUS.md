@@ -3,6 +3,69 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v197 BETRIEB: vier Luecken, alle mit demselben Muster.** Es gab jeweils
+  einen Mechanismus, aber niemand hatte je geprueft, ob er das tut, was auf
+  dem Schild steht.
+  (1) **Test-Gate vor dem Deploy.** `autodeploy.sh` zog bis v196 JEDEN
+      Commit und startete neu; geprueft wurde danach nur, ob `/api/pricing`
+      antwortet - also ob der Server ueberhaupt laeuft. Ein kaputter
+      Renderer ging damit live und der Kunde zahlte einen Credit fuer ein
+      kaputtes Video. Neu: `deploy_gate.sh` laesst den logic-Selftest im
+      NEU GEBAUTEN Image laufen, bevor der laufende Container angefasst
+      wird (`--rm --no-deps`, `DVE_DATA=/tmp/gate_data`, kein OpenAI-Key -
+      die echte users.db sieht der Test nie). Rot = Abbruch, die alte
+      Version laeuft unveraendert weiter. Und ein gescheiterter Deploy
+      meldet sich: `git` steht danach schon auf dem neuen Commit, der
+      naechste Timer-Lauf saehe "nichts Neues" und schwiege - deshalb
+      schreibt `autodeploy.sh` eine Zeile in die alerts-Tabelle des
+      laufenden Containers.
+  (2) **Restore geprobt - und dabei einen echten Backup-Bug gefunden.**
+      `restore.sh` spielt eine Sicherung zurueck: Kandidat PRUEFEN
+      (`integrity_check` + Pflichttabellen users/sessions/ledger/purchases)
+      BEVOR irgendetwas angefasst wird, App stoppen, jetzigen Stand als
+      `vor_restore_<zeit>.db` zur Seite legen (WAL/SHM mit weg), einspielen,
+      starten, Health pruefen. **Die Probe deckte auf, dass die Sicherung
+      selbst kaputt war:** `_backup_users_db` hatte `if os.path.exists(dest):
+      return` ("heute schon gesichert"). Der erste Lauf ist der Start des
+      Cleanup-Workers - alles, was danach am selben Tag passierte, stand in
+      KEINER Sicherung, und nach einem Neustart um 23:50 enthielt "das
+      Backup von heute" praktisch nichts. Beweis aus der Probe: 7 Konten in
+      der DB, 0 im Snapshot. Jetzt wird der Tages-Snapshot aufgefrischt,
+      solange die DB neuer ist (ueber .tmp + `os.replace`, ein Abbruch darf
+      den vorhandenen Snapshot nicht zerstoeren); die Offsite-Mail geht
+      weiter nur einmal je Tag raus, der Admin-Knopf sichert mit `force`
+      IMMER. Probe danach: 7 -> 3 (simulierter Verlust) -> 7 zurueck.
+  (3) **Logs ueberleben den Neustart, Fehler landen im Panel.** Der
+      Betriebs-Log lag nur in `docker logs`, und `update.sh` baut das Image
+      neu - genau dann will man nachsehen, warum etwas kaputtging. Ein
+      `_LogTee` schreibt stdout/stderr zusaetzlich zeilenweise mit
+      Zeitstempel nach `DATA/logs/server.log` (5 MB, 5 Generationen,
+      `DVE_LOGFILE=0` schaltet ab). Zeilenpuffer noetig, weil `print()`
+      je Argument EINZELN `write()` ruft - ohne ihn stuende jedes Argument
+      in einer eigenen Zeile. Dazu ein globaler `@app.exception_handler`:
+      bis v196 stand in der alerts-Tabelle NUR ein fehlgeschlagener Render;
+      ein Absturz in einem Endpunkt ging als Traceback nach stdout und war
+      nach dem naechsten Deploy weg - niemand erfuhr je, dass ein Kunde
+      einen 500er gesehen hat. Der Kunde bekommt weiterhin keinen
+      Traceback. Neue Admin-Ansicht **Logs** (liest nur das Ende, 256 KB).
+  (4) **Warteschlange sagt die Wahrheit.** Der Kunde sah `Queued
+      (position N)` mit N = qsize, also der GESAMTLAENGE - nicht seinem
+      Platz. Bei einer PriorityQueue ist das doppelt falsch: ein zahlendes
+      Konto zieht vorbei (Prio 0). `_queue_platz` zaehlt jetzt, wie viele
+      Eintraege VOR diesem liegen (1 = als naechstes dran); bei der
+      Motion-FIFO die Einfuegereihenfolge, nicht ein Stringvergleich.
+      Skalierung bleibt bewusst bei EINEM Worker auf EINER Maschine (ein
+      Render zieht CPU und RAM; zwei parallele Jobs machen beide langsamer,
+      nicht die Summe schneller) - nur meldet der Watchdog jetzt, WANN es
+      eng wird (`DVE_QUEUE_WARN`, Standard 5). Die Worker-Zahl steht als
+      `WORKERS` an einer Stelle statt zweimal als os.environ-Ausdruck.
+  Tests: 1335/1335 logic (32 neu) + Renders 7/1/5/2 + GUI.
+  EHRLICH: der Test lief hier auf Linux/CPU ohne OpenAI-Key. Die
+  Restore-Probe lief echt durch (Verifizieren, Sicherheitskopie,
+  Einspielen), Schritt 5 (`docker compose up`) konnte in der Sandbox
+  mangels `.env` nicht laufen - den letzten Schritt sieht Ismet erst auf
+  dem Server. Das Test-Gate selbst ist auf dem Server ebenfalls noch
+  ungelaufen.
 - **v196 ANKUENDIGUNGEN + FEEDBACK: zwei echte Luecken geschlossen.**
   (1) **Ankuendigungen.** Bis v195 gab es genau EINEN Weg, Kunden etwas zu
       sagen: eine Mail an alle. Fuer "Wartung heute 20 Uhr" oder "neuer Look

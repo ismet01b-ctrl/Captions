@@ -75,6 +75,101 @@ GOOGLE_OK = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 # DVE_TAX_ID in v135a - live stand 'email .' in der Kauf-Mail).
 SUPPORT_EMAIL = (os.environ.get('DVE_SUPPORT_MAIL') or 'Ismet@douchkove.com').strip()
 
+# ================= v197: Logs, die einen Neustart ueberleben =================
+# Bis v196 lag der gesamte Betriebs-Log NUR in `docker logs`. `update.sh` baut
+# das Image neu und startet den Container neu - damit war der Log weg, und
+# genau dann will man nachsehen, warum etwas kaputtgegangen ist. Alles, was
+# auf stdout/stderr geht (die 43 print-Stellen, Tracebacks, uvicorn), wird
+# zusaetzlich in eine rotierende Datei geschrieben. Der Konsolen-Strom bleibt
+# unveraendert, `docker logs` funktioniert weiter.
+LOG_DIR = os.path.join(DATA, 'logs')
+LOG_FILE = os.path.join(LOG_DIR, 'server.log')
+LOG_MAX = int(os.environ.get('DVE_LOG_MB', '5')) * 1024 * 1024
+LOG_KEEP = 5
+
+
+def _log_rotate():
+    """Rotiert bei Ueberschreiten von LOG_MAX. os.replace, damit ein
+    gleichzeitig lesender Admin-Aufruf nie eine halbe Datei sieht."""
+    try:
+        if os.path.getsize(LOG_FILE) < LOG_MAX:
+            return
+    except OSError:
+        return
+    for i in range(LOG_KEEP - 1, 0, -1):
+        alt = f'{LOG_FILE}.{i}'
+        if os.path.exists(alt):
+            os.replace(alt, f'{LOG_FILE}.{i + 1}')
+    os.replace(LOG_FILE, LOG_FILE + '.1')
+
+
+class _LogTee:
+    """Schreibt jede Zeile mit Zeitstempel zusaetzlich in LOG_FILE.
+    Scheitert IMMER leise - ein kaputter Log darf nie den Server reissen."""
+    def __init__(self, strom, tag):
+        self._s, self._tag = strom, tag
+        self._lock = threading.Lock()
+        self._buf = ''
+
+    def write(self, text):
+        # print() ruft write() je Argument EINZELN auf ("a", " ", "b", "\n").
+        # Ohne Zeilenpuffer stuende jedes Argument in einer eigenen
+        # Log-Zeile - unlesbar. Erst am Zeilenende wird geschrieben.
+        n = self._s.write(text)
+        try:
+            with self._lock:
+                self._buf += text
+                if '\n' not in self._buf:
+                    if len(self._buf) > 65536:       # Notbremse ohne Umbruch
+                        self._buf, rest = '', self._buf
+                        self._schreib([rest])
+                    return n
+                teile = self._buf.split('\n')
+                self._buf = teile.pop()
+                self._schreib(teile)
+        except Exception:
+            pass
+        return n
+
+    def _schreib(self, zeilen):
+        zeilen = [z for z in zeilen if z.strip()]
+        if not zeilen:
+            return
+        stamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        _log_rotate()
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            for z in zeilen:
+                f.write(f'{stamp} [{self._tag}] {z}\n')
+
+    def flush(self):
+        self._s.flush()
+
+    def isatty(self):
+        return getattr(self._s, 'isatty', lambda: False)()
+
+    def fileno(self):
+        return self._s.fileno()
+
+    @property
+    def encoding(self):
+        return getattr(self._s, 'encoding', 'utf-8')
+
+
+def _log_start():
+    """Einmalig beim Import. DVE_LOGFILE=0 schaltet die Datei ab (Tests)."""
+    if os.environ.get('DVE_LOGFILE', '1') == '0':
+        return
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+    except Exception:
+        return
+    if not isinstance(sys.stdout, _LogTee):
+        sys.stdout = _LogTee(sys.stdout, 'out')
+        sys.stderr = _LogTee(sys.stderr, 'err')
+
+
+_log_start()
+
 
 # v84: Credits statt roher Minuten. Intern bleibt alles Sekunden (bewaehrt),
 # 1 Credit = 1 Minute Video. Abgerechnet wird pro ANGEFANGENER Minute -
@@ -1773,7 +1868,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v196-ann-feedback'
+DVE_BUILD = 'v197-betrieb'
 
 
 @app.middleware('http')
@@ -1791,6 +1886,31 @@ async def _security_headers(request, call_next):
     resp.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     resp.headers['X-DVE-Version'] = DVE_BUILD
     return resp
+
+
+@app.exception_handler(Exception)
+async def _unhandled(request, exc):
+    """v197: Bis v196 landete nur ein FEHLGESCHLAGENER RENDER in der
+    alerts-Tabelle. Ein Absturz in einem Endpunkt (Kauf, Login, Library)
+    ging als Traceback nach stdout und war nach dem naechsten Deploy weg -
+    niemand hat je erfahren, dass ein Kunde einen 500er gesehen hat.
+    Jeder unbehandelte Fehler steht jetzt im Admin-Panel unter Alerts.
+    Der Deckel in _notify_admin (1 Mail/Stunde je Schluessel) verhindert,
+    dass ein dauerhaft kaputter Endpunkt das Postfach flutet; die
+    Panel-Zeile wird trotzdem jedes Mal geschrieben.
+    Der Kunde bekommt KEINEN Traceback zu sehen."""
+    import traceback
+    spur = traceback.format_exc()
+    pfad = getattr(getattr(request, 'url', None), 'path', '?')
+    try:
+        _notify_admin(f'exc:{type(exc).__name__}:{pfad}',
+                      f'Serverfehler {type(exc).__name__} in {pfad}',
+                      f'{request.method} {pfad}\n\n{spur}')
+    except Exception:
+        pass
+    print(f'ERROR unbehandelt {request.method} {pfad}: '
+          f'{type(exc).__name__}: {exc}\n{spur}')
+    return JSONResponse({'detail': 'Internal server error.'}, status_code=500)
 
 
 @app.get('/api/pricing')
@@ -2135,6 +2255,11 @@ from queue import PriorityQueue
 import itertools as _it
 QUEUE = PriorityQueue()
 _QSEQ = _it.count()
+# v197: beides an EINER Stelle. Die Worker-Zahl stand vorher nur als
+# os.environ-Ausdruck an der Thread-Schleife und ein zweites Mal im
+# System-Endpunkt - zwei Wahrheiten fuer denselben Wert.
+WORKERS = max(1, int(os.environ.get('DVE_WORKERS', '1')))
+QUEUE_WARN = int(os.environ.get('DVE_QUEUE_WARN', '5'))
 
 
 def q_put(jid, q=None):
@@ -3117,6 +3242,29 @@ def worker():
             QUEUE.task_done()
 
 
+def _queue_platz(jid, q):
+    """v197: Der Kunde sah bisher `Queued (position N)` mit N = qsize, also
+    der GESAMTLAENGE der Schlange - nicht seinem Platz darin. Bei einer
+    PriorityQueue ist das doppelt falsch: ein zahlendes Konto zieht vorbei
+    (Prio 0), ein Free-Job rutscht nach hinten. Gezaehlt wird jetzt, wie
+    viele Eintraege VOR diesem liegen. 1 = als naechstes dran.
+    Der Heap wird nur gelesen (list()), nie veraendert."""
+    try:
+        eintraege = list(q.queue)
+    except Exception:
+        return max(1, q.qsize())
+    treffer = [e for e in eintraege
+               if (e[-1] if isinstance(e, tuple) else e) == jid]
+    if not treffer:
+        return max(1, q.qsize())               # laeuft evtl. schon
+    meiner = treffer[0]
+    if not isinstance(meiner, tuple):
+        # MQUEUE ist eine schlichte FIFO - dort zaehlt die Einfuegereihenfolge.
+        # Ein Groessenvergleich waere hier ein Stringvergleich und damit Unsinn.
+        return eintraege.index(meiner) + 1
+    return 1 + sum(1 for e in eintraege if e < meiner)
+
+
 def motion_worker():
     """Fast-Lane: Motion-Clips (~10s Render) laufen an der Caption-Queue
     vorbei - ein 3-Minuten-Caption-Job blockiert sie nicht mehr."""
@@ -3560,28 +3708,56 @@ def run_job(jid):
     # Erst beim Job-Cleanup loeschen.
 
 
-def _backup_users_db():
+def _backup_users_db(force=False):
     """v80x: Taeglicher Snapshot der users.db nach DATA/backups.
     14 Stueck rotierend. SQLite-Online-Backup-API - konsistent auch
-    waehrend laufender Writes."""
+    waehrend laufender Writes.
+
+    v197: Der Snapshot wurde bis v196 nur EINMAL je Kalendertag geschrieben
+    (`if os.path.exists(dest): return`). Der erste Lauf ist der Start des
+    Cleanup-Workers - alles, was danach am selben Tag passierte, stand in
+    KEINEM Backup, und nach einem Neustart um 23:50 enthielt "das Backup von
+    heute" praktisch nichts. Bei der Restore-Probe kamen dadurch 0 Konten
+    zurueck, obwohl 7 in der DB standen. Der Tages-Snapshot wird jetzt
+    aufgefrischt, solange die DB neuer ist als er.
+    Geschrieben wird ueber eine .tmp-Datei mit os.replace - ein Abbruch
+    mitten im Auffrischen darf den vorhandenen Snapshot nicht zerstoeren.
+    Die Offsite-Mail geht weiter nur EINMAL je Tag raus (beim ersten
+    Anlegen), sonst kaeme stuendlich Post."""
     bdir = os.path.join(DATA, 'backups')
     os.makedirs(bdir, exist_ok=True)
     stamp = time.strftime('%Y%m%d')
     dest = os.path.join(bdir, f'users_{stamp}.db')
-    if os.path.exists(dest):
-        return                                   # heute schon gesichert
+    neu = not os.path.exists(dest)
+    if not neu and not force:
+        try:
+            if os.path.getmtime(USERS_DB) <= os.path.getmtime(dest):
+                return                       # seit dem Snapshot nichts geschrieben
+        except OSError:
+            pass
+    tmp = dest + '.tmp'
     try:
+        if os.path.exists(tmp):
+            os.remove(tmp)
         src = sqlite3.connect(USERS_DB)
-        dst = sqlite3.connect(dest)
+        dst = sqlite3.connect(tmp)
         src.backup(dst)
         dst.close(); src.close()
-        # Rotation: nur die 14 neuesten behalten
-        snaps = sorted(f for f in os.listdir(bdir) if f.startswith('users_'))
+        os.replace(tmp, dest)
+        # Rotation: nur die 14 neuesten behalten (.tmp zaehlt nicht mit)
+        snaps = sorted(f for f in os.listdir(bdir)
+                       if f.startswith('users_') and f.endswith('.db'))
         for old in snaps[:-14]:
             os.remove(os.path.join(bdir, old))
-        print(f"DB-Backup: {dest}")
-        _mail_backup_offsite(dest)
+        print(f"DB-Backup: {dest}{'' if neu else ' (aufgefrischt)'}")
+        if neu:
+            _mail_backup_offsite(dest)
     except Exception as e:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
         print(f"DB-Backup fehlgeschlagen: {type(e).__name__}: {e}")
 
 
@@ -3920,6 +4096,20 @@ def _watchdog_worker():
                     _notify_admin('disk', 'Speicher knapp auf douchko.eu',
                                   f'Nur noch {free_gb:.1f} GB frei unter {DATA}.\n'
                                   f'Cleanup laeuft, reicht aber offenbar nicht.')
+            # v197 Skalierungs-Signal. Der Server rendert mit EINEM Worker auf
+            # EINER Maschine. Das ist bewusst so (ein Render zieht CPU und RAM;
+            # zwei parallele Jobs machen beide langsamer, nicht die Summe
+            # schneller). Nur: bisher hat niemand gemerkt, WANN es eng wird -
+            # der Kunde wartet, im Panel steht nichts. Steht die Schlange
+            # dauerhaft voll, ist das die Ansage "zweite Maschine oder
+            # DVE_WORKERS hoch". Deckel: 1 Meldung/Stunde (_notify_admin).
+            if QUEUE.qsize() >= QUEUE_WARN:
+                _notify_admin('queue', 'Render-Schlange laeuft voll',
+                              f'{QUEUE.qsize()} Caption-Jobs warten '
+                              f'(Grenze {QUEUE_WARN}), {WORKERS} Worker.\n'
+                              f'Kunden warten entsprechend laenger. Mehr Worker '
+                              f'per DVE_WORKERS, mehr Durchsatz nur mit mehr '
+                              f'Maschine.')
             now = time.time()
             with LOCK:
                 items = [(jid, j.get('status'), round(j.get('progress') or 0, 3),
@@ -3950,7 +4140,7 @@ _restore_jobs()
 threading.Thread(target=_cleanup_worker, daemon=True).start()
 threading.Thread(target=_watchdog_worker, daemon=True).start()
 
-for _ in range(int(os.environ.get('DVE_WORKERS', '1'))):
+for _ in range(WORKERS):
     threading.Thread(target=worker, daemon=True).start()
 threading.Thread(target=motion_worker, daemon=True).start()
 
@@ -5276,7 +5466,7 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
     set_state(jid, **{k: v for k, v in JOBS[jid].items()
                       if k not in ('input', 'code')})
     q_put(jid)
-    return {'job': jid, 'position': QUEUE.qsize()}
+    return {'job': jid, 'position': _queue_platz(jid, QUEUE)}
 
 
 # v101v: Resumable Chunk-Upload. Auf dem Handy bricht ein normaler fetch()-Upload
@@ -5513,7 +5703,7 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
     j['mode'] = mode
     set_state(jid, status='wartet', progress=0.0, phase='Queued …')
     q_put(jid)
-    return {'job': jid, 'position': QUEUE.qsize()}
+    return {'job': jid, 'position': _queue_platz(jid, QUEUE)}
 
 
 @app.get('/api/status/{jid}')
@@ -5530,7 +5720,10 @@ def status(jid: str, request: Request):
     out = {k: v for k, v in j.items() if k not in ('input', 'code')}
     if j.get('status') == 'wartet':
         _q = MQUEUE if j.get('kind') == 'motion' else QUEUE
-        out['phase'] = f'Queued (position {_q.qsize()}) …'
+        platz = _queue_platz(jid, _q)
+        out['queue_pos'] = platz
+        out['phase'] = (f'Queued (position {platz} of {max(platz, _q.qsize())}) …'
+                        if platz else 'Queued …')
     return out
 
 
@@ -6199,7 +6392,7 @@ async def save_and_render(request: Request, jid: str,
     set_state(jid, **{k: v for k, v in j.items()
                       if k not in ('input', 'code')})
     q_put(jid)
-    return {'ok': True, 'job': jid, 'position': QUEUE.qsize()}
+    return {'ok': True, 'job': jid, 'position': _queue_platz(jid, QUEUE)}
 
 
 def _admin_ok(request: Request):
@@ -7180,7 +7373,8 @@ def admin_system(request: Request):
         'alerts_active': len(_ADMIN_NOTIFIED),
         'alerts_offen': _alerts_offen(),
         'config': {
-            'workers': int(os.environ.get('DVE_WORKERS', '1')),
+            'workers': WORKERS,
+            'queue_warn': QUEUE_WARN,
             'inflight_cap': CAPTION_INFLIGHT_CAP,
             'motion_concurrency': int(os.environ.get('DVE_MOTION_CONCURRENCY', '2')),
             'max_mb': int(os.environ.get('DVE_MAX_MB', '300')),
@@ -7632,8 +7826,33 @@ def admin_export_csv(table: str, request: Request, since: int = 0, until: int = 
 @app.post('/api/admin/backup/run')
 def admin_backup_run(request: Request):
     _require_admin(request)
-    _backup_users_db()
+    _backup_users_db(force=True)     # v197: der Knopf muss IMMER sichern
     return {'ok': True, 'last_backup': _last_backup_ts()}
+
+
+@app.get('/api/admin/logs')
+def admin_logs(request: Request, zeilen: int = 300, teil: str = ''):
+    """v197: Log-Ende im Panel. `teil` waehlt eine rotierte Datei
+    ('1'..'5'), leer = die laufende. Nur das ENDE wird gelesen (256 KB),
+    ein 5-MB-Log darf keinen Request blockieren."""
+    _require_admin(request)
+    pfad = LOG_FILE if not teil else f'{LOG_FILE}.{teil}'
+    if teil and (not teil.isdigit() or not 1 <= int(teil) <= LOG_KEEP):
+        raise HTTPException(400, 'Unknown log part.')
+    da = [os.path.basename(LOG_FILE)] + [
+        f'{os.path.basename(LOG_FILE)}.{i}' for i in range(1, LOG_KEEP + 1)
+        if os.path.exists(f'{LOG_FILE}.{i}')]
+    if not os.path.exists(pfad):
+        return {'text': '(kein Log vorhanden)', 'dateien': da, 'bytes': 0}
+    gr = os.path.getsize(pfad)
+    with open(pfad, 'rb') as f:
+        if gr > 262144:
+            f.seek(gr - 262144)
+            f.readline()                      # angeschnittene Zeile verwerfen
+        roh = f.read().decode('utf-8', 'replace')
+    zs = roh.rstrip('\n').split('\n')
+    return {'text': '\n'.join(zs[-max(10, min(zeilen, 2000)):]),
+            'dateien': da, 'bytes': gr}
 
 
 @app.post('/api/admin/mail/test')

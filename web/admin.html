@@ -196,13 +196,14 @@ const ICON={
   legal:'<path d="M12 3v18M5 7h14M7 7l-3 6h6zM17 7l-3 6h6z"/>',
   feedback:'<path d="M12 3 14.9 8.9l6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.6 9.8l6.5-.9z"/>',
   ann:'<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
+  logs:'<path d="M6 3h9l5 5v13H6z"/><path d="M9 12h7M9 16h7M9 8h3"/>',
 };
 const NAV=[
   ['', [['live','Live'],['alerts','Alerts'],['jobs','Jobs']]],
   ['Umsatz', [['revenue','Revenue'],['credits','Credits'],['codes','Codes']]],
   ['Kunden', [['users','Users'],['support','Support'],['abuse','Abuse']]],
   ['Produkt', [['feedback','Feedback'],['ann','Announcements']]],
-  ['Betrieb', [['system','System'],['compliance','Compliance'],['legal','Recht & Steuern']]],
+  ['Betrieb', [['system','System'],['logs','Logs'],['compliance','Compliance'],['legal','Recht & Steuern']]],
 ];
 const TABS=NAV.flatMap(([,items])=>items);
 const TITEL=Object.fromEntries(TABS);
@@ -906,7 +907,33 @@ async function annTog(id){await api('/api/admin/announcements/'+id+'/toggle',{me
 async function annDel(id){if(!danger('Delete this announcement?'))return;
   await api('/api/admin/announcements/'+id+'/delete',{method:'POST'});loadAnn();}
 
-const RENDER={live:loadLive,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
+/* v197 Logs. Der Betriebs-Log lag bisher nur in `docker logs` und war nach
+   jedem Deploy weg. Jetzt schreibt der Server ihn zusaetzlich in eine
+   rotierende Datei; hier steht ihr Ende. */
+let logTeil='';
+async function loadLogs(silent){
+  let d;try{d=await api('/api/admin/logs?zeilen=400'+(logTeil?'&teil='+logTeil:''));}
+  catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.logs=Date.now()/1000;
+  const wahl=d.dateien.map(f=>{
+    const t=f.includes('.log.')?f.split('.log.')[1]:'';
+    return `<button class="btn ghost sm${t===logTeil?' on':''}" onclick="logPick('${t}')">${esc(f)}</button>`;
+  }).join(' ');
+  el('view').innerHTML=`
+    <div class="card">
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        ${wahl}
+        <span class="subtle" style="margin-left:auto">${(d.bytes/1024).toFixed(0)} KB</span>
+        <button class="btn ghost sm" onclick="loadLogs()">Refresh</button>
+      </div>
+      <pre style="max-height:64vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
+        font-size:12px;line-height:1.5;margin:0">${esc(d.text)}</pre>
+    </div>`;
+  const p=el('view').querySelector('pre'); if(p)p.scrollTop=p.scrollHeight;
+}
+function logPick(t){logTeil=t;loadLogs();}
+
+const RENDER={live:loadLive,logs:loadLogs,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
 if(KEY)boot();
 </script>
 </body>

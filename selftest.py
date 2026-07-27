@@ -6132,6 +6132,148 @@ def _scenario_betrieb(tmp):
     check('v196: ein Fehler im Banner wird nicht mehr still geschluckt',
           "console.error('announcements:', e);" in _ui196)
 
+    # ======= v197: Betrieb (Backup, Restore, Logs, Schlange) =============
+    # Vier Luecken, die alle dasselbe Muster haben: es gab einen Mechanismus,
+    # aber niemand hat je geprueft, ob er das tut, was auf dem Schild steht.
+    import time as _tm197
+    import io as _io197
+    import sqlite3 as _sq197
+    import server as _SV197
+    _sv197 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _adm197 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+
+    # --- A) Der Tages-Snapshot muss den AKTUELLEN Stand haben.
+    # Bis v196 galt `if os.path.exists(dest): return` - der erste Lauf des
+    # Cleanup-Workers (Serverstart) schrieb den Snapshot, alles danach am
+    # selben Tag stand in keiner Sicherung. Bei der Restore-Probe kamen
+    # dadurch 0 Konten zurueck, obwohl 7 in der Datenbank standen.
+    _con197 = _SV197._db()
+    _n197a = _con197.execute("SELECT COUNT(*) c FROM users").fetchone()['c']
+    _con197.close()
+    _SV197._backup_users_db()
+    import glob as _gl197
+    _snap197 = sorted(_gl197.glob(os.path.join(_SV197.DATA, 'backups', 'users_*.db')))
+    check('v197: der Tages-Snapshot existiert', bool(_snap197))
+    _con197 = _SV197._db()
+    _con197.execute("INSERT INTO users (email, pw_hash, balance_sec, created_at) "
+                    "VALUES (?,?,?,?)",
+                    (f'backup{int(_tm197.time())}@test.invalid', 'x', 0,
+                     int(_tm197.time())))
+    _con197.commit(); _con197.close()
+    _tm197.sleep(1.1)                  # mtime-Aufloesung abwarten
+    _SV197._backup_users_db()           # zweiter Lauf am SELBEN Tag
+    _c197 = _sq197.connect(_snap197[-1])
+    _n197b = _c197.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    _c197.close()
+    check('v197: der Snapshot wird am selben Tag aufgefrischt',
+          _n197b > _n197a, f'{_n197a} -> {_n197b} Konten im Snapshot')
+    check('v197: der Admin-Knopf sichert IMMER (force)',
+          '_backup_users_db(force=True)' in _sv197)
+    check('v197: geschrieben wird ueber .tmp + os.replace',
+          "tmp = dest + '.tmp'" in _sv197 and 'os.replace(tmp, dest)' in _sv197)
+    check('v197: die Offsite-Mail geht nur beim ersten Anlegen raus',
+          'if neu:\n            _mail_backup_offsite(dest)' in _sv197)
+
+    # --- B) Restore. Ein Backup, das man nie zurueckgespielt hat, ist kein
+    # Backup. Geprueft wird die REIHENFOLGE der Sicherungsnetze im Skript.
+    _rst197 = open(os.path.join(HERE, 'restore.sh'), encoding='utf-8').read()
+    check('v197: restore.sh existiert und kennt --letztes', '--letztes' in _rst197)
+    check('v197: die Sicherung wird VOR dem Tausch geprueft',
+          _rst197.index('PRAGMA integrity_check')
+          < _rst197.index('docker compose stop app'))
+    check('v197: Pflichttabellen werden geprueft',
+          "{'users', 'sessions', 'ledger', 'purchases'}" in _rst197)
+    check('v197: der jetzige Stand wird zur Seite gelegt',
+          'vor_restore_' in _rst197)
+    check('v197: WAL und SHM werden mit entfernt',
+          '"$DB-wal" "$DB-shm"' in _rst197)
+    check('v197: die App wird vor dem Tausch gestoppt',
+          _rst197.index('docker compose stop app') < _rst197.index('cp "$SRC" "$DB"'))
+
+    # --- C) Logs ueberleben den Neustart. Bis v196 lag alles nur in
+    # `docker logs` - und `update.sh` baut das Image neu.
+    check('v197: der Log-Tee ist aktiv oder per Schalter abgeschaltet',
+          isinstance(sys.stdout, _SV197._LogTee)
+          or os.environ.get('DVE_LOGFILE') == '0')
+    os.makedirs(_SV197.LOG_DIR, exist_ok=True)   # bei DVE_LOGFILE=0 nicht angelegt
+    _tee197 = _SV197._LogTee(_io197.StringIO(), 'test')
+    _tee197.write('eins '); _tee197.write('zwei'); _tee197.write('\n')
+    _txt197 = open(_SV197.LOG_FILE, encoding='utf-8').read() \
+        if os.path.exists(_SV197.LOG_FILE) else ''
+    check('v197: print-Argumente landen in EINER Log-Zeile',
+          '[test] eins zwei\n' in _txt197)
+    check('v197: der Log rotiert nach Groesse',
+          'def _log_rotate' in _sv197 and 'LOG_KEEP' in _sv197)
+    check('v197: ein kaputter Log reisst den Server nicht',
+          _sv197.count('except Exception:\n            pass') >= 1
+          and 'def _log_start' in _sv197)
+    check('v197: der Admin liest nur das ENDE (kein 5-MB-Request)',
+          "f.seek(gr - 262144)" in _sv197)
+    check('v197: der Log-Teil wird validiert (kein Pfad-Durchgriff)',
+          "not teil.isdigit()" in _sv197)
+    check('v197: das Panel hat eine Logs-Ansicht',
+          'async function loadLogs' in _adm197 and 'logs:loadLogs' in _adm197)
+
+    # --- D) Unbehandelte Fehler landen im Panel. Bisher stand dort NUR ein
+    # fehlgeschlagener Render; ein Absturz in einem Endpunkt ging als
+    # Traceback nach stdout und war nach dem naechsten Deploy weg.
+    check('v197: globaler Ausnahme-Handler registriert',
+          "@app.exception_handler(Exception)" in _sv197)
+    check('v197: der Kunde bekommt keinen Traceback zu sehen',
+          "'detail': 'Internal server error.'" in _sv197)
+    _vor197 = _SV197._alerts_offen()
+
+    class _Req197:
+        method = 'GET'
+        url = type('U', (), {'path': '/api/kaputt'})()
+    import asyncio as _as197
+    _as197.run(_SV197._unhandled(_Req197(), ValueError('kaputt')))
+    check('v197: der Fehler steht danach im Panel',
+          _SV197._alerts_offen() > _vor197,
+          f'{_vor197} -> {_SV197._alerts_offen()}')
+
+    # --- E) Warteschlange. Der Kunde sah `position N` mit N = Gesamtlaenge,
+    # nicht seinem Platz - und bei einer PriorityQueue zieht ein zahlendes
+    # Konto vorbei.
+    from queue import PriorityQueue as _PQ197, Queue as _Q197
+    _q197 = _PQ197()
+    _q197.put((1, 0, 'free_a')); _q197.put((1, 1, 'free_b')); _q197.put((0, 2, 'paid'))
+    check('v197: der zahlende Job steht auf Platz 1',
+          _SV197._queue_platz('paid', _q197) == 1)
+    check('v197: die Free-Jobs ruecken dahinter',
+          (_SV197._queue_platz('free_a', _q197),
+           _SV197._queue_platz('free_b', _q197)) == (2, 3))
+    _m197 = _Q197()
+    for _x in ('z', 'a', 'm'):
+        _m197.put(_x)
+    check('v197: die FIFO zaehlt die Einfuegereihenfolge, nicht den String',
+          (_SV197._queue_platz('z', _m197), _SV197._queue_platz('a', _m197)) == (1, 2))
+    check('v197: der Status meldet den eigenen Platz',
+          "out['queue_pos'] = platz" in _sv197)
+    check('v197: die Worker-Zahl steht an EINER Stelle',
+          "WORKERS = max(1, int(os.environ.get('DVE_WORKERS', '1')))" in _sv197
+          and "'workers': WORKERS," in _sv197
+          and _sv197.count("os.environ.get('DVE_WORKERS'") == 1)
+    check('v197: eine volle Schlange meldet sich im Panel',
+          "_notify_admin('queue'" in _sv197)
+
+    # --- F) Test-Gate vor dem Deploy. Bisher ging JEDER Commit live und
+    # geprueft wurde nur, ob der Server antwortet.
+    _gate197 = open(os.path.join(HERE, 'deploy_gate.sh'), encoding='utf-8').read()
+    _upd197 = open(os.path.join(HERE, 'update.sh'), encoding='utf-8').read()
+    _auto197 = open(os.path.join(HERE, 'autodeploy.sh'), encoding='utf-8').read()
+    check('v197: das Gate laeuft VOR dem Neustart',
+          _upd197.index('deploy_gate.sh')
+          < _upd197.index('docker compose up -d --force-recreate app'))
+    check('v197: rotes Gate bricht den Deploy ab',
+          'DEPLOY ABGEBROCHEN' in _upd197 and 'exit 1' in _upd197)
+    check('v197: das Gate sieht die echte users.db nie',
+          'DVE_DATA=/tmp/gate_data' in _gate197 and '--no-deps' in _gate197)
+    check('v197: das Gate laeuft ohne OpenAI-Key (Heuristik-Pfad)',
+          'OPENAI_API_KEY=' in _gate197)
+    check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
+          'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)
+
     # ======= v195: Admin-Panel als Seitenleiste ==========================
     # Zwoelf Ansichten in einer umbrechenden Tab-Zeile waren schon zu viel,
     # und jede neue machte es schlimmer. Jetzt eine gruppierte Seitenleiste
@@ -6151,7 +6293,7 @@ def _scenario_betrieb(tmp):
     # eine Garantie, dass beim Umbauen der Navigation nichts VERSCHWINDET.
     _soll195 = {'live', 'alerts', 'jobs', 'revenue', 'credits', 'codes',
                 'users', 'support', 'abuse', 'system', 'compliance', 'legal',
-                'feedback', 'ann'}
+                'feedback', 'ann', 'logs'}
     check('v195: alle Ansichten sind weiter erreichbar',
           _ids195 == _soll195, f"fehlt: {_soll195 - _ids195}  neu: {_ids195 - _soll195}")
     check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',

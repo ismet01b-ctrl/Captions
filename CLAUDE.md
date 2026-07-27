@@ -103,7 +103,9 @@ Web-Produkt (`web/`):
   Grid-Kinder brauchen `min-width:0`, sonst schiebt eine breite Tabelle die
   ganze Seite quer.
 - `web/imprint/privacy/terms.html`, `web/codes.py`.
-- `Dockerfile`, `docker-compose.yml` (app + caddy), `autodeploy.sh`, `update.sh`.
+- `Dockerfile`, `docker-compose.yml` (app + caddy), `autodeploy.sh`, `update.sh`,
+  `deploy_gate.sh` (Selftest im neuen Image vor dem Umschalten), `restore.sh`
+  (users.db zurueckspielen, mit Kandidaten-Pruefung + Sicherheitskopie).
 
 Doku:
 - `PROJEKT_STATUS.md` — **komplette Versionshistorie, HIER ZUERST LESEN.**
@@ -687,6 +689,36 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   `admin.html`). Und ein `try/catch` um einen Renderer muss loggen: ein
   leeres Banner sieht sonst aus wie "nichts vorhanden".
 
+## Betrieb: Deploy, Backup, Logs, Schlange (v197)
+- **Nichts geht ungeprueft live.** `update.sh` ruft `deploy_gate.sh` (Selftest
+  im NEU GEBAUTEN Image, `--rm --no-deps`, eigenes `DVE_DATA`, kein Key) VOR
+  `docker compose up`. Rot = Abbruch, die alte Version laeuft weiter. Wer den
+  Deploy anfasst, darf diese Reihenfolge nicht drehen.
+- **Ein stiller Fehlschlag ist schlimmer als ein lauter.** Nach `git pull`
+  steht der Server schon auf dem neuen Commit; scheitert das Gate, saehe der
+  naechste Timer-Lauf "nichts Neues". Deshalb schreibt `autodeploy.sh` bei
+  Fehlschlag eine Zeile in die alerts-Tabelle des LAUFENDEN Containers.
+- **Ein Backup, das man nie zurueckgespielt hat, ist kein Backup.**
+  `restore.sh` prueft den Kandidaten (integrity_check + Pflichttabellen),
+  BEVOR es die laufende DB anfasst, und legt den jetzigen Stand als
+  `vor_restore_*.db` zur Seite. Genau diese Probe hat den Backup-Bug
+  gefunden: `_backup_users_db` sicherte nur EINMAL je Kalendertag, also den
+  Stand beim Worker-Start - alles danach fehlte. Ein Deckel, der auf den
+  KALENDERTAG schaut statt auf den Inhalt, deckelt den falschen Wert
+  (derselbe Fehlertyp wie v194b/c bei den Mails).
+- **`print()` ruft `write()` je Argument einzeln.** Ein Log-Tee ohne
+  Zeilenpuffer schreibt jedes Argument in eine eigene Zeile.
+- **Unbehandelte Fehler gehoeren ins Panel**, nicht nach stdout - stdout ist
+  nach dem naechsten Deploy weg. Der globale `@app.exception_handler` schreibt
+  in `alerts`; der Kunde sieht nie einen Traceback.
+- **Eine Positionsangabe muss die eigene Position sein.** `qsize()` ist die
+  Laenge der Schlange, nicht der Platz darin - und bei der PriorityQueue zieht
+  ein zahlendes Konto vorbei. `_queue_platz` zaehlt die Eintraege davor.
+- Skalierung bleibt bewusst 1 Worker/1 Maschine (`DVE_WORKERS`). Ein Render
+  zieht CPU und RAM; parallele Jobs machen beide langsamer. Der Watchdog
+  meldet ueber `DVE_QUEUE_WARN`, wann es eng wird - das ist das Signal fuer
+  mehr Maschine, nicht mehr Threads.
+
 ## Betriebs-Meldungen (v147)
 Render-Fehler und Job-Timeouts gehen **nicht** mehr per Mail raus, sondern nur
 in die Tabelle `alerts` und den Admin-Tab **Alerts**. `_notify_admin(...,
@@ -734,7 +766,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1303/1303 grün (Stand v196)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1335/1335 grün (Stand v197)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
