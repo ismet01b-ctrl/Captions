@@ -275,6 +275,19 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Regler + behind-Wort (v191)
+- **Ein Regler-Fallback darf nie mit der Anzeige-Skala multipliziert
+  werden.** `min` als Rohwert x 100 ergab "6000 %" und "14000x". Regler
+  ohne Config-Eintrag brauchen `data-default` in ANZEIGE-Einheiten, und
+  der Selftest prueft jeden Regler gegen seinen Bereich.
+- **Verdeckt wird von der SILHOUETTE, nicht vom Kopf.** Der
+  Lesbarkeits-Riegel fuer `behind` verglich mit 1.7x Gesichtsbox;
+  ausgestanzt wird die ganze Person inklusive Schultern (~2.6x). Ein Wort
+  kann klar breiter als der Kopf sein und trotzdem in der Mitte
+  zerschnitten werden (gemessen 28 % am Stueck). Drei Stufen:
+  vergroessern ueber die Schultern, sonst auf KOPFHOEHE heben, sonst ueber
+  den Kopf legen.
+
 ### Ruhe im Bild (v190) — erst messen, dann abschalten
 Ismets "alles zu sehr am Zucken" wurde GEMESSEN, nicht geraten, und die
 naheliegende Vermutung war falsch: mit Beat-Sync, Kamera, Aktivwort-Pop
@@ -596,7 +609,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1184/1184 grün (Stand v190)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1190/1190 grün (Stand v191)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

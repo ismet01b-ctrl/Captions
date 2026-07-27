@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v190-ruhe'
+DVE_BUILD = 'v191-regler'
 
 
 @app.middleware('http')

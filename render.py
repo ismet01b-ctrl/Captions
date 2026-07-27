@@ -8702,23 +8702,47 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                             return (int(_ax.max() - _ax.min()) if _ax.size
                                     else p['arr'].shape[1])
                         _tw = _vis_w()
-                        if _tw < _kopf * 1.25:
-                            _gr = min(_kopf * 1.35 / max(_tw, 1),
+                        # v191 VERDECKT WIRD VON DER PERSON, NICHT VOM KOPF.
+                        # Der Riegel verglich die Wortbreite mit der Kopfbreite
+                        # (1.7x Gesichtsbox) - ausgestanzt wird aber die ganze
+                        # Silhouette inklusive SCHULTERN, und die sind rund
+                        # 2.6x Gesichtsbox breit. An Ismets Render gemessen:
+                        # 'ZIGARETTEN' war mit 0.52 W klar breiter als der
+                        # Kopf, der Riegel griff nicht, und die Person frass
+                        # trotzdem 28 % des Wortes AM STUECK - lesbar blieb
+                        # "ZIGA...TTEN".
+                        _schulter = float(_fpv[2]) * 2.6
+                        # (1) So gross, dass beidseits der Schultern etwas
+                        #     Substanzielles stehen bleibt.
+                        if _tw < _schulter * 1.55:
+                            _gr = min(_schulter * 1.60 / max(_tw, 1),
                                       _bh_limit / max(_tw, 1))
                             if _gr > 1.02:
                                 sz = int(sz * _gr)
                                 _build_behind(sz)
                                 _tw = _vis_w()
-                            if _tw < _kopf * 1.10:
-                                p['by'] = max(float(_fpv[1]) - _kopf * 0.85,
-                                              H * 0.07)
-                                if p.get('entr') == 'emerge':
-                                    p['entr'] = 'rise'
-                                print(f"  Legibility: '{txt}' narrower than the "
-                                      f"head -> placed above the head")
-                            else:
-                                print(f"  Legibility: '{txt}' vergroessert "
-                                      f"(ragt beidseitig heraus)")
+                        # (2) Reicht die Breite nicht, gehoert das Wort auf
+                        #     KOPFHOEHE. Dort ist die Silhouette nur die
+                        #     Gesichtsbox breit statt der Schultern - genau
+                        #     das beschreibt die v99-Regel fuer Nahaufnahmen
+                        #     ("ragt beidseitig am Kopf vorbei").
+                        if _tw < _schulter * 1.35:
+                            p['by'] = max(float(_fpv[1]) - _kopf * 0.15,
+                                          H * 0.07)
+                            if p.get('entr') == 'emerge':
+                                p['entr'] = 'rise'
+                        # (3) Selbst am Kopf zu schmal: ueber den Kopf legen.
+                        if _tw < _kopf * 1.10:
+                            p['by'] = max(float(_fpv[1]) - _kopf * 0.85,
+                                          H * 0.07)
+                            print(f"  Legibility: '{txt}' narrower than the "
+                                  f"head -> placed above the head")
+                        elif _tw < _schulter * 1.35:
+                            print(f"  Legibility: '{txt}' raised to head "
+                                  f"height so the body cannot cut it")
+                        else:
+                            print(f"  Legibility: '{txt}' enlarged so it "
+                                  f"clears the shoulders on both sides")
                 if p.get('count'):
                     p['builder'] = (lambda s, _sz=sz, _tl=p['tilt']:
                                     persp_warp(rot_img(S.text(s, _sz, S.accent, glow=True,

@@ -3,6 +3,34 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v191 REGLER-ANZEIGE + behind-Wort NICHT MEHR ZERSCHNITTEN.**
+  Zwei Befunde Ismets, beide am Beleg nachgerechnet.
+  (a) REGLER LOGEN. Die Screenshots zeigten "Caption size 6000 %" und
+      "Size contrast 14000x". Ursache: der Regler-Bauer nahm bei fehlendem
+      Config-Eintrag `min` als ROHwert und multiplizierte danach nochmal
+      mit der Anzeige-Skala (60 x 100, 140 x 100). Betroffen war jeder
+      Regler, dessen Schluessel nicht in der Config steht - genau die
+      beiden. Jetzt liest der Fallback `data-default` in ANZEIGE-Einheiten
+      (caption_scale 100 %, caption_hierarchie 283x = das tatsaechliche
+      Hausmass 0.105/0.050 em) und klemmt echte Werte an die Skala.
+      Ein Selftest prueft ab sofort JEDEN Regler gegen seinen Bereich.
+  (b) DAS WORT HINTER DER PERSON WURDE ZERSCHNITTEN. Am neuen Render
+      gemessen: 'ZIGARETTEN' spannte 0.239 bis 0.759 W, und die Person
+      frass 28 % davon AM STUECK - lesbar blieb "ZIGA...TTEN".
+      URSACHE: der v96z-Riegel verglich die Wortbreite mit dem KOPF
+      (1.7x Gesichtsbox). Ausgestanzt wird aber die ganze Silhouette
+      inklusive SCHULTERN, rund 2.6x Gesichtsbox. Das Wort war klar
+      breiter als der Kopf, der Riegel griff nicht, und der Koerper
+      zerschnitt es trotzdem.
+      NEU, drei Stufen: (1) vergroessern, bis das Wort die Schultern
+      beidseitig deutlich ueberragt; (2) reicht das nicht, geht das Wort
+      auf KOPFHOEHE - dort ist die Silhouette nur die Gesichtsbox breit
+      (das ist die v99-Regel fuer Nahaufnahmen, jetzt auch fuer den
+      Normalfall); (3) ist es selbst dort zu schmal, liegt es ueber dem
+      Kopf. Jede Stufe schreibt ihre Begruendung ins Log.
+  1190/1190 logic + Renders 7/1/5/2 + GUI gruen.
+  EHRLICH: die Wirkung von (b) auf echtem Material sieht Ismet erst nach
+  dem Deploy - der Testclip hier hat kein Gesicht.
 - **v190 RUHE: Woerter erscheinen, statt einzufliegen.**
   Ismets Befund: "alles zu sehr am Zucken". ERST GEMESSEN, dann gebaut -
   und die Messung hat die naheliegende Vermutung widerlegt.

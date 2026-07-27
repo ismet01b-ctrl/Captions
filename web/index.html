@@ -2128,12 +2128,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <div class="setting"><div class="setting-label">Caption size</div>
             <div class="setting-desc">Scales the whole caption block. 100 % is the
               house size; a learned style reference can push this on its own.</div>
-            <div class="slider" data-cfg="effects.caption_scale" data-min="60" data-max="180" data-scale="100" data-suffix=" %"></div>
+            <div class="slider" data-cfg="effects.caption_scale" data-min="60" data-max="180" data-scale="100" data-default="100" data-suffix=" %"></div>
           </div>
           <div class="setting"><div class="setting-label">Size contrast</div>
             <div class="setting-desc">How much bigger the key word stands next to the
               small text. Low is calm, high is editorial.</div>
-            <div class="slider" data-cfg="effects.caption_hierarchie" data-min="140" data-max="500" data-scale="100" data-suffix="x"></div>
+            <div class="slider" data-cfg="effects.caption_hierarchie" data-min="140" data-max="500" data-scale="100" data-default="283" data-suffix="x"></div>
           </div>
           <div class="setting"><div class="setting-label">Let the last word run off the edge</div>
             <div class="setting-desc">At the end of a sentence a short key word may be
@@ -2706,8 +2706,17 @@ function buildWidgets() {
     const max = parseFloat(el.dataset.max || '100');
     const scale = parseFloat(el.dataset.scale || '1');
     const suffix = el.dataset.suffix || '';
-    const raw = getDeep(State.cfg, cfg, min);
-    const val = Math.round(raw * scale);
+    // v191: der Fallback war MIN als ROHwert und wurde danach nochmal mit
+    // der Skala multipliziert. Fuer jeden Schluessel, der nicht in der
+    // Config steht, zeigte der Regler dadurch min*scale an: caption_scale
+    // 60 -> "6000 %", caption_hierarchie 140 -> "14000x" (Ismets
+    // Screenshots). data-default steht in ANZEIGE-Einheiten und beschreibt,
+    // was die Engine ohne Eintrag tatsaechlich macht.
+    const dflt = parseFloat(el.dataset.default || String(min));
+    const raw = getDeep(State.cfg, cfg, null);
+    const val = (raw === null || raw === undefined)
+      ? Math.round(dflt)
+      : Math.min(max, Math.max(min, Math.round(raw * scale)));
     el.innerHTML = `<input type="range" min="${min}" max="${max}" value="${val}" aria-label="${cfg}">
       <span class="val">${val}${suffix}</span>`;
     const inp = el.querySelector('input');

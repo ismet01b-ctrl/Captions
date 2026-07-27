@@ -5774,6 +5774,53 @@ def _scenario_betrieb(tmp):
     check('v185: die Farb-Karaoke ist restlos entfernt',
           not hasattr(R, 'tint_glyph'))
 
+    # ======= v191: behind-Wort + Regler-Anzeige ===========================
+    # (a) Der Lesbarkeits-Riegel verglich die Wortbreite mit dem KOPF; die
+    # Occlusion stanzt aber die ganze Silhouette inklusive Schultern aus.
+    # An Ismets Render gemessen: 'ZIGARETTEN' war klar breiter als der Kopf,
+    # der Riegel griff nicht, und die Person frass 28 % des Wortes am Stueck.
+    _r191 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v191: der behind-Riegel rechnet mit den Schultern, nicht dem Kopf',
+          "_schulter = float(_fpv[2]) * 2.6" in _r191
+          and 'if _tw < _schulter * 1.55:' in _r191)
+    check('v191: reicht die Breite nicht, geht das Wort auf Kopfhoehe',
+          'if _tw < _schulter * 1.35:' in _r191
+          and "p['by'] = max(float(_fpv[1]) - _kopf * 0.15," in _r191)
+    check('v191: der alte Ueber-den-Kopf-Fall bleibt als letzte Stufe',
+          "if _tw < _kopf * 1.10:" in _r191
+          and "p['by'] = max(float(_fpv[1]) - _kopf * 0.85," in _r191)
+    # (b) Der Regler-Fallback nahm MIN als Rohwert und multiplizierte danach
+    # nochmal mit der Skala: caption_scale zeigte "6000 %", die Hierarchie
+    # "14000x" (Ismets Screenshots).
+    _ui191 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v191: der Regler-Fallback multipliziert nicht mehr doppelt',
+          "const raw = getDeep(State.cfg, cfg, null);" in _ui191
+          and "const dflt = parseFloat(el.dataset.default || String(min));" in _ui191)
+    check('v191: die beiden Regler ohne Config-Eintrag haben einen Default',
+          'data-cfg="effects.caption_scale"' in _ui191
+          and 'data-default="100"' in _ui191
+          and 'data-cfg="effects.caption_hierarchie"' in _ui191
+          and 'data-default="283"' in _ui191)
+    # Und die Anzeige muss fuer JEDEN Regler im plausiblen Bereich landen.
+    import re as _re191
+    _bad191 = []
+    for _m in _re191.finditer(r'<div class="slider" data-cfg="([^"]+)"([^>]*)>', _ui191):
+        _key, _rest = _m.group(1), _m.group(2)
+        _mn = float((_re191.search(r'data-min="([^"]+)"', _rest) or [0, '0'])[1])
+        _mx = float((_re191.search(r'data-max="([^"]+)"', _rest) or [0, '100'])[1])
+        _df = _re191.search(r'data-default="([^"]+)"', _rest)
+        _sc = float((_re191.search(r'data-scale="([^"]+)"', _rest) or [0, '1'])[1])
+        import server as _SV191
+        _cur = _SV191.build_config('creator')
+        for _k in _key.split('.'):
+            _cur = _cur.get(_k) if isinstance(_cur, dict) else None
+        _anz = (float(_df.group(1)) if (_cur is None and _df)
+                else (_mn if _cur is None else _cur * _sc))
+        if not (_mn - 0.5 <= _anz <= _mx + 0.5):
+            _bad191.append((_key, _anz, _mn, _mx))
+    check('v191: kein Regler zeigt einen Wert ausserhalb seiner Skala',
+          not _bad191, f"{_bad191}")
+
     # ======= v190: Ruhe - Woerter erscheinen statt einzufliegen ===========
     # Ismets Befund: "alles zu sehr am Zucken". Gemessen war der Anteil der
     # Effekte daran NULL - mit Beat, Kamera, Pop und Motion-Blur aus blieb
