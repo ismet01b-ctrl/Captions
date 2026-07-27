@@ -5403,11 +5403,17 @@ async function openMomentsEditor() {
     const r = await fetch('/api/moments/' + State.jid);
     State.moments = await r.json();
   } catch (e) { toast('Could not load moments.', 'err'); return; }
+  // v194a: Jobs, die VOR dem Block-Editor analysiert wurden, haben keine
+  // Blockdatei. Dann darf beim Speichern auch nichts geschickt werden -
+  // ein leeres Array hiesse serverseitig "zurueck zur Automatik" und wuerde
+  // eine spaeter angelegte Aufteilung stillschweigend loeschen.
+  State.blocksOk = false;
   try {
     const rb = await fetch('/api/blocks/' + State.jid);
-    State.blocks = rb.ok ? await rb.json() : [];
+    if (rb.ok) { State.blocks = await rb.json(); State.blocksOk = true; }
+    else { State.blocks = []; }
   } catch (e) { State.blocks = []; }
-  if (!Array.isArray(State.blocks)) State.blocks = [];
+  if (!Array.isArray(State.blocks)) { State.blocks = []; State.blocksOk = false; }
   try {
     const ra = await fetch('/api/accents/' + State.jid);
     State.accents = ra.ok ? await ra.json() : [];
@@ -5445,7 +5451,13 @@ function renderBlocks() {
   const body = $('#momBody');
   const list = State.blocks || [];
   if (!list.length) {
-    body.innerHTML = '<div class="acc-empty">No text blocks found for this video.</div>';
+    body.innerHTML = '<div class="acc-empty">'
+      + (State.blocksOk
+         ? 'No text blocks in this video.'
+         : 'This video was analysed before the block editor existed. '
+           + 'Hit \u201cFix transcript\u201d and save once \u2014 that re-runs '
+           + 'the analysis and the blocks appear here.')
+      + '</div>';
     return;
   }
   const fxOpts = ['<option value="">auto (the AI decides)</option>']
@@ -5883,10 +5895,13 @@ $('#momSave').addEventListener('click', async () => {
     fd.append('moments', JSON.stringify(State.moments));
     fd.append('code', State.code);
     fd.append('accents', JSON.stringify(State.accents || []));
-    // v193: Blockplan mitschicken. Leerer String hiesse "nicht angefasst" -
-    // hier wird immer bewusst gesendet, auch eine leere Liste (= zurueck zur
-    // Automatik), damit ein Zuruecksetzen im Editor wirklich ankommt.
-    fd.append('blocks', JSON.stringify(State.blocks || []));
+    // v193: Blockplan mitschicken. v194a: NUR wenn er auch geladen werden
+    // konnte. Bei einem Job aus der Zeit vor dem Block-Editor gibt es keine
+    // Blockdatei; ein leeres Array wuerde dort als "zurueck zur Automatik"
+    // gelesen und der Editor bliebe wirkungslos, ohne dass es jemand merkt.
+    if (State.blocksOk) {
+      fd.append('blocks', JSON.stringify(State.blocks || []));
+    }
     const r = await fetch('/api/moments/' + State.jid, { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok || !d.ok) { toast('Error: ' + (d.detail || d.msg || 'unknown'), 'err'); return; }

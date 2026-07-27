@@ -299,6 +299,17 @@ Merge-Pass wieder zusammengelegt wird, ist keine.
   'akzente' (Standard) verschwaende der Block sonst ohne jede Meldung.
 - **Das Luecken-Netz ist bei Nutzer-Bloecken AUS.** Die Zusage "jedes Wort
   steht im Bild" gilt der Automatik, nicht gegen eine Loeschung.
+- **Eine Block-Animation braucht den GANZEN Block im Bild (v194a).** Ein
+  Fliess-Block baut sich Wort fuer Wort auf; eine Animation von 0.2 bis
+  0.6 s ist vorbei, bevor das dritte Wort da ist - sie lief nur auf dem
+  ersten Wort und dort drei Bilder lang (am Render gemessen: Unterschied
+  4.2 bei 3.28 s, ab 3.38 s noch 0.3). Bei gesetzter Animation steht der
+  Block deshalb ab seinem Beginn ganz da. Ohne Animation bleibt der
+  Karaoke-Aufbau.
+- **Eine Einstellung am PLAN nachzuweisen reicht als Test NICHT.** Genau
+  daran ist v193 vorbeigelaufen: der Plan trug `anim`, im Bild passierte
+  nichts. Der Beweis ist der Unterschied im gerenderten Bild ueber das
+  ganze Zeitfenster.
 - **Fliess-Bloecke konnten bis v192 gar nicht animieren** — alle neun
   `anim_apply`-Aufrufe hingen an `p['arr']` (Keyword-Karten). Der
   Fliess-Pfad hat jetzt einen eigenen Aufruf: **eigener Zustandstraeger je
@@ -683,7 +694,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1259/1259 grün (Stand v194)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1264/1264 grün (Stand v194a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

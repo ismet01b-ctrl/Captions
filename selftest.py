@@ -6043,6 +6043,37 @@ def _scenario_betrieb(tmp):
     check('v194: jede der 26 Animationen bewegt ueberhaupt etwas',
           not _tot194, f"regungslos: {_tot194}")
 
+    # ======= v194a: die Editor-Effekte kommen wirklich im Bild an ========
+    # Ismets Befund nach v193: "Die Effekte beim Editor wurden nicht
+    # uebernommen, ist immer noch dasselbe." Der Plan trug die Einstellung -
+    # sichtbar war sie trotzdem nicht.
+    # URSACHE: Ein Fliess-Block baut sich WORT FUER WORT auf (Karaoke, v182).
+    # Eine Block-Animation dauert 0.2 bis 0.6 s; bis das dritte Wort erscheint,
+    # ist sie laengst vorbei. Sie lief also nur auf dem ERSTEN Wort und dort
+    # drei Bilder lang. Am Render gemessen: Unterschied zum Render ohne
+    # Animation 4.2 bei 3.28 s, ab 3.38 s nur noch 0.3 - praktisch nichts.
+    # LOESUNG: Wer im Editor eine Animation auf einen BLOCK legt, meint den
+    # Block. Bei gesetzter Animation steht der ganze Block ab seinem Beginn
+    # im Bild und bewegt sich als Einheit. Ohne Animation bleibt der
+    # Karaoke-Aufbau unveraendert - er ist die Handschrift des Produkts.
+    _r194a = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v194a: mit Block-Animation zaehlt die Blockzeit fuer ALLE Woerter',
+          "dt = ((_bdt + 0.07) if _banim else (t - wd['start'] + 0.07))"
+          in _r194a)
+    check('v194a: ohne Animation bleibt der Wort-fuer-Wort-Aufbau',
+          "(t - wd['start'] + 0.07))" in _r194a)
+    check('v194a: die Animation laeuft gegen die Blockzeit, nicht die Wortzeit',
+          _r194a.count('_ap, _arr, aud, _bdt)') == 2
+          and "_bdt = t - float(p.get('start', 0.0))" in _r194a)
+    # Und die UI darf einen Job OHNE Blockdatei nicht stillschweigend auf
+    # Automatik zuruecksetzen - sonst wirkt der Editor bei Alt-Jobs nie.
+    _ui194a = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v194a: ohne geladene Bloecke wird auch keine leere Liste geschickt',
+          'if (State.blocksOk) {' in _ui194a
+          and 'State.blocksOk = true;' in _ui194a)
+    check('v194a: der Nutzer erfaehrt, warum ein Alt-Job keine Bloecke hat',
+          'analysed before the block editor existed' in _ui194a)
+
     # ======= v193: BLOCK-EDITOR ==========================================
     # Ismets Ansage: "Es soll voll einstellbar sein und diese Einstellungen
     # MUESSEN auch uebernommen werden." Genau darum steht hier nicht nur
@@ -6203,8 +6234,13 @@ def _scenario_betrieb(tmp):
     check('v193: der Fliess-Zeichenpfad ruft anim_apply',
           "_banim = p.get('anim') if p.get('_user') else None" in _r193
           and '_arr, _adx, _ady, _asc, _aop = anim_apply(' in _r193)
+    # v194a: die Zeile ist auf zwei Zeilen umgebrochen, weil der
+    # Zustandstraeger dazugekommen ist. Geprueft wird unveraendert: eigener
+    # Traeger je Wort (nie ein gemeinsames dict - _anim_core haelt seinen
+    # Zufallszustand am Objekt) und die gemeinsame BLOCK-Zeit.
     check('v193: jedes Wort hat einen eigenen Zustandstraeger, gleiche Blockzeit',
-          "_ap = {'anim': _banim, 'start': float(p['start'])," in _r193
+          "_ap = {'anim': _banim," in _r193
+          and "'start': float(p['start'])," in _r193
           and "_bdt = t - float(p.get('start', 0.0))" in _r193)
     check('v193: die Groesse pro Block geht in compose_flow',
           'maxw=None, groesse=None, texte=None' in _r193

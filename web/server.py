@@ -1709,7 +1709,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v194-animationen'
+DVE_BUILD = 'v194a-editor-effekte'
 
 
 @app.middleware('http')

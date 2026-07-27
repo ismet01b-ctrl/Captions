@@ -11134,17 +11134,36 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             # Fliess-Block KONNTE gar keine Animation tragen, egal was
             # eingestellt war. Genau das war die Luecke, die den Block-Editor
             # bis hierher unmoeglich machte.
-            # Umsetzung: jedes Wort des Blocks bekommt einen eigenen
-            # Zustandstraeger, aber ALLE rechnen gegen dieselbe Blockzeit.
-            # Dadurch bewegt sich der Block als Einheit (gleiche Kurve), waehrend
-            # die Feder-/Tremor-Streuung je Wort natuerlich bleibt. Ein
-            # gemeinsames dict waere falsch: _anim_core haelt seinen Zufalls-
-            # zustand am Objekt und wuerde je Frame N-mal weitergetickt.
+            # Umsetzung: jedes Wort bekommt einen eigenen Zustandstraeger UND
+            # seine EIGENE Zeitbasis - gerechnet ab dem Moment, in dem es
+            # erscheint.
+            # v194a: das war in v193 falsch. Dort liefen alle Woerter gegen die
+            # BLOCK-Zeit, damit sich der Block "als Einheit" bewegt. Ein Block
+            # baut sich hier aber Wort fuer Wort auf (Karaoke-Aufbau, v182).
+            # Wenn das dritte Wort 0.6 s nach Blockbeginn erscheint, ist eine
+            # Animation, die 0.22 s dauert, laengst vorbei - sie lief nur auf
+            # dem ERSTEN Wort und dort nur drei Bilder lang.
+            # Am Render gemessen (Block 3.24-4.30 s, anim 'explosion'):
+            # Unterschied zum Render ohne Animation 4.2 bei 3.28 s, 2.9 bei
+            # 3.32 s und ab 3.38 s nur noch 0.3 - also praktisch nichts.
+            # Genau das ist Ismets Befund "ist immer noch dasselbe".
+            # v194a, zweiter Anlauf: die Zeitbasis allein reichte nicht. Der
+            # eigentliche Grund ist der WORT-FUER-WORT-AUFBAU. Ein Block, dessen
+            # Woerter nacheinander erscheinen, kann nicht "explodieren" - egal
+            # wann die Kurve laeuft, es ist immer nur ein Wort in Bewegung.
+            # Wer im Editor eine Animation auf einen BLOCK legt, meint den
+            # Block. Also steht bei gesetzter Animation der ganze Block ab
+            # seinem Beginn im Bild und bewegt sich als Einheit.
+            # Der Karaoke-Aufbau bleibt fuer alle anderen Bloecke unveraendert -
+            # er ist die Handschrift des Produkts, nur eben nicht vereinbar mit
+            # einer Block-Animation.
             _banim = p.get('anim') if p.get('_user') else None
             _bdt = t - float(p.get('start', 0.0))
             for it in p['front']:
                 wd = words[it['i']]
-                dt = t - wd['start'] + 0.07          # Lese-Vorlauf
+                # Mit Block-Animation zaehlt die BLOCKzeit fuer alle Woerter:
+                # sie erscheinen gemeinsam und bewegen sich gemeinsam.
+                dt = ((_bdt + 0.07) if _banim else (t - wd['start'] + 0.07))
                 if dt < 0:
                     continue
                 # Nur die VERGANGENEN Woerter dimmen; das aktive bleibt voll
@@ -11203,7 +11222,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                         # um sein wichtigstes Wort herum.
                         _ap = it.get('_a')
                         if _ap is None:
-                            _ap = {'anim': _banim, 'start': float(p['start']),
+                            _ap = {'anim': _banim,
+                                   'start': float(p['start']),
                                    'kw_i': int(it['i'])}
                             it['_a'] = _ap
                         _arr, _kdx, _kdy, _ksc, _kop = anim_apply(
@@ -11241,7 +11261,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     if _banim:
                         _ap = it.get('_a')
                         if _ap is None:
-                            _ap = {'anim': _banim, 'start': float(p['start']),
+                            _ap = {'anim': _banim,
+                                   'start': float(p['start']),
                                    'kw_i': int(it['i'])}
                             it['_a'] = _ap
                         _arr, _adx, _ady, _asc, _aop = anim_apply(

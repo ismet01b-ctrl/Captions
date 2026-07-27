@@ -3,6 +3,38 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v194a EDITOR-EFFEKTE KOMMEN JETZT WIRKLICH AN.**
+  Ismets Befund nach v193: "Die Effekte beim Editor wurden nicht uebernommen,
+  ist immer noch dasselbe."
+  ER HATTE RECHT, und die v193-Tests haben es NICHT gefunden, weil sie am
+  Plan geprueft haben statt am Bild. Der Plan trug die Einstellung korrekt
+  (`anim='explosion'`, `_user=True`) - sichtbar war sie trotzdem nicht.
+  URSACHE: Ein Fliess-Block baut sich WORT FUER WORT auf (Karaoke-Aufbau,
+  v182). Eine Block-Animation dauert 0.2 bis 0.6 s. Bis das dritte Wort
+  erscheint, ist sie laengst vorbei - sie lief also nur auf dem ERSTEN Wort
+  und dort drei Bilder lang. Am gerenderten Video gemessen (Block
+  3.24 bis 4.30 s, 'explosion'): Unterschied zum Render ohne Animation 4.2
+  bei 3.28 s, 0.6 bei 3.34 s, ab 3.38 s nur noch 0.3 - praktisch nichts.
+  Ein Block, dessen Woerter nacheinander erscheinen, kann nicht explodieren.
+  LOESUNG: Wer im Editor eine Animation auf einen BLOCK legt, meint den
+  Block. Bei gesetzter Animation steht der ganze Block ab seinem Beginn im
+  Bild und bewegt sich als Einheit. Ohne Animation bleibt der Karaoke-Aufbau
+  unveraendert - er ist die Handschrift des Produkts, nur eben nicht
+  vereinbar mit einer Block-Animation.
+  NACHHER gemessen, dieselbe Stelle: 6.7 / 6.1 / 5.2 / 4.2 / 4.3 / 4.3 ueber
+  das ganze Block-Fenster statt 4.2 und dann nichts.
+  ZWEITE LUECKE, gleich mitgeschlossen: Jobs, die VOR dem Block-Editor
+  analysiert wurden, haben keine Blockdatei. Die UI schickte trotzdem eine
+  leere Liste mit - serverseitig heisst das "zurueck zur Automatik". Der
+  Editor waere bei jedem Alt-Job wirkungslos geblieben, ohne Meldung. Jetzt
+  wird ohne geladene Bloecke gar nichts geschickt, und der Nutzer bekommt
+  gesagt, dass er das Transkript einmal speichern muss.
+  LEHRE fuer die Tests: eine Einstellung am PLAN nachzuweisen reicht nicht.
+  Der Beweis ist der Unterschied im gerenderten BILD, ueber das ganze
+  Zeitfenster, nicht nur am Anfang.
+  BEWEIS: `editor_fix.jpg` (mit/ohne im selben Frame).
+  Tests: 6 neue Pruefungen, logic 1264/1264, render1 7/7, render2a 1/1,
+  render2b 5/5, render2c 2/2, GUI_OK.
 - **v194 ANIMATIONEN GEPRUEFT: 5 von 26 taten nicht, was ihr Name sagt.**
   Ismets Frage: "Tut die Explosion wirklich das, was sie hergibt?"
   Geprueft wurde JEDE der 26 Animationen - Code gelesen UND gemessen.
