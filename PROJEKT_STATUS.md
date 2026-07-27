@@ -3,6 +3,40 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v196 ANKUENDIGUNGEN + FEEDBACK: zwei echte Luecken geschlossen.**
+  (1) **Ankuendigungen.** Bis v195 gab es genau EINEN Weg, Kunden etwas zu
+      sagen: eine Mail an alle. Fuer "Wartung heute 20 Uhr" oder "neuer Look
+      da" ist das zu laut, kommt zu spaet und laesst sich nicht abbestellen,
+      ohne wichtige Post mitzuverlieren.
+      NEU: Admin schreibt Titel + Text, waehlt eine Stufe (Info / Warnung /
+      Wartung) und optional ein Ablaufdatum in Tagen. Das Banner steht in der
+      App, ist wegklickbar - und **weggeklickt wird PRO Ankuendigung
+      gemerkt**, nicht global, sonst verpasst der Kunde die naechste.
+      Der Endpunkt braucht bewusst KEINE Anmeldung: eine Wartungsmeldung muss
+      auch den erreichen, der gerade nicht eingeloggt ist. Ein Ablaufdatum
+      gibt es, weil eine Wartungsmeldung, die jemand vergisst abzuschalten,
+      schlimmer ist als keine.
+  (2) **Feedback.** Bewusst NICHT dasselbe wie ein Support-Ticket: das Ticket
+      ist eine Frage mit Antworterwartung, Feedback ist eine Bewertung ohne.
+      Die Sterne stehen am FERTIGEN RENDER - nur dort ist die Meinung
+      konkret, und nur dort haengt der LOOK dran. Ohne Look-Bezug ist eine
+      Note nicht auswertbar; mit ihm beantwortet sie die Frage, die zaehlt:
+      welcher Look enttaeuscht. Der Admin sieht Verteilung, Schnitt und
+      **Schnitt je Look**, nicht nur eine Liste. Eine Bewertung je Render -
+      die zweite ueberschreibt, sonst kippt jeder Durchschnitt, sobald
+      jemand den Knopf mehrfach drueckt.
+  Navigation: neue Gruppe **Produkt** (Feedback, Announcements), offenes
+  Feedback als Zaehler daneben. Konto-Loeschung nimmt das Feedback mit
+  (DSGVO); Ankuendigungen sind global und gehoeren niemandem.
+  EIGENER FEHLER, ehrlich notiert: das Banner blieb im ersten Anlauf leer.
+  Der Code rief `esc()` - den gibt es nur im Admin, in der Kunden-App heisst
+  der Helfer `escHtml`. Ein `try/catch` schluckte die Ausnahme, und ein
+  leeres Banner sieht aus wie "keine Ankuendigungen". Der Catch loggt jetzt.
+  Tests: 20 neue Pruefungen, logic 1303/1303, render1 7/7, render2a 1/1,
+  render2b 5/5, render2c 2/2, GUI_OK. Browser Ende zu Ende: Ankuendigung im
+  Admin angelegt -> beim Kunden sichtbar -> weggeklickt -> nach Reload weg;
+  Bewertung abgeschickt -> im Admin mit Look und Schnitt sichtbar; alle 14
+  Ansichten durchgeklickt, keine Konsolenfehler.
 - **v195 ADMIN-PANEL: SEITENLEISTE STATT TAB-REIHE.**
   Ismets Vorlage (Screenshot eines fremden Admin-Panels): links eine
   gruppierte Navigation, oben ein Breadcrumb. Uebernommen wurde der AUFBAU,

@@ -1609,6 +1609,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
 <!-- ---------- APP (Wizard) ---------- -->
 <div id="appView" class="app">
+  <!-- v196 ANKUENDIGUNGS-BANNER. Bis v195 gab es genau einen Weg, Kunden
+       etwas zu sagen: eine Mail an alle. Fuer "Wartung heute 20 Uhr" oder
+       "neuer Look da" ist das zu laut und kommt zu spaet. Das Banner steht
+       da, wo der Kunde ohnehin hinschaut, und laesst sich wegklicken -
+       weggeklickt wird PRO ANKUENDIGUNG gemerkt, nicht global, sonst
+       verpasst er die naechste. -->
+  <div id="annBar"></div>
   <!-- v101x: Erst-Besuch-Auswahl. Captions- und Motion-Nutzer sind getrennte
        Zielgruppen - hier waehlt man sein Werkzeug, danach wird es gemerkt. -->
   <div id="toolChooser" class="tool-chooser" role="dialog" aria-modal="true"
@@ -2404,6 +2411,27 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <p id="doneSub">Your video is ready.</p>
         </div>
         <div class="stat-grid" id="statGrid"></div>
+        <!-- v196 BEWERTUNG. Genau hier ist die Meinung konkret: das Ergebnis
+             liegt vor dem Kunden. Ein Fragebogen im Konto haette diesen
+             Bezug nicht - und ohne Look-Bezug ist eine Note nicht
+             auswertbar ("welcher Look enttaeuscht?"). -->
+        <div id="fbCard" class="hidden" style="margin:16px 0 4px; background:var(--surf);
+             border:1px solid var(--line); border-radius:14px; padding:14px 16px;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-weight:700; font-size:14px;">How did this one turn out?</span>
+            <div id="fbStars" style="display:flex; gap:2px;"></div>
+            <span class="hint" id="fbHint" style="margin:0;"></span>
+          </div>
+          <div id="fbMore" class="hidden" style="margin-top:10px;">
+            <textarea id="fbText" rows="2" maxlength="2000"
+                      placeholder="What worked, what didn't? (optional)"
+                      style="width:100%; background:var(--surf2); border:1px solid var(--line);
+                      color:var(--fg); border-radius:10px; padding:9px 11px; font-family:inherit;
+                      font-size:14px; resize:vertical;"></textarea>
+            <button class="btn secondary" id="fbSend" style="margin-top:8px; padding:8px 16px;">
+              Send feedback</button>
+          </div>
+        </div>
         <!-- v89: Director's cut - warum die KI diese Momente gewaehlt hat -->
         <div id="dirReport" class="hidden" style="margin:16px 0 4px; background:var(--surf);
              border:1px solid var(--line); border-radius:14px; padding:16px 18px;"></div>
@@ -3208,6 +3236,7 @@ function enterApp(user) {
   }
   $('#loginView').classList.add('hidden');
   $('#appView').classList.add('show');
+  loadAnnouncements();                           // v196: Banner beim Betreten
   $('#topName').textContent = State.codeName || 'Account';
   updateCreditHeader(State.balanceSec);
   if (!MOTION_ENABLED) {                         // v123: Motion-Einstieg aus der Nav nehmen
@@ -5190,8 +5219,109 @@ function aBtn(disabled) {
   if (b) b.disabled = !!disabled;
 }
 
+/* ---------- v196 ANKUENDIGUNGEN + BEWERTUNG ---------- */
+const ANN_STIL = {
+  info:    ['rgba(91,157,255,.10)',  'rgba(91,157,255,.35)',  '#5b9dff'],
+  warn:    ['rgba(242,193,78,.10)',  'rgba(242,193,78,.38)',  '#f2c14e'],
+  wartung: ['rgba(255,82,51,.10)',   'rgba(255,82,51,.38)',   '#ff5233'],
+};
+function annWeg(id) {
+  // Pro Ankuendigung merken, nicht global - sonst verpasst der Kunde die
+  // naechste, weil er einmal weggeklickt hat.
+  try {
+    const g = JSON.parse(localStorage.getItem('dve_ann_zu') || '[]');
+    if (!g.includes(id)) { g.push(id); localStorage.setItem('dve_ann_zu', JSON.stringify(g.slice(-50))); }
+  } catch (e) {}
+  const n = document.getElementById('ann-' + id);
+  if (n) n.remove();
+}
+async function loadAnnouncements() {
+  const bar = $('#annBar');
+  if (!bar) return;
+  let zu = [];
+  try { zu = JSON.parse(localStorage.getItem('dve_ann_zu') || '[]'); } catch (e) {}
+  try {
+    const d = await (await fetch('/api/announcements')).json();
+    const items = (d.items || []).filter(a => !zu.includes(a.id));
+    bar.innerHTML = items.map(a => {
+      const [bg, br, fg] = ANN_STIL[a.stufe] || ANN_STIL.info;
+      return `<div id="ann-${a.id}" style="background:${bg}; border:1px solid ${br};
+           border-radius:12px; padding:12px 14px; margin:0 0 12px; display:flex;
+           gap:12px; align-items:flex-start;">
+        <span style="color:${fg}; font-weight:800; font-size:12px; letter-spacing:.06em;
+              text-transform:uppercase; flex:none; padding-top:1px;">${a.stufe === 'wartung' ? 'Maintenance' : a.stufe === 'warn' ? 'Heads up' : 'News'}</span>
+        <div style="flex:1; min-width:0;">
+          <b style="font-size:14px;">${escHtml(a.titel)}</b>
+          <div style="color:var(--mut); font-size:13.5px; white-space:pre-wrap;">${escHtml(a.text)}</div>
+        </div>
+        <button onclick="annWeg(${a.id})" aria-label="Dismiss" style="background:none;
+                border:0; color:var(--mut); cursor:pointer; font-size:18px; line-height:1;
+                flex:none;">&times;</button>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    // v196: NICHT still schlucken. Genau daran ist der erste Anlauf
+    // vorbeigelaufen - 'esc' gibt es nur im Admin, hier heisst der Helfer
+    // escHtml. Das leere Banner sah aus wie "keine Ankuendigungen".
+    console.error('announcements:', e);
+  }
+}
+
+let fbNote = 0;
+function fbMalen(aktiv) {
+  const box = $('#fbStars');
+  if (!box) return;
+  box.innerHTML = [1, 2, 3, 4, 5].map(n =>
+    `<button type="button" onclick="fbPick(${n})" aria-label="${n} of 5"
+       style="background:none;border:0;cursor:pointer;font-size:22px;line-height:1;padding:0 1px;
+       color:${n <= aktiv ? 'var(--acc)' : 'var(--line)'};">★</button>`).join('');
+}
+function fbPick(n) {
+  fbNote = n;
+  fbMalen(n);
+  $('#fbMore').classList.remove('hidden');
+  $('#fbHint').textContent = '';
+}
+async function fbInit() {
+  const card = $('#fbCard');
+  if (!card || !State.jid) return;
+  fbNote = 0;
+  card.classList.remove('hidden');
+  $('#fbMore').classList.add('hidden');
+  $('#fbText').value = '';
+  $('#fbHint').textContent = '';
+  fbMalen(0);
+  try {
+    const d = await (await fetch('/api/feedback/mine?jid=' + encodeURIComponent(State.jid))).json();
+    if (d && d.note) {
+      fbNote = d.note; fbMalen(d.note);
+      $('#fbText').value = d.text || '';
+      $('#fbHint').textContent = 'Thanks — you can change it anytime.';
+    }
+  } catch (e) {}
+}
+if ($('#fbSend')) $('#fbSend').addEventListener('click', async () => {
+  if (!fbNote) { $('#fbHint').textContent = 'Pick a rating first.'; return; }
+  const b = $('#fbSend'); b.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('note', String(fbNote));
+    fd.append('text', $('#fbText').value.trim());
+    fd.append('jid', State.jid || '');
+    fd.append('look', State.look || '');
+    const r = await fetch('/api/feedback', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'failed');
+    $('#fbHint').textContent = 'Thanks! That helps.';
+    $('#fbMore').classList.add('hidden');
+  } catch (e) {
+    $('#fbHint').textContent = 'Could not send: ' + e.message;
+  } finally { b.disabled = false; }
+});
+
 function renderSuccess() {
   $('#doneCard').classList.remove('hidden');
+  fbInit();
   const rv = $('#resultVid');
   rv.poster = '/api/poster/' + State.jid;   // v101o: Standbild sofort, Video on demand
   rv.src = '/api/video/' + State.jid;

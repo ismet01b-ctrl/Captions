@@ -673,6 +673,20 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   weg war. Ausnahme: der Kaufbeleg ist ein Rechnungsdokument und geht pro
   Kauf raus.
 
+## Ankuendigungen + Feedback (v196)
+- **Ankuendigung** = Banner IN der App (`announcements`, Stufen info/warn/
+  wartung, optionales Ablaufdatum). `/api/announcements` braucht bewusst
+  KEINE Anmeldung - eine Wartungsmeldung muss auch den erreichen, der
+  gerade nicht eingeloggt ist. Weggeklickt wird **pro Ankuendigung** im
+  localStorage gemerkt, nie global.
+- **Feedback ist NICHT das Ticket-System.** Ticket = Frage mit Antwort,
+  Feedback = Bewertung ohne. Die Sterne haengen am fertigen Render, damit
+  der LOOK mitkommt - ohne ihn ist eine Note nicht auswertbar. Eine
+  Bewertung je Render (die zweite ueberschreibt).
+- Die Kunden-App hat `escHtml`, NICHT `esc` (das gibt es nur in
+  `admin.html`). Und ein `try/catch` um einen Renderer muss loggen: ein
+  leeres Banner sieht sonst aus wie "nichts vorhanden".
+
 ## Betriebs-Meldungen (v147)
 Render-Fehler und Job-Timeouts gehen **nicht** mehr per Mail raus, sondern nur
 in die Tabelle `alerts` und den Admin-Tab **Alerts**. `_notify_admin(...,
@@ -720,7 +734,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1283/1283 grün (Stand v195)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1303/1303 grün (Stand v196)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -355,6 +355,30 @@ def _init_users_db():
                 "status TEXT NOT NULL DEFAULT 'open', "
                 "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_tickets_status ON tickets(status, created_at)")
+    # v196 ANKUENDIGUNGEN. Bis v195 gab es keinen Weg, Kunden etwas zu sagen,
+    # ausser einer Mail an alle - und die ist fuer "Wartung heute 20 Uhr" oder
+    # "neuer Look da" das falsche Mittel (zu laut, nicht abbestellbar ohne
+    # Kollateralschaden). Eine Ankuendigung steht IN der App, ist stufig
+    # (info/warn/wartung) und laeuft optional von selbst ab.
+    con.execute("CREATE TABLE IF NOT EXISTS announcements ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, titel TEXT NOT NULL, "
+                "text TEXT NOT NULL, stufe TEXT NOT NULL DEFAULT 'info', "
+                "aktiv INTEGER NOT NULL DEFAULT 1, "
+                "created_at INTEGER NOT NULL, bis INTEGER)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_ann_aktiv "
+                "ON announcements(aktiv, created_at)")
+    # v196 FEEDBACK. Bewusst NICHT dasselbe wie ein Support-Ticket: das Ticket
+    # ist eine Frage mit Antworterwartung, Feedback ist eine Bewertung ohne.
+    # Es haengt am fertigen Render (jid + look) - nur dort ist die Meinung
+    # konkret und damit auswertbar ("welcher Look enttaeuscht?").
+    con.execute("CREATE TABLE IF NOT EXISTS feedback ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, "
+                "jid TEXT DEFAULT '', look TEXT DEFAULT '', "
+                "note INTEGER NOT NULL, text TEXT DEFAULT '', "
+                "created_at INTEGER NOT NULL, gelesen INTEGER NOT NULL DEFAULT 0)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_fb_neu "
+                "ON feedback(gelesen, created_at)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_fb_user ON feedback(user_id)")
     # v126-sec: Referral-Anspruch pro E-Mail, PSEUDONYM (gesalzener Hash, KEINE
     # Klartext-Mail). UEBERLEBT die Kontoloeschung bewusst - sonst liesse sich der
     # Bonus per Loeschen+Neuregistrieren beliebig oft farmen. DSGVO: berechtigtes
@@ -1749,7 +1773,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v195-adminnav'
+DVE_BUILD = 'v196-ann-feedback'
 
 
 @app.middleware('http')
@@ -4463,6 +4487,83 @@ def api_resend_verification(request: Request):
     return {'ok': True, 'msg': 'Verification email sent.'}
 
 
+# ---------------------------------------------------- v196 Ankuendigungen
+def _ann_aktiv():
+    """Aktive Ankuendigungen, abgelaufene automatisch aus."""
+    now = int(time.time())
+    con = _db()
+    try:
+        rows = con.execute(
+            "SELECT id, titel, text, stufe, created_at, bis FROM announcements "
+            "WHERE aktiv = 1 AND (bis IS NULL OR bis > ?) "
+            "ORDER BY created_at DESC LIMIT 5", (now,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+@app.get('/api/announcements')
+def api_announcements():
+    """Was der Kunde in der App als Banner sieht. Bewusst OHNE Auth: eine
+    Wartungsmeldung muss auch den erreichen, der gerade nicht eingeloggt ist."""
+    return {'items': _ann_aktiv()}
+
+
+@app.post('/api/feedback')
+def api_feedback(request: Request, note: int = Form(...), text: str = Form(''),
+                 jid: str = Form(''), look: str = Form('')):
+    """Bewertung zu einem fertigen Render. Kein Ticket - hier wird nichts
+    beantwortet, hier wird gemessen."""
+    u = _current_user(request)
+    if not u:
+        raise HTTPException(403, 'Please sign in first.')
+    try:
+        note = int(note)
+    except (TypeError, ValueError):
+        raise HTTPException(400, 'Rating must be a number.')
+    if not 1 <= note <= 5:
+        raise HTTPException(400, 'Rating must be between 1 and 5.')
+    text = (text or '').strip()[:2000]
+    jid = (jid or '').strip()[:64]
+    look = (look or '').strip()[:32]
+    # Ein Kunde darf zu EINEM Render einmal bewerten - sonst kippt jeder
+    # Durchschnitt, sobald jemand den Knopf mehrfach drueckt.
+    con = _db()
+    try:
+        if jid:
+            alt = con.execute("SELECT id FROM feedback WHERE user_id = ? AND jid = ?",
+                              (u['id'], jid)).fetchone()
+            if alt:
+                con.execute("UPDATE feedback SET note = ?, text = ?, created_at = ?, "
+                            "gelesen = 0 WHERE id = ?",
+                            (note, text, int(time.time()), alt['id']))
+                con.commit()
+                return {'ok': True, 'updated': True}
+        con.execute("INSERT INTO feedback (user_id, jid, look, note, text, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (u['id'], jid, look, note, text, int(time.time())))
+        con.commit()
+    finally:
+        con.close()
+    return {'ok': True}
+
+
+@app.get('/api/feedback/mine')
+def api_feedback_mine(request: Request, jid: str = ''):
+    """Hat der Kunde diesen Render schon bewertet? Damit die App nicht
+    nochmal fragt und die eigene Note anzeigen kann."""
+    u = _current_user(request)
+    if not u or not jid:
+        return {'note': None}
+    con = _db()
+    try:
+        r = con.execute("SELECT note, text FROM feedback WHERE user_id = ? AND jid = ?",
+                        (u['id'], jid.strip()[:64])).fetchone()
+        return {'note': r['note'], 'text': r['text']} if r else {'note': None}
+    finally:
+        con.close()
+
+
 @app.post('/api/support')
 def api_support(request: Request, subject: str = Form(''),
                 message: str = Form(...)):
@@ -4562,6 +4663,9 @@ def _purge_user_db(uid):
     # v135a: Support-Tickets enthalten Klartext-Mail + Nachrichten - 'Deletion
     # is permanent' gilt auch fuer sie.
     con.execute("DELETE FROM tickets WHERE user_id = ?", (uid,))
+    # v196: Feedback haengt an der Person -> mitloeschen. Ankuendigungen sind
+    # global und gehoeren niemandem, die bleiben.
+    con.execute("DELETE FROM feedback WHERE user_id = ?", (uid,))
     con.execute("DELETE FROM users WHERE id = ?", (uid,))
     con.commit()
     con.close()
@@ -6628,6 +6732,8 @@ def admin_overview(request: Request):
     rr = con.execute("SELECT COUNT(*) c, COALESCE(SUM(-delta_sec),0) s FROM ledger "
                      "WHERE grund LIKE 'Render %'").fetchone()
     tickets_open = con.execute("SELECT COUNT(*) c FROM tickets WHERE status='open'").fetchone()['c']
+    feedback_offen = con.execute(
+        "SELECT COUNT(*) c FROM feedback WHERE gelesen=0").fetchone()['c']   # v196
     con.close()
     purchasers = len(_admin_purchaser_ids())
 
@@ -6651,6 +6757,7 @@ def admin_overview(request: Request):
         'alerts_active': len(_ADMIN_NOTIFIED),
         'alerts_offen': _alerts_offen(),
         'tickets_open': tickets_open,                  # v133c
+        'feedback_offen': feedback_offen,              # v196
         'system': {'disk': _disk_info(), 'db_mb': _db_size_mb(),
                    'last_backup': _last_backup_ts(),
                    'openai': _openai_health(),
@@ -7102,6 +7209,127 @@ def admin_alerts(request: Request):
             'note': 'In-memory notification throttle state; resets on restart.'}
 
 
+@app.get('/api/admin/feedback')
+def admin_feedback(request: Request, filt: str = 'all', limit: int = 300):
+    """v196: Bewertungen sichten. filt = all/neu/schlecht."""
+    _require_admin(request)
+    limit = max(1, min(1000, limit))
+    where = ''
+    if filt == 'neu':
+        where = 'WHERE f.gelesen = 0'
+    elif filt == 'schlecht':
+        where = 'WHERE f.note <= 2'
+    con = _db()
+    try:
+        rows = con.execute(
+            f"SELECT f.id, f.user_id, f.jid, f.look, f.note, f.text, "
+            f"f.created_at, f.gelesen, u.email, u.name "
+            f"FROM feedback f LEFT JOIN users u ON u.id = f.user_id "
+            f"{where} ORDER BY f.created_at DESC LIMIT ?", (limit,)).fetchall()
+        # Verteilung und Schnitt - eine Liste allein sagt nichts ueber die Lage.
+        vert = {n: 0 for n in range(1, 6)}
+        for r in con.execute("SELECT note, COUNT(*) c FROM feedback GROUP BY note"):
+            vert[int(r['note'])] = r['c']
+        ges = sum(vert.values())
+        schnitt = (sum(n * c for n, c in vert.items()) / ges) if ges else 0
+        # Schnitt je Look: DAS ist die Zahl, die eine Produktentscheidung traegt.
+        looks = [dict(r) for r in con.execute(
+            "SELECT look, COUNT(*) c, AVG(note) avg FROM feedback "
+            "WHERE look <> '' GROUP BY look ORDER BY c DESC").fetchall()]
+        offen = con.execute("SELECT COUNT(*) c FROM feedback WHERE gelesen = 0"
+                            ).fetchone()['c']
+        return {'items': [dict(r) for r in rows], 'verteilung': vert,
+                'gesamt': ges, 'schnitt': round(schnitt, 2),
+                'looks': looks, 'offen': offen}
+    finally:
+        con.close()
+
+
+@app.post('/api/admin/feedback/{fid}/read')
+def admin_feedback_read(fid: int, request: Request):
+    _require_admin(request)
+    con = _db()
+    try:
+        con.execute("UPDATE feedback SET gelesen = 1 WHERE id = ?", (fid,))
+        con.commit()
+    finally:
+        con.close()
+    return {'ok': True}
+
+
+@app.get('/api/admin/announcements')
+def admin_ann_list(request: Request):
+    _require_admin(request)
+    con = _db()
+    try:
+        rows = con.execute(
+            "SELECT id, titel, text, stufe, aktiv, created_at, bis "
+            "FROM announcements ORDER BY created_at DESC LIMIT 200").fetchall()
+        return {'items': [dict(r) for r in rows]}
+    finally:
+        con.close()
+
+
+_ANN_STUFEN = ('info', 'warn', 'wartung')
+
+
+@app.post('/api/admin/announcements')
+def admin_ann_save(request: Request, titel: str = Form(...), text: str = Form(...),
+                   stufe: str = Form('info'), tage: float = Form(0),
+                   aid: int = Form(0)):
+    """Anlegen oder aendern. tage > 0 setzt ein Ablaufdatum - eine
+    Wartungsmeldung, die jemand vergisst abzuschalten, ist schlimmer als
+    keine."""
+    _require_admin(request)
+    titel = (titel or '').strip()[:120]
+    text = (text or '').strip()[:2000]
+    if not titel or not text:
+        raise HTTPException(400, 'Title and text are required.')
+    stufe = stufe if stufe in _ANN_STUFEN else 'info'
+    try:
+        tage = max(0.0, min(365.0, float(tage or 0)))
+    except (TypeError, ValueError):
+        tage = 0.0
+    bis = int(time.time() + tage * 86400) if tage else None
+    con = _db()
+    try:
+        if aid:
+            con.execute("UPDATE announcements SET titel=?, text=?, stufe=?, bis=? "
+                        "WHERE id=?", (titel, text, stufe, bis, int(aid)))
+        else:
+            con.execute("INSERT INTO announcements (titel, text, stufe, aktiv, "
+                        "created_at, bis) VALUES (?, ?, ?, 1, ?, ?)",
+                        (titel, text, stufe, int(time.time()), bis))
+        con.commit()
+    finally:
+        con.close()
+    return {'ok': True}
+
+
+@app.post('/api/admin/announcements/{aid}/toggle')
+def admin_ann_toggle(aid: int, request: Request):
+    _require_admin(request)
+    con = _db()
+    try:
+        con.execute("UPDATE announcements SET aktiv = 1 - aktiv WHERE id = ?", (aid,))
+        con.commit()
+    finally:
+        con.close()
+    return {'ok': True}
+
+
+@app.post('/api/admin/announcements/{aid}/delete')
+def admin_ann_del(aid: int, request: Request):
+    _require_admin(request)
+    con = _db()
+    try:
+        con.execute("DELETE FROM announcements WHERE id = ?", (aid,))
+        con.commit()
+    finally:
+        con.close()
+    return {'ok': True}
+
+
 @app.get('/api/admin/tickets')
 def admin_tickets(request: Request, status: str = 'all', limit: int = 200):
     """v133c: Support-Tickets sichten. status = all/open/closed."""
@@ -7138,6 +7366,7 @@ def admin_factory_reset(request: Request, confirm: str = Form('')):
     con = _db()
     tables = ['sessions', 'ledger', 'ledger_archive', 'purchases', 'tickets',
               'consents', 'resets', 'verify_tokens', 'mail_log',
+              'feedback', 'announcements',                       # v196
               'credit_claims', 'referral_claims', 'users']
     counts = {}
     for t in tables:

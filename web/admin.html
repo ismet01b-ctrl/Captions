@@ -194,11 +194,14 @@ const ICON={
   system:'<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
   compliance:'<path d="M9 11l2 2 4-4"/><path d="M20 12a8 8 0 1 1-8-8 8 8 0 0 1 8 8z"/>',
   legal:'<path d="M12 3v18M5 7h14M7 7l-3 6h6zM17 7l-3 6h6z"/>',
+  feedback:'<path d="M12 3 14.9 8.9l6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.6 9.8l6.5-.9z"/>',
+  ann:'<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
 };
 const NAV=[
   ['', [['live','Live'],['alerts','Alerts'],['jobs','Jobs']]],
   ['Umsatz', [['revenue','Revenue'],['credits','Credits'],['codes','Codes']]],
   ['Kunden', [['users','Users'],['support','Support'],['abuse','Abuse']]],
+  ['Produkt', [['feedback','Feedback'],['ann','Announcements']]],
   ['Betrieb', [['system','System'],['compliance','Compliance'],['legal','Recht & Steuern']]],
 ];
 const TABS=NAV.flatMap(([,items])=>items);
@@ -288,6 +291,7 @@ async function refreshBadges(){
   try{
     const d=await api('/api/admin/overview');
     setBadge('alerts', d.alerts_offen||0);
+    setBadge('feedback', d.feedback_offen||0);
   }catch(e){}
 }
 function navTog(){
@@ -791,7 +795,118 @@ async function loadAlerts(silent){
 async function alertRead(id){const fd=new FormData();fd.append('id',id);try{await api('/api/admin/alerts/read',{method:'POST',body:fd});loadAlerts();}catch(e){alert(e.message);}}
 
 function err(e){return '<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Error</b> '+esc(e.message)+'</div>';}
-const RENDER={live:loadLive,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes};
+/* ---------- v196 FEEDBACK ----------
+   Bewusst nicht dasselbe wie Support: ein Ticket ist eine Frage mit
+   Antworterwartung, Feedback ist eine Bewertung ohne. Der Wert steckt in
+   der VERTEILUNG und im Schnitt JE LOOK - eine blosse Liste sagt nichts
+   darueber, wo das Produkt enttaeuscht. */
+let fbFilt='all';
+function sterne(n){return '★'.repeat(n)+'<span style="color:var(--line)">'+'★'.repeat(5-n)+'</span>';}
+async function loadFeedback(silent){
+  let d;try{d=await api('/api/admin/feedback?filt='+fbFilt);}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.feedback=Date.now()/1000;
+  setBadge('feedback', d.offen||0);          // sofort, nicht erst nach 30 s
+  const max=Math.max(1,...Object.values(d.verteilung));
+  const bars=[5,4,3,2,1].map(n=>{
+    const c=d.verteilung[n]||0;
+    return `<div style="display:flex;align-items:center;gap:9px;margin:5px 0">
+      <span style="width:58px;color:var(--mut2);font-size:12px">${n} ★</span>
+      <div style="flex:1;height:8px;background:var(--surf2);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${Math.round(c/max*100)}%;background:${n>=4?'var(--ok)':n===3?'var(--warn)':'var(--bad)'}"></div></div>
+      <span style="width:38px;text-align:right;font-size:12px">${c}</span></div>`;}).join('');
+  const looks=d.looks.length?d.looks.map(l=>
+    `<tr><td>${esc(l.look)}</td><td>${l.c}</td>
+     <td style="color:${l.avg>=4?'var(--ok)':l.avg>=3?'var(--warn)':'var(--bad)'}">${Number(l.avg).toFixed(2)}</td></tr>`
+    ).join(''):'<tr><td colspan="3" class="subtle">No ratings with a look yet.</td></tr>';
+  const rows=d.items.length?d.items.map(f=>`<tr${f.gelesen?'':' style="background:rgba(255,122,26,.06)"'}>
+      <td style="white-space:nowrap;color:${f.note>=4?'var(--ok)':f.note>=3?'var(--warn)':'var(--bad)'}">${sterne(f.note)}</td>
+      <td>${esc(f.name||'')}<div class="subtle">${esc(f.email||'deleted account')}</div></td>
+      <td>${esc(f.look||'–')}</td>
+      <td style="max-width:420px;white-space:pre-wrap">${esc(f.text)||'<span class="subtle">no comment</span>'}</td>
+      <td class="subtle" style="white-space:nowrap">${fdt(f.created_at)}</td>
+      <td>${f.gelesen?'':`<button class="btn ghost sm" onclick="fbRead(${f.id})">Mark read</button>`}</td>
+    </tr>`).join(''):'<tr><td colspan="6" class="subtle">Nothing here yet.</td></tr>';
+  el('view').innerHTML=`
+    <div class="grid g4">
+      <div class="card"><div class="k">Ratings</div><div class="v">${d.gesamt}</div></div>
+      <div class="card acc"><div class="k">Average</div><div class="v">${d.schnitt||'–'} <small>of 5</small></div></div>
+      <div class="card"><div class="k">Unread</div><div class="v">${d.offen}</div></div>
+      <div class="card"><div class="k">1-2 stars</div><div class="v">${(d.verteilung[1]||0)+(d.verteilung[2]||0)}</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:12px">
+      <div class="card"><h3 style="margin-top:0">Distribution</h3>${bars}</div>
+      <div class="card"><h3 style="margin-top:0">Average per look</h3>
+        <table><tr><th>Look</th><th>Ratings</th><th>Ø</th></tr>${looks}</table></div>
+    </div>
+    <h3>Comments
+      <span style="float:right;font-weight:600;text-transform:none;letter-spacing:0">
+      ${['all','neu','schlecht'].map(f=>`<button class="btn ${fbFilt===f?'':'ghost'} sm" onclick="fbSet('${f}')">${f==='all'?'All':f==='neu'?'Unread':'1-2 stars'}</button>`).join(' ')}
+      </span></h3>
+    <table><tr><th>Rating</th><th>Customer</th><th>Look</th><th>Comment</th><th>When</th><th></th></tr>${rows}</table>`;
+}
+function fbSet(f){fbFilt=f;loadFeedback();}
+async function fbRead(id){await api('/api/admin/feedback/'+id+'/read',{method:'POST'});loadFeedback();refreshBadges();}
+
+/* ---------- v196 ANKUENDIGUNGEN ----------
+   Der einzige Weg, Kunden etwas zu sagen, war bisher eine Mail an alle -
+   fuer "Wartung heute 20 Uhr" das falsche Mittel. Eine Ankuendigung steht
+   IN der App und kann von selbst ablaufen; eine Wartungsmeldung, die jemand
+   vergisst abzuschalten, ist schlimmer als keine. */
+async function loadAnn(silent){
+  let d;try{d=await api('/api/admin/announcements');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.ann=Date.now()/1000;
+  const rows=d.items.length?d.items.map(a=>{
+    const ab=a.bis?fdt(a.bis):'–';
+    const weg=a.bis&&a.bis*1000<Date.now();
+    return `<tr>
+      <td><span class="tag ${a.stufe==='warn'?'warn':a.stufe==='wartung'?'no':'ok'}">${a.stufe}</span></td>
+      <td><b>${esc(a.titel)}</b><div class="subtle" style="white-space:pre-wrap;max-width:460px">${esc(a.text)}</div></td>
+      <td class="subtle" style="white-space:nowrap">${fdt(a.created_at)}</td>
+      <td class="subtle" style="white-space:nowrap">${ab}${weg?' <span class="tag no">expired</span>':''}</td>
+      <td>${a.aktiv?'<span class="tag ok">live</span>':'<span class="tag">off</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn ghost sm" onclick="annTog(${a.id})">${a.aktiv?'Turn off':'Turn on'}</button>
+        <button class="btn ghost sm" onclick="annDel(${a.id})">Delete</button></td>
+    </tr>`;}).join(''):'<tr><td colspan="6" class="subtle">No announcements yet.</td></tr>';
+  el('view').innerHTML=`
+    <div class="card">
+      <h3 style="margin-top:0">New announcement</h3>
+      <p class="subtle" style="margin-bottom:10px">Shows as a banner inside the app
+        for every customer. Leave the expiry at 0 for “until I turn it off”.</p>
+      <div style="display:flex;flex-direction:column;gap:9px;max-width:620px">
+        <input class="search" id="annT" placeholder="Title" maxlength="120">
+        <textarea class="search" id="annB" rows="3" placeholder="Text" maxlength="2000"></textarea>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+          <select class="search" id="annS">
+            <option value="info">Info</option>
+            <option value="warn">Warning</option>
+            <option value="wartung">Maintenance</option>
+          </select>
+          <input class="search" id="annD" type="number" min="0" max="365" step="0.5" value="0"
+                 style="width:120px" title="Auto-expire after N days (0 = never)">
+          <span class="subtle">days until it expires (0 = never)</span>
+          <button class="btn" onclick="annSave()">Publish</button>
+        </div>
+        <p class="msg subtle" id="annMsg"></p>
+      </div>
+    </div>
+    <h3>All announcements</h3>
+    <table><tr><th>Level</th><th>Message</th><th>Created</th><th>Expires</th><th>State</th><th></th></tr>${rows}</table>`;
+}
+async function annSave(){
+  const t=el('annT').value.trim(), b=el('annB').value.trim();
+  if(!t||!b){el('annMsg').textContent='Title and text are required.';return;}
+  const fd=new FormData();
+  fd.append('titel',t);fd.append('text',b);
+  fd.append('stufe',el('annS').value);fd.append('tage',el('annD').value||'0');
+  try{await api('/api/admin/announcements',{method:'POST',body:fd});loadAnn();}
+  catch(e){el('annMsg').textContent=e.message;}
+}
+async function annTog(id){await api('/api/admin/announcements/'+id+'/toggle',{method:'POST'});loadAnn();}
+async function annDel(id){if(!danger('Delete this announcement?'))return;
+  await api('/api/admin/announcements/'+id+'/delete',{method:'POST'});loadAnn();}
+
+const RENDER={live:loadLive,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
 if(KEY)boot();
 </script>
 </body>

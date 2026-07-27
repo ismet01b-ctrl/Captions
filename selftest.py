@@ -6047,6 +6047,91 @@ def _scenario_betrieb(tmp):
     check('v194: jede der 26 Animationen bewegt ueberhaupt etwas',
           not _tot194, f"regungslos: {_tot194}")
 
+    # ======= v196: Ankuendigungen + Feedback ============================
+    # Bis v195 gab es KEINEN Weg, Kunden etwas zu sagen ausser einer Mail an
+    # alle, und keinen, ihre Meinung zu erfassen ausser dem Ticket-System -
+    # und ein Ticket ist eine Frage mit Antworterwartung, keine Bewertung.
+    # Eigener time-Import: der v196-Block steht VOR dem v194b-Block, dessen
+    # _tm194b es hier also noch nicht gibt. Ein Test, der sich auf eine
+    # Variable aus einem spaeteren Abschnitt stuetzt, bricht beim ersten
+    # Umsortieren - genau das ist gerade passiert.
+    import time as _tm196
+    import server as _SV196
+    _sv196 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _adm196 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    _ui196 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+
+    check('v196: beide Tabellen werden angelegt',
+          'CREATE TABLE IF NOT EXISTS announcements' in _sv196
+          and 'CREATE TABLE IF NOT EXISTS feedback' in _sv196)
+    check('v196: Feedback wird bei der Kontoloeschung mitgeloescht (DSGVO)',
+          'DELETE FROM feedback WHERE user_id = ?' in _sv196)
+    check('v196: die neuen Tabellen haengen an den heissen Abfragen im Index',
+          'ix_fb_neu' in _sv196 and 'ix_ann_aktiv' in _sv196)
+
+    # Ankuendigungen: Endpunkt OHNE Auth (eine Wartungsmeldung muss auch den
+    # erreichen, der gerade nicht eingeloggt ist), abgelaufene fallen raus.
+    _con196 = _SV196._db()
+    _con196.execute("DELETE FROM announcements")
+    _now196 = int(_tm196.time())
+    _con196.execute("INSERT INTO announcements (titel,text,stufe,aktiv,created_at,bis) "
+                    "VALUES ('Aktiv','A','info',1,?,NULL)", (_now196,))
+    _con196.execute("INSERT INTO announcements (titel,text,stufe,aktiv,created_at,bis) "
+                    "VALUES ('Aus','B','info',0,?,NULL)", (_now196,))
+    _con196.execute("INSERT INTO announcements (titel,text,stufe,aktiv,created_at,bis) "
+                    "VALUES ('Abgelaufen','C','warn',1,?,?)", (_now196, _now196 - 10))
+    _con196.commit(); _con196.close()
+    _akt196 = _SV196._ann_aktiv()
+    check('v196: nur aktive und nicht abgelaufene Ankuendigungen gehen raus',
+          [a['titel'] for a in _akt196] == ['Aktiv'],
+          f"{[a['titel'] for a in _akt196]}")
+    check('v196: der Ankuendigungs-Endpunkt braucht keine Anmeldung',
+          "@app.get('/api/announcements')" in _sv196
+          and 'def api_announcements():' in _sv196)
+    check('v196: eine Ankuendigung kann von selbst ablaufen',
+          "bis = int(time.time() + tage * 86400) if tage else None" in _sv196)
+    check('v196: nur erlaubte Stufen',
+          "_ANN_STUFEN = ('info', 'warn', 'wartung')" in _sv196
+          and "stufe if stufe in _ANN_STUFEN else 'info'" in _sv196)
+
+    # Feedback: Note geprueft, eine Bewertung je Render, Look wird mitgefuehrt.
+    check('v196: die Note wird auf 1 bis 5 geprueft',
+          'if not 1 <= note <= 5:' in _sv196)
+    check('v196: eine Bewertung JE RENDER (zweite ueberschreibt, addiert nicht)',
+          'SELECT id FROM feedback WHERE user_id = ? AND jid = ?' in _sv196
+          and 'UPDATE feedback SET note = ?' in _sv196)
+    check('v196: der Look haengt an der Bewertung (sonst nicht auswertbar)',
+          "look TEXT DEFAULT ''" in _sv196
+          and 'AVG(note) avg FROM feedback' in _sv196)
+    check('v196: Feedback ist NICHT das Ticket-System',
+          "@app.post('/api/feedback')" in _sv196
+          and "@app.post('/api/support')" in _sv196)
+
+    # Admin-Oberflaeche
+    check('v196: die Admin-Navigation hat die Gruppe Produkt',
+          "['Produkt', [['feedback','Feedback'],['ann','Announcements']]]" in _adm196)
+    check('v196: beide Ansichten sind verdrahtet',
+          'feedback:loadFeedback' in _adm196 and 'ann:loadAnn' in _adm196)
+    check('v196: offenes Feedback steht als Zaehler in der Navigation',
+          "setBadge('feedback', d.feedback_offen||0)" in _adm196
+          and "'feedback_offen': feedback_offen" in _sv196)
+    check('v196: der Admin sieht Verteilung und Schnitt je Look, nicht nur eine Liste',
+          'Average per look' in _adm196 and 'Distribution' in _adm196)
+
+    # Kunden-Oberflaeche
+    check('v196: das Banner steht in der App und ist wegklickbar',
+          "id=\"annBar\"" in _ui196 and 'function annWeg(' in _ui196)
+    check('v196: weggeklickt wird PRO Ankuendigung gemerkt, nicht global',
+          "localStorage.getItem('dve_ann_zu')" in _ui196
+          and 'zu.includes(a.id)' in _ui196)
+    check('v196: die Bewertung haengt am fertigen Render',
+          "id=\"fbCard\"" in _ui196 and 'fbInit();' in _ui196
+          and "fd.append('look', State.look" in _ui196)
+    check('v196: die App benutzt ihren eigenen Escaper (esc gibt es nur im Admin)',
+          '${escHtml(a.titel)}' in _ui196 and '${esc(a.titel)}' not in _ui196)
+    check('v196: ein Fehler im Banner wird nicht mehr still geschluckt',
+          "console.error('announcements:', e);" in _ui196)
+
     # ======= v195: Admin-Panel als Seitenleiste ==========================
     # Zwoelf Ansichten in einer umbrechenden Tab-Zeile waren schon zu viel,
     # und jede neue machte es schlimmer. Jetzt eine gruppierte Seitenleiste
@@ -6062,9 +6147,12 @@ def _scenario_betrieb(tmp):
     _ids195 = set(_re195.findall(r"\['([a-z]+)','", _nav195.group(1) if _nav195 else ''))
     _rend195 = set(_re195.findall(r"^\s*([a-z]+):\s*async function|^\s*([a-z]+):\s*function",
                                   _adm195, _re195.M))
+    # v196: zwei Ansichten dazu (feedback, ann). Der Test bleibt, was er war -
+    # eine Garantie, dass beim Umbauen der Navigation nichts VERSCHWINDET.
     _soll195 = {'live', 'alerts', 'jobs', 'revenue', 'credits', 'codes',
-                'users', 'support', 'abuse', 'system', 'compliance', 'legal'}
-    check('v195: alle zwoelf Ansichten sind weiter erreichbar',
+                'users', 'support', 'abuse', 'system', 'compliance', 'legal',
+                'feedback', 'ann'}
+    check('v195: alle Ansichten sind weiter erreichbar',
           _ids195 == _soll195, f"fehlt: {_soll195 - _ids195}  neu: {_ids195 - _soll195}")
     check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',
           'const TABS=NAV.flatMap(' in _adm195)
