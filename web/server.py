@@ -1749,7 +1749,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v194c-maildeckel'
+DVE_BUILD = 'v195-adminnav'
 
 
 @app.middleware('http')

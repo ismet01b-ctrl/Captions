@@ -3,6 +3,34 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v195 ADMIN-PANEL: SEITENLEISTE STATT TAB-REIHE.**
+  Ismets Vorlage (Screenshot eines fremden Admin-Panels): links eine
+  gruppierte Navigation, oben ein Breadcrumb. Uebernommen wurde der AUFBAU,
+  nichts sonst - kein Name, keine Farben, keine Inhalte von dort.
+  WARUM: zwoelf Ansichten lagen in einer umbrechenden Tab-Zeile. Das war
+  schon zu viel, und jede neue Ansicht haette es schlimmer gemacht. Eine
+  gruppierte Leiste haelt beliebig viele Punkte aus und sagt nebenbei, was
+  zusammengehoert.
+  AUFTEILUNG (dieselben zwoelf Ansichten, nur sortiert):
+  oben Live / Alerts / Jobs, dann **Umsatz** (Revenue, Credits, Codes),
+  **Kunden** (Users, Support, Abuse), **Betrieb** (System, Compliance,
+  Recht & Steuern).
+  DAZU: Breadcrumb und Seitentitel folgen der Auswahl (auch im Browser-Tab),
+  offene Alerts stehen als Zaehler direkt in der Navigation - vorher musste
+  man den Tab anklicken, um zu sehen, ob etwas ansteht. Symbole sind SVG,
+  keine Emoji.
+  MOBIL: die Leiste klappt ein und nach der Wahl wieder zu. Beim Testen fiel
+  auf, dass die Seite auf dem Handy QUER lief - ein Grid-Kind hat per
+  Voreinstellung min-width:auto und kann nicht schmaler werden als seine
+  breiteste Tabelle. Gemessen und behoben: horizontaler Ueberstand 0 px auf
+  allen vier geprueften Ansichten bei 390 px Breite.
+  `TABS` wird jetzt aus `NAV` abgeleitet - eine Quelle statt zweier Listen,
+  die auseinanderlaufen koennen. Der Selftest prueft, dass alle zwoelf
+  Ansichten erreichbar bleiben.
+  BEWEIS: `adm_live.png` (Desktop), `adm_mob_nav.png` (Handy).
+  Tests: 9 neue Pruefungen, logic 1283/1283, render1 7/7, render2a 1/1,
+  render2b 5/5, render2c 2/2, GUI_OK. Browser-Smoke: alle zwoelf Ansichten
+  durchgeklickt, keine Konsolenfehler.
 - **v194c MAIL-DECKEL RICHTIG GEZOGEN (Ismets Einwand: "was ist wenn jemand
   100 Videos macht").**
   Er hatte recht. Der Tages-Deckel aus v194b half nur gegen den Ausbruch,

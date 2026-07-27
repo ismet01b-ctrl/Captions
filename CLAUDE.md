@@ -97,6 +97,11 @@ Web-Produkt (`web/`):
 - `web/landing.html` — Marketing-Landing (**Englisch**, international, an
   Branchen-Konventionen ausgerichtet; KEINE Konkurrenz-Namen, kein Datenschutz-
   Block auf der Seite).
+- `web/admin.html` — Ops-Konsole. **Navigation ist EINE Quelle** (`NAV`,
+  gruppiert; `TABS` wird daraus abgeleitet). Wer eine Ansicht ergaenzt, traegt
+  sie in `NAV` ein und legt ein SVG in `ICON` — keine Emoji als Symbole.
+  Grid-Kinder brauchen `min-width:0`, sonst schiebt eine breite Tabelle die
+  ganze Seite quer.
 - `web/imprint/privacy/terms.html`, `web/codes.py`.
 - `Dockerfile`, `docker-compose.yml` (app + caddy), `autodeploy.sh`, `update.sh`.
 
@@ -715,7 +720,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1274/1274 grün (Stand v194c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1283/1283 grün (Stand v195)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -6047,6 +6047,48 @@ def _scenario_betrieb(tmp):
     check('v194: jede der 26 Animationen bewegt ueberhaupt etwas',
           not _tot194, f"regungslos: {_tot194}")
 
+    # ======= v195: Admin-Panel als Seitenleiste ==========================
+    # Zwoelf Ansichten in einer umbrechenden Tab-Zeile waren schon zu viel,
+    # und jede neue machte es schlimmer. Jetzt eine gruppierte Seitenleiste
+    # mit Breadcrumb - dieselben zwoelf Ansichten, nur nach Aufgabe sortiert.
+    _adm195 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v195: die Navigation ist in Abschnitte gruppiert',
+          'const NAV=[' in _adm195
+          and "['Umsatz'," in _adm195 and "['Kunden'," in _adm195
+          and "['Betrieb'," in _adm195)
+    # KEINE Ansicht darf beim Umbau verloren gegangen sein.
+    import re as _re195
+    _nav195 = _re195.search(r"const NAV=\[(.*?)\n\];", _adm195, _re195.S)
+    _ids195 = set(_re195.findall(r"\['([a-z]+)','", _nav195.group(1) if _nav195 else ''))
+    _rend195 = set(_re195.findall(r"^\s*([a-z]+):\s*async function|^\s*([a-z]+):\s*function",
+                                  _adm195, _re195.M))
+    _soll195 = {'live', 'alerts', 'jobs', 'revenue', 'credits', 'codes',
+                'users', 'support', 'abuse', 'system', 'compliance', 'legal'}
+    check('v195: alle zwoelf Ansichten sind weiter erreichbar',
+          _ids195 == _soll195, f"fehlt: {_soll195 - _ids195}  neu: {_ids195 - _soll195}")
+    check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',
+          'const TABS=NAV.flatMap(' in _adm195)
+    check('v195: die aktive Zeile wird in der Seitenleiste markiert',
+          "document.querySelectorAll('.side a').forEach" in _adm195
+          and ".tabs button" not in _adm195)
+    check('v195: Breadcrumb und Titel folgen der Auswahl',
+          "el('crumbNow').textContent=t" in _adm195
+          and "el('viewTitle').textContent=t" in _adm195)
+    check('v195: offene Alerts stehen als Zaehler in der Navigation',
+          'function setBadge(' in _adm195 and "setBadge('alerts'" in _adm195)
+    # Mobil: die Leiste klappt zu, und die Seite darf NIE quer scrollen.
+    check('v195: auf schmalen Schirmen klappt die Leiste nach der Wahl zu',
+          "el('side').classList.add('zu')" in _adm195
+          and 'function navTog(' in _adm195)
+    check('v195: kein horizontaler Ueberlauf (Grid-Kind darf schrumpfen)',
+          '.shell>main{min-width:0}' in _adm195
+          and '#view{overflow-x:auto}' in _adm195)
+    # Symbole muessen SVG sein, keine Emoji (Emoji als Icon ist ein
+    # Anti-Pattern und rendert je Plattform anders).
+    check('v195: die Symbole sind SVG, keine Emoji',
+          'const ICON={' in _adm195
+          and '<svg viewBox="0 0 24 24">${ICON[id]' in _adm195)
+
     # ======= v194b: keine Mail-Flut mehr beim Ablauf ====================
     # Ismets Screenshot: drei "Your video will be deleted soon"-Mails, zwei
     # davon in derselben Minute fuer dieselbe Datei. Ursache: der Deckel sass
