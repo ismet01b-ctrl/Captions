@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v190 RUHE: Woerter erscheinen, statt einzufliegen.**
+  Ismets Befund: "alles zu sehr am Zucken". ERST GEMESSEN, dann gebaut -
+  und die Messung hat die naheliegende Vermutung widerlegt.
+  MESSUNG (Editorial-Render, Ink-Schwerpunkt je Frame in ruhigen Phasen):
+  alles an 2.84 Promille W. Ohne Beat-Sync 2.72. Ohne Kamera 2.95. Ohne
+  Aktivwort-Pop 2.52. Ohne Motion-Blur 2.84. Mit ALLEM aus 3.09.
+  Der Anteil der Effekte an der Unruhe ist also NULL - abschalten machte
+  es sogar minimal schlechter. Die Ursache war der Wort-Einflug selbst:
+  jedes Wort kam 2 % der Bildhoehe von unten, von 86 % hochskaliert, mit
+  ease_back-UEBERSCHWINGEN und gestreutem Timing. Bei drei Woertern je
+  Sekunde ist das Dauerbewegung.
+  GEBAUT (`effects.caption_ruhig`, Standard an): Woerter erscheinen an
+  ihrer Endposition, ohne Positionssprung und ohne Ueberschwingen, mit
+  knappem Scale-Ansatz (0.97 statt 0.86) und laengerer Blende. Pop und
+  Settle auf 45 bzw. 40 % gedaempft. Das Abdimmen der vergangenen Woerter
+  laeuft ueber 0.25 s statt als Helligkeitssprung - bei drei Woertern je
+  Sekunde sprang bis v189 mit JEDEM Wort ein Nachbar von 100 auf 70 %.
+  BEWEIS: Bildaenderung je Frame von 45.1 auf 38.2 %, Helligkeitssprung
+  von 5.39 auf 5.13. Das Alt-Verhalten bleibt ueber den Schalter erreichbar.
+  EHRLICHE GRENZE: der groessere Teil der verbleibenden Bewegung ist die
+  EREIGNISDICHTE selbst - alle 0.3 bis 0.4 s ein neues Wort, alle rund
+  1 s ein neuer Block. Das ist der wortweise Aufbau, also der Referenz-
+  Look, kein Fehler. Wer noch mehr Ruhe will, dreht an Standzeit und
+  Woertern je Block, nicht an der Animation.
+  1184/1184 logic + Renders 7/1/5/2 + GUI gruen.
 - **v188/v189 AKZENTE RAUS, SCHRIFTWAHL GANZ, UMRISS NUR AM FLIESSTEXT.**
   Drei Befunde Ismets am Ergebnis, alle umgesetzt.
   v188: die Auto-Motion-Grafik ist wieder AUS. v185 hatte sie eingeschaltet,

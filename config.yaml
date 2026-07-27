@@ -105,6 +105,12 @@ effects:
   # groesser, die schon gesprochenen dimmen auf 70 %. Der dominante
   # Caption-Stil 2026 - bindet den Blick ans Wort statt an den Block.
   caption_aktivwort: true
+  # v190 RUHE: Woerter erscheinen, statt einzufliegen. Bis v189 kam jedes
+  # Wort von unten (2 % Bildhoehe), von 86 % hochskaliert, mit Overshoot -
+  # bei drei Woertern je Sekunde war das Dauerbewegung. Gemessen: Beat,
+  # Kamera, Pop und Motion-Blur hatten daran KEINEN Anteil, es war der
+  # Einflug selbst. false = Alt-Verhalten (v82 bis v189).
+  caption_ruhig: true
   # v184 PUNCH HINTER DER PERSON: das Schlusswort eines Satzes darf durch
   # die Person laufen und wird von ihr verdeckt (Referenz-Grammatik der
   # High-End-Vorbilder). Nur am Satzende, nie auf B-Roll. false = aus.

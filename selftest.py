@@ -5629,11 +5629,13 @@ def _scenario_betrieb(tmp):
     # v183 TESTANPASSUNG (Substanz unveraendert): das Dimmen traegt seit
     # v183 den Viral-Riegel ('and not _viral' - im Viral-Look traegt die
     # FARBE die Emphase), der Pop hat zwei Staerken (0.055 Haus, 0.10 viral).
+    # v190: das Dimmen laeuft weich (Uebergang statt Sprung), der Zielwert
+    # bleibt 70 %. Keywords dimmen weiterhin nie.
     check('v182: vergangene Woerter dimmen, Keywords nie',
-          "elif it.get('role') not in ('key', 'punch'):"
-          in _r182 and '_dim = 0.70' in _r182)
+          "elif it.get('role') not in ('key', 'punch'):" in _r182
+          and ('_dim = 0.70' in _r182 or '1.0 - 0.30 * smoothstep' in _r182))
     check('v182: das aktive Wort bekommt einen abklingenden Groessen-Pop',
-          '_pop = 1.0 + (0.10 if _viral else 0.055)' in _r182
+          '_pop = 1.0 + ((0.10 if _viral else 0.055)' in _r182
           and '(1 - smoothstep(min(dt / 0.22, 1.0)))' in _r182)
     check('v182: Deckkraft und Skalierung wirken auf BEIDE Zeichenwege',
           _r182.count('* _pop') >= 2 and _r182.count('* _dim') >= 2)
@@ -5771,6 +5773,28 @@ def _scenario_betrieb(tmp):
     # geprueft (v182-Block oben).
     check('v185: die Farb-Karaoke ist restlos entfernt',
           not hasattr(R, 'tint_glyph'))
+
+    # ======= v190: Ruhe - Woerter erscheinen statt einzufliegen ===========
+    # Ismets Befund: "alles zu sehr am Zucken". Gemessen war der Anteil der
+    # Effekte daran NULL - mit Beat, Kamera, Pop und Motion-Blur aus blieb
+    # die Unruhe gleich (3.09 statt 2.84 Promille je Frame). Es war der
+    # Wort-Einflug selbst: 2 % Bildhoehe von unten, von 86 % skaliert, mit
+    # ease_back-Ueberschwingen, bei drei Woertern je Sekunde.
+    _r190 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _c190 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    check('v190: der Ruhe-Modus ist an und abschaltbar',
+          _c190['effects'].get('caption_ruhig') is True
+          and "_ruhig = bool(cfg['effects'].get('caption_ruhig', True))" in _r190)
+    check('v190: ruhig heisst kein Positionssprung und kein Ueberschwingen',
+          '_dy_in, _sc_in = 0.0, 0.97 + 0.03 * e' in _r190
+          and 'e = ease_out(min(dt / 0.16, 1.0))' in _r190)
+    check('v190: das Alt-Verhalten bleibt erreichbar (ease_back-Zweig)',
+          "_dy_in, _sc_in = (1 - e) * H * 0.020, 0.86 + 0.14 * e" in _r190)
+    check('v190: Pop und Settle sind im Ruhe-Modus gedaempft',
+          "(0.45 if _ruhig else 1.0)" in _r190
+          and "(0.02 if _ruhig else 0.05)" in _r190)
+    check('v190: das Abdimmen laeuft weich statt als Sprung',
+          '1.0 - 0.30 * smoothstep(min(max(_dtd, 0) / 0.25, 1.0))' in _r190)
 
     # ======= v189: Schriftwahl gilt ganz, Umriss nur am Fliesstext ========
     _ui189 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
@@ -6082,7 +6106,7 @@ def _scenario_betrieb(tmp):
           'tint_glyph' not in _r182 and 'acc_rgb' not in _r182)
     check('v185: die Emphase traegt Groesse und Deckkraft in allen Looks',
           "elif it.get('role') not in ('key', 'punch'):" in _r182
-          and '_dim = 0.70' in _r182)
+          and ('_dim = 0.70' in _r182 or '1.0 - 0.30 * smoothstep' in _r182))
     _sv185 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('v185: das Viral-Preset hat keine feste Gelb-Akzentfarbe mehr',
           "'accent': [255, 214, 10]" not in _sv185)

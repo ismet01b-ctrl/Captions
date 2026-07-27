@@ -10658,6 +10658,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             # Farbwechsel. Der Pop bleibt im Viral-Look kraeftiger, weil er
             # auf 0.07-0.115 H Versalhoehe sonst untergeht.
             _viral = bool(cfg['effects'].get('caption_viral'))
+            _ruhig = bool(cfg['effects'].get('caption_ruhig', True))
             for it in p['front']:
                 wd = words[it['i']]
                 dt = t - wd['start'] + 0.07          # Lese-Vorlauf
@@ -10671,10 +10672,18 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 _pop = 1.0
                 if _akt_i is not None:
                     if _ist_akt:
-                        _pop = 1.0 + (0.10 if _viral else 0.055) \
+                        _pop = 1.0 + ((0.10 if _viral else 0.055)
+                                      * (0.45 if _ruhig else 1.0)) \
                             * (1 - smoothstep(min(dt / 0.22, 1.0)))
                     elif it.get('role') not in ('key', 'punch'):
-                        _dim = 0.70
+                        # v190: das Abdimmen laeuft ueber 0.25 s statt als
+                        # Helligkeitssprung. Bei drei Woertern je Sekunde
+                        # sprang bis v189 mit JEDEM Wort ein Nachbar von
+                        # 100 auf 70 % - ein Teil des Flimmerns kam daher.
+                        _dtd = t - (words[_akt_i]['start'] if _akt_i is not None
+                                    else wd['start'])
+                        _dim = (1.0 - 0.30 * smoothstep(min(max(_dtd, 0) / 0.25, 1.0))
+                                if _ruhig else 0.70)
                 _arr = it['arr']
                 if it.get('role') in ('key', 'punch') and it.get('letters'):
                     n = len(it['letters'])
@@ -10694,7 +10703,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                         vis_px = (l0 + (l1 - l0) * frac) + 40
                     # dezenter Settle: Keyword landet minimal groesser und
                     # setzt sich weich auf 1.0 (gezielte, ruhige Bewegung)
-                    k_settle = 1.0 + 0.05 * (1 - smoothstep(min(dt / 0.42, 1.0)))
+                    k_settle = 1.0 + (0.02 if _ruhig else 0.05) \
+                        * (1 - smoothstep(min(dt / 0.42, 1.0)))
                     _pcx = it['cx'] + fdx - (0 if vis_px is None
                                              else (_arr.shape[1] - vis_px) / 2)
                     _pcy = it['cy'] + fdy + x_dv * _arr.shape[0]
@@ -10712,12 +10722,28 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                           W, H, scale=_psc,
                           opacity=g_out * _dim, crop_w=vis_px)
                 else:
-                    e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
+                    # v190 RUHE. Bis v189 flog JEDES Wort ein: 2 % Bildhoehe
+                    # von unten, von 86 % hochskaliert, mit ease_back-
+                    # Overshoot und gestreutem Timing. Bei drei Woertern je
+                    # Sekunde ist das Dauerbewegung - Ismets "alles zu sehr
+                    # am Zucken". Gemessen war der Effekt-Anteil daran null:
+                    # mit Beat, Kamera, Pop und Motion-Blur AUS blieb die
+                    # Unruhe unveraendert (3.09 statt 2.84 Promille je
+                    # Frame). Es war der Wort-Einflug selbst.
+                    # Ruhig heisst: kein Positionssprung, kein Ueberschwingen,
+                    # nur ein knapper Scale-Ansatz und die Blende.
+                    if _ruhig:
+                        e = ease_out(min(dt / 0.16, 1.0))
+                        _dy_in, _sc_in = 0.0, 0.97 + 0.03 * e
+                    else:
+                        e = ease_back(dt / (0.24 * (1 + 0.08 * hand_jitter(it['i']))))
+                        _dy_in, _sc_in = (1 - e) * H * 0.020, 0.86 + 0.14 * e
                     paste(comp, _arr,
                           it['cx'] + fdx,
-                          it['cy'] + fdy + (1 - e) * H * 0.020 + x_dv * _arr.shape[0],
-                          W, H, scale=(0.86 + 0.14 * e) * x_sc * _pop,
-                          opacity=min(dt / 0.10, 1) * g_out * _dim)
+                          it['cy'] + fdy + _dy_in + x_dv * _arr.shape[0],
+                          W, H, scale=_sc_in * x_sc * _pop,
+                          opacity=min(dt / (0.16 if _ruhig else 0.10), 1)
+                          * g_out * _dim)
             continue
         if p['tpl'] == 'stack':
             # Personen-Tracking: die Gruppe haengt an der Person und geht mit,

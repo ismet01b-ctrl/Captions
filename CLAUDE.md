@@ -275,6 +275,20 @@ v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
 Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
 aus einer Tendenz eine Schablone.
 
+### Ruhe im Bild (v190) — erst messen, dann abschalten
+Ismets "alles zu sehr am Zucken" wurde GEMESSEN, nicht geraten, und die
+naheliegende Vermutung war falsch: mit Beat-Sync, Kamera, Aktivwort-Pop
+und Motion-Blur AUS blieb die Unruhe unveraendert (3.09 statt 2.84
+Promille je Frame). Ursache war der Wort-EINFLUG: 2 % Bildhoehe von
+unten, von 86 % skaliert, mit ease_back-Ueberschwingen.
+- `effects.caption_ruhig` (Standard an): Woerter erscheinen an ihrer
+  Endposition, kein Sprung, kein Overshoot, Scale ab 0.97, laengere
+  Blende. Pop und Settle gedaempft, Abdimmen ueber 0.25 s statt als
+  Helligkeitssprung. Alt-Verhalten bleibt ueber den Schalter erreichbar.
+- **Der Rest ist EREIGNISDICHTE, kein Fehler:** alle 0.3 bis 0.4 s ein
+  neues Wort, alle rund 1 s ein neuer Block. Wer mehr Ruhe will, dreht an
+  `chunk_hold_min` und `words_per_group`, nicht an der Animation.
+
 ### Schriftwahl + Umriss (v189)
 - **Eine Nutzer-Schriftwahl gilt fuer den GANZEN Satz.** Die Font-Kachel
   setzt display, support, italic und strong. Nur `fonts.display` zu setzen
@@ -582,7 +596,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1179/1179 grün (Stand v189)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1184/1184 grün (Stand v190)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
