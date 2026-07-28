@@ -863,6 +863,21 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   atomar+idempotent, Ownership-Checks, Upload-Caps, jid-Path-Traversal dicht,
   Stripe-Webhook-Secret-Pflicht. Konto-Löschung: Kaufbuchungen → `ledger_archive`
   (GoBD/§147 AO 10 Jahre; DSGVO Art.17(3)(b)), Rest echt gelöscht.
+- **Umsatz ist NETTO (v206).** `purchases` ist der Kaufbeleg und wird NIE
+  nachträglich verbogen (GoBD); eine Erstattung ist ein eigener Vorgang in
+  `refunds` — aus dem Panel UND aus dem Stripe-Dashboard (`charge.refunded`
+  trägt sie nach). Umsatz und §19-Ampel rechnen mit „geblieben", das Panel
+  zeigt alle drei Zahlen. Bis v205 war alles brutto: eine Erstattung zählte
+  weiter als Einnahme, auch in der Steuer-Ampel.
+- **Das Panel hat eine STARTSEITE (v206).** Sie beantwortet vier Fragen —
+  Verdiene ich Geld? Läuft alles? Will jemand etwas von mir? Wächst es? —
+  mit je EINER großen Zahl und einem Satz Klartext daneben. Ismet ist kein
+  Entwickler; „AOV", „ARPPU", „inflight_cap" sagen ihm nichts. Alles
+  Technische bleibt in den bestehenden Ansichten, es steht nur nicht mehr
+  vorn. Wer eine Kennzahl ergänzt, schreibt den erklärenden Satz dazu.
+  **Eine Ampel, die grundlos rot ist, schaut nach einer Woche niemand mehr
+  an** — deshalb wird der Herzschlag beim Start gesetzt (der Wachhund meldet
+  sich sonst erst nach 120 s, also nach JEDEM Deploy zwei Minuten „rot").
 - **Performance (v142, nicht wieder aufweichen):** alle heißen Queries laufen
   über Indexe — Selftest prüft per `EXPLAIN QUERY PLAN`, dass KEINE davon
   scannt. Caching in drei Ebenen: Prozess-Datei-Cache (mtime-invalidiert),
@@ -882,7 +897,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1483/1483 grün (Stand v205b-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1499/1499 grün (Stand v206)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

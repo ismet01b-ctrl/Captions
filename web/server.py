@@ -557,6 +557,21 @@ def _init_users_db():
     con.execute("CREATE INDEX IF NOT EXISTS ix_secev_ts ON security_events(ts)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_secev_akt "
                 "ON security_events(aktion, ts)")
+    # v206 ERSTATTUNGEN. Bis v205 wurde eine Erstattung NIRGENDS vom Umsatz
+    # abgezogen: purchases blieb unveraendert, der Stripe-Hinweis schrieb nur
+    # eine Meldung, und die Steuer-Ampel (§19-Grenzen) rechnete aus derselben
+    # Brutto-Zahl. Im Panel stand also, was Kunden gezahlt haben - nicht, was
+    # geblieben ist. Genau deshalb war die Zahl nicht vertrauenswuerdig.
+    # Eigene Tabelle statt purchases zu aendern: der Kauf-Beleg ist ein
+    # Buchungsbeleg (GoBD, 10 Jahre) und wird nicht nachtraeglich verbogen -
+    # eine Erstattung ist ein EIGENER Vorgang.
+    con.execute("CREATE TABLE IF NOT EXISTS refunds ("
+                "session_id TEXT PRIMARY KEY, "
+                "user_id INTEGER, "
+                "cents INTEGER NOT NULL DEFAULT 0, "
+                "quelle TEXT NOT NULL DEFAULT 'panel', "   # panel | stripe
+                "created_at INTEGER NOT NULL)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_refunds_ts ON refunds(created_at)")
     # v128 Admin: Kauf-Beleg mit ECHTEM Betrag (cents) fuer die Umsatz-Ansicht.
     # Das Ledger kennt nur Sekunden, nicht das bezahlte Geld - hier steht der
     # tatsaechlich gezahlte Betrag (amount_total, also inkl. evtl. Rabatt).
@@ -1933,7 +1948,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v205b-sec'
+DVE_BUILD = 'v206-panel'
 
 
 # ================= v204-sec NOTAUS =================
@@ -2280,6 +2295,30 @@ async def api_stripe_webhook(request: Request):
     # machen - sonst weicht die interne Buchhaltung still von Stripe ab.
     if ev_type == 'charge.refunded':
         ch = event.get('data', {}).get('object', {}) or {}
+        # v206: Eine im Stripe-Dashboard ausgeloeste Erstattung muss GENAUSO
+        # vom Umsatz abgehen wie eine aus dem Panel. Bis v205 gab es dafuer
+        # nur eine Meldung - die interne Buchhaltung lief still auseinander.
+        try:
+            _sess_id = ''
+            _pi = ch.get('payment_intent')
+            if _pi and _stripe():
+                _li = _stripe().checkout.Session.list(payment_intent=_pi, limit=1)
+                _d = (_li.get('data') if isinstance(_li, dict) else _li.data) or []
+                if _d:
+                    _sess_id = (_d[0].get('id') if isinstance(_d[0], dict)
+                                else _d[0].id) or ''
+            if _sess_id:
+                _c_ref = _db()
+                _r_uid = _c_ref.execute("SELECT user_id FROM purchases WHERE "
+                                        "session_id = ?", (_sess_id,)).fetchone()
+                _c_ref.execute(
+                    "INSERT OR IGNORE INTO refunds (session_id, user_id, cents, "
+                    "quelle, created_at) VALUES (?,?,?,'stripe',?)",
+                    (_sess_id, (_r_uid['user_id'] if _r_uid else None),
+                     int(ch.get('amount_refunded', 0) or 0), int(time.time())))
+                _c_ref.commit(); _c_ref.close()
+        except Exception as e:
+            print(f'Stripe-Erstattung nicht vermerkt: {type(e).__name__}: {e}')
         try:
             _notify_admin(f"stref:{ch.get('id', '?')}",
                           'Stripe-Erstattung eingegangen',
@@ -4398,6 +4437,12 @@ def _watchdog_worker():
 
 
 _restore_jobs()
+# v206: Herzschlag beim Start setzen. Der Wachhund meldet sich erst nach
+# seinem ersten Schlaf (120 s) - ohne diese Zeile stuende auf der Startseite
+# nach JEDEM Deploy zwei Minuten lang "Wachhund meldet sich nicht", also ein
+# roter Alarm ohne Anlass. Eine Ampel, die regelmaessig grundlos rot ist,
+# schaut nach einer Woche niemand mehr an.
+_HEARTBEAT['cleanup'] = _HEARTBEAT['watchdog'] = time.time()
 threading.Thread(target=_cleanup_worker, daemon=True).start()
 threading.Thread(target=_watchdog_worker, daemon=True).start()
 
@@ -7635,15 +7680,29 @@ def _sum_grund(con, like, sign=0):
 
 
 def _revrow(con, since, until=None):
+    # v206: Zusaetzlich zu 'eingenommen' auch 'erstattet' und 'geblieben'.
+    # Bis v205 gab es nur die Brutto-Zahl - die sagt, was Kunden gezahlt
+    # haben, nicht was geblieben ist.
     if until is None:
         r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents, "
                         "COALESCE(SUM(sekunden),0) sek FROM purchases WHERE created_at >= ?",
                         (since,)).fetchone()
+        rr = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents "
+                         "FROM refunds WHERE created_at >= ?", (since,)).fetchone()
     else:
         r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents, "
                         "COALESCE(SUM(sekunden),0) sek FROM purchases "
                         "WHERE created_at >= ? AND created_at < ?", (since, until)).fetchone()
-    return {'count': r['c'], 'eur': round(r['cents'] / 100.0, 2), 'minutes': r['sek'] // 60}
+        rr = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents FROM refunds "
+                         "WHERE created_at >= ? AND created_at < ?",
+                         (since, until)).fetchone()
+    _erst = int(rr['cents'] or 0)
+    return {'count': r['c'],
+            'eur': round(r['cents'] / 100.0, 2),          # eingenommen (brutto)
+            'erstattet_eur': round(_erst / 100.0, 2),     # davon zurueckgezahlt
+            'erstattungen': int(rr['c'] or 0),
+            'netto_eur': round((r['cents'] - _erst) / 100.0, 2),   # geblieben
+            'minutes': r['sek'] // 60}
 
 
 @app.get('/admin', response_class=HTMLResponse)
@@ -7902,6 +7961,103 @@ def admin_job_delete(jid: str, request: Request):
     shutil.rmtree(job_dir(jid), ignore_errors=True)
     JOBS.pop(jid, None)
     return {'ok': True}
+
+
+@app.get('/api/admin/start')
+def admin_start(request: Request):
+    """v206 STARTSEITE. Das Panel ist ueber 15 Ansichten gewachsen und war fuer
+    jemanden gebaut, der die Begriffe schon kennt (AOV, ARPPU, inflight_cap).
+    Ismet ist kein Entwickler - fuer ihn war es "unuebersichtlich und kaum
+    benutzerfreundlich", und er wusste nicht einmal, ob die Umsatzzahlen
+    stimmen. Zu Recht: sie waren brutto (siehe v206-Erstattungen).
+
+    Diese Ansicht beantwortet die vier Fragen, die er wirklich hat, in
+    Klartext und mit EINER Zahl je Frage:
+      1. Verdiene ich Geld?
+      2. Laeuft alles?
+      3. Will jemand etwas von mir?
+      4. Waechst es?
+    Alles Technische bleibt in den bestehenden Ansichten - es steht nur nicht
+    mehr vorn."""
+    _require_admin(request)
+    return _ttl_cached('adm:start', 20, _admin_start_calc)
+
+
+def _admin_start_calc():
+    now = int(time.time())
+    tag = 86400
+    con = _db()
+    try:
+        def geld(seit):
+            r = con.execute("SELECT COALESCE(SUM(cents),0) c, COUNT(*) n FROM "
+                            "purchases WHERE created_at >= ?", (seit,)).fetchone()
+            e = con.execute("SELECT COALESCE(SUM(cents),0) c FROM refunds "
+                            "WHERE created_at >= ?", (seit,)).fetchone()
+            return {'eur': round((r['c'] - e['c']) / 100.0, 2),
+                    'kaeufe': r['n'],
+                    'erstattet_eur': round(e['c'] / 100.0, 2)}
+
+        def zahl(q, *p):
+            r = con.execute(q, p).fetchone()
+            return int(r[0] if r else 0)
+
+        heute, woche, monat = geld(now - tag), geld(now - 7 * tag), geld(now - 30 * tag)
+        gesamt = geld(0)
+        # Wachstum: diese 30 Tage gegen die 30 davor
+        _vor = con.execute(
+            "SELECT COALESCE(SUM(cents),0) c FROM purchases "
+            "WHERE created_at >= ? AND created_at < ?",
+            (now - 60 * tag, now - 30 * tag)).fetchone()['c']
+        _trend = None
+        if _vor > 0:
+            _trend = round((monat['eur'] * 100 - _vor) / _vor * 100)
+        kunden_gesamt = zahl("SELECT COUNT(*) FROM users")
+        kunden_neu = zahl("SELECT COUNT(*) FROM users WHERE created_at >= ?",
+                          now - 7 * tag)
+        zahler = zahl("SELECT COUNT(DISTINCT user_id) FROM purchases")
+        renders_woche = zahl("SELECT COUNT(*) FROM ledger WHERE grund LIKE "
+                             "'Render %' AND created_at >= ?", now - 7 * tag)
+        tickets = zahl("SELECT COUNT(*) FROM tickets WHERE status = 'open'")
+        feedback = zahl("SELECT COUNT(*) FROM feedback WHERE gelesen = 0")
+        stoerungen = zahl("SELECT COUNT(*) FROM alerts WHERE gelesen = 0")
+        note = con.execute("SELECT AVG(note) a, COUNT(*) c FROM feedback").fetchone()
+    finally:
+        con.close()
+    hb = _HEARTBEAT
+    disk = _disk_info() or {}
+    # "Laeuft alles?" - eine Ampel statt sechs Zahlen. Rot nur bei etwas, das
+    # den Betrieb WIRKLICH bedroht; alles andere ist gelb.
+    probleme = []
+    if betrieb_stufe() != 'normal':
+        probleme.append(('rot', f'Betrieb steht auf "{betrieb_stufe()}"'))
+    if (disk.get('free_gb') or 99) < 2:
+        probleme.append(('rot', f"Nur noch {disk.get('free_gb')} GB Platz frei"))
+    elif (disk.get('free_gb') or 99) < 10:
+        probleme.append(('gelb', f"Noch {disk.get('free_gb')} GB Platz frei"))
+    for name, key in (('Aufraeumer', 'cleanup'), ('Wachhund', 'watchdog')):
+        ts = hb.get(key)
+        if not ts or now - ts > 3 * 3600:
+            probleme.append(('rot', f'{name} meldet sich nicht'))
+    if QUEUE.qsize() >= QUEUE_WARN:
+        probleme.append(('gelb', f'{QUEUE.qsize()} Videos warten in der Schlange'))
+    if stoerungen:
+        probleme.append(('gelb', f'{stoerungen} ungelesene Stoerungsmeldungen'))
+    ampel = 'rot' if any(p[0] == 'rot' for p in probleme) else (
+        'gelb' if probleme else 'gruen')
+    return {
+        'geld': {'heute': heute, 'woche': woche, 'monat': monat,
+                 'gesamt': gesamt, 'trend_prozent': _trend},
+        'betrieb': {'ampel': ampel,
+                    'probleme': [{'stufe': a, 'text': b} for a, b in probleme],
+                    'laeuft_gerade': sum(1 for j in JOBS.values()
+                                         if j.get('status') == 'laeuft'),
+                    'wartet': QUEUE.qsize()},
+        'post': {'tickets': tickets, 'feedback': feedback,
+                 'note': round(note['a'], 1) if note['a'] else None,
+                 'bewertungen': note['c']},
+        'wachstum': {'kunden': kunden_gesamt, 'neu_7t': kunden_neu,
+                     'zahler': zahler, 'renders_7t': renders_woche},
+    }
 
 
 @app.get('/api/admin/revenue')
@@ -8498,11 +8654,21 @@ def _admin_tax_calc():
     jahre = []
     for y in range(jahr - 4, jahr + 1):
         a, b = _tax_year_bounds(y)
+        # v206: Die §19-Schwellen (25.000 / 100.000 EUR) gehoeren auf das, was
+        # WIRKLICH eingenommen wurde. Eine erstattete Zahlung ist kein Umsatz -
+        # bis v205 lief die Ampel auf der Brutto-Summe und haette zu frueh
+        # ausgeschlagen.
         r = con.execute("SELECT COUNT(*) c, COALESCE(SUM(cents),0) cents "
                         "FROM purchases WHERE created_at >= ? AND created_at < ?",
                         (a, b)).fetchone()
         if r['c'] or y >= jahr - 1:
-            jahre.append({'jahr': y, 'anzahl': r['c'], 'brutto_cent': r['cents']})
+            _rf = con.execute("SELECT COALESCE(SUM(cents),0) c FROM refunds "
+                              "WHERE created_at >= ? AND created_at < ?",
+                              (a, b)).fetchone()['c']
+            jahre.append({'jahr': y, 'anzahl': r['c'],
+                          'brutto_cent': r['cents'] - int(_rf or 0),
+                          'eingenommen_cent': r['cents'],
+                          'erstattet_cent': int(_rf or 0)})
     _cur = next((j for j in jahre if j['jahr'] == jahr), {'brutto_cent': 0})
     _prev = next((j for j in jahre if j['jahr'] == jahr - 1), {'brutto_cent': 0})
     def _lage(ist, grenze):
@@ -9001,6 +9167,18 @@ def admin_refund(request: Request, session_id: str = Form(...), clawback: str = 
             # erstattbar. Jetzt: sauberer Fehler, Retry bleibt moeglich.
             raise HTTPException(502, f'Stripe refund failed: {type(e).__name__}: '
                                      f'{e}. Nothing was booked - retry is safe.')
+    # v206: Die Erstattung wird als eigener Vorgang festgehalten - sonst
+    # zaehlt das Panel dieses Geld weiter als Einnahme (und die Steuer-Ampel
+    # auch). Erst NACH dem erfolgreichen Stripe-Aufruf, damit hier nie eine
+    # Erstattung steht, die es in Wirklichkeit nicht gab.
+    try:
+        _c_ref = _db()
+        _c_ref.execute("INSERT OR IGNORE INTO refunds (session_id, user_id, "
+                       "cents, quelle, created_at) VALUES (?,?,?,'panel',?)",
+                       (session_id, uid, int(p['cents'] or 0), int(time.time())))
+        _c_ref.commit(); _c_ref.close()
+    except Exception as e:
+        print(f'Erstattung nicht vermerkt ({session_id}): {type(e).__name__}: {e}')
     # v135a: Clawback ATOMAR (BEGIN IMMEDIATE) - kein TOCTOU zwischen Lesen
     # der Balance und Buchen; Ledger-Zeile entspricht exakt der Bewegung.
     do_claw = str(clawback).strip() in ('1', 'true', 'on', 'yes')

@@ -2726,7 +2726,10 @@ def _scenario_logic(clip, transcript, tmp):
           # Gefordert ist, dass ueberhaupt eine Kennung gesetzt ist.
           and re.search(r"DVE_BUILD = 'v[0-9][^']*'", _srv_m) is not None)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
-          "const AUTO={live:15000, jobs:5000, alerts:20000}" in _adm
+          # v206: die Startseite kommt mit einem eigenen Takt dazu (30 s -
+          # sie ist eine Uebersicht, kein Live-Monitor). Die Zusage bleibt:
+          # es gibt EINE Stelle, die die Auffrisch-Takte festlegt.
+          "const AUTO={start:30000, live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
           and 'X-Admin-Key' in _adm
           and "['alerts','Alerts']" in _adm
@@ -4259,8 +4262,13 @@ def _scenario_security(tmp):
                    and any(isinstance(c, _ast142.Call)
                            and getattr(c.func, 'id', '') == '_ttl_cached'
                            for c in _ast142.walk(f))}
+    # Die Liste ist bewusst EXAKT: so faellt auf, wenn eine neue Funktion
+    # anfaengt zu cachen. v206 traegt admin_start ein - dieselbe Klasse wie
+    # die drei anderen (Admin-Aggregat, 20 s, wird bei jedem Schreibzugriff
+    # verworfen). KEIN Kunden-Kontostand darf je dazukommen.
     check('v142: Geld-/Konto-Endpunkte sind NICHT gecacht',
-          _cached_fns == {'admin_revenue', 'admin_timeseries', 'admin_tax'}
+          _cached_fns == {'admin_revenue', 'admin_timeseries', 'admin_tax',
+                          'admin_start'}
           and "_ttl_drop('adm:')" in _srv142, str(sorted(_cached_fns)))
     # (d) Async: kein blockierender Aufruf mehr direkt im Event-Loop.
     _blocking = {'subprocess.run', 'requests.post', 'requests.get', 'time.sleep',
@@ -6925,6 +6933,79 @@ def _scenario_betrieb(tmp):
           'pip install --no-cache-dir fastapi uvicorn' not in _dock205
           and _dock205.count('pip install') == 1)
 
+    # ======= v206: Zahlen, denen man trauen kann + Startseite ===========
+    # Ismets Befund: das Panel ist "unuebersichtlich und kaum
+    # benutzerfreundlich", mit Begriffen, bei denen er "keine Ahnung habe, was
+    # genau das ist" - und er wusste nicht, ob die Einnahmen stimmen.
+    # Taten sie nicht: der Umsatz war BRUTTO, Erstattungen wurden nirgends
+    # abgezogen (auch nicht in der §19-Steuerampel).
+    _sv206 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    os.environ['DVE_ADMIN'] = 'testkey_v206'
+    _c206 = _TC198(_SV198.app, base_url='https://test')
+    _H206 = {'X-Admin-Key': 'testkey_v206'}
+    _now206 = int(_tm197.time())
+    _con206 = _SV198._db()
+    _con206.execute("INSERT INTO purchases (session_id,user_id,pack,cents,"
+                    "sekunden,created_at) VALUES ('t206a',1,'m',1900,3600,?)",
+                    (_now206 - 3600,))
+    _con206.commit(); _con206.close()
+    _SV198._ttl_drop('adm:')
+    _r206 = _c206.get('/api/admin/revenue', headers=_H206).json()['windows']['total']
+    _vorher206 = _r206['netto_eur']
+    check('v206: der Umsatz weist eingenommen, erstattet und geblieben aus',
+          all(k in _r206 for k in ('eur', 'erstattet_eur', 'netto_eur')),
+          str(_r206)[:120])
+    _con206 = _SV198._db()
+    _con206.execute("INSERT INTO refunds (session_id,user_id,cents,quelle,"
+                    "created_at) VALUES ('t206a',1,1900,'panel',?)", (_now206,))
+    _con206.commit(); _con206.close()
+    _SV198._ttl_drop('adm:')
+    _r206b = _c206.get('/api/admin/revenue', headers=_H206).json()['windows']['total']
+    check('v206: eine Erstattung senkt das, was geblieben ist',
+          _r206b['netto_eur'] == round(_vorher206 - 19.0, 2)
+          and _r206b['erstattet_eur'] >= 19.0,
+          f"{_vorher206} -> {_r206b['netto_eur']}, erstattet {_r206b['erstattet_eur']}")
+    check('v206: die eingenommene Summe bleibt unveraendert (Beleg wird nicht verbogen)',
+          _r206b['eur'] == _r206['eur'])
+    _tax206 = _c206.get('/api/admin/compliance/tax', headers=_H206).json()
+    _j206 = [j for j in _tax206['jahre'] if j.get('erstattet_cent')]
+    check('v206: die Steuer-Ampel rechnet mit dem, was geblieben ist',
+          bool(_j206) and _j206[0]['brutto_cent']
+          == _j206[0]['eingenommen_cent'] - _j206[0]['erstattet_cent'])
+    check('v206: die Panel-Erstattung wird als eigener Vorgang festgehalten',
+          "INSERT OR IGNORE INTO refunds" in _sv206
+          and _sv206.count('INSERT OR IGNORE INTO refunds') >= 2)
+    check('v206: auch eine im Stripe-Dashboard ausgeloeste Erstattung zaehlt',
+          "'stripe',?)" in _sv206
+          and "ev_type == 'charge.refunded'" in _sv206)
+
+    # Startseite: vier Fragen, vier Zahlen
+    _st206 = _c206.get('/api/admin/start', headers=_H206).json()
+    for _teil in ('geld', 'betrieb', 'post', 'wachstum'):
+        check(f'v206: die Startseite beantwortet "{_teil}"', _teil in _st206)
+    check('v206: sie zeigt Geld NACH Erstattungen',
+          _st206['geld']['gesamt']['eur']
+          == round(_r206b['eur'] - _r206b['erstattet_eur'], 2),
+          f"{_st206['geld']['gesamt']} vs {_r206b}")
+    check('v206: die Betriebs-Ampel kennt nur drei Zustaende',
+          _st206['betrieb']['ampel'] in ('gruen', 'gelb', 'rot'))
+    # Eine Ampel, die nach jedem Deploy grundlos rot ist, schaut niemand an.
+    check('v206: der Herzschlag wird beim Start gesetzt (kein Fehlalarm nach dem Deploy)',
+          "_HEARTBEAT['cleanup'] = _HEARTBEAT['watchdog'] = time.time()" in _sv206)
+    check('v206: direkt nach dem Start ist die Ampel nicht rot',
+          _st206['betrieb']['ampel'] != 'rot'
+          or all('meldet sich nicht' not in p['text']
+                 for p in _st206['betrieb']['probleme']),
+          str(_st206['betrieb']['probleme'])[:150])
+    _adm206 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v206: die Startseite steht vorn und ist die Voreinstellung',
+          "['start','Start']" in _adm206 and "active='start'" in _adm206
+          and 'start:loadStart' in _adm206)
+    check('v206: jede Zahl bekommt einen Satz Klartext daneben',
+          _adm206.count('class="satz"') >= 8
+          and 'VERDIENE ICH GELD?' in _adm206 and 'LAEUFT ALLES?' in _adm206)
+    del os.environ['DVE_ADMIN']
+
     # (7) Missbrauchs-Erkennung laeuft von selbst, nicht nur auf Nachfrage
     check('v204-sec: auffaellige Muster melden sich stuendlich von selbst',
           'def _missbrauch_pruefen' in _sv204
@@ -7045,7 +7126,7 @@ def _scenario_betrieb(tmp):
     # eine Garantie, dass beim Umbauen der Navigation nichts VERSCHWINDET.
     _soll195 = {'live', 'alerts', 'jobs', 'revenue', 'credits', 'codes',
                 'users', 'support', 'abuse', 'system', 'compliance', 'legal',
-                'feedback', 'ann', 'logs', 'events'}
+                'feedback', 'ann', 'logs', 'events', 'start'}
     check('v195: alle Ansichten sind weiter erreichbar',
           _ids195 == _soll195, f"fehlt: {_soll195 - _ids195}  neu: {_ids195 - _soll195}")
     check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',

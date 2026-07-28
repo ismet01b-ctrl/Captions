@@ -3,6 +3,36 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v206 ZAHLEN, DENEN MAN TRAUEN KANN + STARTSEITE.** Ismets Befund: das
+  Panel sei "unuebersichtlich und kaum benutzerfreundlich", teilweise stuenden
+  dort Infos, bei denen er "keine Ahnung habe, was genau das ist" - und er
+  wisse nicht einmal, ob die Einnahmen stimmen.
+  - **Sie stimmten nicht.** Der Umsatz war BRUTTO: `purchases` wurde bei einer
+    Erstattung nie korrigiert, der Stripe-Hinweis schrieb nur eine Meldung,
+    und die §19-Steuerampel (25.000/100.000 EUR) rechnete aus derselben Zahl.
+    Im Panel stand also, was Kunden GEZAHLT haben, nicht was geblieben ist.
+    Neu: Tabelle `refunds` - eigener Vorgang, weil der Kaufbeleg ein
+    Buchungsbeleg ist (GoBD, 10 Jahre) und nicht nachtraeglich verbogen wird.
+    Gefuellt aus dem Panel UND aus dem Stripe-Dashboard (`charge.refunded`
+    sucht die Session zum payment_intent und traegt sie nach - vorher lief die
+    interne Buchhaltung dort still auseinander). Umsatz und Ampel rechnen mit
+    netto, das Panel zeigt eingenommen / erstattet / geblieben.
+  - **Startseite** als erste Ansicht: vier Fragen, vier grosse Zahlen, jede
+    mit einem Satz Klartext. "Verdiene ich Geld?" (30 Tage netto, Trend gegen
+    die 30 Tage davor), "Laeuft alles?" (eine Ampel statt sechs Zahlen; rot
+    nur bei echter Bedrohung), "Will jemand etwas von mir?" (offene Tickets,
+    neue Bewertungen), "Waechst es?" (Konten, neue, Zahler, Renders).
+    Alles Technische bleibt unveraendert in den bestehenden Ansichten.
+  - Mitgenommen: der Wachhund setzt seinen Herzschlag erst nach 120 s - ohne
+    Startwert haette die neue Ampel nach JEDEM Deploy zwei Minuten grundlos
+    rot gezeigt. Eine Ampel, die regelmaessig ohne Anlass rot ist, schaut
+    nach einer Woche niemand mehr an.
+  - Beinahe-Fehler beim Bauen: in der Steuer-Abfrage `_von/_bis` benutzt, die
+    Schleifenvariablen heissen `a/b` - das waere live abgestuerzt.
+  - Der v142-Test haelt die Liste der gecachten Endpunkte EXAKT fest;
+    `admin_start` ist bewusst eingetragen (Admin-Aggregat, 20 s, wird bei
+    jedem Schreibzugriff verworfen). Ein Kunden-Kontostand darf nie dazu.
+  Tests: 1499/1499 logic (16 neu) + Renders 7/1/5/2 + GUI.
 - **v205b-sec DAS GATE SAGT JETZT, WO ES STIRBT.** Ismets Screenshot zeigte
   elf Meldungen "Test-Gate nicht lauffaehig" seit v204: die Deploys gehen
   durch (der v201-Rueckfall wirkt), aber sie gehen UNGEPRUEFT live - und die

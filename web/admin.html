@@ -131,6 +131,21 @@ select.search{cursor:pointer}
 .kv .kk{color:var(--mut2)}
 .note{font-size:11.5px;color:var(--mut2);margin-top:10px;font-style:italic}
 .spin{color:var(--mut2);padding:14px 2px}
+
+/* v206 Startseite: eine Zahl je Frage, gross, mit einem Satz daneben. Alles
+   Technische bleibt in den anderen Ansichten - es steht nur nicht mehr vorn. */
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.hero .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.hero .frage{font-size:12.5px;color:var(--dim);letter-spacing:.02em;margin-bottom:6px}
+.hero .zahl{font-size:34px;font-weight:800;line-height:1.05;letter-spacing:-.02em}
+.hero .zahl small{font-size:15px;font-weight:600;color:var(--dim);margin-left:4px}
+.hero .satz{margin-top:8px;font-size:13px;color:var(--dim);line-height:1.5}
+.hero .box.gruen{border-color:rgba(60,200,120,.45)}
+.hero .box.gelb{border-color:rgba(255,180,40,.5)}
+.hero .box.rot{border-color:rgba(255,90,90,.55)}
+.ampel{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.ampel.gruen{background:#3cc878}.ampel.gelb{background:#ffb428}.ampel.rot{background:#ff5a5a}
+.tuwas{margin-top:14px;display:flex;gap:9px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -175,13 +190,14 @@ select.search{cursor:pointer}
 
 <script>
 let KEY = sessionStorage.getItem('dve_admin_key') || '';
-let POLL=null, TICK=null, paused=false, active='live', lastLoad={}, serverNow=0;
-const AUTO={live:15000, jobs:5000, alerts:20000};
+let POLL=null, TICK=null, paused=false, active='start', lastLoad={}, serverNow=0;
+const AUTO={start:30000, live:15000, jobs:5000, alerts:20000};
 /* v195: Navigation in Abschnitte gruppiert. Die zwoelf Ansichten sind
    unveraendert - nur ihre Anordnung sagt jetzt, was zusammengehoert.
    Reihenfolge folgt dem Arbeitsalltag: erst was gerade passiert, dann Geld,
    dann Kunden, dann Betrieb und Recht. */
 const ICON={
+  start:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/>',
   live:'<path d="M3 12h4l3 8 4-16 3 8h4"/>',
   alerts:'<path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
   jobs:'<path d="M4 7h16M4 12h16M4 17h10"/>',
@@ -200,7 +216,7 @@ const ICON={
   events:'<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>',
 };
 const NAV=[
-  ['', [['live','Live'],['alerts','Alerts'],['jobs','Jobs']]],
+  ['', [['start','Start'],['live','Live'],['alerts','Alerts'],['jobs','Jobs']]],
   ['Umsatz', [['revenue','Revenue'],['credits','Credits'],['codes','Codes']]],
   ['Kunden', [['users','Users'],['support','Support'],['abuse','Abuse']]],
   ['Produkt', [['feedback','Feedback'],['ann','Announcements']]],
@@ -1125,7 +1141,84 @@ async function setBetrieb(stufe){
   catch(e){alert(e.message);}
 }
 
-const RENDER={live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
+/* v206 STARTSEITE. Vier Fragen, vier Zahlen, jede mit einem Satz Klartext.
+   Ismets Befund: das Panel war "unuebersichtlich und kaum benutzerfreundlich",
+   mit Begriffen, bei denen er "keine Ahnung habe, was genau das ist" - und er
+   wusste nicht, ob die Umsatzzahlen stimmen. Taten sie nicht: sie waren brutto.
+   Hier steht jetzt, was GEBLIEBEN ist, und daneben was das heisst. */
+function eur(v){return (v||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' &euro;';}
+async function loadStart(silent){
+  let d;try{d=await api('/api/admin/start');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.start=Date.now()/1000;
+  const g=d.geld, b=d.betrieb, p=d.post, w=d.wachstum;
+
+  const trend = g.trend_prozent===null||g.trend_prozent===undefined ? ''
+    : `<div class="satz">${g.trend_prozent>=0?'+':''}${g.trend_prozent}&nbsp;% gegenueber den 30 Tagen davor.</div>`;
+  const erstattet = g.gesamt.erstattet_eur>0
+    ? `<div class="satz">Insgesamt eingenommen ${eur(g.gesamt.eur+g.gesamt.erstattet_eur)},
+       davon ${eur(g.gesamt.erstattet_eur)} wieder erstattet.</div>`
+    : '<div class="satz">Bisher nichts erstattet &mdash; eingenommen ist gleich geblieben.</div>';
+
+  const probleme = b.probleme.length
+    ? b.probleme.map(x=>`<div class="satz"><span class="ampel ${x.stufe}"></span>${esc(x.text)}</div>`).join('')
+    : '<div class="satz">Keine offenen Punkte. Nichts zu tun.</div>';
+
+  const postSatz = (p.tickets||p.feedback)
+    ? `<div class="satz">${p.tickets?p.tickets+' Kunde(n) warten auf eine Antwort. ':''}${p.feedback?p.feedback+' neue Bewertung(en).':''}</div>`
+    : '<div class="satz">Niemand wartet auf dich.</div>';
+
+  el('view').innerHTML=`
+    <div class="hero">
+      <div class="box">
+        <div class="frage">VERDIENE ICH GELD?</div>
+        <div class="zahl">${eur(g.monat.eur)}<small>letzte 30 Tage</small></div>
+        ${trend}
+        <div class="satz">Heute ${eur(g.heute.eur)} &middot; Woche ${eur(g.woche.eur)} &middot;
+          insgesamt ${eur(g.gesamt.eur)}. Das ist, was nach Erstattungen geblieben ist.</div>
+        ${erstattet}
+        <div class="tuwas"><button class="btn ghost sm" onclick="go('revenue')">Details</button></div>
+      </div>
+
+      <div class="box ${b.ampel}">
+        <div class="frage">LAEUFT ALLES?</div>
+        <div class="zahl"><span class="ampel ${b.ampel}"></span>${
+          b.ampel==='gruen'?'Alles gut':b.ampel==='gelb'?'Kleinigkeiten':'Kuemmern'}</div>
+        ${probleme}
+        <div class="satz">${b.laeuft_gerade} Video(s) werden gerade gerendert,
+          ${b.wartet} warten.</div>
+        <div class="tuwas">
+          <button class="btn ghost sm" onclick="go('alerts')">Stoerungen</button>
+          <button class="btn ghost sm" onclick="go('system')">System</button>
+        </div>
+      </div>
+
+      <div class="box${(p.tickets||p.feedback)?' gelb':''}">
+        <div class="frage">WILL JEMAND ETWAS VON MIR?</div>
+        <div class="zahl">${p.tickets}<small>offene Anfragen</small></div>
+        ${postSatz}
+        ${p.note?`<div class="satz">Durchschnittliche Bewertung ${p.note} von 5
+          (${p.bewertungen} Stimmen).</div>`:''}
+        <div class="tuwas">
+          <button class="btn ghost sm" onclick="go('support')">Support</button>
+          <button class="btn ghost sm" onclick="go('feedback')">Bewertungen</button>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="frage">WAECHST ES?</div>
+        <div class="zahl">${w.kunden}<small>Konten</small></div>
+        <div class="satz">${w.neu_7t} neu in den letzten 7 Tagen.
+          ${w.zahler} davon haben schon einmal gekauft.</div>
+        <div class="satz">${w.renders_7t} Videos in den letzten 7 Tagen gerendert.</div>
+        <div class="tuwas"><button class="btn ghost sm" onclick="go('users')">Kunden</button></div>
+      </div>
+    </div>
+    <div class="note" style="margin-top:14px">Diese Seite beantwortet die vier Fragen,
+      die im Alltag zaehlen. Alles andere &mdash; einzelne Jobs, Codes, Recht &amp; Steuern,
+      Technik &mdash; steht unveraendert in den Ansichten links.</div>`;
+}
+
+const RENDER={start:loadStart,live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
 if(KEY)boot();
 </script>
 </body>
