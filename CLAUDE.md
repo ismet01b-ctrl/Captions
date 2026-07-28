@@ -947,6 +947,41 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
   Heuristik/CPU/synthetisch getestet).
 
+### Sicherheits-Rückstand aus dem v203-Audit (bestätigt, bewusst offen)
+Reihenfolge = Wichtigkeit. Alles hier ist Betrieb oder Architektur und
+braucht Ismets Freigabe, deshalb wurde es NICHT mitgefixt.
+1. **Sicherung außer Haus fehlt komplett.** `_mail_backup_offsite` steigt bei
+   `ALERT_LEVEL != 'all'` sofort aus, und der Standard ist `important`
+   (docker-compose.yml, .env.example) — im Normalbetrieb gibt es also KEINE
+   Kopie außerhalb des Servers, und die vorhandene wäre unverschlüsselt.
+   Ismets Entscheidung (Juli 2026): **Cloudflare R2** (10 GB gratis).
+   Hetzner Object Storage ist mit 7,72 €/Monat Grundpreis für eine 0,2-MB-Datei
+   der falsche Dienst. Zu bauen: verschlüsseln vor dem Verlassen des Servers,
+   eigener Schalter (NICHT an DVE_ALERTS hängen), 30 Stände, Prüf- und
+   Rückhol-Knopf im Panel. Ismet legt Bucket + Schlüssel selbst an und trägt
+   sie in die `.env` ein — **niemals im Chat**.
+2. **Container läuft als root**, während er fremde Videos durch ffmpeg/opencv
+   schiebt. Kein `USER` im Dockerfile, keine Härtung in docker-compose
+   (`cap_drop`, `no-new-privileges`, `mem_limit`, `pids_limit`).
+3. **Kein Sicherheits-Ereignisprotokoll.** Es gibt keine Tabelle, die
+   festhält, wer wann was im Panel getan hat (Admin-Zugriffe, Logins,
+   Passwortwechsel, Erstattungen). Ohne das ist ein Vorfall nicht
+   rekonstruierbar — und DSGVO Art. 33 verlangt Meldung binnen 72 Stunden.
+4. **Abhängigkeiten ungepinnt** (opencv, Pillow, onnxruntime, requests, bcrypt,
+   fastapi/uvicorn), kein Lockfile, kein `--require-hashes`. Modelle werden
+   ohne Prüfsumme geladen, `depth.onnx` über `resolve/main` (beweglicher Zeiger).
+5. **Keine Grenze für Auflösung/FPS** — nur Dauer und Dateigröße. Ein 8K-Clip
+   mit 120 fps kostet denselben Credit und blockiert den einen Worker.
+6. **Render-Subprozess erbt alle Geheimnisse** (`env = dict(os.environ)`) —
+   Stripe LIVE, Admin-Key, SMTP. Er braucht nur `OPENAI_API_KEY`.
+7. `upload_chunk` puffert bis 500 MB im RAM (`await request.body()` vor der
+   Größenprüfung).
+8. **Kein Notaus**: kein Schalter, der Registrierungen/Renders/Käufe anhält
+   oder alle Sitzungen auf einmal beendet.
+9. **Keine Missbrauchs-Erkennung**: die Zähler leben im Prozessspeicher und
+   sind nach jedem Deploy weg; kein Alarm bei auffälligen Mustern.
+10. Kein `security.txt` (Meldeweg für Finder von außen).
+
 **ERLEDIGT, nicht mehr als offen behandeln (v175, am Repo/Live geprüft):**
 - **Sound-Pack liegt vollständig im Repo**: `sfx/pack` 14/14 Slots belegt
   (impact, whoosh, whoosh_soft, riser, tick, counter, boom, crack, fall,
