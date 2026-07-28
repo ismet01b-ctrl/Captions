@@ -65,6 +65,13 @@ möglich. Keine langen Analysen, keine Aufzählung von Nebenbefunden, kein
 Wiederholen dessen, was er schon weiß. Ergebnis zuerst, Details nur auf
 Nachfrage. Gilt auch für Deliver-Summaries.
 
+**SEHR KURZ + FÜR LAIEN — das ist EINE Regel (Ismet hat sie mehrfach
+wiederholt).** Der Standard ist eine Handvoll Zeilen, nicht eine Seite. Auch
+ein Audit mit 30 Befunden wird zu vier Sätzen: was war offen, ist es zu, was
+ist noch offen. Tabellen, Aufzählungen von Nebenbefunden und Belegketten nur
+auf Nachfrage. Wer sich beim Schreiben denkt "das gehört noch dazu", liegt
+fast immer falsch — es gehört in den Commit, nicht in die Antwort.
+
 **FÜR LAIEN ERKLÄREN (Ismets Ansage, Juli 2026 — gilt dauerhaft).** Ismet ist
 kein Entwickler. Erklärungen kommen ohne Fachwörter: was ist es, was heißt das
 für ihn, was kostet es ihn wenn nichts passiert. Ein Bild statt eines
