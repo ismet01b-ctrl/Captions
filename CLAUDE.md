@@ -692,6 +692,14 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   KEINE Anmeldung - eine Wartungsmeldung muss auch den erreichen, der
   gerade nicht eingeloggt ist. Weggeklickt wird **pro Ankuendigung** im
   localStorage gemerkt, nie global.
+- **Support ist eine eigene Seite (v202), kein Block unter Account.** Dazu ein
+  Zaehler im Navigations-Link: ungelesene Antworten kommen als `support_neu`
+  aus `/api/me` (das wird ohnehin bei jedem Seitenaufruf geholt - ein eigener
+  Endpunkt waere reine Last) und werden beim Oeffnen der Seite sofort
+  zurueckgesetzt. Ein Zaehler, der stehen bleibt, nachdem man hingeschaut hat,
+  ist Muell. Achtung beim Ergaenzen von `/api/me`: die REGISTRIERUNG gibt
+  dieselbe Zeile zurueck, hat die Zaehl-Abfrage aber nicht - eine
+  Sammelersetzung baut dort einen 500er ein.
 - **Ein Ticket ist ein VERLAUF (v198), keine Nachricht.** `ticket_messages`
   ist die Quelle, `tickets.body` bleibt nur die erste Zeile. Geantwortet wird
   im Panel; die Antwort geht ZUSAETZLICH als Mail raus (niemand soll in die
@@ -805,7 +813,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1395/1395 grün (Stand v201a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1404/1404 grün (Stand v202)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

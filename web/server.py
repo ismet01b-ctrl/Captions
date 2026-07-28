@@ -1895,7 +1895,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v201a-gate-befund'
+DVE_BUILD = 'v202-support-seite'
 
 
 @app.middleware('http')
@@ -4349,7 +4349,9 @@ def api_register(request: Request, response: Response,
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
     u = _find_user_by_id(uid)
+    # Frisches Konto: es kann noch keine Support-Antwort geben.
     return {'ok': True, 'email': u['email'], 'name': u['name'],
+            'support_neu': 0,                              # v202
             'username': u['name'], 'credits': credits_of(u['balance_sec']),
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified'])}
 
@@ -4599,6 +4601,13 @@ def api_me(request: Request):
     # v124 Referral-Stand: wie viele Einladungen wurden schon belohnt.
     ref_used = con.execute("SELECT COUNT(*) c FROM ledger WHERE user_id = ? AND "
                            "grund LIKE 'Referral for %'", (u['id'],)).fetchone()['c']
+    # v202: ungelesene Support-Antworten fuer den Zaehler in der Navigation.
+    # Bewusst HIER und nicht als eigener Endpunkt: /api/me wird ohnehin bei
+    # jedem Seitenaufruf geholt, ein zweiter Ruf waere reine Last.
+    sup_neu = con.execute(
+        "SELECT COUNT(*) c FROM ticket_messages m JOIN tickets t "
+        "ON t.id = m.ticket_id WHERE t.user_id = ? AND m.von = 'admin' "
+        "AND m.gelesen = 0", (u['id'],)).fetchone()['c']
     con.close()
     # v124 Stil-Gedaechtnis: eigene Editor-Korrekturen, aus denen die Regie lernt.
     style_prefs = sum(1 for c in _load_corrections()
@@ -4612,6 +4621,7 @@ def api_me(request: Request):
     days_in_month = [31, 29 if lt.tm_year % 4 == 0 else 28, 31, 30, 31, 30,
                      31, 31, 30, 31, 30, 31][lt.tm_mon - 1]
     return {'ok': True, 'email': u['email'], 'name': u['name'],
+            'support_neu': sup_neu,                        # v202
             'username': u['name'], 'credits': credits_of(u['balance_sec']),
             'created_at': int(u['created_at']),
             'balance_sec': u['balance_sec'], 'verified': bool(u['verified']),

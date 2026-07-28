@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v202 SUPPORT RAUS AUS DEM KONTO + BENACHRICHTIGUNG.** Ismets Ansage.
+  (1) **Eigene Seite.** Support stand als Block ganz unten unter "Account",
+      zwischen Passwort aendern und Konto loeschen. Dort sucht ihn niemand.
+      Jetzt eigener Eintrag in der Navigation und eine eigene Seite; der
+      Verlauf laedt beim Oeffnen (`showSection`), nicht mehr ueber
+      `renderAccount`.
+  (2) **Die kleine 1.** Ungelesene Antworten stehen als Zaehler im
+      Navigations-Link. Die Zahl kommt als `support_neu` aus `/api/me` -
+      bewusst dort und nicht als eigener Endpunkt, weil /api/me ohnehin bei
+      jedem Seitenaufruf geholt wird. Beim Oeffnen der Seite faellt sie
+      sofort auf 0: ein Zaehler, der stehen bleibt, nachdem man hingeschaut
+      hat, ist Muell.
+  Beweis ueber echte Aufrufe: frisches Konto 0, eigene Frage 0 (die eigene
+  Nachricht ist keine Benachrichtigung), nach der Admin-Antwort 1, nach dem
+  Ansehen wieder 0.
+  Mitgenommener Beinahe-Fehler: `/api/me` und die REGISTRIERUNG geben
+  dieselbe Zeile zurueck. Die Sammelersetzung hat `support_neu` in beide
+  geschrieben - in der Registrierung gibt es die Zaehl-Abfrage nicht, das
+  waere ein 500er bei JEDER Anmeldung gewesen.
+  Tests: 1404/1404 logic (9 neu) + Renders 7/1/5/2 + GUI.
 - **v201 DAS TEST-GATE HAT DEN BETRIEB EINGEFROREN.** Ismets Befund: "kann
   immer noch nicht antworten bei Admin Panel". Der Support-Verlauf (v198) war
   gebaut, getestet und gepusht - nur nie live. Ursache ist ein

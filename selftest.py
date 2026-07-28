@@ -6507,10 +6507,60 @@ def _scenario_betrieb(tmp):
           and 'function threadReply(' in _ui198)
     check('v198: die App benutzt ihren eigenen Escaper',
           '${escHtml(m.text)}' in _ui198)
-    check('v198: der Verlauf wird beim Oeffnen des Kontos geladen',
-          'loadThreads();                                 // v198' in _ui198)
+    # v202: der Verlauf haengt jetzt an der eigenen Support-Seite, nicht mehr
+    # am Konto. Die Zusage ist dieselbe geblieben - er wird beim Oeffnen
+    # geladen -, nur der Ort hat sich geaendert.
+    check('v202: der Verlauf wird beim Oeffnen der Support-Seite geladen',
+          "if (name === 'support') loadThreads();" in _ui198)
     check('v198: wartende Tickets stehen als Zaehler in der Seitenleiste',
           "setBadge('support', d.tickets_open" in _adm198)
+
+    # ======= v202: Support ist eine eigene Seite + Zaehler ===============
+    # Ismets Ansage: "soll nicht alles unter Account verstaut werden", und
+    # eine Antwort soll sich melden. Eine Antwort, die niemand sieht, ist
+    # keine Antwort - der Kunde hat bisher nur die Mail gehabt.
+    _ui202 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v202: Support ist eine eigene Seite, kein Block unter Account',
+          'id="page-support"' in _ui202
+          and "'billing', 'support', 'account'" in _ui202
+          and "if (name === 'support') loadThreads();" in _ui202)
+    check('v202: der Support-Block liegt NICHT mehr in page-account',
+          _ui202.index('id="page-support"') < _ui202.index('id="page-account"')
+          and 'id="supThreads"' in _ui202
+          and _ui202.index('id="supThreads"') < _ui202.index('id="page-account"'))
+    check('v202: es gibt genau EIN Support-Formular (nicht versehentlich zwei)',
+          _ui202.count('id="supportForm"') == 1
+          and _ui202.count('id="supThreads"') == 1)
+    check('v202: der Zaehler sitzt im Navigations-Link',
+          'id="supBadge"' in _ui202 and '.navbadge' in _ui202
+          and 'function supBadge(' in _ui202)
+    check('v202: gesehen ist gesehen - der Zaehler faellt nach dem Lesen',
+          'supBadge(0);' in _ui202
+          and 'supBadge(d.support_neu || 0)' in _ui202)
+
+    # Und der Zaehler muss wirklich zaehlen. Ueber echte Aufrufe, nicht ueber
+    # den Quelltext - v197 hatte fuenf Quelltext-Tests am Problem vorbei.
+    os.environ['DVE_ADMIN'] = 'testkey_v202'
+    _c202 = _TC198(_SV198.app, base_url='https://test')
+    _m202 = f'nav{int(_tm197.time())}@test.invalid'
+    _r202 = _c202.post('/api/register', data={'email': _m202, 'name': 'Zaehler Test',
+                                              'password': 'passwort123'})
+    check('v202: ein frisches Konto hat keinen Zaehler (kein Absturz)',
+          _r202.status_code == 200 and _r202.json().get('support_neu') == 0,
+          _r202.text[:140])
+    _c202.post('/api/login', data={'email': _m202, 'password': 'passwort123'})
+    _t202 = _c202.post('/api/support', data={'subject': 'Frage',
+                                             'message': 'Wie geht das?'}).json()['ticket']
+    check('v202: die eigene Frage erzeugt KEINE Benachrichtigung',
+          _c202.get('/api/me').json()['support_neu'] == 0)
+    _c202.post(f'/api/admin/tickets/{_t202}/reply', data={'text': 'So geht das.'},
+               headers={'X-Admin-Key': 'testkey_v202'})
+    check('v202: nach der Antwort steht die kleine 1',
+          _c202.get('/api/me').json()['support_neu'] == 1)
+    _c202.post(f'/api/support/tickets/{_t202}/read')
+    check('v202: nach dem Ansehen ist sie weg',
+          _c202.get('/api/me').json()['support_neu'] == 0)
+    del os.environ['DVE_ADMIN']
 
     check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
           'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)

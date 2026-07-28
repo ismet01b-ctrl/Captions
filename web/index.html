@@ -181,6 +181,13 @@ body {
 }
 .topnav a:hover { background: var(--surf); color: var(--fg); }
 .topnav a.on { background: var(--acc-soft); color: var(--acc2); }
+/* v202: Zaehler fuer ungelesene Support-Antworten. Er sitzt IM Link, damit er
+   auf dem Handy mit der Nav mitscrollt statt daneben zu stehen. */
+.navbadge { display: none; margin-left: 6px; min-width: 17px; height: 17px;
+  padding: 0 5px; border-radius: 9px; background: var(--acc); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
+  vertical-align: 1px; }
+.navbadge.on { display: inline-block; }
 .chip-credit {
   display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   padding: 8px 14px; border-radius: 999px; font-weight: 800; font-size: 14px;
@@ -1651,6 +1658,10 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <a data-nav="motion">Motion</a>
       <a data-nav="library">Library</a>
       <a data-nav="billing">Billing</a>
+      <!-- v202: Support hat eine eigene Seite. Unter "Account" verstaut hat
+           ihn niemand gefunden, und eine Antwort, die niemand sieht, ist
+           keine Antwort. Der Zaehler zeigt ungelesene Antworten. -->
+      <a data-nav="support">Support<span class="navbadge" id="supBadge"></span></a>
       <a data-nav="account">Account</a>
     </nav>
     <div class="grow"></div>
@@ -1828,6 +1839,27 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
   </section>
 
+  <!-- ===== PAGE: SUPPORT (v202) =====
+       Vorher ein Block unter "Account". Dort hat ihn niemand gesucht, und eine
+       Antwort, die niemand sieht, ist keine Antwort. -->
+  <section class="page" id="page-support">
+    <div class="page-head">
+      <h1>Support</h1>
+      <p class="sub">Ask us anything. Replies land right here and in your inbox.</p>
+    </div>
+    <div class="panel">
+      <h3>New message</h3>
+      <form id="supportForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:520px;">
+        <input type="text" id="supSubject" placeholder="Subject (optional)" maxlength="200" style="text-transform:none;">
+        <textarea id="supMessage" placeholder="How can we help?" rows="5" maxlength="5000"
+                  required style="text-transform:none; resize:vertical; width:100%;"></textarea>
+        <button class="btn" type="submit" id="btnSupport" style="align-self:flex-start; padding:9px 18px;">Send message</button>
+      </form>
+      <p class="hint" id="supDone" style="display:none; color:var(--acc2); margin-top:8px;"></p>
+    </div>
+    <div id="supThreads"></div>
+  </section>
+
   <!-- ===== PAGE: ACCOUNT ===== -->
   <section class="page" id="page-account">
     <div class="page-head">
@@ -1916,23 +1948,6 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <input type="password" id="pwNew" placeholder="New password (min. 8 chars)" required autocomplete="new-password" minlength="8">
           <button class="btn" type="submit" id="btnPwSave" style="align-self:flex-start; padding:9px 18px;">Change password</button>
         </form>
-      </div>
-
-      <!-- v133c: Support-Ticket. Kein Reply-an-noreply mehr; hier laeuft der Kontakt. -->
-      <div class="panel">
-        <h3>Support</h3>
-        <p class="hint">Have a question or ran into a problem? Send us a message
-          and we will reply to your account email.</p>
-        <form id="supportForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:520px;">
-          <input type="text" id="supSubject" placeholder="Subject (optional)" maxlength="200" style="text-transform:none;">
-          <textarea id="supMessage" placeholder="How can we help?" rows="5" maxlength="5000"
-                    required style="text-transform:none; resize:vertical; width:100%;"></textarea>
-          <button class="btn" type="submit" id="btnSupport" style="align-self:flex-start; padding:9px 18px;">Send message</button>
-        </form>
-        <p class="hint" id="supDone" style="display:none; color:var(--acc2); margin-top:8px;"></p>
-        <!-- v198: Der Verlauf. Vorher stand die Antwort nur im Postfach, und
-             eine Rueckfrage darauf erzeugte ein neues Ticket ohne Bezug. -->
-        <div id="supThreads" style="margin-top:16px;"></div>
       </div>
 
       <div class="panel hidden" id="refPanel">
@@ -3268,8 +3283,8 @@ function updateCreditHeader(sec) {
 // Landing-Sektion kommen dann automatisch zurueck).
 const MOTION_ENABLED = false;
 const PAGES = MOTION_ENABLED
-  ? ['create', 'motion', 'library', 'billing', 'account']
-  : ['create', 'library', 'billing', 'account'];
+  ? ['create', 'motion', 'library', 'billing', 'support', 'account']
+  : ['create', 'library', 'billing', 'support', 'account'];
 function showSection(name, fromHistory) {
   if (!PAGES.includes(name)) name = 'create';
   PAGES.forEach(p => {
@@ -3297,6 +3312,7 @@ function showSection(name, fromHistory) {
   if (name === 'motion') initMotion();
   if (name === 'library') renderLibrary();
   if (name === 'billing') renderBilling();
+  if (name === 'support') loadThreads();          // v202: eigene Seite
   if (name === 'account') renderAccount();
 }
 function routeFromHash(fromHistory) {
@@ -4131,9 +4147,9 @@ async function renderAccount() {
   try {
     const d = await (await fetch('/api/me')).json();
     if (d.ok) { State.user = d; State.balanceSec = d.balance_sec;
-      State.verified = d.verified !== false; updateCreditHeader(d.balance_sec); }
+      State.verified = d.verified !== false; updateCreditHeader(d.balance_sec);
+      supBadge(d.support_neu || 0); }                     // v202
   } catch (e) {}
-  loadThreads();                                 // v198: Support-Verlauf
   const u = State.user || {};
   const set = (id, txt) => { const e = $('#' + id); if (e) e.textContent = txt; };
   set('accUsername', u.username || u.name || '–');
@@ -4534,6 +4550,15 @@ if ($('#supportForm')) $('#supportForm').addEventListener('submit', async () => 
    ohne Bezug zum alten. Jetzt steht die Unterhaltung an EINER Stelle - hier
    und im Panel. Die Mail geht weiterhin raus; niemand soll in die App schauen
    muessen, um eine Antwort zu sehen. */
+/* v202: der Zaehler in der Navigation. Er haengt an /api/me (wird ohnehin bei
+   jedem Seitenaufruf geholt) und wird nach dem Lesen sofort zurueckgesetzt -
+   ein Zaehler, der stehen bleibt, nachdem man hingeschaut hat, ist Muell. */
+function supBadge(n) {
+  const b = $('#supBadge');
+  if (!b) return;
+  b.textContent = n > 9 ? '9+' : String(n || 0);
+  b.classList.toggle('on', !!n);
+}
 async function loadThreads() {
   const box = $('#supThreads');
   if (!box) return;
@@ -4563,8 +4588,10 @@ async function loadThreads() {
       </div>`;
     }).join('');
     if (d.ungelesen) {
-      d.items.forEach(t => fetch('/api/support/tickets/' + t.id + '/read', { method: 'POST' }));
+      await Promise.all(d.items.map(
+        t => fetch('/api/support/tickets/' + t.id + '/read', { method: 'POST' })));
     }
+    supBadge(0);                      // gesehen ist gesehen
   } catch (e) { console.error('support threads:', e); box.innerHTML = ''; }
 }
 async function threadReply(tid) {
