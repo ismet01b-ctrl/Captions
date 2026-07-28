@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v201 DAS TEST-GATE HAT DEN BETRIEB EINGEFROREN.** Ismets Befund: "kann
+  immer noch nicht antworten bei Admin Panel". Der Support-Verlauf (v198) war
+  gebaut, getestet und gepusht - nur nie live. Ursache ist ein
+  Konstruktionsfehler in meinem eigenen v197-Gate: "Tests rot" und "Gate
+  laeuft gar nicht" waren derselbe Fall (`if ! bash deploy_gate.sh`). Faellt
+  die PRUEFVORRICHTUNG aus - Image startet nicht, ffmpeg fehlt, docker zickt -,
+  bricht der Deploy ab, obwohl am Code nie etwas fehlte. v198 war der erste
+  Commit, der da durch musste; seitdem stand alles.
+  Ein Waechter, der bei eigenem Ausfall die Tuer zumauert, ist kein Waechter.
+  - `exit 1` = Tests rot -> Abbruch, alte Version bleibt (unveraendert).
+  - `exit 2` = Gate nicht lauffaehig -> Deploy laeuft WEITER, laut, mit
+    Eintrag in der alerts-Tabelle ("dieser Stand ist UNGEPRUEFT live").
+  - Entschieden wird am ERGEBNIS, nicht nur am Rueckgabewert: fehlt die Zeile
+    "<n>/<m> Tests bestanden", ist der Selftest gar nicht bis zum Ende
+    gekommen. Rot heisst rot nur mit Bilanz UND `FAIL`-Zeilen.
+  Beweis: das Gate laeuft im Selftest gegen einen VORGETAEUSCHTEN docker,
+  alle vier Ausgaenge belegt (gruen 0, rot 1, kaputt 2, docker fehlt 2). Eine
+  Quelltext-Suche haette den Fehler nie gefunden - v197 hatte fuenf Tests auf
+  das Gate, alle gruen, alle am Problem vorbei.
+  EHRLICH: dass das Gate auf DEM SERVER scheiterte, ist eine begruendete
+  Annahme - ich komme von hier nicht an douchko.eu. Falls es nicht das Gate
+  war, steht die Ursache jetzt im Panel unter Alerts.
+  Tests: 1391/1391 logic (7 neu) + Renders 7/1/5/2 + GUI.
 - **v200 SOUND-VARIANTEN: nicht mehr immer derselbe Klick.** Ismets Befund
   ("es muessen mehr Variationen rein"). Ursache gemessen, nicht geraten - und
   sie lag NICHT beim Wahl-Mechanismus: den gibt es seit v96d (`load_variants`,

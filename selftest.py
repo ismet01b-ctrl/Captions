@@ -6340,6 +6340,7 @@ def _scenario_betrieb(tmp):
     # geprueft wurde nur, ob der Server antwortet.
     _gate197 = open(os.path.join(HERE, 'deploy_gate.sh'), encoding='utf-8').read()
     _upd197 = open(os.path.join(HERE, 'update.sh'), encoding='utf-8').read()
+    _ = _gate197
     _auto197 = open(os.path.join(HERE, 'autodeploy.sh'), encoding='utf-8').read()
     check('v197: das Gate laeuft VOR dem Neustart',
           _upd197.index('deploy_gate.sh')
@@ -6513,6 +6514,51 @@ def _scenario_betrieb(tmp):
 
     check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
           'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)
+
+    # --- I) v201: Das Gate hatte einen Konstruktionsfehler. "Tests rot" und
+    # "Gate laeuft gar nicht" waren derselbe Fall - eine Panne an der
+    # PRUEFVORRICHTUNG konnte damit den ganzen Betrieb einfrieren, ohne dass
+    # am Code je etwas fehlte. Genau das ist nach v197 passiert: v198 war der
+    # erste Commit, der durch das Gate musste. Ein Waechter, der bei eigenem
+    # Ausfall die Tuer zumauert, ist kein Waechter.
+    # Geprueft wird das Gate ECHT, mit einem vorgetaeuschten docker - eine
+    # Quelltext-Suche haette den Fehler nie gefunden.
+    import subprocess as _sp201
+    import tempfile as _tf201
+    _bin201 = _tf201.mkdtemp(prefix='gate201_')
+
+    def _gate201(ausgabe, rc):
+        with open(os.path.join(_bin201, 'docker'), 'w') as f:
+            f.write(f'#!/usr/bin/env bash\n{ausgabe}\nexit {rc}\n')
+        os.chmod(os.path.join(_bin201, 'docker'), 0o755)
+        umg = dict(os.environ, PATH=_bin201 + os.pathsep + os.environ['PATH'])
+        return _sp201.run(['bash', os.path.join(HERE, 'deploy_gate.sh')],
+                          capture_output=True, text=True, env=umg, cwd=HERE)
+
+    _g_ok = _gate201('echo "1384/1384 Tests bestanden"', 0)
+    check('v201: gruener Selftest laesst den Deploy durch', _g_ok.returncode == 0,
+          _g_ok.stdout[-200:])
+    _g_rot = _gate201('echo "FAIL irgendein Test"; echo "1383/1384 Tests bestanden"', 1)
+    check('v201: roter Selftest bricht ab (exit 1)', _g_rot.returncode == 1)
+    check('v201: das Gate nennt die gefallenen Tests',
+          'FAIL irgendein Test' in _g_rot.stdout)
+    _g_kaputt = _gate201('echo "bash: ffmpeg: command not found"', 127)
+    check('v201: ein NICHT LAUFFAEHIGES Gate ist ein anderer Fall (exit 2)',
+          _g_kaputt.returncode == 2, _g_kaputt.stdout[-200:])
+    os.remove(os.path.join(_bin201, 'docker'))
+    _g_leer = _sp201.run(['bash', os.path.join(HERE, 'deploy_gate.sh')],
+                         capture_output=True, text=True, cwd=HERE,
+                         env=dict(os.environ, PATH=_bin201 + ':/usr/bin:/bin'))
+    check('v201: fehlt docker ganz, ist das ebenfalls exit 2 (nicht "rot")',
+          _g_leer.returncode == 2)
+    shutil.rmtree(_bin201, ignore_errors=True)
+    # Und update.sh muss die beiden Faelle wirklich verschieden behandeln.
+    check('v201: nur exit 1 bricht den Deploy ab',
+          'if [ "$GATE_RC" -eq 1 ]; then' in _upd197
+          and 'elif [ "$GATE_RC" -ne 0 ]; then' in _upd197)
+    check('v201: ein defektes Gate wird im Panel vermerkt, nicht nur im Log',
+          "'deploy_gate', 'Test-Gate nicht lauffaehig'" in _upd197
+          and 'GATE_DEFEKT' in _upd197)
 
     # ======= v195: Admin-Panel als Seitenleiste ==========================
     # Zwoelf Ansichten in einer umbrechenden Tab-Zeile waren schon zu viel,

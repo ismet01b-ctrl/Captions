@@ -709,6 +709,15 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   leeres Banner sieht sonst aus wie "nichts vorhanden".
 
 ## Betrieb: Deploy, Backup, Logs, Schlange (v197)
+- **Das Gate kennt ZWEI Fehler (v201).** `exit 1` = Tests rot, Code kaputt,
+  Deploy abbrechen. `exit 2` = das Gate konnte gar nicht laufen (Image startet
+  nicht, ffmpeg fehlt, docker zickt) - darueber ist ueber den Code NICHTS
+  gesagt, also wird deployt, aber laut und mit Eintrag im Panel. In v197 war
+  beides derselbe Fall: eine Panne an der PRUEFVORRICHTUNG fror damit den
+  ganzen Betrieb ein, und v198 bis v200 gingen nie live. Ein Waechter, der bei
+  eigenem Ausfall die Tuer zumauert, ist kein Waechter. Das Gate wird im
+  Selftest mit einem VORGETAEUSCHTEN docker durchgespielt (alle drei
+  Ausgaenge) - eine Quelltext-Suche haette den Fehler nie gefunden.
 - **Nichts geht ungeprueft live.** `update.sh` ruft `deploy_gate.sh` (Selftest
   im NEU GEBAUTEN Image, `--rm --no-deps`, eigenes `DVE_DATA`, kein Key) VOR
   `docker compose up`. Rot = Abbruch, die alte Version laeuft weiter. Wer den
@@ -791,7 +800,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1384/1384 grün (Stand v200)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1391/1391 grün (Stand v201)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

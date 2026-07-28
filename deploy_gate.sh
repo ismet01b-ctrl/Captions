@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v197 TEST-GATE vor dem Deploy.
+# v201 TEST-GATE vor dem Deploy.
 #
 # WARUM: autodeploy.sh zog bis v196 JEDEN Commit und startete neu. Geprueft
 # wurde danach nur, ob /api/pricing antwortet - also ob der Server ueberhaupt
@@ -8,16 +8,31 @@
 # Betrieb, und er ist billig zu verhindern.
 #
 # WIE: die Tests laufen im NEU GEBAUTEN Image, bevor der laufende Container
-# angefasst wird. Rot = Abbruch, die alte Version laeuft unveraendert weiter.
-# Der Container wird bewusst mit --rm und ohne Volumes gestartet: der Test
-# darf die echte users.db nie sehen (CLAUDE.md-Regel).
-set -euo pipefail
+# angefasst wird. Der Container wird bewusst mit --rm und ohne Abhaengigkeiten
+# gestartet, mit eigenem DVE_DATA: der Test darf die echte users.db nie sehen.
+#
+# v201 - ZWEI VERSCHIEDENE FEHLER, ZWEI VERSCHIEDENE ANTWORTEN:
+#   exit 1  Die Tests sind ROT. Der Code ist kaputt -> Deploy abbrechen.
+#   exit 2  Das Gate konnte gar nicht LAUFEN (Image startet nicht, ffmpeg
+#           fehlt, docker zickt). Dann ist NICHTS ueber den Code gesagt.
+#           In v197 war beides derselbe Fall, und damit konnte eine Panne
+#           an der Pruefvorrichtung den ganzen Betrieb einfrieren: kein
+#           Feature ging mehr live, obwohl am Code nie etwas fehlte.
+#           Ein Waechter, der bei eigenem Ausfall die Tuer zumauert, ist
+#           kein Waechter. Der Deploy laeuft dann weiter - laut, mit
+#           Meldung im Panel, aber er laeuft.
+set -uo pipefail
 cd "$(dirname "$0")"
+
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
 
 echo "==> Test-Gate: Selftest im neuen Image"
 
+set +e
 docker compose run --rm --no-deps \
   -e DVE_DATA=/tmp/gate_data \
+  -e DVE_LOGFILE=0 \
   -e OPENAI_API_KEY= \
   --entrypoint bash app -c '
 set -e
@@ -37,6 +52,24 @@ for x in worte:
 json.dump({"words": w, "text": " ".join(worte)}, open("/tmp/st_transcript.json","w"))
 PY
 python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=logic
-'
+' 2>&1 | tee "$LOG"
+RC=${PIPESTATUS[0]}
+set -e
 
-echo "==> Test-Gate: gruen"
+# Die Entscheidung haengt am ERGEBNIS, nicht nur am Rueckgabewert. Der
+# Selftest schreibt am Ende immer "<n>/<m> Tests bestanden"; fehlt die
+# Zeile, ist er gar nicht bis zum Ende gekommen.
+if grep -qE '[0-9]+/[0-9]+ Tests bestanden' "$LOG"; then
+  if [ "$RC" -eq 0 ] && ! grep -q '^FAIL' "$LOG"; then
+    echo "==> Test-Gate: gruen ($(grep -oE '[0-9]+/[0-9]+ Tests bestanden' "$LOG" | tail -1))"
+    exit 0
+  fi
+  echo "==> Test-Gate: ROT - die folgenden Tests sind gefallen:"
+  grep '^FAIL' "$LOG" | head -20
+  exit 1
+fi
+
+echo "==> Test-Gate: NICHT LAUFFAEHIG (Rueckgabewert $RC, keine Test-Bilanz)."
+echo "    Ueber den Code ist damit nichts gesagt. Letzte Zeilen:"
+tail -12 "$LOG" | sed 's/^/      /'
+exit 2

@@ -20,13 +20,28 @@ echo "==> [3/5] Test-Gate (die Tests laufen im NEUEN Image)"
 # v197: Erst pruefen, DANN umschalten. Faellt der Selftest durch, bleibt die
 # laufende Version unangetastet - ein kaputter Renderer darf nie live gehen,
 # der Kunde zahlt sonst einen Credit fuer ein kaputtes Video.
-if ! bash deploy_gate.sh; then
+# v201: Das Gate unterscheidet jetzt zwei Faelle. Rot = Code kaputt, Abbruch.
+# Nicht lauffaehig = die PRUEFVORRICHTUNG ist kaputt; darueber ist nichts
+# ueber den Code gesagt, und ein Waechter, der bei eigenem Ausfall die Tuer
+# zumauert, friert den ganzen Betrieb ein. Dann wird deployt, aber laut.
+set +e
+bash deploy_gate.sh
+GATE_RC=$?
+set -e
+if [ "$GATE_RC" -eq 1 ]; then
   echo ""
   echo "=========================================="
   echo "  ✗ DEPLOY ABGEBROCHEN - Selftest rot."
   echo "    Die laufende Version bleibt unveraendert."
   echo "=========================================="
   exit 1
+elif [ "$GATE_RC" -ne 0 ]; then
+  echo ""
+  echo "=========================================="
+  echo "  ! Test-Gate nicht lauffaehig - Deploy laeuft TROTZDEM."
+  echo "    Der Code ist damit UNGEPRUEFT live gegangen."
+  echo "=========================================="
+  GATE_DEFEKT=1
 fi
 
 echo "==> [4/5] Container neu starten"
@@ -39,6 +54,24 @@ for i in $(seq 1 30); do
     echo "=========================================="
     echo "  ✓ DEPLOY OK - App laeuft und antwortet"
     echo "=========================================="
+    # v201: Ein defektes Gate muss im Panel stehen, nicht nur in journalctl.
+    # Sonst laeuft der Betrieb monatelang ungeprueft und niemand weiss es.
+    if [ "${GATE_DEFEKT:-0}" = "1" ]; then
+      docker compose exec -T app python - <<'PY' || true
+import os, sqlite3, time
+con = sqlite3.connect(os.path.join(os.environ.get('DVE_DATA', '/app/web/data'),
+                                   'users.db'), timeout=10)
+con.execute("INSERT INTO alerts (schluessel,betreff,text,gemailt,gelesen,"
+            "created_at) VALUES (?,?,?,0,0,?)",
+            ('deploy_gate', 'Test-Gate nicht lauffaehig',
+             'Der Deploy ist durchgelaufen, aber der Selftest konnte im neuen '
+             'Image gar nicht starten - dieser Stand ist also UNGEPRUEFT live. '
+             'Details auf dem Server: journalctl -u douchko-deploy -n 120',
+             int(time.time())))
+con.commit(); con.close()
+print('Gate-Defekt im Panel vermerkt')
+PY
+    fi
     docker compose logs app --tail 5
     exit 0
   fi
