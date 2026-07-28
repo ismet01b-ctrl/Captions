@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v205b-sec DAS GATE SAGT JETZT, WO ES STIRBT.** Ismets Screenshot zeigte
+  elf Meldungen "Test-Gate nicht lauffaehig" seit v204: die Deploys gehen
+  durch (der v201-Rueckfall wirkt), aber sie gehen UNGEPRUEFT live - und die
+  Meldung sagte nicht, warum. "Details auf dem Server: journalctl" ist fuer
+  jemanden, der nie ins Terminal geht, dasselbe wie keine Meldung. Das war
+  meine Luecke, nicht seine.
+  - `deploy_gate.sh` meldet vier STUFEN (Container laeuft / Verzeichnis
+    angelegt / Testvideo erzeugt / Selftest gestartet). Der Befund nennt die
+    zuletzt erreichte Stufe - oder ausdruecklich "KEINE, der Container ist
+    gar nicht angelaufen".
+  - `update.sh` haengt den Befund auch im Fall "nicht lauffaehig" an die
+    Panel-Meldung (bisher nur bei roten Tests).
+  - Das eingebettete Melde-Python wird im Selftest auf Gueltigkeit geprueft -
+    ein Syntaxfehler darin faellt sonst erst im Moment der Stoerung auf, also
+    genau dann, wenn man die Meldung braucht. (Beim Bauen genau passiert: ein
+    fehlendes Pluszeichen haette die Meldung selbst zerlegt.)
+  VERMUTUNG, noch nicht bewiesen: v205a koennte das Gate schon nebenbei
+  repariert haben. `cap_drop: ALL` nahm auch DAC_OVERRIDE, und /app gehoert
+  seit v204 dem Dienst-Nutzer - der Testlauf als root konnte dort also
+  moeglicherweise nicht mehr schreiben. `docker compose run` erbt das
+  `cap_add` aus v205a. Der naechste Deploy zeigt es; falls nicht, steht der
+  Ort jetzt in der Meldung.
+  Tests: 1483/1483 logic (4 neu) + Renders 7/1/5/2 + GUI.
 - **v205a-sec DIE HAERTUNG HAT SICH SELBST BLOCKIERT + Bauteile festgenagelt.**
   - **Eigentor aus v204, am Live-System aufgefallen:** die neue Panel-Anzeige
     meldete "root - die Haertung ist auf den alten Weg zurueckgefallen".

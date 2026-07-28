@@ -6999,6 +6999,29 @@ def _scenario_betrieb(tmp):
     # des Servers, hier hat sie nichts verloren.
     if os.path.exists(_bef201):
         os.remove(_bef201)
+    # v205b-sec: Ein Befund ohne Ort ist kein Befund. Das Gate meldet, welche
+    # Stufe es zuletzt erreicht hat - sonst steht im Panel nur "ging nicht".
+    _gate205 = open(os.path.join(HERE, 'deploy_gate.sh'), encoding='utf-8').read()
+    check('v205b-sec: das Gate meldet, wie weit es gekommen ist',
+          _gate205.count('GATE-STUFE') >= 5)
+    check('v205b-sec: die letzte erreichte Stufe steht im Befund',
+          'Letzte erreichte Stufe:' in _gate205)
+    _upd205 = open(os.path.join(HERE, 'update.sh'), encoding='utf-8').read()
+    check('v205b-sec: der Befund wandert auch bei NICHT LAUFFAEHIGEM Gate ins Panel',
+          'GATE_BEFUND=' in _upd205
+          and '.deploy_gate_last.txt' in _upd205.split('GATE_DEFEKT:-0')[1][:600])
+    # Das eingebettete Python muss fuer sich allein gueltig sein - ein Fehler
+    # darin faellt sonst erst auf dem Server auf, im Moment der Stoerung.
+    import ast as _ast205
+    _i205 = _upd205.index("<<'PY'")
+    _blk205 = _upd205[_upd205.index('\n', _i205) + 1:_upd205.index('\nPY\n', _i205)]
+    try:
+        _ast205.parse(_blk205)
+        _py_ok205 = True
+    except SyntaxError:
+        _py_ok205 = False
+    check('v205b-sec: das eingebettete Melde-Python ist gueltig', _py_ok205)
+
     check('v201a: die Befund-Datei ist kein Repo-Inhalt',
           '.deploy_gate_last.txt' in open(os.path.join(HERE, '.gitignore'),
                                           encoding='utf-8').read())

@@ -57,16 +57,21 @@ for i in $(seq 1 30); do
     # v201: Ein defektes Gate muss im Panel stehen, nicht nur in journalctl.
     # Sonst laeuft der Betrieb monatelang ungeprueft und niemand weiss es.
     if [ "${GATE_DEFEKT:-0}" = "1" ]; then
-      docker compose exec -T app python - <<'PY' || true
-import os, sqlite3, time
+      # v205b-sec: Bis hier stand im Panel nur DASS das Gate nicht lief,
+      # nicht WARUM - und "schau in journalctl" ist fuer jemanden, der nie
+      # ins Terminal geht, dasselbe wie keine Meldung.
+      GATE_BEFUND="$(tail -c 1800 .deploy_gate_last.txt 2>/dev/null || true)"
+      docker compose exec -T app python - "$GATE_BEFUND" <<'PY' || true
+import os, sqlite3, sys, time
+befund = (sys.argv[1] if len(sys.argv) > 1 else '').strip()
 con = sqlite3.connect(os.path.join(os.environ.get('DVE_DATA', '/app/web/data'),
                                    'users.db'), timeout=10)
 con.execute("INSERT INTO alerts (schluessel,betreff,text,gemailt,gelesen,"
             "created_at) VALUES (?,?,?,0,0,?)",
             ('deploy_gate', 'Test-Gate nicht lauffaehig',
              'Der Deploy ist durchgelaufen, aber der Selftest konnte im neuen '
-             'Image gar nicht starten - dieser Stand ist also UNGEPRUEFT live. '
-             'Details auf dem Server: journalctl -u douchko-deploy -n 120',
+             'Image gar nicht starten - dieser Stand ist also UNGEPRUEFT live.'
+             + chr(10) + chr(10) + 'Befund:' + chr(10) + (befund or '(keiner)'),
              int(time.time())))
 con.commit(); con.close()
 print('Gate-Defekt im Panel vermerkt')

@@ -40,12 +40,15 @@ docker compose run --rm --no-deps \
   -e OPENAI_API_KEY= \
   --entrypoint bash app -c '
 set -e
+echo "GATE-STUFE 1: Container laeuft, $(python -V 2>&1)"
 mkdir -p /tmp/gate_data
+echo "GATE-STUFE 2: Verzeichnis angelegt, Nutzer $(id -un 2>/dev/null || echo '?')" 
 # Synthetisches Testmaterial - wir haben im Image kein echtes Video und
 # wollen auch keins: der Selftest laeuft auf CPU mit erfundenem Stoff.
 ffmpeg -y -v error -f lavfi -i "color=c=0x2b2430:s=540x960:d=6:r=30" \
        -f lavfi -i "sine=frequency=200:duration=6" \
        -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest /tmp/st_clip.mp4
+echo "GATE-STUFE 3: Testvideo erzeugt" 
 python - <<PY
 import json
 worte = "Ich zeig dir heute wie wir Captions auf ein neues Level bringen das sind die grossen Momente deines Videos klar".split()
@@ -55,6 +58,7 @@ for x in worte:
     t += 0.265
 json.dump({"words": w, "text": " ".join(worte)}, open("/tmp/st_transcript.json","w"))
 PY
+echo "GATE-STUFE 4: Transkript erzeugt, starte Selftest"
 python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=logic
 ' 2>&1 | tee "$LOG"
 RC=${PIPESTATUS[0]}
@@ -79,5 +83,8 @@ fi
 echo "==> Test-Gate: NICHT LAUFFAEHIG (Rueckgabewert $RC, keine Test-Bilanz)."
 echo "    Ueber den Code ist damit nichts gesagt. Letzte Zeilen:"
 tail -12 "$LOG" | sed 's/^/      /'
-{ echo 'defekt'; echo "Rueckgabewert $RC, keine Test-Bilanz"; tail -12 "$LOG"; } > "$BEFUND"
+{ echo 'defekt'
+  echo "Rueckgabewert $RC, keine Test-Bilanz"
+  echo "Letzte erreichte Stufe: $(grep -o 'GATE-STUFE [0-9][^"]*' "$LOG" | tail -1 || echo 'KEINE - der Container ist gar nicht angelaufen')"
+  tail -14 "$LOG"; } > "$BEFUND"
 exit 2
