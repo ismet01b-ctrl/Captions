@@ -1489,7 +1489,15 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     body = {'model': model, 'messages': messages}
     if json_mode:
         body['response_format'] = {'type': 'json_object'}
-    body['max_completion_tokens' if new else 'max_tokens'] = max_toks
+    # v210 DENKBUDGET. Bei den neuen Modellen zaehlen die internen
+    # Denk-Tokens MIT in max_completion_tokens. Ein knappes Budget wird
+    # komplett vom Denken aufgebraucht, die Antwort kommt LEER zurueck - und
+    # json.loads('') meldet einen JSONDecodeError. Genau so sind in Ismets
+    # Job-Log die Bild-Regie, der Objekt-Anker und der Stille-Score
+    # ausgefallen: nicht die API war kaputt, das Budget war zu klein.
+    # Untergrenze deshalb 2500; die alten Chat-Modelle bleiben unberuehrt.
+    body['max_completion_tokens' if new else 'max_tokens'] = (
+        max(int(max_toks), 2500) if new else max_toks)
     if not new:
         body['temperature'] = temperature
     return body
@@ -7538,6 +7546,14 @@ def ai_flow_direct(words, groups, language='de', model='gpt-5'):
             "(Adjektiv/Adverb), sonst null. Nutze die mitgegebenen Indizes. "
             'Antworte NUR mit JSON: {"chunks": [{"g": <g>, "kw": <index>, '
             '"accent": <index|null>}]}')
+    # v210: 'requests' wird in dieser Datei in JEDER Funktion lokal
+    # importiert - hier fehlte der Import. Die KI-Textaufteilung ist deshalb
+    # bei JEDEM Kunden-Render mit einem NameError gestorben und still auf die
+    # Heuristik zurueckgefallen (in Ismets Job-Log belegt). Ein Fallback, der
+    # jeden Fehler schluckt, macht aus einem Programmierfehler ein Feature,
+    # das niemand vermisst - deshalb prueft der Selftest jetzt, dass die
+    # Funktion ohne echten Schluessel NICHT mit NameError endet.
+    import requests
     try:
         r = requests.post(
             'https://api.openai.com/v1/chat/completions',
@@ -9146,13 +9162,22 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         #     Gesichtsbox breit statt der Schultern - genau
                         #     das beschreibt die v99-Regel fuer Nahaufnahmen
                         #     ("ragt beidseitig am Kopf vorbei").
-                        if _tw < _schulter * 1.35:
+                        # v210: NICHT bei einer HIMMEL-Ansage. "above me"
+                        # heisst UEBER dem Kopf; die Lesbarkeits-Stufe zog das
+                        # Wort auf KOPFHOEHE herunter - gut gemeint und genau
+                        # das Gegenteil der Ansage (in Ismets Job-Log belegt:
+                        # "Legibility: 'ABOVE ME' raised to head height").
+                        # Eine Ansage ist Gesetz; die Schutzliste des
+                        # intent-Flags kannte diesen Riegel bisher nicht.
+                        _himmel = (isinstance(info, dict)
+                                   and info.get('szene') == 'himmel')
+                        if _tw < _schulter * 1.35 and not _himmel:
                             p['by'] = max(float(_fpv[1]) - _kopf * 0.15,
                                           H * 0.07)
                             if p.get('entr') == 'emerge':
                                 p['entr'] = 'rise'
                         # (3) Selbst am Kopf zu schmal: ueber den Kopf legen.
-                        if _tw < _kopf * 1.10:
+                        if _tw < _kopf * 1.10 or _himmel:
                             p['by'] = max(float(_fpv[1]) - _kopf * 0.85,
                                           H * 0.07)
                             print(f"  Legibility: '{txt}' narrower than the "

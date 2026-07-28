@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v210 DREI KI-SYSTEME LIEFEN GAR NICHT.** Aus Ismets Job-Log:
+  `AI flow unavailable (NameError)`, `Vision director unavailable
+  (JSONDecodeError)`, `Object anchor: vision skipped`, `Silent score
+  unavailable`. Vier Meldungen, zwei Ursachen - und beide fielen brav auf
+  eine Notloesung zurueck, weshalb es NIE jemandem auffiel.
+  - **Der NameError war ein fehlender Import.** `render.py` importiert
+    `requests` in JEDER Funktion lokal; in `ai_flow_direct` fehlte die Zeile.
+    Die KI-Textaufteilung ist damit bei JEDEM Kundenrender gestorben.
+    Nachgestellt (NameError -> ProxyError, also erreicht sie jetzt das Netz).
+  - **Der JSONDecodeError war ein zu kleines DENKBUDGET.** Bei gpt-5/o-Serie
+    zaehlen die internen Denk-Tokens in `max_completion_tokens`. Ein knappes
+    Budget (200 bei einem der Aufrufe) wird komplett vom Denken verbraucht,
+    die Antwort kommt LEER zurueck, und `json.loads('')` wirft
+    JSONDecodeError. Nicht die API war kaputt. Untergrenze jetzt 2500, alte
+    Chat-Modelle unveraendert.
+  - **'above me' ging nicht nach oben** (Log: `Legibility: 'ABOVE ME' raised
+    to head height`). Die Lesbarkeits-Stufe zieht ein zu schmales Wort auf
+    Kopfhoehe, damit der Koerper es nicht zerschneidet - bei einer
+    HIMMEL-Ansage ist das genau das Gegenteil der Ansage. Bei szene
+    'himmel' gilt jetzt direkt die Stufe "ueber den Kopf".
+  Lehre: **ein Fallback, der jeden Fehler schluckt, macht aus einem
+  Programmierfehler ein Feature, das niemand vermisst.** Wer eine neue
+  KI-Funktion baut, braucht einen Test, der ohne echten Schluessel prueft,
+  dass sie NICHT an einem NameError stirbt.
+  Zwei Alt-Tests schrieben die alten Werte fest und wurden mitgezogen.
+  Tests: 1558/1558 logic (5 neu) + Renders 7/1/5/2 + GUI.
 - **v209a ZWEI TEXTE GLEICHZEITIG IM BILD.** Ismets zweiter Render zeigte
   Woerter doppelt. Ursache am Plan nachgestellt (ohne sein Video): der
   Solo-Riegel vergleicht nur Karte gegen FLIESSTEXT, nie Karte gegen KARTE.

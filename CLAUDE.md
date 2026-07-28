@@ -193,6 +193,20 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
   Verneinte Sätze bekommen KEINE Animation (`_hat_negation`): eine Anim, die
   die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
 
+### KI-Aufrufe (v210) — ein stiller Fallback verdeckt einen Bug
+- **`render.py` importiert `requests` in JEDER Funktion lokal.** In
+  `ai_flow_direct` fehlte die Zeile: die KI-Textaufteilung starb bei JEDEM
+  Kundenrender an einem NameError und fiel still auf die Heuristik zurueck.
+  Wer eine neue KI-Funktion baut, braucht einen Test, der ohne echten
+  Schluessel prueft, dass sie NICHT mit NameError endet.
+- **Bei gpt-5/o-Serie zaehlen die DENK-Tokens in `max_completion_tokens`.**
+  Ein knappes Budget wird vom Denken aufgebraucht, die Antwort kommt LEER -
+  im Log als JSONDecodeError. So fielen Bild-Regie, Objekt-Anker und
+  Stille-Score aus. `_oai_json` setzt fuer neue Modelle 2500 als Untergrenze.
+- **Ein Fallback, der jeden Fehler schluckt, macht aus einem
+  Programmierfehler ein Feature, das niemand vermisst.** Vier Systeme waren
+  monatelang aus, ohne dass ein Test oder ein Kunde es merkte.
+
 ### Hand-Regie (v174) — "der Text weicht der Hand, die ihn schubst"
 **Angesagt schlägt beiläufig (v177/v178).** Der angesagte Wisch hat eigene
 Werte (Deckel W*3.6, Impuls 2.2, Feder K=52/C=5.2 → ~143 px Spitze); der

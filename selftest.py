@@ -1853,6 +1853,51 @@ def _scenario_logic(clip, transcript, tmp):
     check('v209a: die Ansagen bleiben in der gesprochenen Reihenfolge',
           [p['kw_txt'] for p in _kw209][:1] != [] and len(_kw209) >= 2,
           str([p['kw_txt'] for p in _kw209]))
+    # v210: DREI KI-SYSTEME FIELEN STILL AUS (Ismets Job-Log).
+    # (a) ai_flow_direct hatte KEIN 'import requests' - jeder Kundenrender
+    #     starb dort mit NameError und fiel auf die Heuristik zurueck. Ein
+    #     Fallback, der jeden Fehler schluckt, macht aus einem
+    #     Programmierfehler ein Feature, das niemand vermisst.
+    import os as _os210
+    _alt210 = _os210.environ.get('OPENAI_API_KEY', '')
+    _os210.environ['OPENAI_API_KEY'] = 'sk-selftest-kein-echter-key'
+    _err210 = []
+    _pr210 = R.print if hasattr(R, 'print') else print
+    import io as _io210, contextlib as _ctx210
+    _buf210 = _io210.StringIO()
+    try:
+        with _ctx210.redirect_stdout(_buf210):
+            R.ai_flow_direct([{'word': 'a', 'start': 0.0, 'end': 0.2},
+                              {'word': 'b', 'start': 0.3, 'end': 0.5}],
+                             [[0, 1]], 'en')
+    finally:
+        if _alt210:
+            _os210.environ['OPENAI_API_KEY'] = _alt210
+        else:
+            _os210.environ.pop('OPENAI_API_KEY', None)
+    check('v210: die KI-Textaufteilung stirbt NICHT an einem NameError',
+          'NameError' not in _buf210.getvalue(), _buf210.getvalue()[:90])
+    # (b) Bei den neuen Modellen zaehlen die Denk-Tokens mit. Ein knappes
+    #     Budget wird komplett vom Denken verbraucht, die Antwort kommt leer
+    #     zurueck - im Log als JSONDecodeError. So sind Bild-Regie,
+    #     Objekt-Anker und Stille-Score ausgefallen.
+    check('v210: neue Modelle bekommen ein Denkbudget (>= 2500)',
+          R._oai_json('gpt-5', [], 200, 0.0)['max_completion_tokens'] >= 2500,
+          str(R._oai_json('gpt-5', [], 200, 0.0)))
+    check('v210: alte Chat-Modelle bleiben unveraendert',
+          R._oai_json('gpt-4o', [], 200, 0.0)['max_tokens'] == 200)
+    # (c) Jede Funktion in render.py importiert requests LOKAL. Wer eine neue
+    #     KI-Funktion baut, vergisst den Import genauso leicht.
+    _src210 = open(_os210.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _fn210 = _src210.split('def ai_flow_direct')[1].split('\ndef ')[0]
+    check('v210: ai_flow_direct importiert requests selbst',
+          'import requests' in _fn210)
+    # (d) Eine HIMMEL-Ansage darf die Lesbarkeits-Stufe nicht nach unten
+    #     ziehen. 'above me' heisst UEBER dem Kopf.
+    check('v210: die Kopfhoehen-Stufe kennt die Himmel-Ansage',
+          "and not _himmel" in _src210
+          and "if _tw < _kopf * 1.10 or _himmel" in _src210)
+
     check('Prompt: Sperrliste im Selbstbezug ausgesetzt',
           'Sperrliste AUSGESETZT' in R.REGIE_PROMPT
           and 'NIE ohne Moment' in R.REGIE_PROMPT)
@@ -7889,8 +7934,10 @@ def _scenario_betrieb(tmp):
     check('v191: reicht die Breite nicht, geht das Wort auf Kopfhoehe',
           'if _tw < _schulter * 1.35:' in _r191
           and "p['by'] = max(float(_fpv[1]) - _kopf * 0.15," in _r191)
+    # v210: die Stufe gilt zusaetzlich bei einer HIMMEL-Ansage - "above me"
+    # gehoert UEBER den Kopf, die Kopfhoehen-Stufe wuerde es herunterziehen.
     check('v191: der alte Ueber-den-Kopf-Fall bleibt als letzte Stufe',
-          "if _tw < _kopf * 1.10:" in _r191
+          "if _tw < _kopf * 1.10 or _himmel:" in _r191
           and "p['by'] = max(float(_fpv[1]) - _kopf * 0.85," in _r191)
     # (b) Der Regler-Fallback nahm MIN als Rohwert und multiplizierte danach
     # nochmal mit der Skala: caption_scale zeigte "6000 %", die Hierarchie
@@ -10116,8 +10163,11 @@ def _scenario_lang(tmp):
     check('_oai_json gpt-4o: max_tokens + temperature',
           b4.get('max_tokens') == 800 and b4.get('temperature') == 0.2
           and 'max_completion_tokens' not in b4)
+    # v210: Bei den neuen Modellen zaehlen die Denk-Tokens mit; ein zu
+    # knappes Budget liefert eine LEERE Antwort (im Job-Log als
+    # JSONDecodeError). Untergrenze 2500, deshalb hier nicht mehr 800.
     check('_oai_json gpt-5: max_completion_tokens, kein temperature',
-          b5.get('max_completion_tokens') == 800 and 'temperature' not in b5
+          b5.get('max_completion_tokens') == 2500 and 'temperature' not in b5
           and 'max_tokens' not in b5)
     # v96t: Prosa-Modus (Stil-Lernen) darf KEIN response_format json_object haben
     bj = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 400, 0.3)
