@@ -716,6 +716,28 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   weg war. Ausnahme: der Kaufbeleg ist ein Rechnungsdokument und geht pro
   Kauf raus.
 
+## Reichweite messen (v208) — Trichter ohne Cookie
+Sechs Stufen (`_TRICHTER_STUFEN`): besuch -> app -> konto -> upload ->
+fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
+- **Kein Cookie, keine gespeicherte IP, kein fremder Dienst.** Gezaehlt wird
+  ueber `sha256(salz|DATUM|ip|user-agent)[:16]`. Das DATUM im Salz ist der
+  ganze Trick: der Wert wechselt taeglich, ist nicht rueckrechenbar und
+  nicht ueber Tage verkettbar - deshalb kein Einwilligungsbanner. Wer das
+  Datum herausnimmt, macht daraus eine dauerhafte Kennung und braucht ein
+  Banner plus Rechtsgrundlage.
+- **Menschen zaehlen, nicht Klicks.** Vor der Anmeldung ueber den
+  Fingerabdruck, danach ueber die Konto-Nummer.
+- **Kauf und fertiges Video haben keinen Browser** (Stripe-Webhook,
+  Render-Worker). Ihre Herkunft kommt ueber das Konto (`quelle_von_konto`,
+  erste Spur gewinnt) - sonst laege jeder Umsatz unter "direkt".
+- **Die Zahl, die zaehlt, ist der Anteil an der Stufe DARUEBER.** Der Anteil
+  an ganz oben verschleiert, wo es klemmt.
+- Eine Zaehlung scheitert IMMER leise; `_trichter` darf nie einen
+  Seitenaufruf reissen. Aufbewahrung `DVE_FUNNEL_DAYS` (400 Tage).
+- Wer eine Stufe ergaenzt, traegt sie in `_TRICHTER_STUFEN` UND in die
+  Klartext-Tabelle in `_trichter_calc` ein - eine Stufe ohne Erklaerung ist
+  im Panel wertlos, und die Datenschutzseite muss den Zweck nennen.
+
 ## Ankuendigungen + Feedback (v196)
 - **Ankuendigung** = Banner IN der App (`announcements`, Stufen info/warn/
   wartung, optionales Ablaufdatum). `/api/announcements` braucht bewusst
@@ -795,6 +817,15 @@ die sich wiederholen:
   eigenem Ausfall die Tuer zumauert, ist kein Waechter. Das Gate wird im
   Selftest mit einem VORGETAEUSCHTEN docker durchgespielt (alle drei
   Ausgaenge) - eine Quelltext-Suche haette den Fehler nie gefunden.
+- **Das Gate urteilt nach der BILANZ, nicht nach einer Textsuche (v208a).**
+  Es hielt `1511/1511 Tests bestanden` fuer ROT und blockierte einen
+  einwandfreien Commit, weil irgendwo im Log eine Zeile mit `FAIL` begann -
+  naemlich im BELEG eines BESTANDENEN Tests (der v201a-Test legt absichtlich
+  einen roten Gate-Befund an und zeigt ihn her). Zwei Riegel: `check()` macht
+  aus jedem Beleg EINE Zeile, und gruen heisst jetzt `bestanden == geprueft`
+  plus Rueckgabewert 0. Merksatz: ein Waechter, der Text sucht statt das
+  Ergebnis zu lesen, haelt irgendwann den Falschen auf - und ein falscher
+  Alarm kostet genauso viel wie ein verpasster, weil dann nichts mehr live geht.
 - **Der Befund gehoert in die Meldung (v201a).** `deploy_gate.sh` schreibt
   sein Ergebnis nach `.deploy_gate_last.txt` (gitignored), `autodeploy.sh`
   haengt die gefallenen Tests an die Panel-Meldung. "Deploy abgebrochen" ohne

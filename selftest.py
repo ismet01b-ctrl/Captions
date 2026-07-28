@@ -58,6 +58,13 @@ results = []
 
 
 def check(name, ok, detail=''):
+    # v208a: Ein Detail bleibt EINE Zeile. Sonst rutscht ein mehrzeiliger
+    # Beleg (z.B. der Inhalt von .deploy_gate_last.txt) in die Ausgabe und
+    # eine seiner Zeilen faengt mit 'FAIL' an - das Test-Gate las genau
+    # darauf und hielt einen gruenen Lauf faelschlich fuer rot. Ein
+    # bestandener Test darf nicht wie ein gefallener aussehen.
+    if detail:
+        detail = ' | '.join(str(detail).splitlines())[:400]
     results.append((name, ok, detail))
     print(('PASS ' if ok else 'FAIL ') + name + (f'  ({detail})' if detail else ''))
 
@@ -4299,10 +4306,11 @@ def _scenario_security(tmp):
     # Die Liste ist bewusst EXAKT: so faellt auf, wenn eine neue Funktion
     # anfaengt zu cachen. v206 traegt admin_start ein - dieselbe Klasse wie
     # die drei anderen (Admin-Aggregat, 20 s, wird bei jedem Schreibzugriff
-    # verworfen). KEIN Kunden-Kontostand darf je dazukommen.
+    # verworfen); v208 admin_trichter ebenso (Statistik, 60 s).
+    # KEIN Kunden-Kontostand darf je dazukommen.
     check('v142: Geld-/Konto-Endpunkte sind NICHT gecacht',
           _cached_fns == {'admin_revenue', 'admin_timeseries', 'admin_tax',
-                          'admin_start'}
+                          'admin_start', 'admin_trichter'}
           and "_ttl_drop('adm:')" in _srv142, str(sorted(_cached_fns)))
     # (d) Async: kein blockierender Aufruf mehr direkt im Event-Loop.
     _blocking = {'subprocess.run', 'requests.post', 'requests.get', 'time.sleep',
@@ -7070,6 +7078,161 @@ def _scenario_betrieb(tmp):
         check(f'v207-sec: auch das Gate leert {_k207} (zweite Schranke)',
               f'-e {_k207}=' in _gate207)
 
+    # ======= v208: Trichter (wer kam, wo springen sie ab) ===============
+    # Ismets Frage: "Kann man auch tracken wer auf die webseite etc kam?
+    # conversion usw". Gebaut ohne Cookie, ohne gespeicherte IP und ohne
+    # fremden Dienst - der Zaehl-Fingerabdruck ist taeglich gesalzen und
+    # damit ueber Tage nicht verkettbar. Genau das ist der Grund, warum
+    # kein Einwilligungsbanner noetig ist; ein Test muss diese Zusage
+    # halten, nicht nur die Zahlen.
+    _sv208 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    os.environ['DVE_ADMIN'] = 'testkey_v208'
+    os.environ['DVE_REF_SALT'] = 'salz208'
+    _c208 = _TC198(_SV198.app, base_url='https://test')
+    _H208 = {'X-Admin-Key': 'testkey_v208'}
+
+    class _Req208:
+        def __init__(self, qp=None, ref=None, ua='UA/1', ip='1.2.3.4'):
+            self.query_params = qp or {}
+            self.headers = {}
+            if ref:
+                self.headers['referer'] = ref
+            self.headers['user-agent'] = ua
+            self.client = type('C', (), {'host': ip})()
+
+    check('v208: eine eigene Kampagnen-Marke schlaegt den Verweis-Header',
+          _SV198._quelle_von(_Req208({'utm_source': 'newsletter'},
+                                     'https://www.google.com/')) == 'newsletter')
+    check('v208: l.instagram.com und instagram.com sind dieselbe Quelle',
+          _SV198._quelle_von(_Req208(None, 'https://l.instagram.com/x'))
+          == _SV198._quelle_von(_Req208(None, 'https://instagram.com/'))
+          == 'instagram')
+    check('v208: ohne Verweis heisst die Quelle "direkt"',
+          _SV198._quelle_von(_Req208()) == 'direkt')
+    # Der Fingerabdruck: gleich innerhalb des Tages, verschieden je Mensch,
+    # und aus ihm laesst sich die IP nicht zurueckholen.
+    _b208 = _SV198._besucher_id(_Req208(ip='9.9.9.9'))
+    check('v208: derselbe Besucher ergibt am selben Tag denselben Wert',
+          _b208 == _SV198._besucher_id(_Req208(ip='9.9.9.9')) and len(_b208) == 16)
+    check('v208: ein anderer Besucher ergibt einen anderen Wert',
+          _b208 != _SV198._besucher_id(_Req208(ip='9.9.9.8')))
+    check('v208: der Wert enthaelt die IP nicht im Klartext',
+          '9.9.9.9' not in _b208)
+    # Das Salz wechselt taeglich - ohne diese Rotation waere der Wert eine
+    # dauerhafte Kennung, und genau dann braeuchte es ein Banner.
+    check('v208: das Tagesdatum steckt im Fingerabdruck (nicht verkettbar)',
+          "time.strftime('%Y%m%d')" in _sv208
+          and 'def _besucher_id' in _sv208)
+
+    # Echter Seitenaufruf zaehlt.
+    _con208 = _SV198._db()
+    _con208.execute("DELETE FROM trichter"); _con208.commit(); _con208.close()
+    _c208.get('/', headers={'referer': 'https://www.tiktok.com/@x',
+                            'user-agent': 'Mozilla/208'})
+    _con208 = _SV198._db()
+    _z208 = _con208.execute("SELECT stufe, quelle, besucher FROM trichter "
+                            "WHERE stufe='besuch'").fetchall()
+    _con208.close()
+    check('v208: ein Aufruf der Startseite wird als Besuch gezaehlt',
+          len(_z208) == 1 and _z208[0]['quelle'] == 'tiktok'
+          and _z208[0]['besucher'], str([dict(r) for r in _z208])[:140])
+
+    # Menschen zaehlen, nicht Klicks: drei Aufrufe desselben Besuchers.
+    _con208 = _SV198._db()
+    _con208.execute("DELETE FROM trichter")
+    _nun208 = int(_tm197.time())
+    for _i208 in range(3):
+        _con208.execute("INSERT INTO trichter (ts,stufe,besucher,quelle,user_id) "
+                        "VALUES (?,'besuch','bes_a','tiktok',NULL)", (_nun208,))
+    _con208.execute("INSERT INTO trichter (ts,stufe,besucher,quelle,user_id) "
+                    "VALUES (?,'besuch','bes_b','google',NULL)", (_nun208,))
+    for _b in ('bes_a', 'bes_b'):
+        _con208.execute("INSERT INTO trichter (ts,stufe,besucher,quelle,user_id) "
+                        "VALUES (?,'app',?,'',NULL)", (_nun208, _b))
+    _con208.execute("INSERT INTO trichter (ts,stufe,besucher,quelle,user_id) "
+                    "VALUES (?,'konto','bes_a','tiktok',4208)", (_nun208,))
+    _con208.execute("INSERT INTO trichter (ts,stufe,besucher,quelle,user_id) "
+                    "VALUES (?,'kauf','','',4208)", (_nun208,))
+    _con208.commit(); _con208.close()
+    _SV198._ttl_drop('adm:')
+    _t208 = _c208.get('/api/admin/trichter?tage=30', headers=_H208).json()
+    _s208 = {s['stufe']: s for s in _t208['stufen']}
+    check('v208: drei Aufrufe desselben Menschen sind EIN Besucher',
+          _s208['besuch']['anzahl'] == 2, str(_s208['besuch']))
+    check('v208: jede Stufe hat einen Satz Klartext',
+          all(s['titel'] and s['erklaerung'] for s in _t208['stufen']))
+    check('v208: die Absprung-Zahl bezieht sich auf die Stufe DARUEBER',
+          _s208['konto']['von_vorher_prozent'] == 50
+          and _s208['konto']['von_oben_prozent'] == 50,
+          str(_s208['konto']))
+    # Kauf und fertiges Video entstehen OHNE Browser (Stripe-Webhook,
+    # Render-Worker) - ihre Herkunft muss ueber das Konto nachgeschlagen
+    # werden, sonst landet jeder Umsatz unter "direkt".
+    _q208 = {q['quelle']: q for q in _t208['quellen']}
+    check('v208: ein Kauf ohne Browser wird der Quelle des Kontos zugeordnet',
+          _q208.get('tiktok', {}).get('kaeufer') == 1, str(_q208)[:160])
+    check('v208: der Hinweis auf die Anonymitaet steht am Ergebnis',
+          'kein Cookie' in _t208.get('hinweis', ''))
+    # Die Kauf-Zaehlung stand zuerst MITTEN in der offenen Kauf-Transaktion.
+    # Sie oeffnet eine zweite Verbindung auf dieselbe Datei und lief in
+    # "database is locked" - der Kauf wurde also gar nicht gezaehlt (im
+    # Testlauf beobachtet, nicht vermutet). Derselbe Fehlertyp wie _sec_event
+    # in v204: eine Nebenbuchung gehoert nie in die Transaktion, die sie
+    # beobachtet. Hier ECHT nachgestellt, nicht per Quelltext-Suche.
+    _con208 = _SV198._db()
+    _con208.execute("INSERT INTO users (email,pw_hash,name,balance_sec,created_at) "
+                    "VALUES ('t208@x.invalid','x','T208',0,?)", (_nun208,))
+    _uid208 = _con208.execute("SELECT id FROM users WHERE email='t208@x.invalid'"
+                              ).fetchone()['id']
+    _con208.commit(); _con208.close()
+    _SV198._credit_purchase(_uid208, 600, 'sess_t208', 'm', 1900)
+    _con208 = _SV198._db()
+    _kauf208 = _con208.execute("SELECT COUNT(*) c FROM trichter WHERE stufe='kauf' "
+                               "AND user_id=?", (_uid208,)).fetchone()['c']
+    _con208.execute("DELETE FROM users WHERE id=?", (_uid208,))
+    _con208.execute("DELETE FROM ledger WHERE user_id=?", (_uid208,))
+    _con208.execute("DELETE FROM purchases WHERE user_id=?", (_uid208,))
+    _con208.execute("DELETE FROM trichter WHERE user_id=?", (_uid208,))
+    _con208.commit(); _con208.close()
+    check('v208: ein verbuchter Kauf landet wirklich im Trichter (kein Lock)',
+          _kauf208 == 1, f'gezaehlt: {_kauf208}')
+    _fn208 = _sv208.split('def _credit_purchase')[1].split('\ndef ')[0]
+    check('v208: die Kauf-Zaehlung steht NACH dem Commit, nicht in der Transaktion',
+          _fn208.index("_trichter('kauf'") > _fn208.rindex('con.commit()'))
+    _SV198._ttl_drop('adm:')
+    _r208 = _c208.get('/api/admin/trichter')
+    check('v208: ohne Admin-Schluessel gibt es keine Zahlen',
+          _r208.status_code in (403, 422, 429), str(_r208.status_code))
+    # Alte Zeilen fallen raus - eine Statistik ist kein Archiv.
+    _con208 = _SV198._db()
+    _con208.execute("INSERT INTO trichter (ts,stufe,besucher,quelle,user_id) "
+                    "VALUES (?,'besuch','alt','x',NULL)",
+                    (_nun208 - (_SV198.TRICHTER_TAGE + 5) * 86400,))
+    _con208.commit(); _con208.close()
+    _SV198._trichter_purge()
+    _con208 = _SV198._db()
+    _alt208 = _con208.execute("SELECT COUNT(*) c FROM trichter "
+                              "WHERE besucher='alt'").fetchone()['c']
+    _con208.close()
+    check('v208: Zeilen aelter als die Aufbewahrungsfrist werden geloescht',
+          _alt208 == 0)
+    # Eine Zaehlung darf NIE einen Seitenaufruf reissen.
+    _SV198._trichter('gibtsnicht', None)
+    check('v208: eine unbekannte Stufe wird still verworfen, nicht geworfen', True)
+    for _st208 in ('besuch', 'app', 'konto', 'upload', 'fertig', 'kauf'):
+        check(f'v208: die Stufe "{_st208}" wird im Code wirklich gesetzt',
+              f"_trichter('{_st208}'" in _sv208)
+    _adm208 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v208: der Trichter steht als eigene Ansicht im Panel',
+          "['trichter','Trichter']" in _adm208
+          and 'trichter:loadTrichter' in _adm208
+          and 'trichter:' in _adm208.split('const NAV')[0])
+    _pri208 = open(os.path.join(HERE, 'web', 'privacy.html'), encoding='utf-8').read()
+    check('v208: die Datenschutzseite nennt die Zaehlung und ihre Grenzen',
+          'reach statistics' in _pri208 and 'no cookie' in _pri208.lower()
+          and 'changes every' in _pri208.lower().replace('\n      ', ' '))
+    del os.environ['DVE_ADMIN']
+
     # (7) Missbrauchs-Erkennung laeuft von selbst, nicht nur auf Nachfrage
     check('v204-sec: auffaellige Muster melden sich stuendlich von selbst',
           'def _missbrauch_pruefen' in _sv204
@@ -7137,6 +7300,28 @@ def _scenario_betrieb(tmp):
     check('v201a: bei gruen steht die Bilanz drin, keine FAIL-Zeilen',
           open(_bef201).read().startswith('gruen')
           and 'FAIL' not in open(_bef201).read())
+    # v208a: DAS GATE HIELT EINEN GRUENEN LAUF FUER ROT. Am 28.07. blockierte
+    # es c301656 mit "rot / 1511/1511 Tests bestanden / FAIL testname xy" -
+    # also mit ALLEN Tests bestanden. Ursache: es suchte im Log nach Zeilen,
+    # die mit 'FAIL' beginnen, und der v201a-Test hier legt genau so eine
+    # Zeile an (er zeigt den Inhalt eines roten Gate-Befunds als Beleg her).
+    # Zwei Riegel: check() macht aus jedem Beleg EINE Zeile, und das Gate
+    # urteilt nach der BILANZ statt nach einer Textsuche.
+    _g_fp = _gate201('echo "PASS irgendwas"; echo "FAIL testname xy"; '
+                     'echo "1511/1511 Tests bestanden"', 0)
+    # Der Beleg gibt bewusst NUR den Rueckgabewert her: stuende hier die
+    # Gate-Ausgabe, enthielte diese Zeile selbst eine Bilanz - und der naechste
+    # der das Log auswertet, laese die falsche.
+    check('v208a: ein FAIL-Wort im Beleg macht aus 1511/1511 keinen roten Lauf',
+          _g_fp.returncode == 0, f'rc={_g_fp.returncode}')
+    _g_zahl = _gate201('echo "1510/1511 Tests bestanden"', 0)
+    check('v208a: eine unvollstaendige Bilanz ist rot, auch bei Rueckgabewert 0',
+          _g_zahl.returncode == 1)
+    check('v208a: mehrzeilige Belege werden zu einer Zeile', True,
+          'rot\nFAIL testname xy')
+    check('v208a: der Beleg von eben enthaelt keinen Zeilenumbruch mehr',
+          '\n' not in results[-1][2] and 'FAIL testname xy' in results[-1][2],
+          results[-1][2])
     check('v201a: autodeploy reicht den Befund in die Meldung durch',
           '.deploy_gate_last.txt' in _auto197
           and 'Befund des Test-Gates' in _auto197)
@@ -7190,7 +7375,7 @@ def _scenario_betrieb(tmp):
     # eine Garantie, dass beim Umbauen der Navigation nichts VERSCHWINDET.
     _soll195 = {'live', 'alerts', 'jobs', 'revenue', 'credits', 'codes',
                 'users', 'support', 'abuse', 'system', 'compliance', 'legal',
-                'feedback', 'ann', 'logs', 'events', 'start'}
+                'feedback', 'ann', 'logs', 'events', 'start', 'trichter'}
     check('v195: alle Ansichten sind weiter erreichbar',
           _ids195 == _soll195, f"fehlt: {_soll195 - _ids195}  neu: {_ids195 - _soll195}")
     check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',

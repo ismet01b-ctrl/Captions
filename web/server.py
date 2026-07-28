@@ -557,6 +557,26 @@ def _init_users_db():
     con.execute("CREATE INDEX IF NOT EXISTS ix_secev_ts ON security_events(ts)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_secev_akt "
                 "ON security_events(aktion, ts)")
+    # v208 TRICHTER. Bis v207 wusste das Panel nur, wie viele Konten es gibt -
+    # nicht, wie viele Leute die Seite gesehen und NICHT gekauft haben. Genau
+    # das ist die interessante Zahl: sie sagt, WO man Leute verliert.
+    # Bewusst selbst gebaut statt Google Analytics: das braeuchte in
+    # Deutschland einen Einwilligungs-Banner (Cookies, Schrems II), und ein
+    # Banner kostet sofort Anmeldungen. Hier verlaesst kein Datum das Haus.
+    # KEINE IP, KEIN Cookie: 'besucher' ist ein Fingerabdruck aus einem
+    # taeglich wechselnden Zufallswert + IP + Browserkennung. Er laesst sich
+    # nicht ueber Tage hinweg verketten und nicht zurueckrechnen - deshalb
+    # ist er keine personenbezogene Kennung und braucht keine Einwilligung.
+    con.execute("CREATE TABLE IF NOT EXISTS trichter ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "ts INTEGER NOT NULL, "
+                "stufe TEXT NOT NULL, "        # besuch|app|konto|upload|fertig|kauf
+                "besucher TEXT NOT NULL DEFAULT '', "
+                "quelle TEXT NOT NULL DEFAULT '', "   # tiktok, instagram, direkt ...
+                "user_id INTEGER)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_tri_ts ON trichter(ts, stufe)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_tri_bes ON trichter(besucher, ts)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_tri_uid ON trichter(user_id)")
     # v206 ERSTATTUNGEN. Bis v205 wurde eine Erstattung NIRGENDS vom Umsatz
     # abgezogen: purchases blieb unveraendert, der Stripe-Hinweis schrieb nur
     # eine Meldung, und die Steuer-Ampel (§19-Grenzen) rechnete aus derselben
@@ -1918,6 +1938,15 @@ def _credit_purchase(uid, sec, session_id, pack=None, cents=None):
                         (session_id, uid, pack or '?', int(cents), sec,
                          int(time.time())))
         con.commit()
+        # v208 Stufe 6 - NACH dem commit. Innerhalb der offenen Transaktion
+        # oeffnete _trichter eine ZWEITE Verbindung auf dieselbe Datei und lief
+        # in "database is locked"; der Kauf wurde dann gar nicht gezaehlt.
+        # Derselbe Fehlertyp wie _sec_event in v204: eine Nebenbuchung gehoert
+        # nie in die Transaktion, die sie beobachtet. Der Webhook kommt von
+        # Stripe, nicht aus einem Browser - es gibt hier weder Besucher-Kennung
+        # noch Verweis; die Herkunft wird beim Auswerten ueber die Konto-Nummer
+        # nachgeschlagen.
+        _trichter('kauf', None, user_id=uid, quelle='', besucher='')
         try:
             _unlock_all_jobs(uid)            # v101: Kauf entfernt Wasserzeichen
         except Exception as e:               # Unlock darf den Kauf nie reissen
@@ -1948,7 +1977,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v207a-sec'
+DVE_BUILD = 'v208a-trichter'
 
 
 # ================= v204-sec NOTAUS =================
@@ -3411,6 +3440,102 @@ def _sec_event_purge():
         print(f'Sicherheits-Protokoll nicht aufgeraeumt: {e}')
 
 
+TRICHTER_TAGE = int(os.environ.get('DVE_FUNNEL_DAYS', '400'))
+_TRICHTER_STUFEN = ('besuch', 'app', 'konto', 'upload', 'fertig', 'kauf')
+# Woher kam jemand? Der Verweis-Header nennt die Domain, ein ?utm_source=
+# in eigenen Links nennt die Kampagne. Beides auf einen kurzen Namen bringen -
+# 'l.instagram.com' und 'instagram.com' sind dieselbe Quelle.
+_QUELLEN = (('tiktok', 'tiktok'), ('instagram', 'instagram'), ('youtu', 'youtube'),
+            ('facebook', 'facebook'), ('fb.', 'facebook'), ('linkedin', 'linkedin'),
+            ('x.com', 'x'), ('twitter', 'x'), ('t.co', 'x'),
+            ('reddit', 'reddit'), ('google', 'google'), ('bing', 'bing'),
+            ('duckduckgo', 'duckduckgo'), ('pinterest', 'pinterest'),
+            ('whatsapp', 'whatsapp'), ('telegram', 'telegram'))
+
+
+def _quelle_von(request):
+    """utm_source schlaegt den Verweis-Header - der ist gesetzt, weil WIR ihn
+    in den Link geschrieben haben, und damit die genauere Angabe."""
+    try:
+        utm = (request.query_params.get('utm_source') or '').strip().lower()[:40]
+        if utm:
+            return re.sub(r'[^a-z0-9_.-]', '', utm) or 'unbekannt'
+        ref = (request.headers.get('referer') or '').strip().lower()
+        if not ref:
+            return 'direkt'
+        host = ref.split('//', 1)[-1].split('/', 1)[0]
+        eigen = os.environ.get('DVE_PUBLIC_URL', 'douchko.eu')
+        if host and host.split(':')[0] in eigen:
+            return 'intern'
+        for muster, name in _QUELLEN:
+            if muster in host:
+                return name
+        return re.sub(r'[^a-z0-9_.-]', '', host)[:40] or 'direkt'
+    except Exception:
+        return 'direkt'
+
+
+def _besucher_id(request):
+    """Taeglich wechselnder Fingerabdruck. KEINE IP wird gespeichert, und der
+    Wert laesst sich weder zurueckrechnen noch ueber Tage verketten - genau
+    deshalb ist er keine personenbezogene Kennung."""
+    try:
+        salz = os.environ.get('DVE_REF_SALT', '') or 'dve'
+        tag = time.strftime('%Y%m%d')
+        roh = f"{salz}|{tag}|{_client_ip(request)}|" \
+              f"{(request.headers.get('user-agent') or '')[:120]}"
+        return hashlib.sha256(roh.encode('utf-8')).hexdigest()[:16]
+    except Exception:
+        return ''
+
+
+def _trichter(stufe, request=None, user_id=None, quelle=None, besucher=None):
+    """Eine Stufe festhalten. Scheitert IMMER leise - eine Zaehlung darf nie
+    einen Seitenaufruf reissen."""
+    if stufe not in _TRICHTER_STUFEN:
+        return
+    try:
+        bes = besucher if besucher is not None else (
+            _besucher_id(request) if request is not None else '')
+        q = quelle
+        if q is None:
+            q = _quelle_von(request) if request is not None else ''
+    except Exception as e:
+        print(f'Trichter nicht gezaehlt ({stufe}): {type(e).__name__}: {e}')
+        return
+    # Kurz erneut versuchen: eine gleichzeitige Schreib-Transaktion sperrt die
+    # Datei fuer einen Wimpernschlag, und eine verlorene Zeile faellt niemandem
+    # auf - die Statistik ist dann einfach leise falsch.
+    for _v in range(3):
+        try:
+            con = _db()
+            con.execute("INSERT INTO trichter (ts, stufe, besucher, quelle, user_id) "
+                        "VALUES (?,?,?,?,?)",
+                        (int(time.time()), stufe, bes or '', (q or '')[:40], user_id))
+            con.commit()
+            con.close()
+            return
+        except Exception as e:
+            try:
+                con.close()
+            except Exception:
+                pass
+            if _v == 2:
+                print(f'Trichter nicht gezaehlt ({stufe}): {type(e).__name__}: {e}')
+            else:
+                time.sleep(0.15 * (_v + 1))
+
+
+def _trichter_purge():
+    try:
+        con = _db()
+        con.execute("DELETE FROM trichter WHERE ts < ?",
+                    (int(time.time()) - TRICHTER_TAGE * 86400,))
+        con.commit(); con.close()
+    except Exception as e:
+        print(f'Trichter nicht aufgeraeumt: {e}')
+
+
 def _alerts_offen():
     """Anzahl ungelesener Stoerungen - fuer den Zaehler im Live-Tab."""
     try:
@@ -3953,6 +4078,10 @@ def run_job(jid):
             pass
         set_state(jid, status='fertig', progress=1.0, phase='Done',
                   out='fertig.mp4')
+        # v208 Stufe 5: der Kunde hat zum ersten Mal ein ERGEBNIS gesehen.
+        # Das ist die wichtigste Stufe vor dem Kauf - wer hier abspringt, hat
+        # das Produkt gesehen und trotzdem nicht gekauft.
+        _trichter('fertig', None, user_id=j.get('user_id'), quelle='', besucher='')
     else:
         letzte = [x for x in log[-15:] if x.strip()]
         set_state(jid, status='fehler', progress=0,
@@ -4210,6 +4339,7 @@ def _cleanup_worker():
         _backup_users_db()
         try:
             _sec_event_purge()               # v204-sec: Chronik begrenzen
+            _trichter_purge()                # v208: Trichter begrenzen
             _missbrauch_pruefen()            # v204-sec: auffaellige Muster melden
         except Exception as e:
             print(f'Missbrauchs-Pruefung uebersprungen: {type(e).__name__}: {e}')
@@ -4618,6 +4748,11 @@ def api_register(request: Request, response: Response,
             con.close()
         except Exception:
             pass
+    # v208: Hier bekommt der anonyme Besucher zum ersten Mal eine Konto-Nummer.
+    # Nur ueber diese eine Zeile laesst sich spaeter sagen, aus WELCHER Quelle
+    # ein zahlender Kunde kam - der Kauf selbst kommt per Stripe-Webhook ohne
+    # Browser an und hat keine Herkunft mehr.
+    _trichter('konto', request, user_id=uid)
     _send_verify_mail(uid, email, name.strip())        # v80x
     tok, exp = _create_session(uid)
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
@@ -5432,11 +5567,17 @@ def health():
 
 @app.get('/', response_class=HTMLResponse)
 def landing(request: Request):
+    _trichter('besuch', request)
     return _page('landing.html', request)
 
 
 @app.get('/app', response_class=HTMLResponse)
 def index(request: Request):
+    # v208: Wer die App oeffnet, hat mehr getan als nur die Landing zu sehen -
+    # das ist die erste echte Huerde. Angemeldete zaehlen hier nicht mit,
+    # sonst zaehlt jeder Seitenwechsel eines Bestandskunden als neue Chance.
+    if not _current_user(request):
+        _trichter('app', request)
     return _page('index.html', request)
 
 
@@ -5995,6 +6136,7 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
     # Render umschreiben: Wasserzeichen weg, 10-Sekunden-Grenze weg, bezahlt
     # nichts. Die Eigenschaft gehoert an den JOB, nicht an einen Zustand, den
     # der naechste Request umschreibt.
+    _trichter('upload', request, user_id=uid)          # v208 Stufe 4
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': (code or '').strip(),
                  'user_id': uid, 'vhash': _vh, 'mode': mode,
                  'demo': (mode == 'demo'),
@@ -8058,6 +8200,97 @@ def _admin_start_calc():
         'wachstum': {'kunden': kunden_gesamt, 'neu_7t': kunden_neu,
                      'zahler': zahler, 'renders_7t': renders_woche},
     }
+
+
+@app.get('/api/admin/trichter')
+def admin_trichter(request: Request, tage: int = 30):
+    """v208: Wo verliere ich die Leute? Sechs Stufen und die Herkunft.
+
+    Die Zuordnung ist der knifflige Teil: 'kauf' und 'fertig' entstehen ohne
+    Browser (Stripe-Webhook bzw. Render-Worker), haben also keine Herkunft.
+    Sie wird ueber die Konto-Nummer nachgeschlagen - das Konto haengt an der
+    Registrierung, und DIE kam aus einem Browser mit Verweis.
+    """
+    _require_admin(request)
+    return _ttl_cached(f'adm:trichter:{int(tage)}', 60,
+                       lambda: _trichter_calc(tage))
+
+
+def _trichter_calc(tage: int = 30):
+    tage = max(1, min(365, int(tage)))
+    seit = int(time.time()) - tage * 86400
+    con = _db()
+    try:
+        # Je Stufe zaehlen wir MENSCHEN, nicht Ereignisse: wer dreimal die
+        # Landing oeffnet, ist ein Besucher. Vor der Anmeldung ueber den
+        # Tages-Fingerabdruck, danach ueber die Konto-Nummer.
+        stufen = {}
+        for st in _TRICHTER_STUFEN:
+            spalte = 'user_id' if st in ('konto', 'upload', 'fertig', 'kauf') \
+                else 'besucher'
+            r = con.execute(
+                f"SELECT COUNT(DISTINCT {spalte}) n FROM trichter "
+                f"WHERE stufe = ? AND ts >= ? AND {spalte} IS NOT NULL "
+                f"AND {spalte} != ''", (st, seit)).fetchone()
+            stufen[st] = int(r['n'] or 0)
+
+        # Herkunft: fuer jedes Konto die Quelle seiner ERSTEN Spur. Damit
+        # laesst sich ein Kauf der Quelle zuordnen, aus der der Mensch kam.
+        quelle_von_konto = {}
+        for r in con.execute(
+                "SELECT user_id, quelle FROM trichter WHERE user_id IS NOT NULL "
+                "AND quelle != '' ORDER BY ts").fetchall():
+            quelle_von_konto.setdefault(r['user_id'], r['quelle'])
+
+        quellen = {}
+        for r in con.execute(
+                "SELECT quelle, COUNT(DISTINCT besucher) n FROM trichter "
+                "WHERE stufe = 'besuch' AND ts >= ? AND quelle != '' "
+                "GROUP BY quelle ORDER BY n DESC LIMIT 20", (seit,)).fetchall():
+            quellen[r['quelle']] = {'besucher': int(r['n']), 'konten': 0,
+                                    'kaeufer': 0}
+        for st, feld in (('konto', 'konten'), ('kauf', 'kaeufer')):
+            for r in con.execute(
+                    "SELECT DISTINCT user_id FROM trichter WHERE stufe = ? "
+                    "AND ts >= ? AND user_id IS NOT NULL", (st, seit)).fetchall():
+                q = quelle_von_konto.get(r['user_id'])
+                if q:
+                    quellen.setdefault(q, {'besucher': 0, 'konten': 0,
+                                           'kaeufer': 0})[feld] += 1
+        erste = con.execute("SELECT MIN(ts) t FROM trichter").fetchone()['t']
+    finally:
+        con.close()
+
+    # Jede Stufe mit Klartext: was ist das, und was heisst der Wert.
+    text = {
+        'besuch': ('Besucher', 'Haben die Startseite gesehen.'),
+        'app': ('App geoeffnet', 'Haben angefangen, statt nur zu lesen.'),
+        'konto': ('Konto angelegt', 'Haben sich registriert.'),
+        'upload': ('Video hochgeladen', 'Haben es wirklich probiert.'),
+        'fertig': ('Ergebnis gesehen', 'Haben ein fertiges Video bekommen.'),
+        'kauf': ('Gekauft', 'Zahlende Kunden.'),
+    }
+    reihe = []
+    vorher = None
+    for st in _TRICHTER_STUFEN:
+        n = stufen[st]
+        reihe.append({
+            'stufe': st, 'titel': text[st][0], 'erklaerung': text[st][1],
+            'anzahl': n,
+            # Anteil an der VORHERIGEN Stufe - das ist die Zahl, die sagt, wo
+            # es klemmt. Der Anteil an ganz oben verschleiert das.
+            'von_vorher_prozent': (round(n / vorher * 100) if vorher else None),
+            'von_oben_prozent': (round(n / stufen['besuch'] * 100)
+                                 if stufen['besuch'] else None),
+        })
+        vorher = n or None
+    return {'tage': tage, 'stufen': reihe,
+            'quellen': [{'quelle': k, **v} for k, v in
+                        sorted(quellen.items(),
+                               key=lambda x: -x[1]['besucher'])][:20],
+            'seit': erste,
+            'hinweis': ('Anonym gezaehlt: kein Cookie, keine IP gespeichert. '
+                        'Der Zaehl-Fingerabdruck wechselt taeglich.')}
 
 
 @app.get('/api/admin/revenue')

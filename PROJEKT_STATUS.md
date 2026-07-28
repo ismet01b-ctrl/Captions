@@ -3,6 +3,60 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v208 TRICHTER: wer kam, und wo springen sie ab.** Ismets Frage: "Kann man
+  auch tracken wer auf die webseite etc kam? conversion usw". Bis v207 wusste
+  das Panel nur, wie viele Konten es GIBT - nicht, wie viele es gar nicht erst
+  geworden sind. Sechs Stufen: Besuch -> App geoeffnet -> Konto -> Upload ->
+  fertiges Video -> Kauf, dazu die Herkunft (tiktok/instagram/google/direkt).
+  - **Ohne Cookie, ohne gespeicherte IP, ohne fremden Dienst.** Gezaehlt wird
+    ueber einen Fingerabdruck `sha256(salz|DATUM|ip|user-agent)[:16]`. Das
+    Datum im Salz ist der Kern: der Wert wechselt taeglich, laesst sich also
+    nicht ueber Tage verketten und nicht zurueckrechnen. Deshalb braucht es
+    kein Einwilligungsbanner - anders als bei Google Analytics, das die Daten
+    ausserdem in die USA gibt (Schrems II).
+  - **Gezaehlt werden MENSCHEN, nicht Klicks.** Vor der Anmeldung ueber den
+    Tages-Fingerabdruck, danach ueber die Konto-Nummer. Wer dreimal die
+    Startseite oeffnet, ist ein Besucher.
+  - **Kauf und fertiges Video entstehen OHNE Browser** (Stripe-Webhook bzw.
+    Render-Worker) - sie haben keine Herkunft. Sie wird ueber das Konto
+    nachgeschlagen (die Registrierung kam aus einem Browser mit Verweis).
+    Ohne das laege jeder Umsatz unter "direkt" und die Herkunfts-Tabelle
+    waere wertlos.
+  - **Die Zahl, die zaehlt, ist der Anteil an der Stufe DARUEBER**, nicht der
+    an ganz oben. Nur der sagt, WO es klemmt; der Gesamtanteil verschleiert es.
+  - Eine Zaehlung scheitert IMMER leise - sie darf nie einen Seitenaufruf
+    reissen. Alte Zeilen fallen nach `DVE_FUNNEL_DAYS` (400) raus.
+  - Panel: eigene Ansicht **Trichter** unter Umsatz, mit denselben
+    Klartext-Saetzen wie die v206-Startseite. Datenschutzseite ergaenzt
+    (Zweck, Rotation, Aufbewahrung).
+  - Ehrlich: die Zaehlung beginnt mit dem Deploy, rueckwirkend gibt es nichts.
+    "direkt" ist bei Instagram/TikTok normal - deren Apps schicken die
+    Herkunft oft nicht mit; dafuer sind die `?utm_source=`-Links da.
+  Tests: 1541/1541 logic (30 neu) + Renders 7/1/5/2 + GUI.
+- **v208a DAS TEST-GATE HIELT EINEN GRUENEN LAUF FUER ROT.** Ismets Meldung
+  aus dem Panel: "Commit c3016564 ging NICHT live ... rot, 1511/1511 Tests
+  bestanden, FAIL testname xy". Also ALLE Tests bestanden und trotzdem
+  blockiert. Ursache: das Gate suchte im Log nach Zeilen, die mit `FAIL`
+  beginnen - und genau so eine Zeile erzeugt der v201a-Test selbst: er legt
+  absichtlich einen ROTEN Gate-Befund an und zeigt dessen Inhalt als Beleg
+  her. Der Beleg war mehrzeilig, also stand 'FAIL testname xy' am
+  Zeilenanfang.
+  - `check()` macht aus jedem Beleg EINE Zeile. Ein bestandener Test darf
+    nicht wie ein gefallener aussehen.
+  - Das Gate urteilt nach der BILANZ (`bestanden == geprueft` plus
+    Rueckgabewert 0), nicht nach einer Textsuche.
+  - Beide Faelle mit vorgetaeuschtem docker nachgestellt: Log MIT
+    FAIL-Wort und voller Bilanz -> gruen; Bilanz 1510/1511 bei
+    Rueckgabewert 0 -> rot.
+  Lehre: ein Waechter, der Text sucht statt das Ergebnis zu lesen, haelt
+  irgendwann den Falschen auf - und ein Fehlalarm kostet genauso viel wie
+  ein verpasster Fehler, weil dann gar nichts mehr live geht (v198 bis v200
+  standen aus demselben Grund wochenlang still).
+  Nebenbefund, im Testlauf beobachtet: `_trichter('kauf')` stand MITTEN in
+  der offenen Kauf-Transaktion, oeffnete eine zweite Verbindung auf dieselbe
+  Datei und lief in "database is locked" - der Kauf wurde also gar nicht
+  gezaehlt. Jetzt nach dem Commit, mit kurzem Wiederholversuch. Derselbe
+  Fehlertyp wie `_sec_event` in v204.
 - **v207a-sec Dem Image fehlte der HTTP-Klient des Testclients.** Zweiter
   Befund des Gates, unmittelbar nach v207: der Selftest fuehrt die
   Sicherheits-Pruefungen ueber echte HTTP-Aufrufe (fastapi.testclient), und

@@ -77,9 +77,17 @@ set -e
 # Selftest schreibt am Ende immer "<n>/<m> Tests bestanden"; fehlt die
 # Zeile, ist er gar nicht bis zum Ende gekommen.
 if grep -qE '[0-9]+/[0-9]+ Tests bestanden' "$LOG"; then
-  if [ "$RC" -eq 0 ] && ! grep -q '^FAIL' "$LOG"; then
-    echo "==> Test-Gate: gruen ($(grep -oE '[0-9]+/[0-9]+ Tests bestanden' "$LOG" | tail -1))"
-    printf 'gruen\n%s\n' "$(grep -oE '[0-9]+/[0-9]+ Tests bestanden' "$LOG" | tail -1)" > "$BEFUND"
+  BILANZ="$(grep -oE '[0-9]+/[0-9]+ Tests bestanden' "$LOG" | tail -1)"
+  # v208a: Das Urteil haengt an der BILANZ, nicht an einer Textsuche nach
+  # 'FAIL'. Vorher galt jede Zeile, die mit FAIL beginnt, als gefallener
+  # Test - auch wenn sie nur im BELEG eines bestandenen Tests stand (der
+  # v201a-Test legt absichtlich einen roten Gate-Befund an und zeigt ihn
+  # her). Damit blockierte ein gruener Lauf (1511/1511) den Deploy.
+  # Bestanden == geprueft, und der Selftest muss sauber zurueckkommen.
+  BEST="${BILANZ%%/*}"; GES="${BILANZ#*/}"; GES="${GES%% *}"
+  if [ "$RC" -eq 0 ] && [ "$BEST" = "$GES" ]; then
+    echo "==> Test-Gate: gruen ($BILANZ)"
+    printf 'gruen\n%s\n' "$BILANZ" > "$BEFUND"
     exit 0
   fi
   echo "==> Test-Gate: ROT - die folgenden Tests sind gefallen:"

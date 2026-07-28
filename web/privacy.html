@@ -52,6 +52,16 @@ a:hover { text-decoration: underline; }
     <li><strong>Server logs:</strong> IP address and timestamps for operations
       (kept no longer than 14 days). Legal basis: our legitimate interest in the
       security and stable operation of the service (Art. 6(1)(f) GDPR).</li>
+    <li><strong>Anonymous reach statistics:</strong> we count how many people
+      reach the site, open the app, register, upload, and buy, plus the referring
+      site (e.g. "instagram", "google", "direct"). To avoid counting the same
+      visit twice we store a short one-way hash of IP address and browser string
+      that is <strong>salted with the current date and therefore changes every
+      day</strong>. It cannot be reversed, cannot be linked across days, and is
+      never joined with any advertising network. We do <strong>not</strong> store
+      your IP address for this, and we set <strong>no cookie</strong> for it.
+      Legal basis: our legitimate interest in knowing whether the service reaches
+      anyone (Art. 6(1)(f) GDPR).</li>
     <li><strong>Payment data:</strong> handled by Stripe (Stripe Payments Europe,
       Ltd., Ireland). We only see your email and the amount paid.
       Legal basis: performance of our contract with you (Art. 6(1)(b) GDPR).</li>
@@ -120,6 +130,8 @@ a:hover { text-decoration: underline; }
   <ul>
     <li>Videos, transcripts, intermediate files: <strong>7 days after upload</strong>, then automatic deletion</li>
     <li>Server logs: 14 days</li>
+    <li>Anonymous reach statistics: 400 days (the daily hash is already
+      unlinkable after 24 hours)</li>
     <li>Account and purchase history: until you delete your account</li>
     <li><strong>Exception (tax law):</strong> booking records of purchases
       (amount, date, and the account email as part of the record) are kept for

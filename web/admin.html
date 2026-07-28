@@ -146,6 +146,17 @@ select.search{cursor:pointer}
 .ampel{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:8px;vertical-align:1px}
 .ampel.gruen{background:#3cc878}.ampel.gelb{background:#ffb428}.ampel.rot{background:#ff5a5a}
 .tuwas{margin-top:14px;display:flex;gap:9px;flex-wrap:wrap}
+/* v208 Trichter: eine Zeile je Stufe, Balkenbreite = Anteil an ganz oben. */
+.tri{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.trow{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.trow .tt{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.trow .tt b{font-size:14px}
+.trow .tn{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.trow .tbar{height:12px;background:var(--surf2);border-radius:7px;overflow:hidden;margin:9px 0 7px}
+.trow .tbar i{display:block;height:100%;background:var(--acc);border-radius:7px;min-width:3px;transition:width .4s}
+.trow .te{font-size:12.5px;color:var(--mut);line-height:1.5}
+.trow .tdrop{font-weight:700}
+.trow .tdrop.warn{color:var(--warn)}.trow .tdrop.bad{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -214,10 +225,11 @@ const ICON={
   ann:'<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
   logs:'<path d="M6 3h9l5 5v13H6z"/><path d="M9 12h7M9 16h7M9 8h3"/>',
   events:'<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>',
+  trichter:'<path d="M3 4h18l-7 8v7l-4 2v-9z"/>',
 };
 const NAV=[
   ['', [['start','Start'],['live','Live'],['alerts','Alerts'],['jobs','Jobs']]],
-  ['Umsatz', [['revenue','Revenue'],['credits','Credits'],['codes','Codes']]],
+  ['Umsatz', [['revenue','Revenue'],['trichter','Trichter'],['credits','Credits'],['codes','Codes']]],
   ['Kunden', [['users','Users'],['support','Support'],['abuse','Abuse']]],
   ['Produkt', [['feedback','Feedback'],['ann','Announcements']]],
   ['Betrieb', [['system','System'],['events','Chronik'],['logs','Logs'],['compliance','Compliance'],['legal','Recht & Steuern']]],
@@ -1218,7 +1230,59 @@ async function loadStart(silent){
       Technik &mdash; steht unveraendert in den Ansichten links.</div>`;
 }
 
-const RENDER={start:loadStart,live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
+/* v208 TRICHTER. "Wer kam auf die Webseite, und wo verliere ich die Leute?"
+   Sechs Stufen von Besucher bis Kauf. Gezaehlt werden MENSCHEN, nicht Klicks.
+   Die wichtige Zahl steht rechts an jedem Balken: der Anteil, der es von der
+   Stufe darueber bis hierher geschafft hat - dort klemmt es, nicht im
+   Gesamtanteil. */
+let triTage=30;
+function triSetTage(t){triTage=t;loadTrichter();}
+async function loadTrichter(silent){
+  let d;try{d=await api('/api/admin/trichter?tage='+triTage);}
+  catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.trichter=Date.now()/1000;
+  const oben=(d.stufen[0]||{}).anzahl||0;
+  const rows=d.stufen.map((s,i)=>{
+    const br=oben?Math.max(1,Math.round(s.anzahl/oben*100)):0;
+    let verlust='';
+    if(i>0&&s.von_vorher_prozent!==null&&s.von_vorher_prozent!==undefined){
+      const p=s.von_vorher_prozent;
+      const kl=p<20?'bad':p<50?'warn':'';
+      verlust=`<span class="tdrop ${kl}">${p}&nbsp;% von der Stufe darueber</span>
+        &mdash; ${100-p}&nbsp;% springen hier ab.`;
+    }else if(i===0){verlust='Das ist die Ausgangsmenge.';}
+    return `<div class="trow">
+      <div class="tt"><b>${esc(s.titel)}</b><span class="tn">${s.anzahl}</span></div>
+      <div class="tbar"><i style="width:${br}%"></i></div>
+      <div class="te">${esc(s.erklaerung)} ${verlust}</div>
+    </div>`;}).join('');
+
+  const qr=(d.quellen||[]).map(q=>`<tr><td>${esc(q.quelle)}</td>
+      <td>${q.besucher}</td><td>${q.konten}</td><td>${q.kaeufer}</td>
+      <td>${q.besucher?Math.round(q.konten/q.besucher*100)+'&nbsp;%':'–'}</td></tr>`).join('');
+
+  el('view').innerHTML=`
+    <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+      <span class="subtle">Zeitraum:</span>
+      ${[7,30,90,365].map(t=>`<button class="btn ${t===triTage?'':'ghost'} sm"
+        onclick="triSetTage(${t})">${t===365?'1 Jahr':t+' Tage'}</button>`).join('')}
+    </div>
+    <div class="tri" style="margin-top:12px">${rows}</div>
+    <div class="chart" style="margin-top:14px">
+      <div class="ct"><b>Woher kamen sie</b><span>letzte ${d.tage} Tage</span></div>
+      ${qr?`<table><thead><tr><th>Quelle</th><th>Besucher</th><th>Konten</th>
+        <th>Kaeufer</th><th>Konto-Quote</th></tr></thead><tbody>${qr}</tbody></table>`
+        :'<div class="spin">Noch keine Daten. Die Zaehlung laeuft ab dem Deploy.</div>'}
+      <div class="note">"direkt" heisst: getippt, Lesezeichen, oder die App hat
+        die Herkunft nicht mitgeschickt (bei Instagram/TikTok normal).
+        Konten und Kaeufer werden der Quelle zugeordnet, aus der der Mensch
+        das erste Mal kam.</div>
+    </div>
+    <div class="note">${esc(d.hinweis||'')}
+      ${d.seit?' Erste Zaehlung: '+fdt(d.seit)+'.':''}</div>`;
+}
+
+const RENDER={start:loadStart,trichter:loadTrichter,live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
 if(KEY)boot();
 </script>
 </body>
