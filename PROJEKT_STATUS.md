@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v205-sec OHNE TERMINAL NACHSEHEN, WAS LAEUFT.** Zwei Fragen, die man
+  bisher nur auf der Kommandozeile beantworten konnte - und Ismet geht nicht
+  auf die Kommandozeile.
+  (1) **Laeuft der Dienst wirklich ohne Generalschluessel?** Die Meldung von
+      `entrypoint.sh` geht nach `docker logs` und steht NICHT in server.log -
+      die Datei faengt erst an, wenn Python laeuft (mein Hinweis an Ismet war
+      insofern falsch). Das Panel zeigt jetzt unter System, als welcher Nutzer
+      der Dienst laeuft, und warnt sichtbar, wenn es noch root ist (also die
+      Haertung auf den alten Weg zurueckgefallen ist).
+  (2) **Welche Fremdbauteile in welcher Version stecken drin?** Aus dem
+      LAUFENDEN Prozess gelesen (`importlib.metadata`), nicht aus
+      requirements.txt - die sagt bei den meisten ohnehin nur "irgendeine".
+      Das ist die Liste, die zum Festnageln der Versionen fehlt.
+  Dazu Python- und ffmpeg-Version. Tests: 1475/1475 logic (4 neu).
 - **v204-sec HAERTUNG: acht der zehn offenen Audit-Punkte erledigt.** Ismets
   Ansage "mach alles, was du ohne mich kannst".
   - **Sicherheits-Chronik** (`security_events`): wer wann was. Admin-Zugriffe

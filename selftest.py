@@ -6875,6 +6875,27 @@ def _scenario_betrieb(tmp):
           '--entrypoint bash' in open(os.path.join(HERE, 'deploy_gate.sh'),
                                       encoding='utf-8').read())
 
+    # (6b) v205-sec: Ohne Terminal nachsehen koennen, WAS laeuft.
+    os.environ['DVE_ADMIN'] = 'testkey_v205'
+    _c205 = _TC198(_SV198.app, base_url='https://test')
+    _sys205 = _c205.get('/api/admin/system',
+                        headers={'X-Admin-Key': 'testkey_v205'}).json()
+    del os.environ['DVE_ADMIN']
+    check('v205-sec: das Panel zeigt, ob der Dienst als root laeuft',
+          isinstance(_sys205.get('laufzeit'), dict)
+          and 'root' in _sys205['laufzeit'] and 'user' in _sys205['laufzeit'],
+          str(_sys205.get('laufzeit'))[:120])
+    check('v205-sec: das Panel zeigt die Versionen der Bauteile',
+          len(_sys205.get('pakete') or {}) >= 8,
+          f"{len(_sys205.get('pakete') or {})} Pakete")
+    check('v205-sec: die Bauteile, die fremde Dateien anfassen, sind dabei',
+          any(p in _sys205['pakete'] for p in ('Pillow', 'opencv-python',
+                                               'opencv-python-headless'))
+          and 'fastapi' in _sys205['pakete'])
+    _adm205 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v205-sec: die Ansicht warnt sichtbar, wenn noch als root gelaufen wird',
+          'd.laufzeit.root' in _adm205 and 'Generalschluessel' in _adm205)
+
     # (7) Missbrauchs-Erkennung laeuft von selbst, nicht nur auf Nachfrage
     check('v204-sec: auffaellige Muster melden sich stuendlich von selbst',
           'def _missbrauch_pruefen' in _sv204

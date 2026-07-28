@@ -625,6 +625,22 @@ async function loadSystem(){
     </div>
     <h3>Config (env/boot-time — display only)</h3>
     <table><tbody>${cfg}</tbody></table>
+    <h3>Laeuft hier</h3>
+    <div class="health" style="margin-bottom:10px">
+      ${d.laufzeit ? (d.laufzeit.root
+        ? '<span class="tag no">root</span><span class="subtle">Der Dienst hat noch den Generalschluessel &mdash; die Haertung ist auf den alten Weg zurueckgefallen.</span>'
+        : '<span class="tag ok">'+esc(d.laufzeit.user||('uid '+d.laufzeit.uid))+'</span><span class="subtle">Kein Generalschluessel &mdash; Haertung aktiv.</span>')
+        : '<span class="subtle">unbekannt</span>'}
+    </div>
+    ${d.laufzeit ? `<div class="subtle" style="margin-bottom:10px">
+      Python ${esc(d.laufzeit.python||'?')} &middot; ${esc(d.laufzeit.ffmpeg||'')}</div>` : ''}
+    <h3>Bauteile <span class="subtle">(Version im laufenden Container)</span></h3>
+    <table><tbody>${Object.entries(d.pakete||{}).map(([k,v])=>
+      `<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`).join('')
+      || '<tr><td class="subtle">nicht auslesbar</td></tr>'}</tbody></table>
+    <div class="note">Diese Liste braucht es, um die Versionen in
+      requirements.txt festzunageln &mdash; sonst kann bei jedem Neubau eine
+      andere Fassung hereinkommen.</div>
     <h3>Betriebszustand</h3>
     <div id="betriebBox" class="subtle">loading …</div>
     <h3>Ops actions</h3>

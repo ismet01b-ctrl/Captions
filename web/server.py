@@ -1933,7 +1933,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v204-sec'
+DVE_BUILD = 'v205-sec'
 
 
 # ================= v204-sec NOTAUS =================
@@ -7522,6 +7522,60 @@ def _admin_purchaser_ids():
 
 
 # ---- v130 admin helpers (grounded read-side) ----
+# v205-sec: Die Bauteile, die fremde Dateien anfassen, stehen zuerst - bei
+# ihnen ist eine alte Version am teuersten.
+_PAKETE_WICHTIG = ('opencv-python', 'opencv-python-headless', 'Pillow',
+                   'onnxruntime', 'mediapipe', 'numpy', 'protobuf',
+                   'fastapi', 'uvicorn', 'starlette', 'python-multipart',
+                   'requests', 'PyYAML', 'bcrypt', 'stripe', 'httpx')
+
+
+def _paket_versionen():
+    """Welche Version welchen Bauteils laeuft WIRKLICH? Aus dem laufenden
+    Prozess gelesen, nicht aus requirements.txt - die sagt bei den meisten
+    ohnehin nur "irgendeine"."""
+    try:
+        import importlib.metadata as _md
+    except Exception:
+        return {}
+    aus = {}
+    for name in _PAKETE_WICHTIG:
+        try:
+            aus[name] = _md.version(name)
+        except Exception:
+            continue
+    return aus
+
+
+def _laufzeit_info():
+    """Laeuft der Dienst als root oder als Dienst-Nutzer? Das ist die einzige
+    ehrliche Probe fuer die v204-Haertung - die Meldung des Entrypoints geht
+    nach `docker logs` und ist nach dem naechsten Deploy weg."""
+    import platform as _pf
+    try:
+        uid = os.getuid()
+    except Exception:
+        uid = -1
+    nutzer = ''
+    try:
+        import pwd as _pwd
+        nutzer = _pwd.getpwuid(uid).pw_name
+    except Exception:
+        nutzer = os.environ.get('USER', '')
+    return {'user': nutzer, 'uid': uid, 'root': uid == 0,
+            'python': _pf.python_version(), 'plattform': _pf.platform()[:80],
+            'ffmpeg': _ffmpeg_version()}
+
+
+def _ffmpeg_version():
+    try:
+        r = subprocess.run(['ffmpeg', '-version'], capture_output=True,
+                           text=True, timeout=5)
+        return (r.stdout or '').split('\n')[0][:60]
+    except Exception:
+        return 'unbekannt'
+
+
 def _disk_info():
     try:
         du = shutil.disk_usage(DATA)
@@ -8080,6 +8134,15 @@ def admin_system(request: Request):
         'heartbeats': {'watchdog': hb.get('watchdog'), 'cleanup': hb.get('cleanup')},
         'alerts_active': len(_ADMIN_NOTIFIED),
         'alerts_offen': _alerts_offen(),
+        # v205-sec: Was laeuft hier eigentlich? Zwei Fragen, die man sonst nur
+        # im Terminal beantworten kann - und Ismet geht nicht ins Terminal.
+        # (1) Laeuft der Dienst wirklich ohne Generalschluessel (nicht root)?
+        #     Die Meldung von entrypoint.sh steht in `docker logs`, NICHT in
+        #     server.log - die Datei faengt erst an, wenn Python laeuft.
+        # (2) Welche Fremdbauteile in WELCHER Version stecken drin? Ohne diese
+        #     Liste laesst sich requirements.txt nicht ehrlich festnageln.
+        'laufzeit': _laufzeit_info(),
+        'pakete': _paket_versionen(),
         'config': {
             'workers': WORKERS,
             'queue_warn': QUEUE_WARN,
