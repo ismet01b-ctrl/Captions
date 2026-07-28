@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v208b Eine Fehlermeldung, die den Fehler auch nennt.** Ismet schickte die
+  Panel-Meldung zu `/api/upload/chunk/...`: 60 Zeilen starlette-Innereien und
+  NICHT die Zeile, die sagt, was kaputt ist. Grund ist die Bauart eines
+  Tracebacks - er faengt beim AEUSSERSTEN Rahmen an (Middleware, Routing) und
+  nennt die Ursache erst ganz unten, also genau dort, wo beim Kopieren
+  abgeschnitten wird.
+  - `_unhandled` schreibt jetzt `URSACHE: <Typ>: <Text>` und die letzten sechs
+    Zeilen ZUERST, den vollen Verlauf darunter.
+  - Neuer eigener Riegel fuer `ClientDisconnect` (HTTP 499, KEIN Panel-
+    Eintrag): ein abgebrochener Upload - Tab zu, Funkloch, App im Hintergrund -
+    ist keine Stoerung unseres Servers. Ohne den Riegel meldet jeder davon
+    einen "Serverfehler", und echte Stoerungen gehen im Rauschen unter.
+  Ehrlich: welcher Fehler bei Ismets Upload wirklich auftrat, ist mit der
+  abgeschnittenen Meldung NICHT feststellbar. Der Verbindungsabbruch ist die
+  wahrscheinlichste Erklaerung (die Fehlerform passt), aber bewiesen ist das
+  erst, wenn die naechste Meldung die Ursache oben stehen hat.
+  Tests: 1545/1545 logic (4 neu) + Renders 7/1/5/2 + GUI.
 - **v208 TRICHTER: wer kam, und wo springen sie ab.** Ismets Frage: "Kann man
   auch tracken wer auf die webseite etc kam? conversion usw". Bis v207 wusste
   das Panel nur, wie viele Konten es GIBT - nicht, wie viele es gar nicht erst

@@ -7222,6 +7222,47 @@ def _scenario_betrieb(tmp):
     for _st208 in ('besuch', 'app', 'konto', 'upload', 'fertig', 'kauf'):
         check(f'v208: die Stufe "{_st208}" wird im Code wirklich gesetzt',
               f"_trichter('{_st208}'" in _sv208)
+    # ---- v208b: Meldungen, die man lesen kann + abgebrochene Uploads ----
+    # Ismets Befund: die Panel-Meldung zu /api/upload/chunk zeigte 60 Zeilen
+    # starlette-Innereien und NICHT den eigentlichen Fehler - der steht in
+    # einem Traceback naemlich ganz unten und faellt beim Kopieren weg.
+    import asyncio as _aio208
+
+    class _Fake208:
+        url = type('U', (), {'path': '/api/upload/chunk/x'})()
+        method = 'POST'
+        headers = {}
+        client = type('C', (), {'host': '1.1.1.1'})()
+
+    _con208 = _SV198._db()
+    _con208.execute("DELETE FROM alerts"); _con208.commit(); _con208.close()
+    try:
+        raise ValueError('boom208')
+    except ValueError as _e208:
+        _aio208.run(_SV198._unhandled(_Fake208(), _e208))
+    _con208 = _SV198._db()
+    _a208 = _con208.execute("SELECT text FROM alerts ORDER BY id DESC LIMIT 1"
+                            ).fetchone()
+    _con208.close()
+    _body208 = _a208['text'] if _a208 else ''
+    check('v208b: die Ursache steht ganz oben in der Meldung',
+          'URSACHE: ValueError: boom208' in _body208
+          and _body208.index('URSACHE:') < _body208.index('Voller Verlauf'),
+          _body208[:90])
+    check('v208b: der volle Verlauf bleibt trotzdem erhalten',
+          'Traceback' in _body208)
+    # Ein abgebrochener Upload ist keine Stoerung, sondern ein Kunde im
+    # Funkloch. Ohne eigenen Riegel meldete jeder davon einen "Serverfehler",
+    # und echte Stoerungen gehen im Rauschen unter.
+    check('v208b: ein Verbindungsabbruch hat einen eigenen Riegel',
+          'exception_handler(ClientDisconnect)' in _sv208
+          and 'from starlette.requests import ClientDisconnect' in _sv208)
+    _fn208b = _sv208.split('async def _weggegangen')[1].split('\n@app')[0]
+    check('v208b: ein Verbindungsabbruch schreibt KEINE Stoerung ins Panel',
+          '_notify_admin' not in _fn208b and 'status_code=499' in _fn208b)
+    _con208 = _SV198._db()
+    _con208.execute("DELETE FROM alerts"); _con208.commit(); _con208.close()
+
     _adm208 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v208: der Trichter steht als eigene Ansicht im Panel',
           "['trichter','Trichter']" in _adm208

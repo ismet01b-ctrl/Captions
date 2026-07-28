@@ -855,6 +855,14 @@ die sich wiederholen:
   (derselbe Fehlertyp wie v194b/c bei den Mails).
 - **`print()` ruft `write()` je Argument einzeln.** Ein Log-Tee ohne
   Zeilenpuffer schreibt jedes Argument in eine eigene Zeile.
+- **Die URSACHE gehoert an den ANFANG der Meldung (v208b).** Ein Traceback
+  nennt den eigentlichen Fehler in der LETZTEN Zeile - also genau dort, wo
+  eine Panel-Ansicht oder ein Copy-Paste abschneidet. `_unhandled` schreibt
+  `URSACHE: <Typ>: <Text>` plus die letzten sechs Zeilen nach oben, den
+  vollen Verlauf darunter. Und **ein abgebrochener Upload ist keine
+  Stoerung**: `ClientDisconnect` hat einen eigenen Riegel (499, kein
+  Panel-Eintrag). Wer jeden Funkloch-Abbruch meldet, verstopft die Liste,
+  in der die echten Stoerungen stehen.
 - **Unbehandelte Fehler gehoeren ins Panel**, nicht nach stdout - stdout ist
   nach dem naechsten Deploy weg. Der globale `@app.exception_handler` schreibt
   in `alerts`; der Kunde sieht nie einen Traceback.

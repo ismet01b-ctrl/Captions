@@ -38,6 +38,11 @@ import yaml
 from fastapi import Cookie, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+# v208b: Ein abgebrochener Upload ist KEINE Stoerung. Wer den Tab schliesst
+# oder im Zug den Empfang verliert, kappt die Leitung mitten im Chunk -
+# starlette wirft dann ClientDisconnect, und das landete als "Serverfehler"
+# im Panel.
+from starlette.requests import ClientDisconnect
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -1977,7 +1982,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v208a-trichter'
+DVE_BUILD = 'v208b-trichter'
 
 
 # ================= v204-sec NOTAUS =================
@@ -2071,6 +2076,18 @@ async def _security_headers(request, call_next):
     return resp
 
 
+@app.exception_handler(ClientDisconnect)
+async def _weggegangen(request, exc):
+    """v208b: Der Kunde hat die Verbindung gekappt (Tab zu, Funkloch, Upload
+    abgebrochen). Es gibt niemanden mehr, dem man antworten koennte, und es
+    ist kein Fehler unseres Servers - also KEIN Eintrag unter Stoerungen.
+    Ohne diesen Riegel meldete jeder abgebrochene Upload einen "Serverfehler",
+    und echte Stoerungen gehen in dem Rauschen unter."""
+    pfad = getattr(getattr(request, 'url', None), 'path', '?')
+    print(f'Client hat die Verbindung getrennt: {pfad}')
+    return JSONResponse({'detail': 'Client disconnected.'}, status_code=499)
+
+
 @app.exception_handler(Exception)
 async def _unhandled(request, exc):
     """v197: Bis v196 landete nur ein FEHLGESCHLAGENER RENDER in der
@@ -2085,10 +2102,18 @@ async def _unhandled(request, exc):
     import traceback
     spur = traceback.format_exc()
     pfad = getattr(getattr(request, 'url', None), 'path', '?')
+    # v208b: Die URSACHE steht ganz oben, nicht am Ende. Ein Traceback faengt
+    # mit dem AEUSSERSTEN Rahmen an (Middleware, Routing) und nennt den
+    # eigentlichen Fehler erst in der letzten Zeile - wer die Meldung im Panel
+    # liest oder kopiert, sieht ohne diese Umkehrung nur Bibliotheks-Innereien.
+    _letzte = [z for z in spur.strip().splitlines() if z.strip()][-6:]
     try:
         _notify_admin(f'exc:{type(exc).__name__}:{pfad}',
                       f'Serverfehler {type(exc).__name__} in {pfad}',
-                      f'{request.method} {pfad}\n\n{spur}')
+                      f'{request.method} {pfad}\n\n'
+                      f'URSACHE: {type(exc).__name__}: {exc}\n\n'
+                      + '\n'.join(_letzte)
+                      + f'\n\nVoller Verlauf:\n{spur}')
     except Exception:
         pass
     print(f'ERROR unbehandelt {request.method} {pfad}: '
