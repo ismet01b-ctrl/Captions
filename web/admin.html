@@ -631,7 +631,40 @@ async function loadSystem(){
       <button class="btn warn sm" onclick="sysAct('cleanup/run','Run the retention cleanup sweep now? Deletes job dirs older than retention.')">Run cleanup</button>
       <button class="btn warn sm" onclick="sysAct('expiry/run','Run the credit-expiry sweep now?')">Run expiry sweep</button>
     </div>
-    <div class="note">Config values are set via env at boot — change them in .env + docker restart. The panel cannot live-toggle them.</div>`;
+    <div class="note">Config values are set via env at boot — change them in .env + docker restart. The panel cannot live-toggle them.</div>
+    <h3>Backups</h3>
+    <div id="bkList" class="subtle">loading …</div>
+    <div class="note">Each snapshot is checked here (quick_check + account count) — a backup
+      you cannot read is worth nothing. Restoring one has to stop the app, so it stays a
+      server command: <code>bash restore.sh --letztes</code>.</div>`;
+  loadBackups();
+}
+/* v197a: Die Sicherungen lagen nur auf der Platte und im Postfach. Im Panel
+   stand bloss ein Datum - man sah also, DASS gesichert wurde, kam aber nicht
+   an die Datei und wusste nicht, ob sie lesbar ist. */
+async function loadBackups(){
+  const box=el('bkList'); if(!box)return;
+  let d;try{d=await api('/api/admin/backups');}catch(e){box.innerHTML=err(e);return;}
+  if(!d.items.length){box.innerHTML='<div class="subtle">No backups yet.</div>';return;}
+  box.innerHTML=`<table><thead><tr><th>File</th><th>Kind</th><th>Accounts</th>
+    <th>Size</th><th>When</th><th></th></tr></thead><tbody>${d.items.map(b=>`
+    <tr><td>${b.ok?'':'<span class="tag no">unreadable</span> '}${esc(b.datei)}</td>
+      <td><span class="tag${b.art==='snapshot'?' ok':''}">${b.art}</span></td>
+      <td>${b.konten==null?'–':b.konten}</td>
+      <td class="subtle">${(b.bytes/1024).toFixed(0)} KB</td>
+      <td class="subtle" style="white-space:nowrap">${fdt(b.zeit)}</td>
+      <td><button class="btn ghost sm" onclick="bkDl('${esc(b.datei)}')">Download</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+/* Der Admin-Key steht im HEADER, nicht in der URL - ein <a href> kann ihn
+   also nicht mitschicken (und in der URL haette er nichts zu suchen: er
+   landete in History und Server-Log). Deshalb ueber fetch + Blob, genau wie
+   der CSV-Export. */
+function bkDl(datei){
+  fetch('/api/admin/backup/download?datei='+encodeURIComponent(datei),{headers:hdr()})
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.blob();})
+    .then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
+      a.download=datei;a.click();}).catch(e=>alert(e.message));
 }
 async function sysAct(path,msg){if(!danger(msg))return;try{const d=await api('/api/admin/'+path,{method:'POST'});alert('OK: '+JSON.stringify(d));if(path.startsWith('backup'))loadSystem();}catch(e){alert(e.message);}}
 /* v137: kompletter Neustart auf null (vor dem Launch). Loescht ALLES lokale;

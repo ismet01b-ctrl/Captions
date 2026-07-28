@@ -59,7 +59,20 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
       nicht die Summe schneller) - nur meldet der Watchdog jetzt, WANN es
       eng wird (`DVE_QUEUE_WARN`, Standard 5). Die Worker-Zahl steht als
       `WORKERS` an einer Stelle statt zweimal als os.environ-Ausdruck.
-  Tests: 1335/1335 logic (32 neu) + Renders 7/1/5/2 + GUI.
+  (5) **v197a: alles im Panel, kein Terminal.** Ismets Ansage. Die
+      Sicherungen lagen nur auf der Platte und im Postfach - im Panel stand
+      bloss ein Datum, man sah also DASS gesichert wurde, kam aber nicht an
+      die Datei und wusste nicht, ob sie lesbar ist. Neu unter System:
+      Liste aller Sicherungen mit `quick_check`, Kontenzahl, Groesse, Zeit
+      und Download-Knopf. Eine unlesbare Sicherung wird als solche
+      markiert - genau das ist die Information, die zaehlt. Der Download
+      laeuft ueber fetch+Blob, weil der Admin-Key im HEADER steht; in der
+      URL landete er in History und Server-Log.
+      NICHT im Panel und bewusst nicht: das Zurueckspielen selbst. Es muss
+      die App stoppen - ein Endpunkt, der seinen eigenen Server anhaelt und
+      dabei die Datenbank unter sich austauscht, ist keine gute Idee.
+      Bleibt `bash restore.sh --letztes`.
+  Tests: 1340/1340 logic (37 neu) + Renders 7/1/5/2 + GUI.
   EHRLICH: der Test lief hier auf Linux/CPU ohne OpenAI-Key. Die
   Restore-Probe lief echt durch (Verifizieren, Sicherheitskopie,
   Einspielen), Schritt 5 (`docker compose up`) konnte in der Sandbox

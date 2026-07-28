@@ -7830,6 +7830,46 @@ def admin_backup_run(request: Request):
     return {'ok': True, 'last_backup': _last_backup_ts()}
 
 
+@app.get('/api/admin/backups')
+def admin_backups(request: Request):
+    """v197a: Die Sicherungen waren nur ueber die Kommandozeile oder das
+    Postfach erreichbar. Im Panel stand bloss ein Datum - man sah also,
+    DASS gesichert wurde, kam aber nicht an die Datei."""
+    _require_admin(request)
+    bdir = os.path.join(DATA, 'backups')
+    aus = []
+    for f in sorted(os.listdir(bdir) if os.path.isdir(bdir) else [], reverse=True):
+        if not f.endswith('.db'):
+            continue
+        p = os.path.join(bdir, f)
+        eintrag = {'datei': f, 'bytes': os.path.getsize(p),
+                   'zeit': os.path.getmtime(p),
+                   'art': 'vor_restore' if f.startswith('vor_restore') else 'snapshot',
+                   'konten': None, 'ok': False}
+        try:
+            c = sqlite3.connect(f'file:{p}?mode=ro', uri=True, timeout=5)
+            eintrag['ok'] = c.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+            eintrag['konten'] = c.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+            c.close()
+        except Exception:
+            pass                       # unlesbar -> ok bleibt False, das IST die Info
+        aus.append(eintrag)
+    return {'items': aus, 'dir': bdir}
+
+
+@app.get('/api/admin/backup/download')
+def admin_backup_download(request: Request, datei: str):
+    """Einzelne Sicherung herunterladen. Der Name wird gegen das echte
+    Verzeichnis geprueft - kein Pfad-Durchgriff ueber '..'."""
+    _require_admin(request)
+    bdir = os.path.join(DATA, 'backups')
+    da = set(os.listdir(bdir)) if os.path.isdir(bdir) else set()
+    if datei not in da or not datei.endswith('.db'):
+        raise HTTPException(404, 'Unknown backup file.')
+    return FileResponse(os.path.join(bdir, datei), media_type='application/octet-stream',
+                        filename=datei)
+
+
 @app.get('/api/admin/logs')
 def admin_logs(request: Request, zeilen: int = 300, teil: str = ''):
     """v197: Log-Ende im Panel. `teil` waehlt eine rotierte Datei

@@ -6271,6 +6271,21 @@ def _scenario_betrieb(tmp):
           'DVE_DATA=/tmp/gate_data' in _gate197 and '--no-deps' in _gate197)
     check('v197: das Gate laeuft ohne OpenAI-Key (Heuristik-Pfad)',
           'OPENAI_API_KEY=' in _gate197)
+    # --- G) v197a: Ismet will nie ins Terminal. Die Sicherungen lagen aber
+    # nur auf der Platte und im Postfach - im Panel stand bloss ein Datum.
+    check('v197a: die Sicherungen sind im Panel auflistbar',
+          "@app.get('/api/admin/backups')" in _sv197
+          and 'PRAGMA quick_check' in _sv197)
+    check('v197a: unlesbare Sicherungen werden als solche gemeldet',
+          "eintrag['ok']" in _sv197 and "'konten': None, 'ok': False" in _sv197)
+    check('v197a: der Download prueft den Namen gegen das echte Verzeichnis',
+          'if datei not in da' in _sv197)
+    check('v197a: der Admin-Key bleibt im Header (kein Key in der URL)',
+          'function bkDl(' in _adm197 and 'headers:hdr()' in _adm197
+          and 'key=${encodeURIComponent(KEY)}' not in _adm197)
+    check('v197a: die Backup-Liste haengt in der System-Ansicht',
+          "id=\"bkList\"" in _adm197 and 'loadBackups();' in _adm197)
+
     check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
           'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)
 
