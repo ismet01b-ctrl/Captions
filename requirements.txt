@@ -37,6 +37,19 @@ uvicorn==0.51.0
 # dieser Datei gar nicht drin. Jetzt hier, damit es EINE Liste gibt.
 python-multipart==0.0.32
 
+# --- Testwerkzeug ---
+# v207a-sec: Der Selftest fuehrt die Sicherheits-Pruefungen ueber echte
+# HTTP-Aufrufe (fastapi.testclient), und starlette braucht dafuer einen
+# HTTP-Klienten. In der Entwicklungsumgebung war httpx zufaellig als
+# Nebenabhaengigkeit da, im Image NICHT - das Test-Gate starb deshalb genau
+# an der Stelle, an der es die neuen Sicherheitstests fahren wollte
+# ("The starlette.testclient module requires the httpx2 package").
+# Bewusst httpx und nicht httpx2: DIESE Kombination (starlette 1.3.1 +
+# httpx 0.28.1) laeuft hier nachweislich gruen. starlette nimmt httpx2, wenn
+# es da ist, und faellt sonst auf httpx zurueck - die Warnung dabei ist
+# kosmetisch. Ein geratener httpx2-Pin haette den Build blockieren koennen.
+httpx==0.28.1
+
 # --- Rest ---
 requests==2.34.2
 PyYAML==6.0.3

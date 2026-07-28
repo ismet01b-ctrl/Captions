@@ -3,6 +3,17 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v207a-sec Dem Image fehlte der HTTP-Klient des Testclients.** Zweiter
+  Befund des Gates, unmittelbar nach v207: der Selftest fuehrt die
+  Sicherheits-Pruefungen ueber echte HTTP-Aufrufe (fastapi.testclient), und
+  starlette braucht dafuer httpx bzw. httpx2. In der Entwicklungsumgebung war
+  httpx zufaellig als NEBENabhaengigkeit da, im Image nicht - das Gate starb
+  an genau der Stelle, an der es die neuen Sicherheitstests fahren wollte.
+  `httpx==0.28.1` steht jetzt in requirements.txt (diese Kombination mit
+  starlette 1.3.1 laeuft hier nachweislich gruen; ein geratener httpx2-Pin
+  haette den Build blockieren koennen). Neuer Test: was der Selftest BRAUCHT,
+  muss eine echte Abhaengigkeit sein - sonst laeuft er nur dort, wo jemand
+  Glueck hat. Tests: 1511/1511 logic.
 - **v207-sec DER SELFTEST GING AN DAS ECHTE STRIPE.** Gefunden vom Test-Gate
   bei seinem ERSTEN erfolgreichen Lauf - genau wofuer es gebaut wurde.
   Im Container ist `STRIPE_SECRET_KEY` aus der .env gesetzt. Der v130-Test

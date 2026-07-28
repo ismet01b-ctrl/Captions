@@ -7054,6 +7054,13 @@ def _scenario_betrieb(tmp):
     for _k207 in ('SMTP_PASS', 'RESEND_API_KEY', 'OPENAI_API_KEY',
                   'GOOGLE_CLIENT_SECRET', 'STRIPE_WEBHOOK_SECRET'):
         check(f'v207-sec: {_k207} ist im Test leer', not os.environ.get(_k207))
+    # v207a-sec: Der Testclient braucht einen HTTP-Klienten. Er war hier
+    # zufaellig als Nebenabhaengigkeit da, im Image nicht - das Gate starb
+    # genau an den neuen Sicherheitstests. Was der Test BRAUCHT, gehoert in
+    # requirements.txt, sonst laeuft er nur dort, wo jemand Glueck hat.
+    _req207 = open(os.path.join(HERE, 'requirements.txt'), encoding='utf-8').read()
+    check('v207a-sec: der HTTP-Klient des Testclients ist eine echte Abhaengigkeit',
+          _re203.search(r'^httpx==', _req207, _re203.M) is not None)
     _st207 = open(os.path.join(HERE, 'selftest.py'), encoding='utf-8').read()
     check('v207-sec: gekappt wird VOR dem Import des Servers',
           _st207.index('_GEKAPPT = _dienste_kappen()')
