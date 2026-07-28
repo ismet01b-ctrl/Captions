@@ -1948,7 +1948,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v206-panel'
+DVE_BUILD = 'v207-sec'
 
 
 # ================= v204-sec NOTAUS =================

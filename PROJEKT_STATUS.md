@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v207-sec DER SELFTEST GING AN DAS ECHTE STRIPE.** Gefunden vom Test-Gate
+  bei seinem ERSTEN erfolgreichen Lauf - genau wofuer es gebaut wurde.
+  Im Container ist `STRIPE_SECRET_KEY` aus der .env gesetzt. Der v130-Test
+  ruft `admin_refund` mit der erfundenen Sitzung 'rfsess' auf; `_stripe()` war
+  damit nicht None, also lief `st.Refund.create(...)` gegen das LIVE-Konto.
+  Die erfundene Nummer liess es scheitern ("No such checkout.session") - mit
+  einer ECHTEN haette der Selbsttest echtes Geld an einen Kunden erstattet.
+  Dieselbe Klasse bei Mail (der Test legt Konten an, im Container ist SMTP
+  konfiguriert - es waeren echte Verify-Mails rausgegangen) und bei OpenAI.
+  - `selftest.py` kappt jetzt ganz oben, VOR dem Import von `web.server`,
+    alle Aussendienste: Stripe, Stripe-Webhook, SMTP, Resend, OpenAI, Google.
+    Vor dem Import, weil der Server Teile davon beim Import in
+    Modul-Variablen liest. Er sagt auch, was er gekappt hat.
+  - `deploy_gate.sh` leert dieselben Werte ein ZWEITES Mal. Ein Testlauf, der
+    Geld bewegen kann, darf nicht an einer einzigen Vorsichtsmassnahme haengen.
+  - Beweis: mit `STRIPE_SECRET_KEY=sk_live_...` gestartet, nach dem Import ist
+    der Wert leer und `_stripe()` gibt None zurueck.
+  CLAUDE.md hatte die Regel seit jeher fuer config.yaml und users.db - sie
+  galt nur nie fuer Dienste ausser Haus. Jetzt schon.
+  Tests: 1510/1510 logic (11 neu) + Renders 7/1/5/2 + GUI.
 - **v206 ZAHLEN, DENEN MAN TRAUEN KANN + STARTSEITE.** Ismets Befund: das
   Panel sei "unuebersichtlich und kaum benutzerfreundlich", teilweise stuenden
   dort Infos, bei denen er "keine Ahnung habe, was genau das ist" - und er

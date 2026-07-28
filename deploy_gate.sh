@@ -38,6 +38,15 @@ docker compose run --rm --no-deps \
   -e DVE_DATA=/tmp/gate_data \
   -e DVE_LOGFILE=0 \
   -e OPENAI_API_KEY= \
+  `# v207-sec: ZWEITE Schranke. Der Selftest kappt diese Zugaenge selbst,` \
+  `# aber ein Testlauf, der versehentlich echtes Geld bewegt, darf nicht an` \
+  `# EINER Vorsichtsmassnahme haengen. Gefunden, als das Gate zum ersten Mal` \
+  `# wirklich lief: admin_refund rief Refund.create gegen das LIVE-Konto.` \
+  -e STRIPE_SECRET_KEY= \
+  -e STRIPE_WEBHOOK_SECRET= \
+  -e SMTP_HOST= -e SMTP_USER= -e SMTP_PASS= \
+  -e RESEND_API_KEY= \
+  -e GOOGLE_CLIENT_ID= -e GOOGLE_CLIENT_SECRET= \
   --entrypoint bash app -c '
 set -e
 echo "GATE-STUFE 1: Container laeuft, $(python -V 2>&1)"

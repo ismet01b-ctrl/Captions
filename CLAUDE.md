@@ -897,7 +897,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1499/1499 grün (Stand v206)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1510/1510 grün (Stand v207-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -954,6 +954,15 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 - **Animationen:** immer über zentrales `anim_apply()` routen.
 - **Config-Sicherheit:** in Tests NIE `app.save_cfg()` gegen echte config.yaml;
   Web-Tests NIE gegen die echte users.db (isolierte `DVE_DATA`).
+  **Und NIE gegen einen echten AUSSENDIENST (v207-sec).** `selftest.py` leert
+  ganz oben, VOR dem Import von `web.server`, alle Zugänge: Stripe, SMTP,
+  Resend, OpenAI, Google. Gefunden hat das der erste erfolgreiche Lauf des
+  Test-Gates IM CONTAINER — dort ist der Stripe-LIVE-Schlüssel aus der .env
+  gesetzt, und `admin_refund` rief im Test tatsächlich `Refund.create` gegen
+  das echte Konto. Mit erfundener Sitzungs-Nummer schlug es fehl; mit einer
+  echten wäre echtes Geld erstattet worden. Der Gate-Aufruf leert dieselben
+  Werte ein zweites Mal — ein Testlauf, der Geld bewegen kann, darf nicht an
+  EINER Vorsichtsmaßnahme hängen.
 - **Landing:** Englisch, international, Modellnamen unsichtbar (kein "GPT-4o"
   im Hero), keine Konkurrenz-Namen, kein Datenschutz-Block (gehört in /privacy).
 

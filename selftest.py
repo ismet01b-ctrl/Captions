@@ -62,6 +62,40 @@ def check(name, ok, detail=''):
     print(('PASS ' if ok else 'FAIL ') + name + (f'  ({detail})' if detail else ''))
 
 
+# v207-sec: DER SELFTEST DARF NIEMALS AN EINEN ECHTEN DIENST.
+# Gefunden vom Test-Gate bei seinem ersten erfolgreichen Lauf im Container:
+# dort ist STRIPE_SECRET_KEY aus der .env gesetzt, also lief admin_refund im
+# Test gegen das LIVE-Stripe-Konto und rief Refund.create auf. Mit einer
+# erfundenen Sitzungs-Nummer schlug das fehl - mit einer echten haette der
+# Test ECHTES GELD erstattet. Dasselbe gilt fuer Mail: der Test legt Konten
+# an, und im Container ist SMTP konfiguriert, es waeren also echte Mails
+# rausgegangen.
+# CLAUDE.md sagt seit jeher "Tests nie gegen die echte config.yaml / users.db".
+# Dieselbe Regel gilt fuer jeden AUSSENDIENST. Hier, ganz am Anfang, weil der
+# Riegel sonst davon abhaengt, wie man den Test startet.
+_AUSSENDIENSTE = (
+    'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',      # echtes Geld
+    'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'RESEND_API_KEY',   # echte Mails
+    'OPENAI_API_KEY',                                  # echte Kosten
+    'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
+)
+
+
+def _dienste_kappen():
+    """Alle Zugaenge nach draussen leeren, BEVOR web.server importiert wird.
+    Der Server liest die Werte teils beim Import in Modul-Variablen."""
+    gekappt = [k for k in _AUSSENDIENSTE if os.environ.get(k)]
+    for k in _AUSSENDIENSTE:
+        os.environ[k] = ''
+    if gekappt:
+        print(f'Selftest: Aussendienste gekappt ({", ".join(gekappt)}) - '
+              f'es geht garantiert nichts an Stripe, Mail oder OpenAI raus.')
+    return gekappt
+
+
+_GEKAPPT = _dienste_kappen()
+
+
 def main():
     argv = [a for a in sys.argv[1:] if not a.startswith('--part')]
     part = 'all'
@@ -7005,6 +7039,29 @@ def _scenario_betrieb(tmp):
           _adm206.count('class="satz"') >= 8
           and 'VERDIENE ICH GELD?' in _adm206 and 'LAEUFT ALLES?' in _adm206)
     del os.environ['DVE_ADMIN']
+
+    # ======= v207-sec: kein Testlauf gegen echte Dienste =================
+    # Vom Test-Gate bei seinem ERSTEN erfolgreichen Lauf im Container
+    # gefunden: dort ist der Stripe-LIVE-Schluessel gesetzt, also rief
+    # admin_refund im Test Refund.create gegen das echte Konto. Mit einer
+    # erfundenen Sitzungs-Nummer schlug es fehl - mit einer echten waere
+    # ECHTES GELD erstattet worden. Gleiches Muster bei Mail und OpenAI.
+    import server as _SV207
+    check('v207-sec: der Stripe-Zugang ist im Test leer',
+          not os.environ.get('STRIPE_SECRET_KEY'))
+    check('v207-sec: es gibt damit gar keinen Stripe-Klienten',
+          _SV207._stripe() is None)
+    for _k207 in ('SMTP_PASS', 'RESEND_API_KEY', 'OPENAI_API_KEY',
+                  'GOOGLE_CLIENT_SECRET', 'STRIPE_WEBHOOK_SECRET'):
+        check(f'v207-sec: {_k207} ist im Test leer', not os.environ.get(_k207))
+    _st207 = open(os.path.join(HERE, 'selftest.py'), encoding='utf-8').read()
+    check('v207-sec: gekappt wird VOR dem Import des Servers',
+          _st207.index('_GEKAPPT = _dienste_kappen()')
+          < _st207.index('def main():'))
+    _gate207 = open(os.path.join(HERE, 'deploy_gate.sh'), encoding='utf-8').read()
+    for _k207 in ('STRIPE_SECRET_KEY', 'SMTP_PASS', 'RESEND_API_KEY'):
+        check(f'v207-sec: auch das Gate leert {_k207} (zweite Schranke)',
+              f'-e {_k207}=' in _gate207)
 
     # (7) Missbrauchs-Erkennung laeuft von selbst, nicht nur auf Nachfrage
     check('v204-sec: auffaellige Muster melden sich stuendlich von selbst',
