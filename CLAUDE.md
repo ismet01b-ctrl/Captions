@@ -35,7 +35,21 @@ Hook-A/B-Varianten.
 3. **Fragen statt raten.** Bei Unklarheit über Architektur/Verhalten nachfragen,
    nicht annehmen. Ismet entscheidet.
 4. **Nichts ungefragt umbauen.** Keine Architektur-Änderungen ohne Bestätigung.
-5. **Ehrlich bleiben.** Tests laufen hier auf Linux/CPU mit synthetischem
+5. **Sicherheit wird beim Bauen mitgedacht, nicht nachträglich auditiert**
+   (Ismets Ansage, Juli 2026). Wer einen neuen Endpunkt baut, beantwortet
+   BEVOR er ihn abgibt: Wer darf ihn aufrufen, und wo steht die Prüfung?
+   Gehören die Daten dem Aufrufer (Ownership/IDOR)? Was kostet ein Aufruf
+   den Server, und was passiert bei tausend (Rate-Limit)? Fließt ein
+   Parameter in einen Dateipfad, eine Kommandozeile oder SQL? Landet
+   fremder Text irgendwo im HTML — **auch im Admin-Panel** (dort liegt der
+   Admin-Key im sessionStorage, ein vergessenes `esc()` ist Kontoübernahme
+   per Support-Ticket)? Wird die Aktion protokolliert? Der Selftest bekommt
+   für jede dieser Antworten einen Test — Sicherheit, die nur im Kopf des
+   Autors stand, ist beim nächsten Umbau weg.
+   **Je mächtiger die Aktion, desto mehr als nur der Admin-Key.** Seit v197b
+   kann ein einziger Endpunkt alle Konten ersetzen (`backup/upload`); das ist
+   eine andere Klasse als "Daten lesen" und verlangt eine eigene Schranke.
+6. **Ehrlich bleiben.** Tests laufen hier auf Linux/CPU mit synthetischem
    Material und OHNE OpenAI-Key (Heuristik-Pfad). Echte GPU-/KI-/Qualitäts-
    wirkung sieht Ismet erst auf Windows bzw. live auf douchko.eu mit echtem
    Material — das immer klar sagen, nie so tun als sei es final verifiziert.
