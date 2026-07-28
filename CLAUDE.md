@@ -882,7 +882,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1431/1431 grün (Stand v203-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1471/1471 grün (Stand v204-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -947,10 +947,13 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
   Heuristik/CPU/synthetisch getestet).
 
-### Sicherheits-Rückstand aus dem v203-Audit (bestätigt, bewusst offen)
-Reihenfolge = Wichtigkeit. Alles hier ist Betrieb oder Architektur und
-braucht Ismets Freigabe, deshalb wurde es NICHT mitgefixt.
-1. **Sicherung außer Haus fehlt komplett.** `_mail_backup_offsite` steigt bei
+### Sicherheits-Rückstand aus dem v203-Audit
+**v204-sec hat alles abgearbeitet, was ohne Ismets Zugangsdaten ging** —
+Punkte 2, 3, 5, 6, 7, 8, 9, 10. Offen sind nur noch Punkt 1 (braucht
+Cloudflare-Schlüssel) und Punkt 4 (Pinning braucht ein `pip freeze` AUS DEM
+CONTAINER — die Sandbox-Versionen widersprechen requirements.txt, geraten
+zu pinnen blockiert nur Deploys).
+1. **Sicherung außer Haus fehlt komplett. OFFEN — Ismet.** `_mail_backup_offsite` steigt bei
    `ALERT_LEVEL != 'all'` sofort aus, und der Standard ist `important`
    (docker-compose.yml, .env.example) — im Normalbetrieb gibt es also KEINE
    Kopie außerhalb des Servers, und die vorhandene wäre unverschlüsselt.

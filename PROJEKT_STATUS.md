@@ -3,6 +3,59 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v204-sec HAERTUNG: acht der zehn offenen Audit-Punkte erledigt.** Ismets
+  Ansage "mach alles, was du ohne mich kannst".
+  - **Sicherheits-Chronik** (`security_events`): wer wann was. Admin-Zugriffe
+    werden ZENTRAL in `_require_admin` protokolliert - so kann kein neuer
+    Endpunkt es vergessen -, dazu Logins (Erfolg/Fehlschlag/gesperrt),
+    Passwortwechsel, Konto-Uebernahme und jedes Umschalten des Betriebs.
+    Bewusst OHNE Inhalte: WER WANN WAS, keine Nachrichten, keine Passwoerter.
+    Aufbewahrung 180 Tage (`DVE_SECLOG_DAYS`), neue Ansicht **Chronik** im
+    Panel mit Filter je Ereignisart.
+    Dabei zwei eigene Fehler gefunden und behoben: der Schreiber gab bei
+    'database is locked' sofort auf (jetzt drei Versuche), und aus
+    `_upsert_google_user` heraus blockierte er sich SELBST - die offene
+    Verbindung dieser Funktion hielt die Schreibsperre, also verschwand
+    ausgerechnet die Zeile zur Konto-Uebernahme still. Jetzt wird sie im
+    `finally` NACH `con.close()` geschrieben (hinter dem try stand sie
+    unerreichbar, weil jeder Pfad vorher zurueckkehrt).
+  - **NOTAUS** (`/api/admin/betrieb`, drei Stufen): `pausiert` stoppt neue
+    Uploads, Renders, Kaeufe und Registrierungen, laesst fertige Videos aber
+    abrufbar; `notaus` beendet zusaetzlich ALLE Kundensitzungen. Der Zustand
+    liegt als Datei in DATA, nicht im Prozessspeicher - ein Neustart darf
+    einen Notaus nicht aufheben. Die Schranke sitzt in der MIDDLEWARE, also
+    vor jedem Endpunkt; Health-Check und Admin-Panel bleiben bewusst frei,
+    sonst sperrt man sich selbst aus. Am Testfall belegt.
+  - **Der Renderer kennt die Geheimnisse nicht mehr.** `env = dict(os.environ)`
+    gab dem Subprozess Stripe LIVE, Admin-Key, SMTP-Passwort und die
+    Google-Geheimnisse mit. Jetzt eine Allowlist - er bekommt `OPENAI_API_KEY`
+    und ein paar harmlose Pfade.
+  - **Container-Haertung:** Dienst-Nutzer statt root, dazu
+    `no-new-privileges`, `cap_drop: ALL`, `pids_limit`, `mem_limit`.
+    Das Umschalten macht `entrypoint.sh` und NICHT ein `USER` im Dockerfile:
+    das bestehende /data-Volume gehoert root, ein harter Wechsel haette den
+    Server beim naechsten Deploy ausgesperrt. Das Skript uebergibt /data,
+    prueft VOR dem Rechte-Abwurf, ob der Nutzer wirklich schreiben kann, und
+    faellt bei jedem Zweifel auf den alten Weg zurueck - eine Haertung, die
+    im Zweifel die Seite abschaltet, ist schlimmer als die Luecke.
+  - **Ressourcen-Grenzen:** Aufloesung (4096 px lange Kante) und Bildrate
+    (60 fps) werden jetzt geprueft - bisher war die Dauer die einzige
+    inhaltliche Schranke, ein 8K/120fps-Clip kostete denselben Credit und
+    blockierte den einen Worker stundenlang. Eine Datei ohne lesbare Dauer
+    wird abgelehnt statt als 0-Sekunden-Job durchzulaufen. `upload_chunk`
+    prueft die angekuendigte Groesse im Header, BEVOR der Koerper im
+    Arbeitsspeicher landet (vorher bis 300 MB je Anfrage, ungeprueft).
+  - **Missbrauchs-Erkennung** laeuft stuendlich gegen die Chronik und meldet
+    ins Panel (viele Fehl-Logins, Admin-Durchprobieren, Registrierungswellen,
+    Render-Wellen). Vorher gab es Zahlen nur auf Nachfrage, im Prozessspeicher,
+    nach jedem Deploy weg - es fiel also NIE etwas von selbst auf.
+  - **security.txt** (RFC 9116) unter `/.well-known/security.txt`.
+  NICHT gemacht und warum: die Sicherung ausser Haus braucht Ismets
+  Cloudflare-Schluessel (er legt sie selbst an, nie im Chat). Das Pinnen der
+  Abhaengigkeiten braucht ein `pip freeze` AUS DEM CONTAINER - die Versionen
+  in der Testumgebung widersprechen requirements.txt (numpy 2.4.6 gegen
+  `numpy<2`), geraten zu pinnen wuerde nur Deploys blockieren.
+  Tests: 1471/1471 logic (40 neu) + Renders 7/1/5/2 + GUI.
 - **v203-sec SICHERHEITS-AUDIT: 30 bestaetigte Befunde, die schweren gefixt.**
   Zwei Workflows mit je einem Gegenpruefer, der jeden Befund WIDERLEGEN sollte
   (16 Roh-Befunde verworfen). Teil 1: die Flaeche seit v193. Teil 2: Identitaet,

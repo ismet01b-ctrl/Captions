@@ -56,6 +56,13 @@ JOBS_DIR = os.path.join(DATA, 'jobs')
 CODES_FILE = os.path.join(DATA, 'codes.json')
 USERS_DB = os.path.join(DATA, 'users.db')
 MAX_MB = int(os.environ.get('DVE_MAX_MB', '300'))
+# v204-sec: Obergrenze fuer EINEN Upload-Abschnitt (der Body landet vor
+# jeder Pruefung im RAM). Das Frontend schickt wenige MB je Abschnitt.
+CHUNK_MAX_BYTES = int(os.environ.get('DVE_CHUNK_MB', '32')) * 1024 * 1024
+# v204-sec: Rechenlast-Grenzen. 4K (3840) mit Reserve fuer krumme
+# Formate; 60 fps ist die hoechste Bildrate, die im Feed etwas bringt.
+MAX_PIXEL_LANG = int(os.environ.get('DVE_MAX_PIXEL', '4096'))
+MAX_FPS = float(os.environ.get('DVE_MAX_FPS', '60'))
 MAX_SECONDS = int(os.environ.get('DVE_MAX_SECONDS', '180'))
 SESSION_DAYS = 30
 TRIAL_SECONDS = int(os.environ.get('DVE_TRIAL_SECONDS', '120'))  # 2 Min gratis
@@ -532,6 +539,24 @@ def _init_users_db():
                 "betreff TEXT NOT NULL, text TEXT NOT NULL, "
                 "gemailt INTEGER NOT NULL DEFAULT 0, "
                 "gelesen INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)")
+    # v204-sec SICHERHEITS-PROTOKOLL. Bis v203 hielt NICHTS fest, wer wann was
+    # getan hat: kein Admin-Zugriff, kein Login, kein Passwortwechsel, keine
+    # Erstattung. Nach einem Vorfall waere gar nicht rekonstruierbar gewesen,
+    # was passiert ist - und die DSGVO verlangt in Art. 33 eine Meldung binnen
+    # 72 Stunden, die man ohne Spuren nicht schreiben kann.
+    # Bewusst eine EIGENE Tabelle, nicht die alerts: alerts sind Stoerungen,
+    # die jemand abhakt; das hier ist eine Chronik, die niemand abhakt.
+    con.execute("CREATE TABLE IF NOT EXISTS security_events ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "ts INTEGER NOT NULL, "
+                "aktion TEXT NOT NULL, "          # login_ok, admin, pw_change ...
+                "wer TEXT NOT NULL DEFAULT '', "  # 'user:12' | 'admin' | 'anon'
+                "ip TEXT NOT NULL DEFAULT '', "
+                "ziel TEXT NOT NULL DEFAULT '', " # Pfad / betroffenes Konto
+                "detail TEXT NOT NULL DEFAULT '')")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_secev_ts ON security_events(ts)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_secev_akt "
+                "ON security_events(aktion, ts)")
     # v128 Admin: Kauf-Beleg mit ECHTEM Betrag (cents) fuer die Umsatz-Ansicht.
     # Das Ledger kennt nur Sekunden, nicht das bezahlte Geld - hier steht der
     # tatsaechlich gezahlte Betrag (amount_total, also inkl. evtl. Rabatt).
@@ -1908,7 +1933,81 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v203-sec'
+DVE_BUILD = 'v204-sec'
+
+
+# ================= v204-sec NOTAUS =================
+# Bis v203 gab es Massnahmen gegen EIN Konto (sperren, Sitzungen widerrufen),
+# aber keinen Hebel fuer "jetzt sofort alles anhalten". Genau den braucht man
+# in der einen Stunde, in der man noch nicht weiss, was los ist.
+# Drei Stufen, im Panel schaltbar:
+#   normal    - Betrieb wie immer
+#   pausiert  - keine NEUEN Registrierungen, Uploads, Renders, Kaeufe.
+#               Laufendes laeuft aus, Downloads bleiben offen. Der Kunde
+#               sieht eine ehrliche Meldung statt eines kaputten Knopfs.
+#   notaus    - zusaetzlich sind ALLE Sitzungen beendet (einmalig beim
+#               Umschalten) und die App antwortet nur noch lesend.
+# Der Zustand liegt als Datei in DATA, nicht im Prozessspeicher: ein Neustart
+# darf einen Notaus nicht aufheben.
+BETRIEB_DATEI = os.path.join(DATA, 'betrieb.txt')
+_BETRIEB_STUFEN = ('normal', 'pausiert', 'notaus')
+# Pfade, die AUCH im Notaus erreichbar bleiben muessen - sonst sperrt man sich
+# selbst aus (Panel) oder der Uptime-Pinger schlaegt Alarm.
+_NOTAUS_FREI = ('/api/health', '/api/admin/', '/admin', '/api/announcements',
+                '/api/pricing', '/imprint', '/privacy', '/terms')
+
+
+def betrieb_stufe():
+    try:
+        v = open(BETRIEB_DATEI, encoding='utf-8').read().strip().lower()
+        return v if v in _BETRIEB_STUFEN else 'normal'
+    except Exception:
+        return 'normal'
+
+
+def betrieb_setzen(stufe):
+    stufe = (stufe or '').strip().lower()
+    if stufe not in _BETRIEB_STUFEN:
+        raise HTTPException(400, 'stufe must be normal, pausiert or notaus')
+    os.makedirs(DATA, exist_ok=True)
+    with open(BETRIEB_DATEI, 'w', encoding='utf-8') as f:
+        f.write(stufe)
+    if stufe == 'notaus':
+        try:
+            con = _db()
+            con.execute('DELETE FROM sessions')      # alle Kunden abgemeldet
+            con.commit(); con.close()
+        except Exception as e:
+            print(f'Notaus: Sitzungen nicht geleert: {e}')
+    return stufe
+
+
+# Welche Wege sind bei 'pausiert' zu? Nur das, was NEUE Arbeit oder Geld
+# ausloest - Ansehen und Herunterladen bleibt erlaubt.
+_PAUSE_ZU = ('/api/upload', '/api/upload/', '/api/render_start', '/api/moments',
+             '/api/transcript', '/api/checkout', '/api/register',
+             '/api/motion', '/api/style/learn', '/api/alpha')
+
+
+@app.middleware('http')
+async def _betriebs_schranke(request, call_next):
+    """Greift VOR jedem Endpunkt - ein Notaus, den man in 30 Endpunkten
+    einzeln einbauen muss, ist keiner."""
+    stufe = betrieb_stufe()
+    if stufe != 'normal':
+        pfad = request.url.path
+        frei = any(pfad.startswith(p) for p in _NOTAUS_FREI)
+        if not frei:
+            if stufe == 'notaus' and request.method not in ('GET', 'HEAD', 'OPTIONS'):
+                return JSONResponse(
+                    {'detail': 'Maintenance: the service is paused. '
+                               'Please try again later.'}, status_code=503)
+            if stufe == 'pausiert' and any(pfad.startswith(p) for p in _PAUSE_ZU):
+                return JSONResponse(
+                    {'detail': 'Maintenance: new jobs are paused right now. '
+                               'Your existing videos stay available.'},
+                    status_code=503)
+    return await call_next(request)
 
 
 @app.middleware('http')
@@ -2991,7 +3090,24 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
 
     cmd = [sys.executable, os.path.join(ROOT, 'render.py'), src,
            '--config', cfg_path, '--out', out] + (extra_args or [])
-    env = dict(os.environ)
+    # v204-sec: Bis v203 war das eine VOLLKOPIE der Umgebung - der
+    # Render-Subprozess kannte damit den Stripe-LIVE-Schluessel, den
+    # Admin-Key, das SMTP-Passwort und die Google-Geheimnisse. Er braucht
+    # davon genau eins. Ein Fehler in einer Video-Bibliothek haette so
+    # nebenbei die Kasse offengelegt. Jetzt eine Allowlist: was nicht
+    # ausdruecklich hier steht, sieht der Renderer nicht.
+    _ERLAUBT = (
+        'PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR', 'PWD', 'SHELL',
+        'PYTHONPATH', 'PYTHONUNBUFFERED', 'PYTHONHASHSEED',
+        'OPENAI_API_KEY',                 # das EINE echte Geheimnis
+        'DVE_DATA', 'DVE_CHROMIUM', 'DVE_REFS_FILE', 'DVE_LOGFILE',
+        'DVE_MAX_SECONDS', 'DVE_MAX_MB', 'DVE_WORKERS',
+        'LD_LIBRARY_PATH', 'XDG_CACHE_HOME', 'XDG_RUNTIME_DIR',
+        'MPLBACKEND', 'OPENCV_LOG_LEVEL', 'GLOG_minloglevel',
+        'CUDA_VISIBLE_DEVICES', 'OMP_NUM_THREADS', 'NUMEXPR_MAX_THREADS',
+    )
+    env = {k: v for k, v in os.environ.items()
+           if k in _ERLAUBT or k.startswith('DVE_RENDER_')}
     # v126 Kunden-Stil: hat das Konto eigene Stil-Referenzen, bekommt der Render-
     # Subprozess deren Datei (DVE_REFS_FILE) - Prompt-Block und Mess-Parameter
     # kommen dann aus dem PERSOENLICHEN Geschmack statt aus dem Haus-Stil.
@@ -3201,6 +3317,59 @@ def _alert_log(key, subject, body, gemailt=False):
         con.close()
     except Exception as e:
         print(f'Alert nicht gespeichert: {e}')
+
+
+SEC_EVENT_TAGE = int(os.environ.get('DVE_SECLOG_DAYS', '180'))
+
+
+def _sec_event(aktion, request=None, wer='', ziel='', detail=''):
+    """v204-sec: Eine Zeile in die Chronik. Scheitert IMMER leise - ein
+    Protokoll darf nie den Betrieb reissen. Bewusst ohne Inhalte: hier steht
+    WER WANN WAS, nicht was in der Nachricht stand (Datensparsamkeit)."""
+    ip = ''
+    if request is not None:
+        try:
+            ip = _client_ip(request)
+        except Exception:
+            ip = ''
+    werte = (int(time.time()), str(aktion)[:40], str(wer)[:40], str(ip)[:60],
+             str(ziel)[:200], str(detail)[:400])
+    # Ein Protokoll, das unter Last still Zeilen verliert, ist im Ernstfall
+    # wertlos - und genau dann ist Last. Bei 'database is locked' wird kurz
+    # gewartet und erneut versucht (SQLite serialisiert Schreibzugriffe).
+    for versuch in range(3):
+        try:
+            con = _db()
+            con.execute("INSERT INTO security_events (ts, aktion, wer, ip, "
+                        "ziel, detail) VALUES (?,?,?,?,?,?)", werte)
+            con.commit()
+            con.close()
+            return
+        except Exception as e:
+            try:
+                con.close()
+            except Exception:
+                pass
+            if versuch < 2:
+                time.sleep(0.15 * (versuch + 1))
+                continue
+            # Nach drei Versuchen aufgeben - aber LAUT, damit ein dauerhaft
+            # blockiertes Protokoll auffaellt statt still zu verschwinden.
+            print(f'Sicherheits-Protokoll nicht geschrieben ({aktion}): '
+                  f'{type(e).__name__}: {e}')
+
+
+def _sec_event_purge():
+    """Aufbewahrung begrenzen. Ein Protokoll, das ewig waechst, ist selbst ein
+    Datenschutz-Problem - und niemand liest 400 MB."""
+    try:
+        con = _db()
+        con.execute("DELETE FROM security_events WHERE ts < ?",
+                    (int(time.time()) - SEC_EVENT_TAGE * 86400,))
+        con.commit()
+        con.close()
+    except Exception as e:
+        print(f'Sicherheits-Protokoll nicht aufgeraeumt: {e}')
 
 
 def _alerts_offen():
@@ -3951,6 +4120,46 @@ def _expiry_mails(eimer, _aktiv=None):
         except Exception as e:
             print(f'Ablauf-Mail fehlgeschlagen (User {uid}): {type(e).__name__}: {e}')
 
+def _missbrauch_pruefen():
+    """v204-sec: Bis v203 gab es Missbrauchs-Zahlen nur auf Nachfrage im Panel,
+    und sie lebten im Prozessspeicher - jeder Deploy loeschte sie. Damit fiel
+    NIE etwas von selbst auf. Diese Pruefung laeuft stuendlich gegen die
+    Chronik und meldet ins Panel. Bewusst grosszuegige Schwellen: eine Meldung,
+    die jede Woche ohne Grund kommt, liest nach einem Monat niemand mehr."""
+    seit = int(time.time()) - 3600
+    con = _db()
+    try:
+        def zahl(q, *p):
+            r = con.execute(q, p).fetchone()
+            return int(r[0] if r else 0)
+        fehl = zahl("SELECT COUNT(*) FROM security_events WHERE aktion = "
+                    "'login_fehl' AND ts > ?", seit)
+        konten = zahl("SELECT COUNT(DISTINCT wer) FROM security_events WHERE "
+                      "aktion = 'login_fehl' AND ts > ?", seit)
+        adm = zahl("SELECT COUNT(*) FROM security_events WHERE aktion = "
+                   "'admin_fehlversuch' AND ts > ?", seit)
+        neu_konten = zahl("SELECT COUNT(*) FROM users WHERE created_at > ?", seit)
+        renders = zahl("SELECT COUNT(*) FROM ledger WHERE grund LIKE 'Render %' "
+                       "AND created_at > ?", seit)
+    finally:
+        con.close()
+    if fehl >= 50 or konten >= 10:
+        _notify_admin('missbrauch:login', 'Auffaellig viele Fehl-Logins',
+                      f'{fehl} Fehlversuche auf {konten} Konten in der letzten '
+                      f'Stunde. Sieht nach Durchprobieren aus.', mail=False)
+    if adm >= 20:
+        _notify_admin('missbrauch:admin', 'Admin-Key wird durchprobiert',
+                      f'{adm} falsche Admin-Keys in der letzten Stunde.',
+                      mail=False)
+    if neu_konten >= 30:
+        _notify_admin('missbrauch:reg', 'Auffaellig viele Registrierungen',
+                      f'{neu_konten} neue Konten in der letzten Stunde.',
+                      mail=False)
+    if renders >= 60:
+        _notify_admin('missbrauch:render', 'Auffaellig viele Renders',
+                      f'{renders} Renders in der letzten Stunde.', mail=False)
+
+
 def _cleanup_worker():
     """v80g: Alte Job-Verzeichnisse loeschen. Standard 7 Tage, ueber
     DVE_RETENTION_DAYS ueberschreibbar. Laeuft stuendlich.
@@ -3960,6 +4169,11 @@ def _cleanup_worker():
     while True:
         _HEARTBEAT['cleanup'] = time.time()          # v130: Liveness-Beweis
         _backup_users_db()
+        try:
+            _sec_event_purge()               # v204-sec: Chronik begrenzen
+            _missbrauch_pruefen()            # v204-sec: auffaellige Muster melden
+        except Exception as e:
+            print(f'Missbrauchs-Pruefung uebersprungen: {type(e).__name__}: {e}')
         try:
             _credit_expiry_sweep()           # v125: Verfall buchen + Warn-Mails
         except Exception as e:
@@ -4389,9 +4603,15 @@ def api_login(request: Request, response: Response, email: str = Form(...),
         _verify_pw(password, _DUMMY_HASH)
         raise HTTPException(401, 'Email or password is wrong.')
     if not _verify_pw(password, row['pw_hash']):
+        # v204-sec: Fehlversuche gehoeren in die Chronik. Nur die Konto-ID,
+        # nicht das eingegebene Passwort - ein Protokoll, das Geheimnisse
+        # mitschreibt, ist selbst das Leck.
+        _sec_event('login_fehl', request, wer=f"user:{row['id']}")
         raise HTTPException(401, 'Email or password is wrong.')
     if _row_get(row, 'disabled'):                    # v130: gesperrtes Konto
+        _sec_event('login_gesperrt', request, wer=f"user:{row['id']}")
         raise HTTPException(403, 'This account is suspended. Contact support.')
+    _sec_event('login_ok', request, wer=f"user:{row['id']}")
     tok, exp = _create_session(row['id'])
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
@@ -4441,6 +4661,7 @@ def _upsert_google_user(sub, email, name, ref=''):
     Konto). Neu angelegte Konten sind SOFORT verified=1 (Google hat die Mail
     bestaetigt) und bekommen das Willkommens-Guthaben. Rueckgabe: (uid, is_new)."""
     email = (email or '').strip().lower()
+    _nachtrag = []            # Chronik-Zeilen, erst NACH con.close() schreiben
     con = _db()
     try:
         row = con.execute("SELECT id, disabled FROM users WHERE google_sub = ?",
@@ -4480,6 +4701,14 @@ def _upsert_google_user(sub, email, name, ref=''):
                                 (row['id'],))
                     print(f'Google-Login uebernimmt unbestaetigtes Konto zu {email}: '
                           f'altes Passwort verworfen, Sitzungen beendet.')
+                    # Die Chronik-Zeile wird NACH con.close() geschrieben:
+                    # _sec_event oeffnet eine eigene Verbindung, und solange
+                    # diese hier die Schreibsperre haelt, blockiert sie sich
+                    # selbst ('database is locked'). Ein Protokoll, das
+                    # ausgerechnet den interessantesten Vorgang nicht
+                    # festhalten kann, ist wertlos.
+                    _nachtrag.append(('google_uebernahme', f"user:{row['id']}",
+                                      'unbestaetigtes Konto, Passwort entwertet'))
                 # In BEIDEN Faellen alle bestehenden Anmeldungen beenden - sass
                 # dort jemand anderes, endet das hier.
                 con.execute("DELETE FROM sessions WHERE user_id = ?", (row['id'],))
@@ -4513,6 +4742,12 @@ def _upsert_google_user(sub, email, name, ref=''):
         return (row['id'] if row else None), False
     finally:
         con.close()
+        # ERST hier: solange con offen ist, haelt sie die Schreibsperre und
+        # _sec_event (eigene Verbindung) liefe in 'database is locked'.
+        # Im finally, weil jeder Pfad der Funktion vorher zurueckkehrt - eine
+        # Zeile hinter dem try/finally waere schlicht nie erreicht worden.
+        for _a, _w, _d in _nachtrag:
+            _sec_event(_a, wer=_w, detail=_d)
 
 
 def _google_username(name, email):
@@ -4992,6 +5227,8 @@ def api_change_password(request: Request, response: Response,
     con.execute("DELETE FROM sessions WHERE user_id = ?", (u['id'],))
     con.commit()
     con.close()
+    _sec_event('pw_wechsel', request, wer=f"user:{u['id']}",
+               detail='alle anderen Sitzungen beendet')
     tok, _exp = _create_session(u['id'])
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
@@ -5212,6 +5449,30 @@ def pruefe(request: Request, code: str = Form(...)):
     c = load_codes()[code.strip()]
     rest = (c['limit'] - c.get('genutzt', 0)) if c.get('limit') else None
     return {'ok': True, 'name': c.get('name', ''), 'rest': rest}
+
+
+@app.get('/.well-known/security.txt')
+@app.get('/security.txt')
+def security_txt():
+    """v204-sec: Der Meldeweg fuer Finder von aussen (RFC 9116). Wer eine
+    Luecke entdeckt, soll sie melden koennen, statt sie zu verkaufen oder
+    zu veroeffentlichen - und er soll sehen, dass jemand zuhoert.
+    Bewusst OHNE Anmeldung und ohne Cache-Hindernis."""
+    ablauf = time.strftime('%Y-%m-%dT%H:%M:%SZ',
+                           time.gmtime(time.time() + 365 * 86400))
+    basis = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    return Response(
+        content=(f"Contact: mailto:{SUPPORT_EMAIL}\n"
+                 f"Expires: {ablauf}\n"
+                 f"Preferred-Languages: de, en\n"
+                 f"Canonical: {basis}/.well-known/security.txt\n"
+                 f"Policy: {basis}/terms\n"
+                 f"\n"
+                 f"# Thanks for looking. Please give us a reasonable window to\n"
+                 f"# fix an issue before making it public. We answer every\n"
+                 f"# report, including the ones that turn out to be false\n"
+                 f"# alarms.\n"),
+        media_type='text/plain; charset=utf-8')
 
 
 @app.get('/api/looks')
@@ -5585,20 +5846,57 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
     (atomar) reservieren, Job anlegen + einreihen. Datei liegt bereits komplett in
     src. Wirft 413/402 bei zu lang / zu wenig Guthaben und raeumt dann d auf."""
     import asyncio as _aio
+    # v204-sec: Bis v203 war die Dauer die EINZIGE inhaltliche Schranke -
+    # Aufloesung und Bildrate wurden nie geprueft. Ein 8K-Clip mit 120 Bildern
+    # je Sekunde kostet damit denselben Credit wie ein normales Handy-Video,
+    # rechnet aber ein Vielfaches: die Pipeline laeuft ueber JEDES Bild
+    # (Matting, Gesichter, Compositing). Bei EINEM Worker legt das alle
+    # anderen Kunden fuer Stunden lahm. Jetzt werden Breite, Hoehe und
+    # Bildrate im selben ffprobe-Aufruf mitgelesen und gedeckelt.
+    _dw = _dh = 0
+    _fps = 0.0
     try:
         # v98: to_thread - der sync ffprobe blockierte sonst den Event-Loop.
         _r = await _aio.to_thread(
             subprocess.run,
-            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+            ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+             '-show_entries', 'stream=width,height,avg_frame_rate',
+             '-show_entries', 'format=duration',
              '-of', 'default=nw=1:nk=1', src],
             capture_output=True, text=True)
-        dur = float(_r.stdout.strip() or 0)
+        _zeilen = [z.strip() for z in (_r.stdout or '').splitlines() if z.strip()]
+        # Reihenfolge: width, height, avg_frame_rate, duration
+        if len(_zeilen) >= 4:
+            _dw, _dh = int(float(_zeilen[0])), int(float(_zeilen[1]))
+            _num, _, _den = _zeilen[2].partition('/')
+            try:
+                _fps = float(_num) / float(_den or 1)
+            except (TypeError, ValueError, ZeroDivisionError):
+                _fps = 0.0
+            dur = float(_zeilen[3] or 0)
+        else:
+            dur = float(_zeilen[-1] or 0) if _zeilen else 0
     except Exception:
         dur = 0
     if dur > MAX_SECONDS:
         shutil.rmtree(d, ignore_errors=True)
         raise HTTPException(413, f'Video too long ({dur:.0f}s). '
                                  f'Maximum {MAX_SECONDS} seconds.')
+    # Eine Datei, deren Dauer sich nicht ermitteln laesst, ist keine, die wir
+    # rendern wollen: bis v203 lief sie als 0-Sekunden-Job einfach durch und
+    # kam ungeprueft in die Schwerlast-Pipeline.
+    if dur <= 0:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(400, 'Could not read this video. Please export it '
+                                 'again (MP4/MOV) and retry.')
+    if _dw and _dh and max(_dw, _dh) > MAX_PIXEL_LANG:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(413, f'Video resolution too high ({_dw}x{_dh}). '
+                                 f'Maximum {MAX_PIXEL_LANG} px on the long edge.')
+    if _fps > MAX_FPS + 0.5:
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(413, f'Frame rate too high ({_fps:.0f} fps). '
+                                 f'Maximum {MAX_FPS} fps.')
     u = _current_user(request) if mode != 'demo' else None
     uid = None
     _uhd, need = False, 0
@@ -5747,6 +6045,24 @@ async def upload_chunk(up: str, request: Request, offset: int = 0):
         raise HTTPException(404, 'Upload session expired - please start over.')
     if offset != s['received']:
         return JSONResponse({'received': s['received'], 'resync': True}, status_code=409)
+    # v204-sec: Bis v203 wurde der ganze Body erst in den Arbeitsspeicher
+    # gelesen und DANN die Groesse geprueft - bei 300 MB Cap also bis zu
+    # 300 MB (mit Starlettes Zwischenliste eher das Doppelte) RAM je Anfrage,
+    # und zwar VOR jeder Pruefung. Ein paar parallele Anfragen genuegten, um
+    # die Maschine an den Rand zu bringen. Der angekuendigte Umfang steht im
+    # Header, also wird er zuerst gelesen. Ein Chunk ist im Frontend ein paar
+    # MB gross; 32 MB sind grosszuegig und trotzdem eine Grenze.
+    try:
+        _angek = int(request.headers.get('content-length') or 0)
+    except (TypeError, ValueError):
+        _angek = 0
+    if _angek > CHUNK_MAX_BYTES:
+        raise HTTPException(413, f'Chunk too large (max '
+                                 f'{CHUNK_MAX_BYTES // (1024 * 1024)} MB).')
+    if s['received'] + _angek > MAX_MB * 1024 * 1024:
+        shutil.rmtree(s['dir'], ignore_errors=True)
+        UPLOADS.pop(up, None)
+        raise HTTPException(413, f'Video too large (max {MAX_MB} MB).')
     data = await request.body()
     if not data:
         return {'received': s['received']}
@@ -7169,7 +7485,18 @@ def _require_admin(request: Request):
     verhindert die Flut). Ein RICHTIGER Key laeuft nicht ins Limit, weil nur
     Fehlversuche gezaehlt werden."""
     if _admin_ok(request):
+        # v204-sec: Zentral hier, damit kein neuer Admin-Endpunkt das
+        # Protokollieren vergessen kann - derselbe Gedanke wie beim
+        # Riegel selbst.
+        try:
+            _sec_event('admin', request, wer='admin',
+                       ziel=getattr(getattr(request, 'url', None), 'path', ''),
+                       detail=getattr(request, 'method', ''))
+        except Exception:
+            pass
         return
+    _sec_event('admin_fehlversuch', request, wer='anon',
+               ziel=getattr(getattr(request, 'url', None), 'path', ''))
     # Die Bremse darf den Riegel nie ersetzen: scheitert die IP-Ermittlung
     # (exotischer Aufrufer, interner Aufruf ohne Verbindung), gilt weiterhin
     # 403. Ein 500er an dieser Stelle waere schlimmer als keine Bremse.
@@ -8484,6 +8811,50 @@ def admin_logs(request: Request, zeilen: int = 300, teil: str = ''):
     zs = roh.rstrip('\n').split('\n')
     return {'text': '\n'.join(zs[-max(10, min(zeilen, 2000)):]),
             'dateien': da, 'bytes': gr}
+
+
+@app.get('/api/admin/betrieb')
+def admin_betrieb(request: Request):
+    _require_admin(request)
+    return {'stufe': betrieb_stufe(), 'stufen': list(_BETRIEB_STUFEN)}
+
+
+@app.post('/api/admin/betrieb')
+def admin_betrieb_setzen(request: Request, stufe: str = Form(...)):
+    """v204-sec NOTAUS. 'notaus' beendet zusaetzlich ALLE Kundensitzungen -
+    das ist der Hebel fuer die Stunde, in der man noch nicht weiss, was los
+    ist. Zurueck geht es mit derselben Schaltflaeche."""
+    _require_admin(request)
+    alt_stufe = betrieb_stufe()
+    neu_stufe = betrieb_setzen(stufe)
+    _sec_event('betrieb', request, wer='admin',
+               detail=f'{alt_stufe} -> {neu_stufe}')
+    if neu_stufe != 'normal':
+        _notify_admin(f'betrieb:{neu_stufe}', f'Betrieb auf {neu_stufe} gesetzt',
+                      f'Der Betriebszustand wurde von {alt_stufe} auf '
+                      f'{neu_stufe} geschaltet.', mail=False)
+    return {'ok': True, 'stufe': neu_stufe}
+
+
+@app.get('/api/admin/events')
+def admin_events(request: Request, limit: int = 200, aktion: str = ''):
+    """v204-sec: die Chronik. Wer wann was - Admin-Zugriffe, Logins,
+    Passwortwechsel, Notaus."""
+    _require_admin(request)
+    lim = min(max(int(limit), 1), 1000)
+    con = _db()
+    if aktion:
+        rows = con.execute(
+            "SELECT * FROM security_events WHERE aktion = ? "
+            "ORDER BY ts DESC LIMIT ?", (aktion[:40], lim)).fetchall()
+    else:
+        rows = con.execute("SELECT * FROM security_events ORDER BY ts DESC "
+                           "LIMIT ?", (lim,)).fetchall()
+    arten = [r['aktion'] for r in con.execute(
+        "SELECT aktion FROM security_events GROUP BY aktion ORDER BY aktion")]
+    con.close()
+    return {'events': [dict(r) for r in rows], 'arten': arten,
+            'aufbewahrung_tage': SEC_EVENT_TAGE}
 
 
 @app.post('/api/admin/mail/test')

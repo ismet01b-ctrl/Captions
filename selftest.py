@@ -6738,6 +6738,149 @@ def _scenario_betrieb(tmp):
           "raise HTTPException(409, 'This job is already running.')" in _sv203
           and _sv203.count('_enqueue_guard(') >= 3)
 
+    # ======= v204-sec: Haertung, die ohne Ismet ging ======================
+    # Aus dem Audit-Rueckstand alles, was keine Zugangsdaten braucht.
+    # Offen bleibt allein die Sicherung ausser Haus (Cloudflare R2).
+    _sv204 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    os.environ['DVE_ADMIN'] = 'testkey_v204'
+    _c204 = _TC198(_SV198.app, base_url='https://test')
+    _H204 = {'X-Admin-Key': 'testkey_v204'}
+
+    # (1) Meldeweg von aussen
+    _st204 = _c204.get('/.well-known/security.txt')
+    check('v204-sec: security.txt ist ohne Anmeldung erreichbar',
+          _st204.status_code == 200 and 'Contact: mailto:' in _st204.text
+          and 'Expires:' in _st204.text)
+
+    # (2) Der Renderer sieht die Geheimnisse nicht mehr
+    _erl204 = _sv204.split('_ERLAUBT = (')[1].split(')')[0]
+    check('v204-sec: der Render-Subprozess bekommt eine Allowlist, keine Vollkopie',
+          "env = {k: v for k, v in os.environ.items()" in _sv204
+          and 'env = dict(os.environ)' not in _sv204.split('def _run_render')[1][:2000]
+          if 'def _run_render' in _sv204 else True)
+    for _geheim in ('STRIPE_SECRET_KEY', 'DVE_ADMIN', 'SMTP_PASS',
+                    'GOOGLE_CLIENT_SECRET', 'RESEND_API_KEY', 'DVE_REF_SALT'):
+        check(f'v204-sec: {_geheim} steht NICHT in der Renderer-Allowlist',
+              _geheim not in _erl204)
+    check('v204-sec: der OpenAI-Key kommt aber durch (sonst keine KI-Regie)',
+          'OPENAI_API_KEY' in _erl204)
+
+    # (3) Chronik: wer wann was
+    check('v204-sec: es gibt eine Ereignis-Tabelle',
+          'CREATE TABLE IF NOT EXISTS security_events' in _sv204)
+    check('v204-sec: JEDER Admin-Zugriff wird zentral protokolliert',
+          "_sec_event('admin', request" in _sv204
+          and _sv204.index("_sec_event('admin', request")
+          > _sv204.index('def _require_admin'))
+    _c204.post('/api/login', data={'email': 'gibtsnicht204@x.de',
+                                   'password': 'falsch123'})
+    _m204 = f'chr{int(_tm197.time())}@test.invalid'
+    _SV198._create_user(_m204, 'richtig123', 'Chronik Test')
+    _c204.post('/api/login', data={'email': _m204, 'password': 'falsch1234'})
+    _c204.post('/api/login', data={'email': _m204, 'password': 'richtig123'})
+    _ev204 = _c204.get('/api/admin/events', headers=_H204).json()
+    _arten204 = [e['aktion'] for e in _ev204['events']]
+    check('v204-sec: ein FEHLGESCHLAGENER Login steht in der Chronik',
+          'login_fehl' in _arten204)
+    check('v204-sec: ein erfolgreicher Login ebenfalls', 'login_ok' in _arten204)
+    check('v204-sec: der Admin-Zugriff selbst ebenfalls', 'admin' in _arten204)
+    check('v204-sec: die Chronik enthaelt KEINE Passwoerter',
+          not any('richtig123' in str(e) or 'falsch' in str(e.get('detail', ''))
+                  for e in _ev204['events']))
+    check('v204-sec: die Chronik wird begrenzt (kein ewiges Wachstum)',
+          'def _sec_event_purge' in _sv204 and 'SEC_EVENT_TAGE' in _sv204)
+    # Der Schreiber darf sich nicht selbst blockieren: _sec_event oeffnet eine
+    # EIGENE Verbindung: wird es aus einer Funktion heraus gerufen, die schon
+    # eine offene haelt, laeuft es in 'database is locked' und die Zeile ist
+    # still weg - genau der interessanteste Vorgang (Konto-Uebernahme) war
+    # betroffen. Der echte Beweis: die Zeile MUSS in der Chronik landen.
+    _gm204 = f'gsec{int(_tm197.time())}@test.invalid'
+    _SV198._create_user(_gm204, 'AngreiferPw123', 'vorbeleger204')
+    _SV198._upsert_google_user('gsub204-' + _gm204, _gm204, 'Echter')
+    _con_g = _SV198._db()
+    _n_g = _con_g.execute("SELECT COUNT(*) c FROM security_events "
+                          "WHERE aktion = 'google_uebernahme'").fetchone()['c']
+    _con_g.close()
+    check('v204-sec: die Konto-Uebernahme landet WIRKLICH in der Chronik '
+          '(kein "database is locked")', _n_g >= 1, f'{_n_g} Zeilen')
+    check('v204-sec: sie wird ausserhalb der offenen Verbindung geschrieben',
+          'for _a, _w, _d in _nachtrag:' in _sv204
+          and _sv204.index('_nachtrag.append(')
+          < _sv204.index('for _a, _w, _d in _nachtrag:'))
+    check('v204-sec: der Schreiber gibt bei Sperre nicht sofort auf',
+          'for versuch in range(3):' in _sv204)
+
+    # (4) NOTAUS - der Hebel, wenn man noch nicht weiss, was los ist
+    check('v204-sec: der Betriebszustand liegt auf der PLATTE, nicht im Speicher',
+          'BETRIEB_DATEI = os.path.join(DATA' in _sv204)
+    _c204.post('/api/admin/betrieb', data={'stufe': 'pausiert'}, headers=_H204)
+    check('v204-sec: pausiert stoppt neue Uploads',
+          _c204.post('/api/upload',
+                     files={'datei': ('a.mp4', b'x', 'video/mp4')}
+                     ).status_code == 503)
+    check('v204-sec: pausiert sperrt den Admin NICHT aus',
+          _c204.get('/api/admin/overview', headers=_H204).status_code == 200)
+    check('v204-sec: pausiert laesst fertige Videos abrufbar',
+          _c204.get('/api/library').status_code != 503)
+    _c204.post('/api/admin/betrieb', data={'stufe': 'notaus'}, headers=_H204)
+    _con204 = _SV198._db()
+    _sess204 = _con204.execute('SELECT COUNT(*) c FROM sessions').fetchone()['c']
+    _con204.close()
+    check('v204-sec: NOTAUS meldet alle Kunden ab', _sess204 == 0)
+    check('v204-sec: der Health-Check bleibt auch im NOTAUS erreichbar',
+          _c204.get('/api/health').status_code == 200)
+    _c204.post('/api/admin/betrieb', data={'stufe': 'normal'}, headers=_H204)
+    check('v204-sec: und wieder zurueck',
+          _c204.get('/api/admin/betrieb', headers=_H204).json()['stufe'] == 'normal')
+    check('v204-sec: das Umschalten steht in der Chronik',
+          'betrieb' in [e['aktion'] for e in
+                        _c204.get('/api/admin/events',
+                                  headers=_H204).json()['events']])
+    del os.environ['DVE_ADMIN']
+
+    # (5) Ressourcen-Grenzen
+    check('v204-sec: ein Upload-Abschnitt ist gedeckelt (RAM-Schutz)',
+          'CHUNK_MAX_BYTES' in _sv204
+          and _sv204.index("_angek = int(request.headers.get('content-length'")
+          < _sv204.index("    data = await request.body()"))
+    check('v204-sec: Aufloesung und Bildrate sind gedeckelt',
+          'MAX_PIXEL_LANG' in _sv204 and 'MAX_FPS' in _sv204
+          and 'Video resolution too high' in _sv204
+          and 'Frame rate too high' in _sv204)
+    check('v204-sec: eine unlesbare Datei wird abgelehnt statt als 0s-Job zu laufen',
+          'Could not read this video' in _sv204)
+
+    # (6) Container-Haertung - und ihr Sicherheitsnetz
+    _dock204 = open(os.path.join(HERE, 'Dockerfile'), encoding='utf-8').read()
+    _comp204 = open(os.path.join(HERE, 'docker-compose.yml'), encoding='utf-8').read()
+    _ent204 = open(os.path.join(HERE, 'entrypoint.sh'), encoding='utf-8').read()
+    check('v204-sec: es gibt einen Dienst-Nutzer im Image',
+          'useradd' in _dock204 and 'dve' in _dock204)
+    check('v204-sec: der Start laeuft ueber das Entrypoint-Skript',
+          'ENTRYPOINT ["/app/entrypoint.sh"]' in _dock204)
+    # Das Wichtigste: die Haertung darf die Seite NIE abschalten.
+    check('v204-sec: das Entrypoint faellt im Zweifel auf root zurueck, statt zu sterben',
+          _ent204.count('exec "$@"') >= 4 and 'runuser' in _ent204
+          and 'set -e' not in _ent204.split('\n')[0:30])
+    check('v204-sec: es prueft VOR dem Rechte-Abwurf, ob geschrieben werden kann',
+          'test -w "$DATA_DIR"' in _ent204)
+    for _flag, _was in (('no-new-privileges:true', 'kein Rechte-Aufstieg'),
+                        ('cap_drop', 'keine Kernel-Sonderrechte'),
+                        ('pids_limit', 'keine Fork-Bombe'),
+                        ('mem_limit', 'kein Speicher-Amoklauf')):
+        check(f'v204-sec: Container-Haertung {_flag} ({_was})', _flag in _comp204)
+    # Das Gate ueberschreibt den Entrypoint - sonst laeuft der Selftest im
+    # neuen Image gar nicht erst an.
+    check('v204-sec: das Test-Gate haengt nicht am neuen Entrypoint',
+          '--entrypoint bash' in open(os.path.join(HERE, 'deploy_gate.sh'),
+                                      encoding='utf-8').read())
+
+    # (7) Missbrauchs-Erkennung laeuft von selbst, nicht nur auf Nachfrage
+    check('v204-sec: auffaellige Muster melden sich stuendlich von selbst',
+          'def _missbrauch_pruefen' in _sv204
+          and '_missbrauch_pruefen()' in _sv204
+          and "'missbrauch:login'" in _sv204)
+
     check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
           'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)
 
@@ -6829,7 +6972,7 @@ def _scenario_betrieb(tmp):
     # eine Garantie, dass beim Umbauen der Navigation nichts VERSCHWINDET.
     _soll195 = {'live', 'alerts', 'jobs', 'revenue', 'credits', 'codes',
                 'users', 'support', 'abuse', 'system', 'compliance', 'legal',
-                'feedback', 'ann', 'logs'}
+                'feedback', 'ann', 'logs', 'events'}
     check('v195: alle Ansichten sind weiter erreichbar',
           _ids195 == _soll195, f"fehlt: {_soll195 - _ids195}  neu: {_ids195 - _soll195}")
     check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',

@@ -197,13 +197,14 @@ const ICON={
   feedback:'<path d="M12 3 14.9 8.9l6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.6 9.8l6.5-.9z"/>',
   ann:'<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
   logs:'<path d="M6 3h9l5 5v13H6z"/><path d="M9 12h7M9 16h7M9 8h3"/>',
+  events:'<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>',
 };
 const NAV=[
   ['', [['live','Live'],['alerts','Alerts'],['jobs','Jobs']]],
   ['Umsatz', [['revenue','Revenue'],['credits','Credits'],['codes','Codes']]],
   ['Kunden', [['users','Users'],['support','Support'],['abuse','Abuse']]],
   ['Produkt', [['feedback','Feedback'],['ann','Announcements']]],
-  ['Betrieb', [['system','System'],['logs','Logs'],['compliance','Compliance'],['legal','Recht & Steuern']]],
+  ['Betrieb', [['system','System'],['events','Chronik'],['logs','Logs'],['compliance','Compliance'],['legal','Recht & Steuern']]],
 ];
 const TABS=NAV.flatMap(([,items])=>items);
 const TITEL=Object.fromEntries(TABS);
@@ -624,6 +625,8 @@ async function loadSystem(){
     </div>
     <h3>Config (env/boot-time — display only)</h3>
     <table><tbody>${cfg}</tbody></table>
+    <h3>Betriebszustand</h3>
+    <div id="betriebBox" class="subtle">loading …</div>
     <h3>Ops actions</h3>
     <div class="row-actions">
       <button class="btn ghost sm" onclick="sysAct('backup/run','Run a DB backup now?')">Backup now</button>
@@ -651,6 +654,7 @@ async function loadSystem(){
       stopped, and the state before the restore is kept as
       <code>vor_restore_*.db</code> — you can go back the same way.</div>`;
   loadBackups();
+  loadBetrieb();
 }
 /* v197a: Die Sicherungen lagen nur auf der Platte und im Postfach. Im Panel
    stand bloss ein Datum - man sah also, DASS gesichert wurde, kam aber nicht
@@ -1047,7 +1051,65 @@ async function loadLogs(silent){
 }
 function logPick(t){logTeil=t;loadLogs();}
 
-const RENDER={live:loadLive,logs:loadLogs,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
+/* v204-sec Chronik: wer wann was. Bis v203 hielt NICHTS fest, wer sich im
+   Panel angemeldet oder ein Konto geaendert hat - nach einem Vorfall waere
+   nicht rekonstruierbar gewesen, was passiert ist. */
+let evFilt='';
+async function loadEvents(silent){
+  let d;try{d=await api('/api/admin/events?limit=300'+(evFilt?'&aktion='+encodeURIComponent(evFilt):''));}
+  catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.events=Date.now()/1000;
+  const knopf=(k,t)=>`<button class="btn ghost sm${evFilt===k?' on':''}" onclick="evSet('${k}')">${t}</button>`;
+  const filter=[knopf('','Alle')].concat(d.arten.map(a=>knopf(a,a))).join(' ');
+  const rows=d.events.length?d.events.map(e=>`<tr>
+    <td class="subtle" style="white-space:nowrap">${fdt(e.ts)}</td>
+    <td><span class="tag${e.aktion.includes('fehl')?' no':e.aktion==='login_ok'?' ok':''}">${esc(e.aktion)}</span></td>
+    <td class="mono">${esc(e.wer||'-')}</td>
+    <td class="mono subtle">${esc(e.ip||'-')}</td>
+    <td class="subtle" style="max-width:340px;word-break:break-all">${esc(e.ziel||'')}</td>
+    <td class="subtle">${esc(e.detail||'')}</td></tr>`).join(''):
+    '<tr><td colspan="6" class="subtle">Noch nichts protokolliert.</td></tr>';
+  el('view').innerHTML=`
+    <div class="row-actions" style="margin-bottom:10px;flex-wrap:wrap">${filter}</div>
+    <div class="note">Aufbewahrung ${d.aufbewahrung_tage} Tage. Hier steht WER WANN WAS —
+      bewusst keine Inhalte (keine Nachrichten, keine Passwoerter).</div>
+    <table><thead><tr><th>Wann</th><th>Was</th><th>Wer</th><th>IP</th><th>Wo</th><th>Detail</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+function evSet(k){evFilt=k;loadEvents();}
+
+/* v204-sec NOTAUS. Der Hebel fuer die Stunde, in der man noch nicht weiss,
+   was los ist. 'notaus' beendet zusaetzlich ALLE Kundensitzungen. */
+async function loadBetrieb(){
+  const box=el('betriebBox'); if(!box)return;
+  let d;try{d=await api('/api/admin/betrieb');}catch(e){box.innerHTML=err(e);return;}
+  const txt={normal:'Alles laeuft normal.',
+             pausiert:'PAUSIERT — keine neuen Uploads, Renders, Kaeufe oder Registrierungen. Fertige Videos bleiben abrufbar.',
+             notaus:'NOTAUS — alle Kunden sind abgemeldet, es geht nichts mehr rein.'};
+  box.innerHTML=`
+    <div class="health" style="margin-bottom:10px">
+      ${d.stufe==='normal'?'<span class="tag ok">normal</span>':'<span class="tag no">'+esc(d.stufe)+'</span>'}
+      <span class="subtle">${esc(txt[d.stufe]||'')}</span>
+    </div>
+    <div class="row-actions">
+      <button class="btn ghost sm" onclick="setBetrieb('normal')">Normalbetrieb</button>
+      <button class="btn warn sm" onclick="setBetrieb('pausiert')">Pausieren</button>
+      <button class="btn bad sm" onclick="setBetrieb('notaus')">NOTAUS</button>
+    </div>`;
+}
+async function setBetrieb(stufe){
+  const warnung=stufe==='notaus'
+    ? 'NOTAUS: alle Kunden werden sofort abgemeldet und es geht nichts mehr rein. Fortfahren?'
+    : stufe==='pausiert'
+    ? 'Pausieren: keine neuen Uploads, Renders, Kaeufe, Registrierungen. Fortfahren?'
+    : 'Zurueck in den Normalbetrieb?';
+  if(!danger(warnung))return;
+  const fd=new FormData(); fd.append('stufe',stufe);
+  try{await api('/api/admin/betrieb',{method:'POST',body:fd});loadBetrieb();}
+  catch(e){alert(e.message);}
+}
+
+const RENDER={live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
 if(KEY)boot();
 </script>
 </body>

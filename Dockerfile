@@ -43,8 +43,16 @@ RUN python -c "import render; render.ensure_models()" || echo "Modelle werden zu
 RUN (cd /app/motion && npm ci --no-audit --no-fund) \
     || echo "WARN: Motion-Engine nicht installiert - Brief-Feature bleibt aus"
 
+# v204-sec: Dienst-Nutzer. Der Container schob fremde Videos bis v203 als
+# root durch ffmpeg/opencv/Pillow. Das Umschalten macht entrypoint.sh, nicht
+# ein "USER dve" hier - das bestehende /data-Volume gehoert root, und ein
+# harter Wechsel haette den Server beim naechsten Deploy ausgesperrt.
+RUN useradd -r -u 10001 -m -d /home/dve -s /usr/sbin/nologin dve \
+ && mkdir -p /data && chown -R dve:dve /data /app
+
 ENV DVE_DATA=/data DVE_WORKERS=1 DVE_MAX_SECONDS=180 DVE_MAX_MB=300 \
-    DVE_CHROMIUM=/usr/bin/chromium
+    DVE_CHROMIUM=/usr/bin/chromium DVE_USER=dve \
+    XDG_CACHE_HOME=/tmp/.cache MPLCONFIGDIR=/tmp/.mpl
 VOLUME /data
 EXPOSE 8000
 # v98: Docker meldet dem Orchestrator/`docker ps`, ob die App wirklich lebt
@@ -56,5 +64,6 @@ HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
 # '*' ist ok: Port 8000 ist nur im Compose-Netz erreichbar (expose, kein publish).
 # WICHTIG: NIE mehrere uvicorn-Worker (--workers) - Queues/Jobs/Rate-Limits
 # leben im Prozess-Speicher; Render-Parallelitaet steuert DVE_WORKERS.
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["python", "-m", "uvicorn", "web.server:app", "--host", "0.0.0.0", \
      "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

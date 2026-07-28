@@ -41,6 +41,24 @@ services:
       DVE_REF_SALT: ${DVE_REF_SALT:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    # v204-sec CONTAINER-HAERTUNG. Der Dienst schiebt FREMDE Videos durch
+    # ffmpeg, opencv und Pillow - genau die Bibliotheken, in denen ein
+    # praeparierte Datei historisch zu Codeausfuehrung gefuehrt hat. Bis v203
+    # lief das ohne jede Einschraenkung. Diese vier Zeilen aendern nichts am
+    # Betrieb, nehmen einem Ausbruch aber den Grossteil seines Wertes:
+    #   no-new-privileges: kein Rechte-Aufstieg ueber setuid-Programme
+    #   cap_drop ALL:      keine Kernel-Sonderrechte (der Dienst braucht keine)
+    #   pids_limit:        eine Fork-Bombe kann die Maschine nicht mehr fluten
+    #   mem_limit:         ein entgleister Render reisst nicht den ganzen Host
+    # mem_limit grosszuegig: ein 4K-Render haelt Frames im Speicher. Zu knapp
+    # gesetzt stirbt der Job mitten im Render (und der Kunde bekommt eine
+    # Erstattung statt eines Videos) - das waere die schlechtere Krankheit.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: ${DVE_PIDS_LIMIT:-512}
+    mem_limit: ${DVE_MEM_LIMIT:-6g}
     volumes:
       - dve-data:/data
     expose:
