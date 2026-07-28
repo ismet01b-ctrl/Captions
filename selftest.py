@@ -2689,7 +2689,12 @@ def _scenario_logic(clip, transcript, tmp):
           and "@app.post('/api/admin/jobs/{jid}/kill')" in _srv_m
           and "@app.post('/api/admin/users/{uid}/credits')" in _srv_m
           and "@app.post('/api/admin/users/{uid}/delete')" in _srv_m
-          and 'def _require_admin' in _srv_m and 'if not _admin_ok(request)' in _srv_m
+          and 'def _require_admin' in _srv_m
+          # v203-sec: _require_admin prueft jetzt zuerst positiv und haengt
+          # bei Misserfolg die Bremse davor - die Zusage (nur mit Key) ist
+          # dieselbe, die Schreibweise nicht mehr.
+          and 'if _admin_ok(request):' in _srv_m
+          and "raise HTTPException(403, 'Admin key missing or wrong.')" in _srv_m
           and "@app.get('/admin'" in _srv_m
           and 'CREATE TABLE IF NOT EXISTS purchases' in _srv_m
           and 'INSERT OR IGNORE INTO purchases' in _srv_m
@@ -3804,10 +3809,29 @@ def _scenario_security(tmp):
     _puid, _ = SV._create_user('link@test', 'p' * 8, 'Linker')
     _luid, _lnew = SV._upsert_google_user('gsub_bbb', 'link@test', 'Linker')
     _lrow = SV._find_user_by_id(_puid)
-    check('v132: Google verknuepft vorhandenes Konto per E-Mail (kein Duplikat)',
+    # v203-sec: Dieser Test hielt bis v202 die LUECKE als Zusage fest
+    # ("Passwort bleibt gueltig"). _create_user legt ein UNBESTAETIGTES Konto
+    # an - und ein unbestaetigtes Konto ist kein Eigentumsnachweis fuer die
+    # Adresse. Jeder konnte auf eine fremde Adresse registrieren und wartete;
+    # meldete sich der echte Inhaber spaeter per Google an, teilten sich beide
+    # das Konto. Google hat die Adresse bewiesen, also uebernimmt Google sie:
+    # verknuepfen ja, aber das alte Passwort wird entwertet.
+    check('v132/v203-sec: Google verknuepft das vorhandene Konto (kein Duplikat)',
           _luid == _puid and (not _lnew)
-          and SV._row_get(_lrow, 'google_sub') == 'gsub_bbb'
-          and SV._verify_pw('p' * 8, _lrow['pw_hash']))     # Passwort bleibt gueltig
+          and SV._row_get(_lrow, 'google_sub') == 'gsub_bbb')
+    check('v203-sec: dabei wird das Passwort des unbestaetigten Kontos entwertet',
+          not SV._verify_pw('p' * 8, _lrow['pw_hash']))
+    # Gegenprobe: bei einem BESTAETIGTEN Konto bleibt das Passwort gueltig -
+    # dort ist die Verknuepfung genau das, was der Nutzer erwartet.
+    _vuid, _ = SV._create_user('verlinkt@test', 'q' * 8, 'Verlinkt')
+    _vcon = SV._db()
+    _vcon.execute("UPDATE users SET verified = 1 WHERE id = ?", (_vuid,))
+    _vcon.commit(); _vcon.close()
+    _vluid, _ = SV._upsert_google_user('gsub_ccc', 'verlinkt@test', 'Verlinkt')
+    _vrow = SV._find_user_by_id(_vuid)
+    check('v203-sec: ein BESTAETIGTES Konto behaelt sein Passwort beim Verknuepfen',
+          _vluid == _vuid and SV._verify_pw('q' * 8, _vrow['pw_hash'])
+          and SV._row_get(_vrow, 'google_sub') == 'gsub_ccc')
     # Gesperrtes Konto: kein Login ueber Google.
     _dcon = SV._db()
     _dcon.execute("UPDATE users SET disabled = 1 WHERE id = ?", (_gu1,))
@@ -4881,8 +4905,12 @@ def _scenario_betrieb(tmp):
           SV._will_uhd({'output': {'height': 2160}}, _hd157) is False)
     # Und dann darf die Engine auch nicht auf 2160 weiterrechnen.
     _srv157 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    # v203-sec: dritte Stelle dazugekommen - render_start nimmt eine
+    # Hochstufung auch dann zurueck, wenn der Job schon abgerechnet ist
+    # (sonst 4K zum 1080p-Preis). Die Zusage ist dieselbe: JEDER Pfad, der 4K
+    # ablehnt, setzt auch die Hoehe zurueck.
     check('v157: abgelehntes 4K wird auch aus der Hoehe zurueckgesetzt',
-          _srv157.count("overrides['output']['height'] = 1080") == 2)
+          _srv157.count("overrides['output']['height'] = 1080") == 3)
     _ui157 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     check('v157: 4K steht als dritte Stufe neben 720p und 1080p',
           '720p:720,1080p:1080,4K &middot; 2&times; credits:2160' in _ui157
@@ -6288,8 +6316,11 @@ def _scenario_betrieb(tmp):
           and 'def _log_start' in _sv197)
     check('v197: der Admin liest nur das ENDE (kein 5-MB-Request)',
           "f.seek(gr - 262144)" in _sv197)
+    # v203-sec: isdigit() und int() akzeptieren nicht dieselbe Menge
+    # ('2'.isdigit() ist True, int('2') wirft). Jetzt Vergleich gegen die
+    # erlaubten Werte, ganz ohne Umrechnung.
     check('v197: der Log-Teil wird validiert (kein Pfad-Durchgriff)',
-          "not teil.isdigit()" in _sv197)
+          "teil not in {str(i) for i in range(1, LOG_KEEP + 1)}" in _sv197)
     check('v197: das Panel hat eine Logs-Ansicht',
           'async function loadLogs' in _adm197 and 'logs:loadLogs' in _adm197)
 
@@ -6561,6 +6592,151 @@ def _scenario_betrieb(tmp):
     check('v202: nach dem Ansehen ist sie weg',
           _c202.get('/api/me').json()['support_neu'] == 0)
     del os.environ['DVE_ADMIN']
+
+    # ======= v203-sec: Audit-Befunde ====================================
+    # Zwei unabhaengige Audits (neue Flaeche seit v193 / Identitaet + Geld +
+    # Infrastruktur) haben 30 Befunde bestaetigt. Hier stehen die Tests zu
+    # denen, die sofort gefixt wurden.
+    _sv203 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    os.environ['DVE_ADMIN'] = 'testkey_v203'
+    _c203 = _TC198(_SV198.app, base_url='https://test')
+    _H203 = {'X-Admin-Key': 'testkey_v203'}
+
+    # (1) DER WICHTIGSTE TEST: KEIN /api/admin/*-Endpunkt darf ohne Key
+    # antworten. Der gefundene Fehler war `_admin_ok(request)` als nackte
+    # Anweisung - die Funktion gibt nur bool zurueck und wirft nicht, der
+    # Riegel heisst `_require_admin`. Eine Quelltext-Suche findet das nicht
+    # zuverlaessig (beide Namen stehen da), ein Aufruf schon. Der Test laeuft
+    # ueber ALLE Routen, damit ein neuer Endpunkt gar nicht erst durchrutscht.
+    _offen203 = []
+    for _rt in _SV198.app.routes:
+        _p = getattr(_rt, 'path', '')
+        if not _p.startswith('/api/admin/') or '{' in _p:
+            continue
+        for _meth in (getattr(_rt, 'methods', None) or set()):
+            if _meth not in ('GET', 'POST'):
+                continue
+            try:
+                _r = (_c203.get(_p) if _meth == 'GET'
+                      else _c203.post(_p, data={}))
+            except Exception:
+                continue
+            # 403 = richtig abgewiesen. 422 = FastAPI vermisst Pflichtfelder,
+            # BEVOR der Handler laeuft - dann ist der Riegel nicht bewiesen,
+            # aber es fliesst auch nichts ab; solche Faelle werden unten mit
+            # Pflichtfeldern nachgefasst, hier zaehlen nur echte Antworten.
+            if _r.status_code not in (403, 422, 429):
+                _offen203.append(f'{_meth} {_p} -> {_r.status_code}')
+    check('v203-sec: KEIN Admin-Endpunkt antwortet ohne Key',
+          not _offen203, '; '.join(_offen203[:5]))
+    # Die Rundfahrt oben hat die neue Admin-Bremse ausgeloest (viele
+    # Fehlversuche von derselben IP). Fuer die naechsten Einzelpruefungen
+    # zuruecksetzen, sonst antwortet der Server 429 statt 403 - das waere
+    # richtig, aber es pruefte die falsche Zusage.
+    for _k in [k for k in _SV198._REG_ATTEMPTS if k.startswith('admin:')]:
+        _SV198._REG_ATTEMPTS.pop(_k, None)
+    check('v203-sec: mit Key antwortet er weiterhin',
+          _c203.get('/api/admin/alerts', headers=_H203).status_code == 200)
+    check('v203-sec: der schreibende Alerts-Endpunkt ist ebenfalls dicht',
+          _c203.post('/api/admin/alerts/read', data={'id': 0}).status_code == 403)
+    for _k in [k for k in _SV198._REG_ATTEMPTS if k.startswith('admin:')]:
+        _SV198._REG_ATTEMPTS.pop(_k, None)
+    import re as _re203      # eigener Import: _re195 steht in einem SPAETEREN
+                             # Block (v196-Lehre - nie auf Variablen aus einem
+                             # anderen Abschnitt stuetzen)
+    check('v203-sec: _admin_ok steht nirgends mehr als alleinige Schranke',
+          not _re203.search(r'^\s+_admin_ok\(request\)\s*$', _sv203, _re203.M))
+    # Eine doppelt registrierte Route verdeckt den Riegel der zweiten.
+    _pfade203 = [f"{m} {getattr(r, 'path', '')}"
+                 for r in _SV198.app.routes
+                 for m in (getattr(r, 'methods', None) or set())]
+    check('v203-sec: keine Route ist doppelt registriert',
+          len(_pfade203) == len(set(_pfade203)),
+          str([p for p in _pfade203 if _pfade203.count(p) > 1][:3]))
+
+    # (2) Admin-Key: Bremse + kein Absturz bei exotischem Header
+    class _Req203:
+        def __init__(self, v):
+            self.headers = {'x-admin-key': v}
+    check('v203-sec: ein Key mit Umlaut gibt False statt eines 500ers',
+          _SV198._admin_ok(_Req203('schlüssel')) is False)
+    _codes203 = [_c203.get('/api/admin/jobs',
+                           headers={'X-Admin-Key': f'falsch{_i}'}).status_code
+                 for _i in range(13)]
+    check('v203-sec: nach 10 Fehlversuchen bremst der Admin-Zugang',
+          _codes203[0] == 403 and _codes203[-1] == 429,
+          f'{_codes203[:2]} -> {_codes203[-2:]}')
+    del os.environ['DVE_ADMIN']
+
+    # (3) Konto-Vorbelegung ueber Google
+    _mail203 = f'opfer{int(_tm197.time())}@test.invalid'
+    _SV198._create_user(_mail203, 'AngreiferPw123', 'angreifer203')
+    _uid203, _ = _SV198._upsert_google_user('gsub-' + _mail203, _mail203, 'Opfer')
+    _con203 = _SV198._db()
+    _row203 = _con203.execute('SELECT pw_hash, verified FROM users WHERE id = ?',
+                              (_uid203,)).fetchone()
+    _sess203 = _con203.execute('SELECT COUNT(*) c FROM sessions WHERE user_id = ?',
+                               (_uid203,)).fetchone()['c']
+    _con203.close()
+    check('v203-sec: Google-Login entwertet das Passwort eines unbestaetigten '
+          'Kontos (Konto-Vorbelegung)',
+          not _SV198._verify_pw('AngreiferPw123', _row203['pw_hash']))
+    check('v203-sec: das uebernommene Konto gilt danach als bestaetigt',
+          bool(_row203['verified']))
+    check('v203-sec: bestehende Sitzungen des Kontos sind beendet', _sess203 == 0)
+    # Das Konto selbst bleibt - sonst verlaere ein echter Kunde seine Bibliothek.
+    check('v203-sec: das Konto wird uebernommen, nicht geloescht',
+          _uid203 is not None and _row203 is not None)
+
+    # (4) Nutzerdaten, die in die Engine laufen
+    _m203 = _SV198.sanitize_moments({'3': {'power': 10 ** 9, 'n': 9999,
+                                           'fx': 'behind'},
+                                     '5': {'power': 3, 'fx': 'boese'},
+                                     'kaputt': {'power': 2}})
+    check('v203-sec: ein absurdes power faellt weg (Gauss-Radius ins Unendliche)',
+          'power' not in _m203.get('3', {}) and _m203['3']['fx'] == 'behind')
+    check('v203-sec: ein unbekanntes fx faellt weg, gueltige Werte bleiben',
+          'fx' not in _m203.get('5', {}) and _m203['5']['power'] == 3)
+    check('v203-sec: ein kaputter Schluessel verwirft nicht den ganzen Plan',
+          'kaputt' not in _m203 and len(_m203) == 2)
+    check('v203-sec: die Momente werden beim Speichern geprueft',
+          'sanitize_moments(json.loads(moments))' in _sv203)
+    _b203 = _SV198.sanitize_blocks([{'i0': 0, 'i1': 2, 'start': 0, 'end': 36000}],
+                                   dauer=12.0)
+    check('v203-sec: Blockzeiten werden gegen die Videodauer geklemmt',
+          _b203[0]['end'] <= 17.0, f"end={_b203[0]['end']}")
+    _b203b = _SV198.sanitize_blocks(
+        [{'i0': i, 'i1': i + 1, 'start': 0, 'end': 100} for i in range(10)],
+        dauer=100)
+    check('v203-sec: hoechstens vier Bloecke teilen sich ein Zeitfenster',
+          sum(1 for b in _b203b if 'start' in b) == _SV198._BLK_GLEICH,
+          f"{sum(1 for b in _b203b if 'start' in b)} gleichzeitig")
+    check('v203-sec: die Engine klemmt power selbst (Desktop schreibt dieselbe Datei)',
+          "'power': max(1, min(3, int(" in open(
+              os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
+    # (5) Geld: der Preis haengt am Ledger, nicht an einem ueberschreibbaren Feld
+    check('v203-sec: es gibt eine Ledger-Wahrheit fuer den gebuchten Preis',
+          'def _render_gebucht(' in _sv203)
+    check('v203-sec: eine Hochstufung nach der Abrechnung wird abgelehnt',
+          'Hochstufung nach der Abrechnung abgelehnt' in _sv203
+          and "j['cost_sec'] = _schon" in _sv203)
+    check('v203-sec: der Demo-Job traegt seine Beschraenkung am Job, nicht am mode',
+          "'demo': (mode == 'demo')," in _sv203
+          and "if j.get('demo') or mode == 'demo':" in _sv203
+          and _sv203.count("Demo videos cannot be re-rendered") == 2)
+
+    # (6) Sitzungen
+    check('v203-sec: ein Passwortwechsel beendet alle anderen Sitzungen',
+          'con.execute("DELETE FROM sessions WHERE user_id = ?", (u[\'id\'],))'
+          in _sv203)
+    check('v203-sec: der Restore leert die Sitzungstabelle',
+          "c.execute('DELETE FROM sessions')" in _sv203)
+    check('v203-sec: der Code-Pruefer ist gebremst (Rateorakel)',
+          "bucket='code'" in _sv203)
+    check('v203-sec: die Transkript-Neuanalyse kennt den Flooding-Riegel',
+          "raise HTTPException(409, 'This job is already running.')" in _sv203
+          and _sv203.count('_enqueue_guard(') >= 3)
 
     check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
           'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)

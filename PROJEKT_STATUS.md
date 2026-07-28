@@ -3,6 +3,70 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v203-sec SICHERHEITS-AUDIT: 30 bestaetigte Befunde, die schweren gefixt.**
+  Zwei Workflows mit je einem Gegenpruefer, der jeden Befund WIDERLEGEN sollte
+  (16 Roh-Befunde verworfen). Teil 1: die Flaeche seit v193. Teil 2: Identitaet,
+  Geld gegen den heutigen Code, Infrastruktur, Lieferkette, Vollstaendigkeit.
+  - **CRITICAL, live nachgestellt: `/api/admin/alerts` war ANONYM lesbar und
+    beschreibbar.** Der Handler rief `_admin_ok(request)` als nackte Anweisung
+    auf - die Funktion gibt nur `bool` zurueck und wirft nicht. Der Riegel
+    heisst `_require_admin`. Beweis: GET ohne jeden Header -> HTTP 200 mit der
+    kompletten Stoerungstabelle; POST /alerts/read -> alle Meldungen abgehakt.
+    Seit v197 schreibt der globale Exception-Handler JEDEN Traceback dorthin,
+    dazu stehen Stripe-Session- und Charge-IDs, Job- und Konto-Nummern drin.
+    Verschaerfend: die Route war ZWEIMAL registriert; Starlette bedient die
+    zuerst registrierte, die mit `_require_admin` gesicherte Variante war toter
+    Code - beim Lesen sah der Pfad damit abgesichert aus. Der Fehler stammt aus
+    v147, wurde aber durch v197 (Tracebacks in dieselbe Tabelle) erst richtig
+    gefaehrlich.
+  - **HIGH Konto-Vorbelegung ueber Google.** `_upsert_google_user` verknuepfte
+    still ueber die E-Mail, ohne zu pruefen, ob das vorhandene Konto seine
+    Adresse je bestaetigt hatte - und das Passwort blieb gueltig. Jeder konnte
+    auf eine fremde Adresse registrieren und warten; meldete sich der echte
+    Inhaber per Google an, teilten sich beide das Konto (Library, Transkripte,
+    Original-Uploads, gekaufte Credits). Jetzt: verknuepfen ja, aber altes
+    Passwort entwerten, Konto als bestaetigt markieren, alle Sitzungen beenden.
+    Bewusst NICHT loeschen - gehoerte es einem echten Kunden, behaelt er alles.
+  - **HIGH 4K zum halben Preis + Guthaben aus der Erstattung.** In
+    `render_start` wurden `cfg_overrides`, `uhd` und `cost_sec` gesetzt, BEVOR
+    abgerechnet wird - und die Abrechnung ist ueber `_render_charged`
+    idempotent, bucht also nicht nach. Zwei Aufrufe genuegten. Und weil
+    Erstattungen ueber `_job_cost(j)` laufen, gab ein nachtraeglich erhoehtes
+    `cost_sec` bei einem Abbruch mehr zurueck als je gezahlt wurde. Der Preis
+    haengt jetzt am Ledger (`_render_gebucht`).
+  - **HIGH Demo-Job -> voller Gratis-Render.** 'demo' stand nur im Feld `mode`,
+    und `mode` schreibt jeder spaetere Aufruf um. Ueber den Momente-Editor
+    wurde daraus ein voller Render: Wasserzeichen weg, 10-Sekunden-Grenze weg,
+    nichts bezahlt. Jetzt `j['demo']` an der Anlage, gelesen im Worker, und
+    beide Re-Render-Pfade lehnen Demo-Jobs ab.
+  - **Dazu gefixt:** Admin-Key ohne Bremse (jetzt 10 Fehlversuche/15 min +
+    Panel-Meldung), Passwortwechsel beendete keine anderen Sitzungen (30 Tage
+    lang!), `/api/pruefe-code` war ein ungebremstes Rateorakel auf
+    4-stellige Codes, die Transkript-Neuanalyse kannte den Flooding-Riegel
+    nicht (jeder Lauf loescht den Regie-Cache = neue OpenAI-Kosten),
+    Nutzer-Momente gingen UNGEPRUEFT in die Engine (`power` ungeklemmt treibt
+    den Gauss-Radius ins Unendliche), Blockzeiten waren nicht gegen die
+    Videodauer geklemmt (quadratische Renderzeit), Restore holte widerrufene
+    Sitzungen zurueck, ein Admin-Key mit Umlaut ergab einen 500er,
+    `logs?teil=hoch-2` ebenso (isdigit() und int() akzeptieren nicht dieselbe
+    Menge).
+  - **Der wichtigste neue Test** faehrt ALLE `/api/admin/*`-Routen ohne Key ab
+    und prueft auf Abweisung, plus eine Pruefung auf doppelt registrierte
+    Routen. Eine Quelltext-Suche findet diesen Fehlertyp nicht - beide Namen
+    (`_admin_ok`/`_require_admin`) stehen ja im Code.
+  - **Zwei Alt-Tests hielten das falsche Verhalten fest** und wurden ehrlich
+    nachgezogen: v132 verlangte ausdruecklich "Passwort bleibt gueltig" nach
+    der Google-Verknuepfung - also genau die Luecke. v128 prueft den
+    Admin-Riegel jetzt in seiner neuen Schreibweise.
+  OFFEN (bewusst nicht angefasst, weil Betrieb/Architektur - Ismets Freigabe
+  noetig): Container laeuft als root ohne Haertung waehrend er fremde Videos
+  parst; Abhaengigkeiten ungepinnt ohne Lockfile; Modelle ohne Pruefsumme von
+  `resolve/main`; Offsite-Backup laeuft im Standardbetrieb GAR NICHT
+  (haengt an DVE_ALERTS=all, Standard ist 'important') und waere unverschluesselt;
+  kein Sicherheits-Ereignisprotokoll; Render-Subprozess erbt alle Geheimnisse;
+  keine Grenze fuer Aufloesung/FPS; `upload_chunk` puffert bis 500 MB im RAM;
+  kein Notaus; keine Missbrauchs-Erkennung; kein security.txt.
+  Tests: 1431/1431 logic (27 neu) + Renders 7/1/5/2 + GUI.
 - **v202 SUPPORT RAUS AUS DEM KONTO + BENACHRICHTIGUNG.** Ismets Ansage.
   (1) **Eigene Seite.** Support stand als Block ganz unten unter "Account",
       zwischen Passwort aendern und Konto loeschen. Dort sucht ihn niemand.

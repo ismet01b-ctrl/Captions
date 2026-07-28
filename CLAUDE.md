@@ -739,6 +739,45 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   `admin.html`). Und ein `try/catch` um einen Renderer muss loggen: ein
   leeres Banner sieht sonst aus wie "nichts vorhanden".
 
+## Sicherheit: Lehren aus dem Audit (v203-sec)
+Zwei adversariell gegengeprüfte Audits, 30 bestätigte Befunde. Die Muster,
+die sich wiederholen:
+- **Ein Wächter, der nicht wirft, ist keiner.** `_admin_ok` gibt nur `bool`
+  zurück; als nackte Anweisung aufgerufen (`_admin_ok(request)`) sicherte sie
+  GAR NICHTS. Zwei Endpunkte waren dadurch anonym erreichbar. Der werfende
+  Riegel heißt `_require_admin` — `_admin_ok` ist nur der Test dahinter.
+  Der Selftest fährt jetzt ALLE `/api/admin/*`-Routen ohne Key ab; eine
+  Quelltext-Suche findet diesen Fehler nicht (beide Namen stehen ja da).
+- **Eine doppelt registrierte Route verdeckt den Riegel der zweiten.**
+  Starlette bedient die ZUERST registrierte; die gesicherte Variante war
+  toter Code und sah beim Lesen nach Absicherung aus. Selftest prüft auf
+  doppelte Pfade.
+- **Der Riegel gehört VOR die Mutation.** In `render_start` wurden Preis und
+  Qualität gesetzt, bevor abgerechnet wurde — und die Abrechnung ist
+  idempotent, buchte also nicht nach: 4K zum 1080p-Preis, und über die
+  Erstattung ließ sich Guthaben erzeugen. Der Preis hängt jetzt am LEDGER
+  (`_render_gebucht`), nicht an einem überschreibbaren Feld. Derselbe
+  Fehlertyp wie v159/v170/v176.
+- **Eine Eigenschaft, die schützt, darf nicht in einem Feld stehen, das der
+  nächste Request umschreibt.** 'demo' stand nur in `mode`; über den
+  Momente-Editor wurde daraus ein voller Gratis-Render ohne Wasserzeichen.
+  Jetzt `j['demo']`, gesetzt bei der Anlage, gelesen im Worker.
+- **Ein unbestätigtes Konto ist kein Eigentumsnachweis.** Der Google-Login
+  verknüpfte still über die E-Mail — wer vorher auf eine fremde Adresse
+  registrierte, teilte sich danach das Konto mit dem echten Inhaber. Google
+  hat die Adresse bewiesen, also übernimmt es sie: verknüpfen, altes Passwort
+  entwerten, Sitzungen beenden. NICHT löschen (sonst verlöre ein echter Kunde
+  seine Bibliothek).
+- **Nutzerdaten, die in die Engine laufen, gehören geklemmt — auf BEIDEN
+  Seiten.** `sanitize_moments` am Server, plus harte Klemmung in `render.py`:
+  die Desktop-App schreibt dieselbe Datei. Ein ungeklemmtes `power` treibt den
+  Gauß-Radius ins Unendliche und legt den einen Worker lahm.
+- **Ein Passwortwechsel muss die anderen Sitzungen beenden.** Der Reset-Weg
+  tat es seit jeher, der Wechsel-Weg nicht — die beiden widersprachen sich.
+- **Ein Test kann eine Lücke als Zusage festschreiben.** Der v132-Test
+  verlangte ausdrücklich "Passwort bleibt gültig" nach der Google-Verknüpfung.
+  Wer einen Test anpasst, muss prüfen, ob er die Regel schützt oder den Fehler.
+
 ## Betrieb: Deploy, Backup, Logs, Schlange (v197)
 - **Das Gate kennt ZWEI Fehler (v201).** `exit 1` = Tests rot, Code kaputt,
   Deploy abbrechen. `exit 2` = das Gate konnte gar nicht laufen (Image startet
@@ -836,7 +875,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1404/1404 grün (Stand v202)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1431/1431 grün (Stand v203-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

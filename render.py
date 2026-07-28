@@ -12230,9 +12230,19 @@ def main():
             for i, m in edits.items():
                 if i in kw:
                     e = fx_map.get(i) if isinstance(fx_map.get(i), dict) else {}
+                    # v203-sec: power und n HART klemmen. Sie kommen aus
+                    # _momente.json, und die schreibt nicht nur der Server -
+                    # auch die Desktop-App und jeder, der die Datei von Hand
+                    # anfasst. 'power' geht linear in den Radius des
+                    # Hintergrund-Blurs; ein grosser Wert ergibt einen
+                    # Gauss-Kernel, dessen Berechnung pro BILD Minuten dauert.
+                    # Die Engine darf sich auf keine vorgelagerte Pruefung
+                    # verlassen - gueltig ist 1..3 (POW-Tabelle) und 1..8.
                     fx_map[i] = {'fx': m.get('fx', e.get('fx', 'behind')),
-                                 'power': int(m.get('power', e.get('power', 2))),
-                                 'n': int(m.get('n', e.get('n', 1)))}
+                                 'power': max(1, min(3, int(
+                                     m.get('power', e.get('power', 2)) or 2))),
+                                 'n': max(1, min(8, int(
+                                     m.get('n', e.get('n', 1)) or 1)))}
                     # v141: 'nah' (angesagte Nahaufnahme) gehoert dazu - ohne
                     # das Flag rutschte der Text nach einem Editor-Roundtrip
                     # wieder weg vom Kopf.

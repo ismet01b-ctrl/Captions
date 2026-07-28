@@ -1686,6 +1686,19 @@ def _render_charged(user_id, jid):
     return row is not None
 
 
+def _render_gebucht(user_id, jid):
+    """v203-sec: Wie viele Sekunden wurden fuer diesen Job wirklich abgebucht?
+    Der Ledger ist die Wahrheit ueber den Preis - nicht ein Feld am Job, das
+    ein spaeterer Aufruf ueberschreiben kann. 0 heisst: noch nichts gebucht."""
+    con = _db()
+    row = con.execute(
+        "SELECT COALESCE(SUM(-delta_sec), 0) s FROM ledger "
+        "WHERE user_id = ? AND grund LIKE ? AND delta_sec < 0",
+        (user_id, f'Render {jid} %')).fetchone()
+    con.close()
+    return int(row['s'] or 0)
+
+
 def _reserve_credits(uid, need, jid, grund=None):
     """v92: Guthaben beim Upload ATOMAR reservieren (nicht erst nach dem
     Render abziehen). Ein einziges bedingtes UPDATE zieht 'need' nur ab,
@@ -1895,7 +1908,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v202-support-seite'
+DVE_BUILD = 'v203-sec'
 
 
 @app.middleware('http')
@@ -3653,7 +3666,9 @@ def run_job(jid):
 
     _extra = []
     _uid = j.get('user_id')
-    if mode == 'demo':
+    # v203-sec: aus j['demo'] statt aus mode. mode wird umgeschrieben, das Flag
+    # nicht - es ueberlebt jeden Editor-Roundtrip und den Neustart (set_state).
+    if j.get('demo') or mode == 'demo':
         # v89: anonyme Kostprobe - immer Wasserzeichen, nur die ersten 10s.
         _extra = ['--watermark', '--duration', '10']
     elif _uid and not _has_purchased(_uid):
@@ -4431,11 +4446,43 @@ def _upsert_google_user(sub, email, name, ref=''):
         row = con.execute("SELECT id, disabled FROM users WHERE google_sub = ?",
                           (sub,)).fetchone()
         if not row:
-            row = con.execute("SELECT id, disabled FROM users WHERE email = ?",
-                              (email,)).fetchone()
+            row = con.execute("SELECT id, disabled, verified FROM users "
+                              "WHERE email = ?", (email,)).fetchone()
             if row:
+                # v203-sec KONTO-VORBELEGUNG. Hier wurde bisher STILL verknuepft,
+                # egal ob das vorhandene Konto seine Adresse je bestaetigt hatte -
+                # und das Passwort dieses Kontos galt danach unveraendert weiter.
+                # Die Registrierung verlangt keine Bestaetigung, jeder konnte also
+                # ein Konto auf eine FREMDE Adresse anlegen und warten. Meldete
+                # sich der echte Inhaber spaeter mit Google an, landete er in genau
+                # diesem Konto, und beide teilten es sich: der Angreifer saehe
+                # Library, Transkripte und Original-Uploads und koennte gekaufte
+                # Credits verbrauchen, ohne dass irgendetwas auffaellt.
+                # (Am Code nachgestellt: nach der Verknuepfung war _verify_pw mit
+                # dem Angreifer-Passwort weiterhin True.)
+                #
+                # Google hat die Adresse bewiesen (email_verified wird im Callback
+                # geprueft), ein unbestaetigtes Konto hat gar nichts bewiesen.
+                # Also uebernimmt Google die Adresse: verknuepfen, aber das alte
+                # Passwort unbrauchbar machen und alle Anmeldungen beenden.
+                # NICHT loeschen - gehoerte das Konto doch einem echten Kunden,
+                # der nur nie bestaetigt hat, behaelt er Bibliothek und Guthaben.
+                # Ein Kauf war ohne Bestaetigung ohnehin nicht moeglich.
+                _war_unbestaetigt = not _row_get(row, 'verified')
                 con.execute("UPDATE users SET google_sub = ? WHERE id = ?",
                             (sub, row['id']))
+                if _war_unbestaetigt:
+                    con.execute("UPDATE users SET pw_hash = ?, verified = 1 "
+                                "WHERE id = ?",
+                                (_hash_pw(secrets.token_urlsafe(24)), row['id']))
+                    con.execute("DELETE FROM resets WHERE user_id = ?", (row['id'],))
+                    con.execute("DELETE FROM verify_tokens WHERE user_id = ?",
+                                (row['id'],))
+                    print(f'Google-Login uebernimmt unbestaetigtes Konto zu {email}: '
+                          f'altes Passwort verworfen, Sitzungen beendet.')
+                # In BEIDEN Faellen alle bestehenden Anmeldungen beenden - sass
+                # dort jemand anderes, endet das hier.
+                con.execute("DELETE FROM sessions WHERE user_id = ?", (row['id'],))
                 con.commit()
         if row:
             if _row_get(row, 'disabled'):
@@ -4925,8 +4972,8 @@ def api_support_reply(tid: int, request: Request, message: str = Form(...)):
 
 
 @app.post('/api/change_password')
-def api_change_password(request: Request, old: str = Form(...),
-                        new: str = Form(...)):
+def api_change_password(request: Request, response: Response,
+                        old: str = Form(...), new: str = Form(...)):
     """v80m: Passwort im eingeloggten Zustand aendern."""
     u = _require_user(request)
     if not _verify_pw(old, u['pw_hash']):
@@ -4936,9 +4983,19 @@ def api_change_password(request: Request, old: str = Form(...),
     con = _db()
     con.execute("UPDATE users SET pw_hash = ? WHERE id = ?",
                 (_hash_pw(new), u['id']))
+    # v203-sec: Bis v202 blieb nach einem Passwortwechsel JEDE andere Sitzung
+    # gueltig - bis zu 30 Tage lang. Wer sein Passwort aendert, weil er einen
+    # Fremdzugriff vermutet, erreichte damit genau nichts. Der Reset-Weg macht
+    # es seit jeher richtig (DELETE FROM sessions); die beiden Pfade
+    # widersprachen sich. Jetzt fliegen alle raus - auch die eigene -, und der
+    # Aendernde bekommt sofort eine frische Sitzung, damit er eingeloggt bleibt.
+    con.execute("DELETE FROM sessions WHERE user_id = ?", (u['id'],))
     con.commit()
     con.close()
-    return {'ok': True}
+    tok, _exp = _create_session(u['id'])
+    response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
+                        secure=True, max_age=SESSION_DAYS * 86400, path='/')
+    return {'ok': True, 'sessions_beendet': True}
 
 
 def _purge_user_db(uid):
@@ -5139,7 +5196,16 @@ def datenschutz_legacy():
 
 
 @app.post('/api/pruefe-code')
-def pruefe(code: str = Form(...)):
+def pruefe(request: Request, code: str = Form(...)):
+    # v203-sec: Alt-Zugangscodes sind NAME-1234 - also 10.000 Moeglichkeiten je
+    # erratbarem Namensteil, und dieser Endpunkt sagte bei einem Treffer sofort
+    # Name und Restkontingent. Ohne Anmeldung, ohne Bremse war das ein
+    # Rateorakel: ein Skript findet einen gueltigen Code in Minuten, und ein
+    # Code ist eine vollwertige zweite Identitaet. Dieselbe Bremse wie beim
+    # Login, nur strenger, weil hier niemand ein eigenes Konto hat.
+    if not _rate_limit_ok(_client_ip(request), window_sec=900,
+                          max_attempts=10, bucket='code'):
+        raise HTTPException(429, 'Too many attempts. Please try again later.')
     ok, msg = check_code(code)
     if not ok:
         return JSONResponse({'ok': False, 'msg': msg}, status_code=403)
@@ -5580,8 +5646,15 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
                 overrides['output']['height'] = 1080
         except Exception:
             overrides['output'].pop('height', None)
+    # v203-sec: 'demo' stand bis v202 NUR im Feld mode - und mode wird von
+    # jedem spaeteren Aufruf ueberschrieben. Ein Demo-Job (anonym, nichts
+    # reserviert, kein Konto) liess sich ueber /api/moments in einen vollen
+    # Render umschreiben: Wasserzeichen weg, 10-Sekunden-Grenze weg, bezahlt
+    # nichts. Die Eigenschaft gehoert an den JOB, nicht an einen Zustand, den
+    # der naechste Request umschreibt.
     JOBS[jid] = {'id': jid, 'input': src, 'look': look, 'code': (code or '').strip(),
                  'user_id': uid, 'vhash': _vh, 'mode': mode,
+                 'demo': (mode == 'demo'),
                  'cfg_overrides': overrides, 'status': 'wartet', 'progress': 0.0,
                  'phase': 'Queued …', 'dauer': round(dur, 1),
                  'uhd': bool(_uhd) if uid else False,
@@ -5767,6 +5840,9 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
     uid = u['id'] if u else None
     if j.get('user_id') != uid:
         raise HTTPException(403, 'Not your upload.')
+    if j.get('demo'):
+        raise HTTPException(403, 'Demo videos cannot be re-rendered. '
+                                 'Create a free account and upload again.')
     if mode not in ('full', 'analyze'):
         mode = 'full'
     if look in LOOKS:
@@ -5796,8 +5872,38 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
                 overrides['output']['height'] = 1080
         except Exception:
             overrides['output'].pop('height', None)
-    j['uhd'] = bool(_uhd2)
-    j['cost_sec'] = cost_seconds(j.get('dauer', 0), uhd=_uhd2)
+    # v203-sec PREIS NACH DER ABRECHNUNG. Bis v202 wurden cfg_overrides, uhd
+    # und cost_sec BEDINGUNGSLOS hier gesetzt - und das Abbuch-Gate darunter
+    # ist ueber _render_charged idempotent, bucht also nicht nach. Zwei Aufrufe
+    # genuegten: erst 1080p starten (wird zum einfachen Satz gebucht), dann
+    # denselben Job mit 4K-Overrides erneut - der Render lief in 4K, bezahlt
+    # war 1080p. Schlimmer noch: Erstattungen gehen ueber _job_cost(j), also
+    # ueber cost_sec. Ein nachtraeglich erhoehtes cost_sec gab bei einem
+    # fehlgeschlagenen Render MEHR zurueck, als je bezahlt wurde - aus einem
+    # Abbruch liess sich Guthaben erzeugen. Derselbe Fehlertyp wie v159/v170:
+    # der Riegel sass hinter der Mutation.
+    # Ist bereits gebucht, gilt der GEBUCHTE Stand. Wer 4K will, startet einen
+    # neuen Render und zahlt ihn.
+    _schon = _render_gebucht(uid, jid) if (u and mode == 'full') else 0
+    if _schon > 0:
+        _neu_kosten = cost_seconds(j.get('dauer', 0), uhd=bool(_uhd2))
+        if _neu_kosten > _schon:
+            _uhd2 = bool(j.get('uhd'))          # Hochstufung faellt zurueck
+            if isinstance(overrides.get('output'), dict):
+                overrides['output'].pop('quality', None)
+                try:
+                    if int(overrides['output'].get('height') or 0) > 1080:
+                        overrides['output']['height'] = 1080
+                except Exception:
+                    overrides['output'].pop('height', None)
+            j['cfg_overrides'] = overrides
+            print(f'Render {jid}: Hochstufung nach der Abrechnung abgelehnt '
+                  f'(gebucht {_schon}s, verlangt {_neu_kosten}s).')
+        j['uhd'] = bool(_uhd2)
+        j['cost_sec'] = _schon               # Erstattung = wirklich Gezahltes
+    else:
+        j['uhd'] = bool(_uhd2)
+        j['cost_sec'] = cost_seconds(j.get('dauer', 0), uhd=_uhd2)
     if u and mode == 'full':
         need = _job_cost(j)
         # v95: Das ist der Abbuch-Punkt des Pre-Flows. Der Upload (mode 'pre')
@@ -6015,9 +6121,10 @@ def get_blocks(jid: str, request: Request):
 # theoretische Luecke mehr, sondern der Normalfall.
 _BLK_FX = ('', 'behind', 'cascade', 'blurin', 'outline', 'ground')
 _BLK_MAX = 4000            # Bloecke je Job (3 Min Sprache sind rund 200)
+_BLK_GLEICH = 4            # v203-sec: hoechstens so viele Bloecke gleichzeitig
 
 
-def sanitize_blocks(roh, max_i=10 ** 6):
+def sanitize_blocks(roh, max_i=10 ** 6, dauer=None):
     """Blockplan auf erlaubte Werte reduzieren. Unbekannte Felder fallen weg,
     kaputte Eintraege werden uebersprungen - aber ein einzelner Fehler darf
     nie den ganzen Plan verwerfen (genau das passiert heute in render.py mit
@@ -6057,18 +6164,109 @@ def sanitize_blocks(roh, max_i=10 ** 6):
                 e['groesse'] = round(max(0.5, min(2.0, g)), 3)
         except (TypeError, ValueError):
             pass
+        # v203-sec: Bis v202 wurde nur gegen 36000 s geklemmt - nie gegen die
+        # Laenge des Videos. Ein Kunde konnte JEDEN Block auf start=0/end=36000
+        # setzen; dann ist in jedem Bild jeder Block aktiv, und die Zeichen-
+        # schleife laeuft pro Bild ueber alle Woerter statt ueber drei. Aus
+        # linearer Renderzeit wird quadratische - der EINE Worker haengt
+        # stundenlang, alle anderen Kunden warten. Die Obergrenze ist jetzt die
+        # bezahlte Videodauer (mit kleinem Zuschlag fuer das Ausklingen).
+        _max_t = 36000.0 if not dauer else max(1.0, float(dauer)) + 5.0
         for k in ('start', 'end'):
             v = b.get(k)
             if v in (None, ''):
                 continue
             try:
-                e[k] = round(max(0.0, min(36000.0, float(v))), 3)
+                e[k] = round(max(0.0, min(_max_t, float(v))), 3)
             except (TypeError, ValueError):
                 pass
         if 'start' in e and 'end' in e and e['end'] <= e['start']:
             e.pop('start'), e.pop('end')
         aus.append(e)
     aus.sort(key=lambda x: (x['i0'], x['i1']))
+    # Zweiter Riegel, unabhaengig von der Dauer: hoechstens _BLK_GLEICH Bloecke
+    # duerfen sich EIN Zeitfenster teilen. Wer mehr setzt, verliert seine
+    # eigenen Zeiten (Rueckfall auf die Wortzeiten) - die Bloecke bleiben.
+    _offen = []
+    for e in aus:
+        if 'start' not in e or 'end' not in e:
+            continue
+        _offen = [o for o in _offen if o['end'] > e['start']]
+        if len(_offen) >= _BLK_GLEICH:
+            e.pop('start', None), e.pop('end', None)
+            continue
+        _offen.append(e)
+    return aus
+
+
+_MOM_FX = ('', 'behind', 'cascade', 'blurin', 'outline', 'ground', 'zoom')
+_MOM_MAX = 2000
+
+
+def sanitize_moments(roh):
+    """v203-sec: Fuer 'blocks' gab es sanitize_blocks, fuer 'moments' im SELBEN
+    Request nichts - der Nutzer-JSON ging unveraendert auf die Platte und von
+    dort in die Engine. 'power' wurde dabei ungeklemmt uebernommen und geht
+    linear in den Radius des Hintergrund-Blurs ein: ein grosser Wert ergibt
+    einen Gauss-Kernel, dessen Berechnung pro BILD Minuten dauert. Ein einziger
+    Render legt damit den einen Worker lahm.
+
+    Gleiche Bauart wie sanitize_blocks: unbekannte Felder fallen weg, ein
+    kaputter Eintrag wird uebersprungen und verwirft NIE den ganzen Plan.
+    Der Schluessel ist der Wort-Index (String im JSON)."""
+    if not isinstance(roh, dict):
+        return {}
+    aus = {}
+    for k, m in list(roh.items())[:_MOM_MAX]:
+        if not isinstance(m, dict):
+            continue
+        try:
+            i = int(k)
+        except (TypeError, ValueError):
+            continue
+        if not 0 <= i <= 10 ** 6:
+            continue
+        e = {}
+        f = str(m.get('fx') or '').strip().lower()
+        if f in _MOM_FX and f:
+            e['fx'] = f
+        try:
+            p = int(m.get('power') or 0)
+            if p in (1, 2, 3):
+                e['power'] = p
+        except (TypeError, ValueError):
+            pass
+        try:
+            n = int(m.get('n') or 0)
+            if 1 <= n <= 8:
+                e['n'] = n
+        except (TypeError, ValueError):
+            pass
+        a = str(m.get('anim') or '').strip().lower()
+        if a and a in ANIM_IDS:
+            e['anim'] = a
+        for feld, erlaubt in (('szene', ('', 'wasser', 'boden', 'wand', 'himmel',
+                                         'person')),
+                              ('lage', ('', 'liegend', 'stehend', 'frei'))):
+            v = str(m.get(feld) or '').strip().lower()
+            if v in erlaubt and v:
+                e[feld] = v
+        for feld, laenge in (('text', 200), ('emoji', 16), ('objekt', 60)):
+            v = m.get(feld)
+            if isinstance(v, str) and v.strip():
+                e[feld] = v.strip()[:laenge]
+        for feld in ('nah', 'intent', 'user_pick'):
+            if m.get(feld) is True:
+                e[feld] = True
+        anker = m.get('anker')
+        if isinstance(anker, (list, tuple)) and len(anker) == 2:
+            try:
+                e['anker'] = [round(max(0.0, min(1.0, float(anker[0]))), 4),
+                              round(max(0.0, min(1.0, float(anker[1]))), 4)]
+            except (TypeError, ValueError):
+                pass
+        if e:
+            aus[str(i)] = e
     return aus
 
 
@@ -6317,6 +6515,16 @@ async def save_transcript(request: Request, jid: str,
         except OSError:
             pass
     if str(reanalyze) not in ('0', 'false', 'False', ''):
+        # v203-sec: Der v127-sec-Flooding-Riegel stand nur in save_and_render,
+        # nicht in diesem direkt benachbarten Pfad - derselbe Fehlertyp wie
+        # v159/v170/v176 (Riegel am falschen Gate). Ohne ihn konnte ein Konto
+        # denselben Job beliebig oft neu einreihen; jeder Lauf loescht vorher
+        # den Regie-Cache, die KI-Regie lief also jedes Mal neu gegen die
+        # OpenAI-API. Das kostet ECHTES Geld und blockiert den einen Worker.
+        if j.get('status') in ('wartet', 'laeuft'):
+            raise HTTPException(409, 'This job is already running.')
+        _u_tr = _current_user(request)
+        _enqueue_guard(_u_tr['id'] if _u_tr else None)
         j['mode'] = 'analyze'
         j['status'] = 'wartet'
         j['progress'] = 0.0
@@ -6424,6 +6632,12 @@ async def save_and_render(request: Request, jid: str,
     j = JOBS.get(jid)
     if not j:
         raise HTTPException(404, 'Unknown job.')
+    if j.get('demo'):
+        # v203-sec: siehe _finalize_upload. Ein Demo-Job hat nie jemand bezahlt
+        # und gehoert keinem Konto - er darf nicht in einen vollen Render
+        # umgeschrieben werden.
+        raise HTTPException(403, 'Demo videos cannot be re-rendered. '
+                                 'Create a free account and upload again.')
     # v127-sec: Re-Render ist "inklusive" (nicht erneut abgerechnet) - deshalb
     # hier gegen Missbrauch absichern: nicht doppelt einreihen, waehrend schon
     # ein Render laeuft, und pro Konto nicht die Queue fluten (freie Renders auf
@@ -6434,7 +6648,9 @@ async def save_and_render(request: Request, jid: str,
     _u0 = _current_user(request)
     _enqueue_guard(_u0['id'] if _u0 else None)
     try:
-        mom = json.loads(moments)
+        mom = sanitize_moments(json.loads(moments))
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(400, 'Moments JSON invalid.')
     base = os.path.splitext(j['input'])[0]
@@ -6459,7 +6675,7 @@ async def save_and_render(request: Request, jid: str,
             _blk_roh = json.loads(blocks)
         except Exception:
             raise HTTPException(400, 'Blocks JSON invalid.')
-        _blk = sanitize_blocks(_blk_roh)
+        _blk = sanitize_blocks(_blk_roh, dauer=j.get('dauer'))
         _blk_path = base + '_bloecke.json'
         if _blk:
             json.dump(_blk, open(_blk_path, 'w', encoding='utf-8'),
@@ -6522,7 +6738,12 @@ async def save_and_render(request: Request, jid: str,
 def _admin_ok(request: Request):
     key = os.environ.get('DVE_ADMIN', '').strip()
     given = request.headers.get('x-admin-key', '')
-    return bool(key) and hmac.compare_digest(given, key)
+    # v203-sec: compare_digest auf str verlangt reines ASCII - ein Header mit
+    # Umlaut oder Emoji warf einen TypeError und damit einen 500er (der seit
+    # v197 auch noch eine Zeile in die alerts-Tabelle schrieb). Ueber Bytes
+    # verglichen gibt es ein sauberes 403. Zeitkonstant bleibt es.
+    return bool(key) and hmac.compare_digest(given.encode('utf-8', 'ignore'),
+                                             key.encode('utf-8'))
 
 
 def _owner_ok(request: Request):
@@ -6938,8 +7159,32 @@ def admin_codes(request: Request):
 
 
 def _require_admin(request: Request):
-    if not _admin_ok(request):
-        raise HTTPException(403, 'Admin key missing or wrong.')
+    """v203-sec: Der Admin-Key war die einzige Schranke vor Aktionen, die seit
+    v197b ALLE Konten ersetzen koennen (backup/upload) - und er hatte weder
+    Bremse noch Spur. Der Kunden-Login ist seit v92 mit 20 Versuchen/15 min
+    gedeckelt; der maechtigere Zugang war ungebremst durchprobierbar, und ein
+    Fehlversuch hinterliess nichts, was Ismet je gesehen haette.
+    Jetzt: 10 Fehlversuche pro Viertelstunde und IP, danach dicht - und die
+    erste Meldung landet im Panel (der 1-Stunden-Deckel in _notify_admin
+    verhindert die Flut). Ein RICHTIGER Key laeuft nicht ins Limit, weil nur
+    Fehlversuche gezaehlt werden."""
+    if _admin_ok(request):
+        return
+    # Die Bremse darf den Riegel nie ersetzen: scheitert die IP-Ermittlung
+    # (exotischer Aufrufer, interner Aufruf ohne Verbindung), gilt weiterhin
+    # 403. Ein 500er an dieser Stelle waere schlimmer als keine Bremse.
+    try:
+        ip = _client_ip(request)
+    except Exception:
+        ip = 'unknown'
+    if not _rate_limit_ok(ip, window_sec=900, max_attempts=10, bucket='admin'):
+        _notify_admin('adminfail', 'Admin-Key wird durchprobiert',
+                      f'Mehr als 10 falsche Admin-Keys in 15 Minuten von {ip}.\n'
+                      f'Weitere Versuche von dieser Adresse werden abgewiesen.\n'
+                      f'Wenn das nicht du warst: DVE_ADMIN in der .env aendern '
+                      f'und den Container neu starten.', mail=False)
+        raise HTTPException(429, 'Too many attempts.')
+    raise HTTPException(403, 'Admin key missing or wrong.')
 
 
 def _admin_purchaser_ids():
@@ -7089,8 +7334,17 @@ def admin_overview(request: Request):
 @app.get('/api/admin/alerts')
 def admin_alerts(request: Request, limit: int = 100, offen: int = 0):
     """v147: Stoerungsliste. Ersetzt die Fehler-Mail - Render-Fehler und
-    Timeouts stehen hier, nicht mehr im Postfach."""
-    _admin_ok(request)
+    Timeouts stehen hier, nicht mehr im Postfach.
+
+    v203-sec: Hier stand `_admin_ok(request)` als nackte Anweisung. `_admin_ok`
+    gibt nur einen bool zurueck und WIRFT NICHT - der Rueckgabewert wurde
+    verworfen, der Endpunkt war damit anonym aus dem Internet lesbar. Live
+    nachgestellt: HTTP 200 ohne jeden Header. Seit v197 schreibt der globale
+    Exception-Handler zusaetzlich jeden Traceback in genau diese Tabelle, dazu
+    stehen dort Stripe-Session- und Charge-IDs, Job- und Konto-Nummern.
+    Der Riegel heisst `_require_admin` - `_admin_ok` ist der bool-Test dahinter
+    und darf NIE allein als Schranke stehen."""
+    _require_admin(request)
     lim = min(max(int(limit), 1), 500)
     con = _db()
     q = ("SELECT id, schluessel, betreff, text, gemailt, gelesen, created_at "
@@ -7106,8 +7360,11 @@ def admin_alerts(request: Request, limit: int = 100, offen: int = 0):
 
 @app.post('/api/admin/alerts/read')
 def admin_alerts_read(request: Request, id: int = Form(0)):
-    """Eine Stoerung oder alle als gelesen markieren (id=0 -> alle)."""
-    _admin_ok(request)
+    """Eine Stoerung oder alle als gelesen markieren (id=0 -> alle).
+    v203-sec: derselbe verworfene Rueckgabewert wie in admin_alerts - dieser
+    Endpunkt SCHREIBT sogar und war anonym benutzbar (jemand konnte alle
+    Stoerungsmeldungen abhaken, bevor Ismet sie sieht)."""
+    _require_admin(request)
     con = _db()
     if int(id) > 0:
         con.execute("UPDATE alerts SET gelesen=1 WHERE id=?", (int(id),))
@@ -7517,8 +7774,15 @@ def admin_system(request: Request):
     }
 
 
-@app.get('/api/admin/alerts')
-def admin_alerts(request: Request):
+@app.get('/api/admin/mailthrottle')
+def admin_mailthrottle(request: Request):
+    """v203-sec: Diese Funktion hing bis v202 auf '/api/admin/alerts' - demselben
+    Pfad wie admin_alerts weiter oben. Starlette bedient die ZUERST registrierte
+    Route, also war diese hier toter Code und die ungeschuetzte Variante die
+    wirksame. Beim Lesen sah es so aus, als sei der Pfad abgesichert (hier steht
+    ja _require_admin) - eine Doppelregistrierung versteckt den Fehler doppelt.
+    Sie zeigt etwas anderes als admin_alerts (den Mail-Deckel im Prozess, nicht
+    die Tabelle) und bekommt deshalb einen eigenen, ehrlichen Pfad."""
     _require_admin(request)
     now = time.time()
     items = [{'key': k, 'ago_min': round((now - ts) / 60)}
@@ -8067,6 +8331,17 @@ def _restore_users_db(pfad):
         src.backup(dst)
     finally:
         dst.close(); src.close()
+    # v203-sec: Die Sicherung enthaelt die sessions-Tabelle. Ohne dieses
+    # Loeschen gilt nach dem Zurueckspielen der ANMELDE-Zustand des
+    # Sicherungszeitpunkts: abgemeldete Geraete waeren wieder drin, eine
+    # gesperrte Sitzung wieder gueltig. Nach einem Datenbank-Rueckwurf ist
+    # "alle melden sich neu an" die richtige Erwartung.
+    try:
+        c = sqlite3.connect(USERS_DB, timeout=30)
+        c.execute('DELETE FROM sessions')
+        c.commit(); c.close()
+    except Exception as e:
+        print(f'RESTORE: sessions konnten nicht geleert werden: {e}')
     _init_users_db()                     # Schema nachziehen (alte Sicherung)
     _ttl_drop('adm:')                    # Aggregate im Cache sind jetzt falsch
     print(f'RESTORE eingespielt: {os.path.basename(pfad)} '
@@ -8188,7 +8463,12 @@ def admin_logs(request: Request, zeilen: int = 300, teil: str = ''):
     ein 5-MB-Log darf keinen Request blockieren."""
     _require_admin(request)
     pfad = LOG_FILE if not teil else f'{LOG_FILE}.{teil}'
-    if teil and (not teil.isdigit() or not 1 <= int(teil) <= LOG_KEEP):
+    # v203-sec: isdigit() und int() akzeptieren NICHT dieselbe Menge.
+    # '²'.isdigit() ist True, int('²') wirft ValueError - das ergab einen
+    # 500er statt einer sauberen 400 und schrieb bei jedem Aufruf eine Zeile
+    # in die alerts-Tabelle. Der Vergleich gegen die erlaubten Werte kommt
+    # ganz ohne Umrechnung aus.
+    if teil and teil not in {str(i) for i in range(1, LOG_KEEP + 1)}:
         raise HTTPException(400, 'Unknown log part.')
     da = [os.path.basename(LOG_FILE)] + [
         f'{os.path.basename(LOG_FILE)}.{i}' for i in range(1, LOG_KEEP + 1)
