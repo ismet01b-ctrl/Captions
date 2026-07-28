@@ -909,10 +909,15 @@ async function loadSupport(silent){
         <span class="subtle" style="margin-left:auto">${fdt(t.updated_at||t.created_at)}</span>
       </div>
       ${verlauf}
-      <textarea class="search" id="rp${t.id}" rows="3" placeholder="Write your reply …"
-        style="width:100%;margin-top:8px"></textarea>
+      ${t.status==='closed'
+        ? `<div class="note" style="margin-top:8px">Ticket wurde geschlossen &mdash;
+             es kann nicht mehr geantwortet werden. Der Kunde sieht es noch 24 h,
+             dann verschwindet es aus seiner Liste. Zum Weiterschreiben erst
+             wieder oeffnen.</div>`
+        : `<textarea class="search" id="rp${t.id}" rows="3" placeholder="Write your reply …"
+        style="width:100%;margin-top:8px"></textarea>`}
       <div style="display:flex;gap:9px;margin-top:8px;flex-wrap:wrap">
-        <button class="btn sm" onclick="ticketReply(${t.id})">Send reply</button>
+        ${t.status==='closed' ? '' : `<button class="btn sm" onclick="ticketReply(${t.id})">Send reply</button>`}
         <button class="btn ghost sm" onclick="ticketAct(${t.id},'${t.status==='closed'?'open':'closed'}')">
           ${t.status==='closed'?'Reopen':'Close'}</button>
       </div>

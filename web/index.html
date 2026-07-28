@@ -83,7 +83,7 @@ html, body { min-height: 100%; overscroll-behavior-y: none; }
    durch - am Desktop faellt das sofort auf. color-scheme sagt dem
    Browser zusaetzlich, Scrollbalken und Formularfelder dunkel zu
    zeichnen, statt sie hell zu lassen. */
-html { background: #0d0d10; color-scheme: dark; }
+html { background: #0b0b0e; color-scheme: dark; }
 body {
   background: radial-gradient(1200px 800px at 15% -10%, rgba(255,122,26,.10), transparent 60%),
               radial-gradient(900px 600px at 100% 100%, rgba(255,122,26,.05), transparent 55%),
@@ -4593,7 +4593,7 @@ async function loadThreads() {
         </div>
         ${msgs}
         ${t.status === 'closed' ? `<div class="hint" style="margin-top:8px;">
-          This ticket is closed. Need anything else? Just open a new one.</div>`
+          Ticket closed. Need anything else? Just open a new one.</div>`
         : `<textarea id="tr${t.id}" rows="2" maxlength="5000" placeholder="Reply …"
           style="text-transform:none; resize:vertical; width:100%; margin-top:6px;"></textarea>
         <button class="btn" style="margin-top:6px; padding:7px 14px;"

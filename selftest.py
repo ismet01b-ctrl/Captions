@@ -1926,9 +1926,14 @@ def _scenario_logic(clip, transcript, tmp):
     # v212a: Am Desktop blitzte Browser-Weiss durch (Grund nur auf <body>)
     # und die Karten zogen sich ueber die ganze Fensterbreite.
     check('v212a: der dunkle Grund liegt auf <html>, kein Weiss-Blitz',
-          'html { background: #0d0d10; color-scheme: dark; }' in _idx212a)
+          'html { background: #0b0b0e; color-scheme: dark; }' in _idx212a)
     check('v212a: alle Seiten haben eine Lesebreite',
           '.page-head, .page-body, .main { max-width: 1040px;' in _idx212a)
+
+    _adm212 = open(_os210.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v212b: das Panel zeigt bei geschlossenen Tickets kein Antwortfeld',
+          "t.status==='closed'" in _adm212
+          and 'Ticket wurde geschlossen' in _adm212)
 
     check('Prompt: Sperrliste im Selbstbezug ausgesetzt',
           'Sperrliste AUSGESETZT' in R.REGIE_PROMPT
