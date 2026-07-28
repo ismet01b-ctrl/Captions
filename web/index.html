@@ -3038,7 +3038,11 @@ function renderLookPreview() {
   // v184-Hausmasse, dieselben Zahlen wie in compose_flow
   const szKey = H * 0.105 * skal * (viral ? 1.55 : 1);
   const szNorm = H * 0.050 * skn * (viral ? 2.00 : 1);
-  const kontur = Math.max(0, Math.min(2.5, parseFloat(e.caption_kontur) ?? 1));
+  // parseFloat(undefined) ist NaN, und NaN ?? 1 bleibt NaN - der alte
+  // Rueckfall griff nie. || 1 waere genauso falsch, es machte aus einer
+  // bewusst abgeschalteten Kontur (0) wieder eine.
+  const _kRoh = parseFloat(e.caption_kontur);
+  const kontur = Math.max(0, Math.min(2.5, Number.isFinite(_kRoh) ? _kRoh : 0));
   const zone = parseFloat(e.caption_zone) || 0.25;
   const wpg = Math.max(1, parseInt(e.words_per_group, 10) || 3);
   const hold = Math.max(0.35, parseFloat(e.chunk_hold_min) || 0.75);

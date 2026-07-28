@@ -3,6 +3,24 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v199 UMRISS WEG.** Ismets Ansage: die Kontur um die Schriften raus.
+  `effects.caption_kontur` steht auf 0, auch im Viral-Preset. Gemessen am
+  Sprite: dunkle Randpixel 13234 -> 4776, Tinten-Box 674x73 -> 669x68. Was
+  uebrig bleibt, ist der SCHLAGSCHATTEN, kein Rest-Saum - belegt ueber den
+  Versatz der dunklen Pixel gegen die Glyphe (mit Kontur 1.3 px vertikal, also
+  rundherum; ohne 13.9 px nach unten, also versetzt).
+  EHRLICH: die Kontur war der Lesbarkeits-Garant aus v181 (ohne sie auf
+  grauem Stoff/Beton 1.5-3.1:1 gemessen, WCAG-Norm 4.5:1). Der Ausgleich
+  laeuft jetzt allein ueber die Textfarbe - `fit_caption_color` bekommt
+  `kontur=False` und darf auf mittelgrauem Grund wieder nach DUNKEL kippen
+  (gemessen 5.4:1 statt 3.0:1 mit weissem Text). Heisst: auf hellerem
+  Material werden Captions oefter dunkel statt hell. Wenn das stoert, ist es
+  eine Zahl (`caption_kontur: 1.0`).
+  Drei bestehende Tests massen die Kontur gegen die Datei-Config und waren
+  damit ab sofort inhaltslos (beide Faelle identisch) - sie schalten sie
+  jetzt fuer ihre Messung selbst ein. Dazu ein Vorschau-Fehler mitgenommen:
+  `parseFloat(undefined) ?? 1` ergibt NaN, der Rueckfall griff nie.
+  Tests: 1377/1377 logic (4 neu) + Renders 7/1/5/2 + GUI.
 - **v198 SUPPORT-VERLAUF: antworten im Panel.** Ein Ticket war bis v197 eine
   Einbahnstrasse: der Kunde schrieb, die Antwort lief per Mail aus Ismets
   Postfach (Reply-To am Benachrichtigungs-Mail). Das funktioniert, aber die

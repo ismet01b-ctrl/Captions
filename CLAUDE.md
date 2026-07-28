@@ -505,6 +505,17 @@ vergangene Woerter dimmen NICHT, Pop 10 %. Kein Schreibschrift-Akzent.
   entscheidet Ismet (Referenzen messen statt raten).
 
 ### Lesbarkeit + aktives Wort (v181/v182)
+**v199: die Kontur ist AUS** (`caption_kontur: 0`, Ismets Ansage "die
+outlines bei den Schriften weg" - auch im Viral-Preset). Der Kontrast haengt
+damit allein an der Textfarbe: `fit_caption_color` bekommt `kontur=False`
+und kippt auf hellem Untergrund wieder nach dunkel, statt hell zu bleiben.
+Auf mittelgrauem Grund ist das die schwaechere Loesung (gemessen 5.4:1 statt
+weiss bei 3.0:1 - der Text wird dort also dunkel). Der Abschnitt darunter
+beschreibt, warum es sie gab; die Mechanik bleibt ueber den Regler erreichbar.
+Wer Tests anfasst, die die Kontur MESSEN, muss sie sich dafuer selbst
+einschalten - mit der Datei-Config sind beide Faelle jetzt identisch und der
+Test bewiese nichts (drei Tests sind genau darauf reingefallen).
+
 **Kontur ist Pflicht, nicht Deko.** Ein versetzter Schlagschatten trägt auf
 grauem Stoff nicht — gemessen 1.5 bis 3.1:1, Norm ist 4.5:1. `caption_kontur`
 zeichnet einen dunklen Saum auf der HINTEREN Ebene (0.055 der Schriftgröße);
@@ -780,7 +791,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1373/1373 grün (Stand v198)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1377/1377 grün (Stand v199)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

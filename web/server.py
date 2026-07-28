@@ -1895,7 +1895,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v198-support-verlauf'
+DVE_BUILD = 'v199-kein-umriss'
 
 
 @app.middleware('http')
@@ -2585,7 +2585,12 @@ def build_config(look, overrides=None):
                 'caption_satz_collage': False,
                 'caption_layout': 'rows',
                 'caption_seite': 'mitte',
-                'caption_kontur': 1.5,
+                # v199: auch hier aus. Im Viral-Template ist der Saum
+                # eigentlich konstitutiv (gelbes Karaoke-Wort auf hellem
+                # Material), aber Ismets Ansage galt den Schriften, nicht
+                # einem Look. Eine Zahl zurueck, wenn das Template darunter
+                # leidet.
+                'caption_kontur': 0,
                 'caption_flow': True,
                 # Markt-Zone: mittig-unten (0.58 H). Die Haus-Zone 0.25 H
                 # ("ueber dem Kopf") liest sich im Viral-Kontext wie ein

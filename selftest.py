@@ -5582,8 +5582,13 @@ def _scenario_betrieb(tmp):
                                    encoding='utf-8'))
     check('v181: die Kontrast-Norm steht auf 4.5:1, nicht mehr auf 2.2',
           float(_cfg181['effects']['caption_contrast']) >= 4.5)
-    check('v181: die Kontur ist an und regelbar',
-          float(_cfg181['effects']['caption_kontur']) > 0)
+    # v199: die Kontur ist AUS (Ismets Ansage). Der Test prueft jetzt, dass
+    # der Schalter existiert und einen gueltigen Wert traegt - nicht mehr,
+    # dass er an ist. Dass die Kontur WIRKT, wenn man sie einschaltet,
+    # steht unveraendert in Abschnitt (2).
+    check('v199: die Kontur ist abgeschaltet',
+          float(_cfg181['effects']['caption_kontur']) == 0,
+          f"caption_kontur = {_cfg181['effects']['caption_kontur']}")
     check('v182: das aktive Wort ist an und abschaltbar',
           _cfg181['effects'].get('caption_aktivwort') is True)
 
@@ -5616,7 +5621,11 @@ def _scenario_betrieb(tmp):
     _cfg_k0 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
                                    encoding='utf-8'))
     _cfg_k0['effects']['caption_kontur'] = 0.0
-    _a_mit = R.Sprites(_cfg181, 1280, 720).text('THING', 55, (245, 245, 245))[0]
+    # v199: nicht mehr die Datei-Config als "mit" nehmen - dort steht jetzt 0.
+    _cfg_k1 = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    _cfg_k1['effects']['caption_kontur'] = 1.0
+    _a_mit = R.Sprites(_cfg_k1, 1280, 720).text('THING', 55, (245, 245, 245))[0]
     _a_ohne = R.Sprites(_cfg_k0, 1280, 720).text('THING', 55, (245, 245, 245))[0]
     _dunkel_mit = float(((_a_mit[..., :3].max(axis=2) < 60)
                          & (_a_mit[..., 3] > 120)).sum())
@@ -5627,6 +5636,30 @@ def _scenario_betrieb(tmp):
           f"mit {_dunkel_mit:.0f} vs. ohne {_dunkel_ohne:.0f}")
     check('v181: die Kontur laesst sich wirklich abschalten',
           _dunkel_ohne < _dunkel_mit)
+    # v199: was ohne Kontur an dunklen Pixeln uebrig bleibt, ist der
+    # SCHLAGSCHATTEN - er sitzt versetzt, ein Umriss laege rundherum.
+    # Ohne diese Probe koennte ein Rest-Saum als "Schatten" durchgehen.
+    def _versatz199(arr):
+        _d = np.nonzero((arr[..., :3].max(axis=2) < 60) & (arr[..., 3] > 120))
+        _h = np.nonzero((arr[..., :3].min(axis=2) > 200) & (arr[..., 3] > 200))
+        return abs(float(_d[0].mean() - _h[0].mean()))
+    check('v199: ohne Kontur bleibt nur der versetzte Schatten',
+          _versatz199(_a_ohne) > _versatz199(_a_mit) * 2,
+          f"ohne {_versatz199(_a_ohne):.1f} px vs. mit {_versatz199(_a_mit):.1f} px")
+    # Gemessen wird die TINTE, nicht das Sprite-Rechteck: dessen Polsterung
+    # ist fest, der Saum waechst nur die gesetzten Pixel (v194-Lehre).
+    def _inkbox199(arr):
+        _y, _x = np.nonzero(arr[..., 3] > 40)
+        return int(_x.max() - _x.min() + 1), int(_y.max() - _y.min() + 1)
+    check('v199: die Tinte wird ohne Kontur schmaler und niedriger',
+          _inkbox199(_a_ohne) < _inkbox199(_a_mit),
+          f"{_inkbox199(_a_ohne)} < {_inkbox199(_a_mit)}")
+    check('v199: auch der Viral-Look traegt keinen Saum mehr',
+          "'caption_kontur': 0," in open(os.path.join(HERE, 'web', 'server.py'),
+                                         encoding='utf-8').read())
+    check('v199: die Vorschau faellt nicht auf 1 zurueck, wenn 0 gemeint ist',
+          'Number.isFinite(_kRoh) ? _kRoh : 0' in open(
+              os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read())
 
     # (3) AKTIVES WORT: Quelltext-Garantien. Das schon gesprochene Wort
     # dimmt, das aktive bleibt voll und bekommt einen abklingenden Pop.
@@ -6951,7 +6984,12 @@ def _scenario_betrieb(tmp):
     check('v189: der Schalter steht in der Config und ist standardmaessig aus',
           _c189['effects'].get('caption_kontur_key') is False)
     # Und es wirkt messbar: dunkle Randpixel am grossen Wort brechen ein.
-    _S189 = R.Sprites(_c189, 1080, 1920)
+    # v199: die globale Kontur steht jetzt auf 0 - mit der Datei-Config waeren
+    # beide Faelle identisch und der Test bewiese nichts. Hier geht es um den
+    # SCHALTER am Schluesselwort, also wird die Kontur dafuer eingeschaltet.
+    _c189k = dict(_c189); _c189k['effects'] = dict(_c189['effects'])
+    _c189k['effects']['caption_kontur'] = 1.0
+    _S189 = R.Sprites(_c189k, 1080, 1920)
     _mit = _S189.text('HEUTE', 180, (245, 245, 245), kontur=None)[0]
     _ohne = _S189.text('HEUTE', 180, (245, 245, 245), kontur=False)[0]
     _dm = float(((_mit[..., :3].max(axis=2) < 60) & (_mit[..., 3] > 120)).sum())
@@ -7061,6 +7099,9 @@ def _scenario_betrieb(tmp):
           '_kfill = ((0, 0, 0, 238) if max(color[:3]) >= 128' in _r187)
     _cfg_d = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
                                   encoding='utf-8'))
+    # v199: Kontur global aus - fuer DIESE Pruefung (welche FARBE der Saum
+    # bekommt) muss sie an sein, sonst gibt es keinen Saum zu messen.
+    _cfg_d['effects']['caption_kontur'] = 1.0
     _a_hell = R.Sprites(_cfg_d, 1080, 1920).text('WORT', 70, (245, 245, 245))[0]
     _a_dkl = R.Sprites(_cfg_d, 1080, 1920).text('WORT', 70, (20, 20, 22))[0]
     _saum_h = float(((_a_hell[..., :3].max(axis=2) < 60) & (_a_hell[..., 3] > 120)).sum())

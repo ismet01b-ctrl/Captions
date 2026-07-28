@@ -96,7 +96,12 @@ effects:
   # Kontrast unabhaengig vom Untergrund - ein versetzter Schlagschatten
   # allein reicht auf grauem Stoff oder Beton nicht (gemessen 1.5-3.1:1,
   # Norm ist 4.5:1). 1.0 = Hausmass, 0 = aus, bis 2.5 dicker.
-  caption_kontur: 1.0
+  # v199: AUS (Ismets Ansage "die outlines bei den Schriften weg"). Der
+  # Kontrast haengt damit allein an der Textfarbe: fit_caption_color
+  # bekommt kontur=False und kippt auf hellem Untergrund wieder nach
+  # dunkel, statt hell zu bleiben (v181-Regel). Auf mittelgrauem Grund
+  # bleibt es die schwaechere Loesung - das ist der Preis, nicht ein Bug.
+  caption_kontur: 0
   # v189: Umriss auch am grossen Schluesselwort? Standard AUS - dort traegt
   # die Flaeche den Kontrast, der Saum machte das Wort plakativ statt
   # gesetzt. true = Umriss auch dort (Alt-Verhalten v181-v188).
