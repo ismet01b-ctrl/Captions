@@ -6349,6 +6349,89 @@ def _scenario_betrieb(tmp):
     check('v197b: der Restore verlangt auch im Panel die Tippbestaetigung',
           "Type RESTORE to confirm" in _adm197)
 
+    # ======= v198: Support-Verlauf statt Einbahnstrasse ==================
+    # Ein Ticket war bis v197 EINE Nachricht. Die Antwort lief per Mail aus
+    # Ismets Postfach: sie stand nirgends, das Panel zeigte ewig die Frage,
+    # und eine Rueckfrage des Kunden kam als NEUES Ticket ohne Bezug.
+    _sv198 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _adm198 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    _ui198 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    import server as _SV198
+    check('v198: es gibt eine Nachrichten-Tabelle',
+          'CREATE TABLE IF NOT EXISTS ticket_messages' in _sv198)
+    check('v198: Alt-Tickets bekommen ihre erste Nachricht nachgetragen',
+          'WHERE NOT EXISTS (SELECT 1 FROM ticket_messages' in _sv198)
+    check('v198: die Nachrichten gehen bei der Kontoloeschung mit (DSGVO)',
+          'DELETE FROM ticket_messages WHERE ticket_id IN' in _sv198)
+    check('v198: der Factory-Reset loescht erst die Kinder, dann die Tickets',
+          _sv198.index("'ticket_messages', 'tickets'") > 0)
+    check("v198: 'answered' ist ein gueltiger Status",
+          "status not in ('open', 'closed', 'answered')" in _sv198)
+
+    # Der eigentliche Beweis: die ganze Unterhaltung ueber echte Aufrufe.
+    from fastapi.testclient import TestClient as _TC198
+    _c198 = _TC198(_SV198.app, base_url='https://test')   # secure-Cookie -> https
+    _mail198 = f'sup{int(_tm197.time())}@test.invalid'
+    _c198.post('/api/register', data={'email': _mail198, 'password': 'passwort123',
+                                      'name': 'Testkunde'})
+    _c198.post('/api/login', data={'email': _mail198, 'password': 'passwort123'})
+    _r198 = _c198.post('/api/support', data={'subject': 'Render haengt',
+                                             'message': 'Bleibt bei 40 Prozent stehen.'})
+    check('v198: das Ticket wird angelegt', _r198.status_code == 200, _r198.text[:120])
+    _tid198 = _r198.json()['ticket']
+    # Den Key SELBST setzen. Ein Test, der sich auf eine von aussen gesetzte
+    # Umgebung verlaesst, ueberspringt sich still - genau das ist in v194b
+    # passiert und faellt beim Lesen der Zusammenfassung niemandem auf.
+    os.environ['DVE_ADMIN'] = 'testkey_v198'
+    _H198 = {'X-Admin-Key': 'testkey_v198'}
+    if True:
+        _p198 = _c198.get('/api/admin/tickets', headers=_H198).json()
+        _t198 = [t for t in _p198['tickets'] if t['id'] == _tid198][0]
+        check('v198: das Panel sieht den Verlauf, nicht nur den Rumpftext',
+              len(_t198['messages']) == 1 and _t198['messages'][0]['von'] == 'kunde')
+        _a198 = _c198.post(f'/api/admin/tickets/{_tid198}/reply',
+                           data={'text': 'Lag an der Warteschlange, laeuft wieder.'},
+                           headers=_H198)
+        check('v198: aus dem Panel antworten geht', _a198.status_code == 200, _a198.text[:120])
+        _k198 = _c198.get('/api/support/tickets').json()
+        _mine = [t for t in _k198['items'] if t['id'] == _tid198][0]
+        check('v198: der Kunde sieht die Antwort im selben Ticket',
+              [m['von'] for m in _mine['messages']] == ['kunde', 'admin']
+              and _mine['status'] == 'answered')
+        check('v198: eine ungelesene Antwort wird gezaehlt', _k198['ungelesen'] >= 1)
+        _rr198 = _c198.post(f'/api/support/tickets/{_tid198}/reply',
+                            data={'message': 'Danke, passt jetzt.'})
+        check('v198: die Rueckfrage bleibt IM Ticket und oeffnet es wieder',
+              _rr198.status_code == 200)
+        _t198 = [t for t in _c198.get('/api/admin/tickets', headers=_H198).json()['tickets']
+                 if t['id'] == _tid198][0]
+        check('v198: kein neues Ticket fuer die Rueckfrage',
+              len(_t198['messages']) == 3 and _t198['status'] == 'open',
+              f"{len(_t198['messages'])} Nachrichten, Status {_t198['status']}")
+        check('v198: eine leere Antwort wird abgelehnt',
+              _c198.post(f'/api/admin/tickets/{_tid198}/reply', data={'text': ' '},
+                         headers=_H198).status_code == 400)
+        check('v198: ohne Admin-Key geht gar nichts',
+              _c198.post(f'/api/admin/tickets/{_tid198}/reply', data={'text': 'hi'}
+                         ).status_code == 403)
+    del os.environ['DVE_ADMIN']
+    check('v198: ein fremdes Ticket ist nicht erreichbar',
+          _c198.post('/api/support/tickets/999999/reply',
+                     data={'message': 'fremd'}).status_code == 404)
+    check('v198: das Panel hat ein Antwortfeld je Ticket',
+          'function ticketReply(' in _adm198 and 'Send reply' in _adm198)
+    check('v198: eine nicht verschickte Mail wird im Panel gemeldet',
+          'could not be sent' in _adm198 and "'gemailt': gemailt" in _sv198)
+    check('v198: die App zeigt den Verlauf und kann antworten',
+          'id="supThreads"' in _ui198 and 'function loadThreads(' in _ui198
+          and 'function threadReply(' in _ui198)
+    check('v198: die App benutzt ihren eigenen Escaper',
+          '${escHtml(m.text)}' in _ui198)
+    check('v198: der Verlauf wird beim Oeffnen des Kontos geladen',
+          'loadThreads();                                 // v198' in _ui198)
+    check('v198: wartende Tickets stehen als Zaehler in der Seitenleiste',
+          "setBadge('support', d.tickets_open" in _adm198)
+
     check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
           'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)
 

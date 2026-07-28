@@ -450,6 +450,33 @@ def _init_users_db():
                 "status TEXT NOT NULL DEFAULT 'open', "
                 "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_tickets_status ON tickets(status, created_at)")
+    # v198 SUPPORT-VERLAUF. Ein Ticket war bis v197 eine Einbahnstrasse: der
+    # Kunde schrieb, die Antwort lief per Mail aus Ismets Postfach. Damit stand
+    # die halbe Unterhaltung nirgends, eine Rueckfrage des Kunden erzeugte ein
+    # NEUES Ticket, und wer geantwortet hat, wusste nur das Postfach.
+    # Jede Nachricht ist jetzt eine Zeile; `tickets.body` bleibt als erste.
+    con.execute("CREATE TABLE IF NOT EXISTS ticket_messages ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "ticket_id INTEGER NOT NULL, "
+                "von TEXT NOT NULL, "                 # 'kunde' | 'admin'
+                "text TEXT NOT NULL, "
+                "gelesen INTEGER NOT NULL DEFAULT 0, "  # vom Kunden gesehen
+                "created_at INTEGER NOT NULL)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_tmsg ON ticket_messages"
+                "(ticket_id, created_at)")
+    # Nachtrag fuer Alt-Tickets: die erste Nachricht steckt in tickets.body.
+    # Ohne das faengt jeder alte Verlauf mit der Antwort an.
+    try:
+        offen = con.execute(
+            "SELECT t.id, t.body, t.created_at FROM tickets t "
+            "WHERE NOT EXISTS (SELECT 1 FROM ticket_messages m "
+            "WHERE m.ticket_id = t.id)").fetchall()
+        for r in offen:
+            con.execute("INSERT INTO ticket_messages (ticket_id, von, text, "
+                        "gelesen, created_at) VALUES (?, 'kunde', ?, 1, ?)",
+                        (r[0], r[1], r[2]))
+    except Exception as e:
+        print(f'Ticket-Nachtrag uebersprungen: {type(e).__name__}: {e}')
     # v196 ANKUENDIGUNGEN. Bis v195 gab es keinen Weg, Kunden etwas zu sagen,
     # ausser einer Mail an alle - und die ist fuer "Wartung heute 20 Uhr" oder
     # "neuer Look da" das falsche Mittel (zu laut, nicht abbestellbar ohne
@@ -1868,7 +1895,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v197b-restore-panel'
+DVE_BUILD = 'v198-support-verlauf'
 
 
 @app.middleware('http')
@@ -4776,6 +4803,8 @@ def api_support(request: Request, subject: str = Form(''),
         "created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?)",
         (u['id'], u['email'], subject, message, now, now))
     tid = cur.lastrowid
+    con.execute("INSERT INTO ticket_messages (ticket_id, von, text, gelesen, "
+                "created_at) VALUES (?, 'kunde', ?, 1, ?)", (tid, message, now))
     con.commit(); con.close()
     # An den Betreiber: Reply-To = Kunde, damit man direkt antworten kann.
     try:
@@ -4800,6 +4829,84 @@ def api_support(request: Request, subject: str = Form(''),
     except Exception as e:
         print(f'Support-Bestaetigung an Kunde fehlgeschlagen: {e}')
     return {'ok': True, 'ticket': tid}
+
+
+def _ticket_verlauf(con, tid):
+    """Nachrichten eines Tickets, aelteste zuerst."""
+    return [{'id': r['id'], 'von': r['von'], 'text': r['text'],
+             'gelesen': bool(r['gelesen']), 'created_at': r['created_at']}
+            for r in con.execute(
+                "SELECT id, von, text, gelesen, created_at FROM ticket_messages "
+                "WHERE ticket_id = ? ORDER BY created_at, id", (tid,)).fetchall()]
+
+
+@app.get('/api/support/tickets')
+def api_support_tickets(request: Request):
+    """v198: Der Kunde sieht seinen eigenen Verlauf in der App. Vorher stand
+    die Antwort nur in seinem Postfach - und eine Rueckfrage darauf erzeugte
+    ein neues Ticket ohne Bezug zum alten."""
+    u = _require_user(request)
+    con = _db()
+    tk = con.execute(
+        "SELECT id, subject, status, created_at, updated_at FROM tickets "
+        "WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50",
+        (u['id'],)).fetchall()
+    aus = []
+    for t in tk:
+        aus.append({'id': t['id'], 'subject': t['subject'], 'status': t['status'],
+                    'created_at': t['created_at'], 'updated_at': t['updated_at'],
+                    'messages': _ticket_verlauf(con, t['id'])})
+    neu = con.execute(
+        "SELECT COUNT(*) c FROM ticket_messages m JOIN tickets t "
+        "ON t.id = m.ticket_id WHERE t.user_id = ? AND m.von = 'admin' "
+        "AND m.gelesen = 0", (u['id'],)).fetchone()['c']
+    con.close()
+    return {'items': aus, 'ungelesen': neu}
+
+
+@app.post('/api/support/tickets/{tid}/read')
+def api_support_read(tid: int, request: Request):
+    u = _require_user(request)
+    con = _db()
+    con.execute("UPDATE ticket_messages SET gelesen = 1 WHERE ticket_id = "
+                "(SELECT id FROM tickets WHERE id = ? AND user_id = ?)",
+                (tid, u['id']))
+    con.commit(); con.close()
+    return {'ok': True}
+
+
+@app.post('/api/support/tickets/{tid}/reply')
+def api_support_reply(tid: int, request: Request, message: str = Form(...)):
+    """Rueckfrage des Kunden im BESTEHENDEN Ticket."""
+    u = _require_user(request)
+    if not _rate_limit_ok(_client_ip(request), window_sec=3600,
+                          max_attempts=20, bucket='support'):
+        raise HTTPException(429, 'Too many messages. Please try again later.')
+    text = (message or '').strip()[:5000]
+    if len(text) < 3:
+        raise HTTPException(400, 'Please write a short message.')
+    now = int(time.time())
+    con = _db()
+    t = con.execute("SELECT id, subject FROM tickets WHERE id = ? AND user_id = ?",
+                    (tid, u['id'])).fetchone()
+    if not t:
+        con.close()
+        raise HTTPException(404, 'Unknown ticket.')
+    con.execute("INSERT INTO ticket_messages (ticket_id, von, text, gelesen, "
+                "created_at) VALUES (?, 'kunde', ?, 1, ?)", (tid, text, now))
+    # Eine Rueckfrage macht das Ticket wieder offen - sonst faellt sie aus
+    # dem Blick, weil das Panel nach offenen Tickets sortiert.
+    con.execute("UPDATE tickets SET status = 'open', updated_at = ? WHERE id = ?",
+                (now, tid))
+    con.commit(); con.close()
+    try:
+        _send_mail(SUPPORT_EMAIL or ADMIN_MAIL,
+                   f'[Support #{tid}] {t["subject"]} (reply)',
+                   f'{u["email"]} replied on ticket #{tid}:\n\n{text}',
+                   reply_to=u['email'])
+    except Exception as e:
+        print(f'Support-Rueckfrage-Mail fehlgeschlagen: {e}')
+    return {'ok': True}
 
 
 @app.post('/api/change_password')
@@ -4852,6 +4959,8 @@ def _purge_user_db(uid):
     con.execute("DELETE FROM mail_log WHERE user_id = ?", (uid,))   # v125
     # v135a: Support-Tickets enthalten Klartext-Mail + Nachrichten - 'Deletion
     # is permanent' gilt auch fuer sie.
+    con.execute("DELETE FROM ticket_messages WHERE ticket_id IN "
+                "(SELECT id FROM tickets WHERE user_id = ?)", (uid,))
     con.execute("DELETE FROM tickets WHERE user_id = ?", (uid,))
     # v196: Feedback haengt an der Person -> mitloeschen. Ankuendigungen sind
     # global und gehoeren niemandem, die bleiben.
@@ -7540,12 +7649,52 @@ def admin_tickets(request: Request, status: str = 'all', limit: int = 200):
         f"FROM tickets {where} ORDER BY (status='open') DESC, created_at DESC "
         f"LIMIT ?", (*params, limit)).fetchall()
     open_count = con.execute("SELECT COUNT(*) c FROM tickets WHERE status='open'").fetchone()['c']
+    aus = [{'id': r['id'], 'uid': r['user_id'], 'email': r['email'],
+            'subject': r['subject'], 'body': r['body'],
+            'status': r['status'], 'created_at': r['created_at'],
+            'updated_at': r['updated_at'],
+            # v198: der ganze Verlauf, nicht nur die erste Nachricht.
+            'messages': _ticket_verlauf(con, r['id'])} for r in rows]
     con.close()
-    return {'tickets': [{'id': r['id'], 'uid': r['user_id'], 'email': r['email'],
-                         'subject': r['subject'], 'body': r['body'],
-                         'status': r['status'], 'created_at': r['created_at'],
-                         'updated_at': r['updated_at']} for r in rows],
-            'open_count': open_count}
+    return {'tickets': aus, 'open_count': open_count}
+
+
+@app.post('/api/admin/tickets/{tid}/reply')
+def admin_ticket_reply(tid: int, request: Request, text: str = Form(...)):
+    """v198: Antworten AUS DEM PANEL. Bis v197 lief die Antwort ueber Ismets
+    Postfach (Reply-To am Benachrichtigungs-Mail). Das funktioniert, aber
+    dann steht die halbe Unterhaltung nirgends: das Panel zeigte die Frage
+    und nie die Antwort, und eine Rueckfrage des Kunden kam als NEUES Ticket
+    ohne Bezug. Die Antwort steht jetzt im Verlauf UND geht als Mail raus -
+    der Kunde soll nicht in die App schauen muessen, um sie zu sehen."""
+    _require_admin(request)
+    text = (text or '').strip()[:5000]
+    if len(text) < 2:
+        raise HTTPException(400, 'Empty reply.')
+    now = int(time.time())
+    con = _db()
+    t = con.execute("SELECT id, email, subject, user_id FROM tickets WHERE id = ?",
+                    (tid,)).fetchone()
+    if not t:
+        con.close()
+        raise HTTPException(404, 'Unknown ticket.')
+    con.execute("INSERT INTO ticket_messages (ticket_id, von, text, gelesen, "
+                "created_at) VALUES (?, 'admin', ?, 0, ?)", (tid, text, now))
+    con.execute("UPDATE tickets SET status = 'answered', updated_at = ? "
+                "WHERE id = ?", (now, tid))
+    con.commit(); con.close()
+    gemailt = True
+    try:
+        base = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+        _send_mail(t['email'], f'Re: {t["subject"]} (#{tid})',
+                   f'{text}\n\n'
+                   f'--\nYou can reply here: {base}/app#account\n'
+                   f'DouchkoVE Support',
+                   reply_to=SUPPORT_EMAIL or ADMIN_MAIL)
+    except Exception as e:
+        gemailt = False
+        print(f'Support-Antwort-Mail an Kunde fehlgeschlagen: {e}')
+    return {'ok': True, 'gemailt': gemailt}
 
 
 @app.post('/api/admin/factory_reset')
@@ -7558,7 +7707,8 @@ def admin_factory_reset(request: Request, confirm: str = Form('')):
     if (confirm or '').strip() != 'RESET':
         raise HTTPException(400, "Type RESET to confirm the full wipe.")
     con = _db()
-    tables = ['sessions', 'ledger', 'ledger_archive', 'purchases', 'tickets',
+    tables = ['sessions', 'ledger', 'ledger_archive', 'purchases',
+              'ticket_messages', 'tickets',            # v198: erst die Kinder
               'consents', 'resets', 'verify_tokens', 'mail_log',
               'feedback', 'announcements',                       # v196
               'credit_claims', 'referral_claims', 'users']
@@ -7597,8 +7747,10 @@ def admin_factory_reset(request: Request, confirm: str = Form('')):
 def admin_ticket_status(tid: int, request: Request, status: str = Form(...)):
     """v133c: Ticket auf open/closed setzen."""
     _require_admin(request)
-    if status not in ('open', 'closed'):
-        raise HTTPException(400, 'status must be open or closed')
+    # v198: 'answered' kommt aus der Panel-Antwort dazu. Wer den Wert hier
+    # vergisst, kann ein beantwortetes Ticket nicht mehr von Hand umsetzen.
+    if status not in ('open', 'closed', 'answered'):
+        raise HTTPException(400, 'status must be open, answered or closed')
     con = _db()
     cur = con.execute("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
                       (status, int(time.time()), tid))

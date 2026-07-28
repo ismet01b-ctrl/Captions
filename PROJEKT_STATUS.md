@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v198 SUPPORT-VERLAUF: antworten im Panel.** Ein Ticket war bis v197 eine
+  Einbahnstrasse: der Kunde schrieb, die Antwort lief per Mail aus Ismets
+  Postfach (Reply-To am Benachrichtigungs-Mail). Das funktioniert, aber die
+  halbe Unterhaltung stand nirgends - das Panel zeigte ewig die Frage und nie
+  die Antwort, niemand konnte sehen, ob ueberhaupt geantwortet wurde, und eine
+  Rueckfrage des Kunden kam als NEUES Ticket ohne Bezug zum alten.
+  Neue Tabelle `ticket_messages`; `tickets.body` bleibt die erste Nachricht,
+  Alt-Tickets bekommen sie beim Start nachgetragen (sonst faengt jeder alte
+  Verlauf mit der Antwort an).
+  - **Panel:** je Ticket der ganze Verlauf plus Antwortfeld. Die Antwort steht
+    sofort im Verlauf UND geht als Mail an den Kunden - er soll nicht in die
+    App schauen muessen, um sie zu sehen. Scheitert der Mailversand, sagt das
+    Panel es (`gemailt`), statt Erfolg zu melden. Status wird `answered`;
+    wartende Tickets stehen als Zaehler in der Seitenleiste.
+  - **App (Konto):** der Kunde sieht seine Unterhaltungen und antwortet direkt
+    darin. Seine Rueckfrage bleibt IM Ticket und setzt es wieder auf `open` -
+    sonst faellt sie aus dem Blick, weil das Panel nach offenen sortiert.
+  - DSGVO: `ticket_messages` gehen bei der Kontoloeschung mit; der
+    Factory-Reset loescht erst die Kinder, dann die Tickets.
+  Beweis: voller Durchlauf ueber echte HTTP-Aufrufe im Selftest - Ticket an,
+  Panel sieht 1 Nachricht, Antwort raus, Kunde sieht 2 und 1 ungelesen,
+  Rueckfrage rein, Panel sieht 3 im SELBEN Ticket mit Status open. Fremdes
+  Ticket 404, leere Antwort 400, ohne Admin-Key 403.
+  Tests: 1373/1373 logic (21 neu) + Renders 7/1/5/2 + GUI.
 - **v197 BETRIEB: vier Luecken, alle mit demselben Muster.** Es gab jeweils
   einen Mechanismus, aber niemand hatte je geprueft, ob er das tut, was auf
   dem Schild steht.

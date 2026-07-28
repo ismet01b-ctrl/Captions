@@ -1930,6 +1930,9 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <button class="btn" type="submit" id="btnSupport" style="align-self:flex-start; padding:9px 18px;">Send message</button>
         </form>
         <p class="hint" id="supDone" style="display:none; color:var(--acc2); margin-top:8px;"></p>
+        <!-- v198: Der Verlauf. Vorher stand die Antwort nur im Postfach, und
+             eine Rueckfrage darauf erzeugte ein neues Ticket ohne Bezug. -->
+        <div id="supThreads" style="margin-top:16px;"></div>
       </div>
 
       <div class="panel hidden" id="refPanel">
@@ -4126,6 +4129,7 @@ async function renderAccount() {
     if (d.ok) { State.user = d; State.balanceSec = d.balance_sec;
       State.verified = d.verified !== false; updateCreditHeader(d.balance_sec); }
   } catch (e) {}
+  loadThreads();                                 // v198: Support-Verlauf
   const u = State.user || {};
   const set = (id, txt) => { const e = $('#' + id); if (e) e.textContent = txt; };
   set('accUsername', u.username || u.name || '–');
@@ -4516,9 +4520,61 @@ if ($('#supportForm')) $('#supportForm').addEventListener('submit', async () => 
     done.textContent = 'Thanks! Your message (#' + d.ticket + ') was sent. We will reply to your account email.';
     done.style.display = 'block';
     toast('Message sent.', 'ok');
+    loadThreads();
   } catch (e) { toast('Connection error.', 'err'); }
   finally { btn.disabled = false; }
 });
+
+/* v198 Support-Verlauf. Ein Ticket war eine Einbahnstrasse: der Kunde schrieb,
+   die Antwort kam per Mail, und seine Rueckfrage darauf wurde ein NEUES Ticket
+   ohne Bezug zum alten. Jetzt steht die Unterhaltung an EINER Stelle - hier
+   und im Panel. Die Mail geht weiterhin raus; niemand soll in die App schauen
+   muessen, um eine Antwort zu sehen. */
+async function loadThreads() {
+  const box = $('#supThreads');
+  if (!box) return;
+  try {
+    const r = await fetch('/api/support/tickets');
+    if (!r.ok) { box.innerHTML = ''; return; }
+    const d = await r.json();
+    if (!d.items.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<h4 style="margin:0 0 8px;">Your messages</h4>' + d.items.map(t => {
+      const msgs = t.messages.map(m => `
+        <div style="margin:7px 0; padding:9px 11px; border-radius:9px; text-transform:none;
+             background:${m.von === 'admin' ? 'rgba(255,122,26,.10)' : 'rgba(255,255,255,.05)'}">
+          <div class="hint" style="font-size:11px; margin-bottom:3px;">
+            ${m.von === 'admin' ? 'DouchkoVE Support' : 'You'} · ${new Date(m.created_at * 1000).toLocaleString()}</div>
+          <div style="white-space:pre-wrap;">${escHtml(m.text)}</div>
+        </div>`).join('');
+      return `<div class="panel" style="padding:12px; margin-bottom:10px;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <b style="text-transform:none;">${escHtml(t.subject)}</b>
+          <span class="hint" style="margin-left:auto;">${t.status === 'closed' ? 'closed' : t.status === 'answered' ? 'answered' : 'waiting'}</span>
+        </div>
+        ${msgs}
+        <textarea id="tr${t.id}" rows="2" maxlength="5000" placeholder="Reply …"
+          style="text-transform:none; resize:vertical; width:100%; margin-top:6px;"></textarea>
+        <button class="btn" style="margin-top:6px; padding:7px 14px;"
+          onclick="threadReply(${t.id})">Reply</button>
+      </div>`;
+    }).join('');
+    if (d.ungelesen) {
+      d.items.forEach(t => fetch('/api/support/tickets/' + t.id + '/read', { method: 'POST' }));
+    }
+  } catch (e) { console.error('support threads:', e); box.innerHTML = ''; }
+}
+async function threadReply(tid) {
+  const box = document.getElementById('tr' + tid);
+  const txt = (box && box.value || '').trim();
+  if (txt.length < 3) { toast('Please write a short message.', 'err'); return; }
+  try {
+    const fd = new FormData(); fd.append('message', txt);
+    const r = await fetch('/api/support/tickets/' + tid + '/reply', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { toast(d.detail || 'Could not send.', 'err'); return; }
+    toast('Sent.', 'ok'); loadThreads();
+  } catch (e) { toast('Connection error.', 'err'); }
+}
 if ($('#delForm')) $('#delForm').addEventListener('submit', async () => {
   if (!confirm('This will PERMANENTLY delete your account, credits, and history. Continue?')) return;
   const isGoogle = $('#delMail') && $('#delMail').style.display !== 'none';

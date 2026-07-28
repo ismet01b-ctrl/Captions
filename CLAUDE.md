@@ -681,6 +681,14 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   KEINE Anmeldung - eine Wartungsmeldung muss auch den erreichen, der
   gerade nicht eingeloggt ist. Weggeklickt wird **pro Ankuendigung** im
   localStorage gemerkt, nie global.
+- **Ein Ticket ist ein VERLAUF (v198), keine Nachricht.** `ticket_messages`
+  ist die Quelle, `tickets.body` bleibt nur die erste Zeile. Geantwortet wird
+  im Panel; die Antwort geht ZUSAETZLICH als Mail raus (niemand soll in die
+  App schauen muessen, um sie zu sehen), und eine Rueckfrage des Kunden bleibt
+  im selben Ticket und setzt es wieder auf `open`. Status ist offen/answered/
+  closed - wer einen Wert ergaenzt, muss ihn auch in `admin_ticket_status`
+  erlauben. Alt-Tickets bekommen ihre erste Nachricht beim Start nachgetragen,
+  sonst faengt jeder alte Verlauf mit der Antwort an.
 - **Feedback ist NICHT das Ticket-System.** Ticket = Frage mit Antwort,
   Feedback = Bewertung ohne. Die Sterne haengen am fertigen Render, damit
   der LOOK mitkommt - ohne ihn ist eine Note nicht auswertbar. Eine
@@ -772,7 +780,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1352/1352 grün (Stand v197b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1373/1373 grün (Stand v198)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

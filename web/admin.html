@@ -293,6 +293,7 @@ async function refreshBadges(){
     const d=await api('/api/admin/overview');
     setBadge('alerts', d.alerts_offen||0);
     setBadge('feedback', d.feedback_offen||0);
+    setBadge('support', d.tickets_open||0);       // v198: wartende Tickets
   }catch(e){}
 }
 function navTog(){
@@ -838,20 +839,51 @@ async function newCode(){const fd=new FormData();fd.append('action','new');fd.ap
 async function codeAct(action,code){const fd=new FormData();fd.append('action',action);fd.append('code',code);try{await api('/api/admin/codes',{method:'POST',body:fd});loadCodes();}catch(e){alert(e.message);}}
 
 /* ---------- SUPPORT ---------- */
-async function loadSupport(){
-  let d;try{d=await api('/api/admin/tickets?status=all');}catch(e){el('view').innerHTML=err(e);return;}
-  const rows=d.tickets.map(t=>`<tr>
-    <td class="mono">#${t.id}</td>
-    <td>${esc(t.email)}</td>
-    <td><b>${esc(t.subject)}</b><div class="subtle" style="white-space:pre-wrap;max-width:560px;margin-top:4px">${esc(t.body)}</div></td>
-    <td>${t.status==='open'?'<span class="tag no">open</span>':'<span class="tag ok">closed</span>'}</td>
-    <td class="subtle">${fdt(t.created_at)}</td>
-    <td><button class="btn ghost sm" onclick="ticketAct(${t.id},'${t.status==='open'?'closed':'open'}')">${t.status==='open'?'Close':'Reopen'}</button></td>
-  </tr>`).join('')||'<tr><td colspan=6 class="subtle">no tickets</td></tr>';
+/* v198: Ein Ticket ist ein VERLAUF, keine einzelne Nachricht mehr. Antworten
+   geht hier im Panel; die Antwort geht zusaetzlich als Mail raus, damit der
+   Kunde nicht in die App schauen muss, um sie zu sehen. */
+const TAG_ST={open:'no',answered:'warn',closed:'ok'};
+async function loadSupport(silent){
+  let d;try{d=await api('/api/admin/tickets?status=all');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.support=Date.now()/1000;
+  const karten=d.tickets.map(t=>{
+    const verlauf=(t.messages&&t.messages.length?t.messages:[{von:'kunde',text:t.body,created_at:t.created_at}])
+      .map(m=>`<div style="margin:8px 0;padding:9px 11px;border-radius:9px;
+        background:${m.von==='admin'?'rgba(255,122,26,.09)':'rgba(255,255,255,.04)'}">
+        <div class="subtle" style="font-size:11px;margin-bottom:3px">
+          ${m.von==='admin'?'You':esc(t.email)} · ${fdt(m.created_at)}</div>
+        <div style="white-space:pre-wrap">${esc(m.text)}</div></div>`).join('');
+    return `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <span class="tag ${TAG_ST[t.status]||''}">${t.status}</span>
+        <b>#${t.id} ${esc(t.subject)}</b>
+        <span class="subtle">${esc(t.email)}</span>
+        <span class="subtle" style="margin-left:auto">${fdt(t.updated_at||t.created_at)}</span>
+      </div>
+      ${verlauf}
+      <textarea class="search" id="rp${t.id}" rows="3" placeholder="Write your reply …"
+        style="width:100%;margin-top:8px"></textarea>
+      <div style="display:flex;gap:9px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn sm" onclick="ticketReply(${t.id})">Send reply</button>
+        <button class="btn ghost sm" onclick="ticketAct(${t.id},'${t.status==='closed'?'open':'closed'}')">
+          ${t.status==='closed'?'Reopen':'Close'}</button>
+      </div>
+    </div>`;}).join('')||'<div class="subtle">no tickets</div>';
   el('view').innerHTML=`
-    <h3>Support tickets <span class="subtle">(${d.open_count} open)</span></h3>
-    <div class="note">To reply, answer the notification email in your inbox (its Reply-To is the customer's address). Close a ticket once it is handled.</div>
-    <table><thead><tr><th>#</th><th>Email</th><th>Message</th><th>Status</th><th>When</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    <h3>Support <span class="subtle">(${d.open_count} waiting)</span></h3>
+    <div class="note">Replies are sent from here: they land in the customer's thread
+      inside the app <b>and</b> go out as an email. A follow-up question stays in the
+      same ticket instead of opening a new one.</div>
+    ${karten}`;
+}
+async function ticketReply(id){
+  const box=el('rp'+id); const t=(box&&box.value||'').trim();
+  if(t.length<2){alert('Write something first.');return;}
+  const fd=new FormData(); fd.append('text',t);
+  try{const d=await api('/api/admin/tickets/'+id+'/reply',{method:'POST',body:fd});
+    if(!d.gemailt)alert('Saved in the thread, but the email could not be sent. Check SMTP.');
+    loadSupport();refreshBadges();}
+  catch(e){alert(e.message);}
 }
 async function ticketAct(id,status){const fd=new FormData();fd.append('status',status);try{await api('/api/admin/tickets/'+id+'/status',{method:'POST',body:fd});loadSupport();}catch(e){alert(e.message);}}
 
