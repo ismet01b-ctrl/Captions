@@ -698,6 +698,12 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   steht der Server schon auf dem neuen Commit; scheitert das Gate, saehe der
   naechste Timer-Lauf "nichts Neues". Deshalb schreibt `autodeploy.sh` bei
   Fehlschlag eine Zeile in die alerts-Tabelle des LAUFENDEN Containers.
+- **Alles geht ueber das Admin-Panel, nichts ueber das Terminal (Ismets
+  Ansage, Juli 2026).** Auch das Zurueckspielen: `_restore_users_db` schreibt
+  die Sicherung ueber die SQLite-Online-Backup-API IN die laufende Datenbank -
+  kein Dateitausch, kein Neustart, offene Verbindungen sehen danach den neuen
+  Inhalt. Der Skript-Weg (`restore.sh`) bleibt als Notnagel, wenn die App gar
+  nicht mehr startet. Wer eine neue Betriebs-Aufgabe baut, baut sie ins Panel.
 - **Ein Backup, das man nie zurueckgespielt hat, ist kein Backup.**
   `restore.sh` prueft den Kandidaten (integrity_check + Pflichttabellen),
   BEVOR es die laufende DB anfasst, und legt den jetzigen Stand als
@@ -766,7 +772,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1340/1340 grün (Stand v197a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1352/1352 grün (Stand v197b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

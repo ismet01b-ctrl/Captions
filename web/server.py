@@ -1868,7 +1868,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v197-betrieb'
+DVE_BUILD = 'v197b-restore-panel'
 
 
 @app.middleware('http')
@@ -7830,6 +7830,149 @@ def admin_backup_run(request: Request):
     return {'ok': True, 'last_backup': _last_backup_ts()}
 
 
+RESTORE_PFLICHT = ('users', 'sessions', 'ledger', 'purchases')
+
+
+def _pruefe_sicherung(pfad):
+    """Kandidat pruefen, BEVOR irgendetwas angefasst wird. Eine kaputte
+    Sicherung darf nie eine funktionierende Datenbank ueberschreiben.
+    Gibt (ok, meldung, zahlen) zurueck - wirft nicht."""
+    try:
+        c = sqlite3.connect(f'file:{pfad}?mode=ro', uri=True, timeout=10)
+        if c.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+            c.close()
+            return False, 'Die Datei ist beschaedigt (integrity_check).', {}
+        da = {r[0] for r in c.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        fehlt = [t for t in RESTORE_PFLICHT if t not in da]
+        if fehlt:
+            c.close()
+            return False, f'Pflichttabellen fehlen: {", ".join(fehlt)}', {}
+        zahlen = {'konten': c.execute('SELECT COUNT(*) FROM users').fetchone()[0],
+                  'kaeufe': c.execute('SELECT COUNT(*) FROM purchases').fetchone()[0],
+                  'tabellen': len(da)}
+        c.close()
+        return True, 'ok', zahlen
+    except Exception as e:
+        return False, f'Nicht lesbar: {type(e).__name__}: {e}', {}
+
+
+def _restore_users_db(pfad):
+    """v197b: Zurueckspielen OHNE den Server anzuhalten.
+
+    Der Terminal-Weg (`restore.sh`) tauscht die Datei und muss dafuer die App
+    stoppen. Im Panel geht das nicht - ein Endpunkt, der seinen eigenen Server
+    anhaelt, kann sich danach nicht mehr melden. Deshalb hier der andere Weg:
+    die SQLite-Online-Backup-API schreibt die Sicherung IN die laufende
+    Datenbank. SQLite haelt dabei selbst die noetigen Sperren, WAL bleibt
+    stimmig, offene Verbindungen sehen danach den neuen Inhalt. Kein
+    Dateitausch, kein Neustart.
+
+    Reihenfolge der Sicherungsnetze bleibt dieselbe wie im Skript:
+      1. Kandidat pruefen (siehe _pruefe_sicherung) - vorher passiert nichts.
+      2. Den JETZIGEN Stand als vor_restore_*.db wegschreiben. Auch ein
+         Restore kann die falsche Entscheidung sein.
+      3. Einspielen, danach das Schema nachziehen: eine alte Sicherung kennt
+         spaeter dazugekommene Tabellen/Spalten nicht.
+    """
+    ok, meldung, zahlen = _pruefe_sicherung(pfad)
+    if not ok:
+        raise HTTPException(400, meldung)
+    bdir = os.path.join(DATA, 'backups')
+    os.makedirs(bdir, exist_ok=True)
+    vor = os.path.join(bdir, f'vor_restore_{time.strftime("%Y%m%d_%H%M%S")}.db')
+    src = sqlite3.connect(USERS_DB, timeout=30)
+    dst = sqlite3.connect(vor)
+    src.backup(dst)
+    dst.close(); src.close()
+    # Rotation: 5 Sicherheitskopien reichen, sie fallen nicht unter die
+    # Tages-Rotation der Snapshots (anderer Dateiname).
+    alte = sorted((f for f in os.listdir(bdir) if f.startswith('vor_restore_')),
+                  reverse=True)[5:]
+    for f in alte:
+        try:
+            os.remove(os.path.join(bdir, f))
+        except OSError:
+            pass
+    src = sqlite3.connect(pfad, timeout=30)
+    dst = sqlite3.connect(USERS_DB, timeout=30)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close(); src.close()
+    _init_users_db()                     # Schema nachziehen (alte Sicherung)
+    _ttl_drop('adm:')                    # Aggregate im Cache sind jetzt falsch
+    print(f'RESTORE eingespielt: {os.path.basename(pfad)} '
+          f'({zahlen.get("konten")} Konten, {zahlen.get("kaeufe")} Kaeufe), '
+          f'vorheriger Stand in {os.path.basename(vor)}')
+    _notify_admin('restore', 'Datenbank zurueckgespielt',
+                  f'Eingespielt: {os.path.basename(pfad)}\n'
+                  f'{zahlen.get("konten")} Konten, {zahlen.get("kaeufe")} Kaeufe.\n'
+                  f'Der vorherige Stand liegt als {os.path.basename(vor)} '
+                  f'in {bdir} und kann genauso zurueckgeholt werden.')
+    return {'ok': True, 'quelle': os.path.basename(pfad),
+            'vorher_gesichert': os.path.basename(vor), **zahlen}
+
+
+@app.post('/api/admin/backup/check')
+def admin_backup_check(request: Request, datei: str = Form(...)):
+    """Probe ohne Wirkung: taugt diese Sicherung ueberhaupt etwas?"""
+    _require_admin(request)
+    bdir = os.path.join(DATA, 'backups')
+    if datei not in (set(os.listdir(bdir)) if os.path.isdir(bdir) else set()):
+        raise HTTPException(404, 'Unknown backup file.')
+    ok, meldung, zahlen = _pruefe_sicherung(os.path.join(bdir, datei))
+    return {'ok': ok, 'meldung': meldung, **zahlen}
+
+
+@app.post('/api/admin/backup/restore')
+def admin_backup_restore(request: Request, datei: str = Form(...),
+                         bestaetigung: str = Form('')):
+    """Sicherung aus dem Backup-Verzeichnis einspielen. Tippbestaetigung
+    wie beim Factory-Reset - das hier ueberschreibt alle Konten."""
+    _require_admin(request)
+    if bestaetigung.strip().upper() != 'RESTORE':
+        raise HTTPException(400, 'Confirmation missing.')
+    bdir = os.path.join(DATA, 'backups')
+    if datei not in (set(os.listdir(bdir)) if os.path.isdir(bdir) else set()):
+        raise HTTPException(404, 'Unknown backup file.')
+    return _restore_users_db(os.path.join(bdir, datei))
+
+
+@app.post('/api/admin/backup/upload')
+async def admin_backup_upload(request: Request, file: UploadFile = File(...),
+                              bestaetigung: str = Form('')):
+    """Sicherung aus dem Postfach hochladen und einspielen. Das ist der Weg
+    fuer den Ernstfall: liegt die Platte im Argen, ist die Offsite-Kopie in
+    der Mail die einzige, die es noch gibt. .db oder .db.gz."""
+    _require_admin(request)
+    if bestaetigung.strip().upper() != 'RESTORE':
+        raise HTTPException(400, 'Confirmation missing.')
+    roh = await file.read()
+    if len(roh) > 200 * 1024 * 1024:
+        raise HTTPException(400, 'File too large.')
+    name = os.path.basename(file.filename or 'upload.db')
+    if name.endswith('.gz'):
+        import gzip
+        try:
+            roh = gzip.decompress(roh)
+        except Exception:
+            raise HTTPException(400, 'Not a valid .gz file.')
+        name = name[:-3]
+    if not name.endswith('.db'):
+        raise HTTPException(400, 'Expected a .db or .db.gz file.')
+    bdir = os.path.join(DATA, 'backups')
+    os.makedirs(bdir, exist_ok=True)
+    ziel = os.path.join(bdir, f'upload_{time.strftime("%Y%m%d_%H%M%S")}.db')
+    with open(ziel, 'wb') as f:
+        f.write(roh)
+    try:
+        return _restore_users_db(ziel)
+    except HTTPException:
+        os.remove(ziel)                  # untaugliche Datei nicht liegenlassen
+        raise
+
+
 @app.get('/api/admin/backups')
 def admin_backups(request: Request):
     """v197a: Die Sicherungen waren nur ueber die Kommandozeile oder das
@@ -7844,7 +7987,8 @@ def admin_backups(request: Request):
         p = os.path.join(bdir, f)
         eintrag = {'datei': f, 'bytes': os.path.getsize(p),
                    'zeit': os.path.getmtime(p),
-                   'art': 'vor_restore' if f.startswith('vor_restore') else 'snapshot',
+                   'art': ('vor_restore' if f.startswith('vor_restore')
+                           else 'upload' if f.startswith('upload_') else 'snapshot'),
                    'konten': None, 'ok': False}
         try:
             c = sqlite3.connect(f'file:{p}?mode=ro', uri=True, timeout=5)

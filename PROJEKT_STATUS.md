@@ -68,11 +68,25 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
       markiert - genau das ist die Information, die zaehlt. Der Download
       laeuft ueber fetch+Blob, weil der Admin-Key im HEADER steht; in der
       URL landete er in History und Server-Log.
-      NICHT im Panel und bewusst nicht: das Zurueckspielen selbst. Es muss
-      die App stoppen - ein Endpunkt, der seinen eigenen Server anhaelt und
-      dabei die Datenbank unter sich austauscht, ist keine gute Idee.
-      Bleibt `bash restore.sh --letztes`.
-  Tests: 1340/1340 logic (37 neu) + Renders 7/1/5/2 + GUI.
+  (6) **v197b: auch der Restore laeuft im Panel.** Ismet hat die Ansage
+      wiederholt - nichts mehr am Terminal. Der Einwand aus v197a war
+      richtig, aber die Schlussfolgerung falsch: der Terminal-Weg muss die
+      App stoppen, WEIL er die Datei tauscht. Es gibt einen zweiten Weg.
+      `_restore_users_db` schreibt die Sicherung ueber die
+      SQLite-Online-Backup-API IN die laufende Datenbank; SQLite haelt die
+      Sperren selbst, WAL bleibt stimmig, kein Neustart. Am Testfall
+      belegt: 7 Konten -> 2 (Verlust) -> 7 zurueck, und eine schon offene
+      Verbindung sieht danach ebenfalls 7. Dieselben Sicherungsnetze wie im
+      Skript: Kandidat pruefen BEVOR etwas angefasst wird (integrity_check
+      + Pflichttabellen, eine Muell-Datei wird abgelehnt), jetzigen Stand
+      als `vor_restore_*.db` wegschreiben (der Weg zurueck ist derselbe
+      Knopf), einspielen, Schema nachziehen (eine alte Sicherung kennt
+      spaeter dazugekommene Tabellen nicht). Tippbestaetigung 'RESTORE' wie
+      beim Factory-Reset. Dazu **Upload-Restore** fuer den Ernstfall: ist
+      die Platte weg, ist die Kopie im Postfach die einzige, die es noch
+      gibt - `.db` oder `.db.gz` hochladen und einspielen. `restore.sh`
+      bleibt als Notnagel, wenn die App gar nicht mehr startet.
+  Tests: 1352/1352 logic (49 neu) + Renders 7/1/5/2 + GUI.
   EHRLICH: der Test lief hier auf Linux/CPU ohne OpenAI-Key. Die
   Restore-Probe lief echt durch (Verifizieren, Sicherheitskopie,
   Einspielen), Schritt 5 (`docker compose up`) konnte in der Sandbox

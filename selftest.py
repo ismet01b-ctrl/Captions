@@ -6286,6 +6286,69 @@ def _scenario_betrieb(tmp):
     check('v197a: die Backup-Liste haengt in der System-Ansicht',
           "id=\"bkList\"" in _adm197 and 'loadBackups();' in _adm197)
 
+    # --- H) v197b: Zurueckspielen im Panel, ohne den Server anzuhalten.
+    # Der Terminal-Weg tauscht die Datei und muss dafuer die App stoppen -
+    # im Panel unmoeglich, ein Endpunkt kann sich danach nicht mehr melden.
+    # Die SQLite-Online-Backup-API schreibt IN die laufende Datenbank.
+    check('v197b: der Kandidat wird geprueft, bevor etwas angefasst wird',
+          _sv197.index('def _pruefe_sicherung') < _sv197.index('def _restore_users_db')
+          and 'ok, meldung, zahlen = _pruefe_sicherung(pfad)' in _sv197
+          and _sv197.index('ok, meldung, zahlen = _pruefe_sicherung(pfad)')
+          < _sv197.index("vor = os.path.join(bdir, f'vor_restore_"))
+    check('v197b: eine Muell-Datei wird abgelehnt',
+          _SV197._pruefe_sicherung(os.path.join(HERE, 'selftest.py'))[0] is False)
+    _fehlt197 = os.path.join(_SV197.DATA, 'leer197.db')
+    _c = _sq197.connect(_fehlt197); _c.execute('CREATE TABLE x (a)'); _c.commit(); _c.close()
+    _ok197, _msg197, _ = _SV197._pruefe_sicherung(_fehlt197)
+    check('v197b: fehlende Pflichttabellen werden benannt',
+          _ok197 is False and 'users' in _msg197, _msg197)
+    os.remove(_fehlt197)
+    # Der eigentliche Beweis: einspielen im LAUFENDEN Betrieb.
+    _con197 = _SV197._db()
+    _con197.execute("INSERT INTO users (email, pw_hash, balance_sec, created_at) "
+                    "VALUES (?,?,?,?)",
+                    (f'rst{int(_tm197.time())}@test.invalid', 'x', 0, int(_tm197.time())))
+    _con197.commit(); _con197.close()
+    _SV197._backup_users_db(force=True)
+    _snapf197 = sorted(_gl197.glob(os.path.join(_SV197.DATA, 'backups', 'users_*.db')))[-1]
+
+    def _konten197():
+        c = _SV197._db()
+        v = c.execute('SELECT COUNT(*) c FROM users').fetchone()['c']
+        c.close()
+        return v
+    _voll197 = _konten197()
+    _offen197 = _SV197._db()                 # ueberlebt den Restore absichtlich
+    _con197 = _SV197._db()
+    _con197.execute("DELETE FROM users WHERE email LIKE 'rst%@test.invalid'")
+    _con197.commit(); _con197.close()
+    _leer197 = _konten197()
+    _erg197 = _SV197._restore_users_db(_snapf197)
+    check('v197b: der Restore holt die Konten zurueck, ohne Neustart',
+          _leer197 < _voll197 and _konten197() == _voll197,
+          f'{_voll197} -> {_leer197} -> {_konten197()}')
+    check('v197b: auch eine schon offene Verbindung sieht den neuen Stand',
+          _offen197.execute('SELECT COUNT(*) c FROM users').fetchone()['c'] == _voll197)
+    _offen197.close()
+    check('v197b: der vorherige Stand wurde weggeschrieben',
+          os.path.exists(os.path.join(_SV197.DATA, 'backups',
+                                      _erg197['vorher_gesichert'])))
+    check('v197b: das Schema wird nach einer alten Sicherung nachgezogen',
+          '_init_users_db()                     # Schema nachziehen' in _sv197)
+    check('v197b: ohne Tippbestaetigung passiert nichts',
+          "bestaetigung.strip().upper() != 'RESTORE'" in _sv197
+          and _sv197.count("bestaetigung.strip().upper() != 'RESTORE'") == 2)
+    check('v197b: die Offsite-Kopie aus der Mail kann hochgeladen werden',
+          "@app.post('/api/admin/backup/upload')" in _sv197
+          and 'gzip.decompress' in _sv197)
+    check('v197b: eine untaugliche Hochladung bleibt nicht liegen',
+          'os.remove(ziel)' in _sv197)
+    check('v197b: das Panel hat Verify, Restore und Upload',
+          'function bkCheck(' in _adm197 and 'function bkRestore(' in _adm197
+          and 'function bkUpload(' in _adm197)
+    check('v197b: der Restore verlangt auch im Panel die Tippbestaetigung',
+          "Type RESTORE to confirm" in _adm197)
+
     check('v197: ein gescheiterter Deploy meldet sich, statt still zu bleiben',
           'DEPLOY FEHLGESCHLAGEN' in _auto197 and "'deploy', 'Deploy abgebrochen'" in _auto197)
 

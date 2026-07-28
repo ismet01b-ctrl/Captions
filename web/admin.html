@@ -634,9 +634,21 @@ async function loadSystem(){
     <div class="note">Config values are set via env at boot — change them in .env + docker restart. The panel cannot live-toggle them.</div>
     <h3>Backups</h3>
     <div id="bkList" class="subtle">loading …</div>
-    <div class="note">Each snapshot is checked here (quick_check + account count) — a backup
-      you cannot read is worth nothing. Restoring one has to stop the app, so it stays a
-      server command: <code>bash restore.sh --letztes</code>.</div>`;
+    <div class="card" style="margin-top:12px">
+      <div class="k">Restore from an emailed backup</div>
+      <p class="subtle" style="margin:6px 0 10px">For the real emergency: if this
+        machine's disk is gone, the copy in your inbox is the only one left.
+        Accepts <code>.db</code> or <code>.db.gz</code>.</p>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="bkFile" accept=".db,.gz">
+        <button class="btn bad sm" onclick="bkUpload()">Upload and restore</button>
+      </div>
+    </div>
+    <div class="note">Every backup is verified here (integrity check, required tables,
+      account count) — a backup you cannot read is worth nothing. Restoring writes the
+      snapshot into the running database (SQLite online backup), so nothing has to be
+      stopped, and the state before the restore is kept as
+      <code>vor_restore_*.db</code> — you can go back the same way.</div>`;
   loadBackups();
 }
 /* v197a: Die Sicherungen lagen nur auf der Platte und im Postfach. Im Panel
@@ -653,8 +665,45 @@ async function loadBackups(){
       <td>${b.konten==null?'–':b.konten}</td>
       <td class="subtle">${(b.bytes/1024).toFixed(0)} KB</td>
       <td class="subtle" style="white-space:nowrap">${fdt(b.zeit)}</td>
-      <td><button class="btn ghost sm" onclick="bkDl('${esc(b.datei)}')">Download</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn ghost sm" onclick="bkDl('${esc(b.datei)}')">Download</button>
+        <button class="btn ghost sm" onclick="bkCheck('${esc(b.datei)}')">Verify</button>
+        <button class="btn bad sm" onclick="bkRestore('${esc(b.datei)}',${b.konten==null?-1:b.konten})">Restore</button></td>
     </tr>`).join('')}</tbody></table>`;
+}
+async function bkCheck(datei){
+  const fd=new FormData(); fd.append('datei',datei);
+  try{const d=await api('/api/admin/backup/check',{method:'POST',body:fd});
+    alert(d.ok?`Usable.\n${d.konten} accounts, ${d.kaeufe} purchases, ${d.tabellen} tables.`
+              :`NOT usable:\n${d.meldung}`);}
+  catch(e){alert(e.message);}
+}
+/* Zurueckspielen ueberschreibt ALLE Konten - deshalb dieselbe Tipp-Bestaetigung
+   wie beim Factory-Reset. Der jetzige Stand wird vorher als vor_restore_*.db
+   weggeschrieben, der Weg zurueck ist derselbe Knopf. */
+async function bkRestore(datei,konten){
+  const t=prompt(`This overwrites the live database with "${datei}"`
+    +(konten>=0?` (${konten} accounts)`:'')
+    +`.\nThe current state is kept as vor_restore_*.db.\nType RESTORE to confirm.`);
+  if(!t)return;
+  const fd=new FormData(); fd.append('datei',datei); fd.append('bestaetigung',t);
+  try{const d=await api('/api/admin/backup/restore',{method:'POST',body:fd});
+    alert(`Restored.\n${d.konten} accounts, ${d.kaeufe} purchases.\n`
+      +`Previous state saved as ${d.vorher_gesichert}.`);
+    loadSystem();}
+  catch(e){alert(e.message);}
+}
+async function bkUpload(){
+  const f=el('bkFile'); if(!f||!f.files[0]){alert('Pick a file first.');return;}
+  const t=prompt('This overwrites the live database with the uploaded file.\n'
+    +'The current state is kept as vor_restore_*.db.\nType RESTORE to confirm.');
+  if(!t)return;
+  const fd=new FormData(); fd.append('file',f.files[0]); fd.append('bestaetigung',t);
+  try{const d=await api('/api/admin/backup/upload',{method:'POST',body:fd});
+    alert(`Restored.\n${d.konten} accounts, ${d.kaeufe} purchases.\n`
+      +`Previous state saved as ${d.vorher_gesichert}.`);
+    loadSystem();}
+  catch(e){alert(e.message);}
 }
 /* Der Admin-Key steht im HEADER, nicht in der URL - ein <a href> kann ihn
    also nicht mitschicken (und in der URL haette er nichts zu suchen: er
