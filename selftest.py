@@ -6528,6 +6528,7 @@ def _scenario_betrieb(tmp):
     _bin201 = _tf201.mkdtemp(prefix='gate201_')
 
     def _gate201(ausgabe, rc):
+        os.makedirs(_bin201, exist_ok=True)     # nach dem Aufraeumen erneut nutzbar
         with open(os.path.join(_bin201, 'docker'), 'w') as f:
             f.write(f'#!/usr/bin/env bash\n{ausgabe}\nexit {rc}\n')
         os.chmod(os.path.join(_bin201, 'docker'), 0o755)
@@ -6559,6 +6560,29 @@ def _scenario_betrieb(tmp):
     check('v201: ein defektes Gate wird im Panel vermerkt, nicht nur im Log',
           "'deploy_gate', 'Test-Gate nicht lauffaehig'" in _upd197
           and 'GATE_DEFEKT' in _upd197)
+    # v201a: WELCHE Tests gefallen sind, muss in die Panel-Meldung. Vorher
+    # stand dort nur "Deploy abgebrochen" und der Rest in journalctl - fuer
+    # jemanden, der nie ins Terminal geht, ist das wie keine Meldung.
+    _bef201 = os.path.join(HERE, '.deploy_gate_last.txt')
+    _g_rot2 = _gate201('echo "FAIL testname xy"; echo "1390/1391 Tests bestanden"', 1)
+    check('v201a: das Gate hinterlaesst seinen Befund als Datei',
+          os.path.exists(_bef201) and 'FAIL testname xy' in open(_bef201).read()
+          and open(_bef201).read().startswith('rot'),
+          open(_bef201).read()[:80] if os.path.exists(_bef201) else 'fehlt')
+    _gate201('echo "1391/1391 Tests bestanden"', 0)
+    check('v201a: bei gruen steht die Bilanz drin, keine FAIL-Zeilen',
+          open(_bef201).read().startswith('gruen')
+          and 'FAIL' not in open(_bef201).read())
+    check('v201a: autodeploy reicht den Befund in die Meldung durch',
+          '.deploy_gate_last.txt' in _auto197
+          and 'Befund des Test-Gates' in _auto197)
+    # Der Test darf keine Datei hinterlassen: sie ist ein Laufzeit-Artefakt
+    # des Servers, hier hat sie nichts verloren.
+    if os.path.exists(_bef201):
+        os.remove(_bef201)
+    check('v201a: die Befund-Datei ist kein Repo-Inhalt',
+          '.deploy_gate_last.txt' in open(os.path.join(HERE, '.gitignore'),
+                                          encoding='utf-8').read())
 
     # ======= v195: Admin-Panel als Seitenleiste ==========================
     # Zwoelf Ansichten in einer umbrechenden Tab-Zeile waren schon zu viel,

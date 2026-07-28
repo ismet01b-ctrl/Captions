@@ -12,3 +12,4 @@ data/
 *_vorschau.mp4
 .env
 .freesound_key
+.deploy_gate_last.txt

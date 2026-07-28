@@ -25,7 +25,13 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
   EHRLICH: dass das Gate auf DEM SERVER scheiterte, ist eine begruendete
   Annahme - ich komme von hier nicht an douchko.eu. Falls es nicht das Gate
   war, steht die Ursache jetzt im Panel unter Alerts.
-  Tests: 1391/1391 logic (7 neu) + Renders 7/1/5/2 + GUI.
+  **v201a:** der BEFUND gehoert in die Meldung. Das Gate schreibt sein
+  Ergebnis nach `.deploy_gate_last.txt`, `autodeploy.sh` haengt die gefallenen
+  Tests an den Panel-Eintrag. "Deploy abgebrochen" ohne Grund ist fuer
+  jemanden, der nie ins Terminal geht, dasselbe wie keine Meldung.
+  BESTAETIGT (Ismets Screenshot): live stand `v197-betrieb` - v198 bis v200
+  sind tatsaechlich nie angekommen.
+  Tests: 1395/1395 logic (11 neu) + Renders 7/1/5/2 + GUI.
 - **v200 SOUND-VARIANTEN: nicht mehr immer derselbe Klick.** Ismets Befund
   ("es muessen mehr Variationen rein"). Ursache gemessen, nicht geraten - und
   sie lag NICHT beim Wahl-Mechanismus: den gibt es seit v96d (`load_variants`,

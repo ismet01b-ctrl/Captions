@@ -718,6 +718,11 @@ Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
   eigenem Ausfall die Tuer zumauert, ist kein Waechter. Das Gate wird im
   Selftest mit einem VORGETAEUSCHTEN docker durchgespielt (alle drei
   Ausgaenge) - eine Quelltext-Suche haette den Fehler nie gefunden.
+- **Der Befund gehoert in die Meldung (v201a).** `deploy_gate.sh` schreibt
+  sein Ergebnis nach `.deploy_gate_last.txt` (gitignored), `autodeploy.sh`
+  haengt die gefallenen Tests an die Panel-Meldung. "Deploy abgebrochen" ohne
+  Grund ist fuer jemanden, der nie ins Terminal geht, dasselbe wie keine
+  Meldung.
 - **Nichts geht ungeprueft live.** `update.sh` ruft `deploy_gate.sh` (Selftest
   im NEU GEBAUTEN Image, `--rm --no-deps`, eigenes `DVE_DATA`, kein Key) VOR
   `docker compose up`. Rot = Abbruch, die alte Version laeuft weiter. Wer den
@@ -800,7 +805,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1391/1391 grün (Stand v201)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1395/1395 grün (Stand v201a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

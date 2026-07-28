@@ -27,17 +27,23 @@ if bash update.sh; then
   exit 0
 fi
 echo "$(date -Is) DEPLOY FEHLGESCHLAGEN (${REMOTE:0:8})"
-docker compose exec -T app python - "$REMOTE" <<'PY' || true
+# v201a: WELCHE Tests gefallen sind, gehoert in die Meldung. Bis dahin stand
+# im Panel nur "Deploy abgebrochen" und der Rest in journalctl - fuer jemanden,
+# der nie ins Terminal geht, ist das dasselbe wie keine Meldung.
+BEFUND="$(cat .deploy_gate_last.txt 2>/dev/null | head -25)"
+docker compose exec -T app python - "$REMOTE" "$BEFUND" <<'PY' || true
 import os, sqlite3, sys, time
 DATA = os.environ.get('DVE_DATA', '/app/web/data')
+befund = (sys.argv[2] if len(sys.argv) > 2 else '').strip()
 con = sqlite3.connect(os.path.join(DATA, 'users.db'), timeout=10)
 con.execute("INSERT INTO alerts (schluessel,betreff,text,gemailt,gelesen,"
             "created_at) VALUES (?,?,?,0,0,?)",
             ('deploy', 'Deploy abgebrochen',
              f'Commit {sys.argv[1][:8]} ging NICHT live - update.sh ist '
-             f'gescheitert (meist rotes Test-Gate). Die laufende Version ist '
-             f'unveraendert. Details auf dem Server:\n'
-             f'  journalctl -u douchko-deploy -n 100', int(time.time())))
+             f'gescheitert. Die laufende Version ist unveraendert.\n\n'
+             + (f'Befund des Test-Gates:\n{befund}\n\n' if befund else '')
+             + 'Mehr auf dem Server: journalctl -u douchko-deploy -n 120',
+             int(time.time())))
 con.commit(); con.close()
 print('Deploy-Fehler im Panel vermerkt')
 PY

@@ -25,6 +25,10 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 LOG="$(mktemp)"
+# v201a: Das Ergebnis muss autodeploy.sh lesen koennen, damit im Panel steht,
+# WELCHE Tests gefallen sind. Nur im Terminal zu meckern hilft niemandem, der
+# nie ins Terminal geht.
+BEFUND="$(dirname "$0")/.deploy_gate_last.txt"
 trap 'rm -f "$LOG"' EXIT
 
 echo "==> Test-Gate: Selftest im neuen Image"
@@ -62,14 +66,18 @@ set -e
 if grep -qE '[0-9]+/[0-9]+ Tests bestanden' "$LOG"; then
   if [ "$RC" -eq 0 ] && ! grep -q '^FAIL' "$LOG"; then
     echo "==> Test-Gate: gruen ($(grep -oE '[0-9]+/[0-9]+ Tests bestanden' "$LOG" | tail -1))"
+    printf 'gruen\n%s\n' "$(grep -oE '[0-9]+/[0-9]+ Tests bestanden' "$LOG" | tail -1)" > "$BEFUND"
     exit 0
   fi
   echo "==> Test-Gate: ROT - die folgenden Tests sind gefallen:"
   grep '^FAIL' "$LOG" | head -20
+  { echo 'rot'; grep -oE '[0-9]+/[0-9]+ Tests bestanden' "$LOG" | tail -1;
+    grep '^FAIL' "$LOG" | head -20; } > "$BEFUND"
   exit 1
 fi
 
 echo "==> Test-Gate: NICHT LAUFFAEHIG (Rueckgabewert $RC, keine Test-Bilanz)."
 echo "    Ueber den Code ist damit nichts gesagt. Letzte Zeilen:"
 tail -12 "$LOG" | sed 's/^/      /'
+{ echo 'defekt'; echo "Rueckgabewert $RC, keine Test-Bilanz"; tail -12 "$LOG"; } > "$BEFUND"
 exit 2
