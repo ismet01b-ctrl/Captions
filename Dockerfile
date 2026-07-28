@@ -26,8 +26,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 
 WORKDIR /app
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir fastapi uvicorn python-multipart
+# v205a-sec: fastapi/uvicorn/python-multipart wurden hier bis v205 SEPARAT
+# und voellig ungepinnt nachgeschoben - sie standen in requirements.txt gar
+# nicht drin. Zwei Quellen fuer dieselbe Frage sind eine zu viel; jetzt steht
+# alles in EINER Datei mit exakten Versionen.
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
 

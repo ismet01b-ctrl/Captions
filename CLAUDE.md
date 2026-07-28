@@ -882,7 +882,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1475/1475 grün (Stand v205-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1479/1479 grün (Stand v205a-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -963,16 +963,24 @@ zu pinnen blockiert nur Deploys).
    eigener Schalter (NICHT an DVE_ALERTS hängen), 30 Stände, Prüf- und
    Rückhol-Knopf im Panel. Ismet legt Bucket + Schlüssel selbst an und trägt
    sie in die `.env` ein — **niemals im Chat**.
-2. **Container läuft als root**, während er fremde Videos durch ffmpeg/opencv
-   schiebt. Kein `USER` im Dockerfile, keine Härtung in docker-compose
-   (`cap_drop`, `no-new-privileges`, `mem_limit`, `pids_limit`).
+2. **ERLEDIGT (v204/v205a).** Dienst-Nutzer statt root über `entrypoint.sh`
+   (mit Rückfall auf den alten Weg, falls etwas klemmt), dazu
+   `no-new-privileges`, `cap_drop: ALL`, `pids_limit`, `mem_limit`.
+   **Lehre: `cap_drop: ALL` nimmt auch die Rechte, die der Start BRAUCHT, um
+   überhaupt auf den kleineren Nutzer zu wechseln** (CHOWN/SETUID/SETGID/
+   DAC_OVERRIDE/FOWNER). Genau daran ist v204 gescheitert und still auf root
+   zurückgefallen — sichtbar wurde es erst durch die neue Panel-Anzeige.
+   Die fünf Rechte kommen per `cap_add` zurück; nach dem Kennungswechsel
+   entzieht Linux sie automatisch, der laufende Dienst hat also keine.
 3. **Kein Sicherheits-Ereignisprotokoll.** Es gibt keine Tabelle, die
    festhält, wer wann was im Panel getan hat (Admin-Zugriffe, Logins,
    Passwortwechsel, Erstattungen). Ohne das ist ein Vorfall nicht
    rekonstruierbar — und DSGVO Art. 33 verlangt Meldung binnen 72 Stunden.
-4. **Abhängigkeiten ungepinnt** (opencv, Pillow, onnxruntime, requests, bcrypt,
-   fastapi/uvicorn), kein Lockfile, kein `--require-hashes`. Modelle werden
-   ohne Prüfsumme geladen, `depth.onnx` über `resolve/main` (beweglicher Zeiger).
+4. **ERLEDIGT (v205a).** Alle 13 Bauteile exakt gepinnt, aus dem LAUFENDEN
+   Container abgelesen (Panel → System → Bauteile), fastapi/uvicorn/
+   python-multipart aus dem Dockerfile in requirements.txt gezogen — es gibt
+   jetzt EINE Liste. Offen bleibt hier nur: kein Lockfile mit Hashes, und die
+   Modelle werden weiter ohne Prüfsumme über `resolve/main` geladen.
 5. **Keine Grenze für Auflösung/FPS** — nur Dauer und Dateigröße. Ein 8K-Clip
    mit 120 fps kostet denselben Credit und blockiert den einen Worker.
 6. **Render-Subprozess erbt alle Geheimnisse** (`env = dict(os.environ)`) —

@@ -57,6 +57,23 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # v205a-sec: cap_drop ALL nimmt auch die Rechte weg, die der Start
+    # BRAUCHT, um ueberhaupt auf den kleineren Nutzer umzuschalten - genau
+    # daran ist die v204-Haertung gescheitert und auf root zurueckgefallen
+    # (im Panel unter System sichtbar). Diese vier gibt es nur fuer die
+    # Startsekunde zurueck:
+    #   CHOWN + FOWNER  - /data dem Dienst-Nutzer uebergeben
+    #   SETUID + SETGID - runuser darf die Kennung wechseln
+    #   DAC_OVERRIDE    - dabei fremde Dateien anfassen
+    # Sobald der Prozess die Kennung gewechselt hat, sind sie weg: Linux
+    # entzieht einem Wechsel von root auf einen normalen Nutzer die
+    # Sonderrechte automatisch. Der laufende Dienst hat also weiterhin KEINE.
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     pids_limit: ${DVE_PIDS_LIMIT:-512}
     mem_limit: ${DVE_MEM_LIMIT:-6g}
     volumes:

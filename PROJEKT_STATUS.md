@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v205a-sec DIE HAERTUNG HAT SICH SELBST BLOCKIERT + Bauteile festgenagelt.**
+  - **Eigentor aus v204, am Live-System aufgefallen:** die neue Panel-Anzeige
+    meldete "root - die Haertung ist auf den alten Weg zurueckgefallen".
+    Ursache: `cap_drop: ALL` nimmt dem Container ALLE Sonderrechte - darunter
+    ausgerechnet CHOWN, SETUID, SETGID, DAC_OVERRIDE und FOWNER, also genau
+    die, die der Start braucht, um /data zu uebergeben und auf den kleineren
+    Nutzer zu wechseln. Die Haertung hat die Haertung verhindert. Der Rueckfall
+    im entrypoint.sh hat gewirkt wie gebaut (Seite lief weiter statt zu
+    sterben) - ohne ihn waere douchko.eu beim Deploy unten gewesen.
+    Die fuenf Rechte kommen per `cap_add` zurueck. Sie gelten nur fuer die
+    Startsekunde: sobald der Prozess die Kennung wechselt, entzieht Linux sie
+    automatisch, der laufende Dienst hat also weiterhin KEINE.
+  - **Alle 13 Bauteile exakt gepinnt** - und zwar mit den Versionen aus dem
+    LAUFENDEN Container (Panel -> System -> Bauteile), nicht geraten:
+    opencv 4.11.0.86, Pillow 12.3.0, onnxruntime 1.27.0, mediapipe 0.10.14,
+    numpy 1.26.4, protobuf 4.25.9, fastapi 0.139.2, uvicorn 0.51.0,
+    python-multipart 0.0.32, requests 2.34.2, PyYAML 6.0.3, bcrypt 5.0.0,
+    stripe 15.3.1. Die Testumgebung hier hat voellig andere Versionen
+    (numpy 2.4.6 gegen `numpy<2`) - geraten haette nur Deploys blockiert.
+  - fastapi/uvicorn/python-multipart wurden im Dockerfile SEPARAT und
+    ungepinnt nachgeschoben und standen in requirements.txt gar nicht drin.
+    Jetzt eine einzige Liste.
+  - Der v135b-Test verlangte woertlich `stripe>=10`; ein exakter Pin erfuellt
+    dieselbe Zusage strenger, der Test prueft jetzt die Hauptversion.
+  Tests: 1479/1479 logic (8 neu) + Renders 7/1/5/2 + GUI.
 - **v205-sec OHNE TERMINAL NACHSEHEN, WAS LAEUFT.** Zwei Fragen, die man
   bisher nur auf der Kommandozeile beantworten konnte - und Ismet geht nicht
   auf die Kommandozeile.

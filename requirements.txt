@@ -1,15 +1,46 @@
-numpy<2
-opencv-python
-Pillow
-# v80m: mediapipe auf 0.10.14 gepinnt - neuere Versionen haben in Docker/Python3.12
+# DouchkoVE Laufzeit-Abhaengigkeiten.
+#
+# v205a-sec: ALLE Versionen exakt festgenagelt. Bis v205 stand hier bei den
+# meisten nur der Name - bei jedem Neubau konnte also eine andere Fassung
+# hereinkommen, ohne dass jemand es merkt. Zwei Risiken: eine neue Version
+# verhaelt sich anders (der Renderer bricht ohne erkennbaren Grund), und wird
+# eines dieser Bauteile gekapert, installiert der naechste Deploy die
+# vergiftete Fassung automatisch mit. Gerade opencv, Pillow und onnxruntime
+# parsen FREMDE Dateien - dort ist eine unbemerkte Version am teuersten.
+#
+# Die Zahlen sind KEINE Schaetzung: sie kommen aus dem laufenden Container
+# (Admin-Panel -> System -> Bauteile, Stand 28.07.2026, Python 3.12.13,
+# ffmpeg 7.1.5). Genau diese Kombination laeuft nachweislich in Produktion.
+#
+# WENN DU HIER ETWAS HOCHZIEHST: eine Version zu aendern heisst, die
+# Kombination neu zu pruefen. Der Deploy faengt einen Fehlgriff ab - schlaegt
+# der Build fehl, laeuft die alte Version weiter und im Panel steht eine
+# Meldung -, aber bis zur Korrektur geht dann nichts mehr live.
+# Die aktuell laufenden Versionen stehen jederzeit im Panel unter System.
+
+# --- Bild/Video: parsen fremde Dateien, hier ist Sorgfalt am wichtigsten ---
+opencv-python==4.11.0.86
+Pillow==12.3.0
+onnxruntime==1.27.0
+# v80m: mediapipe auf 0.10.14 - neuere Versionen haben in Docker/Python3.12
 # den 'dispatcher_wrapper NoneType' Bug bei bestimmten Aufrufen (Face-Detection).
 mediapipe==0.10.14
-# Muss mit mediapipe kompatibel sein
-protobuf<5
-onnxruntime
-requests
-PyYAML
-bcrypt
-# v135b: >=10 pinnen - die ungepinnte, im Docker-Layer eingefrorene Alt-Version
-# kannte 'invoice_creation' nicht -> InvalidRequestError beim Checkout.
-stripe>=10
+# Muss mit mediapipe kompatibel bleiben (mediapipe 0.10.14 will numpy<2).
+numpy==1.26.4
+protobuf==4.25.9
+
+# --- Web-Stack ---
+fastapi==0.139.2
+uvicorn==0.51.0
+# v205a-sec: fastapi, uvicorn und python-multipart wurden bis v205 im
+# Dockerfile separat und voellig ungepinnt nachinstalliert - sie standen in
+# dieser Datei gar nicht drin. Jetzt hier, damit es EINE Liste gibt.
+python-multipart==0.0.32
+
+# --- Rest ---
+requests==2.34.2
+PyYAML==6.0.3
+bcrypt==5.0.0
+# v135b: >=10 war noetig, weil eine eingefrorene Alt-Version 'invoice_creation'
+# nicht kannte -> InvalidRequestError beim Checkout. Jetzt exakt gepinnt.
+stripe==15.3.1

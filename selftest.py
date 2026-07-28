@@ -6896,6 +6896,35 @@ def _scenario_betrieb(tmp):
     check('v205-sec: die Ansicht warnt sichtbar, wenn noch als root gelaufen wird',
           'd.laufzeit.root' in _adm205 and 'Generalschluessel' in _adm205)
 
+    # (6c) v205a-sec: Die Haertung darf sich nicht selbst blockieren, und die
+    # Bauteile sind festgenagelt.
+    _comp205 = open(os.path.join(HERE, 'docker-compose.yml'),
+                    encoding='utf-8').read()
+    check('v205a-sec: cap_drop ALL gibt die Start-Rechte gezielt zurueck',
+          'cap_add:' in _comp205
+          and all(c in _comp205 for c in ('CHOWN', 'SETUID', 'SETGID',
+                                          'DAC_OVERRIDE', 'FOWNER')),
+          'sonst kann der Start gar nicht auf den kleineren Nutzer wechseln')
+    _y205 = _y160.safe_load(open(os.path.join(HERE, 'docker-compose.yml'),
+                                 encoding='utf-8'))
+    _app205 = _y205['services']['app']
+    check('v205a-sec: der laufende Dienst behaelt trotzdem KEINE Sonderrechte',
+          _app205.get('cap_drop') == ['ALL']
+          and set(_app205.get('cap_add') or []) <= {'CHOWN', 'FOWNER', 'SETUID',
+                                                    'SETGID', 'DAC_OVERRIDE'})
+    _req205 = open(os.path.join(HERE, 'requirements.txt'), encoding='utf-8').read()
+    _soll205 = ('opencv-python', 'Pillow', 'onnxruntime', 'mediapipe', 'numpy',
+                'protobuf', 'fastapi', 'uvicorn', 'python-multipart',
+                'requests', 'PyYAML', 'bcrypt', 'stripe')
+    _frei205 = [p for p in _soll205
+                if not _re203.search(rf'^{_re203.escape(p)}==', _req205, _re203.M)]
+    check('v205a-sec: JEDES Bauteil hat eine exakte Version',
+          not _frei205, f'ungepinnt: {_frei205}')
+    _dock205 = open(os.path.join(HERE, 'Dockerfile'), encoding='utf-8').read()
+    check('v205a-sec: es gibt nur EINE Quelle fuer die Abhaengigkeiten',
+          'pip install --no-cache-dir fastapi uvicorn' not in _dock205
+          and _dock205.count('pip install') == 1)
+
     # (7) Missbrauchs-Erkennung laeuft von selbst, nicht nur auf Nachfrage
     check('v204-sec: auffaellige Muster melden sich stuendlich von selbst',
           'def _missbrauch_pruefen' in _sv204
@@ -9013,7 +9042,11 @@ def _scenario_betrieb(tmp):
           and 'to_thread(_mk_session, False)' in _coA
           and 'inv_fallback' in _coA
           and 'Checkout fehlgeschlagen:' in _coA
-          and 'stripe>=10' in _reqA)
+          # v205a-sec: aus 'stripe>=10' wurde ein exakter Pin. Die Zusage
+          # bleibt dieselbe - keine eingefrorene Alt-Version, die
+          # 'invoice_creation' nicht kennt -, sie ist nur strenger geworden.
+          and _re203.search(r'^stripe==(\d+)', _reqA, _re203.M)
+          and int(_re203.search(r'^stripe==(\d+)', _reqA, _re203.M).group(1)) >= 10)
     # v135c: keine festen payment_method_types mehr - Stripe zeigt, was im
     # Dashboard aktiviert ist (Live-Fehler: sepa_debit war nicht aktiviert und
     # riss die ganze Session). Async-Webhook-Pfad bleibt fuer spaeteres SEPA.
