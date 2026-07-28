@@ -1895,7 +1895,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v199-kein-umriss'
+DVE_BUILD = 'v200-sfx-varianten'
 
 
 @app.middleware('http')

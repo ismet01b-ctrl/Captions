@@ -96,5 +96,104 @@
   "name": "woodfrictionsustainedpressuregroan.wav",
   "dauer": 1.6,
   "modus": "onset"
+ },
+ "tick_1": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "typinglaptopkeyboard.wav",
+  "dauer": 0.32,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus typinglaptopkeyboard.wav geschnitten (Tastatur-Anschlag)"
+ },
+ "tick_2": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "typingtextonsmartphone.wav",
+  "dauer": 0.3,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus typingtextonsmartphone.wav geschnitten (Tipp auf dem Handy)"
+ },
+ "tick_3": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "digitalcameramultipleshutter.wav",
+  "dauer": 0.37,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus digitalcameramultipleshutter.wav geschnitten (Kamera-Ausloeser)"
+ },
+ "tick_4": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "mechanicbuttonsolidpress.wav",
+  "dauer": 0.37,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus mechanicbuttonsolidpress.wav geschnitten (mechanischer Knopf)"
+ },
+ "tick_5": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "tickingclock.wav",
+  "dauer": 0.32,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus tickingclock.wav geschnitten (Uhr-Tick)"
+ },
+ "press_1": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "mechanicbuttonsolidpress.wav",
+  "dauer": 0.62,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus mechanicbuttonsolidpress.wav geschnitten (mechanischer Knopf)"
+ },
+ "counter_1": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "tickingclock.wav",
+  "dauer": 1.61,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus tickingclock.wav geschnitten (Uhr, laufend)"
+ },
+ "counter_2": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "fishingreelwindingmechanical.wav",
+  "dauer": 1.62,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus fishingreelwindingmechanical.wav geschnitten (Rolle, kurbelnd)"
+ },
+ "turn_1": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "digitalcameramultipleshutter.wav",
+  "dauer": 0.82,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus digitalcameramultipleshutter.wav geschnitten (Ausloeser-Klack)"
+ },
+ "riser_1": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "cameraflashcharge.wav",
+  "dauer": 2.38,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus cameraflashcharge.wav geschnitten (Blitz laedt auf)"
+ },
+ "rise_1": {
+  "eigen": true,
+  "license": "eigene Lizenz (CC0/Epidemic)",
+  "name": "cameraflashcharge.wav",
+  "dauer": 1.62,
+  "modus": "onset",
+  "variante": true,
+  "hinweis": "v200 Variante, aus cameraflashcharge.wav geschnitten (Blitz laedt auf)"
  }
 }

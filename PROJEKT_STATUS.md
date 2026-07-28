@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v200 SOUND-VARIANTEN: nicht mehr immer derselbe Klick.** Ismets Befund
+  ("es muessen mehr Variationen rein"). Ursache gemessen, nicht geraten - und
+  sie lag NICHT beim Wahl-Mechanismus: den gibt es seit v96d (`load_variants`,
+  Reihum-Wechsel, Pitch-Jitter). Es gab nur **nichts zu waehlen**: jeder der
+  14 Slots hatte genau EINE Datei, und **7 der 21 hochgeladenen Sounds waren
+  nie benutzt worden** - sie lagen unangetastet in `sfx/incoming`.
+  - Aus diesen 7 sind 11 Varianten geschnitten (Einzel-Anschlag per
+    Onset-Erkennung, kurze Ausblende gegen Knacken, dieselbe ffmpeg-Kette wie
+    `fetch_one`: Stille weg + loudnorm). Pack jetzt **25 Dateien fuer 14
+    Slots**, vorher 14.
+  - Schwerpunkt `tick` - der laeuft bei fast jeder Wortgruppe und ist damit
+    der meistgehoerte Sound im Video. **6 Varianten** (Maus, Tastatur, Handy,
+    Kamera-Ausloeser, mechanischer Knopf, Uhr), spektrale Schwerpunkte 2289
+    bis 8860 Hz, aehnlichstes Paar 0.66 - also klar unterscheidbar.
+    Sechs aufeinanderfolgende Ticks: Aehnlichkeit 0.20 bis 0.66 statt vorher
+    praktisch identisch.
+  - Zwei Fehler im Wahl-Mechanismus mitgenommen: (1) die Varianten-Suche
+    endete bei `_5` - wer eine sechste Datei ablegt, merkt nicht, dass sie
+    still ignoriert wird (jetzt bis `_9`); (2) der Zaehler startete in JEDEM
+    Video bei 0, also war der erste Tick immer dieselbe Datei und die
+    Reihenfolge ueber alle Videos gleich. Jetzt Versatz aus dem INHALT
+    (crc32 ueber Transkript + Laenge) - bewusst NICHT `hash()`, das ist pro
+    Prozess gesalzen und haette bei jedem Start eine andere Tonspur ergeben.
+    Belegt: gleicher Clip zweimal = bitgleiche Spur, anderer Clip = andere.
+  - Pitch- und Varianten-Versatz laufen jetzt getrennt, sonst haette Variante
+    3 immer denselben Pitch.
+  EHRLICH: hier gemessen wurde die spektrale Verschiedenheit, nicht der
+  Hoereindruck im fertigen Video - das hoert Ismet.
+  Tests: 1384/1384 logic (7 neu) + Renders 7/1/5/2 + GUI.
 - **v199 UMRISS WEG.** Ismets Ansage: die Kontur um die Schriften raus.
   `effects.caption_kontur` steht auf 0, auch im Viral-Preset. Gemessen am
   Sprite: dunkle Randpixel 13234 -> 4776, Tinten-Box 674x73 -> 669x68. Was

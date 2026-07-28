@@ -791,7 +791,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1377/1377 grün (Stand v199)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1384/1384 grün (Stand v200)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -822,6 +822,22 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 5. Deutscher Summary im Effizienzmodus, mit Beweis (Frames/Video) bei Optik.
 
 ## Wichtige Prinzipien (aus der Historie)
+- **Sound-VARIANTEN (v200): ein Slot ist eine LISTE, keine Datei.**
+  `sfx/pack/<slot>.wav` plus `<slot>_1..9.wav`; `V()` wechselt reihum durch.
+  Ismets Befund "immer dieselben Sounds" lag NICHT am Wahl-Mechanismus (den
+  gab es seit v96d), sondern daran, dass es nichts zu waehlen gab: jeder Slot
+  hatte genau EINE Datei, 7 der 21 hochgeladenen Sounds lagen ungenutzt in
+  `sfx/incoming`. Wer Sounds nachlegt, legt sie als `_N` daneben - `tick`
+  zuerst, der laeuft bei fast jeder Wortgruppe.
+  - **Der Varianten-Versatz muss aus dem INHALT kommen** (crc32 ueber Text +
+    Laenge), nicht aus einem bei 0 startenden Zaehler: sonst ist der erste
+    Tick in JEDEM Video dieselbe Datei. Und **nie `hash()`** - Pythons
+    String-Hash ist pro Prozess gesalzen, ein Re-Render ergaebe eine andere
+    Tonspur.
+  - Pitch- und Varianten-Versatz sind GETRENNT, sonst laeuft Variante 3 immer
+    mit demselben Pitch.
+  - Zwei Schnitte aus derselben Aufnahme sind formal Varianten und klingen
+    gleich - der Selftest misst die spektrale Aehnlichkeit (< 0.8).
 - **Sound:** nur echte CC0-Library-Sounds (Freesound), kein Synthetik-Fallback.
   Stille ist besser als billiger Ton. Ohne `sfx/pack` liefe alles STUMM —
   der Pack IST da (14/14 Slots, v175 geprüft), also klingt es.

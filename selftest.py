@@ -1290,8 +1290,54 @@ def _scenario_logic(clip, transcript, tmp):
     check('SFX-Mikro-Pitch: veraendert Laenge/Klang (kein identischer Klick)',
           len(_hi) < len(_base) < len(_lo)
           and _SE._pitch(_base, 1.0) is _base)
+    # v200: die Grenze lag bei _5. Wer eine sechste Variante ablegt, merkt
+    # nicht, dass sie einfach nicht geladen wird - eine still gerissene
+    # Grenze ist schlimmer als eine, die meckert.
+    for _k in range(3, 10):
+        _mk(f'tick_{_k}', 600 + _k * 40)
+    _var9 = _SE.load_variants(folder2)
+    check('v200: bis tick_9 wird geladen (Grenze war _5)',
+          len(_var9.get('tick', [])) == 10,
+          f"{len(_var9.get('tick', []))} Dateien")
+    for _k in range(3, 10):
+        os.remove(os.path.join(folder2, f'tick_{_k}.wav'))
     os.remove(os.path.join(folder2, 'tick_1.wav'))
     os.remove(os.path.join(folder2, 'tick_2.wav'))
+
+    # v200 ECHTES PACK: Ismets Befund "immer dieselben Sounds". Ursache war
+    # nicht der Wahl-Mechanismus, sondern dass es NICHTS zu waehlen gab -
+    # jeder Slot hatte genau eine Datei, 7 der 21 hochgeladenen Sounds waren
+    # nie benutzt. Der Test haengt am echten Pack, weil genau das die Zusage
+    # ist ("Videos sind NICHT stumm", CLAUDE.md v175).
+    _echt200 = _SE.load_variants(os.path.join(HERE, 'sfx', 'pack'))
+    if _echt200:
+        _n200 = sum(len(v) for v in _echt200.values())
+        check('v200: das echte Pack hat mehr Dateien als Slots',
+              _n200 > len(_echt200), f'{_n200} Dateien / {len(_echt200)} Slots')
+        check('v200: der meistgehoerte Slot (tick) hat die meisten Varianten',
+              len(_echt200.get('tick', [])) >= 5,
+              f"tick={len(_echt200.get('tick', []))}")
+        # Und sie muessen sich WIRKLICH unterscheiden. Zwei Schnitte aus
+        # derselben Aufnahme waeren formal Varianten und klaengen gleich.
+        def _spek200(s):
+            f = np.abs(np.fft.rfft(s, 8192))
+            return f / max(f.sum(), 1e-9)
+        _tv = [_spek200(s) for s in _echt200['tick']]
+        _max_aehn = max(
+            float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+            for i, a in enumerate(_tv) for b in _tv[i + 1:])
+        check('v200: die tick-Varianten klingen wirklich verschieden',
+              _max_aehn < 0.8, f'aehnlichstes Paar {_max_aehn:.2f}')
+
+    # v200 WAHL: der Zaehler startete in JEDEM Video bei 0 - erster Tick immer
+    # dieselbe Datei. Jetzt Versatz aus dem Inhalt, aber weiter reproduzierbar.
+    _se200 = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
+    check('v200: der Versatz kommt aus dem Inhalt, nicht aus dem Zufall',
+          'zlib.crc32(_stoff.encode' in _se200 and '_saat) % len(vs)' in _se200)
+    check('v200: KEIN hash() - das ist pro Prozess gesalzen',
+          'hash((' not in _se200)
+    check('v200: Pitch und Variante haengen an getrennten Versaetzen',
+          '_jsaat = (_saat * 7 + 3)' in _se200)
     # v96g: Klick sitzt enger am Wort (Sync) + Folge-Akzent im 3er-Zyklus statt
     # auf jeder Caption (weniger Klick-Teppich, mehr Hook-Variation).
     _se_src = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()

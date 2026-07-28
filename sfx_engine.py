@@ -3,6 +3,7 @@
 Die WAVs landen im sfx/-Ordner und koennen dort durch eigene Dateien ersetzt werden."""
 import os
 import wave
+import zlib
 import numpy as np
 
 SR = 44100
@@ -100,7 +101,11 @@ def load_variants(folder=None):
         return out
     for slot in SLOTS:
         sigs = []
-        names = [slot + '.wav'] + [f'{slot}_{k}.wav' for k in range(1, 6)]
+        # v200: bis _9 statt bis _5. Fuenf Varianten waren beim meistgehoerten
+        # Slot (tick, laeuft bei fast jeder Wortgruppe) die Obergrenze, und
+        # eine Grenze, die man beim Nachlegen von Sounds still reisst, faellt
+        # niemandem auf - die Datei liegt da und wird einfach nicht geladen.
+        names = [slot + '.wav'] + [f'{slot}_{k}.wav' for k in range(1, 10)]
         for name in names:
             p = os.path.join(pdir, name)
             if os.path.exists(p):
@@ -165,6 +170,23 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
         print(f"  SFX variants: {_nvar} files for {len(_variants)} slots "
               f"(more variety)")
 
+    # v200: Der Zaehler startete in JEDEM Video bei 0. Damit war der erste
+    # Tick immer dieselbe Datei, der zweite immer dieselbe zweite - ueber
+    # mehrere Videos hinweg dieselbe Reihenfolge. Ein Versatz aus dem INHALT
+    # (Text + Laenge) bricht das auf und bleibt trotzdem deterministisch:
+    # derselbe Clip ergibt beim Re-Render dieselbe Tonspur.
+    # NICHT hash(): Pythons String-Hash ist pro Prozess zufaellig gesalzen
+    # (PYTHONHASHSEED). Damit waere die Tonspur bei jedem Start eine andere -
+    # ein Re-Render muss dasselbe Video ergeben.
+    _stoff = ('sfx-v200|'
+              + ' '.join(str(w.get('word', '')) for w in (words or []))[:400]
+              + f'|{float(duration or 0):.2f}')
+    _saat = zlib.crc32(_stoff.encode('utf-8')) % 9973
+    # Pitch/Pegel bekommen einen EIGENEN Versatz. Haengen beide am selben
+    # Zaehler, laeuft Variante 3 immer mit demselben Pitch - die Variation
+    # waere kleiner, als die Zahl der Kombinationen verspricht.
+    _jsaat = (_saat * 7 + 3) % 9973
+
     def V(slot):
         """Naechste Variante eines Slots mit Pitch/Pegel-Jitter - oder None."""
         vs = _variants.get(slot)
@@ -172,8 +194,9 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
             return bank.get(slot)          # kein Varianten-Eintrag -> Original
         c = _vc.get(slot, 0)
         _vc[slot] = c + 1
-        sig = vs[c % len(vs)]
-        return _pitch(sig, _JIT_P[c % len(_JIT_P)]) * _JIT_G[c % len(_JIT_G)]
+        sig = vs[(c + _saat) % len(vs)]
+        j = c + _jsaat
+        return _pitch(sig, _JIT_P[j % len(_JIT_P)]) * _JIT_G[(j * 3) % len(_JIT_G)]
     total = np.zeros(int((duration + 1.5) * SR), dtype=np.float32)
 
     env, hop, ref = None, 441, None
