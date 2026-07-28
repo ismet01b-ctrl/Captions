@@ -1919,9 +1919,16 @@ def _scenario_logic(clip, transcript, tmp):
     check('v212: geschlossene Tickets verschwinden nach 24 h aus der Liste',
           'TICKET_CLOSED_TTL' in _sv212
           and "NOT (status = 'closed' AND updated_at < ?)" in _sv212)
-    _idx212 = open(_os210.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _idx212 = _idx212a = open(_os210.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     check('v212: die App zeigt bei geschlossenen Tickets kein Antwortfeld',
           "t.status === 'closed' ? `<div class=\"hint\"" in _idx212)
+
+    # v212a: Am Desktop blitzte Browser-Weiss durch (Grund nur auf <body>)
+    # und die Karten zogen sich ueber die ganze Fensterbreite.
+    check('v212a: der dunkle Grund liegt auf <html>, kein Weiss-Blitz',
+          'html { background: #0d0d10; color-scheme: dark; }' in _idx212a)
+    check('v212a: alle Seiten haben eine Lesebreite',
+          '.page-head, .page-body, .main { max-width: 1040px;' in _idx212a)
 
     check('Prompt: Sperrliste im Selbstbezug ausgesetzt',
           'Sperrliste AUSGESETZT' in R.REGIE_PROMPT

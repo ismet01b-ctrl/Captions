@@ -78,6 +78,12 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-text-size-adjust: 100%; }
 html, body { min-height: 100%; overscroll-behavior-y: none; }
+/* v212a: Der dunkle Grund gehoert auch auf <html>. Steht er nur auf
+   <body>, blitzt beim Laden und beim Ueberscrollen das Browser-Weiss
+   durch - am Desktop faellt das sofort auf. color-scheme sagt dem
+   Browser zusaetzlich, Scrollbalken und Formularfelder dunkel zu
+   zeichnen, statt sie hell zu lassen. */
+html { background: #0d0d10; color-scheme: dark; }
 body {
   background: radial-gradient(1200px 800px at 15% -10%, rgba(255,122,26,.10), transparent 60%),
               radial-gradient(900px 600px at 100% 100%, rgba(255,122,26,.05), transparent 55%),
@@ -306,6 +312,11 @@ body {
 .step-line.done { background: var(--acc); }
 
 .main { padding: 32px; max-width: 1040px; margin: 0 auto; }
+/* v212a: Auf breiten Schirmen zogen sich Karten und Fehlermeldungen
+   ueber die ganze Fensterbreite - der Inhalt zerfiel in Text links
+   und viel Leere rechts. Eine Lesebreite fasst alle Seiten. */
+.page-head, .page-body, .main { max-width: 1040px; margin-left: auto;
+  margin-right: auto; }
 .step-view { display: none; animation: fadein var(--t-slow) var(--ease-out-quart); }
 .step-view.active { display: block; }
 @keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
