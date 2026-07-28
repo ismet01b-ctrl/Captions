@@ -12622,6 +12622,28 @@ def main():
     n_kw = sum(1 for p in plans if 'kw_i' in p)
     n_broll = sum(1 for p in plans if p.get('broll'))
     print(f"Compositions: {len(plans)} ({n_kw} keyword moments, {n_broll} over B-roll)")
+    # v211 BLOCK-MASSE INS LOG. Fuenf Theorien zum angeschnittenen Text, fuenf
+    # widerlegt - weil die gemessene Breite nur im Bild stand, nicht im Log.
+    # Eine Zeile je Textblock: Zeit, linke und rechte Kante als Anteil der
+    # Bildbreite. Wer sie ausserhalb 0..1 sieht, weiss sofort WELCHER Block
+    # herauslaeuft, statt es rueckwaerts aus dem Video zu schaetzen.
+    try:
+        for _p in sorted(plans, key=lambda q: q.get('start', 0)):
+            _fr = _p.get('front') or []
+            if _fr:
+                _lo = min(i['cx'] - i['w'] / 2.0 for i in _fr)
+                _hi = max(i['cx'] + i['w'] / 2.0 for i in _fr)
+                _txt = ' '.join(str(i.get('txt', '')) for i in _fr)[:34]
+            elif _p.get('kw_txt'):
+                _lo = float(_p.get('bx', 0)); _hi = _lo + float(_p.get('bw', 0))
+                _txt = str(_p['kw_txt'])[:34]
+            else:
+                continue
+            _warn = ' <-- RAGT AUS DEM BILD' if (_lo < -1 or _hi > W + 1) else ''
+            print(f"  Block {_p.get('start', 0):5.2f}s x {_lo / W:.3f}..{_hi / W:.3f} W"
+                  f" | {_txt}{_warn}")
+    except Exception as _e:
+        print(f"  Block measurements unavailable: {type(_e).__name__}")
 
     # --- Matting-Session: probiert CUDA, dann DirectML, dann CPU
     import onnxruntime as ort

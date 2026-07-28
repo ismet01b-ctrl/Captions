@@ -1898,6 +1898,14 @@ def _scenario_logic(clip, transcript, tmp):
           "and not _himmel" in _src210
           and "if _tw < _kopf * 1.10 or _himmel" in _src210)
 
+    # v211: Die gemessene Blockbreite gehoert INS LOG. Fuenf Theorien zum
+    # angeschnittenen Text, fuenf widerlegt - weil die Zahl nur im Bild stand.
+    _r211 = open(_os210.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v211: jeder Textblock meldet seine gemessene Breite',
+          'Block measurements unavailable' in _r211
+          and 'RAGT AUS DEM BILD' in _r211
+          and "f\"  Block {_p.get('start', 0):5.2f}s" in _r211)
+
     check('Prompt: Sperrliste im Selbstbezug ausgesetzt',
           'Sperrliste AUSGESETZT' in R.REGIE_PROMPT
           and 'NIE ohne Moment' in R.REGIE_PROMPT)
