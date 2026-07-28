@@ -5337,10 +5337,18 @@ def _speech_intent(fx_map, words):
 # nur mit Artikel davor ('this word', 'der Text') - 'ich gebe dir mein Wort'
 # ist ein Versprechen, kein Selbstbezug.
 _SELF_NOUN_ONE = {'caption', 'captions', 'untertitel', 'subtitle', 'subtitles'}
+# v209: 'line' und 'one' fehlten - und genau so redet ein Mensch ueber seine
+# Captions ("this next LINE goes behind me", "this ONE sticks on the wall").
+# In Ismets Werbe-Video wurde deshalb KEINE der drei Ansagen erkannt: der
+# Text stand vor der Person, nicht hinter ihr, nicht an der Wand, nicht ueber
+# ihm. Ein Wortschatz, der die haeufigste Formulierung nicht kennt, ist der
+# gleiche Fehler wie ein Riegel am falschen Gate.
 _SELF_NOUN_PAIR = {'wort', 'worte', 'woerter', 'wörter', 'word', 'words',
-                   'text', 'texte'}
-_SELF_DET = {'the', 'this', 'these', 'der', 'die', 'das', 'den',
-             'dieses', 'diese', 'dieser'}
+                   'text', 'texte', 'line', 'lines', 'zeile', 'zeilen',
+                   'satz', 'saetze', 'sätze', 'one', 'ones'}
+_SELF_DET = {'the', 'this', 'these', 'that', 'those', 'my', 'der', 'die',
+             'das', 'den', 'dieses', 'diese', 'dieser', 'jene', 'jener',
+             'mein', 'meine', 'meinen'}
 # Animationen, die eine angesagte HANDLUNG sichtbar ausfuehren koennen
 _SELF_ACTION_ANIMS = ('explosion', 'bruch', 'spur', 'schwund', 'sturz',
                       'anstieg', 'regen', 'magnet', 'zittern', 'kippen',
@@ -5378,8 +5386,12 @@ def _self_ref_intent(fx_map, words):
         toks = [_tok(j) for j in range(a, b + 1)]
         ref_at = None
         for k, t in enumerate(toks):
-            if t in _SELF_NOUN_ONE or (t in _SELF_NOUN_PAIR and k > 0
-                                       and toks[k - 1] in _SELF_DET):
+            # v209: Das Bestimmungswort steht nicht immer direkt davor -
+            # "this NEXT line" hat ein Adjektiv dazwischen, und genau diese
+            # Formulierung stand in Ismets Werbe-Video. Zwei Woerter
+            # zurueckschauen; mehr waere geraten.
+            _det = any(toks[k - d] in _SELF_DET for d in (1, 2) if k - d >= 0)
+            if t in _SELF_NOUN_ONE or (t in _SELF_NOUN_PAIR and _det):
                 ref_at = k
                 break
         if ref_at is None:

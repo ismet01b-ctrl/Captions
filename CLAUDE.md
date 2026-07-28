@@ -164,6 +164,17 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
 - "explode / fällt / fliegt / …" → passende Animation, sichtbar vorn (nie behind).
 - Selbstbezug-Sätze bestehen oft nur aus Sperrlisten-Wörtern → `_self_ref_intent`
   erzeugt den Moment notfalls selbst (läuft in ALLEN Pfaden, auch ohne Key).
+- **Der Wortschatz muss die KUNDENSPRACHE treffen (v209).** `_self_ref_intent`
+  erkennt eine Ansage nur, wenn ein Bezugswort auf die Captions im Satz steht.
+  Bis v208 waren das nur caption/subtitle/word/text - und in Ismets eigenem
+  Werbespot wurde deshalb KEINE der drei Ansagen umgesetzt, weil er "this next
+  LINE" und "this ONE" sagt. Ergaenzt: line/zeile/satz/one (+ Bestimmungswort
+  bis zwei Woerter davor, "this NEXT line"). Gegenprobe ist Pflicht: "the guy
+  behind me was loud" darf NICHTS ausloesen. Lehre: ein Wortschatz, der die
+  haeufigste Formulierung nicht kennt, ist derselbe Fehler wie ein Riegel am
+  falschen Gate - das Feature ist gruen getestet und trifft trotzdem nie.
+  Wer hier etwas ergaenzt, testet mit einem ECHTEN Sprechtext, nicht mit dem
+  Lehrbuchsatz.
 - **`intent`-Flag = Ansage ist Gesetz.** Es schützt den Moment vor Degradierung
   durch Dichte-Limit, B-Roll-Gate, Mehrwort-Komposition, Nahaufnahme-Backstop
   und Editor-Roundtrip. NUR eine bewusste Nutzer-Änderung im Editor löscht es.

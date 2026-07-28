@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v209 DIE ANSAGEN IM WERBE-VIDEO WURDEN NICHT ERKANNT.** Ismets Befund am
+  eigenen Werbespot: "Die captions passen sich nicht an". Am Video gemessen -
+  KEINE der drei Ansagen wurde umgesetzt: "this next line goes behind me"
+  stand vor der Person, "this one sticks on the wall" schwebte neben der
+  Wand, "this one floats above me" stand neben dem Kopf.
+  Ursache ist ein Wortschatz-Loch, kein Regie-Fehler: `_self_ref_intent`
+  erkennt einen Satz nur dann als Ansage ueber die Captions, wenn ein
+  bekanntes Bezugswort darin steht - bis v208 nur caption/subtitle/word/text.
+  So redet aber niemand. Ein Mensch sagt "this next LINE" und "this ONE".
+  - `line/lines/zeile/zeilen/satz/saetze/one/ones` ergaenzt, dazu die
+    Bestimmungswoerter `that/those/my/jene/mein`.
+  - Das Bestimmungswort darf jetzt ZWEI Woerter vor dem Nomen stehen -
+    "this NEXT line" haette sonst weiter nicht getroffen.
+  - Beweis: dasselbe Skript ergibt jetzt 3 Momente (behind / ground+wand+
+    stehend / himmel), alle mit `intent`. Vorher: 0.
+  - Gegenprobe im Selftest: "The guy behind me was loud", "I put the box on
+    the wall yesterday", "One thing above me broke" loesen weiterhin NICHTS
+    aus. Ein Wortschatz, der zu weit greift, verschiebt Captions bei jeder
+    beilaeufigen Ortsangabe.
+  Lehre: ein Wortschatz, der die HAEUFIGSTE Formulierung nicht kennt, ist
+  derselbe Fehler wie ein Riegel am falschen Gate (v159/v170/v176) - das
+  Feature ist gebaut, getestet und gruen, und trifft im Alltag trotzdem nie.
+  Die Tests deckten "The captions are behind me" ab; die Kundensprache nicht.
+  OFFEN aus demselben Video (Ursache noch nicht bewiesen): die erste Zeile
+  ist 0.8 s lang links und rechts angeschnitten, und in derselben Zeit stehen
+  zwei Textelemente gleichzeitig im Bild. Mit den Standard-Einstellungen bei
+  720x1280 laesst sich beides NICHT nachstellen (gemessen: Umbruch haelt
+  0.069 bis 0.889 W) - dafuer fehlen Look und gelernter Stil des Jobs.
+  Tests: 1550/1550 logic (5 neu) + Renders 7/1/5/2 + GUI.
 - **v208b Eine Fehlermeldung, die den Fehler auch nennt.** Ismet schickte die
   Panel-Meldung zu `/api/upload/chunk/...`: 60 Zeilen starlette-Innereien und
   NICHT die Zeile, die sagt, was kaputt ist. Grund ist die Bauart eines

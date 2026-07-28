@@ -1790,6 +1790,35 @@ def _scenario_logic(clip, transcript, tmp):
     check('Selbstbezug: kein Treffer ohne Caption-Bezug',
           R._self_ref_intent({}, _wsr('The prices explode this year.')) == {}
           and R._self_ref_intent({}, _wsr('I give you my word about it.')) == {})
+    # v209: AN ISMETS WERBE-VIDEO GEMESSEN. Dort wurde KEINE der drei Ansagen
+    # erkannt - der Text stand vor der Person statt hinter ihr, neben der Wand
+    # statt darauf, neben dem Kopf statt darueber. Ursache war der Wortschatz:
+    # 'line' und 'one' fehlten, und in "this NEXT line" steht ein Adjektiv
+    # zwischen Bestimmungswort und Nomen. Genau so redet ein Mensch ueber
+    # seine Captions - ein Wortschatz, der die haeufigste Formulierung nicht
+    # kennt, ist derselbe Fehler wie ein Riegel am falschen Gate.
+    _v209 = R._self_ref_intent({}, _wsr(
+        'Watch this next line goes behind me. This one sticks on the wall. '
+        'This one floats above me. I just talked.'))
+    _v209f = {d.get('fx') + '/' + d.get('szene', '') for d in _v209.values()}
+    check('v209: "this next line goes behind me" landet HINTER der Person',
+          'behind/' in _v209f, str(_v209f))
+    check('v209: "this one sticks on the wall" landet AN DER WAND',
+          any(d.get('fx') == 'ground' and d.get('szene') == 'wand'
+              and d.get('lage') == 'stehend' for d in _v209.values()), str(_v209))
+    check('v209: "this one floats above me" geht NACH OBEN',
+          any(d.get('szene') == 'himmel' for d in _v209.values()), str(_v209))
+    check('v209: alle drei Ansagen sind als Gesetz markiert (intent)',
+          len(_v209) == 3 and all(d.get('intent') for d in _v209.values()),
+          str(len(_v209)))
+    # Gegenprobe: derselbe Wortschatz darf NICHT auf beliebige Saetze
+    # anspringen. 'behind me' ohne Bezug auf den Text ist eine Ortsangabe
+    # ueber einen Menschen, keine Regie-Anweisung.
+    check('v209: ohne Bezug auf den Text passiert weiterhin nichts',
+          R._self_ref_intent({}, _wsr('The guy behind me was loud today.')) == {}
+          and R._self_ref_intent({}, _wsr(
+              'I put the box on the wall yesterday.')) == {}
+          and R._self_ref_intent({}, _wsr('One thing above me broke.')) == {})
     _sr5 = R._self_ref_intent({2: {'fx': 'behind', 'power': 2, 'n': 1}},
                               _wsr('Watch this word fly across the screen.'))
     check('Selbstbezug: bestehender Moment bekommt Handlung + wird sichtbar',
