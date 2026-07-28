@@ -4581,10 +4581,12 @@ async function loadThreads() {
           <span class="hint" style="margin-left:auto;">${t.status === 'closed' ? 'closed' : t.status === 'answered' ? 'answered' : 'waiting'}</span>
         </div>
         ${msgs}
-        <textarea id="tr${t.id}" rows="2" maxlength="5000" placeholder="Reply …"
+        ${t.status === 'closed' ? `<div class="hint" style="margin-top:8px;">
+          This ticket is closed. Need anything else? Just open a new one.</div>`
+        : `<textarea id="tr${t.id}" rows="2" maxlength="5000" placeholder="Reply …"
           style="text-transform:none; resize:vertical; width:100%; margin-top:6px;"></textarea>
         <button class="btn" style="margin-top:6px; padding:7px 14px;"
-          onclick="threadReply(${t.id})">Reply</button>
+          onclick="threadReply(${t.id})">Reply</button>`}
       </div>`;
     }).join('');
     if (d.ungelesen) {

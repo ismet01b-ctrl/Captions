@@ -1982,7 +1982,7 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v211-blockmass'
+DVE_BUILD = 'v212-tickets'
 
 
 # ================= v204-sec NOTAUS =================
@@ -3465,6 +3465,8 @@ def _sec_event_purge():
         print(f'Sicherheits-Protokoll nicht aufgeraeumt: {e}')
 
 
+# v212: Wie lange ein GESCHLOSSENES Ticket noch beim Kunden steht.
+TICKET_CLOSED_TTL = int(os.environ.get('DVE_TICKET_CLOSED_TTL', '86400'))
 TRICHTER_TAGE = int(os.environ.get('DVE_FUNNEL_DAYS', '400'))
 _TRICHTER_STUFEN = ('besuch', 'app', 'konto', 'upload', 'fertig', 'kauf')
 # Woher kam jemand? Der Verweis-Header nennt die Domain, ein ?utm_source=
@@ -5349,10 +5351,16 @@ def api_support_tickets(request: Request):
     ein neues Ticket ohne Bezug zum alten."""
     u = _require_user(request)
     con = _db()
+    # v212: Geschlossene Tickets verschwinden 24 h nach dem Schliessen aus
+    # der Kundenansicht. Vorher stapelten sich erledigte Vorgaenge fuer immer
+    # in der Liste. Gefiltert wird beim LESEN, nicht geloescht - die Historie
+    # bleibt im Panel und fuer die Aufbewahrung erhalten.
+    _zu = int(time.time()) - TICKET_CLOSED_TTL
     tk = con.execute(
         "SELECT id, subject, status, created_at, updated_at FROM tickets "
-        "WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50",
-        (u['id'],)).fetchall()
+        "WHERE user_id = ? AND NOT (status = 'closed' AND updated_at < ?) "
+        "ORDER BY updated_at DESC LIMIT 50",
+        (u['id'], _zu)).fetchall()
     aus = []
     for t in tk:
         aus.append({'id': t['id'], 'subject': t['subject'], 'status': t['status'],
@@ -5389,11 +5397,18 @@ def api_support_reply(tid: int, request: Request, message: str = Form(...)):
         raise HTTPException(400, 'Please write a short message.')
     now = int(time.time())
     con = _db()
-    t = con.execute("SELECT id, subject FROM tickets WHERE id = ? AND user_id = ?",
-                    (tid, u['id'])).fetchone()
+    t = con.execute("SELECT id, subject, status, updated_at FROM tickets "
+                    "WHERE id = ? AND user_id = ?", (tid, u['id'])).fetchone()
     if not t:
         con.close()
         raise HTTPException(404, 'Unknown ticket.')
+    # v212: Ein GESCHLOSSENES Ticket ist erledigt. Eine Rueckfrage darauf
+    # riss es bisher wieder auf - damit war 'geschlossen' nur eine Meinung.
+    # Wer noch etwas braucht, macht ein neues Ticket auf; der alte Verlauf
+    # bleibt bis zum Ablauf lesbar.
+    if (t['status'] or '') == 'closed':
+        con.close()
+        raise HTTPException(409, 'This ticket is closed. Please open a new one.')
     con.execute("INSERT INTO ticket_messages (ticket_id, von, text, gelesen, "
                 "created_at) VALUES (?, 'kunde', ?, 1, ?)", (tid, text, now))
     # Eine Rueckfrage macht das Ticket wieder offen - sonst faellt sie aus

@@ -1906,6 +1906,23 @@ def _scenario_logic(clip, transcript, tmp):
           and 'RAGT AUS DEM BILD' in _r211
           and "f\"  Block {_p.get('start', 0):5.2f}s" in _r211)
 
+    # v212: Ein geschlossenes Ticket ist erledigt - keine Antwort mehr, und
+    # nach 24 h verschwindet es aus der Kundenliste (nicht geloescht: die
+    # Historie bleibt im Panel und fuer die Aufbewahrung).
+    _sv212 = open(_os210.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v212: auf ein geschlossenes Ticket kann nicht geantwortet werden',
+          "if (t['status'] or '') == 'closed':" in _sv212
+          and 'This ticket is closed. Please open a new one.' in _sv212)
+    check('v212: eine Rueckfrage reisst ein geschlossenes Ticket nicht wieder auf',
+          _sv212.index("This ticket is closed. Please open a new one.")
+          < _sv212.index("UPDATE tickets SET status = 'open', updated_at = ?"))
+    check('v212: geschlossene Tickets verschwinden nach 24 h aus der Liste',
+          'TICKET_CLOSED_TTL' in _sv212
+          and "NOT (status = 'closed' AND updated_at < ?)" in _sv212)
+    _idx212 = open(_os210.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v212: die App zeigt bei geschlossenen Tickets kein Antwortfeld',
+          "t.status === 'closed' ? `<div class=\"hint\"" in _idx212)
+
     check('Prompt: Sperrliste im Selbstbezug ausgesetzt',
           'Sperrliste AUSGESETZT' in R.REGIE_PROMPT
           and 'NIE ohne Moment' in R.REGIE_PROMPT)
