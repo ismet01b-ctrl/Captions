@@ -10089,6 +10089,40 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         _k['end'] = _ke = max(_ks + 0.20, _bs - 0.16)
                         _k['aus'] = 0.12
                         _n_solo += 1
+        # v209a KARTE GEGEN KARTE. Der Riegel darueber vergleicht nur Karte
+        # gegen Fliesstext - zwei KARTEN konnten sich beliebig ueberlagern,
+        # und niemand hat es gemerkt, weil zwei Karten dicht beieinander
+        # selten sind. Bei Orts-Ansagen sind sie der NORMALFALL: drei Saetze
+        # hintereinander ("behind me", "on the wall", "above me") ergeben
+        # drei Karten, und eine Karte haelt ihre Mindestlesezeit weit ueber
+        # das gesprochene Wort hinaus. Gemessen an Ismets Werbespot:
+        # 'ON THE WALL' lief 7.20-10.25, 'BEHIND ME' 7.25-8.75 - anderthalb
+        # Sekunden zwei Karten uebereinander. Derselbe Fehlertyp wie
+        # v159/v170/v176: ein Riegel am falschen Gate.
+        _kws = sorted(_kwp, key=lambda p: p.get('t0', p['start']))
+        for _a, _n in zip(_kws, _kws[1:]):
+            _ns = _n.get('t0', _n['start'])
+            if _a['end'] + _a.get('aus', _AUS) <= _ns + 1e-3:
+                continue                         # sauber nacheinander
+            _as = _a.get('t0', _a['start'])
+            # (1) Die erste Karte kuerzt - aber NIE unter ihre Lesezeit. Eine
+            # auf 0.2 s zusammengestauchte Karte ist schlimmer als die
+            # Ueberschneidung: man sieht sie aufblitzen und kann sie nicht lesen.
+            _soll = max(_as + _KW_MIN, _ns - _AUS)
+            if _soll < _a['end'] - 1e-3:
+                _a['end'] = _soll
+                _n_solo += 1
+            # (2) Reicht das nicht, WARTET die zweite Karte, statt dass die
+            # erste sich kaputtkuerzt. Sie muss danach noch lesbar sein.
+            if _a['end'] + _AUS > _ns + 1e-3:
+                _spaet = _a['end'] + _AUS
+                _n['t0'] = _n['start'] = _spaet
+                # Sie darf dabei laenger stehen bleiben: die Standzeit einer
+                # Karte haengt an der Lesbarkeit, nicht am gesprochenen Wort.
+                # Ohne das waere die zweite Karte nach dem Warten zu kurz -
+                # und genau dann blitzt sie nur auf.
+                _n['end'] = max(_n['end'], _spaet + _KW_MIN)
+                _n_solo += 1
         if _n_solo:
             print(f"  Solo guard: {_n_solo} moment(s) trimmed so the "
                   f"keyword card stands alone")

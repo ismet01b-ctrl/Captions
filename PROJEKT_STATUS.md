@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v209a ZWEI TEXTE GLEICHZEITIG IM BILD.** Ismets zweiter Render zeigte
+  Woerter doppelt. Ursache am Plan nachgestellt (ohne sein Video): der
+  Solo-Riegel vergleicht nur Karte gegen FLIESSTEXT, nie Karte gegen KARTE.
+  Drei Orts-Ansagen hintereinander ergeben drei Karten, und eine Karte steht
+  laenger als ihr gesprochenes Wort - gemessen lagen 'ON THE WALL'
+  (7.20-10.25) und 'BEHIND ME' (7.25-8.75) anderthalb Sekunden uebereinander.
+  Zum dritten Mal derselbe Fehlertyp (v159/v170/v176): der Riegel am
+  falschen Gate. Aufgeloest wird NICHT durch Kuerzen der ersten Karte
+  (0.2 s = Aufblitzen, schlimmer als die Ueberlappung), sondern: die erste
+  kuerzt bis hoechstens auf ihre Lesezeit, dann WARTET die zweite und bleibt
+  dafuer laenger stehen. Beweis: 7.20-8.00 / 8.40-9.20 / 9.95-12.05, keine
+  Ueberschneidung, jede Karte >= 0.80 s.
 - **v209 DIE ANSAGEN IM WERBE-VIDEO WURDEN NICHT ERKANNT.** Ismets Befund am
   eigenen Werbespot: "Die captions passen sich nicht an". Am Video gemessen -
   KEINE der drei Ansagen wurde umgesetzt: "this next line goes behind me"
@@ -31,7 +43,7 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
   zwei Textelemente gleichzeitig im Bild. Mit den Standard-Einstellungen bei
   720x1280 laesst sich beides NICHT nachstellen (gemessen: Umbruch haelt
   0.069 bis 0.889 W) - dafuer fehlen Look und gelernter Stil des Jobs.
-  Tests: 1550/1550 logic (5 neu) + Renders 7/1/5/2 + GUI.
+  Tests: 1553/1553 logic (8 neu) + Renders 7/1/5/2 + GUI.
 - **v208b Eine Fehlermeldung, die den Fehler auch nennt.** Ismet schickte die
   Panel-Meldung zu `/api/upload/chunk/...`: 60 Zeilen starlette-Innereien und
   NICHT die Zeile, die sagt, was kaputt ist. Grund ist die Bauart eines

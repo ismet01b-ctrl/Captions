@@ -1832,6 +1832,27 @@ def _scenario_logic(clip, transcript, tmp):
           bool(_kpsr) and _kpsr[0]['tpl'] == 'behind'
           and 'BEHIND' in _kpsr[0].get('kw_txt', ''),
           str(_kpsr[0].get('kw_txt') if _kpsr else None))
+    # v209a: KARTE GEGEN KARTE. Der Solo-Riegel verglich nur Karte gegen
+    # Fliesstext. Drei Orts-Ansagen hintereinander ergeben drei Karten, und
+    # eine Karte steht laenger als ihr gesprochenes Wort - an Ismets Werbespot
+    # gemessen lagen 'ON THE WALL' (7.20-10.25) und 'BEHIND ME' (7.25-8.75)
+    # anderthalb Sekunden uebereinander. Zwei Texte gleichzeitig im Bild.
+    _w209 = _wsr('Watch this next line goes behind me. This one sticks on '
+                 'the wall. This one floats above me. I just talked here.')
+    _fx209 = R._speech_intent(R._self_ref_intent({}, _w209), _w209)
+    _pl209 = R.build_plans(_w209, set(_fx209), cfg, S, W_, H_,
+                           lambda s, e: True, _fx209)
+    _kw209 = sorted([p for p in _pl209 if 'kw_i' in p], key=lambda p: p['start'])
+    _ov209 = [(a['kw_txt'], b['kw_txt']) for a, b in zip(_kw209, _kw209[1:])
+              if b['start'] < a['end'] + a.get('aus', 0.40) - 1e-6]
+    check('v209a: zwei Keyword-Karten stehen NIE gleichzeitig im Bild',
+          not _ov209, str(_ov209))
+    check('v209a: jede Karte behaelt ihre Mindestlesezeit (0.8 s)',
+          all(p['end'] - p['start'] >= 0.79 for p in _kw209),
+          str([round(p['end'] - p['start'], 2) for p in _kw209]))
+    check('v209a: die Ansagen bleiben in der gesprochenen Reihenfolge',
+          [p['kw_txt'] for p in _kw209][:1] != [] and len(_kw209) >= 2,
+          str([p['kw_txt'] for p in _kw209]))
     check('Prompt: Sperrliste im Selbstbezug ausgesetzt',
           'Sperrliste AUSGESETZT' in R.REGIE_PROMPT
           and 'NIE ohne Moment' in R.REGIE_PROMPT)

@@ -479,6 +479,15 @@ unten, von 86 % skaliert, mit ease_back-Ueberschwingen.
   blossen Ende gerechnet melden die Zahlen "keine Ueberschneidung", waehrend
   im Bild zwei Texte uebereinander liegen. Gedraengte Karten bekommen ein
   eigenes kurzes `aus` am Plan; die Zeichenschleife liest es.
+- **Der Solo-Riegel gilt auch KARTE gegen KARTE (v209a).** Bis v209 verglich
+  er nur Karte gegen Fliesstext - zwei Karten konnten sich beliebig
+  ueberlagern. Bei Orts-Ansagen ist das der Normalfall: drei Saetze
+  hintereinander ergeben drei Karten, und eine Karte steht laenger als ihr
+  gesprochenes Wort (an Ismets Werbespot gemessen: 'ON THE WALL' 7.20-10.25
+  gegen 'BEHIND ME' 7.25-8.75). Beim Aufloesen kuerzt die ERSTE nie unter
+  ihre Lesezeit - stattdessen WARTET die zweite und bleibt dafuer laenger
+  stehen. Eine auf 0.2 s gestauchte Karte blitzt nur auf und ist schlimmer
+  als die Ueberschneidung.
 - **Solange eine Keyword-Karte steht, raeumt jeder andere Textplan.** Die
   Karte hat Vorrang bis 0.80 s Mindestlesezeit, danach raeumt sie selbst.
   Vorher galt "Karte oben, Block unten" als saubere Neben-Platzierung - das
