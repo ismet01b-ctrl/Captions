@@ -977,7 +977,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1594/1594 grün (Stand v216)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1585/1585 grün (Stand v215)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1078,7 +1078,7 @@ laeuft laut Code bewusst nur bei 'durchgehend' - Textpausen sind dort die
 gewollte Handschrift. Der Alpha-Test suchte deshalb den Caption-Moment nicht,
 sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 
-### Was in dieser Runde fertig wurde (v208-v216)
+### Was in dieser Runde fertig wurde (v208-v215)
 - v208/v208a Trichter + Test-Gate urteilt nach der Bilanz statt Textsuche
 - v208b Ursache zuerst in der Fehlermeldung, ClientDisconnect ist keine Stoerung
 - v209 Ansage-Wortschatz: line/one + Adjektiv zwischen Bestimmungswort und Nomen
@@ -1094,19 +1094,13 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
   Ansage, `intent_time_floor()` als zentraler Riegel)
 - v215 Solo-Riegel misst ab dem Erscheinen der Karte (`card_t0`), und ein
   wartender Fliesstext-Block behaelt seine Lesezeit (`_FLOW_MIN`)
-- v216 kein Text am Bildrand angeschnitten (`fit_into_frame`), nie zwei
-  Fliesstext-Bloecke gleichzeitig, und der Block-Log misst endlich Karten
 
 ### Noch offen aus den Renders
-- **Zwei Textbloecke gleichzeitig: der FLIESSTEXT-Fall ist mit v216 zu**
-  ('EVERYONE'S' oben, 'CAPTIONS LOOK' unten). Karte gegen Fliesstext deckt
-  v185/v215 ab, Karte gegen Karte v209a/v213. Am echten Material noch nicht
-  gegengeprueft.
-- **Der Anschnitt ist mit v216 generell abgeriegelt** (`fit_into_frame` misst
-  das FERTIGE Bild und verkleinert notfalls). Die URSACHE ist weiterhin nicht
-  bekannt - sie liess sich mit nachgebautem Transkript nicht ausloesen. Wenn
-  er wiederkommt: der Block-Log nennt jetzt Karten, Wortlaut und Zeitfenster,
-  die herauslaufende Zeile traegt `<-- RAGT AUS DEM BILD`.
+- **Zwei Textbloecke gleichzeitig, 94 Frames** (Karte gegen FLIESSTEXT, nicht
+  Karte gegen Karte). Am Anfang: 'EVERYONE'S' oben, 'CAPTIONS LOOK' unten.
+- Der Anschnitt der ersten Zeile ist WEG (0 Frames Randberuehrung), Ursache
+  war nie geklaert - fuenf Theorien widerlegt (Umbruch, Zoom, gelernter Stil,
+  Haus-Stil, echte Wortzeiten). Wenn er wiederkommt: v211-Blockzeilen lesen.
 - 24 fps Quelle ruckelt auf dem Handy. Video technisch sauber gemessen
   (keine doppelten/fehlenden Bilder) - Ismet soll Seedance auf 30 fps stellen.
 - 'above me' greift jetzt, am echten Material noch nicht bestaetigt.

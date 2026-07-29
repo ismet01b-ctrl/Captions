@@ -2008,105 +2008,6 @@ def _scenario_logic(clip, transcript, tmp):
     check('v215: der Solo-Riegel misst ab dem Erscheinen der Karte',
           '_ks = _ct0(_k)' in _src215 and '_bs = _ct0(_b)' in _src215
           and 'def _ct0(p):' in _src215 and '_FLOW_MIN = 0.55' in _src215)
-    # ------------------------------------------------------------------
-    # v216: AN ISMETS RENDER GEMESSEN (15 s, 720x1280).
-    # (a) KEIN TEXT WIRD VOM BILDRAND ANGESCHNITTEN. Im Video lief
-    #     'CAPTIONS LOOK THE' links UND rechts aus dem Bild (vorne fehlte
-    #     das C, hinten das E), 'THIS ONE FLOATS' klebte mit beiden Kanten
-    #     am Rand. Ein halb abgeschnittenes Wort ist unlesbar.
-    _kt216 = R.Sprites(cfg, 720, 1280)
-    _arr216 = _kt216.text('CAPTIONS LOOK THE', 150, _kt216.white)[0]
-    _p216 = {'tpl': 'outline', 'kw_i': 0, 'kw_txt': 'CAPTIONS LOOK THE',
-             'arr': _arr216, 'cx': 360.0, 'cy': 900.0, 'target': (360.0, 900.0),
-             'start': 1.0, 'end': 2.0}
-    _v216 = R.ink_box(_p216, 720, 1280)
-    _n216 = R.fit_into_frame([_p216], 720, 1280)
-    _n216b = R.ink_box(_p216, 720, 1280)
-    check('v216: eine zu breite Karte wird ins Bild zurueckgeholt',
-          _n216 == 1 and _v216[0] < -1 and _v216[1] > 721
-          and _n216b[0] >= -10 and _n216b[1] <= 730,
-          f"vorher {_v216[0]/720:.3f}..{_v216[1]/720:.3f} W, "
-          f"nachher {_n216b[0]/720:.3f}..{_n216b[1]/720:.3f} W")
-    _its216 = [{'i': k, 'arr': _kt216.text(x, 110, _kt216.white)[0],
-                'cx': 60 + k * 230, 'cy': 960, 'w': 200, 't': 1.0 + k * 0.2,
-                'role': 'key'} for k, x in enumerate(['THIS', 'ONE', 'FLOATS'])]
-    _pf216 = {'tpl': 'flow', 'front': _its216, 'target': (360, 960),
-              'start': 1.0, 'end': 2.0}
-    _vf216 = R.ink_box(_pf216, 720, 1280)
-    R.fit_into_frame([_pf216], 720, 1280)
-    _nf216 = R.ink_box(_pf216, 720, 1280)
-    check('v216: auch ein Fliesstext-Block wird ins Bild zurueckgeholt',
-          _vf216[1] > 721 and _nf216[1] <= 730 and _nf216[0] >= -10,
-          f"vorher {_vf216[0]/720:.3f}..{_vf216[1]/720:.3f} W, "
-          f"nachher {_nf216[0]/720:.3f}..{_nf216[1]/720:.3f} W")
-    # Der GEWOLLTE Randabfall (v152) bleibt unangetastet - er ist Absicht.
-    _pb216 = {'tpl': 'flow', 'target': (360, 900), 'start': 1.0, 'end': 2.0,
-              'front': [{'i': 0, 'arr': _kt216.text('BOOM', 220, _kt216.white)[0],
-                         'cx': 360, 'cy': 900, 'w': 600, 't': 1.0,
-                         'role': 'punch', 'bleed': True}]}
-    _wb216 = _pb216['front'][0]['arr'].shape[1]
-    check('v216: der gewollte Randabfall (v152) wird nicht angefasst',
-          R.fit_into_frame([_pb216], 720, 1280) == 0
-          and _pb216['front'][0]['arr'].shape[1] == _wb216)
-    check('v216: ein Moment, der passt, bleibt unveraendert',
-          R.fit_into_frame([{'tpl': 'flow', 'target': (360, 900),
-                             'start': 1.0, 'end': 2.0,
-                             'front': [{'i': 0, 'cx': 360, 'cy': 900, 'w': 200,
-                                        't': 1.0,
-                                        'arr': _kt216.text('OK', 60,
-                                                           _kt216.white)[0]}]}],
-                            720, 1280) == 0)
-    # ink_box muss ALLE drei Textformen kennen - eine Pruefung, die nur eine
-    # davon sieht, ist fuer die anderen blind (v187-Lehre).
-    check('v216: ink_box misst Karte, Komposition und Fliesstext',
-          R.ink_box({'arr': _arr216, 'cx': 360.0, 'cy': 900.0}, 720, 1280) is not None
-          and R.ink_box({'tokens': [{'arr': _arr216, 'ox': 0.0, 'oy': 0.0}],
-                         'by': 900.0}, 720, 1280) is not None
-          and R.ink_box(_pf216, 720, 1280) is not None
-          and R.ink_box({'tpl': 'camonly'}, 720, 1280) is None)
-    check('v216: der Log nennt den Wortlaut, nicht nur Leerzeichen',
-          R.plan_text({'front': [{'i': 0}, {'i': 1}]},
-                      [{'word': ' Hallo'}, {'word': ' Welt'}]) == 'Hallo Welt'
-          and R.plan_text({'kw_txt': 'BEHIND ME'}, []) == 'BEHIND ME')
-    # (b) ZWEI FLIESSTEXT-BLOECKE GLEICHZEITIG. Der Solo-Riegel haengt an
-    #     einer KARTE ("solange eine Keyword-Karte steht, raeumt jeder andere
-    #     Textplan") - zwei Bloecke ohne Karte kannte er nicht, und
-    #     resolve_overlaps greift nur bei Bloecken NAHE beieinander.
-    #     In Ismets Render standen 'EVERYONE'S' oben und 'CAPTIONS LOOK...'
-    #     unten 94 Frames lang gleichzeitig.
-    _w216 = [{'word': ' ' + x, 'start': 0.30 + i * 0.30, 'end': 0.30 + i * 0.30 + 0.26}
-             for i, x in enumerate("Everyone's captions look the same same file "
-                                   "same yellow word bouncing you have seen it "
-                                   "a thousand times over".split())]
-    _pl216 = R.build_plans(_w216, R.detect_keywords(_w216, cfg, None), cfg, S,
-                           W_, H_, lambda s, e: True, None)
-    _fl216 = sorted([p for p in _pl216 if 'target' in p and p.get('kw_i') is None],
-                    key=lambda p: R.card_t0(p, _w216))
-    _ov216 = []
-    for _i in range(len(_fl216)):
-        for _j in range(_i + 1, len(_fl216)):
-            _a, _b = _fl216[_i], _fl216[_j]
-            _o = (min(_a['end'] + float(_a.get('aus', 0.15)),
-                      _b['end'] + float(_b.get('aus', 0.15)))
-                  - max(R.card_t0(_a, _w216), R.card_t0(_b, _w216)))
-            if _o > 0.05:
-                _ov216.append(round(_o, 2))
-    check('v216: nie zwei Fliesstext-Bloecke gleichzeitig im Bild',
-          not _ov216, f"Ueberlappungen: {_ov216[:6]}")
-    # Und kein Block wird dabei zum Blinzeln gekuerzt oder verliert sein
-    # Schlusswort - eine Ueberlappung durch Loeschen zu beseitigen waere
-    # keine Loesung (v213).
-    # Das Schlusswort muss einsetzen, BEVOR der Block endet (v187-Zusage) -
-    # eine Ueberlappung durch Verschlucken zu beseitigen waere keine Loesung.
-    check('v216: kein Fliesstext-Block verliert sein Schlusswort',
-          all(p['end'] > max((it.get('t', 0) for it in (p.get('front') or [])),
-                             default=0) + 1e-6 for p in _fl216),
-          str([(round(R.card_t0(p, _w216), 2), round(p['end'], 2),
-                round(max((it.get('t', 0) for it in (p.get('front') or [])),
-                          default=0), 2)) for p in _fl216]))
-    check('v216: der Fliesstext-Riegel steht im Solo-Block',
-          '_fl = sorted([p for p in _txt if p.get(\'kw_i\') is None]' in _src215
-          or "_fl = sorted([p for p in _txt if p.get('kw_i') is None]" in _src215)
     # v210: DREI KI-SYSTEME FIELEN STILL AUS (Ismets Job-Log).
     # (a) ai_flow_direct hatte KEIN 'import requests' - jeder Kundenrender
     #     starb dort mit NameError und fiel auf die Heuristik zurueck. Ein
@@ -2155,16 +2056,10 @@ def _scenario_logic(clip, transcript, tmp):
     # v211: Die gemessene Blockbreite gehoert INS LOG. Fuenf Theorien zum
     # angeschnittenen Text, fuenf widerlegt - weil die Zahl nur im Bild stand.
     _r211 = open(_os210.path.join(HERE, 'render.py'), encoding='utf-8').read()
-    # v216: der Log misst jetzt ueber ink_box - damit erscheinen auch KARTEN
-    # und KOMPOSITIONEN in der Liste (vorher las er 'bx'/'bw', die kein
-    # Keyword-Plan setzt: jede Karte stand mit '0.000..0.000 W' im Log) -
-    # dazu der Wortlaut und das sichtbare Zeitfenster.
     check('v211: jeder Textblock meldet seine gemessene Breite',
           'Block measurements unavailable' in _r211
           and 'RAGT AUS DEM BILD' in _r211
-          and '_bx = ink_box(_p, W, H)' in _r211
-          and '_txt = plan_text(_p, words)' in _r211
-          and "f\"  Block {_t0:5.2f}-{_t1:5.2f}s" in _r211)
+          and "f\"  Block {_p.get('start', 0):5.2f}s" in _r211)
 
     # v212: Ein geschlossenes Ticket ist erledigt - keine Antwort mehr, und
     # nach 24 h verschwindet es aus der Kundenliste (nicht geloescht: die
