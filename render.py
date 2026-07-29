@@ -10108,11 +10108,22 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     # Der frueher gestartete wird beendet, der spaeter startende faengt erst
     # nach der Karte an. Kein Plan wird geloescht - Woerter gehen nicht
     # verloren, das Luecken-Netz oben bleibt gueltig.
+    # v215 GERECHNET WIRD AB DEM ERSCHEINEN DER KARTE, NICHT AB p['start'].
+    # p['start'] ist der Anfang der WORTGRUPPE - dort setzen nur die kleinen
+    # Nebenwoerter ein; die grosse Karte kommt erst mit ihrem eigenen Wort
+    # (jeder Zeichen-Zweig rechnet mit `t - p.get('t0', words[kw_i]['start'])`
+    # und ueberspringt negative Werte). Der Riegel glaubte einer Karte deshalb
+    # eine Lesezeit, die sie gar nicht hatte: am Testmaterial stand 'CAPTIONS'
+    # auf dem Papier 1.06-1.86, im Bild 1.59-1.86 - 0.27 s statt der hier
+    # garantierten 0.80 s, also genau das Blinzeln, das _KW_MIN verhindern
+    # soll. Dieselbe Verwechslung wie bei der Ansage (v214).
     if cfg['effects'].get('caption_solo', True):
+        def _ct0(p):
+            return card_t0(p, words)
         _kwp = sorted([p for p in plans if p.get('kw_i') is not None
-                       and 'target' in p], key=lambda p: p.get('t0', p['start']))
+                       and 'target' in p], key=_ct0)
         _txt = sorted([p for p in plans if 'target' in p and p.get('front')],
-                      key=lambda p: p.get('t0', p['start']))
+                      key=_ct0)
         _n_solo = 0
         # Die KARTE hat Vorrang, nicht der Fliesstext: sie ist der dramatische
         # Moment und braucht Lesezeit. Unter 0.8 s ist ein grosses Wort nicht
@@ -10126,10 +10137,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # darueber, 'WIR' lag auf 'ZEIG' (am Render Frame fuer Frame belegt).
         _AUS = 0.40
         _KW_MIN = 0.80
+        # v215: so lange muss ein wartender Fliesstext-Block danach noch
+        # stehen, sonst gibt die Karte nach. Knapp unter der Lesezeit einer
+        # Karte: der Block traegt mehr Woerter, aber in kleinerer Schrift -
+        # und er ist der Text, den der Sprecher gerade sagt.
+        _FLOW_MIN = 0.55
         for _k in _kwp:
-            _ks = _k.get('t0', _k['start'])
+            _ks = _ct0(_k)
             for _b in _txt:
-                _bs = _b.get('t0', _b['start'])
+                _bs = _ct0(_b)
                 _ke = _k['end']
                 if _bs >= _ke + _AUS or _b['end'] + _AUS <= _ks:
                     continue                     # wirklich keine Ueberschneidung
@@ -10166,7 +10182,17 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     _n_solo += 1
                 if _bs < _ke + _AUS:
                     _spaet = _ke + _AUS
-                    if _b['end'] - _spaet >= 0.20:
+                    # v215 WARTEN DARF DEN BLOCK NICHT SELBST ZUM BLINZELN
+                    # MACHEN. Die Schranke stand auf 0.20 s - das ist kein
+                    # Lesen, das ist ein Aufblitzen, und ein Fliesstext-Block
+                    # traegt die GESPROCHENEN Woerter. Mit der korrigierten
+                    # Messung oben wurde genau das messbar: die Karte bekam
+                    # ihre 0.80 s, der folgende Block sank auf 0.27 s - ein
+                    # Blinzeln gegen ein anderes getauscht. Ab _FLOW_MIN
+                    # raeumt die Karte, statt den Block kaputtzuschieben.
+                    # Der Block wird dabei NIE beschnitten: seine Woerter
+                    # gehen nicht verloren, nur die Karte gibt nach.
+                    if _b['end'] - _spaet >= _FLOW_MIN:
                         _b['t0'] = _b['start'] = _spaet
                         _n_solo += 1
                     else:
@@ -10188,12 +10214,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # 'ON THE WALL' lief 7.20-10.25, 'BEHIND ME' 7.25-8.75 - anderthalb
         # Sekunden zwei Karten uebereinander. Derselbe Fehlertyp wie
         # v159/v170/v176: ein Riegel am falschen Gate.
-        _kws = sorted(_kwp, key=lambda p: p.get('t0', p['start']))
+        _kws = sorted(_kwp, key=_ct0)
         for _a, _n in zip(_kws, _kws[1:]):
-            _ns = _n.get('t0', _n['start'])
+            _ns = _ct0(_n)
             if _a['end'] + _a.get('aus', _AUS) <= _ns + 1e-3:
                 continue                         # sauber nacheinander
-            _as = _a.get('t0', _a['start'])
+            _as = _ct0(_a)
             # (1) Die erste Karte kuerzt - aber NIE unter ihre Lesezeit. Eine
             # auf 0.2 s zusammengestauchte Karte ist schlimmer als die
             # Ueberschneidung: man sieht sie aufblitzen und kann sie nicht lesen.

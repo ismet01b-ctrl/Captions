@@ -3,6 +3,36 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v215 DER SOLO-RIEGEL MASS DIE LESEZEIT AM FALSCHEN PUNKT.**
+  Aufgefallen beim Gegenpruefen von v214, gleiche Verwechslung eine Regel
+  weiter: der Riegel rechnete die Lesezeit einer Karte ab `p['start']` - dem
+  Anfang der WORTGRUPPE. Dort setzen aber nur die kleinen Nebenwoerter ein;
+  die grosse Karte kommt erst mit ihrem eigenen Wort (jeder Zeichen-Zweig
+  rechnet mit `t - p.get('t0', words[kw_i]['start'])` und ueberspringt
+  negative Werte).
+  - **BEWEIS:** `CAPTIONS` stand auf dem Papier 1.20-2.00, im Bild aber nur
+    1.80-2.00 - **0.20 s statt der im Code garantierten 0.80 s**, genau das
+    Blinzeln, das `_KW_MIN` verhindern soll. Nachher: 0.44 s, alle
+    Fliesstext-Bloecke unveraendert oder laenger.
+  - **Beide Richtungen, nicht nur eine.** Die richtige Messung allein haette
+    das Blinzeln nur weitergereicht: die Karte bekam ihre 0.80 s, der
+    nachfolgende Fliesstext-Block sank auf 0.27 s. Ein Block traegt die
+    Woerter, die GERADE GESPROCHEN werden - deshalb `_FLOW_MIN = 0.55`:
+    muesste ein wartender Block darunter, gibt die Karte nach statt ihn
+    kaputtzuschieben. Der Block wird dabei nie beschnitten, es gehen keine
+    Woerter verloren.
+  - `card_t0(p, words)` ist die eine Stelle, die "wann erscheint die Karte
+    wirklich" beantwortet - benutzt vom Solo-Riegel, vom Ansage-Riegel (v214)
+    und von den Tests.
+  - **Selftest robuster statt Test geschoent:** `v101h: Alpha-Kanal traegt
+    Text` prueft die Alpha-Ebene nicht mehr bei fest 1.20 s, sondern SUCHT
+    den Caption-Moment. Bei Dichte 'akzente' sind Textpausen die gewollte
+    Handschrift (das Luecken-Netz laeuft laut Code nur bei 'durchgehend') -
+    lag der geratene Zeitpunkt in einer, fiel der Test, obwohl die Ebene in
+    Ordnung war. Die Zusage ist jetzt schaerfer: irgendwo traegt die Ebene
+    Text auf Transparenz, und NIRGENDS ist sie eine Vollflaeche.
+  - Selftest: 5 neue Tests. Regression **1585/1585 logic + 7/1/5/2 Renders
+    + GUI_OK**, alles gruen.
 - **v214 EINE ANSAGE STEHT NIE VOR IHREM WORT.**
   Ismets Werbespot, an seinem Job-Log belegt: `Block 8.18s | ON THE WALL`,
   gesprochen wird der Satz aber erst ab 9.08 s. Sagt er "sticks on the wall",

@@ -254,14 +254,31 @@ def _scenario_2b(clip, transcript, tmp, pan):
           abs(_adur - _sdur) < 0.25, f'{_adur:.2f}s vs {_sdur:.2f}s')
     # Alpha-Inhalt: an einem Caption-Moment gibt es opake Text-Pixel UND
     # transparente Flaechen (die Ebene ist keine Vollflaeche).
-    _ar = subprocess.run(['ffmpeg', '-v', 'error', '-ss', '1.2', '-i', amov,
-                          '-frames:v', '1', '-f', 'rawvideo',
-                          '-pix_fmt', 'rgba', '-'], capture_output=True)
-    _aok = False
-    if len(_ar.stdout) >= 16:
+    # v215: gesucht wird der Caption-Moment, statt ihn bei 1.20 s zu RATEN.
+    # Bei Dichte 'akzente' sind Textpausen die gewollte Handschrift - lag der
+    # feste Zeitpunkt in einer, fiel der Test, obwohl die Alpha-Ebene in
+    # Ordnung war (genau das passierte mit dem synthetischen Transkript).
+    # Die Zusage bleibt dieselbe und wird sogar schaerfer: irgendwo im Clip
+    # traegt die Ebene Text auf Transparenz, und NIRGENDS ist sie eine
+    # Vollflaeche.
+    _aok, _avoll, _agef = False, False, []
+    for _ats in ('0.5', '1.0', '1.2', '1.5', '2.0', '2.5', '3.0', '3.5',
+                 '4.0', '4.5', '5.0'):
+        _ar = subprocess.run(['ffmpeg', '-v', 'error', '-ss', _ats, '-i', amov,
+                              '-frames:v', '1', '-f', 'rawvideo',
+                              '-pix_fmt', 'rgba', '-'], capture_output=True)
+        if len(_ar.stdout) < 16:
+            continue
         _aal = np.frombuffer(_ar.stdout, np.uint8).reshape(-1, 4)[:, 3]
-        _aok = (_aal > 200).any() and (_aal < 10).mean() > 0.5
-    check('v101h: Alpha-Kanal traegt Text (opak) auf Transparenz', _aok)
+        _atr = (_aal < 10).mean()
+        if _atr <= 0.5:
+            _avoll = True                    # Ebene deckt das halbe Bild: falsch
+        if (_aal > 200).any() and _atr > 0.5:
+            _aok = True
+            _agef.append(_ats)
+    check('v101h: Alpha-Kanal traegt Text (opak) auf Transparenz',
+          _aok and not _avoll, f"Text bei {', '.join(_agef) or 'keinem'} s"
+          + (', Ebene wird irgendwo zur Vollflaeche' if _avoll else ''))
     check('v101h: Kamera im Alpha-Modus deaktiviert (deckungsgleiche Ebene)',
           'Alpha export: caption layer' in log6)
 
@@ -1946,6 +1963,51 @@ def _scenario_logic(clip, transcript, tmp):
           bool(_kw214b) and all(R.card_t0(p, _w209) >= _w209[p['kw_i']]['start'] - 1e-6
                                 for p in _kw214b),
           str([(p['kw_txt'], round(R.card_t0(p, _w209), 2)) for p in _kw214b]))
+    # ------------------------------------------------------------------
+    # v215: DER SOLO-RIEGEL MASS DIE LESEZEIT AM FALSCHEN PUNKT.
+    # Er rechnete ab p['start'] - dem Anfang der WORTGRUPPE. Dort setzen aber
+    # nur die kleinen Nebenwoerter ein; die grosse Karte kommt erst mit ihrem
+    # eigenen Wort. Damit glaubte er einer Karte eine Lesezeit, die sie nie
+    # hatte: 'CAPTIONS' stand auf dem Papier 1.20-2.00, im Bild 1.80-2.00 -
+    # 0.20 s statt der hier garantierten 0.80 s. Dieselbe Verwechslung wie
+    # bei der Ansage (v214), nur eine Regel weiter.
+    check('v215: card_t0 liefert das Erscheinen, nicht den Gruppen-Anfang',
+          R.card_t0({'kw_i': 2, 'start': 1.0}, [{'start': 0.0}, {'start': 0.5},
+                                                {'start': 1.9}]) == 1.9
+          and R.card_t0({'kw_i': 2, 'start': 1.0, 't0': 2.4},
+                        [{'start': 0.0}, {'start': 0.5}, {'start': 1.9}]) == 2.4
+          and R.card_t0({'start': 0.7}, []) == 0.7)
+    _w215 = [{'word': ' ' + x, 'start': i * 0.30, 'end': i * 0.30 + 0.27}
+             for i, x in enumerate(
+                 'Ich zeig dir heute wie wir Captions auf ein neues Level '
+                 'bringen das sind die grossen Momente deines Videos klar'.split())]
+    _pl215 = R.build_plans(_w215, R.detect_keywords(_w215, cfg, None), cfg, S,
+                           W_, H_, lambda s, e: True, None)
+    _tx215 = sorted([p for p in _pl215 if 'target' in p],
+                    key=lambda p: R.card_t0(p, _w215))
+    _bu215 = [(p.get('kw_txt') or 'FLIESSTEXT',
+               round(R.card_t0(p, _w215), 2),
+               round(p['end'] - R.card_t0(p, _w215), 2)) for p in _tx215]
+    # Vor v215 stand 'CAPTIONS' hier 0.20 s im Bild - ein Blinzeln.
+    check('v215: kein Textmoment blinzelt (jeder steht >= 0.35 s im Bild)',
+          all(b[2] >= 0.35 for b in _bu215), str(_bu215))
+    # Und die Gegenrichtung: die richtige Messung darf nicht dazu fuehren,
+    # dass die Karte den nachfolgenden Fliesstext kaputtschiebt. Der traegt
+    # die Woerter, die gerade gesprochen werden.
+    check('v215: ein wartender Fliesstext-Block behaelt seine Lesezeit',
+          all(b[2] >= 0.55 for b in _bu215 if b[0] == 'FLIESSTEXT'),
+          str([b for b in _bu215 if b[0] == 'FLIESSTEXT']))
+    check('v215: die Karte behaelt ihren Vorrang (sie steht allein)',
+          not [1 for _i in range(len(_tx215)) for _j in range(_i + 1, len(_tx215))
+               if min(_tx215[_i]['end'] + _tx215[_i].get('aus', 0.15),
+                      _tx215[_j]['end'])
+               - max(R.card_t0(_tx215[_i], _w215), R.card_t0(_tx215[_j], _w215))
+               > 0.05],
+          str(_bu215))
+    _src215 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v215: der Solo-Riegel misst ab dem Erscheinen der Karte',
+          '_ks = _ct0(_k)' in _src215 and '_bs = _ct0(_b)' in _src215
+          and 'def _ct0(p):' in _src215 and '_FLOW_MIN = 0.55' in _src215)
     # v210: DREI KI-SYSTEME FIELEN STILL AUS (Ismets Job-Log).
     # (a) ai_flow_direct hatte KEIN 'import requests' - jeder Kundenrender
     #     starb dort mit NameError und fiel auf die Heuristik zurueck. Ein

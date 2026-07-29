@@ -970,7 +970,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1580/1580 grün (Stand v214)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1585/1585 grün (Stand v215)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1056,25 +1056,22 @@ AM PLAN) plus `intent_time_floor()` als zentralem Riegel am Ende von
 Lehre bleibt: **wer eine neue Zeit-Regel baut, fragt zuerst, was sie mit einem
 `intent`-Moment macht** - sie darf ihn nur nach HINTEN schieben.
 
-### SOFORT: zwei Befunde von der v214-Runde, Ismet entscheidet
-1. **Der Solo-Riegel misst die Lesezeit einer Karte am falschen Punkt.**
-   Er rechnet ab `p['start']` (Anfang der WORTGRUPPE); sichtbar wird die Karte
-   aber erst mit ihrem eigenen Wort. Gemessen am Testmaterial: `CAPTIONS` stand
-   auf dem Papier 1.06-1.86, im Bild 1.59-1.86 - **0.27 s statt der im Code
-   garantierten 0.80 s**, also genau das Blinzeln, das `_KW_MIN` verhindern
-   soll. Der Fix ist klein (in `build_plans` ueberall dort, wo der Riegel
-   `p.get('t0', p['start'])` liest, `card_t0(p, words)` nehmen), aber er
-   verschiebt Timing in JEDEM Video mit Keyword-Karte und drueckt den
-   nachfolgenden Fliesstext-Block kuerzer (im Test von 0.80 s auf 0.27 s).
-   Das ist eine Abwaegung Karte gegen Fliesstext - deshalb nicht ungefragt
-   gebaut. Probiert, gemessen, wieder zurueckgebaut.
-2. **Woerter ohne jede Caption.** In derselben Passage bekommen 'wie' und 'wir'
-   gar keinen Text (Dichte 'akzente': sie sind weder Phrase noch Nebenwort).
-   Ergebnis ist ein Loch von ~0.5 s, obwohl durchgehend gesprochen wird - und
-   daran faellt in der Sandbox `render2b` (`v101h: Alpha-Kanal traegt Text`,
-   prueft fest bei 1.20 s). Vor v214 identisch, also keine Regression.
+### ERLEDIGT (v215): Solo-Riegel mass die Lesezeit am falschen Punkt
+Gleiche Verwechslung wie v214, eine Regel weiter: gerechnet wurde ab
+`p['start']` (Anfang der WORTGRUPPE) statt ab dem Erscheinen der Karte.
+`CAPTIONS` stand auf dem Papier 1.20-2.00, im Bild 1.80-2.00 - **0.20 s statt
+der garantierten 0.80 s**. Behoben ueber `card_t0(p, words)`, der EINEN Stelle
+fuer "wann erscheint die Karte wirklich".
+**Beide Richtungen:** die richtige Messung allein haette das Blinzeln nur an
+den Fliesstext weitergereicht (0.27 s). `_FLOW_MIN = 0.55` - muesste ein
+wartender Block darunter, gibt die KARTE nach. Ein Block traegt die Woerter,
+die gerade gesprochen werden; er wird nie beschnitten.
+**Kein Bug war:** Woerter ohne Caption bei Dichte 'akzente'. Das Luecken-Netz
+laeuft laut Code bewusst nur bei 'durchgehend' - Textpausen sind dort die
+gewollte Handschrift. Der Alpha-Test suchte deshalb den Caption-Moment nicht,
+sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 
-### Was in dieser Runde fertig wurde (v208-v214)
+### Was in dieser Runde fertig wurde (v208-v215)
 - v208/v208a Trichter + Test-Gate urteilt nach der Bilanz statt Textsuche
 - v208b Ursache zuerst in der Fehlermeldung, ClientDisconnect ist keine Stoerung
 - v209 Ansage-Wortschatz: line/one + Adjektiv zwischen Bestimmungswort und Nomen
@@ -1088,6 +1085,8 @@ Lehre bleibt: **wer eine neue Zeit-Regel baut, fragt zuerst, was sie mit einem
 - v214 Ansage steht nie vor ihrem Wort (`intent` am Plan, 1.5-s-Vorlauf nur
   fuer NICHT angesagten Szenen-Text, Sofort-Hook + Beat-Grid respektieren die
   Ansage, `intent_time_floor()` als zentraler Riegel)
+- v215 Solo-Riegel misst ab dem Erscheinen der Karte (`card_t0`), und ein
+  wartender Fliesstext-Block behaelt seine Lesezeit (`_FLOW_MIN`)
 
 ### Noch offen aus den Renders
 - **Zwei Textbloecke gleichzeitig, 94 Frames** (Karte gegen FLIESSTEXT, nicht
