@@ -3,6 +3,15 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v216 ZURUECKGENOMMEN (Ismets Ansage, am Bild belegt).** Der Fliesstext-
+  Riegel liess denselben Satz ZWEIMAL gleichzeitig stehen ('EVERYONE'S ...
+  LOOK THE' hinter der Person und 'CAPTIONS LOOK THE' unten). Statt zwei
+  verschiedene Bloecke zu trennen, hat er einen Block verlaengert, der
+  inhaltlich schon vom naechsten abgeloest war. Kompletter Revert
+  (fit_into_frame, ink_box, plan_text, Log-Umbau, Flow-gegen-Flow).
+  Lehre: ein Riegel, der Zeiten VERLAENGERT statt nur zu kuerzen, kann ein
+  Doppelbild erzeugen, statt es zu verhindern - und das faellt in keinem
+  Zeit-Test auf, weil die Zahlen sich nicht ueberschneiden.
 - **v215 DER SOLO-RIEGEL MASS DIE LESEZEIT AM FALSCHEN PUNKT.**
   Aufgefallen beim Gegenpruefen von v214, gleiche Verwechslung eine Regel
   weiter: der Riegel rechnete die Lesezeit einer Karte ab `p['start']` - dem
