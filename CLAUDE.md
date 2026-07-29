@@ -1039,6 +1039,55 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 - **Landing:** Englisch, international, Modellnamen unsichtbar (kein "GPT-4o"
   im Hero), keine Konkurrenz-Namen, kein Datenschutz-Block (gehört in /privacy).
 
+## STAND 29.07.2026 - HIER WEITERMACHEN (fuer den naechsten Chat)
+
+### SOFORT: Ansage wird vor ihr Wort gezogen (NICHT gefixt)
+Ismets Werbespot, an seinem Job-Log belegt:
+```
+Block  8.18s | ON THE WALL      <- gesprochen wird der Satz erst ab 9.08 s
+Block  8.78s | BEHIND ME
+```
+`Overlap guard: 3 moment(s) pulled forward` zieht Momente nach vorn, um
+Gedraenge aufzuloesen - und schob die Wand-Ansage fast eine Sekunde vor ihr
+Wort UND vor die vorherige Ansage. Wenn Ismet "sticks on the wall" sagt, ist
+die Karte schon weg; im Bild sieht es aus, als fehle sie ganz.
+**Fix:** ein Moment mit `intent` darf NIE vor sein gesprochenes Wort gezogen
+werden (Overlap guard, und Cut discipline gegenpruefen). Test: Kartenstart >=
+Wortstart fuer jede Ansage. Danach v213 gegenpruefen - der hielt die
+falsch einsortierte Karte fuer die erste von zweien und kuerzte sie zusaetzlich.
+Das ist zum VIERTEN Mal derselbe Fehlertyp an einem Tag: eine Regel, die den
+Sonderfall "Ansage" nicht kennt. Wer eine neue Zeit-Regel baut, fragt zuerst:
+was macht sie mit einem intent-Moment?
+
+### Was in dieser Runde fertig wurde (v208-v213)
+- v208/v208a Trichter + Test-Gate urteilt nach der Bilanz statt Textsuche
+- v208b Ursache zuerst in der Fehlermeldung, ClientDisconnect ist keine Stoerung
+- v209 Ansage-Wortschatz: line/one + Adjektiv zwischen Bestimmungswort und Nomen
+- v209a/v213 Solo-Riegel Karte gegen Karte, ohne dass eine Ansage verschwindet
+- v210 ai_flow_direct hatte kein `import requests` (NameError bei JEDEM Render);
+  Denkbudget >= 2500 fuer gpt-5 (leere Antwort -> JSONDecodeError);
+  Himmel-Ansage wird nicht mehr auf Kopfhoehe heruntergezogen
+- v211 Blockmasse ins Job-Log (genau das hat den Befund oben moeglich gemacht)
+- v212/a/b/c Tickets: geschlossen = dicht, nach 24 h aus der Kundenliste;
+  Desktop-Lesebreite; KEIN color-scheme (machte Eingabefelder pechschwarz)
+
+### Noch offen aus den Renders
+- **Zwei Textbloecke gleichzeitig, 94 Frames** (Karte gegen FLIESSTEXT, nicht
+  Karte gegen Karte). Am Anfang: 'EVERYONE'S' oben, 'CAPTIONS LOOK' unten.
+- Der Anschnitt der ersten Zeile ist WEG (0 Frames Randberuehrung), Ursache
+  war nie geklaert - fuenf Theorien widerlegt (Umbruch, Zoom, gelernter Stil,
+  Haus-Stil, echte Wortzeiten). Wenn er wiederkommt: v211-Blockzeilen lesen.
+- 24 fps Quelle ruckelt auf dem Handy. Video technisch sauber gemessen
+  (keine doppelten/fehlenden Bilder) - Ismet soll Seedance auf 30 fps stellen.
+- 'above me' greift jetzt, am echten Material noch nicht bestaetigt.
+
+### Vor dem Launch (Ismets Seite)
+1. **Sicherung ausser Haus fehlt komplett** - Cloudflare R2, Schluessel in die
+   .env auf dem Server, NIE im Chat. Groesstes Risiko.
+2. UptimeRobot auf /api/health.
+3. Ein echter Windows-Render mit echtem Material.
+4. Demo-Video auf die Startseite.
+
 ## Offene echte Punkte
 - Windows-Test mit echtem Material + Maskenqualität 'hoch' + MOV-Import Premiere.
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
