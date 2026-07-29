@@ -1174,51 +1174,32 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
   Heuristik/CPU/synthetisch getestet).
 
-### Sicherheits-Rückstand aus dem v203-Audit
-**v204-sec hat alles abgearbeitet, was ohne Ismets Zugangsdaten ging** —
-Punkte 2, 3, 5, 6, 7, 8, 9, 10. Offen sind nur noch Punkt 1 (braucht
-Cloudflare-Schlüssel) und Punkt 4 (Pinning braucht ein `pip freeze` AUS DEM
-CONTAINER — die Sandbox-Versionen widersprechen requirements.txt, geraten
-zu pinnen blockiert nur Deploys).
-1. **Sicherung außer Haus fehlt komplett. OFFEN — Ismet.** `_mail_backup_offsite` steigt bei
-   `ALERT_LEVEL != 'all'` sofort aus, und der Standard ist `important`
-   (docker-compose.yml, .env.example) — im Normalbetrieb gibt es also KEINE
-   Kopie außerhalb des Servers, und die vorhandene wäre unverschlüsselt.
-   Ismets Entscheidung (Juli 2026): **Cloudflare R2** (10 GB gratis).
-   Hetzner Object Storage ist mit 7,72 €/Monat Grundpreis für eine 0,2-MB-Datei
-   der falsche Dienst. Zu bauen: verschlüsseln vor dem Verlassen des Servers,
-   eigener Schalter (NICHT an DVE_ALERTS hängen), 30 Stände, Prüf- und
-   Rückhol-Knopf im Panel. Ismet legt Bucket + Schlüssel selbst an und trägt
-   sie in die `.env` ein — **niemals im Chat**.
-2. **ERLEDIGT (v204/v205a).** Dienst-Nutzer statt root über `entrypoint.sh`
-   (mit Rückfall auf den alten Weg, falls etwas klemmt), dazu
-   `no-new-privileges`, `cap_drop: ALL`, `pids_limit`, `mem_limit`.
-   **Lehre: `cap_drop: ALL` nimmt auch die Rechte, die der Start BRAUCHT, um
-   überhaupt auf den kleineren Nutzer zu wechseln** (CHOWN/SETUID/SETGID/
-   DAC_OVERRIDE/FOWNER). Genau daran ist v204 gescheitert und still auf root
-   zurückgefallen — sichtbar wurde es erst durch die neue Panel-Anzeige.
-   Die fünf Rechte kommen per `cap_add` zurück; nach dem Kennungswechsel
-   entzieht Linux sie automatisch, der laufende Dienst hat also keine.
-3. **Kein Sicherheits-Ereignisprotokoll.** Es gibt keine Tabelle, die
-   festhält, wer wann was im Panel getan hat (Admin-Zugriffe, Logins,
-   Passwortwechsel, Erstattungen). Ohne das ist ein Vorfall nicht
-   rekonstruierbar — und DSGVO Art. 33 verlangt Meldung binnen 72 Stunden.
-4. **ERLEDIGT (v205a).** Alle 13 Bauteile exakt gepinnt, aus dem LAUFENDEN
-   Container abgelesen (Panel → System → Bauteile), fastapi/uvicorn/
-   python-multipart aus dem Dockerfile in requirements.txt gezogen — es gibt
-   jetzt EINE Liste. Offen bleibt hier nur: kein Lockfile mit Hashes, und die
-   Modelle werden weiter ohne Prüfsumme über `resolve/main` geladen.
-5. **Keine Grenze für Auflösung/FPS** — nur Dauer und Dateigröße. Ein 8K-Clip
-   mit 120 fps kostet denselben Credit und blockiert den einen Worker.
-6. **Render-Subprozess erbt alle Geheimnisse** (`env = dict(os.environ)`) —
-   Stripe LIVE, Admin-Key, SMTP. Er braucht nur `OPENAI_API_KEY`.
-7. `upload_chunk` puffert bis 500 MB im RAM (`await request.body()` vor der
-   Größenprüfung).
-8. **Kein Notaus**: kein Schalter, der Registrierungen/Renders/Käufe anhält
-   oder alle Sitzungen auf einmal beendet.
-9. **Keine Missbrauchs-Erkennung**: die Zähler leben im Prozessspeicher und
-   sind nach jedem Deploy weg; kein Alarm bei auffälligen Mustern.
-10. Kein `security.txt` (Meldeweg für Finder von außen).
+### Sicherheits-Rückstand (Stand v221, am Code nachgeprüft)
+**Nur noch ZWEI Punkte offen — der Rest ist gebaut.** Nicht wieder als offen
+führen: Dienst-Nutzer statt root (v204/v205a), Sicherheits-Ereignisprotokoll
+(Tabelle `security_events`), FPS-/Auflösungsgrenze (`DVE_MAX_FPS`, Default 60),
+Render-Subprozess bekommt nur noch eine Allowlist (`_ERLAUBT`, das einzige
+echte Geheimnis darin ist `OPENAI_API_KEY`), Notaus (`_BETRIEB_STUFEN`
+normal/pausiert/notaus, beendet auf Wunsch alle Sitzungen), `security.txt`
+unter `/.well-known/`, gepinnte Bauteile in EINER requirements.txt.
+
+1. **Sicherung außer Haus fehlt komplett. OFFEN — braucht Ismets Zugang.**
+   `_mail_backup_offsite` steigt bei `ALERT_LEVEL != 'all'` sofort aus, und
+   der Standard ist `important` — im Normalbetrieb liegt also KEINE Kopie
+   außerhalb des Servers, und die vorhandene wäre unverschlüsselt (gzip per
+   Mail). Stirbt die Platte, ist das Credit-Ledger zahlender Kunden weg.
+   **Das größte Risiko im ganzen Betrieb.** Ismets Entscheidung (Juli 2026):
+   **Cloudflare R2** (10 GB gratis). Hetzner Object Storage ist mit 7,72 €/
+   Monat Grundpreis für eine 0,2-MB-Datei der falsche Dienst. Zu bauen:
+   verschlüsseln vor dem Verlassen des Servers, eigener Schalter (NICHT an
+   DVE_ALERTS hängen), 30 Stände, Prüf- und Rückhol-Knopf im Panel. Ismet
+   legt Bucket + Schlüssel selbst an und trägt sie in die `.env` ein —
+   **niemals im Chat.**
+2. **Kein Lockfile mit Hashes.** Die Versionen sind exakt gepinnt (v205a), aber
+   ohne Hash-Prüfung; die KI-Modelle werden weiter ohne Prüfsumme über
+   `resolve/main` geladen. Wer das angeht, braucht ein `pip freeze` AUS DEM
+   CONTAINER — die Sandbox-Versionen widersprechen requirements.txt, geraten
+   zu pinnen blockiert nur Deploys.
 
 **ERLEDIGT, nicht mehr als offen behandeln (v175, am Repo/Live geprüft):**
 - **Sound-Pack liegt vollständig im Repo**: `sfx/pack` 14/14 Slots belegt
