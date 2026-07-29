@@ -977,7 +977,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1599/1599 grün (Stand v218)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1603/1603 grün (Stand v219)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1078,7 +1078,7 @@ laeuft laut Code bewusst nur bei 'durchgehend' - Textpausen sind dort die
 gewollte Handschrift. Der Alpha-Test suchte deshalb den Caption-Moment nicht,
 sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 
-### Was in dieser Runde fertig wurde (v208-v218)
+### Was in dieser Runde fertig wurde (v208-v219)
 - v208/v208a Trichter + Test-Gate urteilt nach der Bilanz statt Textsuche
 - v208b Ursache zuerst in der Fehlermeldung, ClientDisconnect ist keine Stoerung
 - v209 Ansage-Wortschatz: line/one + Adjektiv zwischen Bestimmungswort und Nomen
@@ -1098,8 +1098,14 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
   misst endlich Karten. Der Fliesstext-gegen-Fliesstext-Riegel ist RAUS: er
   verlaengerte den wartenden Block und liess denselben Satz doppelt stehen.
   **Eine Regel gegen Doppelbilder darf Zeiten nur KUERZEN, nie verlaengern.**
-- v218 Wand-Text sitzt in der gemessenen Wandebene (`wall_pose` aus der
-  Tiefenkarte statt festem +-6-Grad-Wechsel; Wand hebt jetzt `flat_arr` auf)
+- v218/v219 Wand-Text sitzt in der gemessenen Wandebene (`wall_pose` aus der
+  Tiefenkarte statt festem +-6-Grad-Wechsel; Wand hebt jetzt `flat_arr` auf).
+  **v218 war toter Code:** der Block lag im nicht-getrackten Zweig, und bei
+  einem Wand-Plan ist `tracked` IMMER wahr (need_track deckt das ganze
+  Anzeigefenster ab). Der ground-Zweig hat DREI Zeichenwege (getrackt,
+  ungetrackt, `front_layer`) - eine Sprite-Korrektur gehoert VOR die Weiche.
+  Gefunden hat es nur ein Test, der `composite_frame` wirklich aufruft;
+  Quelltext-Suche plus reine Funktionspruefung waren gruen (v193-Fehler).
 
 ### Noch offen aus den Renders
 - **Zwei Fliesstext-Bloecke gleichzeitig: WEITER OFFEN** ('EVERYONE'S' oben,

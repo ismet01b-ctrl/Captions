@@ -11769,6 +11769,29 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                   opacity=g_out * aop, crop_w=vis_px)
             draw_small(p, g_out, tdx, tdy, x_sc, x_dv)
         elif p['tpl'] == 'ground' and dt >= 0:
+            # v219 DIE WANDMESSUNG STEHT HIER OBEN, VOR ALLEN ZWEIGEN.
+            # v218 hat sie in den NICHT-getrackten Zweig gelegt - und bei einem
+            # Wand-Plan ist `tracked` IMMER wahr (need_track deckt das ganze
+            # Anzeigefenster ab, und der Rueckfall auf den Boden-Track ist
+            # ebenfalls nie None). Der Block war damit toter Code: gezeichnet
+            # wurde weiter mit dem gebackenen Wechselwinkel (+-6 Grad), also
+            # genau der Zustand, den v218 ersetzen sollte. Im Talking-Head
+            # kommt ein zweiter Bypass dazu (`front_layer`, wenn keine freie
+            # Wandflaeche gefunden wird) - der zeichnet noch weiter oben.
+            # Es gibt in diesem Zweig DREI Zeichenwege; eine Korrektur am
+            # Sprite gehoert deshalb VOR die Weiche, nicht in einen Ast.
+            # (Derselbe Fehlertyp wie v159/v170/v176: Riegel am falschen Gate.)
+            if (p.get('szene') == 'wand' and not p.get('lying')
+                    and not p.get('glass') and not p.get('_pose_done')
+                    and p.get('flat_arr') is not None and depth_n is not None):
+                _yaw_w = wall_pose(depth_n, p.get('cx', W / 2),
+                                   p.get('cy', H * 0.45),
+                                   p['flat_arr'].shape[1] * 0.7,
+                                   p['flat_arr'].shape[0] * 2.2, W, H)
+                if _yaw_w is not None:
+                    p['arr'] = persp_warp(p['flat_arr'], yaw=_yaw_w, pitch=0.0)
+                    p['_wall_yaw'] = _yaw_w
+                p['_pose_done'] = True
             # v91: liegender Boden-Text auf B-Roll MIT Person -> Anker einmalig
             # auf die klare Strasse verschieben (weg vom Bild-Zentrum, wo bei
             # Kameraschwenk-nach-unten Arm/Pulli stehen). Danach traegt die
@@ -11998,34 +12021,24 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     if p.get('glass_frames'):
                         gf = p['glass_frames']
                         p['arr'] = gf[blender_engine.anim_loop_idx(dt, len(gf))]
-                    # v218: die WAND wird genauso behandelt wie der Boden -
-                    # ihre Neigung wird GEMESSEN und der Text danach gewarpt.
-                    _wand_p = (p.get('szene') == 'wand' and not p.get('lying')
-                               and not p.get('glass'))
-                    if (p.get('lying') or _wand_p) and not p.get('glass'):
+                    # v219: die Wandmessung steht jetzt GANZ OBEN im
+                    # ground-Zweig (vor allen drei Zeichenwegen). Hier bleibt
+                    # nur der Boden: liegender Text richtet sich nach der
+                    # gemessenen Bodenneigung.
+                    if p.get('lying') and not p.get('glass'):
                         # GEMALT = starr, auch ohne Kamera-Track: kein Einflug,
                         # kein Atmen - nur schneller Fade ab dem Anker-Moment.
                         if (not p.get('_pose_done')
                                 and p.get('flat_arr') is not None):
-                            if _wand_p:
-                                _yaw = wall_pose(depth_n, p.get('cx', W / 2),
-                                                 p['cy'],
-                                                 p['flat_arr'].shape[1] * 0.7,
-                                                 p['flat_arr'].shape[0] * 2.2,
-                                                 W, H)
-                                if _yaw is not None:
-                                    p['arr'] = persp_warp(p['flat_arr'],
-                                                          yaw=_yaw, pitch=0.0)
-                            else:
-                                _pose = ground_pose(depth_n, p.get('cx', W / 2),
-                                                    p['cy'],
-                                                    p['flat_arr'].shape[1] * 0.7,
-                                                    p['flat_arr'].shape[0] * 2.2,
-                                                    W, H)
-                                if _pose is not None:
-                                    p['arr'] = rot_img(
-                                        persp_warp(p['flat_arr'], yaw=0.0,
-                                                   pitch=_pose[1]), _pose[0])
+                            _pose = ground_pose(depth_n, p.get('cx', W / 2),
+                                                p['cy'],
+                                                p['flat_arr'].shape[1] * 0.7,
+                                                p['flat_arr'].shape[0] * 2.2,
+                                                W, H)
+                            if _pose is not None:
+                                p['arr'] = rot_img(
+                                    persp_warp(p['flat_arr'], yaw=0.0,
+                                               pitch=_pose[1]), _pose[0])
                             p['_pose_done'] = True
                         _tvs = t - p.get('t_anchor', p.get('t0', p['start']))
                         paste_scene(comp, p['arr'], p.get('cx', W / 2) + sdx,

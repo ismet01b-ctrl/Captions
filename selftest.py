@@ -2108,7 +2108,6 @@ def _scenario_logic(clip, transcript, tmp):
     # neu zu warpen - genau daran ist es vorher vorbeigelaufen.
     check('v218: Wand-Text hebt sein Roh-Sprite auf (flat_arr)',
           'if lying or on_wall:' in _src217
-          and "_wand_p = (p.get('szene') == 'wand'" in _src217
           and 'wall_pose(depth_n' in _src217)
     _wt218 = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
               for i, x in enumerate('This one sticks on the wall. I talked here.'.split())]
@@ -2119,6 +2118,71 @@ def _scenario_logic(clip, transcript, tmp):
     check('v218: die Wand-Ansage traegt ein Roh-Sprite zum Neu-Warpen',
           bool(_wp218) and _wp218[0].get('flat_arr') is not None,
           str([(p.get('kw_txt'), p.get('flat_arr') is not None) for p in _wp218]))
+    # ------------------------------------------------------------------
+    # v219: DIE MESSUNG MUSS IM ECHTEN ZEICHENPFAD ANKOMMEN.
+    # v218 hat den Wand-Warp in den NICHT-getrackten Zweig gelegt - bei einem
+    # Wand-Plan ist 'tracked' aber IMMER wahr (need_track deckt das ganze
+    # Anzeigefenster ab, und der Rueckfall auf den Boden-Track ist ebenfalls
+    # nie None). Der Block war toter Code, gezeichnet wurde weiter mit dem
+    # gebackenen Wechselwinkel. Aufgefallen ist es NICHT im Selftest, weil der
+    # nur wall_pose als reine Funktion plus eine Quelltext-Suche geprueft hat -
+    # genau der in CLAUDE.md beschriebene v193-Fehler ("eine Einstellung am
+    # PLAN nachzuweisen reicht als Test NICHT").
+    # Deshalb hier: composite_frame WIRKLICH aufrufen und messen, dass die
+    # Messung greift. Der Test faellt, sobald jemand die Weiche verschiebt.
+    _W9, _H9 = 720, 1280
+    _S9 = R.Sprites(cfg, _W9, _H9)
+    _w9 = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
+           for i, x in enumerate('This one sticks on the wall. I just talked here.'.split())]
+    _fx9 = R._speech_intent(R._self_ref_intent({}, _w9), _w9)
+    _pl9 = R.build_plans(_w9, set(_fx9), cfg, _S9, _W9, _H9,
+                         lambda s, e: True, _fx9)
+    _wp9 = [p for p in _pl9 if p.get('szene') == 'wand']
+    _ruf9 = {'n': 0}
+    _orig9 = R.wall_pose
+
+    def _spion9(*a, **k):
+        _ruf9['n'] += 1
+        return _orig9(*a, **k)
+    try:
+        R.wall_pose = _spion9
+        _dp9 = np.tile(np.linspace(0.2, 0.9, _W9).astype(np.float32), (_H9, 1))
+        _fr9 = np.full((_H9, _W9, 3), 190.0, np.float32)
+        _al9 = np.zeros((_H9, _W9, 1), np.float32)
+        _al9[400:1000, 300:520] = 1.0          # Person im Bild (Talking-Head)
+        _t9 = R.card_t0(_wp9[0], _w9) if _wp9 else 1.0
+        for _k9 in range(6):
+            R.composite_frame(_fr9.copy(), _al9, _t9 + 0.05 + _k9 * 0.04, _pl9,
+                              _w9, (360, 500, 60), cfg, _S9, _W9, _H9,
+                              depth_n=_dp9, H_cum=np.eye(3),
+                              H_cum_wall=np.eye(3), track_gen=1, wall_gen=1)
+    finally:
+        R.wall_pose = _orig9
+    check('v219: die Wandmessung laeuft im ECHTEN Zeichenpfad (getrackt, mit Person)',
+          _ruf9['n'] >= 1, f"wall_pose {_ruf9['n']}x aufgerufen")
+    check('v219: der gemessene Winkel landet am Plan',
+          bool(_wp9) and _wp9[0].get('_wall_yaw') is not None
+          and abs(_wp9[0]['_wall_yaw']) > 8,
+          str(_wp9[0].get('_wall_yaw') if _wp9 else None))
+    # Und die Messung muss das BILD veraendern, nicht nur ein Feld setzen.
+    _flat9 = _S9.text('ON THE WALL', 110, _S9.white)[0]
+    _geb9 = R.persp_warp(_flat9, yaw=-6, pitch=0.12)      # gebacken (bisher)
+    _mes9 = R.persp_warp(_flat9, yaw=-42.0, pitch=0.0)    # gemessen
+
+    def _verk9(x):
+        _m = x[..., 3] > 80
+        _nz = np.where(_m)
+        if not len(_nz[0]):
+            return 0.0
+        _l = _m[:, _nz[1].min():_nz[1].min() + 20].sum()
+        _r = _m[:, max(_nz[1].max() - 19, 0):_nz[1].max() + 1].sum()
+        return _l / max(_r, 1)
+    check('v219: der gemessene Winkel verkuerzt die abgewandte Seite wirklich',
+          _verk9(_geb9) > 1.5 and _verk9(_mes9) < 0.8,
+          f"gebacken {_verk9(_geb9):.2f}, gemessen {_verk9(_mes9):.2f}")
+    check('v219: die Wandmessung steht VOR der Zeichen-Weiche, nicht in einem Ast',
+          _src217.index("if (p.get('szene') == 'wand' and not p.get('lying')")
+          < _src217.index('tracked = (g_broll and'))
 
     # v210: DREI KI-SYSTEME FIELEN STILL AUS (Ismets Job-Log).
     # (a) ai_flow_direct hatte KEIN 'import requests' - jeder Kundenrender

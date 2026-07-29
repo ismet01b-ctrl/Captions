@@ -3,6 +3,40 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v219 v218 WAR TOTER CODE - die Wandmessung lief nie.** Ismets zweiter
+  Render war PIXELGLEICH mit dem ersten (mittlere Differenz < 1 auf allen
+  gepruefeten Zeitpunkten). Gefunden mit vier parallelen Pruefstraengen im
+  Renderer, jeder Befund adversariell gegengeprueft.
+  - **URSACHE:** der v218-Block lag im NICHT-getrackten Zweig von
+    `composite_frame`. Bei einem Wand-Plan ist `tracked` aber IMMER wahr:
+    `need_track` wird fuer JEDEN ground-Plan gesetzt, mit dem Fenster
+    [start-0.35, end+0.6], und das Zeichenfenster [start, end+aus] liegt
+    vollstaendig darin - `_hc` ist also in jedem gezeichneten Frame gesetzt.
+    Der getrackte Zweig endet mit `continue`. Gemessen mit Spionen auf
+    wall_pose: 0 Aufrufe im Normalfall, 0 auch ohne Person, und nur dann 1,
+    wenn man H_cum UND H_cum_wall kuenstlich auf None zwingt (kommt im
+    Betrieb nur bei `track3d: false` vor). Gezeichnet wurde weiter mit dem
+    gebackenen Wechselwinkel (+-6 Grad, Pitch 0.12).
+  - **Zweiter Bypass im Talking-Head:** findet `ground_anchor` keine freie
+    Wandflaeche - im Hochformat fast immer, das Wand-Sprite ist 688-715 px
+    breit bei 720 px Bildbreite -, wird `front_layer=True` gesetzt und noch
+    weiter oben gezeichnet, ebenfalls ohne jede Pose. Es gibt in diesem
+    Zweig DREI Zeichenwege.
+  - **FIX:** die Messung steht jetzt GANZ OBEN im ground-Zweig, VOR der
+    Weiche - damit gilt sie fuer alle drei Wege. Derselbe Fehlertyp wie
+    v159/v170/v176: ein Riegel am falschen Gate.
+  - **WARUM DER SELFTEST ES NICHT GEFUNDEN HAT:** v218 prueft `wall_pose`
+    nur als reine Funktion plus eine Quelltext-Suche (`'wall_pose(depth_n'
+    in src`). Beides war gruen, waehrend im Bild nichts passierte - genau
+    der in CLAUDE.md dokumentierte v193-Fehler. Neu sind vier Tests, die
+    `composite_frame` WIRKLICH aufrufen (getrackt, mit Person, mit
+    Tiefenkarte) und messen: wall_pose wird aufgerufen, der Winkel landet
+    am Plan, das Sprite aendert sich (abgewandte Seite von 2.23 auf 0.52
+    verkuerzt), und die Messung steht vor der Weiche.
+  - **EHRLICHE GRENZE:** das Tiefen-Modell laesst sich im Container nicht
+    laden (huggingface.co gesperrt). Geprueft ist der Pfad mit erzeugten
+    Tiefenkarten, nicht an Ismets Wand.
+  - Regression **1603/1603 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v218 DIE WAND WIRD GEMESSEN, NICHT GERATEN.** Ismets Befund am Render:
   "es sitzt nicht richtig an der Wand". Genau so war es gebaut: fuer
   LIEGENDEN Text misst `ground_pose` die echte Neigung der Flaeche aus der
