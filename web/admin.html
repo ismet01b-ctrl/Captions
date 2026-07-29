@@ -641,7 +641,13 @@ async function loadSystem(){
       ${led(k.ref_salt)}<span class="pill"><b>Ref salt</b> set</span>
     </div>
     <div class="grid g4" style="margin-top:12px">
-      <div class="card"><div class="k">Build</div><div class="v" style="font-size:16px">${esc(d.build)}</div></div>
+      <div class="card"><div class="k">Build</div><div class="v" style="font-size:16px">${esc(d.build)}</div>
+        ${d.deploy ? `<div class="k" style="margin-top:6px">${d.deploy.branch
+            ? esc(d.deploy.branch) + ' · seit ' + (d.deploy.alter_tage ?? '?') + ' Tagen'
+            : 'Stand unbekannt'}</div>` : ''}
+        ${d.deploy && d.deploy.warnung
+            ? `<div style="margin-top:6px;color:var(--warn,#e0a33e);font-size:12px">${esc(d.deploy.warnung)}</div>`
+            : ''}</div>
       <div class="card"><div class="k">Disk free</div><div class="v">${d.disk?d.disk.free_gb+'G':'?'} <small>${d.disk?d.disk.used_pct+'%':''}</small></div></div>
       <div class="card"><div class="k">DB size</div><div class="v">${d.db_mb??'?'} <small>MB</small></div></div>
       <div class="card"><div class="k">Last backup</div><div class="v" style="font-size:16px">${d.last_backup?fdate(d.last_backup):'none'}</div></div>

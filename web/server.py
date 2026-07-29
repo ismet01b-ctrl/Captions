@@ -1982,7 +1982,64 @@ _CSP = (
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
-DVE_BUILD = 'v213-ansage'
+# v222 DER STEMPEL MUSS AUS DEM DEPLOY KOMMEN, NICHT AUS EINER KONSTANTEN.
+# Bis v221 stand hier fester Text - 'v213-ansage', monatelang nicht mitgezogen.
+# Er landet ueber DVE_JOB_TAG in den Metadaten JEDES Videos, log also bei jedem
+# Kundenrender. Ergebnis: drei Fixes geliefert, drei Renders geprueft, dreimal
+# geraetselt, warum sich nichts aendert - in Wahrheit lief der Server noch auf
+# dem alten Stand, weil der Deploy nicht griff, und NICHTS konnte das zeigen.
+# `update.sh` schreibt Branch/Commit/Zeit nach DVE_DATA/build.json (liegt
+# ausserhalb des Images und ueberlebt den Neubau); hier wird es gelesen.
+DVE_VERSION = 'v222'
+
+
+def _build_stempel():
+    """Branch + Commit des LAUFENDEN Stands. Fehlt die Datei (Erst-Start,
+    Handbetrieb), bleibt die Programm-Version - dann steht dort ehrlich
+    'unbekannt' statt einer Zahl, die niemand geprueft hat."""
+    try:
+        with open(os.path.join(DATA, 'build.json'), encoding='utf-8') as fh:
+            b = json.load(fh)
+        c = str(b.get('commit') or '')[:8]
+        br = str(b.get('branch') or '')
+        if c:
+            return f"{DVE_VERSION} {c}" + (f" ({br})" if br else '')
+    except Exception:
+        pass
+    return f'{DVE_VERSION} (Commit unbekannt)'
+
+
+DVE_BUILD = _build_stempel()
+
+
+def _deploy_info():
+    """v222: Branch, Commit und ALTER des laufenden Stands - fuer das Panel.
+    Das Alter ist der eigentliche Wert: ein Deploy, der nie stattfand, war
+    bisher unsichtbar. `autodeploy.sh` meldet nur einen GESCHEITERTEN
+    Versuch; steht der Server auf einem anderen Branch, sieht er dauerhaft
+    'nichts Neues' und schweigt. Genau so lief der Server monatelang auf
+    v213, waehrend die Arbeit auf einem anderen Zweig lag."""
+    out = {'version': DVE_VERSION, 'commit': '', 'branch': '',
+           'subject': '', 'deployed_at': 0, 'alter_tage': None, 'warnung': ''}
+    try:
+        with open(os.path.join(DATA, 'build.json'), encoding='utf-8') as fh:
+            b = json.load(fh)
+        out['commit'] = str(b.get('commit') or '')[:12]
+        out['branch'] = str(b.get('branch') or '')
+        out['subject'] = str(b.get('subject') or '')[:120]
+        out['deployed_at'] = int(b.get('deployed_at') or 0)
+        if out['deployed_at']:
+            _t = (time.time() - out['deployed_at']) / 86400.0
+            out['alter_tage'] = round(_t, 1)
+            if _t > 3:
+                out['warnung'] = (f"Der laufende Stand ist {_t:.0f} Tage alt. "
+                                  f"Wenn seitdem gepusht wurde, greift der "
+                                  f"Auto-Deploy nicht - Branch auf dem Server "
+                                  f"pruefen.")
+    except Exception:
+        out['warnung'] = ('Kein Build-Stempel vorhanden. Der laufende Stand ist '
+                          'unbekannt - update.sh wurde seit v222 nie gelaufen.')
+    return out
 
 
 # ================= v204-sec NOTAUS =================
@@ -7928,6 +7985,12 @@ def admin_overview(request: Request):
     return {
         'now': now,
         'build': DVE_BUILD,
+        # v222: nicht nur WELCHER Stand, sondern auch WIE ALT er ist. Ein
+        # Deploy, der seit Tagen nicht mehr durchkam, war bisher unsichtbar -
+        # autodeploy.sh meldet nur einen FEHLGESCHLAGENEN Versuch, nicht einen,
+        # der nie stattfand (z.B. weil der Server auf einem anderen Branch
+        # steht: dann sieht er "nichts Neues" und schweigt fuer immer).
+        'deploy': _deploy_info(),
         'users': {'total': u_total, 'verified': u_verif, 'purchasers': purchasers,
                   'free': u_total - purchasers},
         'signups': signups,

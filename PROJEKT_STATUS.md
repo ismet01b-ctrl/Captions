@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v222 DER SERVER LIEF SEIT v213 - UND NICHTS KONNTE DAS ZEIGEN.**
+  Ismets dritter Befund "immer noch nicht an der Wall" war richtig, aber die
+  Ursache lag nicht im Code: **alle drei hochgeladenen Renders tragen in
+  ihren Metadaten `DouchkoVE v213-ansage`** (ffprobe, format_tags/comment).
+  v214 bis v221 sind nie live gegangen. Dazu passt die Messung: die Renders
+  sind untereinander pixelgleich (mittlere Differenz < 1).
+  - **Warum es niemand sehen konnte:** `DVE_BUILD` war ein FESTER Text im
+    Server, seit v213 nicht mitgezogen. Er landet ueber `DVE_JOB_TAG` in den
+    Metadaten JEDES Kundenvideos und im Panel - und log dort ueberall.
+    Drei Runden wurden damit auf die Frage verschwendet, ob der Code wirkt.
+  - **Warum der Deploy schweigt:** `autodeploy.sh` meldet nur einen
+    GESCHEITERTEN Versuch. Steht der Server auf einem anderen Branch, sieht
+    er dauerhaft "nichts Neues" und schweigt fuer immer - kein Alarm, keine
+    Panel-Meldung, nichts. Genau dieses Muster.
+  - **FIX:** `update.sh` schreibt Branch, Commit, Betreff und Zeit nach
+    `DVE_DATA/build.json` (liegt AUSSERHALB des Images, ueberlebt den
+    Neubau). `_build_stempel()` liest es; fehlt die Datei, steht dort
+    ehrlich "Commit unbekannt" statt einer erfundenen Nummer. Das Panel
+    zeigt Branch und ALTER des laufenden Stands und warnt ab 3 Tagen:
+    "wenn seitdem gepusht wurde, greift der Auto-Deploy nicht".
+  - **Ein Test schrieb den Fehler fest:** der v130-Test VERLANGTE
+    `DVE_BUILD = 'v...'` als Literal - also genau die Konstante, die das
+    Problem war. Angepasst. (CLAUDE.md-Lehre "ein Test kann eine Luecke als
+    Zusage festschreiben", diesmal am eigenen Bein.)
+  - Regression **1632/1632 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v221 TEXTFLUSS + DAS ORTSWORT LIEGT SCHON DA (Ismets Befund + Idee).**
   - **(a) "Fuehlt sich 0 fluessig an" - gemessen, nicht geraten:** an Ismets
     15-s-Werbespot standen **45 % der Laufzeit KEINE Captions** im Bild,

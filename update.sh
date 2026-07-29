@@ -13,6 +13,34 @@ free -h | awk '/^Mem:/{print "  RAM: " $7 " verfuegbar"}'
 echo "==> [1/5] Code aktualisieren"
 git pull
 
+# v222 WELCHE FASSUNG LAEUFT? Bis v221 stand die Build-Kennung als fester
+# Text im Server ('v213-ansage') und wurde monatelang nicht mitgezogen. Sie
+# landet ueber DVE_JOB_TAG in den Metadaten JEDES Videos - und log damit.
+# Ergebnis: dreimal wurde ein Fix geliefert, dreimal gerendert, dreimal
+# geraetselt, warum sich nichts aendert. In Wahrheit lief der Server noch auf
+# v213, weil der Deploy gar nicht griff, und NICHTS im Bild oder im Panel
+# konnte das zeigen. Jetzt schreibt der Deploy Branch, Commit und Zeit in
+# DVE_DATA (liegt AUSSERHALB des Images, ueberlebt also den Neubau); Server,
+# Panel und Video-Metadaten lesen es von dort.
+DATA_DIR="${DVE_DATA:-$(pwd)/web/data}"
+mkdir -p "$DATA_DIR"
+python3 - "$DATA_DIR" <<'PY' || echo "  (Build-Stempel uebersprungen)"
+import json, subprocess, sys, time, os
+def g(*a):
+    try:
+        return subprocess.run(['git', *a], capture_output=True, text=True,
+                              timeout=10).stdout.strip()
+    except Exception:
+        return ''
+json.dump({'commit': g('rev-parse', 'HEAD')[:12],
+           'branch': g('rev-parse', '--abbrev-ref', 'HEAD'),
+           'subject': g('log', '-1', '--pretty=%s')[:120],
+           'deployed_at': int(time.time())},
+          open(os.path.join(sys.argv[1], 'build.json'), 'w'))
+print(f"  Build-Stempel: {g('rev-parse','--abbrev-ref','HEAD')} "
+      f"@ {g('rev-parse','HEAD')[:8]}")
+PY
+
 echo "==> [2/5] Image bauen (Code-Layer wird immer neu kopiert)"
 docker compose build app
 

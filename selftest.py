@@ -12,6 +12,7 @@ import urllib.parse
 import subprocess
 import sys
 import tempfile
+import time
 
 import numpy as np
 
@@ -2421,6 +2422,59 @@ def _scenario_logic(clip, transcript, tmp):
     _sv220 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('v220: ein abgebrochener Upload/Abruf ist keine Betriebsstoerung',
           'ClientDisconnect' in _sv220)
+    # ------------------------------------------------------------------
+    # v222: WELCHE FASSUNG LAEUFT? Bis v221 stand die Build-Kennung als
+    # fester Text im Server ('v213-ansage') und wurde monatelang nicht
+    # mitgezogen. Sie landet ueber DVE_JOB_TAG in den Metadaten JEDES Videos -
+    # log also bei jedem Kundenrender. Ergebnis: drei Fixes geliefert, drei
+    # Renders geprueft, dreimal geraetselt, warum sich nichts aendert; in
+    # Wahrheit lief der Server noch auf v213, weil der Deploy nicht griff,
+    # und NICHTS im Bild oder im Panel konnte das zeigen.
+    check('v222: die Build-Kennung kommt aus dem Deploy, nicht aus einer Konstanten',
+          'def _build_stempel()' in _sv220
+          and "os.path.join(DATA, 'build.json')" in _sv220
+          and 'DVE_BUILD = _build_stempel()' in _sv220,
+          'DVE_BUILD darf kein fester Text mehr sein')
+    _up222 = open(os.path.join(HERE, 'update.sh'), encoding='utf-8').read()
+    check('v222: der Deploy schreibt Branch und Commit nach DVE_DATA',
+          "build.json" in _up222 and "rev-parse" in _up222
+          and "'--abbrev-ref'" in _up222)
+    # Fehlt die Datei, muss der Stempel EHRLICH 'unbekannt' sagen - eine
+    # erfundene Versionsnummer waere genau der alte Fehler.
+    import importlib as _il222
+    _mod222 = _il222.import_module('web.server')
+    _alt222 = _mod222.DATA
+    try:
+        _mod222.DATA = os.path.join(tmp, 'kein_build_' + str(os.getpid()))
+        check('v222: ohne Stempel steht dort ehrlich "unbekannt"',
+              'unbekannt' in _mod222._build_stempel(), _mod222._build_stempel())
+        _d222 = _mod222._deploy_info()
+        check('v222: ohne Stempel warnt das Panel',
+              bool(_d222.get('warnung')) and _d222.get('alter_tage') is None,
+              str(_d222)[:120])
+        os.makedirs(_mod222.DATA, exist_ok=True)
+        json.dump({'commit': 'abcdef123456', 'branch': 'claude/test-zweig',
+                   'subject': 'irgendwas', 'deployed_at': int(time.time()) - 9 * 86400},
+                  open(os.path.join(_mod222.DATA, 'build.json'), 'w'))
+        _st222 = _mod222._build_stempel()
+        _d222 = _mod222._deploy_info()
+        check('v222: mit Stempel nennt er Commit UND Branch',
+              'abcdef12' in _st222 and 'claude/test-zweig' in _st222, _st222)
+        check('v222: ein alter Stand wird als Warnung gemeldet (Deploy greift nicht)',
+              _d222.get('alter_tage', 0) >= 8.9 and 'Auto-Deploy' in _d222.get('warnung', ''),
+              f"{_d222.get('alter_tage')} Tage, Warnung: {bool(_d222.get('warnung'))}")
+        json.dump({'commit': 'abcdef123456', 'branch': 'b',
+                   'subject': 's', 'deployed_at': int(time.time())},
+                  open(os.path.join(_mod222.DATA, 'build.json'), 'w'))
+        check('v222: ein frischer Stand warnt NICHT',
+              not _mod222._deploy_info().get('warnung'))
+    finally:
+        _mod222.DATA = _alt222
+    check('v222: das Panel zeigt Branch, Alter und die Warnung',
+          'd.deploy.branch' in open(os.path.join(HERE, 'web', 'admin.html'),
+                                    encoding='utf-8').read()
+          and 'd.deploy.warnung' in open(os.path.join(HERE, 'web', 'admin.html'),
+                                         encoding='utf-8').read())
 
     check('v212: auf ein geschlossenes Ticket kann nicht geantwortet werden',
           "if (t['status'] or '') == 'closed':" in _sv212
@@ -3415,7 +3469,13 @@ def _scenario_logic(clip, transcript, tmp):
           # Test schlug bei jeder Version fehl und wurde jedes Mal
           # nachgezogen - das prueft die Pflege des Tests, nicht den Server.
           # Gefordert ist, dass ueberhaupt eine Kennung gesetzt ist.
-          and re.search(r"DVE_BUILD = 'v[0-9][^']*'", _srv_m) is not None)
+          # v222: sie ist jetzt ABGELEITET (aus Branch/Commit des Deploys) -
+          # ein festes Literal war die Ursache dafuer, dass der Server
+          # monatelang 'v213' in jedes Kundenvideo schrieb, obwohl niemand
+          # wusste, welcher Stand wirklich lief. Der alte Test hat genau
+          # dieses Literal VERLANGT und damit den Fehler festgeschrieben.
+          and 'DVE_BUILD = _build_stempel()' in _srv_m
+          and re.search(r"DVE_VERSION = 'v[0-9][^']*'", _srv_m) is not None)
     check('v130 Admin: UI dynamisch (Auto-Refresh, Tabs, Pause, visibility-pause)',
           # v206: die Startseite kommt mit einem eigenen Takt dazu (30 s -
           # sie ist eine Uebersicht, kein Live-Monitor). Die Zusage bleibt:

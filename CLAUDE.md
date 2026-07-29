@@ -977,7 +977,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1624/1624 grün (Stand v221)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1632/1632 grün (Stand v222)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1040,6 +1040,12 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
 5. **Wenn ein Fix nicht reproduzierbar ist, sagen — nicht liefern und hoffen.**
    Zwei Videos pixelweise vergleichen (`mittlere Differenz < 1` = derselbe
    Render) beantwortet in 10 Sekunden, ob überhaupt die neue Fassung lief.
+6. **ZUERST prüfen, WELCHE Fassung das Video gerendert hat** (v222). Der
+   Build-Stempel steht in den Metadaten jedes Videos:
+   `ffprobe -show_entries format_tags` → `comment=DouchkoVE <stand> job <jid>`.
+   Stimmt der Stand nicht mit dem eigenen Commit überein, ist die Frage nach
+   dem Code sinnlos — dann hängt der Deploy. Drei Runden gingen genau dafür
+   verloren, weil `DVE_BUILD` ein festes Literal war und log.
 
 ## Deliver-Muster (jede neue Version)
 0. **Wirksamkeits-Nachweis nach dem Abschnitt darüber.** Ohne ihn gilt eine
