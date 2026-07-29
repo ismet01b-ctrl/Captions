@@ -2180,6 +2180,121 @@ def _scenario_logic(clip, transcript, tmp):
     check('v219: der gemessene Winkel verkuerzt die abgewandte Seite wirklich',
           _verk9(_geb9) > 1.5 and _verk9(_mes9) < 0.8,
           f"gebacken {_verk9(_geb9):.2f}, gemessen {_verk9(_mes9):.2f}")
+    # ------------------------------------------------------------------
+    # v221: (a) TEXTFLUSS. An Ismets 15-s-Werbespot gemessen standen 45 % der
+    # Laufzeit KEINE Captions im Bild, einzelne Pausen bis 1.17 s, waehrend
+    # durchgehend gesprochen wird ("fuehlt sich 0 fluessig an"). Das Luecken-
+    # Netz gab es, es lief nur bei Dichte 'durchgehend'. Jetzt auch bei
+    # 'akzente' - 'sparsam' bleibt bewusst ruhig.
+    _wf221 = [{'word': ' ' + x, 'start': 0.3 + i * 0.32, 'end': 0.3 + i * 0.32 + 0.28}
+              for i, x in enumerate("Everyone captions look the same file same "
+                                    "yellow word bouncing you have seen it a "
+                                    "thousand times over and over again".split())]
+
+    def _luecken221(dichte):
+        _c = copy.deepcopy(cfg)
+        _c['effects']['density'] = dichte
+        _pl = R.build_plans(_wf221, R.detect_keywords(_wf221, _c, None), _c, S,
+                            W_, H_, lambda s, e: True, None)
+        _zeigt = set()
+        for _p in _pl:
+            for _k in ('front', 'small'):
+                for _it in (_p.get(_k) or []):
+                    if isinstance(_it, dict) and _it.get('i') is not None:
+                        _zeigt.add(_it['i'])
+            if _p.get('kw_i') is not None:
+                _zeigt.add(_p['kw_i'])
+        _fehlt = [R.clean(_wf221[i]['word']) for i in range(len(_wf221))
+                  if i not in _zeigt]
+        # groesste Textpause waehrend der Rede
+        _sp = sorted((R.card_t0(_p, _wf221), _p['end'])
+                     for _p in _pl if 'target' in _p)
+        _t, _max = 0.0, 0.0
+        for _a, _b in _sp:
+            _max = max(_max, _a - _t)
+            _t = max(_t, _b)
+        return _fehlt, _max
+    _f221, _p221 = _luecken221('akzente')
+    check('v221: bei "akzente" steht jetzt JEDES gesprochene Wort im Bild',
+          not _f221, f"nie gezeigt: {_f221}")
+    check('v221: bei "akzente" keine Textpause ueber 0.5 s waehrend der Rede',
+          _p221 <= 0.5, f"groesste Pause {_p221:.2f} s")
+    _fs221, _ = _luecken221('sparsam')
+    check('v221: "sparsam" bleibt bewusst ruhig (dort ist die Pause der Stil)',
+          len(_fs221) > 0, f"{len(_fs221)} Woerter ohne Caption - so gewollt")
+    _src221 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v221: die Atempause gilt nur noch, wo die Pause der Stil ist',
+          "not in ('durchgehend', 'akzente')" in _src221)
+    # (b) DAS ORTSWORT LIEGT SCHON DA (Ismets Idee: "dass es schon da darauf
+    # steht, beispielsweise das Wort Wall, und das andere baut sich drum
+    # herum auf").
+    check('v221: das Ortswort wird richtig abgeleitet',
+          R.anker_wort('ON THE WALL') == 'WALL'
+          and R.anker_wort('BEHIND ME') == 'BEHIND'
+          and R.anker_wort('ABOVE ME') == 'ABOVE'
+          and R.anker_wort('ON THE GROUND') == 'GROUND'
+          and R.anker_wort('AN DER WAND') == 'WAND'
+          and R.anker_wort('WALL') is None      # ein Wort ist sein eigener Anker
+          and R.anker_wort('') is None)
+    _W1, _H1 = 720, 1280
+    _S1 = R.Sprites(cfg, _W1, _H1)
+    _w1 = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
+           for i, x in enumerate('Watch this one sticks on the wall. I just talked here.'.split())]
+    _fx1 = R._speech_intent(R._self_ref_intent({}, _w1), _w1)
+    _pl1 = R.build_plans(_w1, set(_fx1), cfg, _S1, _W1, _H1, lambda s, e: True, _fx1)
+    _ap1 = [p for p in _pl1 if p.get('anker_arr') is not None]
+    check('v221: die Wand-Ansage bekommt ein Ankerwort mit Vorlauf',
+          bool(_ap1) and _ap1[0].get('anker_txt') == 'WALL'
+          and R.card_t0(_ap1[0], _w1) - _ap1[0]['anker_t0'] > 0.3,
+          str([(p.get('anker_txt'), round(p['anker_t0'], 2),
+                round(R.card_t0(p, _w1), 2)) for p in _ap1]))
+    check('v221: der Vorlauf ist auf 2 s gedeckelt (Anker, kein Titel)',
+          all(R.card_t0(p, _w1) - p['anker_t0'] <= 2.01 for p in _ap1),
+          str([round(R.card_t0(p, _w1) - p['anker_t0'], 2) for p in _ap1]))
+    # WIRKSAMKEITS-NACHWEIS: das Ankerwort muss im BILD stehen - und nach dem
+    # Kartenstart wieder verschwinden. Gemessen als Differenz mit/ohne Sprite
+    # am gerenderten Frame, nicht am Plan (v219-Lehre).
+    if _ap1:
+        _dp1 = np.tile(np.linspace(0.2, 0.9, _W1).astype(np.float32), (_H1, 1))
+        _fr1 = np.full((_H1, _W1, 3), 190.0, np.float32)
+        _al1 = np.zeros((_H1, _W1, 1), np.float32)
+        _al1[400:1000, 300:520] = 1.0
+
+        # WICHTIG: composite_frame ist NICHT zustandsfrei - es merkt sich am
+        # Plan, wo es angekert hat, wie weit die Animation ist und welche
+        # Flaeche es gemessen hat. Fuer einen Vergleich muss deshalb JEDER
+        # Lauf frische Plaene bekommen, sonst misst man den Zustand des
+        # ersten Laufs statt der Aenderung.
+        def _frisch1(mit_anker):
+            _pl = R.build_plans(_w1, set(_fx1), cfg, _S1, _W1, _H1,
+                                lambda s, e: True, _fx1)
+            if not mit_anker:
+                for _q in _pl:
+                    _q.pop('anker_arr', None)
+                    _q.pop('anker_flat', None)
+            return _pl
+
+        def _ankerpixel(tt):
+            _bilder = []
+            for _mit in (True, False):
+                _pl = _frisch1(_mit)
+                _bilder.append(R.composite_frame(
+                    _fr1.copy(), _al1, tt, _pl, _w1, (360, 500, 60), cfg, _S1,
+                    _W1, _H1, depth_n=_dp1, H_cum=np.eye(3),
+                    H_cum_wall=np.eye(3), track_gen=1, wall_gen=1).copy())
+            return int((np.abs(_bilder[0] - _bilder[1]).mean(axis=2) > 8).sum())
+        _kt1 = R.card_t0(_ap1[0], _w1)
+        _at1 = _ap1[0]['anker_t0']
+        _vor1 = _ankerpixel(max(_kt1 - 0.15, _at1 + 0.4))
+        _nach1 = _ankerpixel(_kt1 + 0.5)
+        check('v221: das Ortswort steht WIRKLICH im Bild, bevor der Satz kommt',
+              _vor1 > 200, f"{_vor1} Pixel im Anker-Fenster")
+        check('v221: sobald der Satz steht, ist das Ortswort weg (kein Doppel)',
+              _nach1 == 0, f"{_nach1} Pixel nach dem Kartenstart")
+    check('v221: der Anker-Durchgang steht VOR der Hauptschleife und nutzt plans',
+          _src221.index("for p in plans:\n        if p.get('anker_arr') is None")
+          < _src221.index('    for p in active:\n        # v82: Cutter-Exit'))
+
     check('v219: die Wandmessung steht VOR der Zeichen-Weiche, nicht in einem Ast',
           _src217.index("if (p.get('szene') == 'wand' and not p.get('lying')")
           < _src217.index('tracked = (g_broll and'))
@@ -8703,7 +8818,7 @@ def _scenario_betrieb(tmp):
     check('v185: bei "durchgehend" steht JEDES gesprochene Wort im Bild',
           not _fehlt185, f"nie gezeigt: {_fehlt185}")
     check('v185: die Atempause loescht keine Gruppe mehr im Dauerbetrieb',
-          "!= 'durchgehend'):" in _r182
+          "not in ('durchgehend', 'akzente')" in _r182
           and 'if (breathing and prev_was_keyword and not g_kw' in _r182)
     check('v185: es gibt ein Luecken-Netz als letzte Sicherung',
           'Gap guard:' in _r182 and '_laeufe, _cur = [], []' in _r182)

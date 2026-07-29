@@ -3444,6 +3444,32 @@ def ground_pose(depth_n, cx, cy, bw, bh, W, H):
     return roll, pitch
 
 
+_ANKER_FUELL = {'me', 'us', 'you', 'my', 'the', 'a', 'an', 'on', 'in', 'at',
+                'to', 'of', 'this', 'that', 'it', 'here', 'there', 'right',
+                'now', 'mir', 'uns', 'dir', 'mich', 'dem', 'der', 'die', 'das',
+                'den', 'ein', 'eine', 'im', 'am', 'an', 'auf', 'unter', 'ueber',
+                'über', 'kopf', 'hier', 'da', 'jetzt'}
+
+
+def anker_wort(txt):
+    """v221 DAS ORTSWORT EINER ANSAGE.
+
+    Ismets Idee: "es waere ja auch eine Option, dass es schon da darauf steht.
+    Beispielsweise das Wort Wall. Und das andere baut sich drum herum auf."
+    Genau dafuer braucht die Ansage ein Ankerwort: aus 'ON THE WALL' wird
+    'WALL', aus 'BEHIND ME' 'BEHIND', aus 'ABOVE ME' 'ABOVE'. Genommen wird
+    das LETZTE inhaltstragende Wort - es benennt den Ort ('wall', 'ground',
+    'water'); Praepositionen und Selbstbezuege tragen ihn nicht.
+    Rueckgabe: das Wort in der Schreibung des Kartentexts, oder None."""
+    teile = [w for w in str(txt or '').split() if w.strip()]
+    if len(teile) < 2:
+        return None                       # ein Wort ist schon sein eigener Anker
+    for w in reversed(teile):
+        if clean(w).lower().strip('.,!?;:') not in _ANKER_FUELL:
+            return w
+    return None
+
+
 def wall_pose(depth_n, cx, cy, bw, bh, W, H):
     """v218 DIE WAND WIRD GEMESSEN, NICHT GERATEN.
 
@@ -8975,8 +9001,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         # 4.0 s von 15 s ohne jeden Text, dazu 4 von 30 Woertern nie sichtbar.
         # v193: ein Nutzer-Block ist kein Rhythmus-Vorschlag, sondern eine
         # Ansage. Die Atempause darf ihn nicht wegraeumen.
+        # v221: auch 'akzente' verspricht jetzt jedes Wort im Bild (Ismets
+        # Ansage). Die Atempause bleibt nur, wo die Pause der Stil IST.
         if (breathing and prev_was_keyword and not g_kw and not _ublk
-                and str(cfg['effects'].get('density', 'akzente')) != 'durchgehend'):
+                and str(cfg['effects'].get('density', 'akzente'))
+                not in ('durchgehend', 'akzente')):
             prev_was_keyword = False
             continue
 
@@ -9605,6 +9634,38 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         # Text lag davor statt darauf ("es sitzt nicht richtig
                         # an der Wand", Ismets Befund am Render).
                         p['flat_arr'] = flat
+                # v221 DAS ORTSWORT LIEGT SCHON DA (Ismets Idee).
+                # "Es waere ja auch eine Option, dass es schon da darauf steht.
+                # Beispielsweise das Wort Wall. Und das andere baut sich drum
+                # herum auf." Genau das: ab dem Anfang der Wortgruppe liegt nur
+                # das ORTSWORT ('WALL') auf der Flaeche; wenn der Sprecher es
+                # ausspricht, steht der ganze Satz da ('ON THE WALL').
+                # Das widerspricht v214 NICHT: die KARTE erscheint weiter erst
+                # zu ihrem Wort. Frueher da ist nur das Ankerwort - und es
+                # verschwindet nicht vorher, genau das war der v214-Fehler.
+                _aw = anker_wort(txt) if (scene_ground and not p.get('count')
+                                          and not p.get('letters')) else None
+                if _aw and isinstance(info, dict) and info.get('intent'):
+                    _afl = S.text(_aw, sz, S.white, extrude=g_ex,
+                                  flat_light=lying)[0]
+                    p['anker_flat'] = _afl
+                    p['anker_arr'] = persp_warp(_afl, yaw=g_yaw, pitch=g_pitch)
+                    p['anker_txt'] = _aw
+                    # Sichtbar ab dem SATZANFANG - dort setzt der Sprecher an
+                    # ("this one sticks on the wall"), und genau dann soll das
+                    # Wort schon an der Flaeche liegen. Der Gruppenanfang
+                    # reicht nicht: er faellt oft mit dem Keyword zusammen,
+                    # dann gaebe es gar keinen Vorlauf (am Testmaterial
+                    # gemessen: anker_t0 == card_t0). Deckel 2.0 s - mehr
+                    # waere ein Titel, kein Anker.
+                    _satz = i
+                    while (_satz > 0 and _satz > i - 12
+                           and not str(words[_satz - 1].get('word', '')).rstrip()
+                                   .endswith(('.', '!', '?'))):
+                        _satz -= 1
+                    _at = float(words[_satz].get('start', p['start']))
+                    p['anker_t0'] = max(0.0, min(_at, kw_t0 - 0.25),
+                                        kw_t0 - 2.0) if kw_t0 > 0.25 else 0.0
                 p['lying'] = lying
                 if scene_ground:
                     p['scene_ground'] = True
@@ -10158,14 +10219,21 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     # Wege koennen Woerter verschlucken (Keyword-Moment zeigt nur EIN Wort
     # seiner Gruppe, B-Roll-Gate, Zahl-Bremse, Ein-Wort-Rest). Statt jeden
     # einzelnen Weg zu flicken, wird am Ende geprueft, WAS fehlt, und der
-    # Rest bekommt eine schlichte Flow-Caption. Nur 'durchgehend' - in
-    # 'akzente'/'sparsam' sind Textpausen die gewollte Handschrift.
+    # Rest bekommt eine schlichte Flow-Caption.
+    # v221 GILT JETZT AUCH FUER 'akzente' (Ismets Ansage, am Render gemessen).
+    # Bis v220 lief das Netz nur bei 'durchgehend', weil Textpausen in
+    # 'akzente' als gewollte Handschrift galten. Am 15-Sekunden-Werbespot
+    # gemessen war das keine Handschrift, sondern ein Loch: 45 % der Laufzeit
+    # OHNE jeden Text, einzelne Pausen bis 1.17 s, waehrend durchgehend
+    # gesprochen wird. Ismets Urteil: "fuehlt sich 0 fluessig an" - und er
+    # hat recht, ein Untertitel, der jede Sekunde verschwindet und wiederkommt,
+    # stockt. 'sparsam' bleibt bewusst ruhig; DORT ist die Pause der Stil.
     # v193: Bei einer Nutzer-Aufteilung ist das Netz aus. Wer einen Block
     # abschaltet oder ein Wort aus einer Zeile loescht, sagt "hier soll nichts
     # stehen" - das Netz wuerde es kommentarlos wieder hinstellen und die
     # Loeschung waere wirkungslos. Die Zusage 'jedes Wort' gilt fuer die
     # AUTOMATIK, nicht gegen eine Entscheidung.
-    if str(cfg['effects'].get('density', 'akzente')) == 'durchgehend' \
+    if str(cfg['effects'].get('density', 'akzente')) in ('durchgehend', 'akzente') \
             and words and not _bl_akt:
         _gezeigt = set()
         for _p in plans:
@@ -10202,6 +10270,17 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 continue
             if not face_ok(_s0, _e0) and not cfg['effects'].get('broll_captions', False):
                 continue                     # B-Roll bleibt textfrei
+            # v221b DAS NETZ FUELLT NUR LEERE ZEIT, KEINE KARTEN-FENSTER.
+            # Ohne diesen Riegel war die Umstellung auf 'akzente' ein
+            # Rueckschritt: das Netz legte Bloecke IN die Standzeit einer
+            # Keyword-Karte, der Solo-Riegel raeumte daraufhin die Karte weg,
+            # und die Ansagen standen nur noch 0.2 s im Bild - genau Ismets
+            # Befund "eine Millisekunde da", nur schlimmer. Waehrend einer
+            # Karte ist das Bild NICHT leer; dort fehlt kein Text.
+            _kwf = [(card_t0(_q, words), _q['end'] + 0.40) for _q in plans
+                    if _q.get('kw_i') is not None and 'target' in _q]
+            if any(_s0 < _kb and _e0 > _ka for _ka, _kb in _kwf):
+                continue
             S.set_palette(palette_at(_s0 + 0.2) if palette_at else None)
             _it2, _th2, _an2 = compose_flow(_lauf, words, S, W, H, portrait,
                                             layout='flow', punch=False,
@@ -10426,7 +10505,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     # raeumt die Karte, statt den Block kaputtzuschieben.
                     # Der Block wird dabei NIE beschnitten: seine Woerter
                     # gehen nicht verloren, nur die Karte gibt nach.
-                    if _b['end'] - _spaet >= _FLOW_MIN:
+                    # v221b: bei einer ANSAGE gibt die Karte NICHT nach. Sie
+                    # ist woertlich bestellt ("this one sticks on the wall") -
+                    # dass sie ihre Lesezeit behaelt, ist die ganze Zusage des
+                    # intent-Flags. Der Fliesstext wartet dann eben laenger.
+                    if _b['end'] - _spaet >= _FLOW_MIN or _k.get('intent'):
                         _b['t0'] = _b['start'] = _spaet
                         _n_solo += 1
                     else:
@@ -11481,6 +11564,36 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                   W, H, scale=(0.88 + 0.12 * e) * x_sc,
                   opacity=min(dt / 0.10, 1) * g_out)
 
+    # v221 DAS ORTSWORT LIEGT SCHON DA. Vor der eigentlichen Karte (deren Uhr
+    # erst mit dem gesprochenen Wort bei 0 steht, v214/v215) liegt nur das
+    # Ankerwort auf der Flaeche. Eigener Durchgang VOR der Hauptschleife: die
+    # Zeichenzweige dort steigen bei dt < 0 alle aus, ein Ankerwort waere
+    # dort nie zu sehen (v219-Lehre: die Korrektur muss an der Stelle stehen,
+    # die auch laeuft).
+    # Bewusst ueber ALLE plans, nicht ueber 'active': das Ankerwort liegt VOR
+    # dem Anzeigefenster der Karte. Wuerde man dafuer p['start'] vorziehen,
+    # haetten Ueberlappungs- und Solo-Riegel eine falsche Startzeit - genau
+    # die Verwechslung, die v214/v215 gekostet hat.
+    for p in plans:
+        if p.get('anker_arr') is None or 'kw_i' not in p:
+            continue
+        _at0 = float(p.get('anker_t0', p.get('start', 0.0)))
+        _kt0 = card_t0(p, words)
+        if t < _at0 or t >= _kt0:
+            continue                       # davor nichts, danach der ganze Satz
+        _adt = t - _at0
+        _asd = scene_shift(p)
+        _aop = min(_adt / 0.35, 1.0)       # ruhig einblenden, es LIEGT ja da
+        if p.get('scene_ground') or p.get('broll'):
+            paste_scene(comp, p['anker_arr'],
+                        p.get('cx', W / 2) + _asd[0],
+                        p.get('cy', H * 0.45) + _asd[1], W, H, scale=1.0,
+                        opacity=_aop * 0.97, refract=0.0, ripple=0.12,
+                        grain=2.2, occ=occ_for(p), grain_seed=_gs)
+        else:
+            paste(comp, p['anker_arr'], p.get('cx', W / 2) + _asd[0],
+                  p.get('cy', H * 0.45) + _asd[1], W, H, opacity=_aop)
+
     for p in active:
         # v82: Cutter-Exit statt linearem Fade - Deckkraft haelt und laesst
         # dann los, dazu minimaler Scale-Settle + Drift (exit_pose).
@@ -11791,6 +11904,11 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 if _yaw_w is not None:
                     p['arr'] = persp_warp(p['flat_arr'], yaw=_yaw_w, pitch=0.0)
                     p['_wall_yaw'] = _yaw_w
+                    # v221: das Ankerwort liegt auf DERSELBEN Flaeche - sonst
+                    # kippt es beim Uebergang zum vollen Satz sichtbar um.
+                    if p.get('anker_flat') is not None:
+                        p['anker_arr'] = persp_warp(p['anker_flat'],
+                                                    yaw=_yaw_w, pitch=0.0)
                 p['_pose_done'] = True
             # v91: liegender Boden-Text auf B-Roll MIT Person -> Anker einmalig
             # auf die klare Strasse verschieben (weg vom Bild-Zentrum, wo bei

@@ -3,6 +3,44 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v221 TEXTFLUSS + DAS ORTSWORT LIEGT SCHON DA (Ismets Befund + Idee).**
+  - **(a) "Fuehlt sich 0 fluessig an" - gemessen, nicht geraten:** an Ismets
+    15-s-Werbespot standen **45 % der Laufzeit KEINE Captions** im Bild,
+    einzelne Pausen bis **1.17 s**, waehrend durchgehend gesprochen wird. Das
+    Luecken-Netz (v185) gab es, es lief nur bei Dichte 'durchgehend' -
+    Textpausen galten in 'akzente' als gewollte Handschrift. Am echten
+    Material ist das keine Handschrift, sondern ein Stocken. Netz und
+    Atempausen-Verzicht gelten jetzt auch fuer 'akzente'; 'sparsam' bleibt
+    bewusst ruhig, DORT ist die Pause der Stil.
+  - **(b) DAS NETZ FUELLT KEINE KARTEN-FENSTER (v221b, sonst waere es ein
+    Rueckschritt gewesen):** der erste Anlauf legte Netz-Bloecke IN die
+    Standzeit einer Keyword-Karte, der Solo-Riegel raeumte daraufhin die
+    Karte weg - die Ansagen standen nur noch **0.2 s** im Bild, also genau
+    Ismets "eine Millisekunde da", nur schlimmer. Sechs bestehende Tests
+    haben das gefangen. Waehrend einer Karte ist das Bild NICHT leer; dort
+    fehlt kein Text. Zusaetzlich: bei einer ANSAGE gibt die Karte im
+    Solo-Riegel nicht mehr nach - der Fliesstext wartet.
+  - **(c) DAS ORTSWORT LIEGT SCHON DA (Ismets Idee):** "es waere ja auch eine
+    Option, dass es schon da darauf steht. Beispielsweise das Wort Wall. Und
+    das andere baut sich drum herum auf." Genau so: ab dem SATZANFANG liegt
+    nur das Ortswort ('WALL') auf der Flaeche - in derselben gemessenen
+    Wandebene wie die spaetere Karte -, und sobald der Sprecher es
+    ausspricht, steht der ganze Satz da ('ON THE WALL'). `anker_wort()`
+    nimmt das letzte inhaltstragende Wort. Vorlauf gedeckelt auf 2.0 s
+    (mehr waere ein Titel, kein Anker).
+    **Das widerspricht v214 NICHT:** die KARTE erscheint weiter erst zu
+    ihrem Wort; frueher da ist nur der Anker, und er verschwindet nicht
+    vorher - genau das war der v214-Fehler.
+  - **WIRKSAMKEITS-NACHWEIS:** das Ankerwort ist im gerenderten Bild
+    gemessen - 799 Pixel im Anker-Fenster, 0 Pixel nach dem Kartenstart
+    (Differenz mit/ohne Sprite). Dabei aufgefallen und behoben:
+    `composite_frame` ist NICHT zustandsfrei (Anker, Animationsphase und
+    Flaechenmessung liegen am Plan), ein Vergleich braucht also FRISCHE
+    Plaene pro Lauf - sonst misst man den Zustand des ersten Durchgangs.
+  - Der Anker-Durchgang laeuft ueber `plans`, nicht ueber `active`, und
+    zieht `p['start']` NICHT vor: sonst haetten Ueberlappungs- und
+    Solo-Riegel eine falsche Startzeit (die Verwechslung aus v214/v215).
+  - Regression **1624/1624 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v220 EIN FUNKLOCH IST KEIN RENDER-FEHLER.** Ismets Screenshot (5G, zwei
   Balken): rote Karte "Render error - Connection lost", darunter der Satz
   "der Render laeuft weiter, schau in die Library oder lade neu". Beides

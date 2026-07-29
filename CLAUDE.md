@@ -977,7 +977,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1614/1614 grün (Stand v220)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1624/1624 grün (Stand v221)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1033,6 +1033,10 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
 4. **Eine Regel gegen Doppelbilder darf Zeiten nur KÜRZEN, nie verlängern**
    (v216/v217). Sonst beseitigt sie die Überschneidung in den ZAHLEN und
    erzeugt sie im INHALT — kein Zeit-Test fällt darauf.
+4b. **`composite_frame` ist NICHT zustandsfrei.** Anker, Animationsphase und
+   Flächenmessung liegen AM PLAN. Ein alt-gegen-neu-Vergleich braucht deshalb
+   FRISCHE Pläne pro Lauf — sonst misst der zweite Durchgang den Zustand des
+   ersten (v221, hat einen eigenen Test zum Fallen gebracht).
 5. **Wenn ein Fix nicht reproduzierbar ist, sagen — nicht liefern und hoffen.**
    Zwei Videos pixelweise vergleichen (`mittlere Differenz < 1` = derselbe
    Render) beantwortet in 10 Sekunden, ob überhaupt die neue Fassung lief.
