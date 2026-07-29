@@ -10141,6 +10141,21 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # erste sich kaputtkuerzt. Sie muss danach noch lesbar sein.
             if _a['end'] + _AUS > _ns + 1e-3:
                 _spaet = _a['end'] + _AUS
+                # v213: EINE ANSAGE VERSCHWINDET NIE. Bis v212 durfte die
+                # zweite Karte beliebig weit nach hinten wandern - bei drei
+                # Ansagen in vier Sekunden schob sie sich damit in die
+                # naechste hinein und fiel am Ende ganz raus. In Ismets
+                # Werbespot fehlte 'ON THE WALL' komplett, obwohl er es sagt.
+                # Eine Ueberlappung zu beseitigen, indem man eine Aussage
+                # loescht, ist keine Loesung. Deshalb: hoechstens 0.60 s
+                # warten; reicht das nicht, kuerzt die ERSTE Karte weiter
+                # (bis auf 0.50 s), statt die zweite weiter zu schieben.
+                _max_push = _ns + 0.60
+                if _spaet > _max_push:
+                    _a['end'] = max(_as + 0.50, _max_push - _AUS)
+                    _spaet = max(_ns, min(_spaet, _max_push), _a['end'] + 0.06)
+                    # Das Ausklingen darf nicht in die naechste Karte fallen.
+                    _a['aus'] = max(0.06, min(_AUS, _spaet - _a['end']))
                 _n['t0'] = _n['start'] = _spaet
                 # Sie darf dabei laenger stehen bleiben: die Standzeit einer
                 # Karte haengt an der Lesbarkeit, nicht am gesprochenen Wort.

@@ -1850,6 +1850,16 @@ def _scenario_logic(clip, transcript, tmp):
     check('v209a: jede Karte behaelt ihre Mindestlesezeit (0.8 s)',
           all(p['end'] - p['start'] >= 0.79 for p in _kw209),
           str([round(p['end'] - p['start'], 2) for p in _kw209]))
+    # v213: EINE ANSAGE VERSCHWINDET NIE. Der v209a-Riegel schob die mittlere
+    # Karte so weit nach hinten, dass sie in die naechste fiel und ganz
+    # ausblieb - in Ismets Werbespot fehlte 'ON THE WALL' komplett, obwohl er
+    # es sagt. Eine Ueberschneidung zu beseitigen, indem man eine Aussage
+    # loescht, ist keine Loesung.
+    check('v213: drei Ansagen ergeben DREI Karten, keine faellt weg',
+          len(_kw209) == 3, str([p['kw_txt'] for p in _kw209]))
+    check('v213: jede Ansage steht auch wirklich im Bild (Dauer > 0)',
+          all(p['end'] > p['start'] + 0.19 for p in _kw209),
+          str([round(p['end'] - p['start'], 2) for p in _kw209]))
     check('v209a: die Ansagen bleiben in der gesprochenen Reihenfolge',
           [p['kw_txt'] for p in _kw209][:1] != [] and len(_kw209) >= 2,
           str([p['kw_txt'] for p in _kw209]))
