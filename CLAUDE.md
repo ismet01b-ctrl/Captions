@@ -60,6 +60,13 @@ Sätze, nur Code + exakte Schritte. Technische Tiefe bleibt voll erhalten,
 nur Füllmaterial weg. Korrektur ohne Rechtfertigung annehmen. Bei visuellen
 Änderungen: Beweis liefern (Frame-Streifen / Beispiel-Video), nicht behaupten.
 
+**HARTE OBERGRENZE: 5 ZEILEN (Ismets Ansage, 29.07.2026, "nie wieder so
+viel schreiben, fuer immer").** Ergebnis + was zu tun ist, sonst nichts.
+Keine Ueberschriften, keine Aufzaehlung der Befunde, keine Beweisketten,
+keine Ursachen-Erklaerung, keine Ehrlich-Grenzen-Absaetze - das steht
+alles im Commit und in PROJEKT_STATUS.md. Details NUR auf Nachfrage.
+Wer beim Schreiben denkt "das muss er noch wissen": nein, muss er nicht.
+
 **KURZ UND KNACKIG (Ismets Ansage, Juli 2026).** Antworten so kurz wie
 möglich. Keine langen Analysen, keine Aufzählung von Nebenbefunden, kein
 Wiederholen dessen, was er schon weiß. Ergebnis zuerst, Details nur auf
