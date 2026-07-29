@@ -7867,6 +7867,53 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
     return n
 
 
+def card_t0(p, words):
+    """Der Zeitpunkt, an dem eine Keyword-Karte WIRKLICH im Bild erscheint.
+    Alle Zeichen-Zweige rechnen mit `t - p.get('t0', words[kw_i]['start'])`
+    und ueberspringen negative Werte - sichtbar wird die Karte also genau
+    dann, wenn diese Uhr bei 0 steht, nicht bei p['start'] (das ist der
+    Gruppen-Anfang und traegt nur die kleinen Nebenwoerter)."""
+    i = p.get('kw_i')
+    if not isinstance(i, int) or not (0 <= i < len(words)):
+        return p.get('t0', p.get('start', 0.0))
+    return float(p.get('t0', words[i].get('start', 0.0)))
+
+
+def intent_time_floor(plans, words, min_stage=0.50):
+    """v214 EINE ANSAGE STEHT NIE VOR IHREM WORT.
+
+    Ismets Werbespot, an seinem Job-Log belegt: die Karte 'ON THE WALL' stand
+    ab 8.18 s, gesprochen wird der Satz erst ab 9.08 s. Sagt er "sticks on the
+    wall", ist die Karte schon wieder weg - im Bild sieht es aus, als fehle
+    sie ganz. Ursache war der 1.5-s-Vorlauf des Szenen-Texts ("liegt schon
+    da"), den anschliessend der Solo-Riegel als t0 festschrieb.
+
+    Das ist zum VIERTEN Mal derselbe Fehlertyp: eine Zeit-Regel, die den
+    Sonderfall 'Ansage' nicht kennt. Die Ursachen sind an ihrer Stelle
+    behoben; dieser Riegel ist der zentrale Rueckfall-Schutz fuer JEDE
+    kuenftige Regel. Wer eine neue Zeit-Regel baut, muss sie nicht kennen -
+    ihr Ergebnis laeuft hier durch.
+
+    Verschoben wird nur nach HINTEN (spaeter ist erlaubt, frueher nie), und
+    eine so verschobene Karte behaelt mindestens `min_stage` Sekunden Buehne.
+    Rueckgabe: Anzahl korrigierter Ansagen."""
+    n = 0
+    for p in plans:
+        if not p.get('intent') or p.get('_user_t'):
+            continue                      # Nutzer-Zeit bleibt Nutzer-Zeit
+        i = p.get('kw_i')
+        if not isinstance(i, int) or not (0 <= i < len(words)):
+            continue
+        w0 = float(words[i].get('start', 0.0))
+        if card_t0(p, words) >= w0 - 1e-6:
+            continue
+        p['t0'] = w0
+        if p.get('end') is not None and float(p['end']) < w0 + min_stage:
+            p['end'] = w0 + min_stage
+        n += 1
+    return n
+
+
 def build_watermark(W, H):
     """v101: Free-Tier-Wasserzeichen als Sprite (Text + Logo, ~38%
     Deckkraft, unten rechts). Ausgelagert, damit der Watermark-Split
@@ -8952,6 +8999,12 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # Wucht aus dem Block-Editor nichts bewirken.
             p['power'] = int((fx_map or {}).get(i, {}).get('power', 2)
                              if isinstance((fx_map or {}).get(i), dict) else 2)
+            # v214 ANSAGE AN DEN PLAN. 'intent' stand bisher nur in fx_map -
+            # jede Zeit-Regel weiter unten arbeitet aber auf Plaenen und
+            # konnte deshalb nicht wissen, dass dieser Moment eine ANSAGE
+            # ist. Genau daran ist die Wand-Ansage vor ihr Wort gerutscht.
+            if isinstance((fx_map or {}).get(i), dict) and fx_map[i].get('intent'):
+                p['intent'] = True
             if _ublk:
                 p['_user'] = True
                 if _ublk.get('power'):
@@ -9378,7 +9431,17 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # Talking-Head-Fallback fest.
                 if (scene_ground or broll) and cfg['effects'].get('track3d', True):
                     p['t_word'] = kw_t0
-                    p['start'] = max(p['start'] - 1.5, 0.0)
+                    # v214: NICHT bei einer ANSAGE. "Liegt schon da" ist ein
+                    # Regie-Effekt fuer Szenen-Text, den niemand angekuendigt
+                    # hat - die Kamera schwenkt auf ein Wort, das in der Welt
+                    # liegt. Sagt der Sprecher die Platzierung aber ANSAGT
+                    # ("this one sticks on the wall"), dann ist die Karte 1.5 s
+                    # vor seinem Satz schlicht falsch: er zeigt auf etwas, das
+                    # laengst steht, und wenn er es ausspricht, ist es weg.
+                    # Genau das stand in Ismets Job-Log (Karte 8.18 s, Satz
+                    # ab 9.08 s).
+                    if not p.get('intent'):
+                        p['start'] = max(p['start'] - 1.5, 0.0)
             # v81e: Emoji ins Sprite backen. Nur einfache Ein-Array-Effekte
             # (behind/cascade/blurin/ground). 'outline' hat zwei Layer + Zaehler
             # bauen live -> dort bewusst kein Emoji, um Regression zu vermeiden.
@@ -9943,6 +10006,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         early = min(hook_len, 8.0)
         cands = [p for p in plans if 'kw_i' in p and not p.get('broll')
                  and not p.get('tokens')          # Kompositionen takten wortweise
+                 and not p.get('intent')          # v214: Ansage bleibt an ihrem Wort
                  and words[p['kw_i']]['start'] < early]
         if cands:
             def _hook_rank(p):
@@ -10216,6 +10280,11 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if st is None or en is None:
                 continue
             nb = min(bts, key=lambda b: abs(b - st))
+            # v214: eine Ansage rastet nur NACH hinten auf den Takt. Der Takt
+            # darf einen Moment atmen lassen, aber nicht vor den Satz ziehen,
+            # der ihn ankuendigt.
+            if p.get('intent') and nb < float(words[p['kw_i']]['start']) - 1e-6:
+                continue
             if 0.005 < abs(nb - st) <= 0.12 and en - nb >= 0.6:
                 p['start'] = nb
                 n_snap += 1
@@ -10260,6 +10329,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         n_sil += 1
         if n_sil:
             print(f"  Silence before the impact: {n_sil} moment(s) end earlier")
+
+    # v214 ZENTRALER RIEGEL, GANZ AM ENDE: keine Ansage steht vor ihrem Wort.
+    # Hier laufen ALLE Zeit-Regeln zusammen (Hook, Ueberlappung, Solo, Schnitt,
+    # Beat, Stille). Schlaegt er an, hat eine davon eine Ansage nach vorn
+    # gezogen - dann ist die Meldung der Hinweis, WO nachzusehen ist.
+    _n_int = intent_time_floor(plans, words)
+    if _n_int:
+        print(f"  Announcement guard: {_n_int} announced moment(s) moved back "
+              f"to their spoken word")
 
     # v101d: Safe-Zone-Kontrolle. Die Constraints (v_zone/clamp_cx) halten Text
     # schon in der Flaeche; hier melden wir nur die Faelle, wo ein Sprite dafuer

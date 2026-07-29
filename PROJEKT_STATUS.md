@@ -3,6 +3,55 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v214 EINE ANSAGE STEHT NIE VOR IHREM WORT.**
+  Ismets Werbespot, an seinem Job-Log belegt: `Block 8.18s | ON THE WALL`,
+  gesprochen wird der Satz aber erst ab 9.08 s. Sagt er "sticks on the wall",
+  ist die Karte schon wieder weg - im Bild sieht es aus, als fehle sie ganz.
+  - **EHRLICHE URSACHE: nicht der Overlap guard.** Der kuerzt nur Enden, er
+    zieht nichts nach vorn. Schuld war der 1.5-Sekunden-Vorlauf des
+    Szenen-Texts ("LIEGT SCHON DA", `p['start'] = start - 1.5`, seit v55) -
+    ein Regie-Effekt fuer Text, den NIEMAND angesagt hat: die Kamera schwenkt
+    auf ein Wort, das schon in der Welt liegt. Auf eine ANSAGE angewandt ist
+    er die Verneinung der Ansage. Den vorgezogenen Wert schrieb anschliessend
+    der Solo-Riegel als `t0` fest, und `t0` IST die Uhr, nach der jeder
+    Zeichen-Zweig die Karte einblendet - ab da war sie wirklich sichtbar zu
+    frueh.
+  - **BEWEIS (dieselbe Wortfolge, vorher/nachher, Sandbox):**
+    vorher `ON THE WALL` sichtbar ab 2.25 s bei Wort 3.50 s (**1.25 s zu
+    frueh**), und `BEHIND ME` blieb dadurch 0.10 s stehen - ein Blitz;
+    nachher stehen alle drei Ansagen exakt auf ihrem Wort (Differenz 0.00)
+    mit je 1.2 s Buehne.
+  - **Vier Stellen, eine Regel.** `intent` steht jetzt AM PLAN (vorher nur in
+    `fx_map`, weshalb keine Zeit-Regel es sehen konnte); der 1.5-s-Vorlauf
+    ueberspringt Ansagen; der Sofort-Hook waehlt keine Ansage mehr als
+    Frame-1-Karte; das Beat-Grid rastet eine Ansage nur nach HINTEN.
+    Dazu `intent_time_floor()` als zentraler Riegel GANZ AM ENDE von
+    `build_plans` - dort laufen alle Zeit-Regeln zusammen. Schlaegt er an
+    (`Announcement guard: N announced moment(s) moved back`), hat eine Regel
+    die Ansage vorgezogen; die Meldung sagt, dass nachzusehen ist.
+  - **Der Vorlauf ist NICHT abgeschafft.** Szenen-Text ohne Ansage behaelt
+    seine 1.5 s ("liegt schon da") - dafuer gibt es einen eigenen Test.
+    Einen Bug beheben, indem man ein Feature entfernt, waere keine Loesung.
+  - Lehre (zum vierten Mal derselbe Fehlertyp): eine neue Zeit-Regel muss
+    zuerst beantworten, was sie mit einem `intent`-Moment macht.
+  - Selftest: 11 neue Tests (Kartenstart >= Wortstart fuer jede Ansage,
+    intent am Plan, Mindest-Buehne, Riegel holt zurueck / laesst Spaeteres
+    und Nicht-Ansagen und Nutzer-Zeiten in Ruhe, Vorlauf bleibt fuer
+    Szenen-Text, Sofort-Hook, Beat-Grid). Regression: **1580/1580 logic**
+    + Renders 7/1/4von5/2 + GUI_OK.
+  - **Ehrlich offen (Sandbox, NICHT von dieser Aenderung):**
+    (a) `render2b` meldet 4/5 - `v101h: Alpha-Kanal traegt Text` prueft die
+    Alpha-Ebene bei fest 1.20 s, und im hiesigen synthetischen Transkript ist
+    dort eine Caption-Luecke. Vor der Aenderung gemessen: identisch 4/5.
+    (b) Dabei aufgefallen und NICHT angefasst (waere eine Timing-Aenderung in
+    JEDEM Video, das gehoert Ismet): der Solo-Riegel misst die Lesezeit einer
+    Karte ab `p['start']` (Anfang der Wortgruppe) statt ab ihrem Erscheinen.
+    Gemessen stand `CAPTIONS` auf dem Papier 1.06-1.86, sichtbar war sie
+    1.59-1.86 - 0.27 s statt der im Code garantierten 0.80 s.
+    (c) In derselben Passage bekommen 'wie' und 'wir' gar keine Caption
+    (Dichte 'akzente'), daher das Loch 1.1-1.5 s.
+    (d) Depth-Occlusion lief hier nie mit: huggingface.co ist im Container
+    gesperrt, `models/depth.onnx` liess sich nicht laden.
 - **v210 DREI KI-SYSTEME LIEFEN GAR NICHT.** Aus Ismets Job-Log:
   `AI flow unavailable (NameError)`, `Vision director unavailable
   (JSONDecodeError)`, `Object anchor: vision skipped`, `Silent score

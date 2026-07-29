@@ -1863,6 +1863,89 @@ def _scenario_logic(clip, transcript, tmp):
     check('v209a: die Ansagen bleiben in der gesprochenen Reihenfolge',
           [p['kw_txt'] for p in _kw209][:1] != [] and len(_kw209) >= 2,
           str([p['kw_txt'] for p in _kw209]))
+    # ------------------------------------------------------------------
+    # v214: EINE ANSAGE STEHT NIE VOR IHREM WORT.
+    # Ismets Job-Log: Karte 'ON THE WALL' ab 8.18 s, gesprochen ab 9.08 s.
+    # Sagt er "sticks on the wall", ist die Karte schon weg - im Bild sieht
+    # es aus, als fehle sie ganz. Ursache: der 1.5-s-Vorlauf des Szenen-
+    # Texts ("liegt schon da"), den der Solo-Riegel danach als t0 festschrieb.
+    # Gemessen wird die Zeit, zu der die Karte WIRKLICH erscheint (card_t0) -
+    # p['start'] ist der Gruppen-Anfang und traegt nur die Nebenwoerter.
+    _fruh214 = [(p['kw_txt'], round(R.card_t0(p, _w209) - _w209[p['kw_i']]['start'], 2))
+                for p in _kw209
+                if R.card_t0(p, _w209) < _w209[p['kw_i']]['start'] - 1e-6]
+    check('v214: keine Ansage erscheint vor ihrem gesprochenen Wort',
+          not _fruh214, str(_fruh214))
+    check('v214: jede Ansage ist als solche am Plan markiert (intent)',
+          all(p.get('intent') for p in _kw209),
+          str([(p['kw_txt'], p.get('intent')) for p in _kw209]))
+    check('v214: jede Ansage hat danach noch Buehne (>= 0.5 s)',
+          all(p['end'] - R.card_t0(p, _w209) >= 0.49 for p in _kw209),
+          str([round(p['end'] - R.card_t0(p, _w209), 2) for p in _kw209]))
+    # Der Riegel selbst: eine kuenftige Zeit-Regel, die eine Ansage nach vorn
+    # zieht, wird zentral zurueckgeholt - und die Karte behaelt ihre Buehne.
+    _fw214 = [{'word': ' ' + x, 'start': 2.0 + i * 0.3, 'end': 2.2 + i * 0.3}
+              for i, x in enumerate(['this', 'one', 'sticks', 'on', 'the', 'wall'])]
+    _fp214 = [{'tpl': 'ground', 'kw_i': 3, 'kw_txt': 'ON THE WALL', 'intent': True,
+               'start': 1.4, 't0': 1.4, 'end': 3.2},
+              {'tpl': 'ground', 'kw_i': 3, 'kw_txt': 'SPAETER IST OK', 'intent': True,
+               'start': 3.4, 't0': 3.4, 'end': 4.4},
+              {'tpl': 'ground', 'kw_i': 3, 'kw_txt': 'OHNE ANSAGE', 'start': 1.4,
+               't0': 1.4, 'end': 3.2}]
+    _n214 = R.intent_time_floor(_fp214, _fw214)
+    check('v214: der Riegel holt eine vorgezogene Ansage an ihr Wort zurueck',
+          _n214 == 1 and abs(_fp214[0]['t0'] - _fw214[3]['start']) < 1e-6,
+          f"{_n214} korrigiert, t0={_fp214[0]['t0']}")
+    check('v214: eine spaetere Ansage bleibt unangetastet (spaet ist erlaubt)',
+          _fp214[1]['t0'] == 3.4 and _fp214[1]['end'] == 4.4)
+    check('v214: der Riegel fasst NUR Ansagen an, nicht jeden Szenen-Text',
+          _fp214[2]['t0'] == 1.4 and _fp214[2]['start'] == 1.4)
+    _fp214b = [{'tpl': 'ground', 'kw_i': 3, 'kw_txt': 'KNAPP', 'intent': True,
+                'start': 1.4, 't0': 1.4, 'end': 2.95}]
+    R.intent_time_floor(_fp214b, _fw214)
+    check('v214: eine zurueckgeholte Ansage bekommt ihre Mindest-Buehne',
+          _fp214b[0]['end'] - _fp214b[0]['t0'] >= 0.49,
+          str(round(_fp214b[0]['end'] - _fp214b[0]['t0'], 2)))
+    check('v214: Nutzer-gesetzte Zeiten bleiben auch bei einer Ansage stehen',
+          R.intent_time_floor([{'tpl': 'ground', 'kw_i': 3, 'intent': True,
+                                '_user_t': True, 'start': 1.0, 't0': 1.0,
+                                'end': 3.0}], _fw214) == 0)
+    # Gegenprobe: der 1.5-s-Vorlauf ("liegt schon da") ist NICHT abgeschafft -
+    # er gilt weiter fuer Szenen-Text, den niemand angesagt hat. Sonst haetten
+    # wir einen Bug behoben, indem wir ein Feature entfernen.
+    _wv214 = [{'word': ' ' + x, 'start': 2.0 + i * 0.4, 'end': 2.3 + i * 0.4}
+              for i, x in enumerate(['der', 'Asphalt', 'glaenzt', 'heute', 'sehr'])]
+    _fxv214 = {1: {'fx': 'ground', 'szene': 'boden', 'lage': 'liegend',
+                   'power': 3, 'n': 1}}
+    _plv214 = R.build_plans(_wv214, {1}, cfg, S, W_, H_, lambda s, e: True, _fxv214)
+    _kwv214 = [p for p in _plv214 if p.get('kw_i') == 1]
+    check('v214: Szenen-Text OHNE Ansage behaelt den 1.5-s-Vorlauf',
+          bool(_kwv214) and _kwv214[0]['start'] <= _wv214[1]['start'] - 1.4,
+          str(round(_kwv214[0]['start'], 2) if _kwv214 else None))
+    # Instant-Hook: die staerkste fruehe Karte wird auf Frame 1 gezogen -
+    # eine ANSAGE darf er dafuer nicht nehmen, sonst steht sie Sekunden vor
+    # dem Satz, der sie ankuendigt.
+    _cfg214 = copy.deepcopy(cfg)
+    _cfg214['effects']['caption_flow'] = False
+    _cfg214['effects']['instant_hook'] = True
+    _pl214h = R.build_plans(_w209, set(_fx209), _cfg214, S, W_, H_,
+                            lambda s, e: True, _fx209)
+    _kw214h = [p for p in _pl214h if p.get('intent')]
+    check('v214: der Sofort-Hook zieht keine Ansage auf Frame 1',
+          bool(_kw214h) and all(R.card_t0(p, _w209) >= _w209[p['kw_i']]['start'] - 1e-6
+                                for p in _kw214h),
+          str([(p['kw_txt'], round(R.card_t0(p, _w209), 2),
+                _w209[p['kw_i']]['start']) for p in _kw214h]))
+    # Beat-Grid: der Takt darf einen Moment atmen lassen, aber nicht vor den
+    # Satz ziehen, der ihn ankuendigt.
+    _bts214 = [round(x * 0.05, 2) for x in range(0, 300)]
+    _pl214b = R.build_plans(_w209, set(_fx209), cfg, S, W_, H_,
+                            lambda s, e: True, _fx209, beat_times=_bts214)
+    _kw214b = [p for p in _pl214b if p.get('intent')]
+    check('v214: das Beat-Grid rastet eine Ansage nie vor ihr Wort',
+          bool(_kw214b) and all(R.card_t0(p, _w209) >= _w209[p['kw_i']]['start'] - 1e-6
+                                for p in _kw214b),
+          str([(p['kw_txt'], round(R.card_t0(p, _w209), 2)) for p in _kw214b]))
     # v210: DREI KI-SYSTEME FIELEN STILL AUS (Ismets Job-Log).
     # (a) ai_flow_direct hatte KEIN 'import requests' - jeder Kundenrender
     #     starb dort mit NameError und fiel auf die Heuristik zurueck. Ein

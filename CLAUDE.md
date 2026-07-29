@@ -970,13 +970,17 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1511/1511 grün (Stand v207a-sec)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1580/1580 grün (Stand v214)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
 
 ```bash
 # Testmaterial: /tmp/st_clip.mp4  + /tmp/st_transcript.json
+# Erzeugen wie in deploy_gate.sh - ABER: das Transkript muss eine BLANKE
+# Wortliste sein ([{word,start,end}, ...]). deploy_gate.sh schreibt die
+# {"words": ...}-Form; die reicht nur fuer --part=logic, render.py liest
+# daraus 2 "Woerter" und bricht ab.
 # In Etappen (Rendern ist langsam, sonst Timeout):
 python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=logic
 python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=render1   # 6
@@ -1041,25 +1045,36 @@ Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 
 ## STAND 29.07.2026 - HIER WEITERMACHEN (fuer den naechsten Chat)
 
-### SOFORT: Ansage wird vor ihr Wort gezogen (NICHT gefixt)
-Ismets Werbespot, an seinem Job-Log belegt:
-```
-Block  8.18s | ON THE WALL      <- gesprochen wird der Satz erst ab 9.08 s
-Block  8.78s | BEHIND ME
-```
-`Overlap guard: 3 moment(s) pulled forward` zieht Momente nach vorn, um
-Gedraenge aufzuloesen - und schob die Wand-Ansage fast eine Sekunde vor ihr
-Wort UND vor die vorherige Ansage. Wenn Ismet "sticks on the wall" sagt, ist
-die Karte schon weg; im Bild sieht es aus, als fehle sie ganz.
-**Fix:** ein Moment mit `intent` darf NIE vor sein gesprochenes Wort gezogen
-werden (Overlap guard, und Cut discipline gegenpruefen). Test: Kartenstart >=
-Wortstart fuer jede Ansage. Danach v213 gegenpruefen - der hielt die
-falsch einsortierte Karte fuer die erste von zweien und kuerzte sie zusaetzlich.
-Das ist zum VIERTEN Mal derselbe Fehlertyp an einem Tag: eine Regel, die den
-Sonderfall "Ansage" nicht kennt. Wer eine neue Zeit-Regel baut, fragt zuerst:
-was macht sie mit einem intent-Moment?
+### ERLEDIGT (v214): Ansage wurde vor ihr Wort gezogen
+Ismets Befund (`Block 8.18s | ON THE WALL`, gesprochen ab 9.08 s) ist behoben.
+**Die Ursache war NICHT der Overlap guard** - der kuerzt nur Enden. Schuld war
+der 1.5-s-Vorlauf des Szenen-Texts ("liegt schon da"), den der Solo-Riegel
+danach als `t0` festschrieb; `t0` ist die Uhr, nach der die Karte einblendet.
+Behoben an vier Stellen (Vorlauf, Sofort-Hook, Beat-Grid, `intent` steht jetzt
+AM PLAN) plus `intent_time_floor()` als zentralem Riegel am Ende von
+`build_plans`. Der Vorlauf gilt weiter fuer Szenen-Text OHNE Ansage.
+Lehre bleibt: **wer eine neue Zeit-Regel baut, fragt zuerst, was sie mit einem
+`intent`-Moment macht** - sie darf ihn nur nach HINTEN schieben.
 
-### Was in dieser Runde fertig wurde (v208-v213)
+### SOFORT: zwei Befunde von der v214-Runde, Ismet entscheidet
+1. **Der Solo-Riegel misst die Lesezeit einer Karte am falschen Punkt.**
+   Er rechnet ab `p['start']` (Anfang der WORTGRUPPE); sichtbar wird die Karte
+   aber erst mit ihrem eigenen Wort. Gemessen am Testmaterial: `CAPTIONS` stand
+   auf dem Papier 1.06-1.86, im Bild 1.59-1.86 - **0.27 s statt der im Code
+   garantierten 0.80 s**, also genau das Blinzeln, das `_KW_MIN` verhindern
+   soll. Der Fix ist klein (in `build_plans` ueberall dort, wo der Riegel
+   `p.get('t0', p['start'])` liest, `card_t0(p, words)` nehmen), aber er
+   verschiebt Timing in JEDEM Video mit Keyword-Karte und drueckt den
+   nachfolgenden Fliesstext-Block kuerzer (im Test von 0.80 s auf 0.27 s).
+   Das ist eine Abwaegung Karte gegen Fliesstext - deshalb nicht ungefragt
+   gebaut. Probiert, gemessen, wieder zurueckgebaut.
+2. **Woerter ohne jede Caption.** In derselben Passage bekommen 'wie' und 'wir'
+   gar keinen Text (Dichte 'akzente': sie sind weder Phrase noch Nebenwort).
+   Ergebnis ist ein Loch von ~0.5 s, obwohl durchgehend gesprochen wird - und
+   daran faellt in der Sandbox `render2b` (`v101h: Alpha-Kanal traegt Text`,
+   prueft fest bei 1.20 s). Vor v214 identisch, also keine Regression.
+
+### Was in dieser Runde fertig wurde (v208-v214)
 - v208/v208a Trichter + Test-Gate urteilt nach der Bilanz statt Textsuche
 - v208b Ursache zuerst in der Fehlermeldung, ClientDisconnect ist keine Stoerung
 - v209 Ansage-Wortschatz: line/one + Adjektiv zwischen Bestimmungswort und Nomen
@@ -1070,6 +1085,9 @@ was macht sie mit einem intent-Moment?
 - v211 Blockmasse ins Job-Log (genau das hat den Befund oben moeglich gemacht)
 - v212/a/b/c Tickets: geschlossen = dicht, nach 24 h aus der Kundenliste;
   Desktop-Lesebreite; KEIN color-scheme (machte Eingabefelder pechschwarz)
+- v214 Ansage steht nie vor ihrem Wort (`intent` am Plan, 1.5-s-Vorlauf nur
+  fuer NICHT angesagten Szenen-Text, Sofort-Hook + Beat-Grid respektieren die
+  Ansage, `intent_time_floor()` als zentraler Riegel)
 
 ### Noch offen aus den Renders
 - **Zwei Textbloecke gleichzeitig, 94 Frames** (Karte gegen FLIESSTEXT, nicht
