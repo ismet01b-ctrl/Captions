@@ -27,7 +27,28 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
     `DVE_BUILD = 'v...'` als Literal - also genau die Konstante, die das
     Problem war. Angepasst. (CLAUDE.md-Lehre "ein Test kann eine Luecke als
     Zusage festschreiben", diesmal am eigenen Bein.)
-  - Regression **1632/1632 logic + 7/1/5/2 Renders + GUI_OK**.
+  - **Der stille Stopp meldet sich jetzt selbst:** der Watchdog prueft alle
+    10 Minuten das Alter des laufenden Stands und schreibt ab 7 Tagen (oder
+    bei fehlendem Stempel) eine Meldung ins Panel plus Mail - EINE pro Tag
+    (Tagesschluessel; der Stunden-Deckel von `_notify_admin` haette 24 am
+    Tag ergeben, und eine taegliche Tapete meldet nichts mehr, v194b-Lehre).
+    Bisher schrieb nur `autodeploy.sh` bei einem GESCHEITERTEN Versuch -
+    steht der Timer, haengt ein Build im flock oder scheitert `git fetch`,
+    sah das genauso aus wie "es gibt nichts Neues".
+  - **NACHGEPRUEFT, dass es NICHT das Test-Gate ist:** der Selftest unter
+    exakten Server-Bedingungen (leeres `models/`, Transkript in der
+    `{"words": ...}`-Form aus `deploy_gate.sh`, alle Aussendienste leer,
+    eigenes DVE_DATA) laeuft **1634/1634 gruen**. Das Gate blockiert also
+    nicht; der Deploy kommt gar nicht erst dort an.
+  - **v213 liegt NUR auf `claude/caveman-repo-xt386k`** (`origin/main` und
+    `origin/claude/caveman-repo-8ohsfu` stehen beide auf dem
+    Upload-Commit `234f33a` und enthalten 27c19fe nicht). Der Server hat
+    diesen Branch also bis 27c19fe gezogen und danach aufgehoert - die
+    Ursache liegt im Server-Prozess (Timer/flock/git), nicht im Branch und
+    nicht im Code. Dieser eine Schritt braucht Ismets Zugang; aus der
+    Sandbox gibt es keinen Weg auf die Maschine (kein SSH, douchko.eu ist
+    ueber den Proxy gesperrt).
+  - Regression **1634/1634 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v221 TEXTFLUSS + DAS ORTSWORT LIEGT SCHON DA (Ismets Befund + Idee).**
   - **(a) "Fuehlt sich 0 fluessig an" - gemessen, nicht geraten:** an Ismets
     15-s-Werbespot standen **45 % der Laufzeit KEINE Captions** im Bild,

@@ -4610,6 +4610,40 @@ def _watchdog_worker():
                     _notify_admin('disk', 'Speicher knapp auf douchko.eu',
                                   f'Nur noch {free_gb:.1f} GB frei unter {DATA}.\n'
                                   f'Cleanup laeuft, reicht aber offenbar nicht.')
+                # v222 DER STILLE DEPLOY-STOPP. Der Server lief monatelang auf
+                # v213, waehrend die Arbeit weiterging - und NICHTS hat es
+                # gemeldet: autodeploy.sh schreibt nur bei einem GESCHEITERTEN
+                # Versuch ins Panel. Bleibt der Timer stehen, haengt ein Build
+                # im flock oder scheitert `git fetch`, sieht es genauso aus wie
+                # "es gibt nichts Neues" - stille Funkstille. Der Watchdog
+                # meldet deshalb jetzt selbst, wenn der laufende Stand alt ist.
+                # Ein Deckel je Woche, damit die Meldung nicht zur Tapete wird.
+                try:
+                    _dp = _deploy_info()
+                    _al = _dp.get('alter_tage')
+                    if _al is None or _al > 7:
+                        _notify_admin(
+                            # Tagesschluessel: der Stunden-Deckel von
+                            # _notify_admin ergaebe hier 24 Mails am Tag. Ein
+                            # Betriebsstillstand darf gemeldet werden, aber
+                            # einmal taeglich reicht - sonst ist die Meldung
+                            # nach zwei Tagen Tapete (v194b-Lehre).
+                            'deploy_alt-' + time.strftime('%Y-%m-%d'),
+                            'Seit Tagen kein Deploy - laeuft der Auto-Deploy noch?',
+                            ('Der laufende Stand ist '
+                             + (f'{_al:.0f} Tage alt' if _al is not None
+                                else 'unbekannt (kein Build-Stempel)')
+                             + f".\nBranch: {_dp.get('branch') or 'unbekannt'}\n"
+                             f"Commit: {_dp.get('commit') or 'unbekannt'}\n\n"
+                             'Wurde seitdem gepusht, greift der Auto-Deploy '
+                             'nicht. Auf dem Server pruefen:\n'
+                             '  systemctl status douchko-deploy.timer\n'
+                             '  cd /opt/douchko && git status && bash update.sh\n\n'
+                             'Bis dahin gehen KEINE Aenderungen live - und '
+                             'jedes Kundenvideo wird mit dem alten Stand '
+                             'gerendert.'))
+                except Exception:
+                    pass
             # v197 Skalierungs-Signal. Der Server rendert mit EINEM Worker auf
             # EINER Maschine. Das ist bewusst so (ein Render zieht CPU und RAM;
             # zwei parallele Jobs machen beide langsamer, nicht die Summe

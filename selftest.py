@@ -2470,6 +2470,16 @@ def _scenario_logic(clip, transcript, tmp):
               not _mod222._deploy_info().get('warnung'))
     finally:
         _mod222.DATA = _alt222
+    # Der stille Deploy-Stopp muss sich MELDEN. autodeploy.sh schreibt nur bei
+    # einem GESCHEITERTEN Versuch ins Panel; bleibt der Timer stehen, sieht es
+    # aus wie "nichts Neues". Genau so lief der Server monatelang auf v213.
+    check('v222: der Watchdog meldet einen veralteten Stand von selbst',
+          "_notify_admin(" in _sv220 and 'deploy_alt-' in _sv220
+          and 'laeuft der Auto-Deploy noch' in _sv220
+          and "_al is None or _al > 7" in _sv220)
+    check('v222: die Deploy-Warnung ist auf eine pro Tag gedeckelt',
+          "'deploy_alt-' + time.strftime('%Y-%m-%d')" in _sv220,
+          'sonst 24 Mails am Tag')
     check('v222: das Panel zeigt Branch, Alter und die Warnung',
           'd.deploy.branch' in open(os.path.join(HERE, 'web', 'admin.html'),
                                     encoding='utf-8').read()
