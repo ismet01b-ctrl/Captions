@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v218 DIE WAND WIRD GEMESSEN, NICHT GERATEN.** Ismets Befund am Render:
+  "es sitzt nicht richtig an der Wand". Genau so war es gebaut: fuer
+  LIEGENDEN Text misst `ground_pose` die echte Neigung der Flaeche aus der
+  Tiefenkarte, fuer WAND-Text gab es das nicht - dort stand ein FESTER
+  Winkel, der pro Moment zwischen -6 und +6 Grad wechselte
+  (`g_yaw = -6 if side_toggle % 2 == 0 else 6`). Sechs Grad in zufaelliger
+  Richtung haben mit der Wand im Bild nichts zu tun; der Text lag davor
+  statt darauf.
+  - `wall_pose()` misst die WAAGERECHTE Fluchtrichtung aus der Tiefenkarte
+    und liefert den Yaw, mit dem `persp_warp` den Text in die Wandebene
+    legt. Ein senkrechtes Gefaelle (Boden/Decke) gibt None zurueck - dafuer
+    ist `ground_pose` zustaendig -, ebenso eine frontale Wand ohne Flucht.
+  - **Der Wand-Text hebt jetzt sein Roh-Sprite auf** (`flat_arr`, bisher nur
+    bei `lying`). Ohne das gaebe es nichts neu zu warpen - genau daran ist
+    es vorbeigelaufen: die Messung haette man einbauen koennen, sie waere
+    ohne das Roh-Sprite wirkungslos geblieben.
+  - Beweis an synthetischen Tiefenkarten: Wand flieht nach links -> yaw
+    -31.2 Grad (linke Seite kippt weg), nach rechts -> +31.2 Grad, Boden
+    und frontale Wand -> None (bisheriger Winkel bleibt).
+  - **EHRLICHE GRENZE:** das Tiefen-Modell laesst sich in diesem Container
+    nicht laden (huggingface.co gesperrt) - gemessen ist `wall_pose` an
+    erzeugten Tiefenkarten, nicht an Ismets Video. Wie es am echten
+    Material sitzt, sieht er erst im naechsten Render.
+  - Selftest: 7 neue Tests. Regression **1599/1599 logic + 7/1/5/2 Renders
+    + GUI_OK**.
 - **v217 NUR DER ANSCHNITT-RIEGEL, OHNE DEN DOPPELBILD-FEHLER.**
   v216 hatte zwei Teile; einer war richtig, einer falsch. Der
   Fliesstext-gegen-Fliesstext-Riegel VERLAENGERTE bei Gedraenge den

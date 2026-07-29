@@ -2076,6 +2076,49 @@ def _scenario_logic(clip, transcript, tmp):
     check('v217: kein Riegel verlaengert einen Fliesstext-Block',
           "_b2['end'] = _spaet2 + _FLOW_MIN" not in _src217
           and 'HIER STAND EIN FLIESSTEXT-GEGEN-FLIESSTEXT-RIEGEL' in _src217)
+    # ------------------------------------------------------------------
+    # v218: DIE WAND WIRD GEMESSEN, NICHT GERATEN.
+    # Ismets Befund am Render: "es sitzt nicht richtig an der Wand". Genau so
+    # war es gebaut - fuer LIEGENDEN Text misst ground_pose die echte Neigung
+    # aus der Tiefenkarte, fuer WAND-Text stand dort ein fester Winkel im
+    # Wechsel (-6/+6 Grad). Sechs Grad in zufaelliger Richtung haben mit der
+    # Wand im Bild nichts zu tun: der Text lag davor statt darauf.
+    _Wv, _Hv = 720, 1280
+    _xr = np.linspace(0.2, 0.9, _Wv).astype(np.float32)
+    _d_links = np.tile(_xr, (_Hv, 1))              # Naehe steigt nach rechts
+    _d_rechts = np.tile(_xr[::-1].copy(), (_Hv, 1))
+    _d_boden = np.tile(np.linspace(0.2, 0.9, _Hv).astype(np.float32)[:, None],
+                       (1, _Wv))
+    _d_flach = np.full((_Hv, _Wv), 0.5, np.float32)
+    _yl = R.wall_pose(_d_links, 360, 600, 200, 80, _Wv, _Hv)
+    _yr = R.wall_pose(_d_rechts, 360, 600, 200, 80, _Wv, _Hv)
+    # persp_warp: yaw > 0 = RECHTE Seite kippt nach hinten.
+    check('v218: eine nach links fliehende Wand kippt die linke Seite weg',
+          _yl is not None and _yl < -8, str(_yl))
+    check('v218: eine nach rechts fliehende Wand kippt die rechte Seite weg',
+          _yr is not None and _yr > 8, str(_yr))
+    check('v218: der Winkel bleibt in einem plausiblen Rahmen',
+          abs(_yl) <= 46 and abs(_yr) <= 46, f"{_yl:.1f} / {_yr:.1f}")
+    check('v218: ein BODEN ist keine Wand (dafuer ist ground_pose zustaendig)',
+          R.wall_pose(_d_boden, 360, 600, 200, 80, _Wv, _Hv) is None)
+    check('v218: ohne messbare Flucht bleibt der bisherige Winkel',
+          R.wall_pose(_d_flach, 360, 600, 200, 80, _Wv, _Hv) is None
+          and R.wall_pose(None, 360, 600, 200, 80, _Wv, _Hv) is None)
+    # Und der Wand-Text muss sein Roh-Sprite aufheben, sonst gibt es nichts
+    # neu zu warpen - genau daran ist es vorher vorbeigelaufen.
+    check('v218: Wand-Text hebt sein Roh-Sprite auf (flat_arr)',
+          'if lying or on_wall:' in _src217
+          and "_wand_p = (p.get('szene') == 'wand'" in _src217
+          and 'wall_pose(depth_n' in _src217)
+    _wt218 = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
+              for i, x in enumerate('This one sticks on the wall. I talked here.'.split())]
+    _fx218 = R._speech_intent(R._self_ref_intent({}, _wt218), _wt218)
+    _pl218 = R.build_plans(_wt218, set(_fx218), cfg, S, W_, H_,
+                           lambda s, e: True, _fx218)
+    _wp218 = [p for p in _pl218 if p.get('szene') == 'wand']
+    check('v218: die Wand-Ansage traegt ein Roh-Sprite zum Neu-Warpen',
+          bool(_wp218) and _wp218[0].get('flat_arr') is not None,
+          str([(p.get('kw_txt'), p.get('flat_arr') is not None) for p in _wp218]))
 
     # v210: DREI KI-SYSTEME FIELEN STILL AUS (Ismets Job-Log).
     # (a) ai_flow_direct hatte KEIN 'import requests' - jeder Kundenrender

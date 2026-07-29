@@ -3444,6 +3444,45 @@ def ground_pose(depth_n, cx, cy, bw, bh, W, H):
     return roll, pitch
 
 
+def wall_pose(depth_n, cx, cy, bw, bh, W, H):
+    """v218 DIE WAND WIRD GEMESSEN, NICHT GERATEN.
+
+    Ismets Befund am Render: "es sitzt nicht richtig an der Wand". Genau so
+    war es gebaut - fuer LIEGENDEN Text misst `ground_pose` die echte Neigung
+    der Flaeche aus der Tiefenkarte, fuer WAND-Text gab es das nicht: dort
+    stand ein fester Winkel (`g_yaw = -6 oder +6`, im Wechsel je Moment) und
+    ein fester Pitch. Sechs Grad in zufaelliger Richtung haben mit der Wand
+    im Bild nichts zu tun - der Text lag davor statt darauf.
+
+    Gemessen wird die WAAGERECHTE Fluchtrichtung: depth_n ist NAEHE, eine
+    Wand, die nach links wegflieht, hat dort kleinere Werte. Daraus wird der
+    Yaw (Drehung um die Hochachse), mit dem persp_warp den Text in die
+    Wandebene legt. Rueckgabe: yaw in Grad, oder None, wenn keine klare
+    seitliche Flucht messbar ist (dann bleibt der bisherige Wert)."""
+    if depth_n is None:
+        return None
+    x1 = int(max(cx - bw, 0)); x2 = int(min(cx + bw, W))
+    y1 = int(max(cy - bh, 0)); y2 = int(min(cy + bh, H))
+    reg = depth_n[y1:y2, x1:x2]
+    if reg.size < 400:
+        return None
+    reg = cv2.GaussianBlur(reg.astype(np.float32), (0, 0), 4)
+    gx = float(np.median(cv2.Sobel(reg, cv2.CV_32F, 1, 0, ksize=5)))
+    gy = float(np.median(cv2.Sobel(reg, cv2.CV_32F, 0, 1, ksize=5)))
+    # Eine WAND flieht seitlich. Ueberwiegt das senkrechte Gefaelle, schauen
+    # wir auf Boden oder Decke - dafuer ist ground_pose zustaendig.
+    if abs(gx) < abs(gy) * 1.2 or abs(gx) < 1e-5:
+        return None
+    # Wie stark verkuerzt sich die Flaeche? Die Spannweite der Naehe ueber
+    # die Breite ist ein direktes Mass fuer den Blickwinkel.
+    span = float(np.percentile(reg, 90) - np.percentile(reg, 10))
+    stark = max(0.0, min(1.0, span * 2.2))
+    # gx < 0: Naehe faellt nach rechts -> die rechte Seite ist weiter weg
+    # und muss nach hinten kippen (persp_warp: yaw > 0).
+    yaw = (1.0 if gx < 0 else -1.0) * (8.0 + 34.0 * stark)
+    return max(-46.0, min(46.0, yaw))
+
+
 def ground_anchor(alpha, arr, W, H, avoid_x=None, band=(0.60, 1.02),
                   allow_overhang=False, depth_n=None):
     """Sucht auf B-Roll MIT sichtbarer Person eine klare Bodenflaeche fuer
@@ -9557,9 +9596,14 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 else:
                     flat = S.text(txt, sz, S.white, extrude=g_ex, flat_light=lying)[0]
                     p['arr'] = persp_warp(flat, yaw=g_yaw, pitch=g_pitch)
-                    if lying:
+                    if lying or on_wall:
                         # Roh-Sprite aufheben: beim Ankern wird die Neigung der
                         # ECHTEN Flaeche gemessen und der Text neu gewarpt.
+                        # v218: gilt jetzt auch fuer die WAND. Bis dahin stand
+                        # dort ein fester Winkel im Wechsel (-6/+6 Grad) - mit
+                        # der Wand im Bild hatte der nichts zu tun, und der
+                        # Text lag davor statt darauf ("es sitzt nicht richtig
+                        # an der Wand", Ismets Befund am Render).
                         p['flat_arr'] = flat
                 p['lying'] = lying
                 if scene_ground:
@@ -11954,20 +11998,34 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     if p.get('glass_frames'):
                         gf = p['glass_frames']
                         p['arr'] = gf[blender_engine.anim_loop_idx(dt, len(gf))]
-                    if p.get('lying') and not p.get('glass'):
+                    # v218: die WAND wird genauso behandelt wie der Boden -
+                    # ihre Neigung wird GEMESSEN und der Text danach gewarpt.
+                    _wand_p = (p.get('szene') == 'wand' and not p.get('lying')
+                               and not p.get('glass'))
+                    if (p.get('lying') or _wand_p) and not p.get('glass'):
                         # GEMALT = starr, auch ohne Kamera-Track: kein Einflug,
                         # kein Atmen - nur schneller Fade ab dem Anker-Moment.
                         if (not p.get('_pose_done')
                                 and p.get('flat_arr') is not None):
-                            _pose = ground_pose(depth_n, p.get('cx', W / 2),
-                                                p['cy'],
-                                                p['flat_arr'].shape[1] * 0.7,
-                                                p['flat_arr'].shape[0] * 2.2,
-                                                W, H)
-                            if _pose is not None:
-                                p['arr'] = rot_img(
-                                    persp_warp(p['flat_arr'], yaw=0.0,
-                                               pitch=_pose[1]), _pose[0])
+                            if _wand_p:
+                                _yaw = wall_pose(depth_n, p.get('cx', W / 2),
+                                                 p['cy'],
+                                                 p['flat_arr'].shape[1] * 0.7,
+                                                 p['flat_arr'].shape[0] * 2.2,
+                                                 W, H)
+                                if _yaw is not None:
+                                    p['arr'] = persp_warp(p['flat_arr'],
+                                                          yaw=_yaw, pitch=0.0)
+                            else:
+                                _pose = ground_pose(depth_n, p.get('cx', W / 2),
+                                                    p['cy'],
+                                                    p['flat_arr'].shape[1] * 0.7,
+                                                    p['flat_arr'].shape[0] * 2.2,
+                                                    W, H)
+                                if _pose is not None:
+                                    p['arr'] = rot_img(
+                                        persp_warp(p['flat_arr'], yaw=0.0,
+                                                   pitch=_pose[1]), _pose[0])
                             p['_pose_done'] = True
                         _tvs = t - p.get('t_anchor', p.get('t0', p['start']))
                         paste_scene(comp, p['arr'], p.get('cx', W / 2) + sdx,
