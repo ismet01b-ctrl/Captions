@@ -3,6 +3,50 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v216 ANGESCHNITTENER TEXT + ZWEI BLOECKE GLEICHZEITIG (Ismets Render).**
+  Befunde am hochgeladenen Video (15 s, 720x1280, 24 fps).
+  - **(a) Text lief aus dem Bild.** 'CAPTIONS LOOK THE' war links UND rechts
+    angeschnitten (vorne fehlte das C, hinten das E), 'THIS ONE FLOATS'
+    klebte mit beiden Aussenkanten am Rand, 'BEHIND ME' und 'ON THE WALL'
+    waren links angeschnitten. Die Breite entsteht auf fuenf Wegen (Karte,
+    Editorial-Komposition, Fliesstext, Referenz-Skalierung, Perspektiv-
+    Verzerrung), jeder mit eigener Begrenzung - und `S.fit` SCHAETZT die
+    Breite aus Einzelzeichen-Kaesten (Leerzeichen zaehlen fast nichts) und
+    hat eine harte Untergrenze; passt es danach nicht, prueft es niemand
+    nach. Statt fuenf Schaetzungen zu flicken: `fit_into_frame()` misst ganz
+    am Ende von `build_plans` EINMAL das fertige Bild und verkleinert bzw.
+    verschiebt notfalls. Der GEWOLLTE Randabfall (v152, 'bleed') bleibt
+    unangetastet. Meldung im Log: `Frame guard: N moment(s) scaled/moved
+    back into frame`.
+  - **(b) Zwei Fliesstext-Bloecke gleichzeitig.** Der ganze Solo-Riegel
+    haengt an einer KARTE ("solange eine Keyword-Karte steht, raeumt jeder
+    andere Textplan") - zwei Bloecke OHNE Karte kannte er nicht, und
+    `resolve_overlaps` greift nur bei Bloecken NAHE beieinander (< 0.16 H);
+    'EVERYONE'S' stand oben, 'CAPTIONS LOOK...' unten. Damit war 'ein
+    Moment, ein Bild' (v185) fuer den haeufigsten Fall ungedeckt - zum
+    vierten Mal ein Riegel am falschen Gate. Jetzt raeumt der frueher
+    gestartete Block, aber NIE bevor sein Schlusswort gesprochen ist
+    (v187); reicht das nicht, wartet der spaetere und bleibt dafuer laenger.
+  - **(c) Das Messwerkzeug war blind fuer die gesuchten Faelle.** Der
+    v211-Block-Log las 'bx'/'bw' - die setzt kein Keyword-Plan: JEDE Karte
+    stand mit `0.000..0.000 W` im Log, also genau die Momente, die im Bild
+    angeschnitten waren. Fliesstext-Bloecke meldeten statt ihres Wortlauts
+    eine Reihe Leerzeichen (der Text steht nicht im Item, nur der
+    Wortindex). Neu: `ink_box()` misst die TINTE aller drei Textformen
+    (Karte / Komposition / Fliesstext), `plan_text()` holt den Wortlaut aus
+    dem Transkript, und die Zeile nennt das SICHTBARE Zeitfenster
+    (`Block 8.25- 9.85s`) - damit ist eine Ueberschneidung im Log ablesbar,
+    ohne das Video Frame fuer Frame durchzugehen.
+  - **KEIN Bug war:** 'ON THE WALL' wirkt blass, gemessener Kontrast aber
+    5.69:1 (Norm 4.5:1) - das ist die gewollte Szenen-Integration, nicht
+    zu wenig Kontrast. Nicht angefasst.
+  - **EHRLICHE GRENZE:** (a) liess sich mit nachgebautem Transkript NICHT
+    ausloesen - Ismets Konfiguration (gelernte Referenz / Look) liegt hier
+    nicht vor. Der Riegel ist am Einzeltest belegt (Karte 1.77 W -> 1.01 W,
+    Fliesstext 1.06 W -> 1.01 W), nicht an seinem Video. Der reparierte Log
+    zeigt beim naechsten Render sofort, welcher Block herauslaeuft.
+  - Selftest: 9 neue Tests, v211-Test auf die neue Zusage gezogen.
+    Regression **1594/1594 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v215 DER SOLO-RIEGEL MASS DIE LESEZEIT AM FALSCHEN PUNKT.**
   Aufgefallen beim Gegenpruefen von v214, gleiche Verwechslung eine Regel
   weiter: der Riegel rechnete die Lesezeit einer Karte ab `p['start']` - dem
