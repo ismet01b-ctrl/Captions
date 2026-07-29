@@ -1926,7 +1926,13 @@ def _scenario_logic(clip, transcript, tmp):
     # v212a: Am Desktop blitzte Browser-Weiss durch (Grund nur auf <body>)
     # und die Karten zogen sich ueber die ganze Fensterbreite.
     check('v212a: der dunkle Grund liegt auf <html>, kein Weiss-Blitz',
-          'html { background: #0b0b0e; color-scheme: dark; }' in _idx212a)
+          'html { background: #0b0b0e; }' in _idx212a)
+    # v212c: color-scheme: dark liess den BROWSER die Felder zeichnen -
+    # pechschwarz, eckig, randlos. Die Felder bekommen ihre Optik hier.
+    check('v212c: kein color-scheme, Felder werden selbst gestaltet',
+          'color-scheme: dark' not in _idx212a
+          and 'input[type=text], input[type=email]' in _idx212a
+          and 'border-radius: 12px;' in _idx212a)
     check('v212a: alle Seiten haben eine Lesebreite',
           '.page-head, .page-body, .main { max-width: 1040px;' in _idx212a)
 

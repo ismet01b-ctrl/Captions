@@ -80,10 +80,25 @@ html { -webkit-text-size-adjust: 100%; }
 html, body { min-height: 100%; overscroll-behavior-y: none; }
 /* v212a: Der dunkle Grund gehoert auch auf <html>. Steht er nur auf
    <body>, blitzt beim Laden und beim Ueberscrollen das Browser-Weiss
-   durch - am Desktop faellt das sofort auf. color-scheme sagt dem
-   Browser zusaetzlich, Scrollbalken und Formularfelder dunkel zu
-   zeichnen, statt sie hell zu lassen. */
-html { background: #0b0b0e; color-scheme: dark; }
+   durch - am Desktop faellt das sofort auf. */
+html { background: #0b0b0e; }
+/* v212c: Die dunkle Farbschema-Angabe ist RAUS. Sie wies den Browser an, Formular-
+   felder SELBST zu zeichnen - Eingaben wurden dadurch pechschwarz,
+   eckig und randlos, also genau das Gegenteil des Designs. Felder
+   bekommen ihre Optik hier explizit, damit sie zu den Karten passen. */
+input[type=text], input[type=email], input[type=password], input[type=number],
+textarea, select {
+  background: var(--bg2); color: var(--fg);
+  border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
+  padding: 11px 13px; font: inherit; outline: none;
+  appearance: none; -webkit-appearance: none;
+}
+input[type=text]:focus, input[type=email]:focus, input[type=password]:focus,
+input[type=number]:focus, textarea:focus, select:focus {
+  border-color: rgba(255,122,26,.55);
+}
+textarea { line-height: 1.5; }
+::placeholder { color: rgba(255,255,255,.38); }
 body {
   background: radial-gradient(1200px 800px at 15% -10%, rgba(255,122,26,.10), transparent 60%),
               radial-gradient(900px 600px at 100% 100%, rgba(255,122,26,.05), transparent 55%),
