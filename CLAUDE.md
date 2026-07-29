@@ -977,7 +977,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1603/1603 grün (Stand v219)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1606/1606 grün (Stand v219a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1002,7 +1002,40 @@ xvfb-run -a python3 -c "import tkinter as tk, gui; r=tk.Tk(); gui.App(r); r.dest
 Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
 (Login → Testuser in users.db verifizieren → Seite prüfen → Testuser löschen).
 
+## WIRKSAMKEITS-NACHWEIS (v219, Ismets Ansage "lerne aus deinen Fehlern")
+**Vor jedem Deliver einer Verhaltens-/Optik-Änderung ist zu BEWEISEN, dass der
+geänderte Code im echten Pfad LÄUFT.** Nicht dass er da steht — dass er läuft.
+Drei Fehlschläge an einem Tag hatten dieselbe Form: der Fix war richtig
+gedacht, grün getestet und ohne jede Wirkung. Ismet hat dreimal umsonst
+gerendert. Die Pflichtfragen, in dieser Reihenfolge:
+
+1. **Wird die Zeile ERREICHT?** Jede umschliessende Bedingung von aussen nach
+   innen durchgehen und ihren Wert im Zielfall aufschreiben. `composite_frame`
+   ist die Falle: der `ground`-Zweig allein hat DREI Zeichenwege (getrackt /
+   ungetrackt / `front_layer`), und jeder endet mit `continue`. Eine
+   Sprite- oder Pose-Korrektur gehört VOR die Weiche, nie in einen Ast.
+   Bei `tracked` gilt: für einen ground-Plan ist es IMMER wahr, weil
+   `need_track` das ganze Anzeigefenster abdeckt (v219).
+2. **Der Test muss die Funktion AUFRUFEN, die im Produkt läuft.** Eine
+   Quelltext-Suche (`'wall_pose(' in src`) und eine reine Funktionsprüfung
+   waren bei v218 beide grün, während im Bild nichts passierte. Also:
+   `build_plans` UND `composite_frame` echt aufrufen, notfalls mit einem
+   Spion auf der neuen Funktion (`R.x = spion`), und den AUFRUFZÄHLER prüfen.
+   Das ist die v193-Lehre, verschärft: nicht nur "Plan trägt den Wert",
+   sondern "der Wert kommt im Bild an".
+3. **Der Unterschied muss MESSBAR sein.** Alt gegen neu am gerenderten Bild
+   oder am Sprite vergleichen (v219: abgewandte Textseite von 2.23 auf 0.52
+   verkürzt). "Plausibel" ist kein Beweis.
+4. **Eine Regel gegen Doppelbilder darf Zeiten nur KÜRZEN, nie verlängern**
+   (v216/v217). Sonst beseitigt sie die Überschneidung in den ZAHLEN und
+   erzeugt sie im INHALT — kein Zeit-Test fällt darauf.
+5. **Wenn ein Fix nicht reproduzierbar ist, sagen — nicht liefern und hoffen.**
+   Zwei Videos pixelweise vergleichen (`mittlere Differenz < 1` = derselbe
+   Render) beantwortet in 10 Sekunden, ob überhaupt die neue Fassung lief.
+
 ## Deliver-Muster (jede neue Version)
+0. **Wirksamkeits-Nachweis nach dem Abschnitt darüber.** Ohne ihn gilt eine
+   Verhaltens-/Optik-Änderung als NICHT fertig, auch wenn alle Tests grün sind.
 1. Selftest erweitern (neues Feature bekommt Tests; visuelle Sachen bekommen
    Verhaltens-Invarianten, nicht nur "läuft durch").
 2. Volle Regression grün + ggf. Browser-Smoke.

@@ -2183,6 +2183,27 @@ def _scenario_logic(clip, transcript, tmp):
     check('v219: die Wandmessung steht VOR der Zeichen-Weiche, nicht in einem Ast',
           _src217.index("if (p.get('szene') == 'wand' and not p.get('lying')")
           < _src217.index('tracked = (g_broll and'))
+    # v219 LEHRE FESTGENAGELT: die Regel gehoert nicht nur in die Doku.
+    # Drei Fehlschlaege an einem Tag hatten dieselbe Form - der Fix war richtig
+    # gedacht, gruen getestet und ohne jede Wirkung. Diese beiden Tests fallen,
+    # sobald jemand die Lehre aus CLAUDE.md entfernt oder das Deliver-Muster
+    # wieder ohne Wirksamkeits-Nachweis fuehrt.
+    _cmd219 = open(os.path.join(HERE, 'CLAUDE.md'), encoding='utf-8').read()
+    check('v219: der Wirksamkeits-Nachweis steht in CLAUDE.md',
+          'WIRKSAMKEITS-NACHWEIS' in _cmd219
+          and 'Wird die Zeile ERREICHT?' in _cmd219
+          and 'DREI Zeichenwege' in _cmd219
+          and 'nur KÜRZEN, nie verlängern' in _cmd219)
+    check('v219: das Deliver-Muster verlangt ihn als Schritt 0',
+          _cmd219.index('## Deliver-Muster') > _cmd219.index('## WIRKSAMKEITS-NACHWEIS')
+          and '0. **Wirksamkeits-Nachweis' in _cmd219)
+    # Und der konkrete Rueckfall: eine Zeitregel darf einen Fliesstext-Block
+    # nicht verlaengern (v216/v217). Der Test steht schon oben - hier nur die
+    # Gegenprobe, dass die Lehre auch im Quelltext vermerkt ist, damit der
+    # naechste Umbau sie liest, bevor er sie wiederholt.
+    check('v219: die Doppelbild-Lehre steht im Quelltext, wo sie gebraucht wird',
+          'HIER STAND EIN FLIESSTEXT-GEGEN-FLIESSTEXT-RIEGEL' in _src217
+          and 'Zeiten nur\n        # KUERZEN, nie verlaengern' in _src217)
 
     # v210: DREI KI-SYSTEME FIELEN STILL AUS (Ismets Job-Log).
     # (a) ai_flow_direct hatte KEIN 'import requests' - jeder Kundenrender

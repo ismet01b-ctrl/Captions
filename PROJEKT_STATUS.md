@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v219a LEHREN FESTGENAGELT (Ismets Ansage "lerne aus deinen Fehlern").**
+  Drei Fehlschlaege an einem Tag hatten dieselbe Form: der Fix war richtig
+  gedacht, gruen getestet und ohne jede Wirkung - Ismet hat dreimal umsonst
+  gerendert. Neuer Pflicht-Abschnitt `WIRKSAMKEITS-NACHWEIS` in CLAUDE.md,
+  direkt vor dem Deliver-Muster, und dort als Schritt 0 verankert:
+  (1) wird die Zeile ERREICHT (jede umschliessende Bedingung mit ihrem Wert
+  im Zielfall; `composite_frame`s ground-Zweig hat DREI Zeichenwege, jeder
+  mit `continue` - Sprite-Korrekturen gehoeren VOR die Weiche),
+  (2) der Test muss die Funktion AUFRUFEN, die im Produkt laeuft (Spion +
+  Aufrufzaehler statt Quelltext-Suche),
+  (3) der Unterschied muss MESSBAR sein (alt gegen neu am Bild),
+  (4) eine Regel gegen Doppelbilder darf Zeiten nur KUERZEN,
+  (5) zwei Videos pixelweise vergleichen beantwortet in 10 Sekunden, ob
+  ueberhaupt die neue Fassung lief.
+  Drei Tests halten die Lehren fest - sie fallen, sobald jemand den
+  Abschnitt entfernt oder das Deliver-Muster wieder ohne Schritt 0 fuehrt.
+  Regression **1606/1606 logic**.
 - **v219 v218 WAR TOTER CODE - die Wandmessung lief nie.** Ismets zweiter
   Render war PIXELGLEICH mit dem ersten (mittlere Differenz < 1 auf allen
   gepruefeten Zeitpunkten). Gefunden mit vier parallelen Pruefstraengen im
