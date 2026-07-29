@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v220 EIN FUNKLOCH IST KEIN RENDER-FEHLER.** Ismets Screenshot (5G, zwei
+  Balken): rote Karte "Render error - Connection lost", darunter der Satz
+  "der Render laeuft weiter, schau in die Library oder lade neu". Beides
+  zusammen war unehrlich UND unbrauchbar.
+  - **Rot plus "Render error" liest sich wie "dein Credit ist weg"** - genau
+    die Angst, die ein Bezahlprodukt nicht erzeugen darf. Der Render lief in
+    Wahrheit weiter.
+  - **Der Rat "lade neu" konnte nicht funktionieren:** `showError` hat den
+    laufenden Job aus dem Speicher GELOESCHT (`dve_active_job`), und genau
+    daran haengt `resumeActiveJob` beim naechsten Seitenaufruf. Die App hat
+    empfohlen, was sie sich selbst gerade unmoeglich gemacht hat.
+  - **Der Render-Knopf wurde freigegeben, waehrend der Job noch lief** - ein
+    Klick, und der Kunde zahlt denselben Clip zweimal. Bleibt jetzt gesperrt.
+  - Neu: eigener weicher Zustand (neutrale Farbe, Titel "Connection lost",
+    Job bleibt gespeichert), die Seite versucht es langsamer WEITER statt
+    aufzugeben, und sobald das Netz zurueck ist verschwindet die Karte von
+    selbst ("Back online - still rendering"). Echte Render-Fehler bleiben
+    unveraendert rot.
+  - **WIRKSAMKEITS-NACHWEIS (neue Pflicht, siehe CLAUDE.md):** die
+    Fehlerbehandlung ist Browser-JavaScript - eine Quelltext-Suche aus dem
+    Python-Selftest beweist NICHTS (das war der v218/v219-Fehler). Neu ist
+    `web/_dom_probe.mjs`: die Sonde schneidet die echten Funktionen aus
+    `index.html`, fuehrt sie gegen ein Mini-DOM AUS und prueft das
+    Verhalten - 9 Nachweise, aufgerufen aus dem Selftest (Node 22 liegt im
+    Image, der Nachweis laeuft also auch im Deploy-Gate).
+  - Regression **1614/1614 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v219a LEHREN FESTGENAGELT (Ismets Ansage "lerne aus deinen Fehlern").**
   Drei Fehlschlaege an einem Tag hatten dieselbe Form: der Fix war richtig
   gedacht, gruen getestet und ohne jede Wirkung - Ismet hat dreimal umsonst

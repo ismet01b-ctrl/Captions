@@ -2268,6 +2268,45 @@ def _scenario_logic(clip, transcript, tmp):
     # nach 24 h verschwindet es aus der Kundenliste (nicht geloescht: die
     # Historie bleibt im Panel und fuer die Aufbewahrung).
     _sv212 = open(_os210.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    # ------------------------------------------------------------------
+    # v220: EIN FUNKLOCH IST KEIN RENDER-FEHLER.
+    # Ismets Screenshot (5G, zwei Balken): rote Karte "Render error -
+    # Connection lost", darunter "der Render laeuft weiter, lade die Seite
+    # neu". Beides zusammen war unehrlich und unbrauchbar - rot plus
+    # "Render error" liest sich wie "dein Credit ist weg", und der Rat
+    # "lade neu" konnte nicht funktionieren, weil showError den laufenden
+    # Job vorher aus dem Speicher geloescht hat (daran haengt
+    # resumeActiveJob).
+    # GEPRUEFT WIRD DURCH AUSFUEHREN, nicht durch Quelltext-Suche: die Sonde
+    # web/_dom_probe.mjs schneidet die echten Funktionen aus index.html und
+    # laesst sie gegen ein Mini-DOM laufen. Genau das fehlte bei v218/v219.
+    _node220 = shutil.which('node') or shutil.which('nodejs')
+    if _node220:
+        _r220 = run([_node220, os.path.join(HERE, 'web', '_dom_probe.mjs')])
+        _out220 = (_r220.stdout or '') + (_r220.stderr or '')
+        check('v220: die SPA-Sonde laeuft durch (echte Funktionen ausgefuehrt)',
+              _r220.returncode == 0 and 'alle Nachweise gruen' in _out220,
+              ' | '.join(l for l in _out220.splitlines() if l.startswith('FAIL'))[:200]
+              or f"rc={_r220.returncode}")
+        for _n220 in ('Funkloch: Titel ist NICHT "Render error"',
+                      'Funkloch: der laufende Job bleibt gespeichert',
+                      'Funkloch: Render-Knopf bleibt gesperrt',
+                      'echter Fehler: Titel bleibt "Render error"',
+                      'echter Fehler: Job wird vergessen',
+                      'fertig: die Connection-lost-Karte ist verschwunden'):
+            _ok220 = ('PASS ' + _n220) in _out220
+            check('v220: ' + _n220, _ok220,
+                  '' if _ok220 else 'Sonde meldet den Fall nicht bestanden')
+    else:
+        check('v220: die SPA-Sonde laeuft durch (echte Funktionen ausgefuehrt)',
+              False, 'node fehlt - Nachweis NICHT gefuehrt')
+    # Und der Server muss den Job bei einem Verbindungsabbruch weiterlaufen
+    # lassen: der Abbruch des Browsers ist keine Stoerung (v208b) und der
+    # gezahlte Credit bleibt am Job.
+    _sv220 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v220: ein abgebrochener Upload/Abruf ist keine Betriebsstoerung',
+          'ClientDisconnect' in _sv220)
+
     check('v212: auf ein geschlossenes Ticket kann nicht geantwortet werden',
           "if (t['status'] or '') == 'closed':" in _sv212
           and 'This ticket is closed. Please open a new one.' in _sv212)

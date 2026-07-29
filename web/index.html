@@ -2536,12 +2536,12 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
 
       <!-- Error -->
       <div class="card hidden" id="errCard" style="margin-top:20px;">
-        <h3 style="color:var(--red); display:flex; align-items:center; gap:8px;">
+        <h3 id="errTitle" style="color:var(--red); display:flex; align-items:center; gap:8px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          Render error
+          <span id="errTitleText">Render error</span>
         </h3>
         <div id="errMsg" style="color:var(--mut); margin-top:8px;"></div>
         <pre id="errDetail" style="background:var(--surf2); padding:14px; border-radius:10px;
@@ -5141,13 +5141,39 @@ function pollPre(jid, f) {
   setTimeout(tick, 3000);
 }
 
-function showError(msg, detail) {
+/* v220 EIN FUNKLOCH IST KEIN RENDER-FEHLER.
+   Ismets Screenshot (5G, zwei Balken): rote Karte "Render error - Connection
+   lost", darunter der Satz "der Render laeuft weiter, schau in die Library
+   oder lade neu". Beides zusammen ist unehrlich UND unbrauchbar:
+     * Rot plus "Render error" liest sich wie "dein Credit ist weg" - genau
+       die Angst, die ein Bezahlprodukt nicht erzeugen darf. Der Render lief
+       in Wahrheit weiter.
+     * Der Rat "lade neu" konnte nicht funktionieren: showError hat den
+       laufenden Job aus dem Speicher GELOESCHT (dve_active_job), und genau
+       daran haengt resumeActiveJob beim naechsten Seitenaufruf. Die App hat
+       dem Kunden also empfohlen, was sie sich selbst gerade unmoeglich
+       gemacht hat.
+   opts.weich = Verbindungsproblem (neutrale Farbe, anderer Titel, Job bleibt
+   gespeichert). Ohne opts bleibt alles wie vorher: echte Render-Fehler sind
+   rot und loeschen den Job. */
+function showError(msg, detail, opts) {
+  opts = opts || {};
   $('#progressCard').classList.add('hidden');
   $('#errCard').classList.remove('hidden');
   $('#errMsg').textContent = msg;
   $('#errDetail').textContent = detail || '';
-  $('#btnRender').disabled = false;
-  try { localStorage.removeItem('dve_active_job'); } catch (e) {}
+  // Bei einem Verbindungsproblem laeuft der Job WEITER - der Knopf bleibt
+  // gesperrt. Gaebe man ihn frei, startet ein zweiter Render und der Kunde
+  // zahlt denselben Clip zweimal.
+  $('#btnRender').disabled = !!opts.weich;
+  const tt = $('#errTitleText'), th = $('#errTitle');
+  if (tt) tt.textContent = opts.titel || 'Render error';
+  if (th) th.style.color = opts.weich ? 'var(--mut)' : 'var(--red)';
+  // Ein Verbindungsabbruch darf den laufenden Job NICHT vergessen - sonst
+  // findet resumeActiveJob ihn nach dem Neuladen nicht mehr.
+  if (!opts.keepJob) {
+    try { localStorage.removeItem('dve_active_job'); } catch (e) {}
+  }
   // v80q: kein Fehler-Toast mehr - die rote Karte ist die einzige Anzeige.
   // Karte in den Blick scrollen, damit man den Fehler nicht suchen muss.
   try { $('#errCard').scrollIntoView({behavior: 'smooth', block: 'center'}); } catch (e) {}
@@ -5236,6 +5262,13 @@ async function pollRender() {
       showError(st.msg || 'Render failed', st.detail || '');
       return;
     }
+    // v220: Verbindung ist zurueck - die "Connection lost"-Karte muss weg,
+    // sonst steht sie noch da, waehrend der Ring wieder laeuft.
+    if (State.pollErrs) {
+      $('#errCard').classList.add('hidden');
+      $('#progressCard').classList.remove('hidden');
+      toast('Back online - still rendering.', 'ok', 3000);
+    }
     State.pollErrs = 0;
   } catch (e) {
     // v98: Endlos-Poll gegen einen toten Server fror die UI ein. Nach
@@ -5243,12 +5276,23 @@ async function pollRender() {
     // weiter und liegt danach in der Library.
     State.pollErrs = (State.pollErrs || 0) + 1;
     if (State.pollErrs >= 10) {
-      State.pollErrs = 0;
+      // v220: EHRLICH BENENNEN UND WEITER VERSUCHEN. Bis v219 galt das hier
+      // als Render-Fehler (rote Karte), der laufende Job wurde vergessen und
+      // das Polling eingestellt - der Kunde blieb mit "lade die Seite neu"
+      // allein, und das Neuladen konnte den Job nicht mehr finden. Auf dem
+      // Handy ist ein kurzes Funkloch der Normalfall, nicht die Ausnahme.
       if (State.progRAF) cancelAnimationFrame(State.progRAF);
       State.progRAF = null; State.progShown = 0;
-      showError('Connection lost.',
-                'The render keeps running on the server - check your Library '
-                + 'in a few minutes, or reload this page.');
+      showError('Connection lost - your render is still running.',
+                'Nothing is lost: the server keeps rendering and your credit '
+                + 'stays booked for this clip. This page reconnects by itself '
+                + 'as soon as you are back online; the finished video also '
+                + 'appears in your Library.',
+                {weich: true, keepJob: true, titel: 'Connection lost'});
+      // Nicht aufgeben: langsamer weiter versuchen, damit sich die Seite von
+      // selbst wieder verbindet, sobald das Netz zurueck ist.
+      State.pollErrs = 0;
+      setTimeout(pollRender, 5000);
       return;
     }
   }
@@ -5435,6 +5479,10 @@ if ($('#fbSend')) $('#fbSend').addEventListener('click', async () => {
 });
 
 function renderSuccess() {
+  // v220: eine stehengebliebene "Connection lost"-Karte darf nicht neben dem
+  // fertigen Video haengen. Sie bleibt jetzt bewusst sichtbar, solange der
+  // Job laeuft - also muss sie hier weg.
+  $('#errCard').classList.add('hidden');
   $('#doneCard').classList.remove('hidden');
   fbInit();
   const rv = $('#resultVid');

@@ -977,7 +977,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1606/1606 grün (Stand v219a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1614/1614 grün (Stand v220)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1023,6 +1023,10 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
    Spion auf der neuen Funktion (`R.x = spion`), und den AUFRUFZÄHLER prüfen.
    Das ist die v193-Lehre, verschärft: nicht nur "Plan trägt den Wert",
    sondern "der Wert kommt im Bild an".
+2b. **Browser-JavaScript wird AUSGEFÜHRT, nicht gelesen.** Node 22 liegt im
+   Image. `web/_dom_probe.mjs` schneidet Funktionen aus `index.html` und lässt
+   sie gegen ein Mini-DOM laufen; der Selftest ruft die Sonde auf. Wer SPA-
+   Verhalten ändert, erweitert die Sonde — eine Quelltext-Suche zählt nicht.
 3. **Der Unterschied muss MESSBAR sein.** Alt gegen neu am gerenderten Bild
    oder am Sprite vergleichen (v219: abgewandte Textseite von 2.23 auf 0.52
    verkürzt). "Plausibel" ist kein Beweis.
