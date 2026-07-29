@@ -7867,6 +7867,196 @@ def resolve_overlaps(plans, W, H, exit_lead=0.34):
     return n
 
 
+def ink_box(p, W, H):
+    """v216: die TINTE eines Textmoments in Bildkoordinaten - egal in welcher
+    Form er vorliegt. Es gibt drei, und jede Pruefung, die nur eine davon
+    kennt, ist blind fuer die anderen (derselbe Fehlertyp wie v187 beim
+    Safe-Zone-Report):
+      * Karte          -> 'arr' (der Look 'outline' legt sein Bild in 'o_arr')
+      * Komposition    -> 'tokens' (jedes Wort mit eigenem Versatz 'ox'/'oy')
+      * Fliesstext     -> 'front' (Items mit eigenen absoluten Koordinaten)
+    Gemessen wird der deckende Glyphenkoerper, NICHT das Sprite-Rechteck: ein
+    Text-Sprite traegt bis zu 180 px durchsichtigen Rand (Glow-Polster). Mit
+    dem Rechteck gerechnet meldet jede Pruefung Verstoesse, wo im Bild nichts
+    steht. Rueckgabe: (x0, x1, y0, y1) oder None."""
+    def _nz(a):
+        if a is None or a.size == 0:
+            return None
+        m = np.where(a[..., 3] > 80)
+        return None if not len(m[0]) else (float(m[1].min()), float(m[1].max()),
+                                           float(m[0].min()), float(m[0].max()))
+    xs, ys = [], []
+    _a = p.get('arr')
+    if _a is None:
+        _a = p.get('o_arr')
+    if _a is not None:
+        _m = _nz(_a)
+        if _m:
+            _cx = float(p.get('cx', W / 2.0))
+            _cy = float(p.get('cy', p.get('by', H * 0.398)))
+            xs += [_cx - _a.shape[1] / 2.0 + _m[0], _cx - _a.shape[1] / 2.0 + _m[1]]
+            ys += [_cy - _a.shape[0] / 2.0 + _m[2], _cy - _a.shape[0] / 2.0 + _m[3]]
+    for _t in (p.get('tokens') or []):
+        _m = _nz(_t.get('arr'))
+        if not _m:
+            continue
+        _tx = W / 2.0 + float(_t.get('ox', 0.0))
+        _ty = float(p.get('by', H * 0.398)) + float(_t.get('oy', 0.0))
+        xs += [_tx - _t['arr'].shape[1] / 2.0 + _m[0],
+               _tx - _t['arr'].shape[1] / 2.0 + _m[1]]
+        ys += [_ty - _t['arr'].shape[0] / 2.0 + _m[2],
+               _ty - _t['arr'].shape[0] / 2.0 + _m[3]]
+    for _it in (p.get('front') or []):
+        if _it.get('cx') is None or _it.get('_bleed_aus'):
+            continue                       # v152: gewollter Randabfall
+        _m = _nz(_it.get('arr'))
+        if not _m:
+            _h = float(_it.get('adv', _it.get('w', 0))) / 2.0
+            xs += [_it['cx'] - _h, _it['cx'] + _h]
+            continue
+        xs += [_it['cx'] - _it['arr'].shape[1] / 2.0 + _m[0],
+               _it['cx'] - _it['arr'].shape[1] / 2.0 + _m[1]]
+        ys += [_it['cy'] - _it['arr'].shape[0] / 2.0 + _m[2],
+               _it['cy'] - _it['arr'].shape[0] / 2.0 + _m[3]]
+    if not xs:
+        return None
+    return (min(xs), max(xs), min(ys) if ys else 0.0, max(ys) if ys else 0.0)
+
+
+def _skaliere_sprite(a, s):
+    """Sprite um Faktor s verkleinern, Seitenverhaeltnis bleibt."""
+    h, w = a.shape[:2]
+    nh, nw = max(int(round(h * s)), 2), max(int(round(w * s)), 2)
+    return cv2.resize(a, (nw, nh), interpolation=cv2.INTER_AREA)
+
+
+def fit_into_frame(plans, W, H, rand=0.012):
+    """v216 KEIN TEXT WIRD VOM BILDRAND ANGESCHNITTEN.
+
+    Ismets Render (15 s, 720x1280): 'CAPTIONS LOOK THE' lief links UND rechts
+    aus dem Bild - vorne fehlte das C, hinten das E. 'THIS ONE FLOATS' klebte
+    mit beiden Aussenkanten am Bildrand, 'BEHIND ME' und 'ON THE WALL' waren
+    links angeschnitten. Ein halb abgeschnittenes Wort ist nicht Stil, es ist
+    unlesbar - und es ist der deutlichste Amateur-Tell im ganzen Bild.
+
+    Die Breite entsteht auf mehreren Wegen (Karte, Editorial-Komposition,
+    Fliesstext, Referenz-Skalierung, Perspektiv-Verzerrung, Betonungs-
+    Typografie), und jeder hat seine eigene Begrenzung. Genau daran ist es
+    vorbeigelaufen: `S.fit` schaetzt die Breite aus Einzelzeichen-Kaesten
+    (Leerzeichen zaehlen dabei fast nichts) und hat eine harte Untergrenze -
+    passt es danach immer noch nicht, prueft es niemand nach. Statt fuenf
+    Schaetzungen zu flicken, wird am Ende EINMAL das fertige Bild gemessen
+    und notfalls verkleinert. Dieselbe Bauweise wie `intent_time_floor`.
+
+    Der GEWOLLTE Randabfall (v152, Items mit 'bleed') bleibt unangetastet -
+    er ist Absicht und auf 8 Zeichen begrenzt. Rueckgabe: Anzahl korrigierter
+    Momente."""
+    links, rechts = -W * rand, W * (1.0 + rand)
+    n = 0
+    for p in plans:
+        if 'target' not in p:
+            continue                       # Kamera-Impulse tragen keinen Text
+        _bl = [it for it in (p.get('front') or []) if it.get('bleed')]
+        for it in _bl:
+            it['_bleed_aus'] = True        # v152: gewollter Anschnitt, nicht messen
+        try:
+            box = ink_box(p, W, H)
+        finally:
+            for it in _bl:
+                it.pop('_bleed_aus', None)
+        if box is None:
+            continue
+        x0, x1 = box[0], box[1]
+        if x0 >= links and x1 <= rechts:
+            continue
+        breite = x1 - x0
+        nutzbar = W * (1.0 + 2 * rand)
+        s = min(1.0, nutzbar / breite) if breite > 1 else 1.0
+        if s < 0.999:
+            _skaliere_plan(p, s, W, H)
+            box = ink_box(p, W, H)
+            if box is None:
+                continue
+            x0, x1 = box[0], box[1]
+        # Nach dem Verkleinern kann der Block noch aussermittig stehen
+        # (die Tinte sitzt nicht zwangslaeufig mittig im Sprite).
+        dx = 0.0
+        if x0 < links:
+            dx = links - x0
+        elif x1 > rechts:
+            dx = rechts - x1
+        if abs(dx) > 0.5:
+            _verschiebe_plan(p, dx)
+        n += 1
+    return n
+
+
+def _skaliere_plan(p, s, W, H):
+    """Alle Bildteile eines Textmoments um s verkleinern - Karte, Komposition
+    und Fliesstext. Die Versaetze schrumpfen mit, sonst faellt das Layout
+    auseinander (Treppen-Einzug, Stuetzzeile, Schreibschrift-Akzent)."""
+    for k in ('arr', 'o_arr', 'flat_arr'):
+        if p.get(k) is not None:
+            p[k] = _skaliere_sprite(p[k], s)
+    if p.get('letters'):
+        p['letters'] = [(_skaliere_sprite(sl, s), off * s)
+                        for sl, off in p['letters']]
+    for t in (p.get('tokens') or []):
+        if t.get('arr') is not None:
+            t['arr'] = _skaliere_sprite(t['arr'], s)
+        t['ox'] = float(t.get('ox', 0.0)) * s
+        t['oy'] = float(t.get('oy', 0.0)) * s
+        if t.get('sz'):
+            t['sz'] = max(int(t['sz'] * s), 8)
+    fr = p.get('front') or []
+    if fr:
+        # Fliesstext-Items tragen absolute Koordinaten: um die Blockmitte
+        # schrumpfen, damit der Satzspiegel als Ganzes kleiner wird.
+        mx = sum(float(it['cx']) for it in fr) / len(fr)
+        my = sum(float(it['cy']) for it in fr) / len(fr)
+        for it in fr:
+            if it.get('arr') is not None:
+                it['arr'] = _skaliere_sprite(it['arr'], s)
+            it['cx'] = mx + (float(it['cx']) - mx) * s
+            it['cy'] = my + (float(it['cy']) - my) * s
+            for k in ('w', 'adv', 'sz'):
+                if it.get(k):
+                    it[k] = it[k] * s
+
+
+def _verschiebe_plan(p, dx):
+    """Textmoment waagerecht verschieben, ohne seine Form anzufassen."""
+    if p.get('cx') is not None:
+        p['cx'] = float(p['cx']) + dx
+    for t in (p.get('tokens') or []):
+        t['ox'] = float(t.get('ox', 0.0)) + dx
+    for it in (p.get('front') or []):
+        if it.get('cx') is not None:
+            it['cx'] = float(it['cx']) + dx
+    if p.get('target') is not None:
+        p['target'] = (p['target'][0] + dx, p['target'][1])
+    if p.get('vpos') is not None:
+        p['vpos'] = (p['vpos'][0] + dx, p['vpos'][1])
+
+
+def plan_text(p, words):
+    """Der Wortlaut eines Textmoments - fuer das Job-Log. Ein Fliesstext-Block
+    traegt seinen Text NICHT im Item (dort steht nur der Wortindex 'i'), er
+    muss aus dem Transkript geholt werden. Bis v215 schrieb der Block-Log
+    darum eine Reihe Leerzeichen, und die Zeile, die den Anschnitt haette
+    zeigen sollen, zeigte gar nichts."""
+    if p.get('kw_txt'):
+        return str(p['kw_txt'])
+    out = []
+    for _it in (p.get('front') or []):
+        _i = _it.get('i')
+        if isinstance(_i, int) and 0 <= _i < len(words):
+            out.append(clean(words[_i].get('word', '')))
+        elif _it.get('txt'):
+            out.append(str(_it['txt']))
+    return ' '.join(x for x in out if x)
+
+
 def card_t0(p, words):
     """Der Zeitpunkt, an dem eine Keyword-Karte WIRKLICH im Bild erscheint.
     Alle Zeichen-Zweige rechnen mit `t - p.get('t0', words[kw_i]['start'])`
@@ -10253,6 +10443,17 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 # und genau dann blitzt sie nur auf.
                 _n['end'] = max(_n['end'], _spaet + _KW_MIN)
                 _n_solo += 1
+        # v217: HIER STAND EIN FLIESSTEXT-GEGEN-FLIESSTEXT-RIEGEL (v216).
+        # Er ist RAUS und kommt so nicht wieder. Er hat den Fall nicht
+        # geloest, sondern verschlimmert: bei Gedraenge VERLAENGERTE er den
+        # wartenden Block (er schob dessen Ende nach hinten), und damit
+        # stand derselbe Satz zweimal gleichzeitig im Bild - einmal hinter
+        # der Person, einmal unten (Ismets Screenshot, 'EVERYONE'S ... LOOK
+        # THE' und 'CAPTIONS LOOK THE'). In keinem Zeit-Test faellt das auf,
+        # weil sich die ZAHLEN sauber nicht ueberschneiden; doppelt war der
+        # INHALT. Lehre: eine Regel gegen Doppelbilder darf Zeiten nur
+        # KUERZEN, nie verlaengern - und wer sie neu baut, muss den Wortlaut
+        # vergleichen, nicht nur die Zeitfenster.
         if _n_solo:
             print(f"  Solo guard: {_n_solo} moment(s) trimmed so the "
                   f"keyword card stands alone")
@@ -10409,6 +10610,15 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
         _n_ank += 1
     if _n_ank:
         print(f"  Object anchor: {_n_ank} moment(s) placed next to their object")
+
+    # v216 GANZ ZUM SCHLUSS: nichts wird vom Bildrand angeschnitten. Hier
+    # steht die endgueltige Groesse UND Position jedes Moments fest - davor
+    # koennten Objekt-Anker, Platzierungs-Regie oder Referenz-Skalierung noch
+    # dazwischenfunken. Wer eine neue Groessen- oder Platzierungsregel baut,
+    # muss diesen Riegel nicht kennen; ihr Ergebnis laeuft hier durch.
+    _n_fit = fit_into_frame(plans, W, H)
+    if _n_fit:
+        print(f"  Frame guard: {_n_fit} moment(s) scaled/moved back into frame")
 
     plans.sort(key=lambda p: p['start'])
     return plans
@@ -12746,20 +12956,27 @@ def main():
     # Eine Zeile je Textblock: Zeit, linke und rechte Kante als Anteil der
     # Bildbreite. Wer sie ausserhalb 0..1 sieht, weiss sofort WELCHER Block
     # herauslaeuft, statt es rueckwaerts aus dem Video zu schaetzen.
+    # v216: gemessen wird die TINTE ueber ink_box - damit erscheinen endlich
+    # auch KARTEN und KOMPOSITIONEN in dieser Liste. Bis v215 las die Zeile
+    # 'bx'/'bw', und die setzt kein Keyword-Plan: jede Karte stand mit
+    # '0.000..0.000 W' im Log. Genau die Momente, die im Bild angeschnitten
+    # waren, waren im Log unsichtbar - ein Messwerkzeug, das den gesuchten
+    # Fall nicht misst.
     try:
         for _p in sorted(plans, key=lambda q: q.get('start', 0)):
-            _fr = _p.get('front') or []
-            if _fr:
-                _lo = min(i['cx'] - i['w'] / 2.0 for i in _fr)
-                _hi = max(i['cx'] + i['w'] / 2.0 for i in _fr)
-                _txt = ' '.join(str(i.get('txt', '')) for i in _fr)[:34]
-            elif _p.get('kw_txt'):
-                _lo = float(_p.get('bx', 0)); _hi = _lo + float(_p.get('bw', 0))
-                _txt = str(_p['kw_txt'])[:34]
-            else:
+            _bx = ink_box(_p, W, H)
+            if _bx is None:
                 continue
+            _lo, _hi = _bx[0], _bx[1]
+            _txt = plan_text(_p, words)[:34]
             _warn = ' <-- RAGT AUS DEM BILD' if (_lo < -1 or _hi > W + 1) else ''
-            print(f"  Block {_p.get('start', 0):5.2f}s x {_lo / W:.3f}..{_hi / W:.3f} W"
+            # v216: mit dem SICHTBAREN Zeitfenster. Ohne das Ende liess sich
+            # aus dem Log nicht ablesen, ob zwei Texte gleichzeitig stehen -
+            # genau der Befund, den Ismet am fertigen Bild gemeldet hat.
+            _t0 = card_t0(_p, words)
+            _t1 = float(_p.get('end', _t0)) + float(
+                _p.get('aus', 0.15 if _p.get('tpl') == 'flow' else 0.40))
+            print(f"  Block {_t0:5.2f}-{_t1:5.2f}s x {_lo / W:.3f}..{_hi / W:.3f} W"
                   f" | {_txt}{_warn}")
     except Exception as _e:
         print(f"  Block measurements unavailable: {type(_e).__name__}")

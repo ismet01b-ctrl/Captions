@@ -3,15 +3,54 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
-- **v216 ZURUECKGENOMMEN (Ismets Ansage, am Bild belegt).** Der Fliesstext-
-  Riegel liess denselben Satz ZWEIMAL gleichzeitig stehen ('EVERYONE'S ...
-  LOOK THE' hinter der Person und 'CAPTIONS LOOK THE' unten). Statt zwei
-  verschiedene Bloecke zu trennen, hat er einen Block verlaengert, der
-  inhaltlich schon vom naechsten abgeloest war. Kompletter Revert
-  (fit_into_frame, ink_box, plan_text, Log-Umbau, Flow-gegen-Flow).
-  Lehre: ein Riegel, der Zeiten VERLAENGERT statt nur zu kuerzen, kann ein
-  Doppelbild erzeugen, statt es zu verhindern - und das faellt in keinem
-  Zeit-Test auf, weil die Zahlen sich nicht ueberschneiden.
+- **v217 NUR DER ANSCHNITT-RIEGEL, OHNE DEN DOPPELBILD-FEHLER.**
+  v216 hatte zwei Teile; einer war richtig, einer falsch. Der
+  Fliesstext-gegen-Fliesstext-Riegel VERLAENGERTE bei Gedraenge den
+  wartenden Block - dadurch stand derselbe Satz zweimal gleichzeitig im
+  Bild ('EVERYONE'S ... LOOK THE' hinter der Person, 'CAPTIONS LOOK THE'
+  unten; Ismets Screenshot). In keinem Zeit-Test faellt das auf, weil sich
+  die ZAHLEN sauber nicht ueberschneiden - doppelt war der INHALT.
+  **Lehre: eine Regel gegen Doppelbilder darf Zeiten nur KUERZEN, nie
+  verlaengern.** Der Riegel ist raus, ein Test haelt ihn draussen.
+  Der Anschnitt-Riegel (unten (a)+(c)) bleibt - Ismets Ansage: "achte
+  darauf, dass alle captions auch im bild sind".
+  Befunde am hochgeladenen Video (15 s, 720x1280, 24 fps).
+  - **(a) Text lief aus dem Bild.** 'CAPTIONS LOOK THE' war links UND rechts
+    angeschnitten (vorne fehlte das C, hinten das E), 'THIS ONE FLOATS'
+    klebte mit beiden Aussenkanten am Rand, 'BEHIND ME' und 'ON THE WALL'
+    waren links angeschnitten. Die Breite entsteht auf fuenf Wegen (Karte,
+    Editorial-Komposition, Fliesstext, Referenz-Skalierung, Perspektiv-
+    Verzerrung), jeder mit eigener Begrenzung - und `S.fit` SCHAETZT die
+    Breite aus Einzelzeichen-Kaesten (Leerzeichen zaehlen fast nichts) und
+    hat eine harte Untergrenze; passt es danach nicht, prueft es niemand
+    nach. Statt fuenf Schaetzungen zu flicken: `fit_into_frame()` misst ganz
+    am Ende von `build_plans` EINMAL das fertige Bild und verkleinert bzw.
+    verschiebt notfalls. Der GEWOLLTE Randabfall (v152, 'bleed') bleibt
+    unangetastet. Meldung im Log: `Frame guard: N moment(s) scaled/moved
+    back into frame`.
+  - **(b) ZURUECKGEBAUT (v217).** Zwei gleichzeitige Fliesstext-Bloecke
+    bleiben damit ein OFFENER Punkt - besser offen als mit einem Doppelbild
+    erkauft.
+  - **(c) Das Messwerkzeug war blind fuer die gesuchten Faelle.** Der
+    v211-Block-Log las 'bx'/'bw' - die setzt kein Keyword-Plan: JEDE Karte
+    stand mit `0.000..0.000 W` im Log, also genau die Momente, die im Bild
+    angeschnitten waren. Fliesstext-Bloecke meldeten statt ihres Wortlauts
+    eine Reihe Leerzeichen (der Text steht nicht im Item, nur der
+    Wortindex). Neu: `ink_box()` misst die TINTE aller drei Textformen
+    (Karte / Komposition / Fliesstext), `plan_text()` holt den Wortlaut aus
+    dem Transkript, und die Zeile nennt das SICHTBARE Zeitfenster
+    (`Block 8.25- 9.85s`) - damit ist eine Ueberschneidung im Log ablesbar,
+    ohne das Video Frame fuer Frame durchzugehen.
+  - **KEIN Bug war:** 'ON THE WALL' wirkt blass, gemessener Kontrast aber
+    5.69:1 (Norm 4.5:1) - das ist die gewollte Szenen-Integration, nicht
+    zu wenig Kontrast. Nicht angefasst.
+  - **EHRLICHE GRENZE:** (a) liess sich mit nachgebautem Transkript NICHT
+    ausloesen - Ismets Konfiguration (gelernte Referenz / Look) liegt hier
+    nicht vor. Der Riegel ist am Einzeltest belegt (Karte 1.77 W -> 1.01 W,
+    Fliesstext 1.06 W -> 1.01 W), nicht an seinem Video. Der reparierte Log
+    zeigt beim naechsten Render sofort, welcher Block herauslaeuft.
+  - Selftest: 9 neue Tests, v211-Test auf die neue Zusage gezogen.
+    Regression **1592/1592 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v215 DER SOLO-RIEGEL MASS DIE LESEZEIT AM FALSCHEN PUNKT.**
   Aufgefallen beim Gegenpruefen von v214, gleiche Verwechslung eine Regel
   weiter: der Riegel rechnete die Lesezeit einer Karte ab `p['start']` - dem
