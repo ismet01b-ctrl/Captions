@@ -1668,6 +1668,43 @@ def _scenario_logic(clip, transcript, tmp):
     R.zt('phase-a', _t27)
     R.zt('phase-b', time.time() - 0.5)
     _rp27 = R.zeit_report(4.0)
+    # v228c BILD-REGIE UND OBJEKT-ANKER LAUFEN GLEICHZEITIG.
+    # Ismets Job-Log: ki-bildregie 39.5s + ki-objektanker 25.3s, streng
+    # hintereinander - und beide warten nur auf dieselbe Schnittstelle. Sie
+    # sind unabhaengig (die eine schreibt szene/lage, die andere anker), also
+    # laufen sie parallel auf je einer KOPIE. Zusammengefuehrt wird
+    # deterministisch, sonst haenge das Ergebnis daran, wer zuerst fertig ist.
+    _sz28 = {3: {'fx': 'behind', 'szene': 'wand', 'lage': 'stehend'},
+             7: {'fx': 'ground', 'szene': 'boden'}}
+    _an28 = {3: {'fx': 'behind', 'anker': {'objekt': 'glas', 'cx': .5}},
+             7: {'fx': 'ground'}, 9: {'anker': {'objekt': 'geist'}}}
+    _mg28 = R.merge_anker(copy.deepcopy(_sz28), _an28)
+    check('v228c: der Anker steuert NUR sein eigenes Feld bei',
+          _mg28[3]['anker']['objekt'] == 'glas'
+          and _mg28[3]['szene'] == 'wand' and _mg28[3]['lage'] == 'stehend'
+          and 'anker' not in _mg28[7] and 9 not in _mg28,
+          str(_mg28))
+    check('v228c: die Zusammenfuehrung ist unabhaengig von der Reihenfolge',
+          R.merge_anker(copy.deepcopy(_sz28), _an28)
+          == R.merge_anker(copy.deepcopy(_sz28), dict(reversed(list(_an28.items())))))
+    _rq28 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v228c: die beiden Vision-Aufrufe laufen im Thread-Pool',
+          'ThreadPoolExecutor(max_workers=2)' in _rq28
+          and '_ex.submit(_lauf_szene)' in _rq28
+          and '_ex.submit(_lauf_anker)' in _rq28
+          and 'copy.deepcopy(fx_map)' in _rq28,
+          'ohne Kopie schreiben zwei Threads in dieselben dicts')
+    # Und der Zeit-Report darf verschachtelte Bloecke nicht DOPPELT zaehlen:
+    # in Ismets Zeile stand 'regie+plaene 133.2s' NEBEN den KI-Aufrufen, die
+    # darin stecken - die Summe ergab 190 %.
+    R._ZEIT.clear()
+    R._ZEIT.update({'regie+plaene': 133.2, 'ki-textregie': 37.7,
+                    'ki-bildregie+anker': 39.5, 'ki-textfluss': 26.1})
+    _rp28 = R.zeit_report(191.0)
+    _anteil = sum(float(x) for x in re.findall(r'(\d+\.\d+)s \(', _rp28))
+    check('v228c: verschachtelte Bloecke zaehlen nicht doppelt',
+          _anteil <= 191.5 and 'regie+plaene 29.9s' in _rp28, _rp28)
+    R._ZEIT.clear()
     check('v227: der Render berichtet, wo die Zeit hingeht',
           _rp27.startswith('Timing (total 4.0s):') and 'phase-a 2.0s' in _rp27
           and 'other' in _rp27 and _rp27.index('phase-a') < _rp27.index('phase-b'),

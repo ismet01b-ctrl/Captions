@@ -431,7 +431,33 @@ async function loadJobs(silent){
 async function jobAct(jid,act,msg){if(msg&&!danger(msg))return;try{await api('/api/admin/jobs/'+jid+'/'+act,{method:'POST'});loadJobs();}catch(e){alert(e.message);}}
 async function jobRefund(jid){const m=prompt('Refund how many minutes to this user? (blank = full job cost)','');if(m===null)return;const fd=new FormData();if(m.trim())fd.append('minutes',parseInt(m,10)||0);fd.append('reason','admin');try{const d=await api('/api/admin/jobs/'+jid+'/refund',{method:'POST',body:fd});alert('Refunded '+d.refunded_min+' min.');loadJobs();}catch(e){alert(e.message);}}
 async function reapStuck(){if(!danger('Stop ALL waiting/running jobs and refund them?'))return;try{const d=await api('/api/admin/jobs/reap_stuck',{method:'POST'});alert('Stopped '+d.reaped+' job(s).');loadJobs();}catch(e){alert(e.message);}}
-async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');el('modal').innerHTML=`<h2>Log · ${esc(jid)}</h2><div class="scroll" style="max-height:60vh"><pre class="mono" style="padding:12px;font-size:11.5px;white-space:pre-wrap">${esc(d.log)}</pre></div>`;el('overlay').classList.add('on');}catch(e){alert(e.message);}}
+/* v228c Ein Log ist zum WEITERGEBEN da. Bis hier musste man ihn im Handy
+   muehsam markieren; jetzt ein Klick fuer alles, plus ein eigener Knopf fuer
+   die Timing-Zeile - die ist die eine, die man beim Thema Renderzeit
+   braucht. Fallback ohne Zwischenablage-Recht (Safari ohne HTTPS-Kontext):
+   Text markieren, damit Kopieren wenigstens von Hand geht. */
+function copyText(txt, btn){
+  const fertig = ok => { if(!btn) return; const alt = btn.textContent;
+    btn.textContent = ok ? 'Kopiert' : 'Bitte manuell'; setTimeout(()=>{btn.textContent=alt;},1600); };
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(txt).then(()=>fertig(true),()=>fertig(false));
+  } else {
+    const ta=document.createElement('textarea'); ta.value=txt;
+    ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta);
+    ta.select(); let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(ta); fertig(ok);
+  }
+}
+let LOG_TXT='';
+async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');LOG_TXT=d.log||'';
+  const tl=(LOG_TXT.split('\n').filter(l=>l.startsWith('Timing (total'))||[]).pop()||'';
+  el('modal').innerHTML=`<h2>Log · ${esc(jid)}</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+      <button class="btn sm" onclick="copyText(LOG_TXT,this)">Log kopieren</button>
+      ${tl?`<button class="btn ghost sm" onclick="copyText(${JSON.stringify(tl).replace(/"/g,'&quot;')},this)">Timing kopieren</button>`:''}
+    </div>
+    <div class="scroll" style="max-height:60vh"><pre class="mono" onclick="copyText(LOG_TXT,null)" title="Klick kopiert den ganzen Log" style="padding:12px;font-size:11.5px;white-space:pre-wrap;cursor:copy">${esc(d.log)}</pre></div>`;
+  el('overlay').classList.add('on');}catch(e){alert(e.message);}}
 
 /* ---------- REVENUE ---------- */
 async function loadRevenue(){

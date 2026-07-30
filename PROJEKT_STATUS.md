@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v228c 129 VON 191 SEKUNDEN WAREN WARTEN AUF DIE KI.**
+  Ismets Timing-Zeile am echten Render: `regie+plaene 133.2s (70%)` - und
+  darin `ki-bildregie 39.5s | ki-textregie 37.7s | ki-textfluss 26.1s |
+  ki-objektanker 25.3s`. Zusammen **128.6 s = 96 % des Vorbereitungsblocks
+  und 67 % der ganzen Renderzeit**. Freistellen (18.3 s) und Captions setzen
+  (24.9 s) sind dagegen klein - und die Standbilder, die in v227a noch teuer
+  waren, liegen jetzt bei 2.3 s.
+  - **Bild-Regie und Objekt-Anker laufen jetzt GLEICHZEITIG** (39.5 + 25.3 s
+    -> rund 40 s). Sie sind voneinander unabhaengig: die eine schreibt
+    szene/lage, die andere anker. Jeder Thread bekommt eine KOPIE der fx_map,
+    danach fuehrt `merge_anker()` deterministisch zusammen - das Ergebnis
+    haengt nicht daran, wer zuerst fertig wird (getestet, auch mit
+    umgedrehter Reihenfolge). Erwartet: **191 s -> rund 166 s**.
+  - Text-Regie und Text-Fluss lassen sich NICHT parallelisieren: der
+    Text-Fluss braucht die Blockaufteilung, und die haengt an den Momenten
+    aus der Text-Regie. Echte Abhaengigkeit, kein Versaeumnis.
+  - **Die Timing-Zeile hat doppelt gezaehlt.** `regie+plaene` umschliesst die
+    KI-Aufrufe; die Prozente summierten sich auf 190 %. Der Elternblock zeigt
+    jetzt nur noch, was nach Abzug seiner Kinder bleibt.
+  - **Log im Panel ist mit einem Klick kopierbar** (ganzer Log oder nur die
+    Timing-Zeile) - Ismets Wunsch, und der einzige Weg, wie diese Zahlen
+    ueberhaupt bei mir ankommen.
+  - Regression **1711/1711 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v228b DIE NACHSCHAERFUNG ZERFETZTE DIE MASKE - NICHT DIE DETAILSTUFE.**
   Ismet hat "hochdrehen" entschieden. Die Messung sagt: das waere der falsche
   Hebel gewesen, und das gehoert gesagt statt still geliefert.

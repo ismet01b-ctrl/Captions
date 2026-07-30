@@ -7,7 +7,7 @@ Nutzung:
     python render.py video.mp4 --out fertig.mp4 --keywords "Schufa,Score"
     python render.py video.mp4 --transcript video_transcript.json   (API-Aufruf ueberspringen)
 """
-import argparse, json, math, os, re, shutil, subprocess, sys, tempfile, time
+import argparse, copy, json, math, os, re, shutil, subprocess, sys, tempfile, time
 import numpy as np
 import blender_engine
 import cv2
@@ -33,12 +33,25 @@ def zt(name, t0):
     return _n
 
 
+# v228c Verschachtelte Bloecke duerfen nicht DOPPELT zaehlen. 'regie+plaene'
+# umschliesst die KI-Aufrufe und die Bild-Analysen; in Ismets Zeile standen
+# deshalb 133.2s neben 39.5+37.7+26.1+25.3s, und die Summe ergab 190 % - die
+# Zahlen stimmten einzeln, die Zeile log trotzdem. Der Elternblock zeigt jetzt
+# nur noch, was NACH Abzug seiner Kinder uebrig bleibt.
+_ZEIT_KIND = {'regie+plaene': ('ki-textregie', 'ki-bildregie+anker',
+                               'ki-textfluss', 'raumkarte', 'zeige-regie')}
+
+
 def zeit_report(gesamt):
     """Eine Zeile, absteigend nach Kosten. 'rest' ist alles Ungemessene -
     ist der gross, ist die Messung selbst unvollstaendig und sagt das."""
     if not _ZEIT:
         return ''
-    _s = sorted(_ZEIT.items(), key=lambda kv: -kv[1])
+    _w = dict(_ZEIT)
+    for _p, _kinder in _ZEIT_KIND.items():
+        if _p in _w:
+            _w[_p] = max(_w[_p] - sum(_w.get(_k, 0.0) for _k in _kinder), 0.0)
+    _s = sorted(_w.items(), key=lambda kv: -kv[1])
     _rest = max(gesamt - sum(v for _, v in _s), 0.0)
     _teile = [f"{k} {v:.1f}s ({v / max(gesamt, 1e-6) * 100:.0f}%)"
               for k, v in _s if v >= 0.05]
@@ -11427,6 +11440,22 @@ def refine_alpha(alpha, frame, staerke=1.0):
     return out.astype(np.float32)
 
 
+def merge_anker(szene_map, anker_map):
+    """v228c Ergebnis der Objekt-Anker-Regie in die Bild-Regie einhaengen.
+
+    Beide laufen gleichzeitig auf je einer KOPIE der fx_map (sonst schreiben
+    zwei Threads in dieselben dicts). Zusammengefuehrt wird deterministisch:
+    die Bild-Regie ist die Grundlage, der Anker steuert NUR sein eigenes Feld
+    bei. Damit haengt das Ergebnis nicht daran, wer zuerst fertig wird."""
+    if not isinstance(szene_map, dict) or not isinstance(anker_map, dict):
+        return szene_map
+    for _i, _v in anker_map.items():
+        if isinstance(_v, dict) and _v.get('anker') \
+                and isinstance(szene_map.get(_i), dict):
+            szene_map[_i]['anker'] = _v['anker']
+    return szene_map
+
+
 def matte_muell(a):
     """v228b Wieviel MUELL hat die Maske? Gezaehlt werden lose Kruemel (kleine
     Flecken neben der Person) und Loecher (kleine Aussparungen in ihr) - genau
@@ -13314,23 +13343,50 @@ def main():
                                          0.0), 1.0)
                               for i in list(fx_map)}
             if fx_map and cfg['keywords'].get('ai_vision', True):
+                # v228c BILD-REGIE UND OBJEKT-ANKER LAUFEN GLEICHZEITIG.
+                # An Ismets Job-Log gemessen: 39.5 s + 25.3 s, streng
+                # hintereinander - und beide warten nur auf dieselbe
+                # OpenAI-Schnittstelle. Sie sind voneinander unabhaengig: die
+                # eine schreibt 'szene'/'lage'/'nah', die andere 'anker'.
+                # Damit sich die beiden Threads nicht in derselben fx_map ins
+                # Gehege kommen, bekommt jeder eine KOPIE; danach werden die
+                # Felder deterministisch zusammengefuehrt. Das Ergebnis haengt
+                # damit NICHT davon ab, wer zuerst fertig wird.
+                _mit_anker = bool(cfg['effects'].get('caption_objekt', True))
                 _zt_ki = time.time()
-                fx_map = ai_scene_direct(words, fx_map, args.input,
-                                         cfg['keywords'].get('ai_model', 'gpt-5'),
-                                         min_power=int(cfg['keywords'].get('vision_min_power', 2)),
-                                         face_cover=face_cover)
-                zt('ki-bildregie', _zt_ki)
-                # v161 OBJEKT-ANKER: gibt es zu einem Moment ein sichtbares
-                # Bezugsobjekt ("dieses Glas hier")? Laeuft im selben
-                # Vision-Zweig und landet mit im Regie-Cache - beim zweiten
-                # Render desselben Videos kostet er dadurch nichts mehr.
-                if cfg['effects'].get('caption_objekt', True):
-                    _zt_ki = time.time()
-                    fx_map = ai_objekt_anker(
-                        words, fx_map, args.input,
+                _erg = {}
+
+                def _lauf_szene():
+                    return ai_scene_direct(
+                        words, copy.deepcopy(fx_map), args.input,
+                        cfg['keywords'].get('ai_model', 'gpt-5'),
+                        min_power=int(cfg['keywords'].get('vision_min_power', 2)),
+                        face_cover=face_cover)
+
+                def _lauf_anker():
+                    return ai_objekt_anker(
+                        words, copy.deepcopy(fx_map), args.input,
                         cfg['keywords'].get('ai_model', 'gpt-5'),
                         min_power=int(cfg['keywords'].get('vision_min_power', 2)))
-                    zt('ki-objektanker', _zt_ki)
+                if _mit_anker:
+                    try:
+                        from concurrent.futures import ThreadPoolExecutor
+                        with ThreadPoolExecutor(max_workers=2) as _ex:
+                            _f1 = _ex.submit(_lauf_szene)
+                            _f2 = _ex.submit(_lauf_anker)
+                            _erg['szene'], _erg['anker'] = _f1.result(), _f2.result()
+                    except Exception as _e:
+                        print(f"  Vision director: parallel run failed "
+                              f"({type(_e).__name__}), running one after another")
+                        _erg['szene'] = _lauf_szene()
+                        _erg['anker'] = _lauf_anker()
+                else:
+                    _erg['szene'] = _lauf_szene()
+                zt('ki-bildregie+anker', _zt_ki)
+                # Zusammenfuehren: die Bild-Regie ist die Grundlage, der Anker
+                # steuert nur sein eigenes Feld bei.
+                fx_map = merge_anker(_erg.get('szene') or fx_map,
+                                     _erg.get('anker'))
             elif fx_map:
                 # Vision aus, aber der Backstop soll trotzdem greifen.
                 fx_map = _behind_cover_backstop(fx_map, face_cover)

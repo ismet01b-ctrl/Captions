@@ -1065,13 +1065,23 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Merksatz: wer eine neue Analyse baut, die Standbilder zieht, holt sie ueber
   `_frame_bgr_vorab` / `_frame_b64_vorab` - ein Prozessstart je Bild in einer
   Schleife ist der teuerste Weg, den es gibt.
+- **Am echten Render gemessen (v228c): 129 von 191 s waren WARTEN AUF DIE
+  KI** (Bild-Regie 39.5 + Text-Regie 37.7 + Text-Fluss 26.1 + Objekt-Anker
+  25.3). Bild-Regie und Objekt-Anker laufen jetzt gleichzeitig (je eine KOPIE
+  der fx_map, `merge_anker` fuehrt deterministisch zusammen). Text-Regie und
+  Text-Fluss haengen echt voneinander ab - der Fluss braucht die
+  Blockaufteilung. Wer hier weiter will, dreht am MODELL oder am Denkbudget,
+  und das ist eine Qualitaetsfrage fuer Ismet, keine technische.
+- **Verschachtelte Zeit-Bloecke duerfen nicht doppelt zaehlen** (`_ZEIT_KIND`):
+  `regie+plaene` umschliesst die KI-Aufrufe, die Prozente summierten sich auf
+  190 %.
 - Noch NICHT gemessen (braucht echtes Material): Tiefen-Modell je Bild,
   MediaPipe-Hände bei voller Auflösung, x264-Preset. Und die Pipeline läuft
   strikt seriell (dekodieren → freistellen → Tiefe → setzen → kodieren);
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1707/1707 grün (Stand v228b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1711/1711 grün (Stand v228c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
