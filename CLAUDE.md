@@ -1041,13 +1041,22 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   ist billiger als jede Qualitätsdiskussion.
 - Ein Tempo-Test gehört an eine PIXELGLEICHHEITS-Prüfung gekoppelt. Ohne sie
   ist "schneller" nur die verbotene Abkürzung mit besserem Namen.
+- **Am echten Render gemessen (v227a): 64 % der Zeit lagen VOR dem ersten
+  Bild** (`regie+plaene 99.5s` von 154.7s), und darin vor allem Warten auf
+  ffmpeg: bis zu 40 Zeige-Proben + 24 Vision-Bilder + 16 Anker-Bilder, jedes
+  ein eigener Prozessstart, streng hintereinander - und die Vision-Bilder
+  DOPPELT (Bild-Regie und Objekt-Anker fragen dieselbe Stelle). Jetzt
+  Zwischenspeicher + paralleles Vorabholen, bitgleiche Bilder, 2.5-2.7x.
+  Merksatz: wer eine neue Analyse baut, die Standbilder zieht, holt sie ueber
+  `_frame_bgr_vorab` / `_frame_b64_vorab` - ein Prozessstart je Bild in einer
+  Schleife ist der teuerste Weg, den es gibt.
 - Noch NICHT gemessen (braucht echtes Material): Tiefen-Modell je Bild,
   MediaPipe-Hände bei voller Auflösung, x264-Preset. Und die Pipeline läuft
   strikt seriell (dekodieren → freistellen → Tiefe → setzen → kodieren);
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1692/1692 grün (Stand v227)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1697/1697 grün (Stand v227a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

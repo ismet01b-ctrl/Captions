@@ -1631,6 +1631,59 @@ def _scenario_logic(clip, transcript, tmp):
           _rp27.startswith('Timing (total 4.0s):') and 'phase-a 2.0s' in _rp27
           and 'other' in _rp27 and _rp27.index('phase-a') < _rp27.index('phase-b'),
           _rp27)
+    # ------------------------------------------------------------------
+    # v227a EINZELBILDER: GLEICHZEITIG HOLEN, NICHT ZWEIMAL HOLEN.
+    # Am Kundenrender (154.7s) steckten 64 % der Zeit VOR dem ersten Bild.
+    # Darin: bis zu 40 Zeige-Proben, 24 Vision-Bilder und 16 Anker-Bilder -
+    # jedes ein eigener ffmpeg-Start, streng hintereinander, und die Vision-
+    # Bilder doppelt (Bild-Regie und Objekt-Anker fragen dieselbe Stelle).
+    # Beides ist Wartezeit, keine Qualitaet: gleiche Argumente -> gleiches
+    # Bild. Genau das wird hier geprueft, sonst waere es eine Abkuerzung.
+    _ts27 = [round(0.05 + _i * 0.2, 2) for _i in range(8)]
+    R._FRAME_BGR_CACHE.clear()
+    _ser27 = [R._frame_bgr(clip, _t) for _t in _ts27]
+    R._FRAME_BGR_CACHE.clear()
+    R._frame_bgr_vorab(clip, _ts27)
+    _par27 = [R._frame_bgr(clip, _t) for _t in _ts27]
+    _gl27 = all((_a is None and _b is None)
+                or (_a is not None and _b is not None and _a.shape == _b.shape
+                    and not np.any(_a != _b))
+                for _a, _b in zip(_ser27, _par27))
+    check('v227a: parallel geholte Einzelbilder sind BITGLEICH',
+          _gl27 and any(_x is not None for _x in _par27),
+          f'{sum(_x is not None for _x in _par27)}/{len(_ts27)} Bilder')
+    R._FRAME_B64_CACHE.clear()
+    _b1_27 = [R._frame_b64(clip, _t) for _t in _ts27]
+    R._FRAME_B64_CACHE.clear()
+    R._frame_b64_vorab(clip, _ts27)
+    _b2_27 = [R._frame_b64(clip, _t) for _t in _ts27]
+    check('v227a: parallel geholte Vision-Bilder sind BITGLEICH',
+          _b1_27 == _b2_27,
+          f'{sum(_x is not None for _x in _b2_27)}/{len(_ts27)} Bilder')
+    # Und derselbe Frame darf nicht zweimal aus dem Video geholt werden.
+    _run27 = R.subprocess.run
+    _cnt27 = {'x': 0}
+
+    def _zaehl27(*a, **k):
+        _cnt27['x'] += 1
+        return _run27(*a, **k)
+    R.subprocess.run = _zaehl27
+    try:
+        _b3_27 = [R._frame_b64(clip, _t) for _t in _ts27]
+    finally:
+        R.subprocess.run = _run27
+    check('v227a: derselbe Frame wird nicht zweimal geholt (Zwischenspeicher)',
+          _cnt27['x'] == 0 and _b3_27 == _b2_27,
+          f'{_cnt27["x"]} ffmpeg-Starts beim zweiten Abruf')
+    _src27 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v227a: Zeige-Regie und Hand-Regie holen ihre erste Probe vorab',
+          _src27.count('_frame_bgr_vorab(video_path, [float(t) + proben[0] '
+                       'for t in times])') == 2)
+    check('v227a: Bild-Regie und Objekt-Anker holen ihre Bilder vorab',
+          _src27.count("_frame_b64_vorab(video_path, "
+                       "[words[i]['start'] + 0.15 for i in idx])") == 2)
+    R._FRAME_BGR_CACHE.clear()
+    R._FRAME_B64_CACHE.clear()
     R._ZEIT.clear()
     _pers = np.full((240, 320, 3), 200.0, np.float32)
     _pers[..., 0] = 255.0                            # blauer Farbstich am Rand

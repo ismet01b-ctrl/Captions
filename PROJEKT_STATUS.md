@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v227a DIE ZEIT LAG VOR DEM ERSTEN BILD - UND WAR WARTEZEIT.**
+  Ismets Timing-Zeile am echten Render (15 s Video, 154.7 s Gesamtzeit):
+  `regie+plaene 99.5s (64%) | matting 21.6s (14%) | compositing 20.2s (13%)`.
+  Der teuerste Block ist also NICHT die Bild-fuer-Bild-Arbeit, sondern die
+  Vorbereitung - und darin steckt vor allem Warten auf ffmpeg.
+  - Gefunden: bis zu 40 Zeige-Proben, 24 Vision-Bilder und 16 Anker-Bilder,
+    JEDES ein eigener ffmpeg-Start, streng hintereinander. Sie blockieren sich
+    nicht gegenseitig, sie warteten nur der Reihe nach.
+  - Und die Vision-Bilder wurden DOPPELT geholt: Bild-Regie und Objekt-Anker
+    fragen exakt dieselbe Stelle (`words[i]['start'] + 0.15`).
+  - Behoben: Zwischenspeicher (derselbe Frame nur einmal) plus paralleles
+    Vorabholen der ersten Probe/aller Vision-Bilder. **Gleiche Argumente ->
+    BITGLEICHES Bild**, gemessen ueber 30 Zeitpunkte; hier wird nichts anders
+    gemessen, nur nicht mehr nacheinander gewartet. Gemessen 2.5x (BGR) und
+    2.7x (Vision-JPEG) auf 4 Kernen, zweiter Abruf 0 ms.
+  - Der Timing-Block ist jetzt feiner: `ki-textregie`, `ki-bildregie`,
+    `ki-objektanker`, `ki-textfluss`, `vision-frames`, `einzelframes`,
+    `zeige-regie`, `raumkarte`. Was von den 99.5 s uebrig bleibt, ist das
+    Bauen der Schrift-Sprites - das zeigt der naechste Render.
+  - **EHRLICHE GRENZE:** wieviel schneller es bei Ismet wird, haengt an den
+    Kernen seines Servers (hier 4) und daran, wieviel der 99.5 s auf die
+    Einzelbilder ging. Der naechste Timing-Log sagt es.
+  - Regression **1697/1697 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v227 RENDERZEIT: ERST MESSEN, DANN SCHNEIDEN.**
   Ismets Befund: "fuer ein 15 Sekunden Video knapp 3 Minuten Renderzeit ist
   schon gottlos". Bis hier gab es KEINE Zeitmessung - nur eine

@@ -1404,17 +1404,55 @@ def scene_palette_sampler(video_path, cut_times=None, min_contrast=2.2,
 
     return palette_at
 
+# v227a Derselbe Frame wurde MEHRFACH aus dem Video geholt. Bild-Regie
+# (bis 24 Momente) und Objekt-Anker (bis 16) fragen exakt dieselbe Stelle
+# (`words[i]['start'] + 0.15`) - jeder Aufruf startet ein eigenes ffmpeg.
+# Am Kundenrender waren das rund 40 Prozessstarts, gut die Haelfte davon
+# fuer ein Bild, das schon im Speicher lag. Ein Zwischenspeicher liefert
+# BITGLEICH dasselbe Base64 (gleiche Datei, gleiche Zeit, gleiche
+# ffmpeg-Argumente sind deterministisch) - hier wird nichts vereinfacht,
+# nur nicht zweimal gemacht. Rund 40 KB je Bild, das ist nichts.
+_FRAME_B64_CACHE = {}
+
+
 def _frame_b64(video_path, t, width=480, quality=72):
     """Holt einen Frame als Base64-JPEG fuer die Vision-Regie (klein und guenstig)."""
     import base64
+    _k = (video_path, round(float(max(t, 0.0)), 3), width, quality)
+    if _k in _FRAME_B64_CACHE:
+        return _FRAME_B64_CACHE[_k]
+    _t0 = time.time()
     r = subprocess.run(
         ['ffmpeg', '-v', 'error', '-ss', str(max(t, 0.0)), '-i', video_path,
          '-frames:v', '1', '-vf', f'scale={width}:-2',
          '-f', 'image2', '-c:v', 'mjpeg', '-q:v', str(max(2, int(31 - quality / 3.5))), '-'],
         capture_output=True, timeout=20)
+    zt('vision-frames', _t0)
     if len(r.stdout) < 500:
+        _FRAME_B64_CACHE[_k] = None
         return None
-    return base64.b64encode(r.stdout).decode('ascii')
+    _b = base64.b64encode(r.stdout).decode('ascii')
+    _FRAME_B64_CACHE[_k] = _b
+    return _b
+
+
+def _frame_b64_vorab(video_path, ts, width=480, quality=72):
+    """v227a Die Vision-Bilder GLEICHZEITIG holen. Bild-Regie und Objekt-Anker
+    ziehen bis zu 24 bzw. 16 Standbilder, bisher streng hintereinander - das
+    ist Wartezeit, nicht Rechenzeit. Gleiche Argumente, gleiches Ergebnis."""
+    _offen = [t for t in ts
+              if (video_path, round(float(max(t, 0.0)), 3), width, quality)
+              not in _FRAME_B64_CACHE]
+    if len(_offen) < 2:
+        return
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        _n = max(2, min(6, (os.cpu_count() or 2)))
+        with ThreadPoolExecutor(max_workers=_n) as _ex:
+            list(_ex.map(lambda _t: _frame_b64(video_path, _t, width, quality),
+                         _offen))
+    except Exception:
+        pass
 
 SILENT_PROMPT = """Du bist Retention-Analyst fuer Short-Form-Video. Du siehst Standbilder
 eines FERTIG gerenderten Videos mit eingebrannten Captions - so wie es ~74% der
@@ -1556,6 +1594,7 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-5', min_power=2,
         return _behind_cover_backstop(fx_map, face_cover)
     content = []
     sent = []
+    _frame_b64_vorab(video_path, [words[i]['start'] + 0.15 for i in idx])
     for i in idx:
         b64 = _frame_b64(video_path, words[i]['start'] + 0.15)
         if not b64:
@@ -2679,6 +2718,7 @@ def ai_objekt_anker(words, fx_map, video_path, model='gpt-5', min_power=2):
     idx = [i for i in sorted(fx_map)
            if int(fx_map[i].get('power', 2)) >= min_power][:16]
     content, sent = [], []
+    _frame_b64_vorab(video_path, [words[i]['start'] + 0.15 for i in idx])
     for i in idx:
         b64 = _frame_b64(video_path, words[i]['start'] + 0.15)
         if not b64:
@@ -2888,9 +2928,16 @@ _HAND_WRIST = 0
 _HAND_FINGER = ((8, 6), (12, 10), (16, 14), (20, 18))   # (Spitze, Mittelgelenk)
 
 
+_FRAME_BGR_CACHE = {}
+
+
 def _frame_bgr(video_path, t, w=384):
     """Einzelner Frame als BGR-Array. None, wenn ffmpeg nichts Brauchbares
     liefert (Ende des Videos, kaputte Stelle)."""
+    _k = (video_path, round(float(max(t, 0.0)), 3), int(w))
+    if _k in _FRAME_BGR_CACHE:
+        return _FRAME_BGR_CACHE[_k]
+    _t0 = time.time()
     try:
         r = subprocess.run(
             ['ffmpeg', '-v', 'error', '-ss', str(max(float(t), 0.0)),
@@ -2898,12 +2945,41 @@ def _frame_bgr(video_path, t, w=384):
              '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'],
             capture_output=True, timeout=25)
     except Exception:
+        zt('einzelframes', _t0)
         return None
+    zt('einzelframes', _t0)
     buf = r.stdout
     zeile = int(w) * 3
     if len(buf) < zeile * 16 or len(buf) % zeile:
+        _FRAME_BGR_CACHE[_k] = None
         return None
-    return np.frombuffer(buf, dtype=np.uint8).reshape(-1, int(w), 3).copy()
+    _a = np.frombuffer(buf, dtype=np.uint8).reshape(-1, int(w), 3).copy()
+    if len(_FRAME_BGR_CACHE) < 400:          # ~250 KB je Bild, Deckel ~100 MB
+        _FRAME_BGR_CACHE[_k] = _a
+    return _a
+
+
+def _frame_bgr_vorab(video_path, ts, w=384):
+    """v227a Viele Einzelbilder GLEICHZEITIG holen statt eins nach dem anderen.
+
+    Die Zeige-Regie prueft bis zu 40 Momente, die Hand-Regie bis zu 12 - jede
+    Probe war ein eigener ffmpeg-Start, streng hintereinander. Das ist reine
+    Wartezeit: jeder Start liest die Datei unabhaengig, sie blockieren sich
+    nicht. Die Argumente sind identisch, also ist das Ergebnis BITGLEICH -
+    hier wird nichts anders gemessen, nur nicht mehr nacheinander gewartet.
+    Scheitert der Pool, laeuft der alte Weg (jeder Aufruf holt selbst)."""
+    _offen = [t for t in ts
+              if (video_path, round(float(max(t, 0.0)), 3), int(w))
+              not in _FRAME_BGR_CACHE]
+    if len(_offen) < 2:
+        return
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        _n = max(2, min(6, (os.cpu_count() or 2)))
+        with ThreadPoolExecutor(max_workers=_n) as _ex:
+            list(_ex.map(lambda _t: _frame_bgr(video_path, _t, w), _offen))
+    except Exception:
+        pass
 
 
 def _rand_ziel(ox, oy, dx, dy, W, H, anteil=0.55):
@@ -3105,6 +3181,8 @@ def hand_ziele(video_path, times, W, H, proben=(0.05, 0.25, 0.45)):
                 num_hands=2, min_hand_detection_confidence=0.4))
     except Exception:
         return ziele
+    if proben:                       # v227a: erste Probe fuer alle Zeiten parallel
+        _frame_bgr_vorab(video_path, [float(t) + proben[0] for t in times])
     for t in times:
         pos = None
         for dt in proben:
@@ -3172,6 +3250,11 @@ def zeige_ziele(video_path, times, W, H, proben=(0.10, 0.30, 0.55)):
         return ziele
     n_z = 0
     blick_cands = []
+    # v227a: die erste Probe fuer ALLE Momente parallel holen. Dort faellt fast
+    # die ganze Arbeit an (die meisten Momente sind mit dem ersten Bild
+    # entschieden); die restlichen Proben holt die Schleife wie bisher selbst.
+    if proben:
+        _frame_bgr_vorab(video_path, [float(t) + proben[0] for t in times])
     for t in times:
         treffer = None
         blick = None
@@ -13077,10 +13160,12 @@ def main():
                 print("Style references changed - old direction discarded, the AI plans again")
         if fx_map is None:
             print("AI director is analysing the transcript ...")
+            _zt_ki = time.time()
             fx_map = ai_direct(words, cfg.get('language', 'de'),
                                cfg['keywords'].get('ai_model', 'gpt-5'),
                                voice_wav=voice_wav,
                                validate=cfg['keywords'].get('ai_validate', True))
+            zt('ki-textregie', _zt_ki)
             _regie_wahl = bool(fx_map)
             # v99a: Selbstbezug VOR face_cover/Vision einhaengen, damit
             # erzeugte Momente den Nahaufnahme-Check (behind unsichtbar?)
@@ -13097,19 +13182,23 @@ def main():
                                          0.0), 1.0)
                               for i in list(fx_map)}
             if fx_map and cfg['keywords'].get('ai_vision', True):
+                _zt_ki = time.time()
                 fx_map = ai_scene_direct(words, fx_map, args.input,
                                          cfg['keywords'].get('ai_model', 'gpt-5'),
                                          min_power=int(cfg['keywords'].get('vision_min_power', 2)),
                                          face_cover=face_cover)
+                zt('ki-bildregie', _zt_ki)
                 # v161 OBJEKT-ANKER: gibt es zu einem Moment ein sichtbares
                 # Bezugsobjekt ("dieses Glas hier")? Laeuft im selben
                 # Vision-Zweig und landet mit im Regie-Cache - beim zweiten
                 # Render desselben Videos kostet er dadurch nichts mehr.
                 if cfg['effects'].get('caption_objekt', True):
+                    _zt_ki = time.time()
                     fx_map = ai_objekt_anker(
                         words, fx_map, args.input,
                         cfg['keywords'].get('ai_model', 'gpt-5'),
                         min_power=int(cfg['keywords'].get('vision_min_power', 2)))
+                    zt('ki-objektanker', _zt_ki)
             elif fx_map:
                 # Vision aus, aber der Backstop soll trotzdem greifen.
                 fx_map = _behind_cover_backstop(fx_map, face_cover)
@@ -13475,6 +13564,7 @@ def main():
     # ueber effects.adaptive_place - dann faellt spot() auf Gesicht + Wunschzone
     # zurueck und verhaelt sich wie eine reine Motiv-Ausweichung.
     space_at = None
+    _zt_rk = time.time()
     if cfg['effects'].get('adaptive_place', True):
         try:
             space_at = scene_space_sampler(args.input, cut_times)
@@ -13482,11 +13572,13 @@ def main():
                   "(Raum-Karte pro Shot)")
         except Exception as _e:
             print(f"Placement director: space map skipped ({type(_e).__name__})")
+    zt('raumkarte', _zt_rk)
     # v160 ZEIGE-REGIE. Wohin zeigt oder schaut der Sprecher an den gewaehlten
     # Momenten? Die Messung laeuft NUR auf diesen Zeitpunkten (drei kleine
     # Frames je Moment), nicht ueber das ganze Video. Ohne models/hand.task
     # bleibt sie leer und die Platzierung verhaelt sich wie bisher.
     _zeigen = []
+    _zt_zg = time.time()
     if cfg['effects'].get('caption_zeige', True):
         try:
             _zt = sorted({round(float(words[i]['start']), 2)
@@ -13506,6 +13598,7 @@ def main():
         except Exception as _e:
             print(f"Pointing direction: skipped ({type(_e).__name__})")
             _zeigen = []
+    zt('zeige-regie', _zt_zg)
     # v96b: Erzaehler-/Voiceover-Modus. Kaum Gesicht im Bild -> Captions NICHT
     # an einer (kaum vorhandenen) Person ausrichten, sondern zentriert-editorial
     # setzen (face_pos/faces_at = None laesst build_plans das freie, mittige
@@ -13528,8 +13621,10 @@ def main():
             except Exception:
                 flow_map = None
         if flow_map is None:
+            _zt_ki = time.time()
             _sel = ai_flow_direct(words, _fgroups, cfg.get('language', 'de'),
                                   cfg['keywords'].get('ai_model', 'gpt-5'))
+            zt('ki-textfluss', _zt_ki)
             if _sel:
                 flow_map = _sel
                 try:
