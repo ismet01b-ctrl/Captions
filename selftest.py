@@ -1723,6 +1723,15 @@ def _scenario_logic(clip, transcript, tmp):
           str(cfg['keywords'].get('ai_denken', '')).lower()
           in ('minimal', 'low', 'medium', 'high', 'aus'),
           str(cfg['keywords'].get('ai_denken')))
+    # v228e ZURUECKGESTELLT. Ismets Befund nach dem ersten Render mit 'low':
+    # "Qualitaet ist sehr schlecht geworden". Die Regie ist das Herz des
+    # Produkts; Renderzeit dagegen zu tauschen war das falsche Geschaeft.
+    # Der Test haelt den Rueckweg fest - wer den Standard wieder auf ein
+    # Denk-Limit stellt, muss diese Zeile bewusst anfassen.
+    check('v228e: der Auslieferungs-Standard ist wieder volles Nachdenken',
+          str(cfg['keywords'].get('ai_denken', '')).lower() == 'aus'
+          and "AI_DENKEN = 'aus'" in _rq28,
+          str(cfg['keywords'].get('ai_denken')))
     # Und der Zeit-Report darf verschachtelte Bloecke nicht DOPPELT zaehlen:
     # in Ismets Zeile stand 'regie+plaene 133.2s' NEBEN den KI-Aufrufen, die
     # darin stecken - die Summe ergab 190 %.

@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v228e ZURUECKGESTELLT: die KI denkt wieder voll nach.**
+  Ismets Befund nach dem ersten Render mit `ai_denken: low`: "Qualitaet ist
+  sehr schlecht geworden". Damit ist die Abwaegung entschieden - die Regie
+  ist das Herz des Produkts, Renderzeit dagegen zu tauschen war das falsche
+  Geschaeft. Standard wieder `aus` (kein `reasoning_effort`, Verhalten wie
+  vor v228d). Der Schalter bleibt in der config, damit die Entscheidung
+  jederzeit umkehrbar ist; ein Test haelt den Auslieferungs-Standard fest.
+  - Die Zeit-Gewinne, die NICHTS mit Qualitaet zu tun haben, bleiben alle:
+    Standbilder parallel + nur einmal (v227a), Kantenverfeinerung nur wo die
+    Maske ist (v227, pixelgleich), Bild-Regie und Objekt-Anker gleichzeitig
+    (v228c, deterministisch zusammengefuehrt).
+  - **Lehre:** ein Qualitaets-Regler gehoert dem, der das Ergebnis sieht. Er
+    wird angeboten, mit Zahlen, und nach dem ersten Gegenbefund ohne
+    Diskussion zurueckgestellt - nicht verteidigt.
+  - Regression **1717/1717 logic**.
 - **v228d DIE KI DENKT KUERZER (Ismets Entscheidung).**
   Nach v228c bleiben rund 100 s reine KI-Wartezeit, und bei den neuen
   Modellen geht der Loewenanteil davon nicht in die Antwort, sondern ins

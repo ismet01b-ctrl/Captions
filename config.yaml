@@ -42,7 +42,12 @@ keywords:
   # Antwort. 'low' ist die bewusste Entscheidung (Ismet, Juli 2026):
   # spuerbar schneller, dafuer denkt die Regie weniger lange nach.
   # 'aus' schickt den Parameter gar nicht (Verhalten wie vor v228d).
-  ai_denken: low
+  # v228e ZURUECKGESTELLT auf 'aus'. Ismets Befund nach dem ersten Render mit
+  # 'low': "Qualitaet ist sehr schlecht geworden". Die Regie ist das Herz des
+  # Produkts - Renderzeit gegen Regie-Qualitaet zu tauschen war das falsche
+  # Geschaeft, und das entscheidet der, der das Ergebnis sieht. Der Schalter
+  # bleibt: wer die Zeit braucht, kann ihn selbst stellen.
+  ai_denken: aus
   auto: true
   emphasize_last: true
   min_gap_seconds: 6

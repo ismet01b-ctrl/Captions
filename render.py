@@ -1559,7 +1559,7 @@ Mittelgrund -> "stehend". Sprecher-Nahaufnahme -> "frei". Im Zweifel "frei".
 Antworte NUR mit JSON: {"momente": [{"i": <Index>, "szene": "...", "lage": "...", "fx": "<optional>"}]}"""
 
 # v228d Wieviel darf die KI nachdenken? Wird in main() aus der config gesetzt.
-AI_DENKEN = 'low'
+AI_DENKEN = 'aus'   # v228e: zurueckgestellt, siehe config.yaml
 
 
 def _oai_json(model, messages, max_toks, temperature, json_mode=True):
@@ -13198,7 +13198,7 @@ def main():
             args.transcript = auto_t
     # v228d: Denk-Aufwand der KI aus der Config uebernehmen (Standard 'low').
     global AI_DENKEN
-    AI_DENKEN = str(cfg['keywords'].get('ai_denken', 'low')).strip().lower()
+    AI_DENKEN = str(cfg['keywords'].get('ai_denken', 'aus')).strip().lower()
     _zt_tr = time.time()
     if args.transcript and os.path.exists(args.transcript):
         words = json.load(open(args.transcript, encoding='utf-8'))
