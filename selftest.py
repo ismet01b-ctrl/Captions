@@ -2296,6 +2296,80 @@ def _scenario_logic(clip, transcript, tmp):
           _src221.index("for p in plans:\n        if p.get('anker_arr') is None")
           < _src221.index('    for p in active:\n        # v82: Cutter-Exit'))
 
+    # ------------------------------------------------------------------
+    # v223: DER TEXT MUSS AUF DIE WANDFLAECHE, NICHT NUR IN IHRE EBENE.
+    # Ismets Befund am v222-Render: "der wird gar nicht richtig auf der Wand
+    # platziert". Die NEIGUNG stimmte da schon (v219), die STELLE nicht: die
+    # Wand steht links und ist im Bild nur ~40 % breit, das Wand-Sprite ist
+    # fast bildbreit (688-715 px bei 720 px) - der Text lag zwangslaeufig halb
+    # daneben und halb ausserhalb. Gesetzt wurde er von der normalen
+    # Platzierungs-Regie, die Gesichter und Bildunruhe kennt, aber keine Wand.
+    _W3, _H3 = 720, 1280
+    _d3 = np.full((_H3, _W3), 0.5, np.float32)
+    _d3[:, :int(_W3 * 0.45)] = np.tile(
+        np.linspace(0.25, 0.75, int(_W3 * 0.45)).astype(np.float32), (_H3, 1))
+    _al3 = np.zeros((_H3, _W3, 1), np.float32)
+    _al3[400:1000, 420:620] = 1.0            # Person rechts, nicht auf der Wand
+    _wa3 = R.wall_area(_d3, _al3, _W3, _H3)
+    check('v223: die Wandflaeche wird gefunden (Mitte auf der Wand)',
+          _wa3 is not None and 0.05 * _W3 < _wa3[0] < 0.45 * _W3,
+          str(None if not _wa3 else tuple(round(v, 1) for v in _wa3)))
+    check('v223: die Person zaehlt nicht zur Wand',
+          _wa3 is not None and _wa3[0] + _wa3[2] / 2 < 430,
+          f"rechte Kante {None if not _wa3 else round(_wa3[0] + _wa3[2] / 2, 1)}")
+    check('v223: eine frontale Flaeche ist keine Wand (kein Eingriff)',
+          R.wall_area(np.full((_H3, _W3), 0.5, np.float32), None, _W3, _H3) is None
+          and R.wall_area(None, None, _W3, _H3) is None)
+    # WIRKSAMKEITS-NACHWEIS im echten Zeichenpfad.
+    _S3 = R.Sprites(cfg, _W3, _H3)
+    _w3 = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
+           for i, x in enumerate('Watch this one sticks on the wall. I just talked here.'.split())]
+    _fx3 = R._speech_intent(R._self_ref_intent({}, _w3), _w3)
+    _pl3 = R.build_plans(_w3, set(_fx3), cfg, _S3, _W3, _H3, lambda s, e: True, _fx3)
+    _wp3 = [p for p in _pl3 if p.get('szene') == 'wand']
+
+    def _tinte3(arr, cx):
+        _nz = np.where(arr[..., 3] > 80)
+        return ((cx - arr.shape[1] / 2.0 + float(_nz[1].min())) / _W3,
+                (cx - arr.shape[1] / 2.0 + float(_nz[1].max())) / _W3)
+    if _wp3:
+        _p3 = _wp3[0]
+        _vor3 = _tinte3(_p3['arr'], _p3.get('cx', _W3 / 2))
+        _fr3 = np.full((_H3, _W3, 3), 190.0, np.float32)
+        for _k3 in range(3):
+            R.composite_frame(_fr3.copy(), _al3, R.card_t0(_p3, _w3) + 0.3 + _k3 * 0.04,
+                              _pl3, _w3, (500, 500, 60), cfg, _S3, _W3, _H3,
+                              depth_n=_d3, H_cum=np.eye(3), H_cum_wall=np.eye(3),
+                              track_gen=1, wall_gen=1)
+        _na3 = _tinte3(_p3['arr'], _p3['cx'])
+        check('v223: der Wand-Text landet AUF der Wandflaeche (0..0.45 W)',
+              _na3[1] <= 0.47 and _na3[0] >= -0.01,
+              f"vorher {_vor3[0]:.3f}..{_vor3[1]:.3f} W, nachher "
+              f"{_na3[0]:.3f}..{_na3[1]:.3f} W")
+        check('v223: er wird dabei nicht vom Bildrand angeschnitten',
+              _na3[0] >= -0.005 and _na3[1] <= 1.005,
+              f"{_na3[0]:.3f}..{_na3[1]:.3f} W")
+        check('v223: die Neigung wird AN DER FLAECHE gemessen, nicht an der '
+              'alten Stelle',
+              _p3.get('_wall_yaw') is not None and abs(_p3['_wall_yaw']) > 8,
+              str(_p3.get('_wall_yaw')))
+        check('v223: der Text passt auf die Flaeche (nicht breiter als die Wand)',
+              _wa3 is not None
+              and (_na3[1] - _na3[0]) * _W3 <= _wa3[2] * 1.05,
+              f"Text {round((_na3[1] - _na3[0]) * _W3)} px, "
+              f"Wand {round(_wa3[2]) if _wa3 else '?'} px")
+    check('v223: Flaechensuche laeuft VOR der Neigungsmessung',
+          _src221.index('_wa = wall_area(depth_n, alpha, W, H)')
+          < _src221.index('_yaw_w = wall_pose(depth_n, _mx, _my'))
+    # v223a: der Job-Log muss BEIDE Faelle nennen - besonders den kritischen
+    # (keine Tiefenkarte, also kein Wand-Effekt). Die Meldung stand zuerst
+    # INNERHALB der Tiefen-Bedingung: genau der Fall, der sich melden sollte,
+    # war der einzige, der stumm blieb.
+    check('v223a: der Log meldet auch den Fall OHNE Tiefenkarte',
+          _src221.index("and not p.get('glass') and depth_n is None")
+          < _src221.index("and p.get('flat_arr') is not None and depth_n is not None")
+          and 'no depth map' in _src221 and 'placed on wall area at x=' in _src221)
+
     check('v219: die Wandmessung steht VOR der Zeichen-Weiche, nicht in einem Ast',
           _src217.index("if (p.get('szene') == 'wand' and not p.get('lying')")
           < _src217.index('tracked = (g_broll and'))

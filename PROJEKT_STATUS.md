@@ -3,6 +3,38 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v223 DER WAND-TEXT MUSS AUF DIE FLAECHE, NICHT NUR IN IHRE EBENE.**
+  Ismets Befund am v222-Render (Build-Stempel bestaetigt: `v222`, der Code
+  lief also endlich): "der wird gar nicht richtig auf der Wand platziert".
+  Die NEIGUNG stimmte da schon (v219), die STELLE nicht.
+  - **URSACHE, gemessen:** die Wand steht links und ist im Bild nur rund
+    40 % breit; das Wand-Sprite ist fast bildbreit (688-715 px bei 720 px).
+    Der Text konnte dort gar nicht "auf" der Wand sein - er lag quer ueber
+    Wand UND Person und ragte links aus dem Bild (im Render zu sehen: nur
+    'ON' bzw. 'WAL' stand drin). Gesetzt hat ihn die normale
+    Platzierungs-Regie: die kennt Gesichter und Bildunruhe, aber keine
+    Wandflaeche.
+  - **`wall_area()`** misst die zusammenhaengende Flaeche, deren Tiefe sich
+    WAAGERECHT aendert und auf der keine Person steht. Der Text wird in ihre
+    Mitte gelegt und auf ihre Breite verkleinert (Untergrenze 45 % - unter
+    der waere er auf der Wand nicht mehr lesbar). Beweis: Tinte vorher
+    0.194..0.806 W, nachher 0.035..0.389 W bei einer Wand von 0..0.45 W;
+    Textbreite 255 px auf 278 px Wand.
+  - **REIHENFOLGE-FEHLER dabei gefunden:** erst gemessen, dann verschoben -
+    also an der ALTEN Stelle (Bildmitte) gemessen, wo die Flaeche frontal
+    ist. `wall_pose` gab dort None zurueck und der Text behielt den
+    gebackenen Winkel. Jetzt: Flaeche finden, dann DORT messen (yaw -32.9
+    statt None).
+  - **ZWEITE ANSCHNITT-PRUEFUNG:** der v217-Riegel laeuft in `build_plans` -
+    VOR dieser Neuverzerrung. Nach dem Warp sitzt die Tinte anders; ohne
+    zweite Pruefung lief genau das wieder aus dem Bild, was v217 abgeriegelt
+    hatte.
+  - **v223a DER LOG MELDET BEIDE FAELLE.** Ohne Tiefenkarte gibt es keinen
+    Wand-Effekt - und genau dieser Fall war zuerst der einzige, der stumm
+    blieb (die Meldung stand INNERHALB der Tiefen-Bedingung). Jetzt sagt der
+    Job-Log entweder `plane -33 deg, placed on wall area at x=0.21 W` oder
+    `no depth map - keeping default angle and position`.
+  - Regression **1643/1643 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v222 DER SERVER LIEF SEIT v213 - UND NICHTS KONNTE DAS ZEIGEN.**
   Ismets dritter Befund "immer noch nicht an der Wall" war richtig, aber die
   Ursache lag nicht im Code: **alle drei hochgeladenen Renders tragen in
