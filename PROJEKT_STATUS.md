@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v225b DIE VERKUERZUNG KOMMT AUS DER ENTFERNUNG, NICHT AUS EINEM VORZEICHEN.**
+  Ismets Befund am v225-Bild: "die Schrift muss genau in die andere Richtung
+  mit dem Winkel". Er hatte recht, und die Ursache war peinlich einfach: die
+  Richtung kam aus dem VORZEICHEN eines Sobel-Medians, dessen Orientierung ich
+  verwechselt hatte. Ein Vorzeichen ist kein Beleg, sondern eine Behauptung -
+  und eine, die man nur am fertigen Bild widerlegen kann, also erst beim Kunden.
+  - Die Richtung ist jetzt GEOMETRISCH begruendet: `wall_quad()` bildet je
+    Bildspalte den Median der Tiefe, vergleicht die linke mit der rechten
+    Haelfte, und die weiter entfernte Seite wird im Bild KUERZER. Perspektive
+    statt Rateraten - vertauschen kann sich das nicht mehr.
+  - Gefunden beim Messen: die Naehe an den Aussenspalten kam als 0.0 zurueck,
+    weil die Gradienten-Maske ueber die Wandkante hinausreicht und dort keine
+    Tiefe liegt. Nullwerte fliegen jetzt raus (`> 0.02`, mind. 3 Pixel je
+    Spalte, mind. 6 Spalten) - vorher fiel die ganze Messung durch und es gab
+    ueberhaupt kein Viereck.
+  - **Beweis, beide Richtungen:** linke Wandseite nah -> links 980 px,
+    rechts 591 px. Dieselbe Wand gespiegelt -> links 587 px, rechts 980 px.
+    Ein Gegentest, der bei vertauschter Richtung fallen MUSS.
+  - Die ehrliche Grenze aus v225 bleibt: das Viereck ist immer noch
+    rechteckiger als die echte Wand (Oberkante 180 -> 190 statt 120 -> 200),
+    weil die Tiefenmaske grob ist. Naechster Schritt bleibt die
+    Kantenerkennung im BILD (Hough-Linien).
+  - Regression **1660/1660 logic + 7/1/5/2 Renders + GUI_OK**. Getestet mit
+    synthetischen Tiefenkarten (das echte Tiefen-Modell laedt hier nicht) -
+    am echten Material sieht Ismet es erst nach dem Deploy.
 - **v225 IN DIE WANDEBENE PROJIZIEREN, NICHT NUR KIPPEN.**
   Ismets Befund am v224-Bild: "es ist jetzt auf der Wand, aber es hat die
   falschen Winkel". Er hat recht, und ein einzelner Winkel konnte das nie

@@ -3636,16 +3636,69 @@ def wall_quad(depth_n, alpha, W, H):
     c = max(cs, key=cv2.contourArea)
     if cv2.contourArea(c) < 96 * 128 * 0.04:
         return None
-    # Vier Ecken: das Viereck, das die Kontur am besten beschreibt. approxPolyDP
-    # liefert je nach Rauschen 4-8 Punkte; die Ecken holen wir deshalb ueber
-    # die Extremwerte von x+y und x-y - das ist gegen Ausreisser stabil und
-    # ergibt zuverlaessig die Reihenfolge oben-links..unten-links.
-    pts = c.reshape(-1, 2).astype(np.float32)
-    s, dd = pts[:, 0] + pts[:, 1], pts[:, 0] - pts[:, 1]
-    quad = np.array([pts[np.argmin(s)],      # oben links
-                     pts[np.argmax(dd)],     # oben rechts
-                     pts[np.argmax(s)],      # unten rechts
-                     pts[np.argmin(dd)]],    # unten links
+    # v225a DAS TRAPEZ WIRD AUS DEN SPALTENHOEHEN KONSTRUIERT.
+    # Ismets Befund: "die Schrift muss genau in die andere Richtung mit dem
+    # Winkel". Die Richtung kam bis hier aus dem VORZEICHEN eines
+    # Sobel-Medians - und die Orientierung davon hatte ich verwechselt; ein
+    # Vorzeichen ist auch kein Beleg, sondern eine Behauptung. Ausserdem waren
+    # die Ecken aus den Kontur-Extremwerten zu rechteckig (gemessen 180->190
+    # statt 120->200), weil die Maske an den Raendern beschnitten wird.
+    # Beides loest dieselbe Konstruktion: fuer die linke und die rechte Spalte
+    # der Flaeche wird gemessen, WIE HOCH sie im Bild ist und WO ihre Mitte
+    # liegt. Die im Bild kuerzere Seite ist die weiter entfernte - daraus
+    # ergeben sich Fluchtlinien UND Richtung zwingend aus der Geometrie,
+    # ohne Vorzeichen-Raterei.
+    _msk = np.zeros((128, 96), np.uint8)
+    cv2.drawContours(_msk, [c], -1, 1, thickness=-1)
+    _sp = np.where(_msk.any(axis=0))[0]
+    if len(_sp) < 6:
+        return None
+    _x0, _x1 = int(_sp.min()), int(_sp.max())
+
+    def _spalte(x):
+        _ys = np.where(_msk[:, x])[0]
+        if not len(_ys):
+            return None
+        return float(_ys.min()), float(_ys.max())
+    # v225b DIE VERKUERZUNG KOMMT AUS DER NAEHE, NICHT AUS DER MASKENHOEHE.
+    # Die Maske stammt aus dem Gradienten und hoert VOR der echten Wandkante
+    # auf - oben und unten gleich weit, wodurch das Trapez zum Rechteck wird
+    # (gemessen: Oberkante 179->190 statt 120->200). Die Tiefe dagegen sagt
+    # eindeutig, welche Seite weiter weg ist, und Perspektive heisst: die
+    # entferntere Seite ist im Bild KUERZER. Damit ist die Richtung
+    # geometrisch begruendet statt aus einem Vorzeichen geraten - genau der
+    # Punkt in Ismets Befund "die Schrift muss genau in die andere Richtung".
+    _dk = cv2.resize(depth_n.astype(np.float32), (96, 128))
+    # Gemessen wird ueber SPALTEN-MEDIANE der linken und rechten Haelfte, nicht
+    # an den Randspalten. Die Maske reicht ueber die Wandkante hinaus (dort ist
+    # der Gradient am groessten) - genau dort ist die Tiefe 0, und ein
+    # Mittelwert an der Aussenspalte kam deshalb als 0.0 zurueck und liess die
+    # Messung durchfallen. Nullwerte sind keine Flaeche und fliegen raus.
+    _prof = []
+    for _x in range(_x0, _x1 + 1):
+        _v = _dk[:, _x][(_msk[:, _x] > 0) & (_dk[:, _x] > 0.02)]
+        if len(_v) >= 3:
+            _prof.append((_x, float(np.median(_v))))
+    if len(_prof) < 6:
+        return None
+    _h = len(_prof) // 2
+    _n0 = float(np.median([v for _, v in _prof[:_h]]))
+    _n1 = float(np.median([v for _, v in _prof[_h:]]))
+    _x0, _x1 = _prof[0][0], _prof[-1][0]
+    _ca, _cb = _spalte(_x0), _spalte(_x1)
+    if _ca is None or _cb is None or _n0 <= 1e-6 or _n1 <= 1e-6:
+        return None
+    # Naehe ist invers zur Entfernung: die Seite mit der KLEINEREN Naehe ist
+    # weiter weg und wird kuerzer. Deckel 0.55, damit die Schrift lesbar bleibt.
+    _k = max(0.55, min(_n1 / _n0, 1.0 / max(_n1 / _n0, 1e-6)))
+    _mitte = ((_ca[0] + _ca[1]) / 2.0 + (_cb[0] + _cb[1]) / 2.0) / 2.0
+    _hoehe = max((_ca[1] - _ca[0]), (_cb[1] - _cb[0]))
+    if _n1 < _n0:                          # rechts weiter weg -> rechts kuerzer
+        _h0, _h1 = _hoehe, _hoehe * _k
+    else:                                  # links weiter weg -> links kuerzer
+        _h0, _h1 = _hoehe * _k, _hoehe
+    quad = np.array([[_x0, _mitte - _h0 / 2.0], [_x1, _mitte - _h1 / 2.0],
+                     [_x1, _mitte + _h1 / 2.0], [_x0, _mitte + _h0 / 2.0]],
                     dtype=np.float32)
     quad[:, 0] *= W / 96.0
     quad[:, 1] *= H / 128.0

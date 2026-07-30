@@ -2474,6 +2474,31 @@ def _scenario_logic(clip, transcript, tmp):
           _q5 is not None and _q5[0][1] < _q5[3][1] and _q5[1][1] < _q5[2][1]
           and _q5[0][0] < _q5[1][0],
           str(None if _q5 is None else [[int(v) for v in q] for q in _q5]))
+    # v225b DIE RICHTUNG KOMMT AUS DER GEOMETRIE. Ismets Befund: "die Schrift
+    # muss genau in die andere Richtung mit dem Winkel". Sie kam bis dahin aus
+    # dem VORZEICHEN eines Sobel-Medians, dessen Orientierung verwechselt war -
+    # ein Vorzeichen ist auch kein Beleg, sondern eine Behauptung. Jetzt gilt:
+    # die Seite mit der KLEINEREN Naehe ist weiter weg und im Bild KUERZER.
+    # Gegenprobe mit gespiegelter Wand ist Pflicht - sonst haette ein einfach
+    # umgedrehtes Vorzeichen denselben Test bestanden.
+    if _q5 is not None:
+        _hl5 = float(_q5[3][1] - _q5[0][1])
+        _hr5 = float(_q5[2][1] - _q5[1][1])
+        check('v225b: links nah -> die rechte Kante ist kuerzer',
+              _hr5 < _hl5 * 0.92, f"links {_hl5:.0f} px, rechts {_hr5:.0f} px")
+        _dsp5 = _dq5[:, ::-1].copy()
+        _asp5 = np.zeros((_H3, _W3, 1), np.float32)
+        _asp5[400:1000, 80:250] = 1.0
+        _qs5 = R.wall_quad(_dsp5, _asp5, _W3, _H3)
+        check('v225b: gespiegelte Wand -> die LINKE Kante ist kuerzer',
+              _qs5 is not None
+              and (_qs5[3][1] - _qs5[0][1]) < (_qs5[2][1] - _qs5[1][1]) * 0.92,
+              str(None if _qs5 is None else
+                  f"links {_qs5[3][1] - _qs5[0][1]:.0f} px, "
+                  f"rechts {_qs5[2][1] - _qs5[1][1]:.0f} px"))
+        check('v225b: die Verkuerzung kommt aus der Naehe, nicht aus einem '
+              'Vorzeichen',
+              'Spalten-Mediane' in _src221 or '_prof.append' in _src221)
     check('v225: eine frontale Wand gibt kein Viereck (dann keine Projektion)',
           R.wall_quad(np.full((_H3, _W3), 0.5, np.float32), None, _W3, _H3) is None
           and R.wall_quad(None, None, _W3, _H3) is None)

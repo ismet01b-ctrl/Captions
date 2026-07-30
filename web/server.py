@@ -1990,7 +1990,7 @@ _CSP = (
 # dem alten Stand, weil der Deploy nicht griff, und NICHTS konnte das zeigen.
 # `update.sh` schreibt Branch/Commit/Zeit nach DVE_DATA/build.json (liegt
 # ausserhalb des Images und ueberlebt den Neubau); hier wird es gelesen.
-DVE_VERSION = 'v222'
+DVE_VERSION = 'v225b'
 
 
 def _build_stempel():

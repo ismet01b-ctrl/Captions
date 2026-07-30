@@ -977,7 +977,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1657/1657 grün (Stand v225)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1660/1660 grün (Stand v225b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1046,6 +1046,13 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
    Stimmt der Stand nicht mit dem eigenen Commit überein, ist die Frage nach
    dem Code sinnlos — dann hängt der Deploy. Drei Runden gingen genau dafür
    verloren, weil `DVE_BUILD` ein festes Literal war und log.
+7. **Eine Richtung aus einem VORZEICHEN ist eine Behauptung** (v225b). Ob eine
+   Wand nach links oder rechts flieht, kam aus dem Vorzeichen eines
+   Sobel-Medians — dessen Orientierung ich verwechselt hatte, und das faellt
+   erst am fertigen Bild auf, also beim Kunden. Richtungen gehoeren
+   geometrisch begruendet (die weiter entfernte Seite ist im Bild kuerzer) und
+   mit einem GESPIEGELTEN Gegentest belegt, der bei vertauschter Richtung
+   fallen muss. Gilt fuer jede Seiten-, Dreh- oder Kipp-Entscheidung.
 
 ## Deliver-Muster (jede neue Version)
 0. **Wirksamkeits-Nachweis nach dem Abschnitt darüber.** Ohne ihn gilt eine
