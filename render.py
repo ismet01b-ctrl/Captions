@@ -3604,6 +3604,82 @@ def wall_typo(S, txt, flw, flh, W, H, extrude=False):
                               cv2.BORDER_CONSTANT, value=(0, 0, 0, 0))
 
 
+def wall_quad(depth_n, alpha, W, H):
+    """v225 DAS WAND-VIERECK. Ismets Befund am v224-Bild: "es ist jetzt auf der
+    Wand, aber es hat die falschen Winkel".
+
+    Er hat recht, und ein einzelner Winkel konnte das nie leisten: eine Wand
+    im Bild ist ein TRAPEZ mit Fluchtlinien - die Oberkante faellt, die
+    Unterkante steigt, beide laufen auf einen Fluchtpunkt zu. `persp_warp(yaw)`
+    verkuerzt nur eine Seite und laesst die Zeilen waagerecht; genau deshalb
+    sah der Schriftzug aufgeklebt aus statt an der Wand.
+    Gemessen wird deshalb die FLAECHE als Viereck. Rueckgabe: 4x2-Array
+    (oben-links, oben-rechts, unten-rechts, unten-links) oder None."""
+    if depth_n is None:
+        return None
+    d = cv2.resize(depth_n.astype(np.float32), (96, 128))
+    d = cv2.GaussianBlur(d, (0, 0), 2.0)
+    gx = np.abs(cv2.Sobel(d, cv2.CV_32F, 1, 0, ksize=5))
+    gy = np.abs(cv2.Sobel(d, cv2.CV_32F, 0, 1, ksize=5))
+    stark = float(np.percentile(gx, 80))
+    if stark < 1e-4:
+        return None
+    m = ((gx > stark * 0.45) & (gx > gy * 1.2)).astype(np.uint8)
+    if alpha is not None:
+        pm = cv2.resize(person_mask(alpha).astype(np.float32), (96, 128))
+        m[pm > 0.30] = 0
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cs:
+        return None
+    c = max(cs, key=cv2.contourArea)
+    if cv2.contourArea(c) < 96 * 128 * 0.04:
+        return None
+    # Vier Ecken: das Viereck, das die Kontur am besten beschreibt. approxPolyDP
+    # liefert je nach Rauschen 4-8 Punkte; die Ecken holen wir deshalb ueber
+    # die Extremwerte von x+y und x-y - das ist gegen Ausreisser stabil und
+    # ergibt zuverlaessig die Reihenfolge oben-links..unten-links.
+    pts = c.reshape(-1, 2).astype(np.float32)
+    s, dd = pts[:, 0] + pts[:, 1], pts[:, 0] - pts[:, 1]
+    quad = np.array([pts[np.argmin(s)],      # oben links
+                     pts[np.argmax(dd)],     # oben rechts
+                     pts[np.argmax(s)],      # unten rechts
+                     pts[np.argmin(dd)]],    # unten links
+                    dtype=np.float32)
+    quad[:, 0] *= W / 96.0
+    quad[:, 1] *= H / 128.0
+    # Entartete Vierecke (Strich, Dreieck) sind keine Flaeche.
+    if (np.linalg.norm(quad[0] - quad[1]) < W * 0.06
+            or np.linalg.norm(quad[0] - quad[3]) < H * 0.06):
+        return None
+    return quad
+
+
+def wall_project(arr, quad, W, H, rand=0.12, oben=0.20, hoch=0.34):
+    """v225 Legt ein Text-Sprite IN das Wand-Viereck - eine echte projektive
+    Abbildung, also mit Fluchtlinien, Neigung und Verkuerzung in einem.
+    `rand` laesst links/rechts Luft, `oben`/`hoch` waehlen das Band auf der
+    Flaeche (Standard: oberes Drittel, Augenhoehe). Rueckgabe: bildgrosses
+    RGBA-Sprite (Position steckt darin, also cx=W/2, cy=H/2)."""
+    def _misch(a, b, f):
+        return a + (b - a) * f
+
+    ol, orr, ur, ul = quad
+    def _pkt(fx, fy):
+        # bilinear im Viereck: erst auf Ober- und Unterkante, dann dazwischen
+        return _misch(_misch(ol, orr, fx), _misch(ul, ur, fx), fy)
+    ziel = np.array([_pkt(rand, oben), _pkt(1.0 - rand, oben),
+                     _pkt(1.0 - rand, oben + hoch), _pkt(rand, oben + hoch)],
+                    dtype=np.float32)
+    h, w = arr.shape[:2]
+    src = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
+    M = cv2.getPerspectiveTransform(src, ziel)
+    return cv2.warpPerspective(arr, M, (W, H), flags=cv2.INTER_LINEAR,
+                               borderMode=cv2.BORDER_CONSTANT,
+                               borderValue=(0, 0, 0, 0))
+
+
 def wall_area(depth_n, alpha, W, H):
     """v223 WO IST DIE WAND? Ismets Befund am v222-Render: "der wird gar nicht
     richtig auf der Wand platziert". Die NEIGUNG stimmte da schon (v219), die
@@ -11779,68 +11855,49 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 # 720 px). Der Text konnte dort nie "auf" der Wand sein -
                 # er lag zwangslaeufig halb daneben und halb ausserhalb.
                 # "An der Wand" heisst: er passt auf die Flaeche.
-                # v224 NEU SETZEN STATT STAUCHEN. v223 hat die fertige,
-                # fast bildbreite Zeile auf die Flaeche gestaucht (bis
-                # 45 %) - das ergab eine winzige, randfuellende Zeile ohne
-                # Luft. Ismets Urteil: "sitzt auf der Wand, sieht aber echt
-                # unstrukturiert aus, muss eventuell etwas kleiner". Ein
-                # Schriftzug AN einer Wand ist mehrzeilig: die Flaeche gibt
-                # die Breite vor, der Text bricht um, die Schrift bleibt
-                # gross, und ein sichtbarer Rand bleibt frei. Der Rand ist
-                # das, was 'strukturiert' aussieht.
-                # v224a DEN WARP-VERLUST AUSGLEICHEN. persp_warp verkuerzt
-                # die abgewandte Seite - bei den gemessenen -33 Grad blieben
-                # von 72 % Flaechenbreite nur 44 % uebrig, der Schriftzug
-                # war damit wieder zu klein. Einmal probeweise warpen, das
-                # Verhaeltnis messen, dann mit ausgeglichener Zielbreite
-                # neu setzen. Ein Aufruf mehr je Moment, nicht je Frame.
-                _kw_wand = _wbw
-                if _yaw_w is not None:
-                    _pr = wall_typo(S, p.get('kw_txt', ''), _wbw, _wbh,
-                                    W, H, extrude=False)
-                    if _pr is not None:
-                        _pw = persp_warp(_pr, yaw=_yaw_w, pitch=0.0)
-                        _n1 = np.where(_pr[..., 3] > 80)
-                        _n2 = np.where(_pw[..., 3] > 80)
-                        if len(_n1[0]) and len(_n2[0]):
-                            _b1 = float(_n1[1].max() - _n1[1].min() + 1)
-                            _b2 = float(_n2[1].max() - _n2[1].min() + 1)
-                            if _b2 > 1 and _b1 > 1:
-                                # Deckel 1.25: mehr Ausgleich heisst, die
-                                # Schrift wird vor dem Warp so breit
-                                # gesetzt, dass sie danach zerquetscht ist
-                                # (am Beweisbild gesehen).
-                                _kw_wand = _wbw * max(1.0,
-                                                      min(_b1 / _b2, 1.25))
-                _wt = wall_typo(S, p.get('kw_txt', ''), _kw_wand, _wbh, W, H,
+                # v225 IN DIE WANDEBENE PROJIZIEREN, NICHT NUR KIPPEN.
+                # Ismets Befund am v224-Bild: "es ist jetzt auf der Wand, aber
+                # es hat die falschen Winkel". Er hat recht, und ein einzelner
+                # Winkel konnte das nie leisten: eine Wand im Bild ist ein
+                # TRAPEZ mit Fluchtlinien - Oberkante faellt, Unterkante steigt.
+                # persp_warp(yaw) verkuerzt nur eine Seite und laesst die
+                # Zeilen WAAGERECHT; genau deshalb sah der Schriftzug
+                # aufgeklebt aus. Jetzt wird das gemessene Wand-Viereck als
+                # Zielflaeche genommen und der Satz per Homographie
+                # hineingelegt - Fluchtlinien, Neigung und Verkuerzung in
+                # einem Schritt, ohne Winkel-Basteln.
+                _quad = wall_quad(depth_n, alpha, W, H)
+                _wt = wall_typo(S, p.get('kw_txt', ''), _wbw, _wbh, W, H,
                                 extrude=False)
-                if _wt is not None:
-                    # v224c JE MEHR ZEILEN, DESTO WENIGER WINKEL. persp_warp
-                    # staucht die abgewandte Seite in der HOEHE; bei einem
-                    # dreizeiligen Block trifft das jede Zeile anders und
-                    # der Satz zerfaellt (am Beweisbild: 'ON' halb weg,
-                    # 'THE' gequetscht). Eine Wand darf man andeuten - die
-                    # Schrift muss lesbar bleiben, sonst arbeitet der
-                    # Effekt gegen sich selbst.
-                    _nz_w = int(getattr(wall_typo, 'zeilen', 1) or 1)
-                    _yw = (None if _yaw_w is None else
-                           max(-20.0 / _nz_w, min(20.0 / _nz_w, _yaw_w)))
-                    p['_wall_yaw'] = _yw
+                if _quad is not None and _wt is not None:
                     p['flat_arr'] = _wt
-                    p['arr'] = (persp_warp(_wt, yaw=_yw, pitch=0.0)
-                                if _yw is not None else _wt)
+                    p['arr'] = wall_project(_wt, _quad, W, H)
+                    p['_wall_quad'] = [[round(float(v), 1) for v in q]
+                                       for q in _quad]
+                    p['_wall_yaw'] = _yaw_w
                     if p.get('anker_txt'):
-                        _wat = wall_typo(S, p['anker_txt'], _kw_wand, _wbh,
+                        _wat = wall_typo(S, p['anker_txt'], _wbw, _wbh,
                                          W, H, extrude=False)
                         if _wat is not None:
-                            _nz_a = int(getattr(wall_typo, 'zeilen', 1) or 1)
-                            _ya = (None if _yaw_w is None else
-                                   max(-20.0 / _nz_a,
-                                       min(20.0 / _nz_a, _yaw_w)))
                             p['anker_flat'] = _wat
-                            p['anker_arr'] = (
-                                persp_warp(_wat, yaw=_ya, pitch=0.0)
-                                if _ya is not None else _wat)
+                            p['anker_arr'] = wall_project(_wat, _quad, W, H)
+                    # Das Sprite liegt jetzt in BILDkoordinaten - die Position
+                    # steckt in der Projektion. Ein zusaetzliches cx/cy waere
+                    # eine zweite Verschiebung.
+                    p['cx'], p['cy'] = W / 2.0, H / 2.0
+                    p['_wall_proj'] = True
+                elif _wt is not None:
+                    # Kein verlaessliches Viereck (frontale Wand, unruhige
+                    # Tiefenkarte): sauber gesetzter Satz ohne Projektion.
+                    p['flat_arr'] = _wt
+                    p['arr'] = _wt
+                    p['_wall_yaw'] = None
+                    if p.get('anker_txt'):
+                        _wat = wall_typo(S, p['anker_txt'], _wbw, _wbh,
+                                         W, H, extrude=False)
+                        if _wat is not None:
+                            p['anker_flat'] = _wat
+                            p['anker_arr'] = _wat
                 else:
                     # Rueckfall: passt kein Satz auf die Flaeche, wird wie
                     # in v223 gestaucht - lieber klein als daneben.
@@ -11856,14 +11913,20 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                         if _tw > _ziel:
                             p[_sn] = _skaliere_sprite(_sa,
                                                       max(_ziel / _tw, 0.45))
-                p['cx'] = _wcx
-                # v224: nicht auf den Schwerpunkt, sondern ins obere
-                # Drittel der Flaeche. Der Schwerpunkt einer bildhohen
-                # Wand ist die Bildmitte - dort schwebt der Text ohne
-                # Bezug. Auf Augenhoehe sitzt ein Wandschriftzug.
-                p['cy'] = _wcy - _wbh * 0.16
-                p['_wall_area'] = (round(_wcx, 1), round(p['cy'], 1),
-                                   round(_wbw, 1))
+                # v225: NICHT bei projizierten Sprites. Dort steckt die
+                # Position schon in der Homographie (das Sprite liegt in
+                # Bildkoordinaten) - ein zusaetzliches cx/cy waere eine
+                # zweite Verschiebung und schoebe den Schriftzug von der
+                # Wand weg.
+                if not p.get('_wall_proj'):
+                    p['cx'] = _wcx
+                    # v224: nicht auf den Schwerpunkt, sondern ins obere
+                    # Drittel der Flaeche. Der Schwerpunkt einer bildhohen
+                    # Wand ist die Bildmitte - dort schwebt der Text ohne
+                    # Bezug. Auf Augenhoehe sitzt ein Wandschriftzug.
+                    p['cy'] = _wcy - _wbh * 0.16
+                    p['_wall_area'] = (round(_wcx, 1), round(p['cy'], 1),
+                                       round(_wbw, 1))
             # v223: ins Log, WAS gemessen wurde. Drei Runden gingen mit
             # der Frage verloren, ob der Wand-Code ueberhaupt greift -
             # ohne Tiefenkarte tut er es nicht, und das war nirgends zu

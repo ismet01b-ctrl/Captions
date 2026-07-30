@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v225 IN DIE WANDEBENE PROJIZIEREN, NICHT NUR KIPPEN.**
+  Ismets Befund am v224-Bild: "es ist jetzt auf der Wand, aber es hat die
+  falschen Winkel". Er hat recht, und ein einzelner Winkel konnte das nie
+  leisten: eine Wand im Bild ist ein TRAPEZ mit Fluchtlinien - Oberkante
+  faellt, Unterkante steigt, beide laufen auf einen Fluchtpunkt zu.
+  `persp_warp(yaw)` verkuerzt nur eine Seite und laesst die Zeilen WAAGERECHT.
+  - `wall_quad()` misst die Flaeche als VIERECK (vier Ecken ueber die
+    Extremwerte von x+y und x-y - stabiler als approxPolyDP),
+    `wall_project()` legt den Satz per Homographie hinein: Fluchtlinien,
+    Neigung und Verkuerzung in einem Schritt, ohne Winkel-Basteln.
+    Der Warp-Ausgleich aus v224a ist damit ueberholt und entfernt.
+  - Das projizierte Sprite liegt in BILDkoordinaten; `cx`/`cy` werden dann
+    NICHT mehr gesetzt (das waere eine zweite Verschiebung).
+  - **EHRLICHE GRENZE - der Befund ist NICHT vollstaendig behoben:** das aus
+    der Tiefenkarte gewonnene Viereck ist zu rechteckig. Am Testfall gemessen
+    liefert es die Oberkante 180 -> 190 px, die echte Wandkante laeuft
+    120 -> 200 px. Die Maske entsteht auf 96x128 und wird an den Raendern
+    beschnitten (dort ueberwiegt der senkrechte Gradient), die Ecken wandern
+    dadurch nach innen. Der Schriftzug sitzt sauber, mehrzeilig und mittig auf
+    der Flaeche - die FLUCHTLINIEN trifft er noch nicht, er wirkt weiter
+    frontal aufgeklebt. Der naechste Schritt ist die Kantenerkennung im BILD
+    (Hough-Linien auf den Wandkanten) statt in der groben Tiefenmaske; die
+    Fluchtlinien liegen dort exakt.
+  - Regression **1657/1657 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v224 EIN WANDSCHRIFTZUG WIRD GESETZT, NICHT GESCHRUMPFT.**
   Ismets Befund am v223-Render: "sitzt auf der Wand, sieht aber echt
   unstrukturiert aus, muss eventuell etwas kleiner". Beides kam aus derselben

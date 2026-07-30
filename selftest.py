@@ -2427,11 +2427,72 @@ def _scenario_logic(clip, transcript, tmp):
               _vh5 >= 48, f"Versalhoehe {_vh5} px (gestaucht waeren ~39 px)")
         check('v224: der Block ist schmaler als die Wand (Rand bleibt frei)',
               _bw5 <= 277.5 * 0.85, f"{_bw5:.0f} px auf 278 px Wand")
-        check('v224: der Warp-Verlust wird ausgeglichen (aber gedeckelt)',
-              '_kw_wand = _wbw' in _src221 and 'min(_b1 / _b2, 1.25)' in _src221,
-              'mehr Ausgleich quetscht die Schrift')
-        check('v224: er sitzt auf Augenhoehe, nicht im Flaechen-Schwerpunkt',
-              _p4['cy'] < 635 - 100, f"cy {round(_p4['cy'])} (Schwerpunkt 635)")
+        # v225: der Warp-Ausgleich ist ueberholt - die Homographie legt den
+        # Satz direkt in das Wand-Viereck, da gibt es keinen Verlust
+        # auszugleichen. Geprueft wird jetzt, dass der alte Notbehelf WEG ist.
+        check('v225: der Warp-Ausgleich ist durch die Projektion ersetzt',
+              'min(_b1 / _b2' not in _src221
+              and 'p[\'arr\'] = wall_project(_wt, _quad, W, H)' in _src221)
+        # v225: die Augenhoehe steckt jetzt im Zielband der Projektion
+        # (oben=0.20, hoch=0.34) - gemessen wird sie am fertigen Sprite.
+        _dq6 = np.zeros((_H3, _W3), np.float32)
+        _xw6 = int(_W3 * 0.45)
+        for _x6 in range(_xw6):
+            _f6 = _x6 / max(_xw6 - 1, 1)
+            _dq6[int(120 + 80 * _f6):int(1230 - 80 * _f6), _x6] = 0.75 - 0.5 * _f6
+        _q5 = R.wall_quad(_dq6, _al3, _W3, _H3)
+        if _q5 is not None:
+            _pr6 = R.wall_project(_S3.text('ON THE WALL', 90, _S3.white)[0],
+                                  _q5, _W3, _H3)
+            _n6 = np.where(_pr6[..., 3] > 80)
+            _mid6 = (float(_n6[0].min()) + float(_n6[0].max())) / 2.0
+            _woben = (_q5[0][1] + _q5[1][1]) / 2.0
+            _wunten = (_q5[2][1] + _q5[3][1]) / 2.0
+            _rel6 = (_mid6 - _woben) / max(_wunten - _woben, 1.0)
+            check('v225: der Schriftzug sitzt im oberen Drittel der Wand',
+                  0.15 <= _rel6 <= 0.50,
+                  f"{_rel6:.0%} der Wandhoehe von oben")
+
+    # ------------------------------------------------------------------
+    # v225: IN DIE WANDEBENE PROJIZIEREN, NICHT NUR KIPPEN.
+    # Ismets Befund am v224-Bild: "es ist jetzt auf der Wand, aber es hat die
+    # falschen Winkel". Ein einzelner Winkel kann das nicht leisten: eine Wand
+    # im Bild ist ein TRAPEZ mit Fluchtlinien. persp_warp(yaw) verkuerzt nur
+    # eine Seite und laesst die Zeilen waagerecht.
+    _dq5 = np.zeros((_H3, _W3), np.float32)
+    _xw5 = int(_W3 * 0.45)
+    for _x5 in range(_xw5):
+        _f5 = _x5 / max(_xw5 - 1, 1)
+        _y05 = int(120 + (200 - 120) * _f5)
+        _y15 = int(1230 + (1150 - 1230) * _f5)
+        _dq5[_y05:_y15, _x5] = 0.75 - 0.5 * _f5
+    _q5 = R.wall_quad(_dq5, _al3, _W3, _H3)
+    check('v225: das Wand-Viereck wird mit vier Ecken gemessen',
+          _q5 is not None and _q5.shape == (4, 2),
+          str(None if _q5 is None else [[int(v) for v in q] for q in _q5]))
+    check('v225: die Ecken kommen in der Reihenfolge oben-links..unten-links',
+          _q5 is not None and _q5[0][1] < _q5[3][1] and _q5[1][1] < _q5[2][1]
+          and _q5[0][0] < _q5[1][0],
+          str(None if _q5 is None else [[int(v) for v in q] for q in _q5]))
+    check('v225: eine frontale Wand gibt kein Viereck (dann keine Projektion)',
+          R.wall_quad(np.full((_H3, _W3), 0.5, np.float32), None, _W3, _H3) is None
+          and R.wall_quad(None, None, _W3, _H3) is None)
+    if _q5 is not None:
+        _sp5 = _S3.text('ON THE WALL', 90, _S3.white)[0]
+        _pr5 = R.wall_project(_sp5, _q5, _W3, _H3)
+        check('v225: das projizierte Sprite ist bildgross (Position steckt drin)',
+              _pr5.shape[:2] == (_H3, _W3), str(_pr5.shape))
+        _n5 = np.where(_pr5[..., 3] > 80)
+        check('v225: die Tinte landet INNERHALB des Wand-Vierecks',
+              len(_n5[0]) > 0 and _n5[1].max() <= max(q[0] for q in _q5) + 4
+              and _n5[1].min() >= min(q[0] for q in _q5) - 4,
+              f"x {int(_n5[1].min())}..{int(_n5[1].max())}, Wand "
+              f"{int(min(q[0] for q in _q5))}..{int(max(q[0] for q in _q5))}")
+    # Bei aktiver Projektion darf die Position NICHT zusaetzlich verschoben
+    # werden - sie steckt schon in der Homographie.
+    check('v225: projizierte Sprites werden nicht doppelt verschoben',
+          "if not p.get('_wall_proj'):" in _src221
+          and "p['cx'], p['cy'] = W / 2.0, H / 2.0" in _src221)
 
     check('v223: Flaechensuche laeuft VOR der Neigungsmessung',
           _src221.index('_wa = wall_area(depth_n, alpha, W, H)')
