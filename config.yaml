@@ -36,6 +36,13 @@ keywords:
   ai: true
   ai_model: gpt-5      # v94: staerkere Regie-KI (frueher aelteres Chat-Modell). Urteilt
                        # besser welcher Effekt HIER passt + Platzierung.
+  # v228d DENK-AUFWAND der Regie-KI: minimal | low | medium | high | aus.
+  # An einem echten Render gemessen waren 129 von 191 s reines Warten auf die
+  # KI - und der Loewenanteil davon ist internes Nachdenken, nicht die
+  # Antwort. 'low' ist die bewusste Entscheidung (Ismet, Juli 2026):
+  # spuerbar schneller, dafuer denkt die Regie weniger lange nach.
+  # 'aus' schickt den Parameter gar nicht (Verhalten wie vor v228d).
+  ai_denken: low
   auto: true
   emphasize_last: true
   min_gap_seconds: 6

@@ -1558,6 +1558,10 @@ Regeln: Wasser/Boden gross im Bild + grosser Moment -> "liegend". Klare Flaeche 
 Mittelgrund -> "stehend". Sprecher-Nahaufnahme -> "frei". Im Zweifel "frei".
 Antworte NUR mit JSON: {"momente": [{"i": <Index>, "szene": "...", "lage": "...", "fx": "<optional>"}]}"""
 
+# v228d Wieviel darf die KI nachdenken? Wird in main() aus der config gesetzt.
+AI_DENKEN = 'low'
+
+
 def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     """v94: chat/completions-Body, modell-kompatibel. Neuere Modelle (gpt-5,
     o-Serie) verlangen max_completion_tokens und lehnen ein abweichendes
@@ -1581,6 +1585,18 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True):
         max(int(max_toks), 2500) if new else max_toks)
     if not new:
         body['temperature'] = temperature
+    # v228d DENK-AUFWAND. An Ismets Job-Log gemessen sind 129 von 191 s reines
+    # Warten auf die KI - und bei den neuen Modellen geht der Loewenanteil
+    # nicht in die Antwort, sondern ins interne Nachdenken. `reasoning_effort`
+    # steuert genau das. 'low' ist der Standard (Ismets Entscheidung, Juli
+    # 2026); wer die alte Gruendlichkeit will, setzt `keywords.ai_denken` in
+    # der config.yaml auf 'medium' oder 'high' - oder auf 'aus', dann wird der
+    # Parameter gar nicht geschickt (Verhalten wie vor v228d).
+    # WICHTIG: das Denkbudget oben bleibt bei mindestens 2500. Weniger denken
+    # heisst MEHR Platz fuer die Antwort, nie weniger - die v210-Falle
+    # (leere Antwort) wird dadurch unwahrscheinlicher, nicht wahrscheinlicher.
+    if new and AI_DENKEN in ('minimal', 'low', 'medium', 'high'):
+        body['reasoning_effort'] = AI_DENKEN
     return body
 
 
@@ -13180,6 +13196,9 @@ def main():
         auto_t = os.path.splitext(args.input)[0] + '_transcript2.json'
         if os.path.exists(auto_t):
             args.transcript = auto_t
+    # v228d: Denk-Aufwand der KI aus der Config uebernehmen (Standard 'low').
+    global AI_DENKEN
+    AI_DENKEN = str(cfg['keywords'].get('ai_denken', 'low')).strip().lower()
     _zt_tr = time.time()
     if args.transcript and os.path.exists(args.transcript):
         words = json.load(open(args.transcript, encoding='utf-8'))

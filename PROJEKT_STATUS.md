@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v228d DIE KI DENKT KUERZER (Ismets Entscheidung).**
+  Nach v228c bleiben rund 100 s reine KI-Wartezeit, und bei den neuen
+  Modellen geht der Loewenanteil davon nicht in die Antwort, sondern ins
+  interne Nachdenken. Genau dafuer gibt es `reasoning_effort`.
+  - Neu `keywords.ai_denken` in der config: minimal | low | medium | high |
+    aus. **Standard 'low'** - Ismets Ansage ("ja go"), nachdem die Abwaegung
+    benannt war: spuerbar schneller, dafuer denkt die Regie kuerzer nach.
+    'aus' schickt den Parameter gar nicht (Verhalten wie vor v228d), und
+    genau das ist der Rueckweg, wenn die Regie schlechter wird.
+  - **Das Denkbudget bleibt bei mindestens 2500** (v210-Falle: ein knappes
+    Budget wird vom Denken aufgebraucht und die Antwort kommt LEER zurueck).
+    Weniger denken heisst MEHR Platz fuer die Antwort - der Riegel wird
+    dadurch sicherer, nicht wackliger.
+  - Alte Chat-Modelle (gpt-4o) bekommen den Parameter nicht (getestet).
+  - **EHRLICHE GRENZE:** wieviel es bringt, steht erst im naechsten
+    Timing-Log - hier laeuft kein Schluessel, also ist die Zeitersparnis
+    NICHT gemessen. Und ob die Regie darunter leidet, sieht Ismet am
+    fertigen Video, nicht ich an einem Test.
+  - Regression **1716/1716 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v228c 129 VON 191 SEKUNDEN WAREN WARTEN AUF DIE KI.**
   Ismets Timing-Zeile am echten Render: `regie+plaene 133.2s (70%)` - und
   darin `ki-bildregie 39.5s | ki-textregie 37.7s | ki-textfluss 26.1s |

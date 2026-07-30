@@ -1072,6 +1072,10 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Text-Fluss haengen echt voneinander ab - der Fluss braucht die
   Blockaufteilung. Wer hier weiter will, dreht am MODELL oder am Denkbudget,
   und das ist eine Qualitaetsfrage fuer Ismet, keine technische.
+- **`keywords.ai_denken` (v228d, Standard 'low')** steuert `reasoning_effort`
+  der neuen Modelle - Ismets Entscheidung nach der Abwaegung. 'aus' ist der
+  Rueckweg zum alten Verhalten. Das Denkbudget bleibt bei >= 2500: weniger
+  denken heisst MEHR Platz fuer die Antwort (v210-Falle).
 - **Verschachtelte Zeit-Bloecke duerfen nicht doppelt zaehlen** (`_ZEIT_KIND`):
   `regie+plaene` umschliesst die KI-Aufrufe, die Prozente summierten sich auf
   190 %.
@@ -1081,7 +1085,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1711/1711 grün (Stand v228c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1716/1716 grün (Stand v228d)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -1694,6 +1694,35 @@ def _scenario_logic(clip, transcript, tmp):
           and '_ex.submit(_lauf_anker)' in _rq28
           and 'copy.deepcopy(fx_map)' in _rq28,
           'ohne Kopie schreiben zwei Threads in dieselben dicts')
+    # v228d DENK-AUFWAND. 129 von 191 s waren Warten auf die KI, und der
+    # Loewenanteil davon ist internes Nachdenken. `reasoning_effort` steuert
+    # genau das - Standard 'low' (Ismets Entscheidung). Das Denkbudget bleibt
+    # bei mindestens 2500: weniger denken heisst MEHR Platz fuer die Antwort,
+    # die v210-Falle (leere Antwort -> JSONDecodeError) wird dadurch
+    # unwahrscheinlicher, nicht wahrscheinlicher.
+    _alt_dk = R.AI_DENKEN
+    try:
+        R.AI_DENKEN = 'low'
+        _b1_dk = R._oai_json('gpt-5', [{'role': 'user', 'content': 'x'}], 800, 0.2)
+        _b2_dk = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 800, 0.2)
+        R.AI_DENKEN = 'aus'
+        _b3_dk = R._oai_json('gpt-5', [{'role': 'user', 'content': 'x'}], 800, 0.2)
+    finally:
+        R.AI_DENKEN = _alt_dk
+    check('v228d: die neue Regie-KI denkt nur so lange wie eingestellt',
+          _b1_dk.get('reasoning_effort') == 'low', str(_b1_dk)[:120])
+    check('v228d: das Denkbudget bleibt bei mindestens 2500 (v210-Falle)',
+          _b1_dk.get('max_completion_tokens') == 2500
+          and 'max_tokens' not in _b1_dk, str(_b1_dk)[:120])
+    check('v228d: alte Chat-Modelle bekommen den Parameter NICHT',
+          'reasoning_effort' not in _b2_dk and _b2_dk.get('max_tokens') == 800,
+          str(_b2_dk)[:120])
+    check('v228d: "aus" schickt ihn gar nicht (Verhalten wie vorher)',
+          'reasoning_effort' not in _b3_dk, str(_b3_dk)[:120])
+    check('v228d: der Wert steht in der config und ist damit umstellbar',
+          str(cfg['keywords'].get('ai_denken', '')).lower()
+          in ('minimal', 'low', 'medium', 'high', 'aus'),
+          str(cfg['keywords'].get('ai_denken')))
     # Und der Zeit-Report darf verschachtelte Bloecke nicht DOPPELT zaehlen:
     # in Ismets Zeile stand 'regie+plaene 133.2s' NEBEN den KI-Aufrufen, die
     # darin stecken - die Summe ergab 190 %.
