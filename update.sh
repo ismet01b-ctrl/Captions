@@ -19,12 +19,20 @@ git pull
 # Ergebnis: dreimal wurde ein Fix geliefert, dreimal gerendert, dreimal
 # geraetselt, warum sich nichts aendert. In Wahrheit lief der Server noch auf
 # v213, weil der Deploy gar nicht griff, und NICHTS im Bild oder im Panel
-# konnte das zeigen. Jetzt schreibt der Deploy Branch, Commit und Zeit in
-# DVE_DATA (liegt AUSSERHALB des Images, ueberlebt also den Neubau); Server,
-# Panel und Video-Metadaten lesen es von dort.
-DATA_DIR="${DVE_DATA:-$(pwd)/web/data}"
-mkdir -p "$DATA_DIR"
-python3 - "$DATA_DIR" <<'PY' || echo "  (Build-Stempel uebersprungen)"
+# konnte das zeigen. Jetzt schreibt der Deploy Branch, Commit und Zeit in eine
+# `build.json`; Server, Panel und Video-Metadaten lesen sie.
+# v225c DER STEMPEL GEHOERT INS BAUVERZEICHNIS, NICHT NACH DVE_DATA.
+# v222 schrieb ihn nach DVE_DATA - das ist hier der HOST. Im Container heisst
+# DVE_DATA aber /data und ist ein Docker-Volume; der Server hat die Datei also
+# NIE gesehen. Ergebnis: Panel dauerhaft 'Commit unbekannt', taeglich eine
+# "Seit Tagen kein Deploy"-Mail (Fehlalarm), und in den Video-Metadaten stand
+# weiter kein Commit - also genau die drei Dinge, die v222 beheben sollte.
+# Zweiter Grund: hier steht der Stempel VOR dem Test-Gate. Bricht das Gate ab,
+# laeuft weiter die ALTE Fassung - ein Stempel in DVE_DATA haette trotzdem den
+# neuen Commit behauptet. Im Image kann er das nicht: `COPY . /app/` nimmt die
+# Datei mit, jeder Container liest ausschliesslich seinen EIGENEN Stand.
+STAMP_DIR="$(pwd)"
+python3 - "$STAMP_DIR" <<'PY' || echo "  (Build-Stempel uebersprungen)"
 import json, subprocess, sys, time, os
 def g(*a):
     try:

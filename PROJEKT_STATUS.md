@@ -3,6 +3,36 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v225c DER BUILD-STEMPEL KAM IM CONTAINER NIE AN (Fehlalarm-Mail).**
+  Ismets Screenshot: "[DouchkoVE] Seit Tagen kein Deploy - laeuft der
+  Auto-Deploy noch? / Der laufende Stand ist unbekannt (kein Build-Stempel)".
+  Die Mail ist ein FEHLALARM - und beweist gerade dadurch, dass der Deploy
+  laeuft: nur v222-Code kann sie ueberhaupt verschicken.
+  - Ursache: `update.sh` schrieb den Stempel nach `$DVE_DATA` - auf dem HOST.
+    Im Container ist `DVE_DATA=/data` ein Docker-Volume (`dve-data`, kein
+    Bind-Mount). Derselbe Name, ein anderer Ort. Der Server hat die Datei nie
+    gesehen; damit waren ALLE DREI v222-Ziele tot: Panel "Commit unbekannt",
+    Video-Metadaten ohne Commit, taeglich eine Stillstands-Mail.
+  - Behoben: der Stempel geht ins BAUVERZEICHNIS, `COPY . /app/` nimmt ihn
+    mit, der Container liest ausschliesslich seinen EIGENEN Stand
+    (`_build_datei()`: Image zuerst, DVE_DATA nur als Desktop-Rueckfall).
+    Nebeneffekt, der wichtiger ist als der Bugfix: ein Stempel neben der
+    Datenbank behauptete den neuen Commit schon nach `git pull` - auch wenn
+    das Test-Gate danach abbrach und weiter die ALTE Fassung lief. Im Image
+    kann er nicht luegen.
+  - Der Wachhund unterscheidet jetzt zwei Lagen: messbar alt = echter Befund
+    (taeglich erlaubt), kein Stempel = "ich weiss es nicht" (genau EINMAL je
+    Programmlauf). Ein grundloser Alarm kostet so viel wie ein verpasster.
+  - **Ein Test hatte den Fehler festgeschrieben** (`_al is None or _al > 7`),
+    dieselbe Falle wie v132. Neu abgeklopft wird jetzt der ganze Weg:
+    update.sh -> Bauverzeichnis -> Dockerfile-COPY -> .dockerignore ->
+    Leser-Reihenfolge.
+  - **Beweis:** mit `build.json` im Projektverzeichnis meldet ein frisch
+    gestarteter Server `DVE_BUILD = v225b ec9cc305
+    (claude/caveman-repo-xt386k)` und `warnung: ''` - vorher immer
+    "Commit unbekannt". Derselbe Wert laeuft ueber `DVE_JOB_TAG` in die
+    Metadaten jedes Videos.
+  - Regression **1669/1669 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v225b DIE VERKUERZUNG KOMMT AUS DER ENTFERNUNG, NICHT AUS EINEM VORZEICHEN.**
   Ismets Befund am v225-Bild: "die Schrift muss genau in die andere Richtung
   mit dem Winkel". Er hatte recht, und die Ursache war peinlich einfach: die

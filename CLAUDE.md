@@ -876,6 +876,26 @@ die sich wiederholen:
   im NEU GEBAUTEN Image, `--rm --no-deps`, eigenes `DVE_DATA`, kein Key) VOR
   `docker compose up`. Rot = Abbruch, die alte Version laeuft weiter. Wer den
   Deploy anfasst, darf diese Reihenfolge nicht drehen.
+- **Ein Pfad heisst auf dem Host und im Container gleich und ist trotzdem ein
+  anderer Ort (v225c).** `update.sh` schrieb den Build-Stempel nach
+  `$DVE_DATA` - auf dem HOST. Im Container ist `DVE_DATA=/data` ein
+  Docker-Volume (`dve-data`, KEIN Bind-Mount), also hat der Server die Datei
+  nie gesehen: Panel dauerhaft "Commit unbekannt", taeglich eine
+  "Seit Tagen kein Deploy"-Mail, Video-Metadaten ohne Commit - genau die drei
+  Dinge, die v222 beheben sollte, alle drei tot. Was der Container wissen
+  soll, gehoert ins IMAGE (Datei ins Bauverzeichnis, `COPY . /app/` nimmt sie
+  mit) oder in eine Umgebungsvariable, nie in ein Verzeichnis, das nur auf dem
+  Host so heisst. Zweiter Grund fuer denselben Weg: ein Stempel neben der
+  Datenbank behauptet den NEUEN Commit, sobald `git pull` durch ist - auch
+  wenn das Test-Gate danach abbricht und weiter die ALTE Fassung laeuft. Ein
+  Stempel, der luegen kann, ist wertlos.
+- **Ein fehlender Messwert ist kein schlechter Messwert (v225c).** Der
+  Wachhund behandelte "kein Stempel" wie "Stand ist 20 Tage alt" und mailte
+  taeglich einen Stillstand, den es nicht gab. Zwei Lagen, zwei Meldungen:
+  messbar alt = echter Befund (taeglich erlaubt), kein Stempel = "ich weiss es
+  nicht" (genau EINMAL je Programmlauf). Und der alte Test verlangte
+  ausdruecklich `_al is None or _al > 7` - er hat den Fehler festgeschrieben,
+  dieselbe Falle wie v132.
 - **Ein stiller Fehlschlag ist schlimmer als ein lauter.** Nach `git pull`
   steht der Server schon auf dem neuen Commit; scheitert das Gate, saehe der
   naechste Timer-Lauf "nichts Neues". Deshalb schreibt `autodeploy.sh` bei
@@ -977,7 +997,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1660/1660 grün (Stand v225b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1669/1669 grün (Stand v225c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1045,7 +1065,10 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
    `ffprobe -show_entries format_tags` → `comment=DouchkoVE <stand> job <jid>`.
    Stimmt der Stand nicht mit dem eigenen Commit überein, ist die Frage nach
    dem Code sinnlos — dann hängt der Deploy. Drei Runden gingen genau dafür
-   verloren, weil `DVE_BUILD` ein festes Literal war und log.
+   verloren, weil `DVE_BUILD` ein festes Literal war und log. Steht dort
+   `(Commit unbekannt)`, ist der Container älter als v225c — dann sagt der
+   Stempel gar nichts, und die Frage muss über das Panel (Ansicht Build)
+   beantwortet werden.
 7. **Eine Richtung aus einem VORZEICHEN ist eine Behauptung** (v225b). Ob eine
    Wand nach links oder rechts flieht, kam aus dem Vorzeichen eines
    Sobel-Medians — dessen Orientierung ich verwechselt hatte, und das faellt

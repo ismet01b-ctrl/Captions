@@ -2667,19 +2667,23 @@ def _scenario_logic(clip, transcript, tmp):
     # und NICHTS im Bild oder im Panel konnte das zeigen.
     check('v222: die Build-Kennung kommt aus dem Deploy, nicht aus einer Konstanten',
           'def _build_stempel()' in _sv220
-          and "os.path.join(DATA, 'build.json')" in _sv220
+          and 'def _build_datei()' in _sv220
           and 'DVE_BUILD = _build_stempel()' in _sv220,
           'DVE_BUILD darf kein fester Text mehr sein')
     _up222 = open(os.path.join(HERE, 'update.sh'), encoding='utf-8').read()
-    check('v222: der Deploy schreibt Branch und Commit nach DVE_DATA',
+    check('v222: der Deploy schreibt Branch und Commit in einen build.json-Stempel',
           "build.json" in _up222 and "rev-parse" in _up222
           and "'--abbrev-ref'" in _up222)
     # Fehlt die Datei, muss der Stempel EHRLICH 'unbekannt' sagen - eine
     # erfundene Versionsnummer waere genau der alte Fehler.
     import importlib as _il222
     _mod222 = _il222.import_module('web.server')
-    _alt222 = _mod222.DATA
+    _alt222, _altr222 = _mod222.DATA, _mod222.ROOT
     try:
+        # v225c: ROOT mit umbiegen. Der Stempel im Image hat Vorrang - laege im
+        # Arbeitsverzeichnis eine echte build.json (nach einem Handlauf von
+        # update.sh), wuerde dieser Test sonst sie messen statt der Testdatei.
+        _mod222.ROOT = os.path.join(tmp, 'kein_root_' + str(os.getpid()))
         _mod222.DATA = os.path.join(tmp, 'kein_build_' + str(os.getpid()))
         check('v222: ohne Stempel steht dort ehrlich "unbekannt"',
               'unbekannt' in _mod222._build_stempel(), _mod222._build_stempel())
@@ -2703,15 +2707,62 @@ def _scenario_logic(clip, transcript, tmp):
                   open(os.path.join(_mod222.DATA, 'build.json'), 'w'))
         check('v222: ein frischer Stand warnt NICHT',
               not _mod222._deploy_info().get('warnung'))
+        # v225c DER STEMPEL IM IMAGE HAT VORRANG. Der Stempel in DVE_DATA hat
+        # den Container nie erreicht (Host-Pfad gegen Docker-Volume) und kann
+        # ausserdem den NEUEN Commit behaupten, waehrend nach einem
+        # abgebrochenen Test-Gate weiter die ALTE Fassung laeuft.
+        os.makedirs(_mod222.ROOT, exist_ok=True)
+        json.dump({'commit': 'aaaa1111bbbb', 'branch': 'im-image',
+                   'subject': 'im Image gebaut', 'deployed_at': int(time.time())},
+                  open(os.path.join(_mod222.ROOT, 'build.json'), 'w'))
+        _st225 = _mod222._build_stempel()
+        check('v225c: der im Image gebaute Stempel schlaegt den in DVE_DATA',
+              'aaaa1111' in _st225 and 'im-image' in _st225
+              and 'abcdef12' not in _st225, _st225)
+        check('v225c: das Panel liest denselben Stempel',
+              _mod222._deploy_info().get('branch') == 'im-image')
+        os.remove(os.path.join(_mod222.ROOT, 'build.json'))
+        check('v225c: ohne Image-Stempel bleibt DVE_DATA der Rueckfall (Desktop)',
+              'abcdef12' in _mod222._build_stempel(), _mod222._build_stempel())
     finally:
-        _mod222.DATA = _alt222
+        _mod222.DATA, _mod222.ROOT = _alt222, _altr222
     # Der stille Deploy-Stopp muss sich MELDEN. autodeploy.sh schreibt nur bei
     # einem GESCHEITERTEN Versuch ins Panel; bleibt der Timer stehen, sieht es
     # aus wie "nichts Neues". Genau so lief der Server monatelang auf v213.
     check('v222: der Watchdog meldet einen veralteten Stand von selbst',
           "_notify_admin(" in _sv220 and 'deploy_alt-' in _sv220
           and 'laeuft der Auto-Deploy noch' in _sv220
-          and "_al is None or _al > 7" in _sv220)
+          and "_al is not None and _al > 7" in _sv220)
+    # v225c EIN FEHLENDER STEMPEL IST KEIN STILLSTAND. Bis v225b galt beides
+    # als derselbe Fall - und weil der Stempel wegen des Pfadfehlers NIE ankam,
+    # mailte der Wachhund taeglich einen Deploy-Stopp, den es nicht gab
+    # (Ismets Screenshot). Ein grundloser Alarm kostet so viel wie ein
+    # verpasster. Der ALTE Test verlangte ausdruecklich `_al is None or ...` -
+    # er hat den Fehler festgeschrieben, genau die v132-Lehre.
+    check('v225c: ein fehlender Stempel loest KEINEN Deploy-Stopp-Alarm aus',
+          "_al is None or _al > 7" not in _sv220
+          and "elif _al is None and not globals().get('_STEMPEL_GEMELDET')" in _sv220,
+          'unbekannt ist nicht dasselbe wie "seit Tagen kein Deploy"')
+    check('v225c: die Stempel-Meldung kommt genau einmal je Programmlauf',
+          "globals()['_STEMPEL_GEMELDET'] = True" in _sv220
+          and "'deploy_stempel'" in _sv220,
+          'sonst 24 Mails am Tag ueber etwas, das der naechste Deploy heilt')
+    # Der Weg des Stempels muss im Deploy stimmen, sonst ist alles darueber
+    # Zierde: update.sh legt ihn ins BAUVERZEICHNIS, `COPY . /app/` nimmt ihn
+    # mit, und .dockerignore darf ihn nicht wieder aussortieren.
+    check('v225c: update.sh legt den Stempel ins Bauverzeichnis, nicht nach DVE_DATA',
+          'STAMP_DIR="$(pwd)"' in _up222
+          and 'DATA_DIR="${DVE_DATA' not in _up222,
+          'im Container ist DVE_DATA ein Docker-Volume - der Host-Pfad kommt dort nie an')
+    check('v225c: das Image kopiert den Stempel mit',
+          'COPY . /app/' in open(os.path.join(HERE, 'Dockerfile'),
+                                 encoding='utf-8').read())
+    check('v225c: .dockerignore sortiert den Stempel nicht aus',
+          'build.json' not in open(os.path.join(HERE, '.dockerignore'),
+                                   encoding='utf-8').read())
+    check('v225c: der Stempel ist kein Repo-Inhalt (gitignored)',
+          'build.json' in open(os.path.join(HERE, '.gitignore'),
+                               encoding='utf-8').read())
     check('v222: die Deploy-Warnung ist auf eine pro Tag gedeckelt',
           "'deploy_alt-' + time.strftime('%Y-%m-%d')" in _sv220,
           'sonst 24 Mails am Tag')

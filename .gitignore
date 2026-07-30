@@ -13,3 +13,4 @@ data/
 .env
 .freesound_key
 .deploy_gate_last.txt
+build.json

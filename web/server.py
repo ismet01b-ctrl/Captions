@@ -1988,9 +1988,31 @@ _CSP = (
 # Kundenrender. Ergebnis: drei Fixes geliefert, drei Renders geprueft, dreimal
 # geraetselt, warum sich nichts aendert - in Wahrheit lief der Server noch auf
 # dem alten Stand, weil der Deploy nicht griff, und NICHTS konnte das zeigen.
-# `update.sh` schreibt Branch/Commit/Zeit nach DVE_DATA/build.json (liegt
-# ausserhalb des Images und ueberlebt den Neubau); hier wird es gelesen.
+# v225c DER STEMPEL GEHOERT INS IMAGE, NICHT IN DAS DATENVERZEICHNIS.
+# v222 schrieb ihn nach DVE_DATA - auf dem HOST. Im Container ist DVE_DATA aber
+# `/data`, ein Docker-Volume (`dve-data`), das mit dem Host-Verzeichnis nichts
+# zu tun hat. Der Server hat die Datei also NIE gesehen: das Panel zeigte
+# dauerhaft 'Commit unbekannt', der Wachhund mailte "Seit Tagen kein Deploy",
+# und die Video-Metadaten trugen weiterhin keinen Commit - genau die drei
+# Dinge, die v222 beheben sollte. Der Fehlalarm hat es aufgedeckt.
+# Zweiter, schwererer Grund fuer den Wechsel: ein Stempel im Datenverzeichnis
+# behauptet den NEUEN Commit, sobald `git pull` durch ist - auch wenn das
+# Test-Gate danach abbricht und weiterhin die ALTE Fassung laeuft. Ein Stempel,
+# der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
+# `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
+# laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
 DVE_VERSION = 'v225b'
+
+
+def _build_datei():
+    """Der Stempel des laufenden Stands. Reihenfolge ist wichtig: zuerst der
+    im Image mitgebaute (der kann nicht luegen), dann als Rueckfall das
+    Datenverzeichnis (Desktop/Handbetrieb ohne Docker)."""
+    for p in (os.path.join(ROOT, 'build.json'),
+              os.path.join(DATA, 'build.json')):
+        if os.path.exists(p):
+            return p
+    return os.path.join(ROOT, 'build.json')
 
 
 def _build_stempel():
@@ -1998,7 +2020,7 @@ def _build_stempel():
     Handbetrieb), bleibt die Programm-Version - dann steht dort ehrlich
     'unbekannt' statt einer Zahl, die niemand geprueft hat."""
     try:
-        with open(os.path.join(DATA, 'build.json'), encoding='utf-8') as fh:
+        with open(_build_datei(), encoding='utf-8') as fh:
             b = json.load(fh)
         c = str(b.get('commit') or '')[:8]
         br = str(b.get('branch') or '')
@@ -2022,7 +2044,7 @@ def _deploy_info():
     out = {'version': DVE_VERSION, 'commit': '', 'branch': '',
            'subject': '', 'deployed_at': 0, 'alter_tage': None, 'warnung': ''}
     try:
-        with open(os.path.join(DATA, 'build.json'), encoding='utf-8') as fh:
+        with open(_build_datei(), encoding='utf-8') as fh:
             b = json.load(fh)
         out['commit'] = str(b.get('commit') or '')[:12]
         out['branch'] = str(b.get('branch') or '')
@@ -2038,7 +2060,9 @@ def _deploy_info():
                                   f"pruefen.")
     except Exception:
         out['warnung'] = ('Kein Build-Stempel vorhanden. Der laufende Stand ist '
-                          'unbekannt - update.sh wurde seit v222 nie gelaufen.')
+                          'unbekannt - dieser Container wurde vor v225c gebaut. '
+                          'Nach dem naechsten Deploy steht hier Branch und '
+                          'Commit.')
     return out
 
 
@@ -4618,10 +4642,19 @@ def _watchdog_worker():
                 # "es gibt nichts Neues" - stille Funkstille. Der Watchdog
                 # meldet deshalb jetzt selbst, wenn der laufende Stand alt ist.
                 # Ein Deckel je Woche, damit die Meldung nicht zur Tapete wird.
+                # v225c ZWEI VERSCHIEDENE LAGEN, ZWEI VERSCHIEDENE MELDUNGEN.
+                # Bis v225b galt "kein Stempel" als dasselbe wie "Stand ist
+                # 20 Tage alt" - und weil der Stempel wegen eines Pfadfehlers
+                # NIE ankam, mailte der Wachhund taeglich einen Stillstand, den
+                # es nicht gab. Ein grundloser Alarm kostet genauso viel wie ein
+                # verpasster: nach der zweiten Mail schaut niemand mehr hin.
+                #   Stand messbar alt   -> echter Befund, taeglich erlaubt.
+                #   Kein Stempel        -> "ich WEISS es nicht". Genau EINMAL
+                #                          je Programmlauf, kein Dauerfeuer.
                 try:
                     _dp = _deploy_info()
                     _al = _dp.get('alter_tage')
-                    if _al is None or _al > 7:
+                    if _al is not None and _al > 7:
                         _notify_admin(
                             # Tagesschluessel: der Stunden-Deckel von
                             # _notify_admin ergaebe hier 24 Mails am Tag. Ein
@@ -4630,10 +4663,8 @@ def _watchdog_worker():
                             # nach zwei Tagen Tapete (v194b-Lehre).
                             'deploy_alt-' + time.strftime('%Y-%m-%d'),
                             'Seit Tagen kein Deploy - laeuft der Auto-Deploy noch?',
-                            ('Der laufende Stand ist '
-                             + (f'{_al:.0f} Tage alt' if _al is not None
-                                else 'unbekannt (kein Build-Stempel)')
-                             + f".\nBranch: {_dp.get('branch') or 'unbekannt'}\n"
+                            (f'Der laufende Stand ist {_al:.0f} Tage alt.\n'
+                             f"Branch: {_dp.get('branch') or 'unbekannt'}\n"
                              f"Commit: {_dp.get('commit') or 'unbekannt'}\n\n"
                              'Wurde seitdem gepusht, greift der Auto-Deploy '
                              'nicht. Auf dem Server pruefen:\n'
@@ -4642,6 +4673,19 @@ def _watchdog_worker():
                              'Bis dahin gehen KEINE Aenderungen live - und '
                              'jedes Kundenvideo wird mit dem alten Stand '
                              'gerendert.'))
+                    elif _al is None and not globals().get('_STEMPEL_GEMELDET'):
+                        globals()['_STEMPEL_GEMELDET'] = True
+                        _notify_admin(
+                            'deploy_stempel', 'Kein Build-Stempel - Stand unbekannt',
+                            ('Dieser Container traegt keinen Build-Stempel, der '
+                             'laufende Stand ist damit nicht feststellbar (auch '
+                             'nicht in den Video-Metadaten).\n\n'
+                             'Das ist KEIN Stillstand: bis v225b lag der Stempel '
+                             'auf dem Host, der Container hat ihn nie gesehen. '
+                             'Mit dem naechsten Deploy wird er ins Image gebaut '
+                             'und diese Meldung verschwindet von selbst.\n\n'
+                             'Kommt sie danach wieder, hat der Deploy nicht '
+                             'gegriffen.'))
                 except Exception:
                     pass
             # v197 Skalierungs-Signal. Der Server rendert mit EINEM Worker auf
