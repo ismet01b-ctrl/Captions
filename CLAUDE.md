@@ -1043,6 +1043,12 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   216 ms. Er lief zweimal über das GANZE Bild, obwohl die Maske ein Drittel
   ausmacht. Zuschnitt auf die Maske + 4 Radien Rand → **pixelgleich**
   (0.0000/255 über vier Formen), 1.8x bis 14x schneller.
+- **Derselbe Fund ein zweites Mal (v228f):** `kill_spill` (Farbsaum an der
+  Silhouette) lief ebenfalls über das ganze Bild, obwohl nur ein schmales
+  Band zählt — 36 ms je Bild, teuerster Einzelposten im Compositor.
+  Zuschnitt auf das Band + 10 Sigma Rand: exakt pixelgleich, 1.9x-15x
+  schneller. Wer eine Funktion mit einer weichen Maske multipliziert, prüft
+  ZUERST, wo diese Maske überhaupt ungleich null ist.
 - Merksatz: bevor eine Einstellung heruntergedreht wird, prüfen, ob die
   Funktion überhaupt dort rechnet, wo etwas ist. `boundingRect` auf der Maske
   ist billiger als jede Qualitätsdiskussion.
@@ -1087,7 +1093,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1717/1717 grün (Stand v228e)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1720/1720 grün (Stand v228f)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

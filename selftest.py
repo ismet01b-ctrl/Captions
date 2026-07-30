@@ -1801,6 +1801,57 @@ def _scenario_logic(clip, transcript, tmp):
     R._FRAME_BGR_CACHE.clear()
     R._FRAME_B64_CACHE.clear()
     R._ZEIT.clear()
+    # ------------------------------------------------------------------
+    # v228f NUR AM SAUM RECHNEN. Beim Profilieren des Captions-Setzens
+    # (720x1280, dichte Captions) war kill_spill mit 36 ms je Bild der
+    # teuerste Einzelposten - teurer als alles andere im Compositor. Der Saum
+    # ist ein schmales Band um die Silhouette; ausserhalb ist der Faktor exakt
+    # 0 und die Formel liefert das Bild unveraendert. Trotzdem liefen
+    # Weichzeichner, Graustufen-Mittel und Mischung ueber das GANZE Bild.
+    # Wie bei v227 gilt: Tempo NUR gegen eine Pixelgleichheits-Pruefung.
+    def _spill_voll(person, alpha, frame):
+        """Die Fassung VOR v228f: ueber das ganze Bild."""
+        _a = alpha[..., 0]
+        _k = cv2.GaussianBlur((_a > 0.05).astype(np.float32)
+                              - (_a > 0.95).astype(np.float32), (0, 0), 2.0)
+        _k = np.clip(_k, 0, 1)[..., None]
+        return person * (1 - 0.35 * _k) + person.mean(axis=2, keepdims=True) * (0.35 * _k)
+    _W2f, _H2f = 480, 854
+    _rngf = np.random.default_rng(9)
+    _pf = (_rngf.random((_H2f, _W2f, 3)) * 255).astype(np.float32)
+    _faellef = {}
+    _af = np.zeros((_H2f, _W2f), np.float32)
+    cv2.ellipse(_af, (240, 470), (120, 280), 0, 0, 360, 1.0, -1)
+    _faellef['person'] = cv2.GaussianBlur(_af, (0, 0), 5)
+    _af = np.zeros((_H2f, _W2f), np.float32)
+    cv2.rectangle(_af, (0, 400), (200, _H2f - 1), 1.0, -1)
+    _faellef['am Bildrand'] = cv2.GaussianBlur(_af, (0, 0), 4)
+    _af = np.zeros((_H2f, _W2f), np.float32)
+    cv2.circle(_af, (120, 120), 18, 1.0, -1)
+    _faellef['klein'] = cv2.GaussianBlur(_af, (0, 0), 3)
+    _faellef['ganzes Bild'] = np.ones((_H2f, _W2f), np.float32)
+    _abwf = {}
+    for _nf, _aaf in _faellef.items():
+        _alf = _aaf[..., None]
+        _abwf[_nf] = float(np.abs(_spill_voll(_pf, _alf, _pf)
+                                  - R.kill_spill(_pf, _alf, _pf)).max())
+    check('v228f: der Farbsaum-Zuschnitt ist PIXELGLEICH (alle Formen)',
+          all(v < 1e-4 for v in _abwf.values()),
+          ' | '.join(f'{k}: {v:.6f}' for k, v in _abwf.items()))
+    _leerf = np.zeros((_H2f, _W2f, 1), np.float32)
+    check('v228f: ohne Maske gibt es keinen Saum (und keine Rechnerei)',
+          float(np.abs(R.kill_spill(_pf, _leerf, _pf) - _pf).max()) == 0.0)
+    _t2f = time.time()
+    for _ in range(4):
+        _spill_voll(_pf, _faellef['klein'][..., None], _pf)
+    _dvf = time.time() - _t2f
+    _t2f = time.time()
+    for _ in range(4):
+        R.kill_spill(_pf, _faellef['klein'][..., None], _pf)
+    _dnf = time.time() - _t2f
+    check('v228f: bei kleiner Silhouette ist es deutlich schneller',
+          _dnf < _dvf * 0.6,
+          f'{_dvf / 4 * 1000:.1f} ms -> {_dnf / 4 * 1000:.1f} ms je Bild')
     _pers = np.full((240, 320, 3), 200.0, np.float32)
     _pers[..., 0] = 255.0                            # blauer Farbstich am Rand
     _sp = R.kill_spill(_pers, _al60, _fr60)

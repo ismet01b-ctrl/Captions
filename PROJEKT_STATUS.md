@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v228f DER FARBSAUM RECHNETE UEBER DAS GANZE BILD.**
+  Ismets Frage: "kann man die Renderzeit noch reduzieren, ohne an Qualitaet
+  zu verlieren?" - Antwort: ja, aber nur noch in kleinen Schritten. Beim
+  Profilieren des Captions-Setzens (720x1280, dichte Captions) war
+  `kill_spill` mit **36 ms je Bild der teuerste Einzelposten** im Compositor.
+  - Der Saum ist ein schmales Band um die Silhouette; ausserhalb ist der
+    Faktor exakt 0 und die Formel liefert das Bild unveraendert. Trotzdem
+    liefen Weichzeichner, Graustufen-Mittel und Mischung ueber das GANZE Bild
+    - dieselbe Leerarbeit wie bei `refine_alpha` in v227.
+  - Zuschnitt auf das Band plus 10 Sigma Rand: **exakt pixelgleich** (0.000000
+    ueber vier Formen inkl. randberuehrend und bildfuellend), 1.9x bis 15x
+    schneller. Mit nur 4 Sigma Rand war EIN Wert um 1/255 daneben - gemessen,
+    also nachgebessert statt weggerundet.
+  - Erwartet an Ismets Render: Captions setzen 24.9 s -> rund 18 s.
+  - **Was NICHT mehr geht, ohne Qualitaet zu kosten:** der Rest der Zeit ist
+    Warten auf die KI (rund 100 s von 160). Text-Regie und Text-Fluss haengen
+    echt voneinander ab; kuerzer denken lassen war v228d und ist an Ismets
+    Urteil gescheitert.
+  - Regression **1720/1720 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v228e ZURUECKGESTELLT: die KI denkt wieder voll nach.**
   Ismets Befund nach dem ersten Render mit `ai_denken: low`: "Qualitaet ist
   sehr schlecht geworden". Damit ist die Abwaegung entschieden - die Regie

@@ -11526,11 +11526,34 @@ def kill_spill(person, alpha, frame):
     if alpha is None:
         return person
     a = alpha[..., 0]
-    kante = cv2.GaussianBlur((a > 0.05).astype(np.float32) - (a > 0.95).astype(np.float32),
-                             (0, 0), 2.0)
+    # v228f NUR AM SAUM RECHNEN. Gemessen (720x1280, dichte Captions) war das
+    # hier der teuerste Einzelposten beim Captions-Setzen: 36 ms je Bild, mehr
+    # als alles andere im Compositor. Der Saum ist ein schmales Band um die
+    # Silhouette - ausserhalb ist `kante` exakt 0, und die Formel liefert dort
+    # `person * 1 + grau * 0`, also das Bild unveraendert. Trotzdem liefen
+    # Weichzeichner, Graustufen-Mittel und Mischung ueber das GANZE Bild.
+    # Der Zuschnitt ist deshalb keine Qualitaets-Abwaegung, sondern
+    # weggelassene Leerarbeit - das Ergebnis ist PIXELGLEICH (geprueft).
+    _band = (a > 0.05)
+    _bx = cv2.boundingRect(_band.astype(np.uint8))
+    if _bx[2] == 0 or _bx[3] == 0:
+        return person
+    # 10 Sigma Rand: der Weichzeichner ist dort rechnerisch aus. Mit 4 Sigma
+    # blieb an einer randberuehrenden Silhouette EIN Wert um 1/255 daneben
+    # (Spiegel-Rand des Filters) - messbar, also weg damit.
+    _pd = 20
+    _h, _w = a.shape[:2]
+    _x0, _y0 = max(_bx[0] - _pd, 0), max(_bx[1] - _pd, 0)
+    _x1, _y1 = min(_bx[0] + _bx[2] + _pd, _w), min(_bx[1] + _bx[3] + _pd, _h)
+    _ac = a[_y0:_y1, _x0:_x1]
+    kante = cv2.GaussianBlur((_ac > 0.05).astype(np.float32)
+                             - (_ac > 0.95).astype(np.float32), (0, 0), 2.0)
     kante = np.clip(kante, 0, 1)[..., None]
-    grau = person.mean(axis=2, keepdims=True)
-    return person * (1 - 0.35 * kante) + grau * (0.35 * kante)
+    out = person.copy()
+    _pc = out[_y0:_y1, _x0:_x1]
+    grau = _pc.mean(axis=2, keepdims=True)
+    out[_y0:_y1, _x0:_x1] = _pc * (1 - 0.35 * kante) + grau * (0.35 * kante)
+    return out
 
 
 def apply_duplicate_trail(comp, frame, strength, alpha=None, offset_px=14, layers=3):
