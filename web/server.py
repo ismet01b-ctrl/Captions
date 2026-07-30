@@ -3677,7 +3677,13 @@ def _notify_admin(key, subject, body, routine=False, mail=True):
         return False
     _ADMIN_NOTIFIED[key] = now
     try:
-        _send_mail(ADMIN_MAIL, f'[DouchkoVE] {subject}', body)
+        # v226a WER MELDET, SAGT AUCH, WELCHER STAND ER IST. Ismet bekam
+        # dieselbe Fehlalarm-Mail zweimal und konnte nicht sehen, ob die
+        # zweite noch von der alten Fassung kam oder ob der Fix nicht griff -
+        # das war eine halbe Stunde Rueckwaerts-Rechnen fuer eine Zeile, die
+        # der Absender kostenlos mitliefern kann.
+        _send_mail(ADMIN_MAIL, f'[DouchkoVE] {subject}',
+                   f'{body}\n\n--\nGemeldet von DouchkoVE {DVE_BUILD}')
         return True
     except Exception as e:
         print(f'Admin-Mail fehlgeschlagen: {e}')
@@ -4686,6 +4692,39 @@ def _watchdog_worker():
                              'und diese Meldung verschwindet von selbst.\n\n'
                              'Kommt sie danach wieder, hat der Deploy nicht '
                              'gegriffen.'))
+                except Exception:
+                    pass
+                # v226a EIN GESCHEITERTER DEPLOY WAR STUMM. `autodeploy.sh`
+                # und `update.sh` schreiben ihren Befund per sqlite DIREKT in
+                # die alerts-Tabelle - sie koennen `_notify_admin` nicht
+                # aufrufen, also ging nie eine Mail raus. Der eine Fall, in
+                # dem gar nichts mehr live geht, war damit genau der Fall, von
+                # dem Ismet nichts erfuhr (er schaut nicht stuendlich ins
+                # Panel). Der Watchdog holt das nach: ungemailte Deploy-Alarme
+                # aus den letzten 24 h gehen als EINE Mail raus und werden
+                # danach als gemailt markiert.
+                try:
+                    _con_d = _db()
+                    _offen = _con_d.execute(
+                        "SELECT id, betreff, text FROM alerts WHERE "
+                        "schluessel IN ('deploy','deploy_gate') AND gemailt=0 "
+                        "AND created_at > ? ORDER BY id DESC LIMIT 5",
+                        (int(time.time()) - 86400,)).fetchall()
+                    if _offen:
+                        _txt = '\n\n'.join(
+                            f"{r['betreff']}\n{str(r['text'])[:900]}"
+                            for r in _offen)
+                        if _notify_admin(
+                                'deploy_fehler-' + time.strftime('%Y-%m-%d'),
+                                'Deploy ist gescheitert - es geht nichts live',
+                                _txt + '\n\nDie laufende Fassung ist '
+                                'unveraendert. Im Panel unter Alerts steht '
+                                'der vollstaendige Befund.'):
+                            _con_d.executemany(
+                                'UPDATE alerts SET gemailt=1 WHERE id=?',
+                                [(r['id'],) for r in _offen])
+                            _con_d.commit()
+                    _con_d.close()
                 except Exception:
                     pass
             # v197 Skalierungs-Signal. Der Server rendert mit EINEM Worker auf
@@ -5730,14 +5769,19 @@ def logo_dark(request: Request):
 def health():
     """Fuer externe Uptime-Ueberwachung (z.B. UptimeRobot, kostenlos, alle
     5 Min anpingen): 200 = Server + Datenbank leben, alles andere loest
-    dort den Alarm aus. Bewusst ohne Login und ohne interne Details."""
+    dort den Alarm aus. Bewusst ohne Login und ohne interne Details.
+    v226a: die Programm-Version steht dabei - "welche Fassung laeuft
+    gerade?" war bisher nur mit Admin-Schluessel oder ueber die Metadaten
+    eines fertigen Videos zu beantworten, und genau diese Frage kostete
+    drei Runden. Sie ist kein Geheimnis: derselbe Text steht im Kommentar
+    JEDES ausgelieferten Videos. Der Commit bleibt draussen."""
     try:
         con = _db()
         con.execute('SELECT 1').fetchone()
         con.close()
     except Exception:
         raise HTTPException(503, 'db unavailable')
-    return {'ok': True}
+    return {'ok': True, 'version': DVE_VERSION}
 
 
 @app.get('/', response_class=HTMLResponse)

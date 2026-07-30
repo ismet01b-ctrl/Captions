@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v226a WER MELDET, SAGT AUCH, WELCHER STAND ER IST.**
+  Ismet bekam die Fehlalarm-Mail ein zweites Mal und konnte nicht erkennen, ob
+  sie noch von der alten Fassung kam oder ob v225c nicht griff. Die Antwort
+  liess sich nur ueber Commit-Zeiten und Video-Metadaten rekonstruieren - fuer
+  eine Zeile, die der Absender kostenlos mitliefern kann.
+  - Jede Stoerungs-Mail endet jetzt mit `Gemeldet von DouchkoVE <Stand>`.
+  - `/api/health` nennt die Version (nicht den Commit). Kein Geheimnis: der
+    gleiche Text steht im Kommentar JEDES ausgelieferten Videos. Damit kann
+    auch ein externer Pinger sehen, welche Fassung laeuft.
+  - **Ein gescheiterter Deploy war STUMM.** `autodeploy.sh` und `update.sh`
+    schreiben ihren Befund per sqlite direkt in die alerts-Tabelle - sie
+    koennen `_notify_admin` nicht aufrufen, also ging nie eine Mail raus.
+    Genau der Fall, in dem gar nichts mehr live geht, war der Fall, von dem
+    Ismet nichts erfuhr. Der Watchdog holt es nach: ungemailte
+    deploy/deploy_gate-Alarme der letzten 24 h gehen als EINE Mail raus und
+    werden danach als gemailt markiert.
+  - Regression **1681/1681 logic**.
 - **v226 DIE KAMERA DARF DIE ANSAGE NICHT WIDERLEGEN.**
   Ismets Befund am gestempelten v225b-Render: "das 'above me' zuckt etwas zu
   viel und geht runter". Am Video gemessen: die Karte wanderte in 0.29 s um

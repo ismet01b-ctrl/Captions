@@ -5794,7 +5794,11 @@ def _scenario_betrieb(tmp):
     sys.path.insert(0, os.path.join(HERE, 'web'))
     import server as SV
     # 1) Health-Endpoint (fuer externe Uptime-Ueberwachung)
-    check('Health-Endpoint meldet ok (Server+DB)', SV.health() == {'ok': True})
+    # v226a: dazu die Version - "welche Fassung laeuft?" war sonst nur mit
+    # Admin-Schluessel zu beantworten, und genau die Frage kostete drei Runden.
+    check('Health-Endpoint meldet ok (Server+DB)',
+          SV.health() == {'ok': True, 'version': SV.DVE_VERSION},
+          str(SV.health()))
     # 2) Admin-Alarm: pro Schluessel max. 1 Mail/Stunde, Mail-Fehler leise
     sent = []
     SV._send_mail = lambda to, s, b, reply_to=None, html=None: sent.append((to, s, html))
@@ -10315,6 +10319,59 @@ def _scenario_betrieb(tmp):
     check('v147: Admin-Panel hat den Alerts-Tab',
           "['alerts','Alerts']" in _adm147 and 'alerts:loadAlerts' in _adm147
           and 'Mark all read' in _adm147 and 'Unread alerts' in _adm147)
+
+    # ------------------------------------------------------------------
+    # v226a WER MELDET, SAGT AUCH, WELCHER STAND ER IST - UND EIN
+    # GESCHEITERTER DEPLOY DARF NICHT STUMM SEIN.
+    # Ismet bekam dieselbe Fehlalarm-Mail zweimal und konnte nicht erkennen,
+    # ob die zweite noch von der alten Fassung kam. Und der eine Fall, in dem
+    # gar nichts mehr live geht (Deploy am Test-Gate gescheitert), ging bis
+    # v226 NUR ins Panel: `autodeploy.sh`/`update.sh` schreiben per sqlite
+    # direkt in die alerts-Tabelle und koennen `_notify_admin` nicht aufrufen.
+    _mails226 = []
+    _sm226 = SV._send_mail
+    SV._send_mail = lambda to, subj, body, **kw: _mails226.append((subj, body))
+    try:
+        SV._notify_admin('stand226', 'Irgendeine Stoerung', 'Text dazu')
+    finally:
+        SV._send_mail = _sm226
+    check('v226a: jede Stoerungs-Mail nennt den Stand des Absenders',
+          bool(_mails226) and SV.DVE_BUILD in _mails226[-1][1]
+          and 'Gemeldet von DouchkoVE' in _mails226[-1][1],
+          str(_mails226[-1][1])[-80:] if _mails226 else 'keine Mail')
+    check('v226a: /api/health nennt die Version (fuer externe Pruefung)',
+          SV.health().get('version') == SV.DVE_VERSION
+          and SV.health().get('ok') is True
+          and 'commit' not in SV.health(), str(SV.health()))
+    # Der Weg des Deploy-Alarms: das Skript schreibt ihn wie hier, der
+    # Watchdog muss ihn FINDEN (dieselbe Abfrage wie im Server) und danach
+    # als gemailt markieren - sonst kommt er bei jedem Lauf erneut.
+    _con226 = SV._db()
+    _con226.execute("INSERT INTO alerts (schluessel,betreff,text,gemailt,"
+                    "gelesen,created_at) VALUES (?,?,?,0,0,?)",
+                    ('deploy', 'Deploy abgebrochen', 'Selftest rot: 3 Tests',
+                     int(time.time())))
+    _con226.commit()
+    _off226 = _con226.execute(
+        "SELECT id, betreff, text FROM alerts WHERE "
+        "schluessel IN ('deploy','deploy_gate') AND gemailt=0 "
+        "AND created_at > ? ORDER BY id DESC LIMIT 5",
+        (int(time.time()) - 86400,)).fetchall()
+    _con226.close()
+    check('v226a: der Watchdog findet einen ungemailten Deploy-Alarm',
+          any(r['betreff'] == 'Deploy abgebrochen' for r in _off226),
+          f'{len(_off226)} offene Deploy-Alarme')
+    check('v226a: der Watchdog mailt ihn und markiert ihn danach',
+          "'deploy_fehler-' + time.strftime('%Y-%m-%d')" in _srv147
+          and "schluessel IN ('deploy','deploy_gate') AND gemailt=0" in _srv147
+          and 'UPDATE alerts SET gemailt=1 WHERE id=?' in _srv147,
+          'sonst kommt dieselbe Meldung bei jedem Lauf erneut')
+    check('v226a: die Deploy-Skripte schreiben genau diese Schluessel',
+          "'deploy', 'Deploy abgebrochen'" in open(
+              os.path.join(HERE, 'autodeploy.sh'), encoding='utf-8').read()
+          and "'deploy_gate', 'Test-Gate nicht lauffaehig'" in open(
+              os.path.join(HERE, 'update.sh'), encoding='utf-8').read(),
+          'ein anderer Schluessel und der Watchdog findet nichts')
 
     # ============ v146: Transkription haelt einen OpenAI-Aussetzer aus ========
     # Live-Befund (Ismet, 4K-Clip auf douchko.eu): ein einzelner HTTP 500 von

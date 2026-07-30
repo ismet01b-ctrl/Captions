@@ -889,6 +889,19 @@ die sich wiederholen:
   Datenbank behauptet den NEUEN Commit, sobald `git pull` durch ist - auch
   wenn das Test-Gate danach abbricht und weiter die ALTE Fassung laeuft. Ein
   Stempel, der luegen kann, ist wertlos.
+- **Jede Meldung nennt den Stand des Absenders (v226a).** Ismet bekam
+  dieselbe Fehlalarm-Mail zweimal und konnte nicht erkennen, ob die zweite
+  noch von der alten Fassung kam. Die Antwort brauchte Commit-Zeiten und
+  Video-Metadaten - fuer eine Zeile, die der Absender gratis mitliefert.
+  `_notify_admin` haengt `Gemeldet von DouchkoVE <Stand>` an, `/api/health`
+  nennt die Version (nicht den Commit).
+- **Ein gescheiterter Deploy war STUMM (v226a).** `autodeploy.sh`/`update.sh`
+  schreiben per sqlite DIREKT in die alerts-Tabelle - sie koennen
+  `_notify_admin` nicht aufrufen, also ging nie eine Mail raus. Genau der
+  Fall, in dem gar nichts mehr live geht, war der Fall, von dem niemand
+  erfuhr. Der Watchdog mailt ungemailte `deploy`/`deploy_gate`-Alarme nach.
+  Merksatz: wer aus einem Skript heraus meldet, prueft, ob den Eintrag
+  ueberhaupt jemand ABHOLT.
 - **Ein fehlender Messwert ist kein schlechter Messwert (v225c).** Der
   Wachhund behandelte "kein Stempel" wie "Stand ist 20 Tage alt" und mailte
   taeglich einen Stillstand, den es nicht gab. Zwei Lagen, zwei Meldungen:
@@ -997,7 +1010,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1676/1676 grün (Stand v226)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1681/1681 grün (Stand v226a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
