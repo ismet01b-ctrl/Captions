@@ -241,6 +241,16 @@ body {
 .lib-thumb { position: relative; aspect-ratio: 16/9; background: #000;
   display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; }
 .lib-thumb img, .lib-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* v228 DAS VORSCHAUBILD DARF ZUSCHNEIDEN, DER PLAYER NICHT.
+   Die Kachel ist bewusst 16:9 mit `cover` - so bleibt das Raster ruhig. Beim
+   KLICK wurde derselbe Rahmen aber zum Player, und ein 9:16-Video in einem
+   16:9-Fenster mit `cover` zeigt nur einen waagerechten Streifen: bei 390 px
+   Breite 219 von 693 px, also 32 % des Bildes (Ismets Befund "ich sehe nur
+   die Haelfte von meinem Video"). Sobald das Video laeuft, gilt deshalb sein
+   eigenes Seitenverhaeltnis: nichts abgeschnitten, nichts verzerrt. */
+.lib-thumb.playing { aspect-ratio: auto; }
+.lib-thumb.playing video { width: auto; max-width: 100%; height: auto;
+  max-height: 78vh; object-fit: contain; margin: 0 auto; }
 .lib-thumb .play { position: absolute; width: 54px; height: 54px; border-radius: 50%;
   background: rgba(0,0,0,.55); backdrop-filter: blur(4px); display: flex;
   align-items: center; justify-content: center; pointer-events: none; }
@@ -2491,9 +2501,14 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <!-- v89: Director's cut - warum die KI diese Momente gewaehlt hat -->
         <div id="dirReport" class="hidden" style="margin:16px 0 4px; background:var(--surf);
              border:1px solid var(--line); border-radius:14px; padding:16px 18px;"></div>
+        <!-- v228: `object-fit: contain` ist hier Pflicht. Mit width:100% und
+             max-height:480px klemmt der Browser bei einem Hochformat-Video die
+             HOEHE ab, laesst die Breite aber stehen - und die Voreinstellung
+             `fill` zieht das Bild dann in die Breite. Contain haelt das
+             Seitenverhaeltnis; der Rest des Rahmens bleibt schwarz. -->
         <video id="resultVid" controls playsinline preload="metadata"
                style="width:100%; border-radius:16px; margin:16px 0;
-               background:#000; max-height: 480px;"></video>
+               background:#000; max-height: 480px; object-fit: contain;"></video>
         <div style="display:flex; gap:10px; flex-wrap: wrap;">
           <a class="btn" id="dlLink" download style="flex:1; min-width:180px;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -4149,6 +4164,9 @@ async function renderLibrary() {
       v.controls = true; v.autoplay = true; v.playsInline = true;
       this.innerHTML = '';
       this.style.cursor = 'default';
+      // v228: ab jetzt ist der Rahmen ein Player, kein Vorschaubild mehr -
+      // er nimmt das Seitenverhaeltnis des Videos an, statt es zu beschneiden.
+      this.classList.add('playing');
       this.appendChild(v);
     });
     grid.appendChild(card);

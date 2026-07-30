@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v228 DER PLAYER ZEIGTE NUR EIN DRITTEL DES VIDEOS.**
+  Ismets Befund: "wenn ich den Player starte, z.B. in Library, dann sehe ich
+  nur die Haelfte von meinem Video". Die Bibliotheks-Kachel ist bewusst 16:9
+  mit `object-fit: cover` - das haelt das Raster ruhig. Beim Klick wurde aber
+  DERSELBE Rahmen zum Player, und ein 9:16-Video in einem 16:9-Fenster mit
+  `cover` zeigt nur einen waagerechten Streifen.
+  - **Im Browser gemessen** (Chromium, 390x844, echtes 540x960-Video):
+    Rahmen 388x218 -> **32 % des Bildes sichtbar**. Nach dem Fix Rahmen
+    370x658, **100 % sichtbar, unverzerrt**.
+  - Sobald ein Video laeuft, bekommt der Rahmen die Klasse `playing` und
+    damit das Seitenverhaeltnis des Videos (`aspect-ratio: auto`,
+    `object-fit: contain`, Deckel 78vh). Das Vorschaubild bleibt
+    zugeschnitten - das ist Absicht, kein Fehler.
+  - **Zweiter Fund an derselben Stelle:** der Ergebnis-Player nach dem Render
+    (`#resultVid`) stand auf `width:100%; max-height:480px` ohne `object-fit`.
+    Bei Hochformat klemmt der Browser die HOEHE ab, laesst die Breite stehen -
+    und die Voreinstellung `fill` zieht das Bild in die Breite (gemessen
+    Rahmen 358x480 gegen Video 540x960, also sichtbar verzerrt). Jetzt
+    `contain`.
+  - Regression **1700/1700 logic + SPA-Sonde gruen**.
 - **v227a DIE ZEIT LAG VOR DEM ERSTEN BILD - UND WAR WARTEZEIT.**
   Ismets Timing-Zeile am echten Render (15 s Video, 154.7 s Gesamtzeit):
   `regie+plaene 99.5s (64%) | matting 21.6s (14%) | compositing 20.2s (13%)`.

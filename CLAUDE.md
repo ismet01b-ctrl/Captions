@@ -790,6 +790,13 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   `transitionend` ausbleibt). Merksatz: eine Animation, die Bedienelemente
   verschluckt, ist den Preis nicht wert - und ohne JS muss der Bereich
   trotzdem VOLLSTAENDIG da sein.
+- **Was ein Vorschaubild darf, darf ein Player nicht (v228).** Die
+  Bibliotheks-Kachel ist 16:9 mit `object-fit: cover` - richtig fuer ein
+  ruhiges Raster. Beim Klick wurde derselbe Rahmen zum Player: von einem
+  9:16-Video waren 32 % zu sehen. Wer einen Rahmen doppelt benutzt, muss ihn
+  beim Rollenwechsel umschalten (`.playing` -> `aspect-ratio: auto` +
+  `contain`). Und `width:100%` + `max-height` ohne `object-fit` VERZERRT ein
+  Hochformat-Video, weil die Voreinstellung `fill` ist.
 - Am Handy geprueft wird im BROWSER (Chromium, 390x844) und ueber
   `web/_dom_probe.mjs`, nicht per Quelltext-Suche. `scrollHeight` ist nur bei
   `overflow: hidden` aussagekraeftig - bei `visible` liefert es die eigene
@@ -1056,7 +1063,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1697/1697 grün (Stand v227a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1700/1700 grün (Stand v228)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

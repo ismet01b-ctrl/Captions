@@ -2937,6 +2937,27 @@ def _scenario_logic(clip, transcript, tmp):
           "body.style.maxHeight = body.scrollHeight + 'px'" in _ix226
           and "body.style.maxHeight = '';" in _ix226
           and 'function accToggle(' in _ix226)
+    # v228 DAS VORSCHAUBILD DARF ZUSCHNEIDEN, DER PLAYER NICHT.
+    # Ismets Befund: "wenn ich den Player starte, z.B. in Library, dann sehe
+    # ich nur die Haelfte von meinem Video". Die Kachel ist bewusst 16:9 mit
+    # `cover` (ruhiges Raster) - beim Klick wurde derselbe Rahmen zum Player,
+    # und ein 9:16-Video darin zeigt nur einen waagerechten Streifen. Im
+    # Browser gemessen (Chromium, 390x844, echtes 540x960-Video): 32 % des
+    # Bildes sichtbar, nach dem Fix 100 % und unverzerrt.
+    check('v228: sobald das Video laeuft, gilt sein eigenes Seitenverhaeltnis',
+          '.lib-thumb.playing { aspect-ratio: auto; }' in _ix226
+          and 'max-height: 78vh; object-fit: contain' in _ix226
+          and "this.classList.add('playing');" in _ix226,
+          'sonst schneidet der 16:9-Rahmen das Hochformat-Video ab')
+    check('v228: das Vorschaubild bleibt bewusst zugeschnitten (ruhiges Raster)',
+          '.lib-thumb img, .lib-thumb video { width: 100%; height: 100%; '
+          'object-fit: cover' in _ix226)
+    # Und der Player nach dem Render: width:100% + max-height klemmt bei
+    # Hochformat die HOEHE ab, die Voreinstellung `fill` zieht das Bild dann
+    # in die Breite. Ohne contain ist es verzerrt (gemessen 358x480 Rahmen
+    # gegen 540x960 Video).
+    check('v228: der Ergebnis-Player verzerrt kein Hochformat',
+          'max-height: 480px; object-fit: contain;' in _ix226)
     # Und der Server muss den Job bei einem Verbindungsabbruch weiterlaufen
     # lassen: der Abbruch des Browsers ist keine Stoerung (v208b) und der
     # gezahlte Credit bleibt am Job.
