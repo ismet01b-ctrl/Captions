@@ -1557,6 +1557,81 @@ def _scenario_logic(clip, transcript, tmp):
           _kantenbreite(_ref) < _kantenbreite(_al60) * 0.9,
           f'{_kantenbreite(_al60):.0f} -> {_kantenbreite(_ref):.0f} Halbschatten-Pixel')
     check('Masking: abschaltbar', R.refine_alpha(_al60, _fr60, 0.0) is _al60)
+    # ------------------------------------------------------------------
+    # v227 NUR DORT RECHNEN, WO EINE MASKE IST. Ismets Befund: knapp 3 Minuten
+    # Renderzeit fuer 15 Sekunden Video. Gemessen (1080x1920, CPU) kostete
+    # refine_alpha 151-279 ms je BILD - mehr als das Matting-Netz selbst
+    # (216 ms). Der Guided Filter lief ueber das ganze Bild, obwohl die Maske
+    # typisch ein Drittel ausmacht. Der Zuschnitt ist kein Qualitaets-
+    # Kompromiss: er muss PIXELGLEICH sein, und genau das wird hier geprueft -
+    # sonst waere es die verbotene Abkuerzung (Regel 1).
+    def _refine_voll(alpha, frame, staerke):
+        """Die Fassung VOR v227: Guided Filter ueber das ganze Bild."""
+        _a = np.ascontiguousarray(alpha[..., 0].astype(np.float32))
+        _g = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_BGR2RGB)
+        _r = max(int(min(frame.shape[:2]) * 0.006), 4)
+        _a2 = cv2.ximgproc.guidedFilter(_g, _a, _r, 1e-4)
+        if staerke > 1.15:
+            _a2 = cv2.ximgproc.guidedFilter(_g, _a2, max(_r // 3, 2), 1e-5)
+        _a2 = np.clip((_a2 - 0.5) * (1.0 + 0.9 * staerke) + 0.5, 0.0, 1.0)
+        _m = min(staerke, 1.0)
+        return (_a[..., None] * (1 - _m) + _a2[..., None] * _m).astype(np.float32)
+    _W27, _H27 = 540, 960
+    _rng27 = np.random.default_rng(11)
+    _fr27 = np.full((_H27, _W27, 3), 70.0, np.float32)
+    cv2.putText(_fr27, 'BG', (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 3,
+                (210, 190, 170), 8)
+    cv2.circle(_fr27, (430, 800), 120, (30, 120, 200), -1)
+    _fr27 = np.clip(_fr27 + _rng27.random((_H27, _W27, 3)) * 20, 0, 255)
+    _faelle27 = {}
+    _a27 = np.zeros((_H27, _W27), np.float32)
+    cv2.ellipse(_a27, (270, 300), (75, 95), 0, 0, 360, 1.0, -1)
+    cv2.ellipse(_a27, (270, 675), (150, 280), 0, 0, 360, 1.0, -1)
+    _faelle27['person'] = cv2.GaussianBlur(_a27, (0, 0), 5)
+    _a27 = np.zeros((_H27, _W27), np.float32)
+    cv2.rectangle(_a27, (0, 450), (250, _H27 - 1), 1.0, -1)
+    _faelle27['am Bildrand'] = cv2.GaussianBlur(_a27, (0, 0), 4)
+    _a27 = np.zeros((_H27, _W27), np.float32)
+    cv2.circle(_a27, (150, 150), 9, 1.0, -1)
+    _faelle27['winzig'] = cv2.GaussianBlur(_a27, (0, 0), 2)
+    _faelle27['ganzes Bild'] = np.ones((_H27, _W27), np.float32)
+    _abw27 = {}
+    for _nm27, _aa27 in _faelle27.items():
+        _al27 = _aa27[..., None].astype(np.float32)
+        _v27 = _refine_voll(_al27, _fr27, 1.3)
+        _n27 = R.refine_alpha(_al27, _fr27, 1.3)
+        _abw27[_nm27] = float(np.abs(_v27 - _n27).max()) * 255.0
+    check('v227: der Zuschnitt liefert PIXELGLEICHE Masken (alle Formen)',
+          all(v < 0.51 for v in _abw27.values()),
+          ' | '.join(f'{k}: {v:.4f}/255' for k, v in _abw27.items()))
+    # Eine leere Maske hat nichts zu schaerfen - und darf gar nichts kosten.
+    _leer27 = np.zeros((_H27, _W27, 1), np.float32)
+    check('v227: eine leere Maske geht unveraendert durch',
+          R.refine_alpha(_leer27, _fr27, 1.3) is _leer27)
+    # Und es muss WIRKLICH schneller sein, sonst war der Umbau sinnlos.
+    _t27 = time.time()
+    for _ in range(3):
+        _refine_voll(_faelle27['winzig'][..., None], _fr27, 1.3)
+    _dv27 = time.time() - _t27
+    _t27 = time.time()
+    for _ in range(3):
+        R.refine_alpha(_faelle27['winzig'][..., None], _fr27, 1.3)
+    _dn27 = time.time() - _t27
+    check('v227: bei kleiner Maske ist es deutlich schneller',
+          _dn27 < _dv27 * 0.6,
+          f'{_dv27 / 3 * 1000:.0f} ms -> {_dn27 / 3 * 1000:.0f} ms je Bild')
+    # Und der Render muss sagen, WO die Zeit hingeht - sonst ist die naechste
+    # Optimierung wieder Raten (genau das war der Zustand bis v226b).
+    R._ZEIT.clear()
+    _t27 = time.time() - 2.0
+    R.zt('phase-a', _t27)
+    R.zt('phase-b', time.time() - 0.5)
+    _rp27 = R.zeit_report(4.0)
+    check('v227: der Render berichtet, wo die Zeit hingeht',
+          _rp27.startswith('Timing (total 4.0s):') and 'phase-a 2.0s' in _rp27
+          and 'other' in _rp27 and _rp27.index('phase-a') < _rp27.index('phase-b'),
+          _rp27)
+    R._ZEIT.clear()
     _pers = np.full((240, 320, 3), 200.0, np.float32)
     _pers[..., 0] = 255.0                            # blauer Farbstich am Rand
     _sp = R.kill_spill(_pers, _al60, _fr60)

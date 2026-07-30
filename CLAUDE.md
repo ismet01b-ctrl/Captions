@@ -1025,8 +1025,29 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - OFFEN (Ismet): Demo-Video in den Hero, UptimeRobot auf /api/health,
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
+## Renderzeit (v227) — messen ist Pflicht, raten ist verboten
+Jeder Render endet mit `Timing (total …)`: alle Phasen absteigend nach Kosten
+plus `other` für alles Ungemessene. Wer an der Geschwindigkeit dreht, liest
+zuerst DIESE Zeile aus einem echten Job-Log — Regel 1 verbietet, Qualität
+gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
+- **Der teuerste Schritt war nicht das KI-Netz, sondern die Nacharbeit.**
+  `refine_alpha` (Guided Filter, zieht die Maskenkante an die Bildkante)
+  kostete bei 1080x1920 auf CPU 151-279 ms je Bild, das Matting-Netz selbst
+  216 ms. Er lief zweimal über das GANZE Bild, obwohl die Maske ein Drittel
+  ausmacht. Zuschnitt auf die Maske + 4 Radien Rand → **pixelgleich**
+  (0.0000/255 über vier Formen), 1.8x bis 14x schneller.
+- Merksatz: bevor eine Einstellung heruntergedreht wird, prüfen, ob die
+  Funktion überhaupt dort rechnet, wo etwas ist. `boundingRect` auf der Maske
+  ist billiger als jede Qualitätsdiskussion.
+- Ein Tempo-Test gehört an eine PIXELGLEICHHEITS-Prüfung gekoppelt. Ohne sie
+  ist "schneller" nur die verbotene Abkürzung mit besserem Namen.
+- Noch NICHT gemessen (braucht echtes Material): Tiefen-Modell je Bild,
+  MediaPipe-Hände bei voller Auflösung, x264-Preset. Und die Pipeline läuft
+  strikt seriell (dekodieren → freistellen → Tiefe → setzen → kodieren);
+  Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
+
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1688/1688 grün (Stand v226b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1692/1692 grün (Stand v227)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

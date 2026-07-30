@@ -3,6 +3,36 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v227 RENDERZEIT: ERST MESSEN, DANN SCHNEIDEN.**
+  Ismets Befund: "fuer ein 15 Sekunden Video knapp 3 Minuten Renderzeit ist
+  schon gottlos". Bis hier gab es KEINE Zeitmessung - nur eine
+  Bilder-pro-Sekunde-Zeile, die nicht sagt, welcher Schritt sie kostet. Ohne
+  Messung optimieren heisst hier: Qualitaet abschalten. Also erst der
+  Messschritt, dann ein Schnitt, der nichts kostet.
+  - **Neu: `Timing (total …)` am Ende jedes Renders** - alle Phasen absteigend
+    nach Kosten (decode, matting, tiefe, planar-track, objekt-anker, haende,
+    compositing, encode-write, gesichter-durchgang, regie+plaene, sfx-bauen,
+    audio-mux, modelle-laden) plus `other` fuer alles Ungemessene. Am
+    Testrender steht `other` bei 4 % - die Messung ist also nahezu
+    vollstaendig und nicht bloss ein Gefuehl.
+  - **Gefunden: die Kantenverfeinerung der Freistellung war der teuerste
+    Schritt im ganzen Programm.** Gemessen bei 1080x1920 auf CPU:
+    `refine_alpha` 151-279 ms je Bild - MEHR als das Matting-Netz selbst
+    (216 ms bei Detailstufe 0.4). Ursache: der Guided Filter lief zweimal
+    ueber das GANZE Bild, obwohl die Maske typisch ein Drittel davon ausmacht;
+    im leeren Rest rechnet er nachweislich Nullen.
+  - Behoben durch Zuschnitt auf die Maske plus vier Radien Rand - weiter
+    reicht der Filter nicht. **Das Ergebnis ist PIXELGLEICH** (gemessen ueber
+    vier Formen inkl. randberuehrend und bildfuellend: max. 0.0000/255
+    Abweichung), also keine Qualitaets-Abwaegung, sondern weggelassene
+    Leerarbeit. Tempo: Person mittig 1.8x, am Bildrand 3.7x, kleine Maske 8x,
+    leere Maske 14x, bildfuellend unveraendert.
+  - **EHRLICHE GRENZE:** wieviel das an Ismets 3 Minuten spart, haengt daran,
+    auf wievielen Bildern ueberhaupt freigestellt wird (`Matting window: N of
+    M frames` im Log). Der naechste Schritt braucht EINEN echten Render mit
+    der neuen Timing-Zeile - dann steht schwarz auf weiss, welcher Schritt
+    die Zeit frisst, statt dass geraten wird.
+  - Regression **1692/1692 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v226b EIN AUFKLAPP-BEREICH DARF KEINEN PIXEL-DECKEL HABEN.**
   Ismets Befund am Handy: "Ich sehe die weiteren Menue Optionen nicht". Der
   offene Bereich stand im Stylesheet auf `max-height: 2000px` +

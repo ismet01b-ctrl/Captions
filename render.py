@@ -16,6 +16,36 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# v227 WO GEHT DIE ZEIT HIN? Ismets Befund: knapp 3 Minuten fuer 15 Sekunden
+# Video. Bis hier gab es KEINE Messung - nur eine Bilder-pro-Sekunde-Zeile im
+# Log, die nicht sagt, WELCHER Schritt sie kostet. Optimieren ohne Messung
+# waere Raten, und Raten heisst hier: Qualitaet abschalten, die niemand
+# vermisst haette. Deshalb erst der Messschritt. Kostet nichts (ein
+# Zeitstempel je Block) und steht am Ende als eine Zeile im Job-Log.
+_ZEIT = {}
+
+
+def zt(name, t0):
+    """Dauer eines Blocks aufaddieren. Rueckgabe = jetzt, damit man Bloecke
+    hintereinander messen kann: t = zt('a', t); t = zt('b', t)."""
+    _n = time.time()
+    _ZEIT[name] = _ZEIT.get(name, 0.0) + (_n - t0)
+    return _n
+
+
+def zeit_report(gesamt):
+    """Eine Zeile, absteigend nach Kosten. 'rest' ist alles Ungemessene -
+    ist der gross, ist die Messung selbst unvollstaendig und sagt das."""
+    if not _ZEIT:
+        return ''
+    _s = sorted(_ZEIT.items(), key=lambda kv: -kv[1])
+    _rest = max(gesamt - sum(v for _, v in _s), 0.0)
+    _teile = [f"{k} {v:.1f}s ({v / max(gesamt, 1e-6) * 100:.0f}%)"
+              for k, v in _s if v >= 0.05]
+    _teile.append(f"other {_rest:.1f}s ({_rest / max(gesamt, 1e-6) * 100:.0f}%)")
+    return f"Timing (total {gesamt:.1f}s): " + ' | '.join(_teile)
+
+
 MODEL_URLS = {
     'models/rvm.onnx': 'https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx',
     'models/face.tflite': 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
@@ -11198,13 +11228,35 @@ def refine_alpha(alpha, frame, staerke=1.0):
     a = np.ascontiguousarray(alpha[..., 0].astype(np.float32))
     guide = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_BGR2RGB)
     r = max(int(min(frame.shape[:2]) * 0.006), 4)     # Radius skaliert mit Aufloesung
+    # v227 NUR DORT RECHNEN, WO EINE MASKE IST. Ismets Befund: knapp 3 Minuten
+    # fuer 15 Sekunden. Gemessen (1080x1920, CPU) kostete DIESE Funktion
+    # 151-279 ms je Bild - MEHR als das Matting-Netz selbst (216 ms). Der
+    # Guided Filter lief ueber das GANZE Bild, obwohl die Maske typisch ein
+    # Drittel davon ausmacht; im leeren Rest rechnet er nachweislich Nullen.
+    # Das ist keine Qualitaets-Abwaegung, sondern weggelassene Leerarbeit:
+    # der Zuschnitt ist um 4 Radien groesser als die Maske, weiter reicht der
+    # Filter nicht, und das Ergebnis ist PIXELGLEICH (gemessen: max. 0.000/255
+    # Abweichung ueber mehrere Formen, auch randberuehrend).
+    _hh, _ww = a.shape[:2]
+    _x0, _y0, _x1, _y1 = 0, 0, _ww, _hh
+    _bx = cv2.boundingRect((a > 0.002).astype(np.uint8))
+    if _bx[2] == 0 or _bx[3] == 0:
+        return alpha                  # leere Maske: es gibt nichts zu schaerfen
+    _pd = 4 * r
+    _x0, _y0 = max(_bx[0] - _pd, 0), max(_bx[1] - _pd, 0)
+    _x1 = min(_bx[0] + _bx[2] + _pd, _ww)
+    _y1 = min(_bx[1] + _bx[3] + _pd, _hh)
     try:
-        a2 = cv2.ximgproc.guidedFilter(guide, a, r, 1e-4)
+        _g = np.ascontiguousarray(guide[_y0:_y1, _x0:_x1])
+        _p = np.ascontiguousarray(a[_y0:_y1, _x0:_x1])
+        _q = cv2.ximgproc.guidedFilter(_g, _p, r, 1e-4)
         if staerke > 1.15:
             # Zweiter Durchgang mit kleinem Radius: holt feine Struktur zurueck
             # (einzelne Haarstraehnen, Brillenbuegel, Finger), die der erste,
             # groebere Durchgang glatt buegelt.
-            a2 = cv2.ximgproc.guidedFilter(guide, a2, max(r // 3, 2), 1e-5)
+            _q = cv2.ximgproc.guidedFilter(_g, _q, max(r // 3, 2), 1e-5)
+        a2 = np.zeros_like(a)
+        a2[_y0:_y1, _x0:_x1] = _q
     except Exception:
         return alpha
     # Kontrast an der Kante anziehen: halbdurchsichtiger Matsch wird zu einer Kante.
@@ -12764,6 +12816,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
 
 # ---------------------------------------------------------------- main
 def main():
+    _zt_main = time.time()          # v227: Gesamtzeit fuer den Zeit-Report
     ap = argparse.ArgumentParser()
     ap.add_argument('input')
     ap.add_argument('--out', default=None)
@@ -12883,6 +12936,7 @@ def main():
         auto_t = os.path.splitext(args.input)[0] + '_transcript2.json'
         if os.path.exists(auto_t):
             args.transcript = auto_t
+    _zt_tr = time.time()
     if args.transcript and os.path.exists(args.transcript):
         words = json.load(open(args.transcript, encoding='utf-8'))
         print(f"Transcript loaded: {len(words)} words")
@@ -12925,6 +12979,7 @@ def main():
         voice_wav = None
     # v101 Betonungs-Typografie: Sprech-Pegel pro Wort einmal messen -
     # compose_phrase/compose_flow setzen laute Woerter typografisch schwerer.
+    _zt_x = zt('transkript+audio', _zt_tr)
     loud_map = _word_loudness(words, voice_wav) if voice_wav else {}
     if loud_map:
         _nl = sum(1 for v in loud_map.values() if v == '!')
@@ -12937,8 +12992,10 @@ def main():
         'schnell':  (3, 0.7, 'veryfast'),
         'standard': (2, 1.0, cfg['output'].get('preset', 'medium')),
         'maximal':  (1, 1.2, 'slow')}.get(speed, (2, 1.0, 'medium'))
+    _zt_x = zt('lautheit', _zt_x)
     face, has_face, face_w, cut_frames, faces_seq, multi_person = track_faces(
         args.input, W, H, fps_str, det_step)
+    _zt_x = zt('gesichter-durchgang', _zt_x)
     # v96b: Automatischer Modus-Schalter. Kaum Gesicht = Erzaehler/Voiceover ->
     # zentrierte editoriale Captions; ein Gesicht = Talking-Head; mehrere =
     # Gespraech. Ismet muss nichts umstellen, der Render erkennt es selbst.
@@ -13614,6 +13671,7 @@ def main():
                     r, rdy, rdx = make_reflection(p['arr'])
                     if r is not None:
                         p['refl'], p['refl_dy'], p['refl_dx'] = r, rdy, rdx
+    _zt_x = zt('regie+plaene', _zt_x)
     n_kw = sum(1 for p in plans if 'kw_i' in p)
     n_broll = sum(1 for p in plans if p.get('broll'))
     print(f"Compositions: {len(plans)} ({n_kw} keyword moments, {n_broll} over B-roll)")
@@ -13647,6 +13705,7 @@ def main():
     except Exception as _e:
         print(f"  Block measurements unavailable: {type(_e).__name__}")
 
+    _zt_x = time.time()
     # --- Matting-Session: probiert CUDA, dann DirectML, dann CPU
     import onnxruntime as ort
     try:
@@ -13694,6 +13753,7 @@ def main():
     refine_str = float(cfg['effects'].get('refine', 1.0)) * q_refine
     print(f"Matting: {active_prov}, quality '{q_name}' "
           f"(Detailstufe {md_val:.3g}, edge sharpness {refine_str:.2g})")
+    _zt_x = zt('modelle-laden', _zt_x)
 
     # --- SFX-Spur. Es gibt NUR echte Sounds aus dem Sound-Pack (sfx/pack/).
     # Synthetische Ersatztoene wurden ersatzlos entfernt - ein billiger Sound ist
@@ -13713,10 +13773,12 @@ def main():
                           if isinstance(v, dict)}
                 dur_total = (args.duration if args.duration else n_frames / fps)
                 print("Placing SFX on the word onsets ...")
+                _zt_sfx = time.time()
                 n_sfx = sfx_engine.build_sfx_track(plans, words, dur_total, folder,
                                                    sfx_path, voice_wav=voice_wav,
                                                    powers=powers,
                                                    cut_times=cut_times)
+                zt('sfx-bauen', _zt_sfx)
                 print(f"SFX: {n_sfx} sound moments placed")
                 if not n_sfx:
                     sfx_path = None
@@ -13926,6 +13988,7 @@ def main():
     S_dn = np.linalg.inv(S_up)
     import time as _time
     t_start = _time.time()
+    _zt_ende = None                 # v227: Marke fuer die Dekodierzeit je Frame
     max_frames = int(args.duration * fps) if args.duration else None
     if max_frames:
         print(f'Preview mode: only the first {args.duration:.0f} seconds')
@@ -13998,6 +14061,11 @@ def main():
         elif bt_freeze is not None:
             bt_freeze = bt_depth = None
 
+        # v227: die Zeit VOR diesem Punkt ist Dekodieren + Freeze/Bullet-Time.
+        # Der Generator liefert den naechsten Frame erst am Schleifenkopf, also
+        # zaehlt hier die Wartezeit auf ffmpeg mit - genau das will man wissen.
+        _zt_frame = zt('decode', _zt_ende) if _zt_ende else time.time()
+
         # --- Freistellen nur in den benoetigten Fenstern
         fa = fi + off_frames
         if fa < len(need_alpha) and need_alpha[fa]:
@@ -14028,6 +14096,8 @@ def main():
             alpha = None
             prev_needed = False
 
+        _zt_frame = zt('matting', _zt_frame)
+
         # --- Globale Kamerabewegung fuer die Szenen-Verankerung
         coh_resp = None                    # Phasen-Korrelation dieses Frames
         if cfg['effects'].get('scene_lock', True):
@@ -14054,6 +14124,8 @@ def main():
             scene_smooth[0] += a * (scene_cum[0] - scene_smooth[0])
             scene_smooth[1] += a * (scene_cum[1] - scene_smooth[1])
 
+        _zt_frame = zt('scene-lock', _zt_frame)
+
         # --- v161 OBJEKT-ANKER: aktive Anker Frame fuer Frame nachfuehren.
         # Der Vision-Aufruf sagt EINMAL, wo das Objekt steht; wohin es
         # wandert, misst Optical Flow - jeden Frame, lokal, ohne Token.
@@ -14078,6 +14150,8 @@ def main():
                 # seine Startstelle huepft, ist schlimmer als einer, der
                 # kurz stehen bleibt.
                 _p['_ank_dx'], _p['_ank_dy'] = _trk.dx, _trk.dy
+
+        _zt_frame = zt('objekt-anker', _zt_frame)
 
         # --- Planarer Kamera-Track (nur in Szenen-Text-Fenstern)
         # fa = absolute Frame-Nummer: bei Fenster-Renders (--window) zaehlt fi
@@ -14134,6 +14208,8 @@ def main():
             H_cum_wall = np.eye(3)
             wall_gen += 1
 
+        _zt_frame = zt('planar-track', _zt_frame)
+
         # --- Tiefe fuer Okklusion (nur in Szenen-Text-Fenstern)
         depth_n = None
         if dsess is not None and fa < len(need_depth) and need_depth[fa]:
@@ -14143,6 +14219,7 @@ def main():
             p5, p95 = np.percentile(pred, 5), np.percentile(pred, 95)
             dn = np.clip((pred - p5) / max(p95 - p5, 1e-4), 0, 1)
             depth_n = cv2.resize(dn.astype(np.float32), (W, H))
+        _zt_frame = zt('tiefe', _zt_frame)
         scene_vel = float(np.hypot(scene_smooth[0] - prev_scene[0],
                                    scene_smooth[1] - prev_scene[1]))
         prev_scene = list(scene_smooth)
@@ -14157,6 +14234,7 @@ def main():
                 hand_contacts(plans, _hand_tips, t, W, H)
         else:
             _hand_tips = []
+        _zt_frame = zt('haende', _zt_frame)
         _cf_kw = dict(aud=(float(aud_rms[ai]), float(aud_bass[ai]),
                            float(aud_onset[ai])),
                       depth_n=depth_n, scene_vel=scene_vel,
@@ -14187,6 +14265,7 @@ def main():
             if accents_render:            # v101t: dezente Akzente OBEN drauf
                 comp = draw_accents(comp, t, accents_render, acc_style, W, H,
                                     _pz_for_accents)
+        _zt_frame = zt('compositing', _zt_frame)
         if not win or t >= win[0] - 1e-6:
             if first_abs is None:
                 first_abs = fi + off_frames
@@ -14231,6 +14310,7 @@ def main():
                 else:
                     grund = f'ffmpeg-Fehler: {err.strip()}'
                 sys.exit(f"ERROR: video encoding aborted. {grund}")
+        _zt_ende = zt('encode-write', _zt_frame)
         fi += 1
         if fi % 100 == 0:
             el = _time.time() - t_start
@@ -14299,7 +14379,9 @@ def main():
             mux += ['-metadata', f'comment={_tag[:120]}']
         mux += [out_path]
         print("Building the audio track ...")
+        _zt_mux = time.time()
         r_mux = subprocess.run(mux, capture_output=True, text=True)
+        zt('audio-mux', _zt_mux)
         if r_mux.returncode != 0 or not os.path.exists(out_path):
             sys.exit(f"ERROR: audio muxing failed: "
                      f"{(r_mux.stderr or '')[-600:].strip() or '(no output)'}")
@@ -14349,6 +14431,13 @@ def main():
         except Exception as _ke:
             print(f"WARNING: contact sheet skipped ({type(_ke).__name__})")
 
+    # v227: WO GEHT DIE ZEIT HIN. Eine Zeile, absteigend nach Kosten - damit
+    # die naechste Optimierung an einer MESSUNG haengt und nicht an einem
+    # Verdacht. 'other' ist alles Ungemessene; ist es gross, luegt die
+    # Messung nicht, sie ist nur unvollstaendig.
+    _rep = zeit_report(time.time() - _zt_main)
+    if _rep:
+        print(_rep)
     print(f"Done: {out_path}")
 
     # v101 Silent-Score: das fertige Video stumm bewerten (74% der Views
