@@ -81,5 +81,54 @@ try { renderSuccess(); } catch (e) {}
 pruef('fertig: die Connection-lost-Karte ist verschwunden',
       $('#errCard').classList.contains('hidden'));
 
+// 4) v226b Aufklapp-Bereich: KEIN fester Deckel, nichts abgeschnitten.
+// Ismets Befund am Handy: "Ich sehe die weiteren Menue Optionen nicht" - der
+// offene Bereich war auf 2000 px begrenzt (overflow:hidden), auf dem Handy ist
+// er hoeher, der Rest war unerreichbar. Hier wird die ECHTE Funktion aus
+// index.html ausgefuehrt und geprueft, dass am Ende KEIN Pixel-Deckel steht.
+const accToggle = eval('(' + schneide('accToggle') + ')');
+let raf_q = [], to_q = [];
+globalThis.requestAnimationFrame = f => raf_q.push(f);
+globalThis.setTimeout = (f) => { to_q.push(f); return 0; };
+const mkAcc = () => {
+  const body = {
+    _cls: new Set(), style: {}, scrollHeight: 4200,
+    classList: { add: c => body._cls.add(c), remove: c => body._cls.delete(c),
+                 contains: c => body._cls.has(c) },
+    _lis: [], addEventListener: (_e, f) => body._lis.push(f),
+    removeEventListener: (_e, f) => { body._lis = body._lis.filter(x => x !== f); },
+  };
+  const acc = {
+    _cls: new Set(),
+    classList: { add: c => acc._cls.add(c), remove: c => acc._cls.delete(c),
+                 contains: c => acc._cls.has(c),
+                 toggle: c => (acc._cls.has(c) ? acc._cls.delete(c)
+                                               : acc._cls.add(c)) },
+    querySelector: () => body,
+  };
+  return { acc, body };
+};
+const { acc: a4, body: b4 } = mkAcc();
+accToggle(a4);                              // aufklappen
+pruef('Aufklappen: der Bereich ist offen', a4._cls.has('open'));
+raf_q.forEach(f => f()); raf_q = [];
+pruef('Aufklappen: die Animation nutzt die GEMESSENE Hoehe, nicht 2000 px',
+      b4.style.maxHeight === '4200px', b4.style.maxHeight);
+b4._lis.slice().forEach(f => f());          // transitionend
+pruef('Aufklappen: danach steht KEIN Deckel mehr (nichts abgeschnitten)',
+      b4.style.maxHeight === '' && !b4._cls.has('anim'),
+      JSON.stringify({max: b4.style.maxHeight, anim: [...b4._cls]}));
+// Auch wenn transitionend NIE kommt (Hintergrund-Tab), muss der Deckel weg.
+const { acc: a5, body: b5 } = mkAcc();
+accToggle(a5);
+raf_q.forEach(f => f()); raf_q = [];
+to_q.forEach(f => f()); to_q = [];
+pruef('Aufklappen: auch ohne transitionend faellt der Deckel weg',
+      b5.style.maxHeight === '', b5.style.maxHeight);
+accToggle(a5);                              // zuklappen
+raf_q.forEach(f => f()); raf_q = [];
+pruef('Zuklappen: der Bereich schliesst wieder',
+      !a5._cls.has('open') && b5.style.maxHeight === '0px', b5.style.maxHeight);
+
 console.log(fails ? `\n${fails} FEHLER` : '\nalle Nachweise gruen');
 process.exit(fails ? 1 : 0);

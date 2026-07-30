@@ -2778,13 +2778,37 @@ def _scenario_logic(clip, transcript, tmp):
                       'Funkloch: Render-Knopf bleibt gesperrt',
                       'echter Fehler: Titel bleibt "Render error"',
                       'echter Fehler: Job wird vergessen',
-                      'fertig: die Connection-lost-Karte ist verschwunden'):
+                      'fertig: die Connection-lost-Karte ist verschwunden',
+                      # v226b: der Aufklapp-Bereich darf nichts abschneiden.
+                      'Aufklappen: die Animation nutzt die GEMESSENE Hoehe',
+                      'Aufklappen: danach steht KEIN Deckel mehr',
+                      'Aufklappen: auch ohne transitionend faellt der Deckel weg',
+                      'Zuklappen: der Bereich schliesst wieder'):
             _ok220 = ('PASS ' + _n220) in _out220
             check('v220: ' + _n220, _ok220,
                   '' if _ok220 else 'Sonde meldet den Fall nicht bestanden')
     else:
         check('v220: die SPA-Sonde laeuft durch (echte Funktionen ausgefuehrt)',
               False, 'node fehlt - Nachweis NICHT gefuehrt')
+    # v226b KEIN FESTER DECKEL AUF EINEM AUFKLAPP-BEREICH.
+    # Ismets Befund am Handy: "Ich sehe die weiteren Menue Optionen nicht".
+    # Der offene Bereich stand auf max-height:2000px + overflow:hidden; auf
+    # einem 390 px breiten Bildschirm ist "Look & Typography" rund 3500 px hoch,
+    # also waren ~1500 px an Einstellungen unerreichbar - kein Scrollen half,
+    # der Inhalt war gar nicht da. Im Browser gemessen (Chromium, 390x844).
+    _ix226 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v226b: der offene Bereich hat keinen Pixel-Deckel im Stylesheet',
+          '.acc.open .acc-body { padding: 4px 24px 24px; max-height: none;'
+          in _ix226 and 'max-height: 2000px' not in _ix226,
+          'ein Deckel im CSS schneidet ab, sobald der Inhalt waechst')
+    check('v226b: ohne JavaScript ist der Bereich trotzdem vollstaendig da',
+          '.acc.open .acc-body.anim { overflow: hidden; }' in _ix226
+          and 'max-height: none; overflow: visible' in _ix226,
+          'die Bedienbarkeit darf nie an einem Skript haengen')
+    check('v226b: die Animation misst die Hoehe und raeumt den Deckel weg',
+          "body.style.maxHeight = body.scrollHeight + 'px'" in _ix226
+          and "body.style.maxHeight = '';" in _ix226
+          and 'function accToggle(' in _ix226)
     # Und der Server muss den Job bei einem Verbindungsabbruch weiterlaufen
     # lassen: der Abbruch des Browsers ist keine Stoerung (v208b) und der
     # gezahlte Credit bleibt am Job.

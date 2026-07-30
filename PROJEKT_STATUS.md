@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v226b EIN AUFKLAPP-BEREICH DARF KEINEN PIXEL-DECKEL HABEN.**
+  Ismets Befund am Handy: "Ich sehe die weiteren Menue Optionen nicht". Der
+  offene Bereich stand im Stylesheet auf `max-height: 2000px` +
+  `overflow: hidden`. Im Browser gemessen (Chromium, 390x844) ist
+  "Look & Typography" rund **3500 px** hoch - **1502 px an Einstellungen waren
+  abgeschnitten und mit keinem Scrollen erreichbar**, weil der Inhalt gar nicht
+  gezeichnet wurde. Genau das zeigt der Screenshot: die Kacheln "From the blur"
+  und "Outline only" halb sichtbar, dann endet die Karte.
+  - Der Deckel war nur fuer die Aufklapp-Animation da. Offen heisst jetzt
+    `max-height: none; overflow: visible`; die Animation setzt einen
+    GEMESSENEN Pixelwert (`scrollHeight`) nur fuer ihre Dauer und raeumt ihn
+    danach weg - inklusive Sicherheitsnetz, falls `transitionend` ausbleibt
+    (Hintergrund-Tab, reduzierte Bewegung).
+  - **Ohne JavaScript ist der Bereich vollstaendig sichtbar** (nur ohne
+    Animation). Bedienbarkeit darf nie an einem Skript haengen.
+  - Nachgewiesen durch AUSFUEHREN: `web/_dom_probe.mjs` ruft die echte
+    `accToggle` gegen ein Mini-DOM auf (Deckel = gemessene Hoehe, danach leer,
+    auch ohne transitionend) - eine Quelltext-Suche zaehlt hier nicht (v219).
+  - Regression **1688/1688 logic**.
 - **v226a WER MELDET, SAGT AUCH, WELCHER STAND ER IST.**
   Ismet bekam die Fehlalarm-Mail ein zweites Mal und konnte nicht erkennen, ob
   sie noch von der alten Fassung kam oder ob v225c nicht griff. Die Antwort

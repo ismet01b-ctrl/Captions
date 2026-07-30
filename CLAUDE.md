@@ -779,6 +779,22 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   Klartext-Tabelle in `_trichter_calc` ein - eine Stufe ohne Erklaerung ist
   im Panel wertlos, und die Datenschutzseite muss den Zweck nennen.
 
+## Kunden-App: Layout-Fallen (v226b)
+- **Ein Aufklapp-Bereich darf keinen festen `max-height` haben.** Der offene
+  Zustand stand auf `max-height: 2000px; overflow: hidden` - nur damit die
+  Animation lief. Auf einem 390 px breiten Handy ist "Look & Typography" rund
+  3500 px hoch: **1502 px an Einstellungen waren abgeschnitten und mit keinem
+  Scrollen erreichbar** (Ismets Befund "Ich sehe die weiteren Menue Optionen
+  nicht"). Offen heisst jetzt `max-height: none`; den Pixelwert setzt das JS
+  gemessen und nur fuer die Dauer der Animation (plus Sicherheitsnetz, falls
+  `transitionend` ausbleibt). Merksatz: eine Animation, die Bedienelemente
+  verschluckt, ist den Preis nicht wert - und ohne JS muss der Bereich
+  trotzdem VOLLSTAENDIG da sein.
+- Am Handy geprueft wird im BROWSER (Chromium, 390x844) und ueber
+  `web/_dom_probe.mjs`, nicht per Quelltext-Suche. `scrollHeight` ist nur bei
+  `overflow: hidden` aussagekraeftig - bei `visible` liefert es die eigene
+  Hoehe und verschweigt den Ueberhang.
+
 ## Ankuendigungen + Feedback (v196)
 - **Ankuendigung** = Banner IN der App (`announcements`, Stufen info/warn/
   wartung, optionales Ablaufdatum). `/api/announcements` braucht bewusst
@@ -1010,7 +1026,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1681/1681 grün (Stand v226a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1688/1688 grün (Stand v226b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

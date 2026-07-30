@@ -518,7 +518,19 @@ body {
   transition: max-height var(--t-slow) var(--ease-out-quart),
     padding var(--t-slow);
 }
-.acc.open .acc-body { padding: 4px 24px 24px; max-height: 2000px; }
+/* v226b KEIN FESTER DECKEL AUF EINEM AUFKLAPP-BEREICH.
+   Der offene Bereich stand auf max-height:2000px + overflow:hidden. Auf dem
+   Handy ist "Captions & Text" deutlich hoeher als 2000 px (jede Beschreibung
+   bricht auf 4-6 Zeilen, die Effekt-Kacheln stapeln sich zweispaltig) - alles
+   darunter war ABGESCHNITTEN und nicht erreichbar, auch nicht durch Scrollen
+   (Ismets Screenshot: die Kacheln "From the blur"/"Outline only" halb
+   sichtbar, dann endet die Karte). Der Deckel war nur fuer die Animation da;
+   eine Animation, die Bedienelemente verschluckt, ist den Preis nicht wert.
+   Offen heisst jetzt: keine Grenze. Die Animation macht das JS ueber einen
+   gemessenen Pixelwert (Klasse .anim) und raeumt ihn danach wieder weg -
+   faellt das JS aus, ist der Bereich trotzdem vollstaendig da. */
+.acc.open .acc-body { padding: 4px 24px 24px; max-height: none; overflow: visible; }
+.acc.open .acc-body.anim { overflow: hidden; }
 
 /* Setting-Blocks */
 .setting { margin: 16px 0 6px; }
@@ -4847,8 +4859,42 @@ if ($('#wiz4Next')) $('#wiz4Next').addEventListener('click', async () => {
 });
 
 /* Accordions */
+/* v226b Auf- und Zuklappen OHNE festen Deckel. Der Pixelwert wird gemessen
+   (scrollHeight), nur fuer die Dauer der Animation gesetzt und danach wieder
+   entfernt - sonst schneidet er spaeter nachgeladene Inhalte ab, und genau das
+   war der Fehler: 2000 px im Stylesheet, der Bereich ist auf dem Handy hoeher,
+   der Rest war unerreichbar. Ohne JS bleibt der Bereich vollstaendig sichtbar
+   (nur ohne Animation) - die Bedienbarkeit haengt nie an einem Skript. */
+function accToggle(acc) {
+  const body = acc.querySelector('.acc-body');
+  if (!body) { acc.classList.toggle('open'); return; }
+  const auf = !acc.classList.contains('open');
+  body.classList.add('anim');
+  if (auf) {
+    acc.classList.add('open');
+    body.style.maxHeight = '0px';
+    // Erst im naechsten Frame den Zielwert setzen, sonst gibt es keinen
+    // Uebergang (der Browser sieht nur den Endzustand).
+    requestAnimationFrame(() => { body.style.maxHeight = body.scrollHeight + 'px'; });
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    requestAnimationFrame(() => {
+      body.style.maxHeight = '0px';
+      acc.classList.remove('open');
+    });
+  }
+  const fertig = () => {
+    body.style.maxHeight = '';        // Deckel weg: kein Abschneiden mehr
+    body.classList.remove('anim');
+    body.removeEventListener('transitionend', fertig);
+  };
+  body.addEventListener('transitionend', fertig);
+  // Sicherheitsnetz: kommt transitionend nicht (Tab im Hintergrund, reduzierte
+  // Bewegung), darf der Deckel nicht stehen bleiben.
+  setTimeout(fertig, 700);
+}
 $$('.acc-head').forEach(h => h.addEventListener('click', () => {
-  h.parentElement.classList.toggle('open');
+  accToggle(h.parentElement);
 }));
 
 /* --------- Datei --------- */
