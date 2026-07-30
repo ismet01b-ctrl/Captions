@@ -11427,6 +11427,53 @@ def refine_alpha(alpha, frame, staerke=1.0):
     return out.astype(np.float32)
 
 
+def matte_muell(a):
+    """v228b Wieviel MUELL hat die Maske? Gezaehlt werden lose Kruemel (kleine
+    Flecken neben der Person) und Loecher (kleine Aussparungen in ihr) - genau
+    das, was eine zerfetzte Silhouette ausmacht. Echte Haarstraehnen zaehlen
+    NICHT mit: sie haengen am Koerper und sind damit dieselbe Flaeche."""
+    m = (a > 0.5).astype(np.uint8)
+    fl = float(m.sum())
+    if fl < 100:
+        return 0
+    n, _l, st, _c = cv2.connectedComponentsWithStats(m, 8)
+    kr = sum(1 for i in range(1, n) if st[i, cv2.CC_STAT_AREA] < fl * 0.002)
+    n2, _l2, st2, _c2 = cv2.connectedComponentsWithStats(
+        (a <= 0.5).astype(np.uint8), 8)
+    lo = sum(1 for i in range(1, n2) if st2[i, cv2.CC_STAT_AREA] < fl * 0.002)
+    return kr + lo
+
+
+def _refine_pruefen(alpha, frame, wunsch):
+    """v228b Die Nachschaerfung EINMAL gegenpruefen und notfalls zuruecknehmen.
+
+    Der Guided Filter zieht die Maskenkante an die Bildkante - auf echtem
+    Kameramaterial holt das Haare und Finger zurueck. Auf weichem, rauschfreiem
+    Material findet er keine echte Kante mehr und macht aus Stoff-Rauschen
+    Silhouette: an Ismets Render gemessen 9 Kruemel/Loecher roh gegen 285 nach
+    der Nachschaerfung. Deshalb wird die Staerke am ersten Bild geprueft und
+    heruntergedreht, wenn sie die Maske SCHMUTZIGER macht. Qualitaet
+    entscheidet, nicht ein fester Wert - und die Pruefung kostet einmal je
+    Render, nicht je Bild."""
+    if alpha is None or wunsch <= 0:
+        return wunsch
+    try:
+        roh = matte_muell(alpha[..., 0])
+        for _st in (wunsch, wunsch * 0.6, wunsch * 0.3):
+            _m = matte_muell(refine_alpha(alpha, frame, _st)[..., 0])
+            if _m <= roh * 4 + 20:
+                if _st < wunsch - 1e-6:
+                    print(f"  Matte check: edge sharpening turned down to "
+                          f"{_st:.2f} ({_m} specks vs {roh} raw) - it was "
+                          f"shredding the silhouette")
+                return _st
+        print(f"  Matte check: edge sharpening OFF - it shredded the "
+              f"silhouette on this footage ({roh} specks raw)")
+        return 0.0
+    except Exception:
+        return wunsch
+
+
 def kill_spill(person, alpha, frame):
     """Farbsaum weg. An der Silhouette mischt sich der Hintergrund in die Person -
     steht dahinter ein knallbunter Caption-Text, leuchtet sein Farbstich um die
@@ -14169,6 +14216,7 @@ def main():
     import time as _time
     t_start = _time.time()
     _zt_ende = None                 # v227: Marke fuer die Dekodierzeit je Frame
+    _refine_auto = None             # v228b: Staerke der Kanten-Nachschaerfung
     max_frames = int(args.duration * fps) if args.duration else None
     if max_frames:
         print(f'Preview mode: only the first {args.duration:.0f} seconds')
@@ -14259,9 +14307,24 @@ def main():
                                            'downsample_ratio': dsr})
             alpha = pha[0, 0][..., None]
             # Kante an das echte Bild schnappen (Haare, Schultern, Finger)
-            alpha = refine_alpha(alpha, frame,
-                                 float(cfg['effects'].get('matte_refine', 1.0))
-                                 * q_refine)
+            # v228b DIE NACHSCHAERFUNG WIRD EINMAL GEGENGEPRUEFT.
+            # Ismets Befund ("das Maskieren hat hier nicht gut geklappt") war
+            # am ersten Bild seines Renders messbar: die ROHE Netz-Maske ist
+            # sauber (9 Kruemel/Loecher), nach der Nachschaerfung mit Staerke
+            # 1.3 waren es 285 - die Kante war zerfetzt, und genau diese Kante
+            # schneidet den Text aus. Auf weichem, rauschfreiem Material
+            # (KI-Footage) findet der Guided Filter keine echte Kante mehr und
+            # rechnet Fabrik-Rauschen zu Silhouette um.
+            # Die Detailstufe des Netzes ist NICHT die Ursache: 0.337 gegen
+            # 0.506 gemessen - gleiche Kante, aber 59 -> 108 ms je Bild.
+            # Deshalb kein fester Wert, sondern eine Gegenprobe am ERSTEN
+            # Bild: macht die Nachschaerfung die Maske schmutziger, wird sie
+            # heruntergedreht. Kostet einmal je Render, nicht je Bild.
+            if _refine_auto is None:
+                _refine_auto = _refine_pruefen(
+                    alpha, frame,
+                    float(cfg['effects'].get('matte_refine', 1.0)) * q_refine)
+            alpha = refine_alpha(alpha, frame, _refine_auto)
             # Zeitliche Glaettung gegen Flackern - aber NUR wenn sich wenig bewegt.
             # Bei schneller Bewegung wuerde das Mitteln einen Geisterschatten
             # hinter der Person ziehen. Darum bewegungsabhaengig.

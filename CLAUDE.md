@@ -1046,6 +1046,14 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
 - Merksatz: bevor eine Einstellung heruntergedreht wird, prüfen, ob die
   Funktion überhaupt dort rechnet, wo etwas ist. `boundingRect` auf der Maske
   ist billiger als jede Qualitätsdiskussion.
+- **Eine Qualitäts-Einstellung hochzudrehen ist auch nur eine Vermutung
+  (v228b).** Ismets zerfetzte Maskenkante sah nach "zu grob gerechnet" aus.
+  Gemessen war die ROHE Netz-Maske sauber (9 Krümel), erst die Nachschärfung
+  machte 285 daraus — und eine feinere Detailstufe (0.337 → 0.506) änderte an
+  der Kante nichts, kostete aber +83 % Matting-Zeit. Wer an Qualität dreht,
+  misst vorher, WELCHER Schritt sie kaputt macht. Der Guided Filter hilft auf
+  echtem Kameramaterial und schadet auf weichem KI-Material; deshalb steht
+  dort jetzt eine Gegenprobe am ersten Bild statt eines festen Werts.
 - Ein Tempo-Test gehört an eine PIXELGLEICHHEITS-Prüfung gekoppelt. Ohne sie
   ist "schneller" nur die verbotene Abkürzung mit besserem Namen.
 - **Am echten Render gemessen (v227a): 64 % der Zeit lagen VOR dem ersten
@@ -1063,7 +1071,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1703/1703 grün (Stand v228a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1707/1707 grün (Stand v228b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

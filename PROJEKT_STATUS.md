@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v228b DIE NACHSCHAERFUNG ZERFETZTE DIE MASKE - NICHT DIE DETAILSTUFE.**
+  Ismet hat "hochdrehen" entschieden. Die Messung sagt: das waere der falsche
+  Hebel gewesen, und das gehoert gesagt statt still geliefert.
+  - **Am echten Bild aus seinem Render gemessen** (720x1280, CPU): die ROHE
+    Netz-Maske ist sauber - 9 lose Kruemel/Loecher. Nach der Nachschaerfung
+    (Guided Filter, Staerke 1.3 bei Qualitaet 'hoch') waren es **285**. Genau
+    diese Kante schneidet den Text aus, also sieht man die Fetzen am Wort.
+  - **Detailstufe hochdrehen bringt NICHTS:** 0.337 gegen 0.506 gemessen -
+    dieselbe Kante, aber 59 -> 108 ms je Bild (+83 % Matting-Zeit). Ein
+    Bildvergleich zeigt es ebenso: die rohen Masken beider Stufen sind
+    ununterscheidbar sauber, beide zerfallen erst nach der Nachschaerfung.
+  - Ursache: der Guided Filter zieht die Maskenkante an die BILDkante. Auf
+    echtem Kameramaterial holt das Haare und Finger zurueck; auf weichem,
+    rauschfreiem Material (KI-Footage) findet er keine echte Kante mehr und
+    rechnet Stoff-Rauschen zu Silhouette um. Der Kontrast-Zug (x2.17) macht
+    daraus harte Flecken.
+  - Behoben ohne festen Wert: **eine Gegenprobe am ERSTEN Bild** je Render
+    (`_refine_pruefen`). Macht die Nachschaerfung die Maske schmutziger, wird
+    sie heruntergedreht, notfalls aus. Auf Ismets Material: 1.3 -> 0.39,
+    Muell 285 -> 32. Auf sauberem Material bleibt sie unangetastet (getestet).
+    Kosten: zwei Filterlaeufe EINMAL je Render, nicht je Bild.
+  - Regression **1707/1707 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v228a DIE PERSON GEHOERT IN DIE WORTMITTE, NICHT AN SEIN ENDE.**
   Ismets Befund am gestempelten v227a-Render: "das Maskieren hat hier nicht
   gut geklappt" - von "BEHIND ME" war nur "BEHI" lesbar. Am Bild gemessen ist

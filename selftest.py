@@ -1558,6 +1558,47 @@ def _scenario_logic(clip, transcript, tmp):
           f'{_kantenbreite(_al60):.0f} -> {_kantenbreite(_ref):.0f} Halbschatten-Pixel')
     check('Masking: abschaltbar', R.refine_alpha(_al60, _fr60, 0.0) is _al60)
     # ------------------------------------------------------------------
+    # v228b DIE NACHSCHAERFUNG WIRD EINMAL GEGENGEPRUEFT.
+    # Ismets Befund ("das Maskieren hat hier nicht gut geklappt") war an einem
+    # echten Bild seines Renders messbar: die ROHE Netz-Maske ist sauber
+    # (9 Kruemel/Loecher), nach der Nachschaerfung mit Staerke 1.3 waren es
+    # 285 - die Kante war zerfetzt, und genau diese Kante schneidet den Text
+    # aus. Die Detailstufe des Netzes ist NICHT die Ursache (0.337 gegen 0.506
+    # gemessen: gleiche Kante, aber 59 -> 108 ms je Bild) - deshalb wird nicht
+    # blind hochgedreht, sondern geprueft.
+    _sauber = np.zeros((240, 320), np.float32)
+    cv2.circle(_sauber, (160, 120), 70, 1.0, -1)
+    _sauber = cv2.GaussianBlur(_sauber, (0, 0), 3)
+    _dreck = _sauber.copy()
+    _rng28 = np.random.default_rng(5)
+    for _ in range(60):                     # lose Kruemel und Loecher
+        _x, _y = int(_rng28.integers(0, 320)), int(_rng28.integers(0, 240))
+        cv2.circle(_dreck, (_x, _y), 2, 1.0 if _rng28.random() < .5 else 0.0, -1)
+    check('v228b: Muell in der Maske wird gezaehlt (Kruemel + Loecher)',
+          R.matte_muell(_sauber) <= 2 and R.matte_muell(_dreck) >= 20,
+          f'sauber {R.matte_muell(_sauber)}, zerfetzt {R.matte_muell(_dreck)}')
+    # Die ENTSCHEIDUNG pruefen, nicht den Filter: eine Nachschaerfung, die die
+    # Maske zerfetzt, muss heruntergedreht werden - eine, die sie sauber
+    # laesst, bleibt unangetastet.
+    _echt28 = R.refine_alpha
+    try:
+        R.refine_alpha = (lambda a, f, st: (_dreck if st > 0.8 else _sauber)[..., None])
+        _st_schlecht = R._refine_pruefen(_sauber[..., None], _fr60, 1.3)
+        R.refine_alpha = lambda a, f, st: _sauber[..., None]
+        _st_gut = R._refine_pruefen(_sauber[..., None], _fr60, 1.3)
+    finally:
+        R.refine_alpha = _echt28
+    check('v228b: eine zerfetzende Nachschaerfung wird heruntergedreht',
+          _st_schlecht < 0.8, f'Staerke {_st_schlecht:.2f} statt 1.30')
+    check('v228b: eine saubere Nachschaerfung bleibt unangetastet',
+          abs(_st_gut - 1.3) < 1e-6, f'Staerke {_st_gut:.2f}')
+    _rsrc28 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v228b: die Pruefung laeuft EINMAL je Render, nicht je Bild',
+          '_refine_auto = None' in _rsrc28
+          and 'if _refine_auto is None:' in _rsrc28
+          and 'alpha = refine_alpha(alpha, frame, _refine_auto)' in _rsrc28,
+          'sonst kostet sie in jedem Bild zwei zusaetzliche Filterlaeufe')
+    # ------------------------------------------------------------------
     # v227 NUR DORT RECHNEN, WO EINE MASKE IST. Ismets Befund: knapp 3 Minuten
     # Renderzeit fuer 15 Sekunden Video. Gemessen (1080x1920, CPU) kostete
     # refine_alpha 151-279 ms je BILD - mehr als das Matting-Netz selbst
