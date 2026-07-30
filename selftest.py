@@ -613,8 +613,17 @@ def _scenario_logic(clip, transcript, tmp):
           and '_ct - 0.115' in _sfxsrc
           and "place(V('boom'), _ct + 0.040" in _sfxsrc
           and 'len(_rs) / float(SR)' in _sfxsrc)
-    check('v143: Ticks nur am Anfang einer Einstellung (kein Maschinengewehr)',
-          '_t0 - _shot0 > 1.60' in _sfxsrc)
+    # v230: die REGEL ("kein Maschinengewehr") gilt weiter, die Umsetzung hat
+    # sich geaendert. Bis v229 war sie "nur in den ersten 1.6 s einer
+    # Einstellung" - in einem schnittarmen Talking-Head hiess das: nach 1.6 s
+    # gar kein Ton mehr (Ismets Befund). Jetzt: dicht am Schnitt, danach mit
+    # Mindestabstand. Geprueft wird deshalb die ZUSAGE am Ergebnis, nicht mehr
+    # die alte Codezeile - ein Test, der die Umsetzung festnagelt, haette hier
+    # den Fehler geschuetzt statt der Regel (v132-Lehre).
+    check('v143/v230: dicht am Schnitt, danach mit Mindestabstand',
+          '_im_fenster = (_t0 - _shot0) <= 1.60' in _sfxsrc
+          and '_t0 - _letzter_tick[0] < _tick_gap' in _sfxsrc
+          and 'TICK_ABSTAND' in _sfxsrc)
     check('v143: ohne Sound-Pack bleibt es STUMM (Projektregel unangetastet)',
           'No sound pack found' in _sfxsrc
           and 'synthetischer Ersatzton waere schlechter als Stille' in _sfxsrc)
@@ -3212,6 +3221,44 @@ def _scenario_logic(clip, transcript, tmp):
           and 'State.srcShort' in _ix226
           and '.seg button:disabled' in _ix226
           and 'updateResChoices();' in _ix226)
+    # v230 MEHR SOUND IN SCHNITTARMEN VIDEOS. Ismets Wunsch ("mehr sfx").
+    # Ursache war eine Regel aus der Referenz: Ticks nur in den ersten 1.6 s
+    # einer EINSTELLUNG. In einem schnittreichen Video ist das oft, in einem
+    # Talking-Head gilt der ganze Clip als eine Einstellung - danach kam kein
+    # Ton mehr. Gemessen an einem 15.6-s-Clip ohne Schnitt: 3 -> 8 Sounds.
+    import sfx_engine as _SE30
+    _w30 = [{'word': ' wort%d' % i, 'start': i * 0.42, 'end': i * 0.42 + 0.36}
+            for i in range(36)]
+    _d30 = _w30[-1]['end'] + 0.5
+    _p30 = [{'flow': True, 'flow_anchor': i, 'flow_t': _w30[i]['start'],
+             'tpl': 'flow'} for i in range(0, 36, 3)]
+    _p30.append({'kw_i': 5, 'tpl': 'behind', 'anim': 'sturz',
+                 'start': _w30[5]['start'], 'end': _w30[7]['end'],
+                 't0': _w30[5]['start']})
+    _f30 = _SE30.pack_folder(HERE)
+    _o30 = os.path.join(tmp, 'sfx230.wav')
+
+    def _n30(dichte, cuts=()):
+        return _SE30.build_sfx_track(_p30, _w30, _d30, _f30, _o30, powers={5: 3},
+                                     cut_times=list(cuts), dichte=dichte)
+    _SE30.TICK_ABSTAND['_alt'] = 1e9          # Zustand VOR v230 nachstellen
+    _alt30, _neu30 = _n30('_alt'), _n30('normal')
+    check('v230: ein schnittarmes Video bekommt jetzt Sound',
+          _neu30 > _alt30 * 2 and _neu30 >= 6,
+          f'alt {_alt30} -> neu {_neu30} Sounds auf {_d30:.1f}s')
+    _sp30, _di30 = _n30('sparsam'), _n30('dicht')
+    check('v230: die Dichte-Stufen unterscheiden sich sinnvoll',
+          _sp30 < _neu30 < _di30, f'sparsam {_sp30} | normal {_neu30} | dicht {_di30}')
+    # Und die Referenz-Handschrift bleibt: am SCHNITT ist es dicht, egal was
+    # die Stufe sagt - die Uebergaenge tragen den Ton.
+    check('v230: Schnitte bekommen weiter die volle Dramaturgie',
+          _n30('sparsam', (4.0, 9.0)) > _sp30 + 5,
+          f'ohne Schnitt {_sp30} -> mit 2 Schnitten {_n30("sparsam", (4.0, 9.0))}')
+    _sv30 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230: der Wert ist ein geschlossener Satz (Server prueft ihn)',
+          "not in ('sparsam', 'normal', 'dicht')" in _sv30
+          and 'sfx_dichte' in _ix226,
+          'ein ungeprueftes Wort darf nicht in die Engine')
     check('v229: sie laeuft nach dem Datei-Lesen UND nach jedem Neuaufbau',
           _ix226.count('updateResChoices();') >= 3,
           f"{_ix226.count('updateResChoices();')} Aufrufe")

@@ -164,6 +164,11 @@ effects:
   tracking: true
   sfx: true
   sfx_volume: 0.6
+  # v230 WIEVIEL TON: sparsam | normal | dicht. Steuert den Mindestabstand
+  # zwischen zwei Ticks ausserhalb des Schnitt-Fensters (3.2 / 1.8 / 1.1 s).
+  # Die 1.6-s-Regel aus der Referenz galt nur direkt nach einem Schnitt - in
+  # einem schnittarmen Talking-Head kam danach gar kein Ton mehr.
+  sfx_dichte: normal
   broll_captions: false
   scene_lock: true
   text_style: 3d

@@ -2001,7 +2001,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v229'
+DVE_VERSION = 'v230'
 
 
 def _build_datei():
@@ -2817,6 +2817,13 @@ def _sanitize_overrides(ov):
             if _ck in e and str(e.get(_ck)).lower() \
                     not in ('auto', 'links', 'rechts', 'mitte'):
                 e.pop(_ck, None)
+        # v230 Sound-Dichte: geschlossener Satz, alles andere fliegt raus.
+        # Ein unbekannter Wert faellt in der Engine still auf 'normal' zurueck -
+        # aber ein Wert, den niemand geprueft hat, gehoert gar nicht erst
+        # durch (dieselbe Regel wie bei der Caption-Dichte, v186).
+        if 'sfx_dichte' in e and str(e.get('sfx_dichte')).lower() \
+                not in ('sparsam', 'normal', 'dicht'):
+            e.pop('sfx_dichte', None)
         for k, cap in (('blender_samples', 256), ('blender_anim_frames', 24),
                        ('blender_width', 1920)):
             if k in e:

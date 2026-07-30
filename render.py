@@ -14099,12 +14099,15 @@ def main():
                 dur_total = (args.duration if args.duration else n_frames / fps)
                 print("Placing SFX on the word onsets ...")
                 _zt_sfx = time.time()
-                n_sfx = sfx_engine.build_sfx_track(plans, words, dur_total, folder,
-                                                   sfx_path, voice_wav=voice_wav,
-                                                   powers=powers,
-                                                   cut_times=cut_times)
+                n_sfx = sfx_engine.build_sfx_track(
+                    plans, words, dur_total, folder, sfx_path,
+                    voice_wav=voice_wav, powers=powers, cut_times=cut_times,
+                    # v230: wieviel Ton das Video bekommt (sparsam/normal/dicht)
+                    dichte=str(cfg['effects'].get('sfx_dichte', 'normal')))
                 zt('sfx-bauen', _zt_sfx)
-                print(f"SFX: {n_sfx} sound moments placed")
+                print(f"SFX: {n_sfx} sound moments placed "
+                      f"({n_sfx / max(dur_total, 1e-6) * 60:.0f} per minute, "
+                      f"density '{cfg['effects'].get('sfx_dichte', 'normal')}')")
                 if not n_sfx:
                     sfx_path = None
         except Exception as e:

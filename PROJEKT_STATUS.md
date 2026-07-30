@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230 MEHR SOUND - UND WARUM ES VORHER FAST KEINEN GAB.**
+  Ismets Wunsch: "dass mehr sfx benutzt werden". Die Ursache war eine Regel
+  aus der Referenz-Messung (v143): Ticks nur in den **ersten 1.6 s einer
+  Einstellung**. In dem schnittreichen Vorbild ist das oft - in einem
+  Talking-Head-Video gilt der GANZE Clip als eine Einstellung, und nach 1.6 s
+  kam kein einziger Ton mehr. Eine Regel, die auf fremdem Material geeicht
+  war und auf dem eigenen zur Stummschaltung wurde.
+  - Neu: nach dem Schnitt-Fenster darf weiter getickt werden, aber nur mit
+    **Mindestabstand** (`effects.sfx_dichte`: sparsam 3.2 s | normal 1.8 s |
+    dicht 1.1 s) und etwas leiser - der Tick begleitet den Satz, er taktet
+    ihn nicht. Am Schnitt bleibt die volle Dramaturgie (Riser, Whoosh,
+    Impact, Boom) unangetastet.
+  - **Gemessen** an einem 15.6-s-Clip mit 12 Ankerwoertern: ohne Schnitt
+    **3 -> 8 Sounds** (normal), 6 bei sparsam, 13 bei dicht. Mit zwei
+    Schnitten 12 -> 15 - dort dominiert weiter der Uebergang.
+  - In der Kunden-App als "How much sound design?" waehlbar; der Server
+    laesst nur die drei bekannten Werte durch (v186-Regel: ein Wort, das
+    niemand geprueft hat, darf nicht in die Engine).
+  - **Ein alter Test hat die alte Umsetzung festgenagelt** (`'_t0 - _shot0 >
+    1.60' in src`) und waere hier rot geworden. Er prueft jetzt die ZUSAGE
+    (dicht am Schnitt, danach Mindestabstand) statt der Codezeile - sonst
+    haette er den Fehler geschuetzt statt der Regel (v132-Lehre).
+  - Regression **1730/1730 logic + 7/1/5/2 Renders + GUI_OK + SPA-Sonde**.
 - **v229 EINE AUSWAHL, DIE NICHTS AUSWAEHLT, GEHOERT AUSGEGRAUT.**
   Ismets Wunsch: laedt jemand ein 720p-Video hoch, sollen die hoeheren
   Aufloesungs-Stufen ausgrauen. Er hat recht, und es war mehr als Kosmetik:

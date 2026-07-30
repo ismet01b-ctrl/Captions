@@ -1093,7 +1093,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1726/1726 grün (Stand v229)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1730/1730 grün (Stand v230)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1201,6 +1201,14 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
     mit demselben Pitch.
   - Zwei Schnitte aus derselben Aufnahme sind formal Varianten und klingen
     gleich - der Selftest misst die spektrale Aehnlichkeit (< 0.8).
+- **Eine an fremdem Material geeichte Regel kann auf dem eigenen zur
+  Stummschaltung werden (v230).** "Ticks nur in den ersten 1.6 s einer
+  Einstellung" stammt aus einer schnittreichen Referenz; in einem
+  Talking-Head ist der ganze Clip EINE Einstellung, also kam nach 1.6 s gar
+  kein Ton mehr. Jetzt: am Schnitt volle Dramaturgie, danach Ticks mit
+  Mindestabstand (`effects.sfx_dichte`, Standard 'normal' = 1.8 s). Gemessen
+  3 -> 8 Sounds auf 15.6 s. Wer eine Referenz-Regel uebernimmt, fragt: was
+  macht sie, wenn das Merkmal (hier: der Schnitt) FEHLT?
 - **Sound:** nur echte CC0-Library-Sounds (Freesound), kein Synthetik-Fallback.
   Stille ist besser als billiger Ton. Ohne `sfx/pack` liefe alles STUMM —
   der Pack IST da (14/14 Slots, v175 geprüft), also klingt es.

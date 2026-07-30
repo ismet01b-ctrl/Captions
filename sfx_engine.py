@@ -144,8 +144,14 @@ def clean_word(w):
     return ''.join(ch for ch in w if ch.isalnum())
 
 
+# v230 WIEVIEL TON? Ismets Wunsch: "dass mehr sfx benutzt werden".
+# Der Mindestabstand zwischen zwei Ticks je Stufe - ein Deckel, keine Quote.
+# Weniger als der Abstand kommt nie, mehr als es Ankerwoerter gibt auch nicht.
+TICK_ABSTAND = {'sparsam': 3.2, 'normal': 1.8, 'dicht': 1.1}
+
+
 def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
-                    powers=None, cut_times=None):
+                    powers=None, cut_times=None, dichte='normal'):
     """Setzt die Sounds intelligent: Onset-Snapping auf den echten Sprech-Einsatz,
     Lautstaerke adaptiv zur lokalen Stimm-Energie, Wucht nach KI-Regie-Bewertung."""
     # Es gibt NUR das Sound-Pack. Fehlt ein Sound, wird er nicht gesetzt -
@@ -288,6 +294,8 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
         print(f"  Cut dramaturgy: {len(_cuts)} transitions scored "
               f"(sound runs 15-30 ms ahead of the picture)")
 
+    _tick_gap = TICK_ABSTAND.get(str(dichte).lower(), TICK_ABSTAND['normal'])
+    _letzter_tick = [-99.0]                # letzte Tick-Zeit (Liste = schreibbar)
     _big_i = 0                             # v96i: zaehlt grosse Momente fuer Variation
     kw_times = []                          # fuer den Anti-Matsch-Limiter der Stacks
     for p in plans:
@@ -307,12 +315,28 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
             import bisect as _bi
             _shot0 = _cuts[_bi.bisect_right(_cuts, _t0) - 1] \
                 if (_cuts and _bi.bisect_right(_cuts, _t0) > 0) else 0.0
-            if _t0 - _shot0 > 1.60:
-                continue
+            # v230 DIE 1.6-SEKUNDEN-REGEL WAR AUF SCHNITTREICHES MATERIAL
+            # GEEICHT. Sie stammt aus einer Referenz mit vielen Schnitten;
+            # dort ist "die ersten 1.6 s einer Einstellung" oft. Ein
+            # Talking-Head-Video hat aber kaum Schnitte - dann gilt der ganze
+            # Clip als EINE Einstellung, und nach 1.6 s kam bis hier KEIN
+            # einziger Tick mehr. Genau das war Ismets Befund ("mehr sfx").
+            # Neu: nach dem Fenster darf weiter getickt werden, aber nur mit
+            # Mindestabstand. Das haelt die Referenz-Handschrift (dicht am
+            # Schnitt, ruhiger danach) und macht aus einem schnittarmen Video
+            # trotzdem kein stummes.
+            _im_fenster = (_t0 - _shot0) <= 1.60
+            if not _im_fenster:
+                if _t0 - _letzter_tick[0] < _tick_gap:
+                    continue
             _tick = V('tick') if 'tick' in bank else None
             if _tick is not None:
-                place(_tick, _t0 - 0.012, 0.42 * local_gain(_t0))   # Ton fuehrt
+                # Ausserhalb des Schnitt-Fensters etwas leiser: der Tick soll
+                # den Satz begleiten, nicht ihn takten.
+                place(_tick, _t0 - 0.012,
+                      (0.42 if _im_fenster else 0.30) * local_gain(_t0))
                 n_placed += 1
+                _letzter_tick[0] = _t0
             continue
         if 'kw_i' not in p:
             continue
