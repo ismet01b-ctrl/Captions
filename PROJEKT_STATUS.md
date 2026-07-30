@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v229 EINE AUSWAHL, DIE NICHTS AUSWAEHLT, GEHOERT AUSGEGRAUT.**
+  Ismets Wunsch: laedt jemand ein 720p-Video hoch, sollen die hoeheren
+  Aufloesungs-Stufen ausgrauen. Er hat recht, und es war mehr als Kosmetik:
+  die Engine skaliert NIE hoch (`H = min(Wunsch, Quelle)`), also bekam der
+  Kunde bei 720p immer 720p - egal was angehakt war. Beim 4K-Haken hat er
+  fuer dieselbe Datei sogar den doppelten Credit-Satz gezahlt.
+  - `updateResChoices()` sperrt jede Stufe oberhalb der kurzen Kante der
+    Quelle (`State.srcShort`, im Browser aus der Datei gelesen - kein
+    Server-Ruf). Steht die Auswahl auf einer gesperrten Stufe (Preset, alter
+    Job), wandert sie auf die hoechste erreichbare und die Kostenanzeige
+    rechnet neu.
+  - **Ist die Aufloesung unbekannt (0), bleibt alles waehlbar** - lieber eine
+    Stufe zu viel anbieten als eine echte verbieten.
+  - Laeuft nach dem Datei-Lesen, nach jedem Widget-Neuaufbau und beim
+    Betreten der Feineinstellung.
+  - **Nachgewiesen durch AUSFUEHREN** (`web/_dom_probe.mjs`, echte Funktion
+    gegen ein Mini-DOM) und zusaetzlich im Browser gemessen (Chromium,
+    390x844): 720p-Quelle -> 1080p und 4K gesperrt, Auswahl auf 720p;
+    1080p-Quelle -> nur 4K gesperrt; 4K-Quelle -> nichts gesperrt.
+  - Regression **1726/1726 logic + SPA-Sonde gruen**.
 - **v228f DER FARBSAUM RECHNETE UEBER DAS GANZE BILD.**
   Ismets Frage: "kann man die Renderzeit noch reduzieren, ohne an Qualitaet
   zu verlieren?" - Antwort: ja, aber nur noch in kleinen Schritten. Beim

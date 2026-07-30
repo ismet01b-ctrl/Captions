@@ -3149,7 +3149,12 @@ def _scenario_logic(clip, transcript, tmp):
                       'Aufklappen: die Animation nutzt die GEMESSENE Hoehe',
                       'Aufklappen: danach steht KEIN Deckel mehr',
                       'Aufklappen: auch ohne transitionend faellt der Deckel weg',
-                      'Zuklappen: der Bereich schliesst wieder'):
+                      'Zuklappen: der Bereich schliesst wieder',
+                      # v229: Aufloesungs-Stufen, die die Quelle nicht hergibt
+                      '720p-Quelle: 1080p und 4K sind ausgegraut',
+                      '720p-Quelle: die Auswahl wandert auf die hoechste',
+                      '1080p-Quelle: nur 4K ist ausgegraut',
+                      'unbekannte Quelle: nichts wird verboten'):
             _ok220 = ('PASS ' + _n220) in _out220
             check('v220: ' + _n220, _ok220,
                   '' if _ok220 else 'Sonde meldet den Fall nicht bestanden')
@@ -3196,6 +3201,20 @@ def _scenario_logic(clip, transcript, tmp):
     # gegen 540x960 Video).
     check('v228: der Ergebnis-Player verzerrt kein Hochformat',
           'max-height: 480px; object-fit: contain;' in _ix226)
+    # v229 AUSGEGRAUTE AUFLOESUNGS-STUFEN. Die Engine skaliert NIE hoch
+    # (H = min(Wunsch, Quelle)) - eine 720p-Quelle bleibt 720p, egal was
+    # angehakt ist. Bis hier standen alle drei Stufen waehlbar da: eine
+    # Auswahl, die nichts auswaehlt, und beim 4K-Haken der doppelte Preis
+    # fuer dieselbe Datei. Das VERHALTEN prueft die SPA-Sonde oben; hier nur,
+    # dass die Teile ueberhaupt verdrahtet sind.
+    check('v229: die Stufen-Sperre haengt an der kurzen Kante der Quelle',
+          'function updateResChoices()' in _ix226
+          and 'State.srcShort' in _ix226
+          and '.seg button:disabled' in _ix226
+          and 'updateResChoices();' in _ix226)
+    check('v229: sie laeuft nach dem Datei-Lesen UND nach jedem Neuaufbau',
+          _ix226.count('updateResChoices();') >= 3,
+          f"{_ix226.count('updateResChoices();')} Aufrufe")
     # Und der Server muss den Job bei einem Verbindungsabbruch weiterlaufen
     # lassen: der Abbruch des Browsers ist keine Stoerung (v208b) und der
     # gezahlte Credit bleibt am Job.

@@ -615,6 +615,13 @@ body {
   min-height: 40px; font-family: inherit;
 }
 .seg button:hover:not(.on) { color: var(--fg); background: rgba(255,255,255,.03); }
+/* v229 Was das hochgeladene Video nicht hergibt, wird ausgegraut. Die Engine
+   skaliert NIE hoch (H = min(Wunsch, Quelle)) - eine 720p-Quelle bleibt 720p,
+   egal was angehakt ist. Bis hier sah der Kunde drei waehlbare Stufen und
+   bekam trotzdem immer dieselbe: eine Auswahl, die nichts auswaehlt. */
+.seg button:disabled { opacity: .38; cursor: not-allowed; text-decoration: line-through;
+  text-decoration-thickness: 1px; }
+.seg button:disabled:hover { background: transparent; color: var(--mut); }
 .seg button.on {
   background: var(--surf3); color: var(--fg);
   box-shadow: 0 2px 8px -2px rgba(0,0,0,.4);
@@ -2332,9 +2339,10 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <div class="setting"><div class="setting-label">Resolution of the finished video</div>
             <div class="setting-desc">Sets the short edge: 1080p gives 1080&times;1920 upright
               and 1920&times;1080 wide. 720p is smaller and quicker.
-              4K doubles the credit cost and only applies if your source is at least 1440p -
-              we never upscale.</div>
+              4K doubles the credit cost. We never upscale: settings above your
+              upload's own resolution are greyed out.</div>
             <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K &middot; 2&times; credits:2160"></div>
+            <div id="resNote" class="setting-desc" style="display:none; margin-top:8px;"></div>
             <div id="uhdNote" class="setting-desc" style="display:none; margin-top:8px; color:var(--acc);"></div>
           </div>
         </div>
@@ -2836,6 +2844,50 @@ function getDeep(obj, path, def) {
 // die Quelle 4K ueberhaupt hergibt - der Server berechnet das Doppelte nur
 // dann (UHD_MIN_KURZE_KANTE = 1440). Wird bei jeder Aenderung der Aufloesung
 // neu gerufen, nicht nur einmal beim Datei-Auswaehlen.
+/* v229 AUFLOESUNGS-STUFEN, DIE ES NICHT GIBT, WERDEN AUSGEGRAUT.
+   Ismets Wunsch. Die Engine skaliert NIE hoch (H = min(Wunsch, Quelle)) -
+   wer ein 720p-Video hochlaedt, bekommt 720p, auch wenn 1080p angehakt ist.
+   Bis hier standen alle drei Stufen waehlbar da: eine Auswahl, die nichts
+   auswaehlt, und beim 4K-Haken sogar der doppelte Preis fuer dieselbe Datei.
+   `State.srcShort` ist die kurze Kante der Quelle, im Browser aus der Datei
+   gelesen (kein Server-Ruf). Ist sie unbekannt (0), bleibt alles waehlbar -
+   lieber eine Stufe zu viel anbieten als eine echte verbieten. */
+function updateResChoices() {
+  const seg = document.querySelector('.seg[data-cfg="output.height"]');
+  if (!seg) return;
+  const kurz = State.srcShort || 0;
+  let bestVal = 0, bestBtn = null;
+  seg.querySelectorAll('button').forEach(b => {
+    const v = +b.dataset.val || 0;
+    const geht = !kurz || v <= kurz;
+    b.disabled = !geht;
+    b.title = geht ? ''
+      : `Your video is ${kurz}p on the short edge. We never upscale, so this would `
+        + 'come out exactly like the smaller setting.';
+    if (geht && v >= bestVal) { bestVal = v; bestBtn = b; }
+  });
+  // Steht die Auswahl auf einer Stufe, die es nicht gibt (Preset, alter Job),
+  // wandert sie auf die hoechste erreichbare - sonst zeigt die App etwas an,
+  // was nie herauskommt.
+  const an = seg.querySelector('button.on');
+  if (an && an.disabled && bestBtn) {
+    seg.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    bestBtn.classList.add('on');
+    // State.cfg kann beim Datei-Auswaehlen noch fehlen (Config kommt vom
+    // Server): dann nur die Kachel umstellen, nicht abstuerzen.
+    if (State.cfg) setDeep(State.cfg, 'output.height', bestVal);
+    if (typeof updateRenderCost === 'function') updateRenderCost();
+  }
+  const hint = document.getElementById('resNote');
+  if (hint) {
+    hint.textContent = kurz
+      ? `Your upload is ${kurz}p on the short edge - higher settings are greyed out `
+        + 'because we never upscale.'
+      : '';
+    hint.style.display = hint.textContent ? 'block' : 'none';
+  }
+}
+
 function updateRenderCost() {
   const bc = $('#btnRenderCost');
   if (!bc || !State.srcDur) return;
@@ -3055,7 +3107,8 @@ async function buildFontGrid() {
   }
 }
 
-function rebuildAllWidgets() { buildWidgets(); buildFxChips(); buildFontGrid(); }
+function rebuildAllWidgets() { buildWidgets(); buildFxChips(); buildFontGrid();
+  updateResChoices(); }   /* v229: nach jedem Neuaufbau wieder ausgrauen */
 
 async function loadDefaults() {
   const r = await fetch('/api/default_config?look=' + State.look);
@@ -4849,6 +4902,9 @@ function goStep(n) {
   $$('.step-view').forEach(v => {
     v.classList.toggle('active', parseInt(v.dataset.step) === n);
   });
+  // v229: beim Betreten der Feineinstellung nochmal pruefen - die Datei kann
+  // sich geaendert haben, und die Config kommt erst vom Server.
+  if (n === 3) { try { updateResChoices(); } catch (e) {} }
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (n === 2) loadTemplates();               // v94: eigene Presets auch hier
   if (n === 4) loadTranscriptStep();          // v101l: Text pruefen vor Render
@@ -4948,6 +5004,7 @@ function setFile(f) {
       // ob 4K ueberhaupt greift - und zeigte bei angehaktem 4K weiter
       // 1 credit, obwohl der Server das Doppelte abbucht (Ismets Befund).
       State.srcShort = Math.min(v.videoWidth || 0, v.videoHeight || 0);
+      updateResChoices();          // v229: Stufen ausgrauen, die es nicht gibt
       State.srcDur = dur;
       // v183a: der Viral-Look wird NICHT mehr automatisch vorgewaehlt
       // (Ismets Befund: das ist das CapCut/Opus-Standard-Template - es darf

@@ -130,5 +130,68 @@ raf_q.forEach(f => f()); raf_q = [];
 pruef('Zuklappen: der Bereich schliesst wieder',
       !a5._cls.has('open') && b5.style.maxHeight === '0px', b5.style.maxHeight);
 
+// 5) v229 Aufloesungs-Stufen ausgrauen, die die Quelle nicht hergibt.
+// Die Engine skaliert NIE hoch (H = min(Wunsch, Quelle)); bis hier standen
+// alle drei Stufen waehlbar da - eine Auswahl, die nichts auswaehlt, und beim
+// 4K-Haken der doppelte Preis fuer dieselbe Datei. Geprueft wird durch
+// AUSFUEHREN der echten Funktion, nicht per Quelltext-Suche.
+const setDeep = eval('(' + schneide('setDeep') + ')');
+const updateResChoices = eval('(' + schneide('updateResChoices') + ')');
+const mkBtn = (v, an) => ({
+  dataset: {val: String(v)}, disabled: false, title: '', textContent: v + 'p',
+  _cls: new Set(an ? ['on'] : []),
+  classList: {add: c => mkBtnCls(c), remove: c => mkBtnCls(c, true),
+              contains: c => false},
+});
+function segBau(anWert) {
+  const btns = [720, 1080, 2160].map(v => {
+    const b = {dataset: {val: String(v)}, disabled: false, title: '',
+               textContent: v + 'p', _cls: new Set(v === anWert ? ['on'] : [])};
+    b.classList = {add: c => b._cls.add(c), remove: c => b._cls.delete(c),
+                   contains: c => b._cls.has(c)};
+    return b;
+  });
+  return {
+    querySelectorAll: () => btns,
+    querySelector: sel => (sel === 'button.on'
+      ? btns.find(b => b._cls.has('on')) || null : btns[0]),
+    _btns: btns,
+  };
+}
+let SEG = null;
+const HINT = {textContent: '', style: {}};
+globalThis.document = {
+  querySelector: () => SEG,
+  getElementById: id => (id === 'resNote' ? HINT : null),
+};
+globalThis.State = {};
+globalThis.setDeep = setDeep;
+globalThis.updateRenderCost = () => {};
+function lauf(kurz, anWert) {
+  SEG = segBau(anWert);
+  State.srcShort = kurz;
+  State.cfg = {output: {height: anWert}};
+  updateResChoices();
+  return SEG._btns.map(b => ({v: +b.dataset.val, aus: b.disabled,
+                             an: b._cls.has('on')}));
+}
+const r720 = lauf(720, 1080);
+pruef('720p-Quelle: 1080p und 4K sind ausgegraut',
+      !r720[0].aus && r720[1].aus && r720[2].aus, JSON.stringify(r720));
+pruef('720p-Quelle: die Auswahl wandert auf die hoechste erreichbare Stufe',
+      r720[0].an && State.cfg.output.height === 720,
+      'gewaehlt ' + State.cfg.output.height);
+const r1080 = lauf(1080, 1080);
+pruef('1080p-Quelle: nur 4K ist ausgegraut',
+      !r1080[0].aus && !r1080[1].aus && r1080[2].aus, JSON.stringify(r1080));
+const r4k = lauf(2160, 1080);
+pruef('4K-Quelle: nichts ist ausgegraut',
+      r4k.every(x => !x.aus), JSON.stringify(r4k));
+const runk = lauf(0, 1080);
+pruef('unbekannte Quelle: nichts wird verboten',
+      runk.every(x => !x.aus), JSON.stringify(runk));
+pruef('der Hinweis nennt die Aufloesung der Quelle',
+      lauf(720, 1080) && HINT.textContent.includes('720p'), HINT.textContent);
+
 console.log(fails ? `\n${fails} FEHLER` : '\nalle Nachweise gruen');
 process.exit(fails ? 1 : 0);
