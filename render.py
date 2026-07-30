@@ -11472,6 +11472,65 @@ def merge_anker(szene_map, anker_map):
     return szene_map
 
 
+def matte_loecher_fuellen(alpha, radius=14):
+    """v230a LOECHER IM INNEREN EINER PERSON SIND IMMER EIN FEHLER.
+
+    Die Nachschaerfung laesst je nach Staerke Krater in der Maske stehen: an
+    Ismets Bild gemessen 15 Pixel bei Staerke 1.3, aber 2981 bei 0.39 (dem
+    Wert, den die v228b-Gegenprobe waehlt). Wo die Maske innen nicht ganz
+    dicht ist, scheint der Text HINTER der Person durch sie hindurch - als
+    Schleier oder feine Linie mitten im Gesicht.
+    Gefuellt wird nur der KERN (die um `radius` geschrumpfte Silhouette).
+    Der Radius ist bewusst grosszuegig (14 px): bei einer sehr weichen Matte
+    reicht der Uebergang 10 px und mehr nach innen, und der wird nicht
+    angetastet - sonst sieht die Person ausgeschnitten aus (v181).
+    Damit bleiben zwei Dinge unangetastet: die weiche Aussenkante (Haare,
+    Finger) und echte Durchblicke - eine Luecke zwischen Arm und Koerper ist
+    breiter als der Radius und ueberlebt das Schrumpfen, ein Krater von
+    wenigen Pixeln nicht."""
+    if alpha is None:
+        return alpha
+    a = alpha[..., 0] if alpha.ndim == 3 else alpha
+    fg = (a > 0.5).astype(np.uint8)
+    if fg.sum() < 100:
+        return alpha
+    k = max(int(radius), 3)
+    kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k * 2 + 1, k * 2 + 1))
+    kernbereich = cv2.erode(fg, kern)
+    if not kernbereich.any():
+        return alpha
+    out = a.copy()
+    out[kernbereich > 0] = 1.0
+    # Und die echten KRATER: kleine Loecher (a <= 0.5), die vollstaendig von
+    # Person umgeben sind. Ein Durchblick zwischen Arm und Koerper beruehrt
+    # entweder den Bildrand oder ist gross - beides bleibt offen.
+    loch = (a <= 0.5).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(loch, 8)
+    if n > 1:
+        gross = float(fg.sum()) * 0.0006          # 0.06 % der Personenflaeche
+        h, w = a.shape[:2]
+        for i in range(1, n):
+            # Untergrenze 200 px (rund 14x14): so klein ist kein gewollter
+            # Durchblick, aber genau so gross sind die Krater der Maske.
+            if st[i, cv2.CC_STAT_AREA] > max(gross, 200):
+                continue
+            x, y = st[i, cv2.CC_STAT_LEFT], st[i, cv2.CC_STAT_TOP]
+            bw_, bh_ = st[i, cv2.CC_STAT_WIDTH], st[i, cv2.CC_STAT_HEIGHT]
+            if x == 0 or y == 0 or x + bw_ >= w or y + bh_ >= h:
+                continue                          # beruehrt den Bildrand
+            # Ist das Loch RINGSUM von Person umgeben? Der Rahmen um seine
+            # Box muss fast vollstaendig Person sein - sonst ist es ein
+            # Durchblick nach draussen, kein Krater.
+            x0, y0 = max(x - 3, 0), max(y - 3, 0)
+            x1, y1 = min(x + bw_ + 3, w), min(y + bh_ + 3, h)
+            ring = fg[y0:y1, x0:x1].copy()
+            ring[3:-3, 3:-3] = 1 if ring.shape[0] > 6 and ring.shape[1] > 6 else ring[3:-3, 3:-3]
+            if float(ring.mean()) < 0.92:
+                continue                          # nicht ringsum umschlossen
+            out[lab == i] = 1.0
+    return out[..., None] if alpha.ndim == 3 else out
+
+
 def matte_muell(a):
     """v228b Wieviel MUELL hat die Maske? Gezaehlt werden lose Kruemel (kleine
     Flecken neben der Person) und Loecher (kleine Aussparungen in ihr) - genau
@@ -14426,6 +14485,9 @@ def main():
                     alpha, frame,
                     float(cfg['effects'].get('matte_refine', 1.0)) * q_refine)
             alpha = refine_alpha(alpha, frame, _refine_auto)
+            # v230a: Krater im Inneren schliessen - dort darf nichts
+            # durchscheinen (die Aussenkante bleibt unangetastet).
+            alpha = matte_loecher_fuellen(alpha)
             # Zeitliche Glaettung gegen Flackern - aber NUR wenn sich wenig bewegt.
             # Bei schneller Bewegung wuerde das Mitteln einen Geisterschatten
             # hinter der Person ziehen. Darum bewegungsabhaengig.

@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230a DIE MASKE IST INNEN WIEDER DICHT (Nebenbefund aus Ismets "Auge glitcht").**
+  Ismets Screenshot zeigte eine feine senkrechte Linie mitten im Gesicht.
+  **Die Linie selbst ist damit NICHT erklaert** - an ihrer Stelle ist die
+  Maske nachweislich voellig dicht (Alpha 1.000), dort kann nichts
+  durchscheinen. Beim Nachmessen kam aber ein echter Fehler heraus:
+  - Die v228b-Gegenprobe waehlt auf Ismets Material Staerke 0.39. Damit ist
+    die Maske INNEN nicht mehr ganz undurchsichtig: **2981 Pixel unter 0.98**
+    (bei Staerke 1.3 nur 15). Wo die Maske innen durchlaessig ist, scheint
+    der Text HINTER der Person als Schleier durch sie hindurch.
+  - `matte_loecher_fuellen()` macht den KERN der Silhouette dicht (die um
+    14 px geschrumpfte Flaeche) und schliesst umschlossene Krater bis 200 px.
+    Gemessen 2981 -> 33 Pixel. **Unangetastet bleiben:** die weiche
+    Aussenkante (Haare, Finger - im Test bitgleich 16436 Pixel weicher Saum)
+    und echte Durchblicke (die Luecke zwischen Arm und Koerper bleibt offen).
+  - **Was noch offen ist:** die Linie in Ismets Bild. Ausgeschlossen sind
+    bisher: die Maske an dieser Stelle (dicht), meine beiden Tempo-Eingriffe
+    (bitgleich), Nachschaerfung des Bildes (gibt es nicht), Trail/Kontakt-
+    schatten/Counter-Ring (aus). Sie wandert MIT dem Gesicht (relative Lage
+    zur Nase konstant, waehrend der Kopf sich bewegt). Ismet sagt, im
+    Quellvideo ist sie nicht. Zum Bisektieren fehlt mir die Quelldatei.
+  - Regression **1735/1735 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v230 MEHR SOUND - UND WARUM ES VORHER FAST KEINEN GAB.**
   Ismets Wunsch: "dass mehr sfx benutzt werden". Die Ursache war eine Regel
   aus der Referenz-Messung (v143): Ticks nur in den **ersten 1.6 s einer

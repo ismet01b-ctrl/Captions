@@ -1602,6 +1602,44 @@ def _scenario_logic(clip, transcript, tmp):
     check('v228b: eine saubere Nachschaerfung bleibt unangetastet',
           abs(_st_gut - 1.3) < 1e-6, f'Staerke {_st_gut:.2f}')
     _rsrc28 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    # v230a LOECHER IM INNEREN EINER PERSON SIND IMMER EIN FEHLER.
+    # Ismets Befund ("das Auge glitcht"): eine feine Linie mitten im Gesicht.
+    # Beim Nachmessen an seinem Bild kam ein echter Nebenbefund heraus: die
+    # v228b-Gegenprobe waehlt Staerke 0.39, und damit ist die Maske INNEN
+    # nicht mehr ganz dicht - 2981 Pixel unter 0.98 (bei Staerke 1.3 nur 15).
+    # Wo die Maske innen durchlaessig ist, scheint der Text HINTER der Person
+    # durch sie hindurch. Gefuellt wird nur der Kern; die weiche Aussenkante
+    # und echte Durchblicke (Luecke zwischen Arm und Koerper) bleiben.
+    _t30 = np.zeros((400, 400), np.float32)
+    cv2.rectangle(_t30, (60, 40), (340, 360), 1.0, -1)
+    cv2.rectangle(_t30, (150, 120), (250, 300), 0.0, -1)   # echter Durchblick
+    cv2.circle(_t30, (300, 200), 4, 0.0, -1)               # Krater
+    # halbdurchlaessig, tief im Inneren (>= 14 px von jeder Kante und vom
+    # Durchblick entfernt - genau das ist der Kern, der dicht sein muss)
+    _t30[316:340, 266:320] = 0.80
+    _g30 = R.matte_loecher_fuellen(_t30[..., None])[..., 0]
+    check('v230a: der Kern der Person wird voellig undurchsichtig',
+          float(_g30[316:340, 266:320].min()) >= 0.999,
+          f'innen min {_g30[316:340, 266:320].min():.3f}')
+    check('v230a: ein kleiner Krater wird geschlossen',
+          float(_g30[200, 300]) >= 0.999, f'{_g30[200, 300]:.3f}')
+    check('v230a: ein echter Durchblick bleibt offen',
+          float(_g30[200, 200]) <= 0.001, f'{_g30[200, 200]:.3f}')
+    # Die weiche Aussenkante darf NICHT hart werden - sonst sieht die
+    # Freistellung ausgeschnitten aus (genau das, was v181 verhindert).
+    _w30 = cv2.GaussianBlur(_t30, (0, 0), 6)
+    _vor = int(((_w30 > 0.05) & (_w30 < 0.95)).sum())
+    _nach_a = R.matte_loecher_fuellen(_w30[..., None])[..., 0]
+    _rand = np.zeros_like(_w30, bool)
+    _rand[cv2.dilate((_w30 > 0.5).astype(np.uint8), np.ones((9, 9), np.uint8)) > 0] = True
+    _rand[cv2.erode((_w30 > 0.5).astype(np.uint8), np.ones((21, 21), np.uint8)) > 0] = False
+    check('v230a: die weiche Aussenkante bleibt weich',
+          int(((_nach_a > 0.05) & (_nach_a < 0.95) & _rand).sum())
+          >= int(((_w30 > 0.05) & (_w30 < 0.95) & _rand).sum()) * 0.95,
+          'sonst sieht die Person ausgeschnitten aus')
+    check('v230a: die Fuellung laeuft im echten Render-Pfad',
+          'alpha = matte_loecher_fuellen(alpha)' in _rsrc28
+          and 'def matte_loecher_fuellen' in _rsrc28)
     check('v228b: die Pruefung laeuft EINMAL je Render, nicht je Bild',
           '_refine_auto = None' in _rsrc28
           and 'if _refine_auto is None:' in _rsrc28
