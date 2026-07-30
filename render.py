@@ -9805,6 +9805,62 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 p['tpl'] = 'behind'            # Komposition lebt hinter der Person
                 p['by'] = Z_BEHIND if not portrait else v_zone(start, end)
                 sy = p['by'] + (H * 0.24 if not portrait else H * 0.15)
+                # v228a DIE PERSON GEHOERT IN DIE WORTMITTE, NICHT AN SEIN ENDE.
+                # Ismets Befund am gestempelten v227a-Render ("das Maskieren
+                # hat hier nicht gut geklappt"): von "BEHIND ME" war nur "BEHI"
+                # lesbar. Am Bild gemessen steht der Sprecher bei 0.66 W, der
+                # Satz wurde aber IMMER auf die Bildmitte gesetzt (fest W/2 im
+                # Zeichenpfad) - seine Silhouette lag damit auf dem rechten
+                # Wortende und frass es am Stueck. Der Referenz-Look ist
+                # ohnehin "die Person steht MITTEN im Wort".
+                # WICHTIG: dieser Zweig (Mehrwort-Komposition) ist der
+                # haeufigste - "BEHIND ME" sind zwei Woerter. Die
+                # Lesbarkeits-Stufen weiter unten haengen an p['arr'] und
+                # laufen hier gar nicht; ein Riegel nur dort waere wirkungslos
+                # gewesen (v219-Lehre: prueft, ob die Zeile erreicht wird).
+                if face_pos is not None and not broll and p.get('tokens'):
+                    _fpc = face_pos(start, end)
+                    if _fpc:
+                        _hb = max((abs(tk['ox']) + tk['arr'].shape[1] / 2.0
+                                   for tk in p['tokens'] if tk.get('arr') is not None),
+                                  default=0.0) + W * 0.02
+                        if _hb < W / 2:
+                            p['bx'] = min(max(float(_fpc[0]), _hb), W - _hb)
+                            if abs(p['bx'] - W / 2) > W * 0.02:
+                                print(f"  Legibility: '{txt}' centred on the "
+                                      f"speaker ({p['bx'] / W:.2f} W) so the "
+                                      f"body cannot eat one end")
+                            # Steht die Person am Bildrand, reicht Verschieben
+                            # nicht: der Block laesst sich nicht weiter
+                            # mittig auf sie legen, ohne aus dem Bild zu
+                            # laufen. Dann gilt die v191-Stufe 2 - auf
+                            # KOPFHOEHE ist die Silhouette nur die Kopfbreite
+                            # statt der Schultern, und beide Wortenden bleiben
+                            # stehen. Gemessen wird der schwaechere Rand.
+                            _sch = float(_fpc[2]) * 2.6
+                            _li = max(0.0, (float(_fpc[0]) - _sch / 2)
+                                      - (p['bx'] - _hb))
+                            _re = max(0.0, (p['bx'] + _hb)
+                                      - (float(_fpc[0]) + _sch / 2))
+                            # Schwelle in BUCHSTABEN, nicht in Prozent: was
+                            # herausragt, muss LESBAR sein. Ein Versal ist
+                            # rund 0.6 der Schriftgroesse breit, also braucht
+                            # es gut zwei davon.
+                            _szc = next((float(tk.get('sz') or 0)
+                                         for tk in p['tokens']
+                                         if tk.get('role') == 'core'), 0.0)
+                            _min_rand = (_szc * 1.2 if _szc > 0
+                                         else 0.15 * 2 * _hb)
+                            if min(_li, _re) < _min_rand:
+                                p['by'] = max(float(_fpc[1])
+                                              - float(_fpc[2]) * 1.7 * 0.15,
+                                              H * 0.07)
+                                if p.get('entr') == 'emerge':
+                                    p['entr'] = 'rise'
+                                print(f"  Legibility: '{txt}' raised to head "
+                                      f"height - the speaker stands at the "
+                                      f"edge, shifting alone would still eat "
+                                      f"one end")
             elif fx == 'behind':
                 # v90: 'himmel' = das Wort steigt HINTER dem Kopf hervor und endet
                 # KOMPLETT UEBER dem Kopf, voll lesbar (Schluss-Signatur, z.B. der
@@ -9907,6 +9963,28 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                         else:
                             print(f"  Legibility: '{txt}' enlarged so it "
                                   f"clears the shoulders on both sides")
+                        # v228a DIE PERSON GEHOERT IN DIE WORTMITTE, NICHT AN
+                        # SEIN ENDE. Ismets Befund am gestempelten v227a-Render
+                        # ("das Maskieren hat hier nicht gut geklappt"): von
+                        # "BEHIND ME" war nur "BEHI" lesbar. Am Bild gemessen
+                        # steht der Sprecher bei 0.66 W, der Block wurde aber
+                        # IMMER auf die Bildmitte gesetzt (fest W/2 im
+                        # Zeichenpfad) - seine Silhouette lag damit auf dem
+                        # rechten Wortende und frass es am Stueck.
+                        # Die Stufen (1)-(3) darueber vergleichen nur BREITEN
+                        # und sind deshalb blind dafuer: das Wort war mit
+                        # 2.4 x Schulterbreite klar breit genug, nur eben an
+                        # der falschen Stelle. Der Referenz-Look ist ohnehin
+                        # "die Person steht MITTEN im Wort" - dann bleibt
+                        # links und rechts etwas stehen.
+                        _bx = float(_fpv[0])
+                        _halb = _tw / 2.0 + W * 0.02
+                        p['bx'] = min(max(_bx, _halb), W - _halb) \
+                            if _halb < W / 2 else W / 2
+                        if abs(p['bx'] - W / 2) > W * 0.02:
+                            print(f"  Legibility: '{txt}' centred on the "
+                                  f"speaker ({p['bx'] / W:.2f} W) so the body "
+                                  f"cannot eat one end")
                 if p.get('count'):
                     p['builder'] = (lambda s, _sz=sz, _tl=p['tilt']:
                                     persp_warp(rot_img(S.text(s, _sz, S.accent, glow=True,
@@ -11846,7 +11924,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                             ee = smoothstep(min(dtt / 1.10, 1))
                             sc = 0.94 + 0.06 * ee
                             px = float(face_xy[0]) if face_xy is not None else W / 2
-                            ziel_x = W / 2 + tok['ox'] + sdx
+                            ziel_x = p.get('bx', W / 2) + tok['ox'] + sdx
                             lok = (px - ziel_x) / max(sc, 0.01) + arr_t.shape[1] / 2
                             p_halb = (float(face_xy[2]) if (face_xy is not None
                                                             and len(face_xy) > 2)
@@ -11857,7 +11935,9 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                             py_off = 0.0
                         else:
                             py_off = (1 - e) * H * 0.05
-                    paste(comp, arr_t, W / 2 + tok['ox'] + sdx + px_off + adx_t,
+                    # v228a: Mitte des Blocks, nicht Mitte des Bildes.
+                    paste(comp, arr_t,
+                          p.get('bx', W / 2) + tok['ox'] + sdx + px_off + adx_t,
                           by + oy_t + sdy + py_off,
                           W, H, scale=sc * (0.985 + 0.015 * out_env) * zz,
                           opacity=min(dtt / 0.12, 1) * out_env * aop_t)
@@ -11869,7 +11949,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     if dl < 0:
                         continue
                     e = ease_back(dl / (0.32 * (1 + 0.08 * hand_jitter(p['kw_i'] * 7 + li))))
-                    paste(comp, sl, W / 2 + sdx + off, by + sdy + (1 - e) * H * 0.055,
+                    paste(comp, sl, p.get('bx', W / 2) + sdx + off,
+                          by + sdy + (1 - e) * H * 0.055,
                           W, H, scale=0.9 + 0.1 * e, opacity=min(dl / 0.12, 1) * fade)
             else:
                 e = smoothstep(dt / 0.8)
@@ -11922,7 +12003,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     sc = (0.94 + 0.06 * ee) * (1.0 - 0.04 * e)
                     op = 1.0
                     px = float(face_xy[0]) if face_xy is not None else W / 2
-                    lok = (px - (W / 2 + sdx)) / max(sc, 0.01) + arr_b.shape[1] / 2
+                    lok = (px - (p.get('bx', W / 2) + sdx)) / max(sc, 0.01) \
+                        + arr_b.shape[1] / 2
                     # Startfenster = ungefaehr die Breite der Person. Groesser waere
                     # sinnlos: das Wort waere sofort halb sichtbar, statt HINTER ihr
                     # zu stecken.
@@ -11931,7 +12013,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                               else W * 0.055) / max(sc, 0.01)
                     halb = p_halb + ee * arr_b.shape[1] * 0.55   # voll erst gegen Ende
                     arr_b = reveal_from(arr_b, lok, halb, weich=34.0)
-                    dx0 = (px - (W / 2 + sdx)) * 0.14 * (1 - ee)   # leichter Schub
+                    dx0 = (px - (p.get('bx', W / 2) + sdx)) * 0.14 * (1 - ee)
                     dy0 = 0.0
                 else:
                     dy0 = H * 0.10 * (1 - ex)
@@ -11951,7 +12033,10 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 elif xo > 0 and entr == 'zoom':
                     x_sc = 2.0 - x_sc            # raus wie rein: nach vorn
                     x_dv = 0.0
-                paste(comp, arr_b, W / 2 + sdx + dx0 + adx_b,
+                # v228a: der Block steht auf SEINER Mitte, nicht auf der
+                # Bildmitte - sonst frisst eine Person, die seitlich steht,
+                # ein ganzes Wortende (siehe _bx-Kommentar in build_plans).
+                paste(comp, arr_b, p.get('bx', W / 2) + sdx + dx0 + adx_b,
                       by + oy_b + sdy + dy0 + x_dv * arr_b.shape[0],
                       W, H, scale=sc * live * x_sc, opacity=op * fade * aop_b, blur=mb_amt)
         else:

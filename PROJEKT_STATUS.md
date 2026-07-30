@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v228a DIE PERSON GEHOERT IN DIE WORTMITTE, NICHT AN SEIN ENDE.**
+  Ismets Befund am gestempelten v227a-Render: "das Maskieren hat hier nicht
+  gut geklappt" - von "BEHIND ME" war nur "BEHI" lesbar. Am Bild gemessen ist
+  es KEIN Maskenfehler: der Sprecher steht bei 0.66 W, der Satz wurde aber
+  IMMER auf die BILDMITTE gesetzt (fest `W / 2` im Zeichenpfad). Seine
+  Silhouette lag damit auf dem rechten Wortende und frass es am Stueck.
+  - Die v191-Lesbarkeitsstufen vergleichen nur BREITEN und sind dafuer blind:
+    das Wort war mit 2.4x Schulterbreite breit genug, nur an der falschen
+    Stelle. Jetzt steht der Block auf `p['bx']` = Position des Sprechers,
+    geklemmt auf den Bildrand.
+  - **Steht die Person am Bildrand, reicht Verschieben nicht** - der Block
+    liefe aus dem Bild. Dann gilt die v191-Stufe 2 (Kopfhoehe): dort ist die
+    Silhouette nur die Kopfbreite statt der Schultern. Die Schwelle ist in
+    BUCHSTABEN gerechnet (gut zwei Versalien), nicht in Prozent - was
+    herausragt, muss lesbar sein.
+  - **Der Riegel musste in VIER Zeichenwege** (Token-Komposition, Einzel-
+    Sprite, Buchstaben-Aufbau, Herausschiebe-Effekt). Der haeufigste Fall ist
+    die Mehrwort-Komposition ("BEHIND ME" sind zwei Woerter) - sie laeuft gar
+    nicht ueber `p['arr']`, ein Riegel nur dort waere toter Code gewesen
+    (v219-Lehre, dritter Fall derselben Art).
+  - **Beweis am gerenderten Bild** (Sprecher bei 0.78 W, frische Plaene je
+    Lauf): Tinte auf der schwaecheren Seite der Silhouette **0 px -> 1701 px**.
+    Null heisst woertlich: ein Wortende war komplett weg.
+  - Regression **1703/1703 logic + 7/1/5/2 Renders + GUI_OK**.
+  - **OFFEN und gemessen:** die Silhouetten-Kante, die den Text beschneidet,
+    ist ausgefranst (Treppen von mehreren Pixeln). Die Freistellung rechnet
+    auf dem Server intern mit Detailstufe ~0.34; feiner kostet Renderzeit
+    (gemessen 1080x1920: 0.25 -> 100 ms, 0.375 -> 172 ms, 0.4 -> 216 ms je
+    Bild). Das ist eine Abwaegung, die Ismet trifft.
 - **v228 DER PLAYER ZEIGTE NUR EIN DRITTEL DES VIDEOS.**
   Ismets Befund: "wenn ich den Player starte, z.B. in Library, dann sehe ich
   nur die Haelfte von meinem Video". Die Bibliotheks-Kachel ist bewusst 16:9

@@ -2564,6 +2564,77 @@ def _scenario_logic(clip, transcript, tmp):
           'Parallaxe geht mit der Entfernung gegen null')
 
     # ------------------------------------------------------------------
+    # v228a DIE PERSON GEHOERT IN DIE WORTMITTE, NICHT AN SEIN ENDE.
+    # Ismets Befund am gestempelten v227a-Render ("das Maskieren hat hier
+    # nicht gut geklappt"): von "BEHIND ME" war nur "BEHI" lesbar. Am Bild
+    # gemessen steht der Sprecher bei 0.66 W, der Satz wurde aber IMMER auf
+    # die BILDMITTE gesetzt (fest W/2 im Zeichenpfad) - seine Silhouette lag
+    # damit auf dem rechten Wortende und frass es am Stueck. Die
+    # Lesbarkeits-Stufen von v191 vergleichen nur BREITEN und sind dafuer
+    # blind: das Wort war mit 2.4x Schulterbreite breit genug, nur an der
+    # falschen Stelle.
+    _W8, _H8 = 720, 1280
+    _S8 = R.Sprites(cfg, _W8, _H8)
+    _t8 = 'watch this the captions are behind me right now and it looks unreal'
+    _w8 = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
+           for i, x in enumerate(_t8.split())]
+    _fx8 = R._speech_intent(R._self_ref_intent({}, _w8), _w8)
+    _FX8, _FY8, _FW8 = _W8 * 0.78, _H8 * 0.20, 60.0
+    _HB8 = 90
+
+    def _plaene8(alt):
+        """Frische Plaene je Lauf - composite_frame ist nicht zustandsfrei."""
+        _pl = R.build_plans(_w8, set(_fx8), cfg, _S8, _W8, _H8,
+                            lambda s, e: True, _fx8,
+                            face_pos=lambda a, b: (_FX8, _FY8, _FW8))
+        _k = next((p for p in _pl if p.get('tpl') == 'behind'
+                   and (p.get('arr') is not None or p.get('tokens'))), None)
+        if _k is not None and alt:
+            _k['bx'] = _W8 / 2                # Zustand VOR v228a
+        return _pl, _k
+    _pl8, _k8 = _plaene8(False)
+    check('v228a: der Block steht auf dem Sprecher, nicht auf der Bildmitte',
+          _k8 is not None and _k8.get('bx') is not None
+          and abs(_k8['bx'] - _W8 / 2) > _W8 * 0.02
+          and 0 < _k8['bx'] < _W8,
+          f"bx={_k8.get('bx') if _k8 else None}")
+    # WIRKSAMKEITS-NACHWEIS am gerenderten Bild: wieviel Tinte steht auf der
+    # SCHWAECHEREN Seite der Silhouette? Null heisst: ein Wortende ist weg.
+    _fr8 = np.full((_H8, _W8, 3), 150.0, np.float32)
+    _al8 = np.zeros((_H8, _W8, 1), np.float32)
+    _al8[int(_H8 * 0.14):int(_H8 * 0.28), int(_FX8 - 52):int(_FX8 + 52)] = 1.0
+    _al8[int(_H8 * 0.28):int(_H8 * 0.95),
+         int(_FX8 - _HB8):int(_FX8 + _HB8)] = 1.0
+    _dp8 = np.tile(np.linspace(.25, .85, _W8).astype(np.float32), (_H8, 1))
+
+    def _schwach8(alt):
+        _pl, _k = _plaene8(alt)
+        if _k is None:
+            return None
+        _by = int(_k.get('by', _H8 * 0.3))
+        _c = R.composite_frame(
+            _fr8.copy(), _al8, R.card_t0(_k, _w8) + 0.5, _pl, _w8,
+            (_FX8, _FY8, _FW8), cfg, _S8, _W8, _H8, [1., 0, 0, 0, 0], (0, 0),
+            depth_n=_dp8, H_cum=np.eye(3), H_cum_wall=np.eye(3),
+            track_gen=1, wall_gen=1)
+        _ink = (_c[max(_by - 140, 0):min(_by + 140, _H8)].mean(axis=2) > 205)
+        _sil = 52 if _by < _H8 * 0.28 else _HB8
+        return min(int(_ink[:, :int(_FX8 - _sil)].sum()),
+                   int(_ink[:, int(_FX8 + _sil):].sum()))
+    _sa8, _sn8 = _schwach8(True), _schwach8(False)
+    check('v228a: kein Wortende wird mehr am Stueck aufgefressen',
+          _sa8 is not None and _sn8 is not None and _sa8 < 50 and _sn8 > 400,
+          f'schwaechere Seite alt {_sa8} px, neu {_sn8} px Tinte')
+    # Und der Riegel muss in ALLEN Zeichenwegen sitzen - der Mehrwort-Satz
+    # ("BEHIND ME") laeuft ueber die Token, nicht ueber p['arr'] (v219-Lehre:
+    # ein Riegel im falschen Ast ist toter Code).
+    check('v228a: alle behind-Zeichenwege nutzen die Blockmitte',
+          _src226.count("p.get('bx', W / 2)") >= 5
+          and "paste(comp, arr_t,\n                          p.get('bx', W / 2)"
+          in _src226,
+          f"{_src226.count(chr(112) + chr(46) + 'get(' + chr(39) + 'bx' + chr(39) + ', W / 2)')} Stellen")
+
+    # ------------------------------------------------------------------
     # v223: DER TEXT MUSS AUF DIE WANDFLAECHE, NICHT NUR IN IHRE EBENE.
     # Ismets Befund am v222-Render: "der wird gar nicht richtig auf der Wand
     # platziert". Die NEIGUNG stimmte da schon (v219), die STELLE nicht: die
