@@ -3,6 +3,37 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v226 DIE KAMERA DARF DIE ANSAGE NICHT WIDERLEGEN.**
+  Ismets Befund am gestempelten v225b-Render: "das 'above me' zuckt etwas zu
+  viel und geht runter". Am Video gemessen: die Karte wanderte in 0.29 s um
+  109 px NACH UNTEN - bei einer Ansage, die "ueber mir" heisst. Zwei Ursachen,
+  beide in dieselbe Richtung.
+  - **Kameramodus 'caption' halt sein Versprechen nicht.** Er schiebt das Bild
+    um `(by - H/2) * 0.30` auf die Karte zu; bei `by = 0.22 H` sind das 108 px
+    nach unten - genau der Messwert. Nur: die Caption wird VOR dem Warp
+    gezeichnet und wandert mit. Der Abstand zwischen Kamera und Karte bleibt
+    gleich, es rutscht bloss alles zusammen ("Close-up auf die Caption" war
+    also nie eins). Bei einer ORTS-Ansage ist das nicht nur wirkungslos,
+    sondern falsch: die Karte verlaesst den angesagten Ort. Orts-Ansagen
+    bekommen jetzt den reinen Zoom ('punch').
+  - **Der Himmel ist die ferne Ebene.** Der Welt-Lock zog die Karte senkrecht
+    1:1 mit dem Nahbereich-Schwenk mit (Deckel 0.072 H). Parallaxe geht mit
+    der Entfernung gegen null - 1:1 war auch physikalisch falsch. Senkrecht
+    steht die Karte jetzt, waagerecht folgt sie gedaempft (0.35).
+  - Die Ansage steht als `p['ort_ansage']` AM PLAN: eine Himmel-Ansage laeuft
+    je nach Fall durch den ground- ODER den behind-Zweig, und nur der
+    ground-Zweig schreibt `p['szene']` - ein Riegel daran haette in der
+    Haelfte der Faelle nicht gegriffen (v159-Lehre).
+  - **Beweis:** `camera_at` (die Produktionsfunktion) 107.3 px -> 0.0 px
+    senkrechter Bildversatz; am gerenderten Bild mit Schwenk nach unten
+    40.4 px -> 4.4 px Weg der Tinte. Der erste Testentwurf war GRUEN, ohne
+    etwas zu pruefen: die Karte trug 'crash' vom Hoehepunkt-Vorrang, der
+    Riegel lief gar nicht. Jetzt besteht die Rotation im Test nur aus
+    'caption', und der Riegel muss sich im Log melden.
+  - Nicht angefasst: die kurze Standzeit der Karte (~0.55 s) - sie liegt am
+    Schnitt 0.4 s nach dem Wort, nicht an einer Regel. Und die
+    Gewichts-Animation bleibt; sie pulst den Strich, sie verschiebt nichts.
+  - Regression **1676/1676 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v225c DER BUILD-STEMPEL KAM IM CONTAINER NIE AN (Fehlalarm-Mail).**
   Ismets Screenshot: "[DouchkoVE] Seit Tagen kein Deploy - laeuft der
   Auto-Deploy noch? / Der laufende Stand ist unbekannt (kein Build-Stempel)".

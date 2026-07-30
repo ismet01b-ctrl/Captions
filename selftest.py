@@ -2302,6 +2302,140 @@ def _scenario_logic(clip, transcript, tmp):
           < _src221.index('    for p in active:\n        # v82: Cutter-Exit'))
 
     # ------------------------------------------------------------------
+    # v226 DIE KAMERA DARF DIE ANSAGE NICHT WIDERLEGEN.
+    # Ismets Befund am gestempelten v225b-Render: "das 'above me' zuckt etwas
+    # zu viel und geht runter". Am Video gemessen wanderte die Karte in 0.29 s
+    # um 109 px NACH UNTEN - bei einer Ansage, die "ueber mir" heisst.
+    # Zwei Ursachen, beide in dieselbe Richtung:
+    #   (1) Kameramodus 'caption' schiebt das Bild um (by - H/2) * 0.30 auf die
+    #       Karte zu; bei by = 0.22 H sind das 108 px nach unten - genau der
+    #       Messwert. Der Modus kann sein Versprechen ("Close-up auf die
+    #       Caption") ohnehin nicht halten: die Caption wird VOR dem Warp
+    #       gezeichnet und wandert mit, der Abstand bleibt gleich.
+    #   (2) Der Welt-Lock zog die Karte senkrecht mit dem Nahbereich-Schwenk
+    #       mit (Deckel 0.072 H). Der Himmel ist die FERNE Ebene - dort ist die
+    #       Parallaxe fast null; 1:1 mitzuziehen war auch physikalisch falsch.
+    _W6, _H6 = 720, 1280
+    _S6 = R.Sprites(cfg, _W6, _H6)
+    _t6 = ('I want to show you something crazy this line floats above me '
+           'and it just stays right up there the whole time')
+    _w6 = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
+           for i, x in enumerate(_t6.split())]
+    _fx6 = R._speech_intent(R._self_ref_intent({}, _w6), _w6)
+
+    def _plaene6(modus):
+        """Frische Plaene, nur die Himmel-Karte. composite_frame ist NICHT
+        zustandsfrei (v221) - jeder Lauf braucht neue Plaene."""
+        _pl = R.build_plans(_w6, set(_fx6), cfg, _S6, _W6, _H6,
+                            lambda s, e: True, _fx6)
+        _k = next((p for p in _pl if p.get('ort_ansage') == 'himmel'), None)
+        if _k is None:
+            return [], None
+        _k['by'] = _H6 * 0.22
+        if modus == 'alt':                  # Zustand VOR v226
+            _k['cam'] = 'caption'
+            _k.pop('ort_ansage', None)
+        else:
+            _k['cam'] = 'punch'             # was der Riegel daraus macht
+        return [_k], _k
+    _pa6, _ka6 = _plaene6('alt')
+    _pn6, _kn6 = _plaene6('neu')
+    check('v226: die Himmel-Ansage ist AM PLAN vermerkt (nicht nur in info)',
+          _kn6 is not None and _kn6.get('ort_ansage') == 'himmel',
+          'sonst greift der Riegel nur in einem der beiden fx-Zweige')
+    # WIRKSAMKEITS-NACHWEIS 1: die Produktionsfunktion camera_at, nicht der Plan.
+    if _ka6 and _kn6:
+        def _py6(pl, k):
+            _t0 = R.card_t0(k, _w6)
+            return max((R.camera_at(float(_t0 + j / 24), pl, _w6, cfg, _W6, _H6)[2]
+                        for j in range(30)), key=abs)
+        _pya, _pyn = _py6(_pa6, _ka6), _py6(_pn6, _kn6)
+        check('v226: der Kameramodus schiebt die Karte nicht mehr nach unten',
+              abs(_pya) > _H6 * 0.06 and abs(_pyn) < _H6 * 0.005,
+              f"alt {-_pya:+.1f} px, neu {-_pyn:+.1f} px")
+    # Und der Riegel muss im echten Bauweg sitzen: eine Orts-Ansage darf nach
+    # build_plans NIE auf 'caption' stehen.
+    # Damit der Riegel wirklich geprueft wird, besteht die Rotation hier NUR aus
+    # 'caption' - sonst kann der Test gruen sein, weil die Rotation zufaellig
+    # etwas anderes gezogen hat (und genau so war es beim ersten Lauf: die Karte
+    # trug 'crash' vom Hoehepunkt-Vorrang, der Riegel lief gar nicht).
+    _cfg6 = copy.deepcopy(cfg)
+    _cfg6['camera']['keyword_rotation'] = ['caption']
+    _t6b = ('watch this one floats above me and later I will show you the '
+            'loudest part of the whole thing right here boom')
+    _w6b = [{'word': ' ' + x, 'start': i * .35, 'end': i * .35 + .3}
+            for i, x in enumerate(_t6b.split())]
+    _fx6b = R._speech_intent(R._self_ref_intent({}, _w6b), _w6b)
+    import io as _io6
+    import contextlib as _cx6
+    _log6 = _io6.StringIO()
+    with _cx6.redirect_stdout(_log6):
+        _pl6 = R.build_plans(_w6b, set(_fx6b), _cfg6, _S6, _W6, _H6,
+                             lambda s, e: True, _fx6b)
+    _ort6 = [p for p in _pl6 if p.get('ort_ansage')]
+    # Der Riegel muss GELAUFEN sein (Log) - und danach darf keine Orts-Ansage
+    # mehr auf 'caption' stehen. Der Hoehepunkt-Vorrang setzt die staerkste
+    # Karte spaeter auf 'crash'; das ist ein reiner Zoom und deshalb in Ordnung.
+    check('v226: auch wenn die Rotation NUR "caption" hergibt, greift der Riegel',
+          bool(_ort6) and 'zoom without vertical drift' in _log6.getvalue()
+          and all(p.get('cam') != 'caption' for p in _ort6),
+          str([(p.get('ort_ansage'), p.get('cam')) for p in _ort6]))
+    # Gegenprobe: ohne Orts-Ansage bleibt 'caption' erlaubt - der Riegel darf
+    # den Modus nicht generell abschaffen.
+    # Zwei Karten, weit auseinander (min_gap 6 s): die staerkste bekommt den
+    # Hoehepunkt-Zoom, die zweite behaelt 'caption' - der Riegel darf den Modus
+    # nicht generell abschaffen, nur bei einer Orts-Ansage.
+    _t6c = ('this part is absolutely insane and it will change everything you '
+            'know about captions because nobody else does it like this and that '
+            'is exactly why it works so well for every single video you make')
+    _w6c = [{'word': ' ' + x, 'start': i * .4, 'end': i * .4 + .34}
+            for i, x in enumerate(_t6c.split())]
+    _pl6c = R.build_plans(_w6c, {4, 26}, _cfg6, _S6, _W6, _H6,
+                          lambda s, e: True,
+                          {4: {'fx': 'behind', 'power': 3},
+                           26: {'fx': 'blurin', 'power': 2}})
+    check('v226: ohne Orts-Ansage bleibt der Modus "caption" erhalten',
+          any(p.get('cam') == 'caption' for p in _pl6c)
+          and not any(p.get('ort_ansage') for p in _pl6c),
+          str(sorted({p.get('cam') for p in _pl6c if p.get('cam')})))
+    _src226 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v226: der Riegel sitzt dort, wo die Kamera gewaehlt wird',
+          _src226.index("p['cam'] = rot_cam.next(); camc += 1")
+          < _src226.index("if p['cam'] == 'caption' and p.get('ort_ansage'):"),
+          'sonst ueberschreibt die Rotation ihn wieder')
+    # WIRKSAMKEITS-NACHWEIS 2: die Tinte im gerenderten Bild, waehrend die
+    # Quelle nach unten kippt. Gemessen wird der Weg, nicht der Plan (v219).
+    _fr6 = np.full((_H6, _W6, 3), 120.0, np.float32)
+    _dp6 = np.tile(np.linspace(0.25, 0.85, _W6).astype(np.float32), (_H6, 1))
+
+    def _weg6(modus):
+        _spur = []
+        for j in range(0, 20, 2):
+            _pl, _k = _plaene6(modus)
+            if _k is None:
+                return None
+            _tt = float(R.card_t0(_k, _w6) + j / 24)
+            _c = R.composite_frame(
+                _fr6.copy(), None, _tt, _pl, _w6, (360, 530, 62), cfg, _S6,
+                _W6, _H6, [1.0, 0.0, 0.0, 0.0, 0.0], (0.0, j * 5.0),
+                depth_n=_dp6, H_cum=np.eye(3), H_cum_wall=np.eye(3),
+                track_gen=1, wall_gen=1)
+            _m = _c.mean(axis=2) > 205
+            if _m.sum() > 200:
+                _spur.append(float(np.nonzero(_m)[0].mean()))
+        return (_spur[-1] - _spur[0]) if len(_spur) >= 3 else None
+    _wa6, _wn6 = _weg6('alt'), _weg6('neu')
+    check('v226: im Bild wandert die Karte nicht mehr nach unten',
+          _wa6 is not None and _wn6 is not None
+          and _wa6 > 20 and _wn6 < _wa6 * 0.4,
+          f"alt {_wa6 if _wa6 is None else round(_wa6, 1)} px, "
+          f"neu {_wn6 if _wn6 is None else round(_wn6, 1)} px")
+    check('v226: der Himmel ist die ferne Ebene (kein senkrechter Welt-Lock)',
+          "if p.get('ort_ansage') == 'himmel':" in _src226
+          and 'min(dx * 0.35, lim)) + _hx, _hy' in _src226,
+          'Parallaxe geht mit der Entfernung gegen null')
+
+    # ------------------------------------------------------------------
     # v223: DER TEXT MUSS AUF DIE WANDFLAECHE, NICHT NUR IN IHRE EBENE.
     # Ismets Befund am v222-Render: "der wird gar nicht richtig auf der Wand
     # platziert". Die NEIGUNG stimmte da schon (v219), die STELLE nicht: die

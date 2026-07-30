@@ -997,7 +997,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1669/1669 grün (Stand v225c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1676/1676 grün (Stand v226)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1139,6 +1139,32 @@ AM PLAN) plus `intent_time_floor()` als zentralem Riegel am Ende von
 `build_plans`. Der Vorlauf gilt weiter fuer Szenen-Text OHNE Ansage.
 Lehre bleibt: **wer eine neue Zeit-Regel baut, fragt zuerst, was sie mit einem
 `intent`-Moment macht** - sie darf ihn nur nach HINTEN schieben.
+
+### ERLEDIGT (v226): die Kamera widerlegte die Ansage
+Ismets Befund am gestempelten v225b-Render: "das 'above me' zuckt etwas zu viel
+und geht runter". Am Video gemessen wanderte die Karte in 0.29 s um 109 px NACH
+UNTEN - bei einer Ansage, die "ueber mir" heisst.
+- **Kameramodus 'caption' kann sein Versprechen nicht halten.** Er schiebt das
+  Bild um `(by - H/2) * 0.30` auf die Karte zu; bei `by = 0.22 H` sind das
+  108 px nach unten - genau der Messwert. Nur: die Caption wird VOR dem Warp
+  ins Bild gezeichnet und wandert mit. Der Abstand zwischen Kamera und Karte
+  bleibt gleich, es rutscht bloss alles zusammen. Ein Name, der eine Zusage
+  macht, die der Code nicht einloest (v194-Lehre) - und bei einer ORTS-Ansage
+  ist das Ergebnis nicht nur wirkungslos, sondern falsch: die Karte verlaesst
+  den angesagten Ort. Orts-Ansagen bekommen deshalb den reinen Zoom.
+- **Der Himmel ist die ferne Ebene.** Der Welt-Lock (`scene_shift`) zog die
+  Karte senkrecht 1:1 mit dem Nahbereich-Schwenk mit (bis 0.072 H). Parallaxe
+  geht mit der Entfernung gegen null - 1:1 war auch physikalisch falsch.
+- **Die Lehre ist dieselbe wie v214, eine Achse weiter: nicht nur ZEIT-Regeln
+  muessen die Ansage respektieren, auch BEWEGUNGS-Regeln** (Kamera, Welt-Lock,
+  Tracking, Anim-Drift). Wer eine neue baut, fragt zuerst: was macht sie mit
+  einem `intent`-Moment, dessen Ansage eine Richtung nennt?
+- Die Ansage steht als `p['ort_ansage']` AM PLAN. Sie muss dort stehen und
+  nicht in `info`: eine Himmel-Ansage laeuft je nach Fall durch den ground-
+  ODER den behind-Zweig, und nur der ground-Zweig schreibt `p['szene']` -
+  ein Riegel daran haette in der Haelfte der Faelle nicht gegriffen (v159).
+- Beweis: `camera_at` 107.3 px -> 0.0 px senkrechter Bildversatz; am
+  gerenderten Bild mit Schwenk 40.4 px -> 4.4 px Weg der Tinte.
 
 ### ERLEDIGT (v215): Solo-Riegel mass die Lesezeit am falschen Punkt
 Gleiche Verwechslung wie v214, eine Regel weiter: gerechnet wurde ab

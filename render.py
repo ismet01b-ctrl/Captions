@@ -9637,6 +9637,38 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             elif fx in ('behind', 'blurin', 'ground'):
                 if CAM_FX:
                     p['cam'] = rot_cam.next(); camc += 1
+                    # v226 DIE KAMERA DARF DIE ANSAGE NICHT WIDERLEGEN.
+                    # Ismets Befund am gestempelten Render (v225b): "das
+                    # 'above me' zuckt etwas zu viel und geht runter". Am Bild
+                    # gemessen wanderte die Karte in 0.29 s um 109 px NACH
+                    # UNTEN - bei einer Ansage, die "ueber mir" bedeutet.
+                    # Ursache ist der Kameramodus 'caption': er schiebt das
+                    # Bild um (by - H/2) * 0.30 auf die Karte zu, bei by =
+                    # 0.22 H also 108 px nach unten - genau der Messwert.
+                    # Und er kann sein Versprechen ("Close-up auf die
+                    # Caption") gar nicht halten: die Caption wird VOR dem
+                    # Warp ins Bild gezeichnet, wandert also mit. Der Abstand
+                    # zwischen Kamera und Karte bleibt gleich, es rutscht nur
+                    # alles zusammen - ein Name, der eine Zusage macht, die
+                    # der Code nicht einloest (v194-Lehre).
+                    # Bei einer ORTS-Ansage ist das nicht nur wirkungslos,
+                    # sondern falsch: die Karte verlaesst den angesagten Ort.
+                    # Sie bekommt deshalb den reinen Zoom ('punch') - Wucht
+                    # ohne Versatz.
+                    # Die Ansage muss AM PLAN stehen, nicht nur in `info`:
+                    # `fx` fuehrt eine Himmel-Ansage je nach Fall durch den
+                    # ground- ODER den behind-Zweig, und nur der ground-Zweig
+                    # schreibt `p['szene']`. Ein Riegel, der davon abhaengt,
+                    # greift dann in der Haelfte der Faelle nicht (v159-Lehre:
+                    # der Riegel gehoert an die immer laufende Stelle).
+                    if (isinstance(info, dict) and info.get('intent')
+                            and info.get('szene')):
+                        p['ort_ansage'] = str(info['szene'])
+                    if p['cam'] == 'caption' and p.get('ort_ansage'):
+                        p['cam'] = 'punch'
+                        print(f"  Camera: '{txt}' is a place announcement "
+                              f"({info.get('szene')}) -> zoom without vertical "
+                              f"drift")
             else:
                 p['ccam'] = next_side_cam()
             # v99a: Eine PLATZIERUNGS-Ansage schlaegt die Komposition. "ON THE
@@ -11584,6 +11616,14 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         dx = scene_off[0] - p['s0'][0]
         dy = scene_off[1] - p['s0'][1]
         lim = W * (0.30 if p.get('broll') else 0.12)
+        if p.get('ort_ansage') == 'himmel':
+            # v226 DER HIMMEL IST DIE FERNE EBENE. Ein Nahbereich-Schwenk
+            # verschiebt ihn fast nicht (Parallaxe geht mit der Entfernung
+            # gegen null) - ihn 1:1 mitzuziehen war physikalisch falsch UND
+            # liess die Karte absinken, bis zum Deckel 0.072 H. Eine
+            # "ueber mir"-Ansage darf nicht nach unten wandern; senkrecht
+            # bleibt sie deshalb stehen, waagerecht folgt sie gedaempft.
+            return (max(-lim, min(dx * 0.35, lim)) + _hx, _hy)
         return (max(-lim, min(dx, lim)) + _hx,
                 max(-lim * 0.6, min(dy, lim * 0.6)) + _hy)
     behind_str = 0.0          # staerkster aktiver Hintergrund-Text (fuer Kontaktschatten)
