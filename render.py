@@ -3505,8 +3505,103 @@ def wall_pose(depth_n, cx, cy, bw, bh, W, H):
     stark = max(0.0, min(1.0, span * 2.2))
     # gx < 0: Naehe faellt nach rechts -> die rechte Seite ist weiter weg
     # und muss nach hinten kippen (persp_warp: yaw > 0).
-    yaw = (1.0 if gx < 0 else -1.0) * (8.0 + 34.0 * stark)
-    return max(-46.0, min(46.0, yaw))
+    # v224b DER WINKEL IST GEDECKELT, WEIL SCHRIFT KEINE TEXTUR IST.
+    # v218 liess bis 46 Grad zu. Am Beweisbild gemessen zerfallen die
+    # Buchstaben dort: bei -33 Grad wurde aus 'WALL' ein 'WAI I', weil
+    # persp_warp die abgewandte Seite auf einen Bruchteil staucht und das
+    # Antialiasing die Strichenden auffrisst. Eine Wand darf man perspektivisch
+    # andeuten - lesbar bleiben muss der Text trotzdem, sonst ist der Effekt
+    # gegen sich selbst gerichtet. 20 Grad sind deutlich sichtbar und noch
+    # sauber (am Sprite gemessen: Strichenden bleiben geschlossen).
+    yaw = (1.0 if gx < 0 else -1.0) * (7.0 + 13.0 * stark)
+    return max(-20.0, min(20.0, yaw))
+
+
+def wall_typo(S, txt, flw, flh, W, H, extrude=False):
+    """v224 EIN WANDSCHRIFTZUG WIRD GESETZT, NICHT GESCHRUMPFT.
+
+    Ismets Befund am v223-Render: "sitzt auf der Wand, sieht aber echt
+    unstrukturiert aus, muss eventuell etwas kleiner". Beides kam aus
+    derselben Ursache: v223 nahm die FERTIGE, fast bildbreite Zeile und
+    stauchte sie auf die Flaeche (bis 45 %). Das ergibt eine winzige,
+    randfuellende Zeile ohne Luft - typografisch nichts, nur klein.
+
+    Ein Schriftzug AN einer Wand ist mehrzeilig: die Fläche gibt die Breite
+    vor, der Text bricht um, die Schrift bleibt gross. Gesetzt wird auf 72 %
+    der Flaechenbreite, damit ein sichtbarer Rand bleibt - der Rand ist es,
+    der 'strukturiert' aussieht.
+    Rueckgabe: Sprite (RGBA) oder None."""
+    worte = [w for w in str(txt or '').split() if w.strip()]
+    if not worte or flw < W * 0.10:
+        return None
+    ziel = flw * 0.72
+    # Zeilenzahl: so viele, dass die Schrift moeglichst gross bleibt, aber
+    # hoechstens drei - mehr liest sich an einer Wand wie ein Absatz.
+    beste = None
+    for nz in (1, 2, 3):
+        if nz > len(worte):
+            break
+        # Woerter moeglichst gleichmaessig auf nz Zeilen verteilen
+        pro = math.ceil(len(worte) / nz)
+        zeilen, i = [], 0
+        while i < len(worte):
+            zeilen.append(' '.join(worte[i:i + pro]))
+            i += pro
+        if len(zeilen) > nz:
+            continue
+        # Schriftgroesse, bei der die BREITESTE Zeile die Zielbreite trifft
+        gr = min(S.fit(z, int(H * 0.16), int(ziel)) for z in zeilen)
+        hoehe = gr * 1.12 * len(zeilen)
+        if hoehe > flh * 0.62:
+            continue                       # passt nicht in die Flaechenhoehe
+        if beste is None or gr > beste[0]:
+            beste = (gr, zeilen)
+    if beste is None:
+        return None
+    gr, zeilen = beste
+    teile = [S.text(z, gr, S.white, extrude=extrude)[0] for z in zeilen]
+    wall_typo.zeilen = len(teile)          # der Aufrufer deckelt den Winkel danach
+    # v224c MONTIERT WIRD AN DER TINTE, NICHT AN DER SCHRIFTGROESSE.
+    # Ein Text-Sprite ist deutlich hoeher als seine Schriftgroesse (Glow- und
+    # Schatten-Polster). Mit einem Zeilenabstand von gr*1.12 wurde jede Zeile
+    # oben abgeschnitten - am Beweisbild zu sehen: von 'ON' und 'THE' stand nur
+    # die untere Haelfte da. Gemessen wird deshalb die TINTE jeder Zeile, und
+    # ueberlagert wird per Maximum, damit nichts wegfaellt.
+    _ink = []
+    for a in teile:
+        _nz = np.where(a[..., 3] > 40)
+        _ink.append((int(_nz[0].min()), int(_nz[0].max()), int(_nz[1].min()))
+                    if len(_nz[0]) else (0, a.shape[0] - 1, 0))
+    _ih = max(b - a0 + 1 for a0, b, _ in _ink)
+    _step = int(_ih * 1.30)                # Zeilenfall am Schriftbild, nicht am em
+    _res = max(a.shape[0] for a in teile)  # Reserve fuer das Polster
+    hoehe = _step * (len(teile) - 1) + _res
+    breite = max(a.shape[1] for a in teile) + max(x for _, _, x in _ink)
+    out = np.zeros((hoehe, breite, 4), teile[0].dtype)
+    for k, a in enumerate(teile):
+        # linksbuendig auf einer gemeinsamen Achse: ein Wandschriftzug hat
+        # eine Kante, an der er ausgerichtet ist - mittig gesetzte Zeilen
+        # wirken wie ein Zitat, nicht wie Farbe an einer Wand. Ausgerichtet
+        # wird die TINTE, nicht der Sprite-Rand.
+        _y = k * _step - _ink[k][0]
+        _x = -_ink[k][2] + max(x for _, _, x in _ink)
+        _y0, _x0 = max(_y, 0), max(_x, 0)
+        _sy, _sx = _y0 - _y, _x0 - _x
+        _y1 = min(_y0 + a.shape[0] - _sy, hoehe)
+        _x1 = min(_x0 + a.shape[1] - _sx, breite)
+        if _y1 <= _y0 or _x1 <= _x0:
+            continue
+        _cut = a[_sy:_sy + (_y1 - _y0), _sx:_sx + (_x1 - _x0)]
+        np.maximum(out[_y0:_y1, _x0:_x1], _cut, out=out[_y0:_y1, _x0:_x1])
+    # v224c SYMMETRISCH POLSTERN. persp_warp polstert nach der BREITE
+    # (w*0.12+20) - bei einem hohen, mehrzeiligen Block reicht das oben und
+    # unten nicht, und die erste Zeile wurde abgeschnitten (am Beweisbild zu
+    # sehen: von 'ON' blieb die untere Haelfte). Einseitig zu polstern waere
+    # ausserdem ein Positionsfehler (v194): der Zeichenpfad setzt das Sprite
+    # mittig, jedes ungleiche Polster verschiebt es.
+    _pad = int(hoehe * 0.22) + 8
+    return cv2.copyMakeBorder(out, _pad, _pad, _pad, _pad,
+                              cv2.BORDER_CONSTANT, value=(0, 0, 0, 0))
 
 
 def wall_area(depth_n, alpha, W, H):
@@ -11613,6 +11708,201 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
     # dem Anzeigefenster der Karte. Wuerde man dafuer p['start'] vorziehen,
     # haetten Ueberlappungs- und Solo-Riegel eine falsche Startzeit - genau
     # die Verwechslung, die v214/v215 gekostet hat.
+    def _wand_aufbereiten(p):
+        """v224d Wandmessung + Typografie an EINER Stelle.
+
+        Vorher stand das nur im ground-Zweig - der laeuft aber erst,
+        wenn die Karte im Anzeigefenster ist. Das ANKERWORT liegt davor
+        (v221) und wurde deshalb noch mit der alten, bildbreiten Fassung
+        und der alten Position gezeichnet: es sass neben der Wand statt
+        darauf (am Beweisbild belegt). Jetzt rufen BEIDE Wege dieselbe
+        Aufbereitung; `_pose_done` macht sie idempotent."""
+        # v219 DIE WANDMESSUNG STEHT HIER OBEN, VOR ALLEN ZWEIGEN.
+        # v218 hat sie in den NICHT-getrackten Zweig gelegt - und bei einem
+        # Wand-Plan ist `tracked` IMMER wahr (need_track deckt das ganze
+        # Anzeigefenster ab, und der Rueckfall auf den Boden-Track ist
+        # ebenfalls nie None). Der Block war damit toter Code: gezeichnet
+        # wurde weiter mit dem gebackenen Wechselwinkel (+-6 Grad), also
+        # genau der Zustand, den v218 ersetzen sollte. Im Talking-Head
+        # kommt ein zweiter Bypass dazu (`front_layer`, wenn keine freie
+        # Wandflaeche gefunden wird) - der zeichnet noch weiter oben.
+        # Es gibt in diesem Zweig DREI Zeichenwege; eine Korrektur am
+        # Sprite gehoert deshalb VOR die Weiche, nicht in einen Ast.
+        # (Derselbe Fehlertyp wie v159/v170/v176: Riegel am falschen Gate.)
+        # v223a: die MELDUNG steht ausserhalb der Tiefen-Bedingung. Sie
+        # innerhalb zu haben war derselbe Fehler in Kleinformat: der
+        # kritische Fall - KEINE Tiefenkarte, also kein Wand-Effekt -
+        # haette sich als einziger nicht gemeldet.
+        if (p.get('szene') == 'wand' and not p.get('lying')
+                and not p.get('glass') and depth_n is None
+                and not p.get('_wall_log')):
+            p['_wall_log'] = True
+            print(f"  Wall text '{p.get('kw_txt', '')}': no depth map - "
+                  f"keeping default angle and position "
+                  f"(models/depth.onnx missing?)")
+        if (p.get('szene') == 'wand' and not p.get('lying')
+                and not p.get('glass') and not p.get('_pose_done')
+                and p.get('flat_arr') is not None and depth_n is not None):
+            # v223 ZUERST DIE FLAECHE FINDEN, DANN DORT MESSEN. Erst
+            # gemessen und dann verschoben zu haben war ein Reihenfolge-
+            # Fehler: gemessen wurde an der ALTEN Stelle (Bildmitte), wo
+            # die Flaeche frontal ist - `wall_pose` gab dort None zurueck
+            # und der Text behielt den gebackenen Winkel, obwohl die Wand
+            # links klar schraeg steht (am Testfall belegt: yaw None statt
+            # der erwarteten Neigung).
+            _wa = wall_area(depth_n, alpha, W, H)
+            _mx = _wa[0] if _wa else p.get('cx', W / 2)
+            _my = _wa[1] if _wa else p.get('cy', H * 0.45)
+            _yaw_w = wall_pose(depth_n, _mx, _my,
+                               p['flat_arr'].shape[1] * 0.7,
+                               p['flat_arr'].shape[0] * 2.2, W, H)
+            if _yaw_w is not None:
+                p['arr'] = persp_warp(p['flat_arr'], yaw=_yaw_w, pitch=0.0)
+                p['_wall_yaw'] = _yaw_w
+                # v221: das Ankerwort liegt auf DERSELBEN Flaeche - sonst
+                # kippt es beim Uebergang zum vollen Satz sichtbar um.
+                if p.get('anker_flat') is not None:
+                    p['anker_arr'] = persp_warp(p['anker_flat'],
+                                                yaw=_yaw_w, pitch=0.0)
+            # v223 AUF DIE WANDFLAECHE, NICHT DANEBEN. Ismets Befund am
+            # v222-Render: die Neigung stimmte, die STELLE nicht - der Text
+            # lag halb ausserhalb am linken Bildrand, weil ihn die normale
+            # Platzierungs-Regie gesetzt hat (die kennt Gesichter und
+            # Bildunruhe, aber keine Wandflaeche). Jetzt wird die Flaeche
+            # gemessen und der Text in ihre Mitte gelegt.
+            if _wa is not None:
+                _wcx, _wcy, _wbw, _wbh = _wa
+                # v223 AUF DIE FLAECHE PASSEN, NICHT NUR DARUEBER LIEGEN.
+                # Am v222-Render gemessen ist die Wand im Bild nur rund
+                # 40 % breit (sie steht links, die Person davor), das
+                # Wand-Sprite dagegen fast bildbreit (688-715 px bei
+                # 720 px). Der Text konnte dort nie "auf" der Wand sein -
+                # er lag zwangslaeufig halb daneben und halb ausserhalb.
+                # "An der Wand" heisst: er passt auf die Flaeche.
+                # v224 NEU SETZEN STATT STAUCHEN. v223 hat die fertige,
+                # fast bildbreite Zeile auf die Flaeche gestaucht (bis
+                # 45 %) - das ergab eine winzige, randfuellende Zeile ohne
+                # Luft. Ismets Urteil: "sitzt auf der Wand, sieht aber echt
+                # unstrukturiert aus, muss eventuell etwas kleiner". Ein
+                # Schriftzug AN einer Wand ist mehrzeilig: die Flaeche gibt
+                # die Breite vor, der Text bricht um, die Schrift bleibt
+                # gross, und ein sichtbarer Rand bleibt frei. Der Rand ist
+                # das, was 'strukturiert' aussieht.
+                # v224a DEN WARP-VERLUST AUSGLEICHEN. persp_warp verkuerzt
+                # die abgewandte Seite - bei den gemessenen -33 Grad blieben
+                # von 72 % Flaechenbreite nur 44 % uebrig, der Schriftzug
+                # war damit wieder zu klein. Einmal probeweise warpen, das
+                # Verhaeltnis messen, dann mit ausgeglichener Zielbreite
+                # neu setzen. Ein Aufruf mehr je Moment, nicht je Frame.
+                _kw_wand = _wbw
+                if _yaw_w is not None:
+                    _pr = wall_typo(S, p.get('kw_txt', ''), _wbw, _wbh,
+                                    W, H, extrude=False)
+                    if _pr is not None:
+                        _pw = persp_warp(_pr, yaw=_yaw_w, pitch=0.0)
+                        _n1 = np.where(_pr[..., 3] > 80)
+                        _n2 = np.where(_pw[..., 3] > 80)
+                        if len(_n1[0]) and len(_n2[0]):
+                            _b1 = float(_n1[1].max() - _n1[1].min() + 1)
+                            _b2 = float(_n2[1].max() - _n2[1].min() + 1)
+                            if _b2 > 1 and _b1 > 1:
+                                # Deckel 1.25: mehr Ausgleich heisst, die
+                                # Schrift wird vor dem Warp so breit
+                                # gesetzt, dass sie danach zerquetscht ist
+                                # (am Beweisbild gesehen).
+                                _kw_wand = _wbw * max(1.0,
+                                                      min(_b1 / _b2, 1.25))
+                _wt = wall_typo(S, p.get('kw_txt', ''), _kw_wand, _wbh, W, H,
+                                extrude=False)
+                if _wt is not None:
+                    # v224c JE MEHR ZEILEN, DESTO WENIGER WINKEL. persp_warp
+                    # staucht die abgewandte Seite in der HOEHE; bei einem
+                    # dreizeiligen Block trifft das jede Zeile anders und
+                    # der Satz zerfaellt (am Beweisbild: 'ON' halb weg,
+                    # 'THE' gequetscht). Eine Wand darf man andeuten - die
+                    # Schrift muss lesbar bleiben, sonst arbeitet der
+                    # Effekt gegen sich selbst.
+                    _nz_w = int(getattr(wall_typo, 'zeilen', 1) or 1)
+                    _yw = (None if _yaw_w is None else
+                           max(-20.0 / _nz_w, min(20.0 / _nz_w, _yaw_w)))
+                    p['_wall_yaw'] = _yw
+                    p['flat_arr'] = _wt
+                    p['arr'] = (persp_warp(_wt, yaw=_yw, pitch=0.0)
+                                if _yw is not None else _wt)
+                    if p.get('anker_txt'):
+                        _wat = wall_typo(S, p['anker_txt'], _kw_wand, _wbh,
+                                         W, H, extrude=False)
+                        if _wat is not None:
+                            _nz_a = int(getattr(wall_typo, 'zeilen', 1) or 1)
+                            _ya = (None if _yaw_w is None else
+                                   max(-20.0 / _nz_a,
+                                       min(20.0 / _nz_a, _yaw_w)))
+                            p['anker_flat'] = _wat
+                            p['anker_arr'] = (
+                                persp_warp(_wat, yaw=_ya, pitch=0.0)
+                                if _ya is not None else _wat)
+                else:
+                    # Rueckfall: passt kein Satz auf die Flaeche, wird wie
+                    # in v223 gestaucht - lieber klein als daneben.
+                    _ziel = _wbw * 0.92
+                    for _sn in ('arr', 'anker_arr'):
+                        _sa = p.get(_sn)
+                        if _sa is None:
+                            continue
+                        _nz = np.where(_sa[..., 3] > 80)
+                        if not len(_nz[0]):
+                            continue
+                        _tw = float(_nz[1].max() - _nz[1].min() + 1)
+                        if _tw > _ziel:
+                            p[_sn] = _skaliere_sprite(_sa,
+                                                      max(_ziel / _tw, 0.45))
+                p['cx'] = _wcx
+                # v224: nicht auf den Schwerpunkt, sondern ins obere
+                # Drittel der Flaeche. Der Schwerpunkt einer bildhohen
+                # Wand ist die Bildmitte - dort schwebt der Text ohne
+                # Bezug. Auf Augenhoehe sitzt ein Wandschriftzug.
+                p['cy'] = _wcy - _wbh * 0.16
+                p['_wall_area'] = (round(_wcx, 1), round(p['cy'], 1),
+                                   round(_wbw, 1))
+            # v223: ins Log, WAS gemessen wurde. Drei Runden gingen mit
+            # der Frage verloren, ob der Wand-Code ueberhaupt greift -
+            # ohne Tiefenkarte tut er es nicht, und das war nirgends zu
+            # sehen. Eine Zeile je Wand-Moment, nicht je Frame.
+            if not p.get('_wall_log'):
+                p['_wall_log'] = True
+                print(f"  Wall text '{p.get('kw_txt', '')}': "
+                      + (f"plane {_yaw_w:+.0f} deg" if _yaw_w is not None
+                         else "no clear plane")
+                      + (f", placed on wall area at x={_wa[0] / W:.2f} W"
+                         if _wa is not None else ", no wall area found"))
+            # v223 UND DANN INS BILD. Der Anschnitt-Riegel (v217) laeuft in
+            # build_plans - also VOR dieser Neuverzerrung. Nach dem Warp
+            # ist das Sprite breiter und die Tinte sitzt anders; ohne
+            # zweite Pruefung laeuft genau das wieder aus dem Bild, was
+            # v217 abgeriegelt hat (im v222-Render zu sehen: nur 'ON' und
+            # 'WAL' standen drin).
+            for _sn in ('arr', 'anker_arr'):
+                _sa = p.get(_sn)
+                if _sa is None:
+                    continue
+                _nz = np.where(_sa[..., 3] > 80)
+                if not len(_nz[0]):
+                    continue
+                _cxn = float(p.get('cx', W / 2))
+                _x0 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].min())
+                _x1 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].max())
+                if _x1 - _x0 > W * 0.98:
+                    _s = (W * 0.96) / (_x1 - _x0)
+                    p[_sn] = _sa = _skaliere_sprite(_sa, _s)
+                    _nz = np.where(_sa[..., 3] > 80)
+                    _x0 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].min())
+                    _x1 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].max())
+                if _x0 < W * 0.02:
+                    p['cx'] = _cxn + (W * 0.02 - _x0)
+                elif _x1 > W * 0.98:
+                    p['cx'] = _cxn - (_x1 - W * 0.98)
+            p['_pose_done'] = True
+
     for p in plans:
         if p.get('anker_arr') is None or 'kw_i' not in p:
             continue
@@ -11620,7 +11910,26 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         _kt0 = card_t0(p, words)
         if t < _at0 or t >= _kt0:
             continue                       # davor nichts, danach der ganze Satz
+        # v224e EIN MOMENT, EIN BILD - auch fuer das Ankerwort. Es liegt in der
+        # Welt und wartet; es ist kein zweiter Untertitel. Steht gerade ein
+        # Fliesstext-Block, weicht der Anker (am Beweisbild gesehen: 'WALL' lag
+        # auf 'this one'). Damit fuellt er genau die Pausen, in denen sonst
+        # nichts im Bild ist - und tritt nie in Konkurrenz.
+        if any(q is not p and q.get('front')
+               and q.get('start', 0.0) <= t
+               < q.get('end', 0.0) + float(q.get('aus', 0.15))
+               for q in plans):
+            continue
         _adt = t - _at0
+        # v224d: die Wandmessung MUSS hier auch laufen. Sie stand nur im
+        # ground-Zweig, und der greift erst, wenn die Karte im Anzeigefenster
+        # ist - das Ankerwort liegt davor. Ergebnis war ein Ankerwort in der
+        # alten, bildbreiten Fassung an der alten Stelle: neben der Wand statt
+        # darauf (am Beweisbild belegt). Idempotent ueber `_pose_done`.
+        if (p.get('szene') == 'wand' and not p.get('lying')
+                and not p.get('glass') and not p.get('_pose_done')
+                and p.get('flat_arr') is not None and depth_n is not None):
+            _wand_aufbereiten(p)
         _asd = scene_shift(p)
         _aop = min(_adt / 0.35, 1.0)       # ruhig einblenden, es LIEGT ja da
         if p.get('scene_ground') or p.get('broll'):
@@ -11921,126 +12230,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                   opacity=g_out * aop, crop_w=vis_px)
             draw_small(p, g_out, tdx, tdy, x_sc, x_dv)
         elif p['tpl'] == 'ground' and dt >= 0:
-            # v219 DIE WANDMESSUNG STEHT HIER OBEN, VOR ALLEN ZWEIGEN.
-            # v218 hat sie in den NICHT-getrackten Zweig gelegt - und bei einem
-            # Wand-Plan ist `tracked` IMMER wahr (need_track deckt das ganze
-            # Anzeigefenster ab, und der Rueckfall auf den Boden-Track ist
-            # ebenfalls nie None). Der Block war damit toter Code: gezeichnet
-            # wurde weiter mit dem gebackenen Wechselwinkel (+-6 Grad), also
-            # genau der Zustand, den v218 ersetzen sollte. Im Talking-Head
-            # kommt ein zweiter Bypass dazu (`front_layer`, wenn keine freie
-            # Wandflaeche gefunden wird) - der zeichnet noch weiter oben.
-            # Es gibt in diesem Zweig DREI Zeichenwege; eine Korrektur am
-            # Sprite gehoert deshalb VOR die Weiche, nicht in einen Ast.
-            # (Derselbe Fehlertyp wie v159/v170/v176: Riegel am falschen Gate.)
-            # v223a: die MELDUNG steht ausserhalb der Tiefen-Bedingung. Sie
-            # innerhalb zu haben war derselbe Fehler in Kleinformat: der
-            # kritische Fall - KEINE Tiefenkarte, also kein Wand-Effekt -
-            # haette sich als einziger nicht gemeldet.
-            if (p.get('szene') == 'wand' and not p.get('lying')
-                    and not p.get('glass') and depth_n is None
-                    and not p.get('_wall_log')):
-                p['_wall_log'] = True
-                print(f"  Wall text '{p.get('kw_txt', '')}': no depth map - "
-                      f"keeping default angle and position "
-                      f"(models/depth.onnx missing?)")
-            if (p.get('szene') == 'wand' and not p.get('lying')
-                    and not p.get('glass') and not p.get('_pose_done')
-                    and p.get('flat_arr') is not None and depth_n is not None):
-                # v223 ZUERST DIE FLAECHE FINDEN, DANN DORT MESSEN. Erst
-                # gemessen und dann verschoben zu haben war ein Reihenfolge-
-                # Fehler: gemessen wurde an der ALTEN Stelle (Bildmitte), wo
-                # die Flaeche frontal ist - `wall_pose` gab dort None zurueck
-                # und der Text behielt den gebackenen Winkel, obwohl die Wand
-                # links klar schraeg steht (am Testfall belegt: yaw None statt
-                # der erwarteten Neigung).
-                _wa = wall_area(depth_n, alpha, W, H)
-                _mx = _wa[0] if _wa else p.get('cx', W / 2)
-                _my = _wa[1] if _wa else p.get('cy', H * 0.45)
-                _yaw_w = wall_pose(depth_n, _mx, _my,
-                                   p['flat_arr'].shape[1] * 0.7,
-                                   p['flat_arr'].shape[0] * 2.2, W, H)
-                if _yaw_w is not None:
-                    p['arr'] = persp_warp(p['flat_arr'], yaw=_yaw_w, pitch=0.0)
-                    p['_wall_yaw'] = _yaw_w
-                    # v221: das Ankerwort liegt auf DERSELBEN Flaeche - sonst
-                    # kippt es beim Uebergang zum vollen Satz sichtbar um.
-                    if p.get('anker_flat') is not None:
-                        p['anker_arr'] = persp_warp(p['anker_flat'],
-                                                    yaw=_yaw_w, pitch=0.0)
-                # v223 AUF DIE WANDFLAECHE, NICHT DANEBEN. Ismets Befund am
-                # v222-Render: die Neigung stimmte, die STELLE nicht - der Text
-                # lag halb ausserhalb am linken Bildrand, weil ihn die normale
-                # Platzierungs-Regie gesetzt hat (die kennt Gesichter und
-                # Bildunruhe, aber keine Wandflaeche). Jetzt wird die Flaeche
-                # gemessen und der Text in ihre Mitte gelegt.
-                if _wa is not None:
-                    _wcx, _wcy, _wbw, _wbh = _wa
-                    # v223 AUF DIE FLAECHE PASSEN, NICHT NUR DARUEBER LIEGEN.
-                    # Am v222-Render gemessen ist die Wand im Bild nur rund
-                    # 40 % breit (sie steht links, die Person davor), das
-                    # Wand-Sprite dagegen fast bildbreit (688-715 px bei
-                    # 720 px). Der Text konnte dort nie "auf" der Wand sein -
-                    # er lag zwangslaeufig halb daneben und halb ausserhalb.
-                    # "An der Wand" heisst: er passt auf die Flaeche.
-                    _ziel = _wbw * 0.92
-                    for _sn in ('arr', 'anker_arr'):
-                        _sa = p.get(_sn)
-                        if _sa is None:
-                            continue
-                        _nz = np.where(_sa[..., 3] > 80)
-                        if not len(_nz[0]):
-                            continue
-                        _tw = float(_nz[1].max() - _nz[1].min() + 1)
-                        if _tw > _ziel:
-                            # Untergrenze: unter 45 % waere der Text auf der
-                            # Wand nicht mehr zu lesen - dann ist die Flaeche
-                            # zu klein und wir lassen ihn lieber groesser
-                            # ueberstehen als unlesbar schrumpfen.
-                            _s = max(_ziel / _tw, 0.45)
-                            p[_sn] = _skaliere_sprite(_sa, _s)
-                    p['cx'] = _wcx
-                    p['cy'] = _wcy
-                    p['_wall_area'] = (round(_wcx, 1), round(_wcy, 1),
-                                       round(_wbw, 1))
-                # v223: ins Log, WAS gemessen wurde. Drei Runden gingen mit
-                # der Frage verloren, ob der Wand-Code ueberhaupt greift -
-                # ohne Tiefenkarte tut er es nicht, und das war nirgends zu
-                # sehen. Eine Zeile je Wand-Moment, nicht je Frame.
-                if not p.get('_wall_log'):
-                    p['_wall_log'] = True
-                    print(f"  Wall text '{p.get('kw_txt', '')}': "
-                          + (f"plane {_yaw_w:+.0f} deg" if _yaw_w is not None
-                             else "no clear plane")
-                          + (f", placed on wall area at x={_wa[0] / W:.2f} W"
-                             if _wa is not None else ", no wall area found"))
-                # v223 UND DANN INS BILD. Der Anschnitt-Riegel (v217) laeuft in
-                # build_plans - also VOR dieser Neuverzerrung. Nach dem Warp
-                # ist das Sprite breiter und die Tinte sitzt anders; ohne
-                # zweite Pruefung laeuft genau das wieder aus dem Bild, was
-                # v217 abgeriegelt hat (im v222-Render zu sehen: nur 'ON' und
-                # 'WAL' standen drin).
-                for _sn in ('arr', 'anker_arr'):
-                    _sa = p.get(_sn)
-                    if _sa is None:
-                        continue
-                    _nz = np.where(_sa[..., 3] > 80)
-                    if not len(_nz[0]):
-                        continue
-                    _cxn = float(p.get('cx', W / 2))
-                    _x0 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].min())
-                    _x1 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].max())
-                    if _x1 - _x0 > W * 0.98:
-                        _s = (W * 0.96) / (_x1 - _x0)
-                        p[_sn] = _sa = _skaliere_sprite(_sa, _s)
-                        _nz = np.where(_sa[..., 3] > 80)
-                        _x0 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].min())
-                        _x1 = _cxn - _sa.shape[1] / 2.0 + float(_nz[1].max())
-                    if _x0 < W * 0.02:
-                        p['cx'] = _cxn + (W * 0.02 - _x0)
-                    elif _x1 > W * 0.98:
-                        p['cx'] = _cxn - (_x1 - W * 0.98)
-                p['_pose_done'] = True
+            _wand_aufbereiten(p)
             # v91: liegender Boden-Text auf B-Roll MIT Person -> Anker einmalig
             # auf die klare Strasse verschieben (weg vom Bild-Zentrum, wo bei
             # Kameraschwenk-nach-unten Arm/Pulli stehen). Danach traegt die

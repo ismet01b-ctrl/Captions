@@ -2161,9 +2161,14 @@ def _scenario_logic(clip, transcript, tmp):
         R.wall_pose = _orig9
     check('v219: die Wandmessung laeuft im ECHTEN Zeichenpfad (getrackt, mit Person)',
           _ruf9['n'] >= 1, f"wall_pose {_ruf9['n']}x aufgerufen")
+    # v224b: der Winkel ist nach ZEILENZAHL gedeckelt (20 Grad / Zeilen).
+    # Schrift ist keine Textur - bei -33 Grad wurde aus 'WALL' ein 'WAI I',
+    # weil persp_warp die abgewandte Seite staucht und das Antialiasing die
+    # Strichenden auffrisst. Gefordert ist also: ein Winkel IST gesetzt und er
+    # liegt im lesbaren Bereich.
     check('v219: der gemessene Winkel landet am Plan',
           bool(_wp9) and _wp9[0].get('_wall_yaw') is not None
-          and abs(_wp9[0]['_wall_yaw']) > 8,
+          and 3.0 <= abs(_wp9[0]['_wall_yaw']) <= 20.0,
           str(_wp9[0].get('_wall_yaw') if _wp9 else None))
     # Und die Messung muss das BILD veraendern, nicht nur ein Feld setzen.
     _flat9 = _S9.text('ON THE WALL', 110, _S9.white)[0]
@@ -2351,13 +2356,83 @@ def _scenario_logic(clip, transcript, tmp):
               f"{_na3[0]:.3f}..{_na3[1]:.3f} W")
         check('v223: die Neigung wird AN DER FLAECHE gemessen, nicht an der '
               'alten Stelle',
-              _p3.get('_wall_yaw') is not None and abs(_p3['_wall_yaw']) > 8,
+              _p3.get('_wall_yaw') is not None
+              and 3.0 <= abs(_p3['_wall_yaw']) <= 20.0,
               str(_p3.get('_wall_yaw')))
         check('v223: der Text passt auf die Flaeche (nicht breiter als die Wand)',
               _wa3 is not None
               and (_na3[1] - _na3[0]) * _W3 <= _wa3[2] * 1.05,
               f"Text {round((_na3[1] - _na3[0]) * _W3)} px, "
               f"Wand {round(_wa3[2]) if _wa3 else '?'} px")
+    # ------------------------------------------------------------------
+    # v224: EIN WANDSCHRIFTZUG WIRD GESETZT, NICHT GESCHRUMPFT.
+    # Ismets Befund am v223-Render: "sitzt auf der Wand, sieht aber echt
+    # unstrukturiert aus, muss eventuell etwas kleiner". Beides kam aus
+    # derselben Ursache: v223 nahm die FERTIGE, fast bildbreite Zeile und
+    # stauchte sie auf die Flaeche (bis 45 %) - eine winzige, randfuellende
+    # Zeile ohne Luft. Ein Schriftzug AN einer Wand ist mehrzeilig: die
+    # Flaeche gibt die Breite, der Text bricht um, die Schrift bleibt gross.
+    _wt4 = R.wall_typo(_S3, 'ON THE WALL', 277.5, 1280.0, _W3, _H3)
+    check('v224: der Wandschriftzug wird mehrzeilig gesetzt',
+          _wt4 is not None and _wt4.shape[0] > _wt4.shape[1] * 0.5,
+          str(None if _wt4 is None else f"{_wt4.shape[1]}x{_wt4.shape[0]}"))
+
+    def _zeilen4(a):
+        m = a[..., 3] > 80
+        _rows = np.where(m.any(axis=1))[0]
+        _seg, _cur = [], None
+        for _y in _rows:
+            if _cur and _y - _cur[1] <= 2:
+                _cur[1] = _y
+            else:
+                if _cur:
+                    _seg.append(_cur)
+                _cur = [_y, _y]
+        if _cur:
+            _seg.append(_cur)
+        return len(_seg), (max(b - a0 + 1 for a0, b in _seg) if _seg else 0)
+    _nl4, _vh4 = _zeilen4(_wt4) if _wt4 is not None else (0, 0)
+    check('v224: hoechstens drei Zeilen (mehr liest sich wie ein Absatz)',
+          1 <= _nl4 <= 3, f"{_nl4} Zeilen")
+    _nz4 = np.where(_wt4[..., 3] > 80) if _wt4 is not None else None
+    _bw4 = (float(_nz4[1].max() - _nz4[1].min() + 1) / 277.5) if _nz4 is not None else 0
+    check('v224: er laesst Rand frei (60-85 % der Flaechenbreite)',
+          0.60 <= _bw4 <= 0.85, f"{_bw4:.0%} der Wandbreite")
+    check('v224: eine zu schmale Flaeche gibt None (dann greift der Rueckfall)',
+          R.wall_typo(_S3, 'ON THE WALL', _W3 * 0.05, 1280.0, _W3, _H3) is None
+          and R.wall_typo(_S3, '', 277.5, 1280.0, _W3, _H3) is None)
+    # WIRKSAMKEITS-NACHWEIS im echten Zeichenpfad: die Schrift muss GROESSER
+    # sein als beim reinen Stauchen, der Block schmaler als die Wand, und er
+    # sitzt auf Augenhoehe statt im Flaechen-Schwerpunkt.
+    if _wp3:
+        _p4 = [p for p in R.build_plans(_w3, set(_fx3), cfg, _S3, _W3, _H3,
+                                        lambda s, e: True, _fx3)
+               if p.get('szene') == 'wand']
+        _pl4 = R.build_plans(_w3, set(_fx3), cfg, _S3, _W3, _H3,
+                             lambda s, e: True, _fx3)
+        _p4 = [p for p in _pl4 if p.get('szene') == 'wand'][0]
+        _fr4 = np.full((_H3, _W3, 3), 190.0, np.float32)
+        for _k4 in range(3):
+            R.composite_frame(_fr4.copy(), _al3,
+                              R.card_t0(_p4, _w3) + 0.3 + _k4 * 0.04, _pl4, _w3,
+                              (500, 500, 60), cfg, _S3, _W3, _H3, depth_n=_d3,
+                              H_cum=np.eye(3), H_cum_wall=np.eye(3),
+                              track_gen=1, wall_gen=1)
+        _nl5, _vh5 = _zeilen4(_p4['arr'])
+        _nz5 = np.where(_p4['arr'][..., 3] > 80)
+        _bw5 = float(_nz5[1].max() - _nz5[1].min() + 1)
+        # Reines Stauchen ergab bei dieser Wand 39 px Versalhoehe (110 px
+        # Ausgangsschrift auf 255/715 gestaucht).
+        check('v224: die Schrift bleibt gross (deutlich groesser als gestaucht)',
+              _vh5 >= 48, f"Versalhoehe {_vh5} px (gestaucht waeren ~39 px)")
+        check('v224: der Block ist schmaler als die Wand (Rand bleibt frei)',
+              _bw5 <= 277.5 * 0.85, f"{_bw5:.0f} px auf 278 px Wand")
+        check('v224: der Warp-Verlust wird ausgeglichen (aber gedeckelt)',
+              '_kw_wand = _wbw' in _src221 and 'min(_b1 / _b2, 1.25)' in _src221,
+              'mehr Ausgleich quetscht die Schrift')
+        check('v224: er sitzt auf Augenhoehe, nicht im Flaechen-Schwerpunkt',
+              _p4['cy'] < 635 - 100, f"cy {round(_p4['cy'])} (Schwerpunkt 635)")
+
     check('v223: Flaechensuche laeuft VOR der Neigungsmessung',
           _src221.index('_wa = wall_area(depth_n, alpha, W, H)')
           < _src221.index('_yaw_w = wall_pose(depth_n, _mx, _my'))

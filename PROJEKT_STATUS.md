@@ -3,6 +3,46 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v224 EIN WANDSCHRIFTZUG WIRD GESETZT, NICHT GESCHRUMPFT.**
+  Ismets Befund am v223-Render: "sitzt auf der Wand, sieht aber echt
+  unstrukturiert aus, muss eventuell etwas kleiner". Beides kam aus derselben
+  Ursache: v223 nahm die FERTIGE, fast bildbreite Zeile und stauchte sie auf
+  die Flaeche (bis 45 %) - eine winzige, randfuellende Zeile ohne Luft.
+  - `wall_typo()` SETZT den Text fuer die Flaeche neu: mehrzeilig (max drei
+    Zeilen), linksbuendig an einer gemeinsamen Achse, auf 72 % der
+    Flaechenbreite - der freie Rand ist es, der 'strukturiert' aussieht.
+    Gemessen: Versalhoehe 52 px statt 39 px beim Stauchen, Block 66 % der
+    Wandbreite statt randfuellend.
+  - Platziert wird auf **Augenhoehe** (oberes Drittel der Flaeche), nicht im
+    Schwerpunkt - der liegt bei einer bildhohen Wand in der Bildmitte, wo der
+    Text ohne Bezug schwebt.
+  - **v224b DER WINKEL IST GEDECKELT, WEIL SCHRIFT KEINE TEXTUR IST.** v218
+    liess bis 46 Grad zu; am Beweisbild wurde bei -33 Grad aus 'WALL' ein
+    'WAI I' - persp_warp staucht die abgewandte Seite, das Antialiasing frisst
+    die Strichenden. Jetzt max 20 Grad, geteilt durch die ZEILENZAHL (ein
+    dreizeiliger Block vertraegt weniger als eine Zeile). Der Warp-Ausgleich
+    ist auf 1.25 gedeckelt - mehr quetscht die Schrift.
+  - **v224c MONTIERT WIRD AN DER TINTE, NICHT AN DER SCHRIFTGROESSE.** Ein
+    Text-Sprite ist deutlich hoeher als seine Schriftgroesse (Glow-Polster).
+    Mit Zeilenabstand `gr*1.12` wurde jede Zeile oben abgeschnitten - von 'ON'
+    und 'THE' stand nur die untere Haelfte da. Gemessen wird jetzt die Tinte
+    jeder Zeile, ueberlagert per Maximum, und symmetrisch gepolstert (v194:
+    einseitig polstern ist ein Positionsfehler).
+  - **v224d DIE MESSUNG LAEUFT AN BEIDEN ZEICHENWEGEN.** Sie stand nur im
+    ground-Zweig - der greift erst, wenn die Karte im Anzeigefenster ist. Das
+    ANKERWORT liegt davor (v221) und wurde deshalb in der alten, bildbreiten
+    Fassung an der alten Stelle gezeichnet: neben der Wand statt darauf.
+    Jetzt rufen beide Wege dieselbe Aufbereitung (`_wand_aufbereiten`,
+    idempotent ueber `_pose_done`).
+  - **v224e EIN MOMENT, EIN BILD - auch fuer das Ankerwort.** Es lag auf dem
+    Fliesstext ('WALL' auf 'this one'). Es liegt in der Welt und wartet, es
+    ist kein zweiter Untertitel: steht ein Fliesstext-Block, weicht der Anker.
+    Damit fuellt er genau die Pausen, in denen sonst nichts im Bild ist.
+  - **VIER Beweisbilder gebraucht** - jedes hat einen eigenen Fehler gezeigt,
+    den keine Zahl gemeldet haette (zerfallene Buchstaben, abgeschnittene
+    Zeilen, Anker neben der Wand, Anker auf dem Fliesstext). CLAUDE.md-Lehre
+    "bei jeder Aenderung hier einen Frame-Streifen rendern" (v150), bestaetigt.
+  - Regression **1651/1651 logic + 7/1/5/2 Renders + GUI_OK**.
 - **v223 DER WAND-TEXT MUSS AUF DIE FLAECHE, NICHT NUR IN IHRE EBENE.**
   Ismets Befund am v222-Render (Build-Stempel bestaetigt: `v222`, der Code
   lief also endlich): "der wird gar nicht richtig auf der Wand platziert".
