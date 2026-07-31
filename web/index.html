@@ -5057,12 +5057,8 @@ if ($('#demoCta')) $('#demoCta').addEventListener('click', () => {
    an der vom Server bestaetigten Byte-Grenze FORT - nichts geht verloren. */
 async function chunkedUpload(file, fields, onProgress) {
   const CHUNK = 2 * 1024 * 1024;
-  const waitVisible = () => new Promise(res => {
-    if (!document.hidden) return res();
-    const h = () => { if (!document.hidden) {
-      document.removeEventListener('visibilitychange', h); res(); } };
-    document.addEventListener('visibilitychange', h);
-  });
+  const waitVisible = whenVisible;   // v230e: eine Quelle fuer "warte, bis
+                                     // der Tab wieder vorn ist"
   const initFd = new FormData();
   initFd.append('filename', file.name || 'video.mp4');
   initFd.append('size', String(file.size || 0));
@@ -5306,7 +5302,35 @@ function showError(msg, detail, opts) {
   try { $('#errCard').scrollIntoView({behavior: 'smooth', block: 'center'}); } catch (e) {}
 }
 
+/* v230e EIN WEGGEKLICKTER TAB IST KEIN VERBINDUNGSABBRUCH.
+   Ismets Befund: "Jedesmal wenn ich die Seite im Tab minimiere, ist die
+   Seite abgestuerzt." Im Browser nachgestellt (Chromium, 390x844): sobald
+   der Tab im Hintergrund ist, bricht das Handy die laufenden Anfragen ab.
+   Die Zaehlung in pollRender/pollAnalyze unterscheidet nicht, WARUM eine
+   Anfrage scheiterte - nach 10 abgebrochenen kam die grosse Karte
+   "Connection lost", der Render-Knopf blieb gesperrt. Gemessen: 14
+   abgebrochene Anfragen in 20 Sekunden Hintergrund, Karte nach ~12 s.
+   Fuer den Kunden sieht das aus wie ein Absturz - dabei laeuft sein Render
+   die ganze Zeit unveraendert weiter.
+   Regel jetzt: im Hintergrund wird gar nicht erst gefragt, und ein Fehler,
+   der DORT auftritt, zaehlt nicht. Dieselbe Mechanik, die der Chunk-Upload
+   seit v101v benutzt (er pausiert und setzt fort). */
+function whenVisible() {
+  if (!document.hidden) return Promise.resolve();
+  return new Promise(res => {
+    const h = () => {
+      if (!document.hidden) {
+        document.removeEventListener('visibilitychange', h);
+        res();
+      }
+    };
+    document.addEventListener('visibilitychange', h);
+  });
+}
 async function pollAnalyze() {
+  // Zurueck aus dem Hintergrund: der Fehlerzaehler faengt bei null an. Sonst
+  // reichen nach einer langen Pause wenige echte Aussetzer fuer die Karte.
+  if (document.hidden) { await whenVisible(); State.aPollErrs = 0; }
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     if (st.status === 'analysiert') {
@@ -5325,6 +5349,8 @@ async function pollAnalyze() {
     aStat(st.phase || 'Running …');
     State.aPollErrs = 0;
   } catch (e) {
+    // v230e: ein Abbruch im Hintergrund ist kein Ausfall.
+    if (document.hidden) { setTimeout(pollAnalyze, 2000); return; }
     State.aPollErrs = (State.aPollErrs || 0) + 1;
     if (State.aPollErrs >= 10) {          // v98: nicht endlos gegen die Wand
       State.aPollErrs = 0;
@@ -5363,6 +5389,9 @@ function progAnim() {
 }
 
 async function pollRender() {
+  // v230e: im Hintergrund gar nicht erst fragen, und beim Zurueckkommen
+  // faengt der Fehlerzaehler bei null an.
+  if (document.hidden) { await whenVisible(); State.pollErrs = 0; }
   if (!State.progRAF) progAnim();   // Smoother laeuft unabhaengig vom Poll
   // v130: Fertig-Mail deaktiviert (Ismet) -> keine Mail-Zusage mehr im Render-Screen.
   try {
@@ -5398,6 +5427,10 @@ async function pollRender() {
     }
     State.pollErrs = 0;
   } catch (e) {
+    // v230e: Der Tab ist weggeklickt - das Handy hat die Anfrage abgebrochen,
+    // der Server ist gesund. Nicht zaehlen, sonst steht beim Zurueckkommen
+    // die Karte "Connection lost" da, obwohl nie etwas verloren war.
+    if (document.hidden) { setTimeout(pollRender, 1200); return; }
     // v98: Endlos-Poll gegen einen toten Server fror die UI ein. Nach
     // ~30s ohne Antwort ehrlich aufgeben - der Job selbst laeuft serverseitig
     // weiter und liegt danach in der Library.

@@ -3,6 +3,37 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230e EIN WEGGEKLICKTER TAB IST KEIN VERBINDUNGSABBRUCH.**
+  Ismets Befund: "Jedesmal wenn ich die Seite im Tab minimiere, ist die Seite
+  abgestuerzt." Im echten Browser nachgestellt (Chromium, 390x844, echter
+  Server): sobald der Tab in den Hintergrund geht, brechen die laufenden
+  Anfragen ab. `pollRender`/`pollAnalyze` unterschieden nicht, WARUM eine
+  Anfrage scheiterte - nach 10 Fehlversuchen kam die grosse Karte
+  "Connection lost - your render is still running", und der Render-Knopf
+  blieb gesperrt. Fuer den Kunden sieht das aus wie ein Absturz, dabei lief
+  sein Render die ganze Zeit unveraendert weiter.
+  - **Gemessen, alt:** 14 abgebrochene Anfragen in 20 s Hintergrund, Karte
+    nach rund 12 s, Knopf gesperrt. **Neu:** 0 Anfragen im Hintergrund,
+    keine Karte, Knopf frei.
+  - Regel jetzt: im Hintergrund wird **gar nicht erst gefragt**
+    (`whenVisible()`), und ein Fehler, der DORT auftritt, zaehlt nicht. Beim
+    Zurueckkommen faengt der Fehlerzaehler bei null an - sonst reichen nach
+    einer langen Pause wenige echte Aussetzer fuer die Karte. Dieselbe
+    Mechanik, die der Chunk-Upload seit v101v benutzt; sie hat jetzt EINE
+    Quelle statt zweier Kopien.
+  - **Nachweis durch Ausfuehren**, nicht durch Quelltext-Suche: die Sonde
+    `web/_dom_probe.mjs` schneidet die echte `pollRender` aus index.html und
+    laesst sie gegen ein Mini-DOM mit umgeschaltetem `document.hidden`
+    laufen. Vier neue Faelle im Selftest. Zwei Fallen dabei, beide behoben:
+    `schneide()` verlor das `async` vor dem Funktionsnamen (das erste
+    `await` war dann ein Syntaxfehler), und ein frueherer Abschnitt der
+    Sonde ersetzt `globalThis.setTimeout` durch eine Warteschlange - ohne
+    die echte Uhr lief der 1.2-s-Takt nie an und der Test mass nichts.
+  - **Nicht behoben, weil nicht reproduzierbar:** ein echter Browser-Absturz
+    (Renderer-Crash) trat in keinem Lauf auf - weder im Leerlauf noch mit
+    laufendem Render, auch nicht nach dreimaligem Einfrieren des Tabs
+    (`Page.setWebLifecycleState`). Bleibt das Verhalten nach dem Deploy
+    bestehen, ist es ein anderer Fehler und braucht Ismets Geraet + Browser.
 - **v230d-sec RUNDE 2 DES AUDITS: FUENF WEITERE LUECKEN, EINE KRITISCH.**
   Sechs Pruefer auf noch nicht abgesuchten Flaechen (Anmeldung, Eigentum,
   Dateipfade, HTML/Panel, Geld, Admin), jeder Befund musste einen

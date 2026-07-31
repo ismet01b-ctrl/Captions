@@ -832,6 +832,23 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   `admin.html`). Und ein `try/catch` um einen Renderer muss loggen: ein
   leeres Banner sieht sonst aus wie "nichts vorhanden".
 
+## Kunden-App: Hintergrund-Tab (v230e)
+- **Ein Fehlerzähler muss wissen, WARUM eine Anfrage scheiterte.** Im
+  Hintergrund bricht das Handy laufende Anfragen ab; gezählt wurden sie wie
+  echte Ausfälle, und nach 10 kam die Karte „Connection lost" — während der
+  Render unverändert weiterlief. Regel: im Hintergrund gar nicht erst
+  fragen (`whenVisible()`), dort auftretende Fehler zählen nicht, und beim
+  Zurückkommen fängt der Zähler bei null an.
+- **Die Sonde `web/_dom_probe.mjs` hat zwei eigene Fallen:** `schneide()`
+  muss das `async` VOR dem Funktionsnamen mitnehmen (sonst ist das erste
+  `await` ein Syntaxfehler), und ein früherer Abschnitt ersetzt
+  `globalThis.setTimeout` durch eine Warteschlange — wer echte Zeit braucht,
+  nimmt `ECHTER_TIMEOUT`. Beides fällt als „Test misst nichts" auf, nicht
+  als Fehler.
+- **Was NICHT reproduzierbar war:** ein echter Renderer-Absturz. Weder im
+  Leerlauf noch mit laufendem Render, auch nicht nach dreimaligem Einfrieren
+  des Tabs. Kommt der Befund wieder, braucht es Gerät und Browser.
+
 ## Sicherheit: Lehren aus Audit-Runde 2 (v230d-sec)
 - **Ein mehrstufiger Vorgang wird an JEDER Stufe geprüft, und die
   Berechtigung gehört an den VORGANG, nicht an den einzelnen Request.** Der
@@ -1189,7 +1206,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1777/1777 grün (Stand v230d)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1781/1781 grün (Stand v230e)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

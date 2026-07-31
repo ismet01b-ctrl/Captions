@@ -11,11 +11,17 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 const HIER = dirname(fileURLToPath(import.meta.url));
+// Die echte Uhr sichern, BEVOR ein Test sie durch eine Warteschlange ersetzt.
+const ECHTER_TIMEOUT = globalThis.setTimeout;
 const html = readFileSync(join(HIER, 'index.html'), 'utf8');
 
 function schneide(name) {
-  const i = html.indexOf('function ' + name + '(');
+  let i = html.indexOf('function ' + name + '(');
   if (i < 0) throw new Error('nicht gefunden: ' + name);
+  // v230e: `async` gehoert zur Funktion. Ohne dieses Stueck schneidet die
+  // Sonde eine async-Funktion als normale heraus, und ihr erstes `await`
+  // ist dann ein Syntaxfehler - der Test faellt aus dem falschen Grund.
+  if (html.slice(Math.max(0, i - 6), i) === 'async ') i -= 6;
   let d = 0, j = html.indexOf('{', i);
   for (let k = j; k < html.length; k++) {
     if (html[k] === '{') d++;
@@ -192,6 +198,99 @@ pruef('unbekannte Quelle: nichts wird verboten',
       runk.every(x => !x.aus), JSON.stringify(runk));
 pruef('der Hinweis nennt die Aufloesung der Quelle',
       lauf(720, 1080) && HINT.textContent.includes('720p'), HINT.textContent);
+
+// ---- v230e: ein weggeklickter Tab ist kein Verbindungsabbruch ----
+// Ismets Befund: "Jedesmal wenn ich die Seite im Tab minimiere, ist die
+// Seite abgestuerzt." Im Hintergrund bricht das Handy die laufenden
+// Anfragen ab; die Zaehlung unterschied nicht, WARUM eine Anfrage
+// scheiterte, und zeigte nach 10 Fehlversuchen die grosse Karte
+// "Connection lost" - waehrend der Render unveraendert weiterlief.
+// Gemessen im echten Browser: 14 abgebrochene Anfragen in 20 s
+// Hintergrund, Karte nach ~12 s. Hier wird die ECHTE pollRender
+// ausgefuehrt, nicht der Quelltext durchsucht.
+{
+  let versteckt = false;
+  let gefragt = 0;
+  const hoerer = [];
+  globalThis.document = {
+    get hidden() { return versteckt; },
+    querySelector: (s) => $(s),
+    getElementById: () => null,
+    addEventListener: (t, h) => { if (t === 'visibilitychange') hoerer.push(h); },
+    removeEventListener: (t, h) => {
+      const i = hoerer.indexOf(h); if (i >= 0) hoerer.splice(i, 1);
+    },
+  };
+  const umschalten = (v) => { versteckt = v; hoerer.slice().forEach(h => h()); };
+  globalThis.State = { jid: 'x', pollErrs: 0 };
+  globalThis.fetch = async () => {
+    gefragt++;
+    // Der Hintergrund bricht ab - genau wie auf dem Handy.
+    if (versteckt) throw new TypeError('Failed to fetch');
+    return { json: async () => ({ status: 'laeuft', progress: 0.4,
+                                  phase: 'Rendering …', eta_sec: 60 }) };
+  };
+  globalThis.requestAnimationFrame = () => 1;
+  globalThis.cancelAnimationFrame = () => {};
+  globalThis.progAnim = () => {};
+  globalThis.fmtDur = () => '0:00';
+  globalThis.renderSuccess = () => {};
+  globalThis.refreshBalanceInHeader = () => {};
+  globalThis.toast = () => {};
+  globalThis.showError = (msg, d, o) => { globalThis._karte = msg; };
+  globalThis.localStorage = localStorage;
+  globalThis.whenVisible = eval('(' + schneide('whenVisible') + ')');
+  const pollRender = eval('(' + schneide('pollRender') + ')');
+  globalThis.pollRender = pollRender;
+  // Ein frueherer Abschnitt hat globalThis.setTimeout durch eine Warteschlange
+  // ersetzt (fuer die Fehler-Tests). Hier brauchen wir die ECHTE Uhr, sonst
+  // laeuft der 1.2-s-Takt von pollRender nie an und nichts wird gemessen.
+  globalThis.setTimeout = ECHTER_TIMEOUT;
+  const warte = (ms) => new Promise(r => ECHTER_TIMEOUT(r, ms));
+
+  globalThis._karte = null;
+  await pollRender();                      // sichtbar: eine Runde
+  const gefragt_sichtbar = gefragt;
+  umschalten(true);                        // Tab weggeklickt
+  // Die naechste geplante Runde faellt in den Hintergrund (1.2 s Takt).
+  // NICHT awaiten: die Runde bleibt absichtlich stehen, bis der Tab
+  // zurueckkommt - genau das ist der Fix.
+  await warte(2000);
+  const gefragt_versteckt = gefragt - gefragt_sichtbar;
+  pruef('v230e: im Hintergrund wird gar nicht erst gefragt',
+        gefragt_versteckt === 0, gefragt_versteckt + ' Anfragen');
+  pruef('v230e: keine Fehlerkarte, waehrend der Tab weg ist',
+        globalThis._karte === null, String(globalThis._karte));
+
+  // Zweiter Fall: die Anfrage lief noch, WAEHREND der Tab weggeklickt wurde.
+  // Sie wird abgebrochen - das darf den Zaehler nicht erhoehen.
+  // Damit die Messung sauber ist, werden die noch laufenden Poll-Ketten aus
+  // Teil 1 vorher geparkt: `versteckt` direkt setzen, OHNE das Ereignis -
+  // dann bleiben sie in whenVisible stehen und koennen nichts mehr
+  // zuruecksetzen, waehrend der naechste Aufruf sie fuer sichtbar haelt.
+  await warte(1500);
+  versteckt = false;
+  State.pollErrs = 9;
+  globalThis.fetch = async () => {
+    versteckt = true;                      // Tab geht waehrend der Anfrage weg
+    throw new TypeError('Failed to fetch');
+  };
+  await pollRender();
+  pruef('v230e: ein Abbruch im Hintergrund erhoeht den Fehlerzaehler nicht',
+        State.pollErrs === 9, 'Zaehler ' + State.pollErrs);
+  pruef('v230e: und er zeigt keine Fehlerkarte',
+        globalThis._karte === null, String(globalThis._karte));
+  // Zurueck im Vordergrund: die naechste Runde setzt den Zaehler zurueck.
+  versteckt = true;
+  const laeuft = pollRender();             // wartet auf die Rueckkehr
+  await warte(200);
+  umschalten(false);
+  globalThis.fetch = async () => ({ json: async () => ({ status: 'laeuft',
+    progress: 0.5, phase: 'Rendering …', eta_sec: 30 }) });
+  await laeuft;
+  pruef('v230e: zurueck im Vordergrund faengt der Zaehler bei null an',
+        State.pollErrs === 0, 'Zaehler ' + State.pollErrs);
+}
 
 console.log(fails ? `\n${fails} FEHLER` : '\nalle Nachweise gruen');
 process.exit(fails ? 1 : 0);

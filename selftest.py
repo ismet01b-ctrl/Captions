@@ -3201,7 +3201,17 @@ def _scenario_logic(clip, transcript, tmp):
                       '720p-Quelle: 1080p und 4K sind ausgegraut',
                       '720p-Quelle: die Auswahl wandert auf die hoechste',
                       '1080p-Quelle: nur 4K ist ausgegraut',
-                      'unbekannte Quelle: nichts wird verboten'):
+                      'unbekannte Quelle: nichts wird verboten',
+                      # v230e: ein weggeklickter Tab ist kein Verbindungs-
+                      # abbruch. Ismets Befund "Jedesmal wenn ich die Seite
+                      # im Tab minimiere, ist die Seite abgestuerzt" - im
+                      # echten Browser nachgestellt: 14 abgebrochene
+                      # Anfragen in 20 s Hintergrund, danach die Karte
+                      # "Connection lost", obwohl der Render weiterlief.
+                      'v230e: im Hintergrund wird gar nicht erst gefragt',
+                      'v230e: keine Fehlerkarte, waehrend der Tab weg ist',
+                      'v230e: ein Abbruch im Hintergrund erhoeht den',
+                      'v230e: zurueck im Vordergrund faengt der Zaehler'):
             _ok220 = ('PASS ' + _n220) in _out220
             check('v220: ' + _n220, _ok220,
                   '' if _ok220 else 'Sonde meldet den Fall nicht bestanden')
