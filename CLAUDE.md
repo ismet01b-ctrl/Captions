@@ -849,6 +849,26 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   Leerlauf noch mit laufendem Render, auch nicht nach dreimaligem Einfrieren
   des Tabs. Kommt der Befund wieder, braucht es Gerät und Browser.
 
+## Eine Allowlist darf nichts VERWERFEN (v230f — meine eigene Regression)
+`_sanitize_overrides` liess nach v230c-sec nur noch Zahlen mit
+Tabellen-Eintrag durch und warf den Rest weg. `effects.caption_zone` fehlte
+— und fiel damit aus jedem gespeicherten Setup heraus: die Captions sassen
+wieder im Standardband (Ismets „die Captions respektieren die Safe Zones
+nicht mehr"). Der Weg: `applyTemplate` setzt `State.cfg` auf das Setup und
+laesst `State.cfgBase` stehen, der Unterschied enthaelt danach ALLE
+Preset-Werte.
+- **Unbekannte Zahlen klemmen, nicht entfernen** (`_ZAHL_ALLGEMEIN`). Ein
+  stiller Wegfall schaltet ein Feature ab, ohne dass ein Test oder eine
+  Meldung es zeigt — derselbe Fehlertyp wie v210. Die teuren Regler behalten
+  ihre eigene enge Grenze, der Sicherheitsgewinn bleibt.
+- **Der Riegel ist der Test, nicht die Sorgfalt:** jede Zahl, die in
+  irgendeinem Preset vorkommt, muss einen eigenen Eintrag haben. So faellt
+  der naechste neue Regler im Selftest auf, nicht beim Kunden. Dazu ein
+  Test, der ein ganzes gespeichertes Setup durchschickt und auf
+  Vollstaendigkeit prueft.
+- Und wieder die v132-Falle: der v230c-Test verlangte ausdruecklich, dass
+  eine unbekannte Zahl VERWORFEN wird — er hat den Fehler festgeschrieben.
+
 ## Sicherheit: Lehren aus Audit-Runde 2 (v230d-sec)
 - **Ein mehrstufiger Vorgang wird an JEDER Stufe geprüft, und die
   Berechtigung gehört an den VORGANG, nicht an den einzelnen Request.** Der
@@ -1206,7 +1226,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1781/1781 grün (Stand v230e)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1786/1786 grün (Stand v230f)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

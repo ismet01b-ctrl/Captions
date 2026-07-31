@@ -2054,7 +2054,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230e'
+DVE_VERSION = 'v230f'
 
 
 def _build_datei():
@@ -2864,7 +2864,25 @@ _EFFECT_RANGE = {
     'env_shadow': (0.0, 1.0), 'caption_scale': (0.60, 1.80),
     'caption_hierarchie': (1.40, 5.00), 'blender_samples': (1, 256),
     'blender_anim_frames': (1, 24), 'blender_width': (16, 1920),
+    # v230f NACHGETRAGEN. caption_zone fehlte hier - und weil ein fehlender
+    # Eintrag den Wert VERWARF, sassen die Captions bei jedem gespeicherten
+    # Setup wieder in der Standard-Zone (Ismets Befund "die Captions
+    # respektieren die Safe Zones nicht mehr"). Der Weg dorthin:
+    # applyTemplate setzt State.cfg auf das gespeicherte Setup, laesst
+    # State.cfgBase aber stehen - der Unterschied enthaelt dann ALLE
+    # Preset-Werte, auch die, die der Kunde nie angefasst hat.
+    'caption_zone': (0.05, 0.95), 'caption_scale_klein': (0.20, 3.00),
+    'caption_weight': (1, 1000), 'reveal_letter_s': (0.0, 2.0),
+    'matte_refine': (0.0, 3.0), 'refine': (0.0, 3.0),
+    'caption_glow': (0.0, 4.0), 'caption_outline': (0.0, 4.0),
+    'beat_grid': (0.0, 4.0), 'sfx_dichte_wert': (0.0, 10.0),
 }
+# Zahlen ohne eigenen Eintrag werden GEKLEMMT, nicht verworfen. Verwerfen war
+# der Fehler von v230c: ein vergessener Schluessel verschwand lautlos und ein
+# Feature war weg, ohne dass ein Test oder eine Meldung es zeigte. Die Grenze
+# ist trotzdem eng genug, dass niemand daraus Rechenzeit macht - die teuren
+# Regler (matting_downsample, bg_blur, blender_*) haben ihre eigene.
+_ZAHL_ALLGEMEIN = (-1000.0, 1000.0)
 _CAMERA_RANGE = {'strength': (0.0, 1.0), 'crash': (0.0, 1.0),
                  'side_every': (1, 60)}
 _FX_IDS = {'behind', 'cascade', 'blurin', 'outline', 'ground'}
@@ -2872,24 +2890,32 @@ _CAM_IDS = {'caption', 'punch', 'pan', 'push', 'pullback', 'crash', 'capzoom',
             'drift', 'none'}
 
 
-def _klemm_zahlen(d, tabelle):
-    """Zahlenwerte gegen die Tabelle klemmen. Ein Zahlenwert OHNE Eintrag
-    fliegt raus - eine Grenze, die niemand aufgeschrieben hat, gibt es
-    nicht. Wahrheitswerte und Texte bleiben (sie treiben keine Rechenzeit),
-    Texte werden nur in der Laenge gedeckelt."""
+def _klemm_zahlen(d, tabelle, allgemein=_ZAHL_ALLGEMEIN):
+    """Zahlenwerte gegen die Tabelle klemmen.
+
+    v230f: Ein Wert OHNE Eintrag wird auf einen weiten allgemeinen Bereich
+    GEKLEMMT, nicht mehr verworfen. Das Verwerfen (v230c) hat einen
+    vergessenen Schluessel lautlos verschwinden lassen - `caption_zone` fiel
+    damit aus jedem gespeicherten Setup heraus und die Captions sassen
+    wieder in der Standard-Zone. Ein stiller Fallback, der ein Feature
+    abschaltet, ist genau der Fehler, den v210 schon einmal gekostet hat.
+    Die teuren Regler haben ihre eigene, enge Grenze in der Tabelle;
+    `allgemein=None` erzwingt weiterhin einen Eintrag (fuer Sektionen, in
+    denen es GAR keine freien Zahlen geben darf, z. B. colors).
+    Wahrheitswerte bleiben, Texte werden nur in der Laenge gedeckelt."""
     for k in list(d):
         v = d[k]
         if isinstance(v, bool):
             continue
         if isinstance(v, (int, float)):
-            r = tabelle.get(k)
+            r = tabelle.get(k) or allgemein
             if not r:
                 d.pop(k, None)
                 continue
             try:
-                d[k] = min(max(float(v), r[0]), r[1])
-                if isinstance(r[0], int) and isinstance(r[1], int):
-                    d[k] = int(round(d[k]))
+                w = min(max(float(v), r[0]), r[1])
+                d[k] = int(round(w)) if (isinstance(r[0], int)
+                                         and isinstance(r[1], int)) else w
             except Exception:
                 d.pop(k, None)
         elif isinstance(v, str) and len(v) > 64:
@@ -3005,7 +3031,8 @@ def _sanitize_overrides(ov):
         if 'speed' in o and str(o.get('speed')).lower() not in \
                 ('schnell', 'standard', 'fein'):
             o.pop('speed', None)
-        _klemm_zahlen(o, {'height': (480, 2160), 'crf': (14, 34)})
+        _klemm_zahlen(o, {'height': (480, 2160), 'crf': (14, 34)},
+                      allgemein=(0.0, 10000.0))
     e = out.get('effects')
     if isinstance(e, dict):
         # v153: Caption-Regler aus der UI. Groessen hart deckeln - ein Client
@@ -3070,7 +3097,9 @@ def _sanitize_overrides(ov):
                     col[_ck] = [int(min(max(x, 0), 255)) for x in v]
                 else:
                     col.pop(_ck, None)
-        _klemm_zahlen(col, {})       # sonstige Zahlen: raus
+        # colors kennt nur style/text/accent/adaptive - eine freie Zahl
+        # gibt es hier nicht, also darf sie auch nicht durch.
+        _klemm_zahlen(col, {}, allgemein=None)
     # Schriften: nur aus dem geschlossenen Satz (siehe _erlaubte_fonts).
     fo = out.get('fonts')
     if isinstance(fo, dict):

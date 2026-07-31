@@ -5737,10 +5737,14 @@ def _scenario_security(tmp):
     check('v230c-sec: bg_blur/trail/freeze_frame/person_shadow geklemmt',
           _bb['bg_blur'] == 1.0 and _bb['trail'] == 1.0
           and _bb['freeze_frame'] == 0.0 and _bb['person_shadow'] == 1.0, str(_bb))
-    # Was keine Grenze in der Tabelle hat, kommt gar nicht erst durch.
-    check('v230c-sec: unbekannte Zahl in effects fliegt raus',
-          'was_neues' not in SV._sanitize_overrides(
-              {'effects': {'was_neues': 1e9}}).get('effects', {}))
+    # v230f: dieser Test verlangte bis eben, dass eine unbekannte Zahl
+    # VERWORFEN wird - und genau das hat `caption_zone` aus jedem
+    # gespeicherten Setup entfernt (Ismets Safe-Zone-Befund). Ein Test kann
+    # eine Luecke als Zusage festschreiben (v132-Falle). Verlangt wird
+    # jetzt: sie wird geklemmt, aber sie bleibt.
+    check('v230c-sec: unbekannte Zahl in effects wird gedeckelt',
+          SV._sanitize_overrides({'effects': {'was_neues': 1e9}}
+                                 )['effects']['was_neues'] == 1000.0)
     check('v230c-sec: camera.strength geklemmt, Rotation nur bekannte Namen',
           SV._sanitize_overrides({'camera': {'strength': 1000}}
                                  )['camera']['strength'] == 1.0
@@ -5769,6 +5773,51 @@ def _scenario_security(tmp):
                                  )['colors']['accent'] == [255, 0, 3]
           and 'accent' not in SV._sanitize_overrides(
               {'colors': {'accent': 'rot'}}).get('colors', {}))
+    # ---- v230f: VERWERFEN WAR DER FALSCHE UMGANG MIT UNBEKANNTEN ZAHLEN ----
+    # v230c liess nur noch Zahlen mit Tabellen-Eintrag durch und WARF den
+    # Rest weg. `caption_zone` fehlte in der Tabelle - damit fiel die
+    # Caption-Zone aus jedem gespeicherten Setup heraus und die Untertitel
+    # sassen wieder im Standardband (Ismets Befund "die Captions
+    # respektieren die Safe Zones nicht mehr"). Der Weg: applyTemplate
+    # setzt State.cfg auf das Setup, laesst State.cfgBase stehen - der
+    # Unterschied enthaelt dann ALLE Preset-Werte.
+    check('v230f: caption_zone kommt durch (Safe-Zone-Regression)',
+          SV._sanitize_overrides({'effects': {'caption_zone': 0.58}}
+                                 )['effects']['caption_zone'] == 0.58)
+    check('v230f: caption_zone wird trotzdem geklemmt',
+          SV._sanitize_overrides({'effects': {'caption_zone': 9}}
+                                 )['effects']['caption_zone'] == 0.95)
+    check('v230f: eine unbekannte Zahl wird GEKLEMMT, nicht verworfen',
+          SV._sanitize_overrides({'effects': {'was_neues': 7}}
+                                 )['effects']['was_neues'] == 7.0
+          and SV._sanitize_overrides({'effects': {'was_neues': 1e9}}
+                                     )['effects']['was_neues'] == 1000.0)
+    # DER EIGENTLICHE RIEGEL: jede Zahl, die in einem Preset vorkommt, MUSS
+    # einen eigenen Eintrag haben. Genau dieser Test haette v230f verhindert -
+    # ein neuer Regler faellt hier auf, nicht beim Kunden.
+    _ohne = []
+    for _lk in SV.LOOKS:
+        _lc = SV.build_config(_lk)
+        for _sec, _tab in (('effects', SV._EFFECT_RANGE),
+                           ('camera', SV._CAMERA_RANGE)):
+            for _k, _v in (_lc.get(_sec) or {}).items():
+                if isinstance(_v, bool) or not isinstance(_v, (int, float)):
+                    continue
+                if _k not in _tab:
+                    _ohne.append(f'{_sec}.{_k}')
+    check('v230f: jede Zahl aus den Presets hat eine eigene Grenze',
+          not _ohne, ', '.join(sorted(set(_ohne)))[:200])
+    # Und ein gespeichertes Setup muss den Weg unbeschadet ueberstehen.
+    _setup = {'effects': {k: v for k, v in
+                          (SV.build_config('viral').get('effects') or {}).items()
+                          if not isinstance(v, bool)
+                          and isinstance(v, (int, float))}}
+    _durch = SV._sanitize_overrides(json.loads(json.dumps(_setup)))
+    check('v230f: ein gespeichertes Setup verliert keinen einzigen Wert',
+          set(_durch.get('effects', {})) == set(_setup['effects']),
+          'verloren: ' + ', '.join(sorted(set(_setup['effects'])
+                                          - set(_durch.get('effects', {})))))
+
     # Engine-Seite: die Desktop-App schreibt dieselbe Config-Datei, deshalb
     # klemmt auch render.py (auf BEIDEN Seiten, v203-sec-Regel).
     _rsrc_sec = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()

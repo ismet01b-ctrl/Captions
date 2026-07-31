@@ -3,6 +3,34 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230f MEINE REGRESSION: DIE CAPTION-ZONE FIEL AUS JEDEM GESPEICHERTEN
+  SETUP.** Ismets Befund "die Captions respektieren die Safe Zones nicht
+  mehr" - verursacht von v230c-sec. Dort liess `_sanitize_overrides` nur
+  noch Zahlen mit Tabellen-Eintrag durch und **verwarf den Rest**;
+  `effects.caption_zone` (die Hoehe des Caption-Bands) fehlte in der
+  Tabelle. Der Weg dorthin: `applyTemplate` setzt `State.cfg` auf das
+  gespeicherte Setup, laesst `State.cfgBase` aber stehen - der Unterschied
+  enthaelt danach ALLE Preset-Werte, auch die, die der Kunde nie angefasst
+  hat. Wer ein Setup geladen hatte, verlor damit die Zone.
+  - **Verwerfen war der falsche Umgang.** Ein vergessener Schluessel
+    verschwand lautlos und ein Feature war weg, ohne Meldung und ohne Test -
+    genau der Fehlertyp, der in v210 vier Systeme monatelang stillgelegt
+    hat. Unbekannte Zahlen werden jetzt auf einen weiten allgemeinen
+    Bereich GEKLEMMT (`_ZAHL_ALLGEMEIN`, +-1000), nicht mehr entfernt. Die
+    teuren Regler (matting_downsample, bg_blur, blender_*) behalten ihre
+    eigene, enge Grenze - der Sicherheitsgewinn aus v230c bleibt also.
+  - **Der eigentliche Riegel ist der neue Test:** jede Zahl, die in
+    IRGENDEINEM Preset vorkommt, muss einen eigenen Eintrag haben. Damit
+    faellt der naechste neue Regler beim Selftest auf, nicht beim Kunden.
+    Dazu ein Test, der ein komplettes gespeichertes Setup durch die
+    Bereinigung schickt und prueft, dass kein einziger Wert fehlt.
+  - Nachgetragen ausserdem: caption_scale_klein, caption_weight,
+    reveal_letter_s, matte_refine, refine, caption_glow, caption_outline,
+    beat_grid. Bei `colors` bleibt es beim Verwerfen (dort gibt es keine
+    freien Zahlen).
+  - Und noch eine v132-Falle: der v230c-Test verlangte AUSDRUECKLICH, dass
+    eine unbekannte Zahl verworfen wird - er hat den Fehler festgeschrieben.
+  Regression **1785/1786 logic + 7/1/5/2 Renders**.
 - **v230e EIN WEGGEKLICKTER TAB IST KEIN VERBINDUNGSABBRUCH.**
   Ismets Befund: "Jedesmal wenn ich die Seite im Tab minimiere, ist die Seite
   abgestuerzt." Im echten Browser nachgestellt (Chromium, 390x844, echter
