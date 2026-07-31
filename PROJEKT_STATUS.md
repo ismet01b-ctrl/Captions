@@ -30,7 +30,14 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
     freien Zahlen).
   - Und noch eine v132-Falle: der v230c-Test verlangte AUSDRUECKLICH, dass
     eine unbekannte Zahl verworfen wird - er hat den Fehler festgeschrieben.
-  Regression **1785/1786 logic + 7/1/5/2 Renders**.
+  - **Und die Lehren stehen jetzt als CHECKLISTE ganz oben in CLAUDE.md**
+    ("MEINE WIEDERKEHRENDEN FEHLER", Ismets Ansage "Lerne aus allen deinen
+    Fehlern"). Zwei davon sind ab sofort Tests, nicht Vorsaetze: die
+    Vollstaendigkeit der Zahlen-Tabelle und das Verbot der
+    sqlite3.Row-Falle `(_current_user(r) or {}).get(...)` - genau die
+    Schreibweise, die in v230d einen Sicherheits-Riegel wirkungslos machte,
+    waehrend alle Quelltext-Tests gruen waren.
+  Regression **1787/1788 logic + 7/1/5/2 Renders**.
 - **v230e EIN WEGGEKLICKTER TAB IST KEIN VERBINDUNGSABBRUCH.**
   Ismets Befund: "Jedesmal wenn ich die Seite im Tab minimiere, ist die Seite
   abgestuerzt." Im echten Browser nachgestellt (Chromium, 390x844, echter

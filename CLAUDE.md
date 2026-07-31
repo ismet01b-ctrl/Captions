@@ -54,6 +54,60 @@ Hook-A/B-Varianten.
    wirkung sieht Ismet erst auf Windows bzw. live auf douchko.eu mit echtem
    Material — das immer klar sagen, nie so tun als sei es final verifiziert.
 
+## MEINE WIEDERKEHRENDEN FEHLER — vor JEDEM Deliver durchgehen
+(Ismets Ansage, mehrfach: "Lerne aus allen deinen Fehlern.") Diese Liste ist
+keine Sammlung von Anekdoten, sondern eine **Checkliste**. Jeder Punkt ist
+mindestens zweimal wirklich passiert und hat Ismet Zeit, Geld oder einen
+Render gekostet. Neue Fehler kommen HIER dazu, nicht nur in den
+Versions-Abschnitt.
+
+1. **Ein Schutz darf begrenzen, niemals wegwerfen.** Eine Allowlist, ein
+   Filter, ein Sanitizer: unbekannte Werte klemmen, nicht entfernen. Ein
+   stiller Wegfall schaltet ein Feature ab, ohne Meldung und ohne Test
+   (v230f `caption_zone`, v210 vier tote KI-Systeme). Wenn Entfernen wirklich
+   nötig ist, muss es protokolliert oder getestet sein.
+2. **Erst den echten Pfad LAUFEN LASSEN, dann behaupten.** Quelltext lesen,
+   greppen und "sieht richtig aus" haben mich mehrfach getäuscht: v230d
+   (`(_current_user(r) or {}).get('id')` wirft AttributeError auf einer
+   `sqlite3.Row`), v218 (toter Code im falschen Zweig), v193 (Plan trug den
+   Wert, im Bild passierte nichts). Der Beweis ist der Aufruf plus eine
+   Messung, nie die Textsuche.
+3. **Prüfen, ob ein bestehender Test die REGEL schützt oder den FEHLER.**
+   Dreimal einen Test angetroffen, der genau das Kaputte festschrieb
+   (v230f "unbekannte Zahl fliegt raus", v230d der `str`-Vergleich beim
+   Admin-Key, v222 `_al is None or _al > 7`). Wer einen Test anpassen muss,
+   um seinen Fix grün zu bekommen, prüft zuerst, welcher von beiden recht hat.
+4. **Ein Riegel gehört in die Funktion, nicht an EIN Gate.** Erst ALLE
+   Aufrufer suchen. v230d gleich dreimal (`check_auth` 1 von 7,
+   `resend_verification`, `/admin/codes`), davor v159/v170/v176.
+5. **Qualität ist nie die Währung.** Renderzeit, Kosten und Bequemlichkeit
+   dürfen nie gegen die Regie oder die Optik getauscht werden — v228d
+   (`reasoning_effort: low`) war genau dieser Tausch und Ismets Antwort war
+   "Qualität ist sehr schlecht geworden". Erst messen, WELCHER Schritt
+   teuer ist; nur echte Leerarbeit darf weg.
+6. **Vergleiche müssen ausgerichtet sein.** Ich habe Ismet gesagt, der
+   Bildfehler stecke in seinem Quellvideo — falsch, weil ich durch ein
+   festes Fenster gemessen habe, während die Kamera 3 % zoomt. Erst nach
+   SIFT-Ausrichtung war die Wahrheit sichtbar. Vor jeder "das war schon
+   vorher so"-Aussage: ausrichten, sonst nichts sagen.
+7. **Der eigene Testaufbau ist auch Code und hat Fehler.** Synthetische
+   Fälle brauchen die ECHTEN Größenverhältnisse (ein 320x240-Testbild
+   beweist nichts über 720x1280), Messfenster müssen dort liegen, wo der
+   Effekt ist, und Werkzeuge haben eigene Fallen (`schneide()` verlor das
+   `async`, ein früherer Abschnitt ersetzte `setTimeout` durch eine
+   Warteschlange). Symptom: der Test ist grün und misst nichts.
+8. **Eine Regel, die Zeiten ändert, darf nur kürzen.** Verlängern beseitigt
+   die Überschneidung in den Zahlen und erzeugt sie im Bild (v216/v217).
+   Und jede neue Zeit-, Bewegungs- oder Platzierungsregel muss zuerst
+   beantworten, was sie mit einem `intent`-Moment macht (v214/v226).
+9. **Vor der Ursachensuche prüfen, WELCHE Fassung lief.** Build-Stempel im
+   Video (`ffprobe -show_entries format_tags`) bzw. Panel-Ansicht Build.
+   Drei Runden gingen verloren, weil der Stempel log (v222/v225c).
+10. **Sagen, was NICHT bewiesen ist.** Kein "gefixt", wenn nur ein
+    Ersatzpfad grün ist; nicht reproduzierbar heißt: nicht reproduzierbar
+    (v230e Renderer-Absturz). Lieber eine Zeile Unsicherheit als eine
+    Runde umsonst.
+
 ## Kommunikation
 Ismet ist direkt und terse. **Effizienzmodus:** keine Floskeln, kurze klare
 Sätze, nur Code + exakte Schritte. Technische Tiefe bleibt voll erhalten,
@@ -1226,7 +1280,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1786/1786 grün (Stand v230f)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1788/1788 grün (Stand v230f)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

@@ -5856,6 +5856,20 @@ def _scenario_security(tmp):
 
     # ---- v230c-sec: Riegel, die es gar nicht gab ----
     _ssrc_sec = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    # Die sqlite3.Row-Falle (v96p, v230d): `(_current_user(r) or {}).get('id')`
+    # sieht sauber aus und wirft im echten Lauf einen AttributeError - eine
+    # Row hat kein .get(). Alle Quelltext-Tests waren gruen, der Riegel war
+    # wirkungslos. Deshalb steht die Schreibweise hier auf der Verbotsliste;
+    # der richtige Weg ist _sitzungs_uid(request).
+    # Erklaerender Text (Kommentar/Docstring) darf die Schreibweise ZEIGEN -
+    # dort steht sie ja als Warnung. Gesucht ist echter Code.
+    _rowfalle = [z for z in _ssrc_sec.splitlines()
+                 if 'or {}).get(' in z and '_current_user' in z
+                 and not z.lstrip().startswith('#') and '`' not in z]
+    check('v230f: keine .get()-Falle auf einer sqlite3.Row',
+          not _rowfalle, ' | '.join(_rowfalle)[:200])
+    check('v230f: es gibt EINE Stelle fuer die Konto-Nummer der Sitzung',
+          'def _sitzungs_uid(' in _ssrc_sec)
     check('v230c-sec: Preisriegel haengt am JOB, nicht am Modus',
           '_schon = _render_gebucht(uid, jid) if u else 0' in _ssrc_sec
           and "_render_gebucht(uid, jid) if (u and mode == 'full')" not in _ssrc_sec)
