@@ -11814,16 +11814,41 @@ def apply_bg_blur(frame, alpha, depth_n, strength, W, H):
     scale = 4
     small = cv2.resize(frame, (W // scale, H // scale))
     sigma = max(1.5, strength * (W / scale) * 0.04)
-    blurred_small = cv2.GaussianBlur(small, (0, 0), sigma)
-    blurred = cv2.resize(blurred_small, (W, H))
+    # Bereinigte Personen-Maske: Hintergrund-Blobs der rohen Matte wuerden
+    # als scharfe Inseln im Bokeh stehen (Halos um Autos/Pflaster).
+    a_c = np.clip(person_mask(alpha), 0, 1) if alpha is not None else None
+    if a_c is not None:
+        # v230b MATTE-BLEED. Der Weichzeichner lief ueber das GANZE Bild, also
+        # auch ueber die Person: an der Silhouette mischte er dunkles Haar mit
+        # heller Wand. Weil die Vordergrund-Maske weichgezeichnet ist, reicht
+        # sie ~20 px IN die Person hinein - dort wurde dieser Mischwert wieder
+        # aufs Haar gelegt. Ergebnis: ein heller, flimmernder Saum an Haar und
+        # Schultern, der nur waehrend eines Moments auftaucht (Ismets Befund
+        # "das Auge glitcht"). Jetzt wird der Hintergrund ALPHA-GEWICHTET
+        # weichgezeichnet: Personen-Pixel gehen gar nicht erst ein.
+        a_s = cv2.resize(a_c, (W // scale, H // scale),
+                         interpolation=cv2.INTER_AREA)
+        wgt = (1.0 - a_s).astype(np.float32)
+        num = cv2.GaussianBlur(small.astype(np.float32) * wgt[..., None],
+                               (0, 0), sigma)
+        den = cv2.GaussianBlur(wgt, (0, 0), sigma)
+        blurred_small = num / np.maximum(den, 1e-3)[..., None]
+        # Tief in der Person ist KEIN Hintergrund in Reichweite - dort bleibt
+        # das Originalbild stehen (dort mischt die Maske ohnehin nichts).
+        leer = den < 1e-3
+        blurred_small[leer] = small.astype(np.float32)[leer]
+        blurred = cv2.resize(blurred_small, (W, H))
+    else:
+        blurred = cv2.resize(cv2.GaussianBlur(small, (0, 0), sigma),
+                             (W, H)).astype(np.float32)
     # Vordergrund-Maske (was scharf bleibt): 1.0 = scharf, 0.0 = voll blur.
-    if alpha is not None:
-        # Bereinigte Personen-Maske: Hintergrund-Blobs der rohen Matte wuerden
-        # als scharfe Inseln im Bokeh stehen (Halos um Autos/Pflaster).
-        fg = np.clip(person_mask(alpha), 0, 1)
+    if a_c is not None:
         # Etwas ausdehnen, damit die Text-Zone um die Person auch scharf bleibt
         # und der Uebergang natuerlich weich verlaeuft (Bokeh-Rand).
-        fg = cv2.GaussianBlur(fg, (0, 0), max(H * 0.008, 2.0))
+        fg = cv2.GaussianBlur(a_c, (0, 0), max(H * 0.008, 2.0))
+        # v230b: Die Person selbst bleibt VOLL scharf. Der Weichzeichner der
+        # Maske darf nur nach AUSSEN wirken, nie in die Silhouette hinein.
+        fg = np.maximum(fg, a_c)
     else:
         fg = np.zeros((H, W), dtype=np.float32)
     if depth_n is not None and depth_n.shape[:2] == (H, W):
@@ -11985,6 +12010,10 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
 
     comp = frame.copy()
     person = frame if alpha is not None else None
+    # v230b: bereinigte Personen-Maske EINMAL. Sie wird von der Tiefen-
+    # Unschaerfe (unten) und beim Zurueckpasten der Person gebraucht -
+    # person_mask ist nicht billig, zweimal rechnen waere Leerarbeit.
+    alpha_p = person_mask(alpha)[..., None] if alpha is not None else None
     lock = cfg['effects'].get('scene_lock', True)
 
     def scene_shift(p):
@@ -12038,7 +12067,26 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             comp *= (1 - dim * (0.55 + 0.45 * rad))[..., None]
         if p['tpl'] == 'behind' and strength > 0.05 and not p.get('tokens'):  # leichte Tiefen-Unschaerfe
             small = cv2.resize(comp, (W // 3, H // 3))
-            soft = cv2.resize(cv2.GaussianBlur(small, (0, 0), 2.2), (W, H))
+            if alpha_p is not None:
+                # v230b MATTE-BLEED, zweiter Fundort. Der Weichzeichner lief
+                # ueber das GANZE Bild, also auch ueber die Person: an der
+                # Silhouette mischte er dunkles Haar mit heller Wand. Danach
+                # wird die Person mit WEICHER Matte zurueckgepastet - an jeder
+                # Haarspitze blieb dadurch ein heller Funkel stehen (Ismets
+                # Befund "das Auge glitcht"). Der Hintergrund wird jetzt
+                # ALPHA-GEWICHTET weichgezeichnet: Personen-Pixel gehen gar
+                # nicht erst in den Mittelwert ein.
+                _as = cv2.resize(alpha_p[..., 0], (W // 3, H // 3),
+                                 interpolation=cv2.INTER_AREA)
+                _w = np.clip(1.0 - _as, 0, 1).astype(np.float32)
+                _num = cv2.GaussianBlur(small * _w[..., None], (0, 0), 2.2)
+                _den = cv2.GaussianBlur(_w, (0, 0), 2.2)
+                _sm = _num / np.maximum(_den, 1e-3)[..., None]
+                _leer = _den < 1e-3          # tief in der Person: nichts zu mischen
+                _sm[_leer] = small[_leer]
+                soft = cv2.resize(_sm, (W, H))
+            else:
+                soft = cv2.resize(cv2.GaussianBlur(small, (0, 0), 2.2), (W, H))
             comp = comp * (1 - 0.45 * strength) + soft * (0.45 * strength)
         if p['tpl'] == 'behind':
             sdx, sdy = scene_shift(p)
@@ -12228,7 +12276,8 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         # den Text legt: die rohe Matte markiert Hintergrund-Blobs (Autos,
         # Pflaster) als 'Person' - kill_spill/Schatten/Repaste zeichnen dann
         # sichtbare Umrisse um diese Blobs (Halos im ganzen Bild).
-        alpha_p = person_mask(alpha)[..., None]
+        # (alpha_p steht seit v230b schon oben - auch die Tiefen-Unschaerfe
+        #  braucht sie.)
         # Kein Farbsaum: der Caption-Text hinter der Person darf nicht um die
         # Schulter herumleuchten.
         if cfg['effects'].get('matte_spill', True):

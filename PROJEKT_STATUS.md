@@ -3,6 +3,51 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b DER FUNKELNDE SAUM AN HAAR UND SCHULTER (Ismets "das Auge glitcht") -
+  GEFUNDEN UND BEHOBEN.** Ismet hat die Quelldatei geschickt und den Look
+  genannt (Editorial); damit liess sich der Fehler lokal nachstellen. Er ist
+  echt und er kommt aus unserer Pipeline - **an derselben Stelle zweimal
+  derselbe Denkfehler**:
+  - **Ein Weichzeichner, der ueber das GANZE Bild laeuft, mischt an der
+    Silhouette dunkles Haar mit heller Wand.** Danach wird die Person mit
+    ihrer WEICHEN Matte wieder darueber gepastet - und der Mischwert bleibt
+    als heller Saum auf dem Haar stehen. Zwei Fundorte:
+    1. `apply_bg_blur` (Bokeh waehrend eines Moments, im Editorial-Preset
+       0.6). Gemessen an Ismets Bild + echter RVM-Matte: das 8-px-Band
+       INNERHALB der Silhouette war **+8.85 Graustufen zu hell (max +39,
+       10934 Pixel ueber +8)**. Nachher: **+0.06, max +7, 0 Pixel**. Die
+       Hintergrund-Unschaerfe selbst bleibt gleich stark (Laplace-Varianz
+       1.5 vorher wie nachher) - es ist keine Abschwaechung, sondern
+       weggelassene Falscharbeit.
+    2. Die **Tiefen-Unschaerfe hinter einem `behind`-Text** in
+       `composite_frame` (`comp*0.55 + blur(comp)*0.45`). Sie lief ebenfalls
+       ueber das ganze Bild, also auch ueber die Person - und sie laeuft
+       GENAU in den angesagten "behind me"-Momenten, in denen Ismet den
+       Fehler gesehen hat.
+  - **Der Fix ist in beiden Faellen derselbe:** der Hintergrund wird
+    ALPHA-GEWICHTET weichgezeichnet (`blur(bild*(1-a)) / blur(1-a)`) -
+    Personen-Pixel gehen gar nicht erst in den Mittelwert ein. Zusaetzlich
+    bleibt die Person voll scharf (`fg = max(blur(a), a)`); vorher reichte
+    die weichgezeichnete Vordergrund-Maske ~20 px IN die Person hinein.
+  - **Beweisweg (WIRKSAMKEITS-NACHWEIS):** ein Spion auf `composite_frame`
+    hat EIN- und AUSGANG bei t=9.583 s auf Platte gelegt. Ergebnis: das Bild
+    VOR dem Compositor ist im Kopfbereich **bitgleich zur Quelle (0.00)** -
+    der Saum entsteht also im Compositor, nicht beim Dekodieren oder
+    Matting. Vorher/Nachher-Streifen an drei Zeitpunkten:
+    `scratchpad/auge_fix.png`.
+  - **Test-Invariante ist RICHTUNGSFREI:** der weichgezeichnete Hintergrund
+    darf nicht davon abhaengen, welche FARBE die Person hat. Ueber die
+    Helligkeit zu messen taugt nicht - ob der Saum heller oder dunkler
+    wird, haengt am Motiv (auf Ismets Material heller, im Testbild dunkler).
+    Gemessen: Hintergrund-Blur **76.7 -> 9.9** von 255, Tiefen-Unschaerfe
+    **28.9 -> 5.0**. Beide Tests rufen den echten Pfad auf
+    (`composite_frame`, nicht nur die Einzelfunktion).
+  - **Ausgeschlossen wurde vorher, einzeln nachgerendert:** Kontaktschatten,
+    Farbsaum-Entfernung (`matte_spill`), Umgebungsschatten, Kamera und die
+    Person-Occlusion - keiner davon aendert den Saum.
+  - Regression **1737/1738 logic + 7/1/5/2 Renders**; der eine Fehlschlag ist
+    "GUI startet ohne Fehler" und liegt an diesem Container (python3.11 hat
+    hier kein tkinter, das Docker-Image schon).
 - **v230a DIE MASKE IST INNEN WIEDER DICHT (Nebenbefund aus Ismets "Auge glitcht").**
   Ismets Screenshot zeigte eine feine senkrechte Linie mitten im Gesicht.
   **Die Linie selbst ist damit NICHT erklaert** - an ihrer Stelle ist die

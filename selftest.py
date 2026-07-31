@@ -12323,6 +12323,71 @@ def _scenario_premium(tmp):
     check('Blur im Kundenprofil gesichert',
           "'bgblur_var'" in _gsrc_bl)
 
+    # ---- v230b: KEIN MATTE-BLEED auf die Person ----
+    # Ismets Befund "das Auge glitcht": ein heller, flimmernder Saum an Haar
+    # und Schultern. Ursache waren ZWEI Weichzeichner, die ueber das GANZE
+    # Bild liefen und dabei den hellen Hintergrund in die Silhouette
+    # hineinmischten - danach wurde die Person mit weicher Matte darueber
+    # gepastet, der Saum blieb sichtbar. Test: eine DUNKLE Person vor HELLEM
+    # Grund darf innen nicht aufhellen.
+    # Die Invariante ist RICHTUNGSFREI: der weichgezeichnete Hintergrund darf
+    # nicht davon abhaengen, welche FARBE die Person hat. Haengt er daran,
+    # steckt Person im Hintergrund - und ueber die weiche Matte kommt sie als
+    # Saum zurueck. (Ueber die Helligkeit zu messen taugt nicht: ob der Saum
+    # heller oder dunkler wird, haengt am Motiv.)
+    print('\n--- Matte-Bleed (v230b) ---')
+    Wm, Hm = 360, 640
+
+    def _mb_bild(v):
+        f = np.full((Hm, Wm, 3), 150.0, np.float32)
+        f[120:520, 120:250] = v                      # "Person"
+        return f
+
+    al_m = np.zeros((Hm, Wm), np.float32)
+    al_m[120:520, 120:250] = 1.0
+    al_m = cv2.GaussianBlur(al_m, (0, 0), 2.0)[..., None]   # weiche Kante
+    _aussen = al_m[..., 0] < 0.02
+    _b0 = R.apply_bg_blur(_mb_bild(0.0), al_m, None, 1.0, Wm, Hm)
+    _b1 = R.apply_bg_blur(_mb_bild(255.0), al_m, None, 1.0, Wm, Hm)
+    _ab = float(np.abs(_b0 - _b1)[_aussen].max())
+    check('Hintergrund-Blur zieht die Person nicht mit', _ab < 20.0,
+          f'{_ab:.1f} von 255 (alt 76.7, Grenze 20)')
+
+    # Zweiter Fundort: die Tiefen-Unschaerfe hinter einem 'behind'-Text.
+    # WIRKSAMKEITS-NACHWEIS: composite_frame wird WIRKLICH aufgerufen - eine
+    # reine Funktionspruefung haette v230b nicht gefunden, der Bleed steckte
+    # in einem Zweig von composite_frame.
+    _wm = [{'word': 'HINTEN', 'start': 0.0, 'end': 3.0}]
+    _Sm = R.Sprites(yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                        encoding='utf-8')), Wm, Hm)
+    _am = _Sm.text('HINTEN', 30, (255, 255, 255))[0]
+    _cm = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _cm['effects']['dim_behind'] = 0.0        # Dimmen wuerde die Messung faerben
+    _cm['effects']['anim'] = False
+    _cm['effects']['bg_blur'] = 0.0           # hier NUR die Tiefen-Unschaerfe
+    _cm['effects']['matte_spill'] = False
+    _ps_bak = R.PERSON_SHADOW
+    R.PERSON_SHADOW = 0.0
+    _pm = [{'tpl': 'behind', 'kw_i': 0, 'start': 0.0, 'end': 3.0, 'arr': _am,
+            'by': Hm * 0.85, 'small': [], 'tilt': 0.0, 'entr': 'rise'}]
+    _o0, _o1 = (R.composite_frame(_mb_bild(v), al_m.copy(), 1.2,
+                                  copy.deepcopy(_pm), _wm, (180, 300, 60),
+                                  _cm, _Sm, Wm, Hm) for v in (0.0, 255.0))
+    R.PERSON_SHADOW = _ps_bak
+    _mt = _aussen & (np.arange(Hm)[:, None] < 500)     # ohne die Textzeile
+    _at = float(np.abs(_o0 - _o1)[_mt].max())
+    check('Tiefen-Unschaerfe zieht die Person nicht mit', _at < 12.0,
+          f'{_at:.1f} von 255 (alt 28.9, Grenze 12)')
+    # Gegenprobe: der Hintergrund MUSS weiter weichgezeichnet werden, sonst
+    # haette man den Saum nur durch Abschalten des Effekts "geloest".
+    _str_m = np.where((np.arange(Wm)[None, :, None] % 8 == 0), 255.0,
+                      _mb_bild(30.0)).astype(np.float32)
+    _var_vor = float(_str_m[10:40, 10:100].std())
+    _bl2 = R.apply_bg_blur(_str_m.copy(), al_m, None, 1.0, Wm, Hm)
+    _var_nach = float(_bl2[10:40, 10:100].std())
+    check('Hintergrund bleibt trotzdem unscharf', _var_nach < _var_vor * 0.5,
+          f'{_var_nach:.1f} < {_var_vor:.1f}*0.5')
+
     # ---- v70: Musik-Beat-Erkennung ----
     print('\n--- Musik-Beat ---')
     check('music_beats existiert', hasattr(R, 'music_beats'))

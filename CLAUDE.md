@@ -1032,6 +1032,34 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - OFFEN (Ismet): Demo-Video in den Hero, UptimeRobot auf /api/health,
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
+## Matte-Bleed (v230b) — ein Weichzeichner darf die Person nicht ansaugen
+Ismets "das Auge glitcht" war ein **heller, flimmernder Saum an Haar und
+Schulter**, und die Ursache stand zweimal im selben Code-Muster: ein
+Weichzeichner lief ueber das GANZE Bild, mischte dort an der Silhouette
+dunkles Haar mit heller Wand — und danach wurde die Person mit ihrer
+WEICHEN Matte wieder darueber gepastet, sodass der Mischwert als Saum auf
+dem Haar stehen blieb. Fundorte: `apply_bg_blur` (Bokeh) und die
+Tiefen-Unschaerfe hinter einem `behind`-Text in `composite_frame`.
+- **Regel: wer den Hintergrund weichzeichnet, rechnet ALPHA-GEWICHTET**
+  (`blur(bild*(1-a)) / blur(1-a)`). Personen-Pixel duerfen gar nicht erst
+  in den Mittelwert eingehen. Und die Vordergrund-Maske darf nur nach
+  AUSSEN weich sein (`fg = max(blur(a), a)`) — die weichgezeichnete Maske
+  reichte vorher ~20 px IN die Person hinein.
+- **Die Test-Invariante ist RICHTUNGSFREI:** der weichgezeichnete
+  Hintergrund darf nicht davon abhaengen, welche FARBE die Person hat. Ueber
+  die Helligkeit zu messen taugt nicht — auf Ismets Material wurde der Saum
+  HELLER, im synthetischen Testbild DUNKLER. Ein Helligkeits-Test waere je
+  nach Motiv gruen gewesen, ohne etwas zu beweisen.
+- **Ein synthetischer Testfall muss die echten GROESSENVERHAELTNISSE haben.**
+  Der erste Entwurf (320x240) zeigte alt wie neu +0.02 — die Maskenweichheit
+  haengt an `H*0.008`, bei 240 px sind das 2 px statt 10. Ein Test in
+  Briefmarkengroesse beweist nichts ueber ein 720x1280-Bild.
+- **Der Spion ist das Werkzeug der Wahl:** EIN- und AUSGANG von
+  `composite_frame` bei EINEM Zeitpunkt auf Platte legen. Damit war in einem
+  Lauf klar, dass das Bild VOR dem Compositor bitgleich zur Quelle ist
+  (0.00) — Dekodieren und Matting waren damit raus, ohne sie einzeln
+  durchzuprobieren.
+
 ## Renderzeit (v227) — messen ist Pflicht, raten ist verboten
 Jeder Render endet mit `Timing (total …)`: alle Phasen absteigend nach Kosten
 plus `other` für alles Ungemessene. Wer an der Geschwindigkeit dreht, liest
@@ -1093,7 +1121,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1735/1735 grün (Stand v230a)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1738/1738 grün (Stand v230b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
