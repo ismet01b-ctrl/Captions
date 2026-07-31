@@ -3,30 +3,44 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
-- **v230k ZWEI FLIESSTEXT-BLOECKE GLEICHZEITIG - DER LETZTE OFFENE PUNKT IST
-  ZU.** Ismets Video (Stempel v230j 558ff5d9, also der neueste Stand): bei
-  0.83 s stehen "EVERYONE'S" oben und "CAPTIONS LOOK" unten gleichzeitig im
-  Bild. Ueber das ganze Video 146 Bilder mit zwei getrennten Textbaendern.
-  - **Nicht die Blockzeit war schuld, sondern das AUSKLINGEN.** An den
-    Plaenen gemessen: Block 1 endet 1.00, Block 2 beginnt 1.12 - sauber
-    getrennt. Aber ein Plan bleibt nach `end` noch 0.40 s im Bild, und damit
-    ueberschneidet sich JEDES aufeinanderfolgende Paar um exakt 0.28 s (eine
-    Wortlaenge). Weil die Platzierungs-Regie zwei Bloecke an verschiedene
-    Stellen setzt, sieht man in dieser Zeit zwei.
-  - **Gekuerzt wird der VORHERIGE, nie der naechste verschoben.** Genau das
-    hat der v216-Versuch getan (den wartenden Block verlaengert) und damit
-    ein Doppelbild erzeugt; die v217-Lehre lautet: eine Regel gegen
-    Doppelbilder darf nur KUERZEN. Das Ausklingen faellt auf den Abstand zum
-    naechsten Block, Untergrenze 0.10 s (keine harte Kante). Die gesprochenen
-    Woerter sind unangetastet - `end` liegt ohnehin davor.
-  - Beweis: an den Plaenen 4 Ueberschneidungen -> 0; am gerenderten Bild
-    (composite_frame wirklich aufgerufen, Bloecke wie in der Praxis weit
-    auseinander gesetzt) 1 Bild mit zwei Bloecken -> 0.
-  - **Testfehler unterwegs, zweimal:** mein Bild-Detektor zaehlte erst die
-    Treppen-Anordnung EINES Blocks als zwei (Schwelle 90 px statt 250), und
-    danach war die Helligkeitsschwelle 150 zu hoch - ein AUSBLENDENDER Block
-    ist blasser und fiel durch. Beide Male war der Test gruen und mass
-    nichts (Checkliste Punkt 7).
+- **v230l DASSELBE GESPROCHENE WORT STAND ZWEIMAL IM BILD.** Ismets Befund
+  nach v230k: "das Gesagte wird zweimal im Bild eingeblendet" - nicht zwei
+  verschiedene Bloecke, sondern DIESELBEN Woerter ein zweites Mal.
+  - **Der Fall ist der ZWEITE Render desselben Videos.** Der erste Lauf
+    schreibt `_momente.json` und legt in JEDEN Moment das Feld `text` - den
+    AUTOMATISCHEN Wortlaut (`words[i .. i+n]`). Der zweite Lauf liest es als
+    NUTZER-Ueberschreibung, obwohl niemand etwas geaendert hat. Genau
+    derselbe Fehler wie v230g, nur eine Datei weiter (dort waren es die
+    Bloecke, hier die Momente).
+  - **Und dann bricht die Phrase frueher ab als der Text.** `phrase` endet an
+    einer Sprechpause (> 0.35 s), `n` kennt die Pause nicht. Der Kartentext
+    hat damit mehr Woerter, als die Karte besitzt - und `phrase = phrase[:1]`
+    gab die ueberzaehligen Woerter frei. Sie standen direkt danach noch
+    einmal als Fliesstext im Bild.
+  - Beweis (alt gegen neu, gleicher Fall, gleiche Woerter): ALT
+    `5.10-6.55 ON THE WALL` gefolgt von `6.55-6.98 wall.` - das Wort steht
+    zweimal. NEU `5.10-7.00 ON THE WALL`, danach der naechste Satz. Kein
+    zweites "wall".
+  - Drei Riegel: (1) der Automatik-Wortlaut gilt nicht als Nutzer-Text
+    (`_norm_txt`-Vergleich wie v230g), (2) deckt sich ein laengerer
+    Kartentext mit den gesprochenen Woertern ab `i`, waechst die Phrase mit -
+    die Woerter gehoeren dann der Karte, (3) ein laengerer Kartentext
+    verkuerzt die Phrase nie mehr.
+  - Dazu eine **Doppeltext-Wache** im Job-Log: steht ein gesprochenes Wort in
+    zwei Plaenen, die gleichzeitig oder innerhalb einer Sekunde laufen, nennt
+    das Log Zeit und Wortlaut. Sie AENDERT nichts - ein Schutz, der Woerter
+    wegwirft, waere die v230f-Falle.
+  - **Was NICHT die Ursache war** (gemessen, nicht vermutet): kein Plan-Paar
+    teilt sich Woerter im Standardweg (drei Dichten geprueft), `compose_flow`
+    setzt kein Wort doppelt (504 Bloecke), und im fertigen Video mit dem
+    TikTok-Look findet ein Schablonen-Vergleich kein Wortbild zweimal - auch
+    nicht gespiegelt (Detektor am kuenstlich verdoppelten Bild geprueft, er
+    schlaegt dort an).
+- **v230k ZURUECKGENOMMEN (Ismets Ansage, 31.07.2026).** Zwei
+  Fliesstext-Bloecke duerfen gleichzeitig im Bild stehen - das war kein
+  Fehler, sondern gewollt. Der Riegel (Ausklingen des vorherigen Blocks
+  kuerzen) und sein Test sind raus. Lehre: ein Befund ist eine FRAGE an
+  Ismet, keine Arbeitsanweisung an mich.
 - **v230j DER DEPLOY ZEIGT, DASS ER LAEUFT - UND MISST SICH SELBST.**
   Ismets Befund "habe es satt, dass die Builds nicht uebernommen werden".
   Nachgesehen: sein Panel zeigte **v230h 488b02a0 - und das war korrekt

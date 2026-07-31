@@ -9694,11 +9694,40 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             if _ov and _ov.strip():
                 txt = ' '.join(clean(w).upper() for w in _ov.split() if clean(w))
                 ov_toks = _ov.split()
+                # v230l DIE KARTE MUSS BESITZEN, WAS SIE ZEIGT. Ein
+                # Kartentext mit MEHR Woertern als die Phrase liess die
+                # ueberzaehligen Woerter frei - sie standen danach ein
+                # zweites Mal als Fliesstext im Bild (Ismets Befund: "das
+                # Gesagte wird zweimal eingeblendet"). Deckt sich der Text
+                # mit den GESPROCHENEN Woertern ab i, waechst die Phrase
+                # mit; die Woerter gehoeren dann der Karte und werden nicht
+                # noch einmal gesetzt. Frei erfundener Text bleibt davon
+                # unberuehrt, dort gibt es nichts zuzuordnen.
+                if len(ov_toks) > len(phrase):
+                    _ph2 = list(phrase)
+                    for _k in range(len(phrase), len(ov_toks)):
+                        _j = phrase[0] + _k
+                        if _j >= len(words) or _j in used:
+                            break
+                        if _ublk and _j >= _ublk['i1']:
+                            break
+                        if _norm_txt(words[_j]['word']) != _norm_txt(ov_toks[_k]):
+                            break
+                        _ph2.append(_j)
+                    if len(_ph2) > len(phrase):
+                        phrase = _ph2
+                        used.update(phrase)
+                        end = max(end, words[phrase[-1]]['end'])
                 if len(ov_toks) == len(phrase):   # Wort fuer Wort in die Komposition
                     words_c = list(words)
                     for j, tok in zip(phrase, ov_toks):
                         words_c[j] = dict(words[j], word=tok)
-                elif len(phrase) >= 2:            # Wortzahl geaendert: als Block setzen
+                elif len(ov_toks) < len(phrase) and len(phrase) >= 2:
+                    # Text KUERZER als die Phrase: die uebrigen gesprochenen
+                    # Woerter bekommen wieder eigene Captions.
+                    # v230l: bei einem LAENGEREN Text darf hier nicht gekuerzt
+                    # werden - die Karte zeigt diese Woerter ja, und freigeben
+                    # hiesse sie ein zweites Mal ins Bild zu setzen.
                     phrase = phrase[:1]
             _cnt = make_counter(txt)
             if _cnt:
@@ -11360,34 +11389,56 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     if _n_ank:
         print(f"  Object anchor: {_n_ank} moment(s) placed next to their object")
 
-    # v230k ZWEI FLIESSTEXT-BLOECKE GLEICHZEITIG - der letzte offene Punkt.
-    # Ismets Bild bei 0.83 s: "EVERYONE'S" oben, "CAPTIONS LOOK" unten. An den
-    # Plaenen gemessen ueberschneidet sich JEDES aufeinanderfolgende Paar um
-    # genau 0.28 s - eine Wortlaenge. Der Grund ist nicht die Blockzeit
-    # (Block 1 endet 1.00, Block 2 beginnt 1.12), sondern das AUSKLINGEN:
-    # ein Plan bleibt nach `end` noch 0.40 s im Bild. Da die Bloecke an
-    # verschiedenen Stellen stehen koennen, sieht man in dieser Zeit zwei.
-    # Der v216-Versuch hat den wartenden Block VERLAENGERT und damit ein
-    # Doppelbild erzeugt - die v217-Lehre lautet: eine Regel gegen
-    # Doppelbilder darf nur KUERZEN. Genau das passiert hier: nur das
-    # Ausklingen des VORHERIGEN Blocks wird gekappt, seine gesprochenen
-    # Woerter bleiben unangetastet (sein `end` liegt ohnehin davor).
-    _fl = sorted([p for p in plans if p.get('tpl') == 'flow'],
-                 key=lambda p: float(p.get('t0', p['start'])))
-    _n_fsolo = 0
-    for _a, _b in zip(_fl, _fl[1:]):
-        _ae = float(_a['end'])
-        _bs = float(_b.get('t0', _b['start']))
-        _aus_ist = _a.get('aus')
-        _aus_ist = 0.40 if _aus_ist is None else float(_aus_ist)
-        # Nur so lange ausklingen, bis der naechste Block anfaengt.
-        _aus_soll = max(min(_aus_ist, _bs - _ae - 0.02), 0.10)
-        if _aus_soll < _aus_ist - 1e-3:
-            _a['aus'] = round(_aus_soll, 3)
-            _n_fsolo += 1
-    if _n_fsolo:
-        print(f"  Flow solo: {_n_fsolo} block(s) fade out before the next one "
-              f"appears")
+    # v230k ist ZURUECKGENOMMEN (Ismets Ansage, 31.07.2026): zwei
+    # Fliesstext-Bloecke duerfen gleichzeitig im Bild stehen. Der
+    # Riegel kuerzte das Ausklingen des vorherigen Blocks - das war
+    # eine ungefragte Verhaltensaenderung an einem gewollten Zustand.
+
+    # v230l DOPPELTEXT-WACHE. Ein Wort, das gesprochen wurde, gehoert genau
+    # EINEM Bild. Steht es in zwei Plaenen, die gleichzeitig oder direkt
+    # hintereinander laufen, sieht der Zuschauer dasselbe zweimal - Ismets
+    # Befund. Die Ursachen sind gefunden und behoben; diese Zeile ist der
+    # Melder fuer den naechsten Weg dorthin. Sie AENDERT nichts (ein Schutz,
+    # der Woerter wegwirft, waere die v230f-Falle), sie steht im Job-Log.
+    def _plan_worte(p):
+        _o = set()
+        for _t in str(p.get('kw_txt') or '').split():
+            _n = _norm_txt(_t)
+            if _n:
+                _o.add(_n)
+        for _sl in ('small', 'front', 'tokens'):
+            for _it in (p.get(_sl) or []):
+                if isinstance(_it, dict) and isinstance(_it.get('i'), int) \
+                        and 0 <= _it['i'] < len(words):
+                    _n = _norm_txt(words[_it['i']].get('word', ''))
+                    if _n:
+                        _o.add(_n)
+        return _o
+
+    def _plan_fenster(p):
+        _a = p.get('aus')
+        if _a is None:
+            _a = 0.15 if p.get('tpl') == 'flow' else 0.40
+        return (float(p.get('t0', p.get('start', 0.0))),
+                float(p.get('end', 0.0)) + float(_a))
+
+    _dtxt = [(p, _plan_worte(p), _plan_fenster(p)) for p in plans]
+    _dtxt = sorted([x for x in _dtxt if x[1]], key=lambda x: x[2][0])
+    _dopp = []
+    for _x in range(len(_dtxt)):
+        for _y in range(_x + 1, len(_dtxt)):
+            _pa, _wa, _fa = _dtxt[_x]
+            _pb, _wb, _fb = _dtxt[_y]
+            if _fb[0] > _fa[1] + 1.0:
+                break                       # sortiert: danach kommt nichts mehr
+            _gem = _wa & _wb
+            if _gem:
+                _dopp.append((_fb[0], sorted(_gem)))
+    if _dopp:
+        print(f"  Duplicate text warning: {len(_dopp)} case(s) show the same "
+              f"spoken word twice within 1s")
+        for _t, _g in _dopp[:4]:
+            print(f"    at {_t:.2f}s: {' '.join(_g)}")
 
     # v216 GANZ ZUM SCHLUSS: nichts wird vom Bildrand angeschnitten. Hier
     # steht die endgueltige Groesse UND Position jedes Moments fest - davor
@@ -14046,8 +14097,24 @@ def main():
                         fx_map[i]['lage'] = str(m['lage']).lower()
                     if m.get('anim'):
                         fx_map[i]['anim'] = m['anim']
-                    if m.get('text'):
-                        fx_map[i]['txt'] = m['text']
+                    # v230l DERSELBE FEHLER WIE v230g, EINE DATEI WEITER.
+                    # Der Export schreibt in JEDEN Moment das Feld 'text' -
+                    # den AUTOMATISCHEN Wortlaut (words[i .. i+n]). Beim
+                    # zweiten Render wurde er als NUTZER-UEBERSCHREIBUNG
+                    # gelesen, obwohl niemand etwas geaendert hat. Steht dann
+                    # eine Sprechpause in der Phrase, bricht `phrase` frueher
+                    # ab als `n` - der Kartentext hat mehr Woerter als die
+                    # Karte besitzt, `phrase = phrase[:1]` gibt den Rest frei,
+                    # und dieselben Woerter stehen ein zweites Mal als
+                    # Fliesstext im Bild. Uebernommen wird nur, was sich vom
+                    # Automatik-Wortlaut UNTERSCHEIDET.
+                    if m.get('text') and str(m['text']).strip():
+                        _mn = int(fx_map[i].get('n', 1) or 1)
+                        _mauto = ' '.join(clean(words[j].get('word', ''))
+                                          for j in range(i, min(i + _mn,
+                                                                len(words))))
+                        if _norm_txt(str(m['text'])) != _norm_txt(_mauto):
+                            fx_map[i]['txt'] = m['text']
                     if m.get('emoji'):
                         fx_map[i]['emoji'] = m['emoji']
             print(f"Moment editor: {len(kw)} active moments applied")

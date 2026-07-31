@@ -54,6 +54,14 @@ Hook-A/B-Varianten.
    wirkung sieht Ismet erst auf Windows bzw. live auf douchko.eu mit echtem
    Material — das immer klar sagen, nie so tun als sei es final verifiziert.
 
+## ERST FRAGEN, DANN BAUEN (Ismets Ansage, 31.07.2026, "merk dir das fuer
+## immer")
+Vor JEDER Aenderung am Verhalten oder an der Optik: kurz fragen, was gewollt
+ist. Nicht loslegen, weil ein Befund plausibel aussieht. Ein Befund ist eine
+FRAGE an Ismet, keine Arbeitsanweisung an mich — was wie ein Fehler aussieht,
+kann gewollt sein (Beispiel: zwei Fliesstext-Bloecke gleichzeitig im Bild sind
+in Ordnung; v230k hat das ungefragt "repariert").
+
 ## MEINE WIEDERKEHRENDEN FEHLER — vor JEDEM Deliver durchgehen
 (Ismets Ansage, mehrfach: "Lerne aus allen deinen Fehlern.") Diese Liste ist
 keine Sammlung von Anekdoten, sondern eine **Checkliste**. Jeder Punkt ist
@@ -923,6 +931,34 @@ Preset-Werte.
 - Und wieder die v132-Falle: der v230c-Test verlangte ausdruecklich, dass
   eine unbekannte Zahl VERWORFEN wird — er hat den Fehler festgeschrieben.
 
+## Ein Sidecar schreibt zurueck, was es liest (v230l — zweimal derselbe Fehler)
+Ismets „das Gesagte wird zweimal im Bild eingeblendet" hatte dieselbe Wurzel
+wie der Anschnitt in v230g, nur eine Datei weiter: der Analyse-Lauf schreibt
+in JEDEN Eintrag den AUTOMATISCHEN Wortlaut (`_bloecke.json` das Feld `text`,
+`_momente.json` ebenso), und der naechste Lauf liest ihn als
+NUTZER-Ueberschreibung — obwohl niemand etwas geaendert hat.
+- **Regel: ein zurueckgeschriebenes Feld ist erst dann eine Nutzer-Aenderung,
+  wenn es sich vom Automatik-Wert UNTERSCHEIDET** (`_norm_txt`-Vergleich).
+  Wer ein neues Sidecar-Feld exportiert, beantwortet sofort, wie der naechste
+  Lauf „unveraendert" von „geaendert" unterscheidet.
+- **Ein Kartentext darf nie mehr Woerter zeigen, als die Karte besitzt.**
+  `phrase` bricht an einer Sprechpause ab, `n` kennt die Pause nicht; der
+  alte `phrase = phrase[:1]` gab die ueberzaehligen Woerter frei und sie
+  standen direkt danach noch einmal als Fliesstext im Bild (gemessen: Karte
+  `ON THE WALL` 5.10-6.55, danach Block `wall.` 6.55-6.98). Deckt sich der
+  Text mit den gesprochenen Woertern ab `i`, waechst die Phrase mit.
+- **Die Doppeltext-Wache meldet, sie raeumt nicht auf.** Sie schreibt Zeit
+  und Wortlaut ins Job-Log, wenn ein gesprochenes Wort in zwei Plaenen steht,
+  die gleichzeitig oder innerhalb einer Sekunde laufen. Woerter wegzuwerfen
+  waere die v230f-Falle.
+- **Der Suchweg ist die eigentliche Lehre:** vier Ebenen wurden gemessen,
+  bevor die Ursache feststand — innerhalb eines Blocks (504 Bloecke, 0),
+  zwischen den Plaenen (drei Dichten, 0), im fertigen Bild per Schablone
+  (0, Detektor vorher am kuenstlich verdoppelten Bild geprueft) und
+  gespiegelt (0). Erst der zweite Render mit Sidecar zeigte den Fall. Wer
+  einen Kundenbefund nicht reproduziert, hat meistens den ERSTEN Lauf
+  getestet.
+
 ## Sicherheit: Lehren aus Audit-Runde 2 (v230d-sec)
 - **Ein mehrstufiger Vorgang wird an JEDER Stufe geprüft, und die
   Berechtigung gehört an den VORGANG, nicht an den einzelnen Request.** Der
@@ -1280,7 +1316,9 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1827/1827 grün (Stand v230k)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1831/1832 (Stand v230l)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
+(Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1502,14 +1540,8 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
   Quelltext-Suche plus reine Funktionspruefung waren gruen (v193-Fehler).
 
 ### Noch offen aus den Renders
-- **Zwei Fliesstext-Bloecke gleichzeitig: BEHOBEN (v230k).** Nicht die
-  Blockzeit war schuld, sondern das AUSKLINGEN: ein Plan bleibt nach `end`
-  noch 0.40 s im Bild, der naechste Block beginnt aber schon eine Wortlaenge
-  frueher. An den Plaenen gemessen ueberschnitt sich JEDES aufeinanderfolgende
-  Paar um 0.28 s. Jetzt wird das Ausklingen des VORHERIGEN Blocks gekappt
-  (`Flow solo`), nie der naechste verschoben - der v216-Versuch tat genau das
-  und erzeugte ein Doppelbild (v217-Lehre: nur kuerzen). Untergrenze 0.10 s,
-  damit es keine harte Kante gibt.
+- **Zwei Fliesstext-Bloecke gleichzeitig sind IN ORDNUNG** (Ismets Ansage,
+  31.07.2026). v230k hatte das ungefragt "repariert" und ist wieder raus.
 - **Der Anschnitt ist mit v216 generell abgeriegelt** (`fit_into_frame` misst
   das FERTIGE Bild und verkleinert notfalls). Die URSACHE ist weiterhin nicht
   bekannt - sie liess sich mit nachgebautem Transkript nicht ausloesen. Wenn

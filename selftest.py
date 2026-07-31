@@ -12865,41 +12865,81 @@ def _scenario_premium(tmp):
           and 'tdx = min(max(tdx, 2.0 - _ib[0]), (W - 2.0) - _ib[1])'
           in _rsrc_sec230)
 
-    # (1d) v230k: NIE ZWEI FLIESSTEXT-BLOECKE GLEICHZEITIG.
-    # Der letzte offene Punkt aus Ismets Renders ("EVERYONE'S" oben,
-    # "CAPTIONS LOOK" unten). An den Plaenen gemessen ueberschnitt sich JEDES
-    # aufeinanderfolgende Paar um genau eine Wortlaenge - nicht die Blockzeit
-    # war schuld, sondern das AUSKLINGEN (ein Plan bleibt nach `end` noch
-    # 0.40 s stehen). Der v216-Versuch verlaengerte den wartenden Block und
-    # erzeugte damit ein Doppelbild; die v217-Lehre lautet: nur KUERZEN.
-    _wk = [{'word': w, 'start': 0.28 * i, 'end': 0.28 * i + 0.25}
-           for i, w in enumerate(("everyone's captions look the same file same "
-                                  "yellow word a thousand times this next line "
-                                  "goes behind me").split())]
-    _Sk = R.Sprites(_cg, _Wg, _Hg)
-    _plk = R.build_plans(_wk, set(), _cg, _Sk, _Wg, _Hg, lambda a, b: True, {})
-
+    # (1d) v230k ist ZURUECKGENOMMEN (Ismets Ansage, 31.07.2026): zwei
+    # Fliesstext-Bloecke gleichzeitig im Bild sind in Ordnung. Der
+    # Testblock, der das Gegenteil festschrieb, ist deshalb raus - ein
+    # Test darf keine ungefragte Verhaltensaenderung zementieren.
     def _fenster(p):
         return (float(p.get('t0', p['start'])),
                 float(p['end']) + (0.40 if p.get('aus') is None
                                    else float(p['aus'])))
 
-    _flk = sorted([p for p in _plk if p.get('tpl') == 'flow'],
-                  key=lambda p: _fenster(p)[0])
-    _ueb = [round(_fenster(a)[1] - _fenster(b)[0], 2)
-            for a, b in zip(_flk, _flk[1:])
-            if _fenster(b)[0] < _fenster(a)[1] - 1e-3]
-    check('v230k: nie zwei Fliesstext-Bloecke gleichzeitig im Bild',
-          not _ueb, f'{len(_ueb)} Ueberschneidung(en): {_ueb[:4]}')
-    check('v230k: dabei wird nur GEKUERZT, nie verlaengert (v217)',
-          all((p.get('aus') is None or float(p['aus']) <= 0.40)
-              for p in _flk),
-          str([p.get('aus') for p in _flk]))
-    check('v230k: das Ausklingen wird nicht auf null gekappt',
-          all((p.get('aus') is None or float(p['aus']) >= 0.10)
-              for p in _flk))
-    check('v230k: die gesprochenen Woerter bleiben unangetastet',
-          all(_fenster(p)[1] >= float(p['end']) for p in _flk))
+    # (1e) v230l: DASSELBE GESPROCHENE WORT STEHT NIE ZWEIMAL IM BILD.
+    # Ismets Befund "das Gesagte wird zweimal eingeblendet". Der Fall ist der
+    # ZWEITE Render desselben Videos: der erste Lauf schreibt _momente.json
+    # mit dem AUTOMATISCHEN Wortlaut (words[i .. i+n]), der zweite liest ihn
+    # als Nutzer-Ueberschreibung. Liegt in der Phrase eine Sprechpause, bricht
+    # `phrase` frueher ab als `n`; der Kartentext ist dann laenger als die
+    # Karte besitzt, `phrase = phrase[:1]` gab den Rest frei - und dieselben
+    # Woerter standen direkt danach noch einmal als Fliesstext im Bild
+    # (am Plan gemessen: Karte 'ON THE WALL' 5.10-6.55, danach Block 'wall.'
+    # 6.55-6.98). Derselbe Fehlertyp wie v230g, eine Datei weiter.
+    _wl2 = [{'word': w, 'start': 0.42 * i, 'end': 0.42 * i + 0.30}
+            for i, w in enumerate('watch this one sticks on the wall now'.split())]
+    for _k in range(6, len(_wl2)):          # Sprechpause MITTEN in der Phrase
+        _wl2[_k]['start'] += 0.55
+        _wl2[_k]['end'] += 0.55
+    _fxl2 = {4: {'fx': 'ground', 'power': 3, 'n': 3, 'txt': 'on the wall',
+                 'intent': True, 'szene': 'wand', 'lage': 'stehend'}}
+    _Sl2 = R.Sprites(_cg, _Wg, _Hg)
+    _pll2 = R.build_plans(_wl2, set(_fxl2), _cg, _Sl2, _Wg, _Hg,
+                          lambda a, b: True, dict(_fxl2))
+
+    def _worte_von(p):
+        _o = set()
+        for _t in str(p.get('kw_txt') or '').split():
+            _n = re.sub(r'[^a-z0-9]', '', _t.lower())
+            if _n:
+                _o.add(_n)
+        for _sl in ('small', 'front', 'tokens'):
+            for _it in (p.get(_sl) or []):
+                if isinstance(_it, dict) and isinstance(_it.get('i'), int):
+                    _n = re.sub(r'[^a-z0-9]', '',
+                                str(_wl2[_it['i']]['word']).lower())
+                    if _n:
+                        _o.add(_n)
+        return _o
+
+    _dopp2 = []
+    _lst2 = [(p, _worte_von(p), _fenster(p)) for p in _pll2]
+    _lst2 = [x for x in _lst2 if x[1]]
+    for _i2 in range(len(_lst2)):
+        for _j2 in range(_i2 + 1, len(_lst2)):
+            _a2, _wa2, _fa2 = _lst2[_i2]
+            _b2, _wb2, _fb2 = _lst2[_j2]
+            if _fb2[0] > _fa2[1] + 1.0 or _fa2[0] > _fb2[1] + 1.0:
+                continue
+            _g2 = _wa2 & _wb2
+            if _g2:
+                _dopp2.append(sorted(_g2))
+    check('v230l: kein gesprochenes Wort steht zweimal im Bild',
+          not _dopp2, f'{len(_dopp2)} Fall/Faelle: {_dopp2[:3]}')
+    # Der Riegel muss die Woerter der KARTE zuschlagen, nicht sie loeschen
+    # (v230f: ein Schutz darf begrenzen, nie wegwerfen).
+    _kart2 = [p for p in _pll2 if p.get('kw_txt')]
+    check('v230l: die Karte zeigt weiterhin den ganzen angesagten Text',
+          any('WALL' in str(p.get('kw_txt', '')).upper() for p in _kart2),
+          str([p.get('kw_txt') for p in _kart2]))
+    # Der AUTOMATISCHE Wortlaut aus dem Sidecar ist keine Nutzer-Aenderung.
+    check('v230l: der Automatik-Wortlaut gilt nicht als Nutzer-Text',
+          "if m.get('text') and str(m['text']).strip():" in _rsrc_sec230
+          and '_norm_txt(str(m[\'text\'])) != _norm_txt(_mauto)' in _rsrc_sec230)
+    # Ein laengerer Kartentext darf die Phrase NICHT mehr verkuerzen.
+    check('v230l: laengerer Kartentext gibt keine Woerter frei',
+          'elif len(ov_toks) < len(phrase) and len(phrase) >= 2:'
+          in _rsrc_sec230)
+    check('v230l: Doppeltext-Wache meldet im Job-Log',
+          'Duplicate text warning:' in _rsrc_sec230)
 
     # (2) Der Abzug der halben Hoehenzunahme verankerte die UNTERKANTE der
     # Anim-Leinwand. Am Tinten-Schwerpunkt gemessen profitiert davon KEINE
