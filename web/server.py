@@ -547,6 +547,17 @@ def _init_users_db():
     # mehr im Postfach, sondern im Admin-Panel - und die JOBS-Liste haelt nur
     # den Arbeitsspeicher, ein Neustart loescht sie. Deshalb eine eigene
     # Tabelle: jede Stoerung landet hier IMMER, unabhaengig von DVE_ALERTS.
+    # v230j DEPLOY-ZUSTAND. Eine einzige Zeile, geschrieben vom Deploy-Skript
+    # auf dem Host (per `docker compose exec`, derselbe Weg wie die
+    # Alarm-Meldungen). Damit sieht das Panel, ob gerade etwas gebaut wird,
+    # wie lange schon - und wie lange der letzte Deploy WIRKLICH gedauert hat.
+    con.execute("CREATE TABLE IF NOT EXISTS deploy_state ("
+                "id INTEGER PRIMARY KEY CHECK (id = 1), "
+                "phase TEXT NOT NULL DEFAULT '', commit_kurz TEXT NOT NULL DEFAULT '', "
+                "started_at INTEGER NOT NULL DEFAULT 0, "
+                "finished_at INTEGER NOT NULL DEFAULT 0, "
+                "dauer_s INTEGER NOT NULL DEFAULT 0, "
+                "grund TEXT NOT NULL DEFAULT '')")
     con.execute("CREATE TABLE IF NOT EXISTS alerts ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, schluessel TEXT NOT NULL, "
                 "betreff TEXT NOT NULL, text TEXT NOT NULL, "
@@ -2054,7 +2065,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230i'
+DVE_VERSION = 'v230j'
 
 
 def _build_datei():
@@ -2116,6 +2127,30 @@ def _deploy_info():
                           'unbekannt - dieser Container wurde vor v225c gebaut. '
                           'Nach dem naechsten Deploy steht hier Branch und '
                           'Commit.')
+    # v230j WAS GERADE PASSIERT, NICHT NUR WAS LAEUFT.
+    # Das Panel zeigte bisher ausschliesslich den LAUFENDEN Stand. Damit laesst
+    # sich "dauert noch" nicht von "haengt" unterscheiden - Ismets Befund
+    # ("habe es satt, dass die Builds nicht uebernommen werden", waehrend der
+    # Deploy in Wahrheit nur vier Minuten alt war). autodeploy.sh schreibt
+    # seinen Zustand jetzt in `deploy_state`, und der Deploy MISST SICH SELBST:
+    # jede fertige Runde legt ihre Dauer ab. Damit steht im Panel eine echte
+    # Zahl vom eigenen Server statt einer Schaetzung.
+    try:
+        con = _db()
+        r = con.execute("SELECT phase, commit_kurz, started_at, finished_at, "
+                        "dauer_s, grund FROM deploy_state WHERE id = 1"
+                        ).fetchone()
+        con.close()
+        if r:
+            d = {k: r[k] for k in r.keys()}
+            d['laeuft_seit'] = (int(time.time() - (d.get('started_at') or 0))
+                                if d.get('phase') == 'baut' else 0)
+            # Ein 'baut', das ewig steht, ist ein Haenger - nicht "dauert noch".
+            if d['phase'] == 'baut' and d['laeuft_seit'] > 45 * 60:
+                d['phase'] = 'haengt'
+            out['deploy'] = d
+    except Exception:
+        pass
     return out
 
 

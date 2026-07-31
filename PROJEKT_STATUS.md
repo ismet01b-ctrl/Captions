@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230j DER DEPLOY ZEIGT, DASS ER LAEUFT - UND MISST SICH SELBST.**
+  Ismets Befund "habe es satt, dass die Builds nicht uebernommen werden".
+  Nachgesehen: sein Panel zeigte **v230h 488b02a0 - und das war korrekt
+  live**. v230i lag zu dem Zeitpunkt vier Minuten zurueck und wurde gerade
+  gebaut. Der Deploy funktionierte also; **das Panel konnte nur nicht
+  zeigen, dass gerade etwas unterwegs ist.** Damit laesst sich "dauert noch"
+  nicht von "haengt" unterscheiden - und wer das nicht unterscheiden kann,
+  glaubt irgendwann, es haenge immer.
+  - `autodeploy.sh` schreibt jetzt bei jeder Runde seinen Zustand in die
+    Datenbank des LAUFENDEN Containers (`deploy_state`, derselbe Weg wie die
+    Alarm-Meldungen seit v226a): `baut` beim Start, `ok` mit GEMESSENER
+    Dauer, `fehler` mit dem Befund des Test-Gates.
+  - Das Panel zeigt es in der Build-Kachel: "abcdef12 wird ausgerollt · seit
+    3 min", "letzter Deploy abcdef12 · 6 min 12 s", oder rot mit Grund. Steht
+    ein Bau laenger als 45 Minuten, heisst es nicht mehr "dauert noch",
+    sondern "das dauert zu lange".
+  - **Damit beantwortet der Server die Frage "wie lange dauert ein Deploy"
+    selbst, mit einer echten Zahl** statt einer Schaetzung.
+  - Hier gemessen (dieser Container, CPU): das Test-Gate faehrt
+    `selftest.py --part=logic` und braucht **183 s**; die Render-Teile laufen
+    im Gate NICHT mit (10/7/21/20 s waeren es zusaetzlich). Dazu kommen
+    Timer-Wartezeit (0-2 min, `OnUnitActiveSec=2min`), `git pull`,
+    `docker compose build` und der Health-Check (max 30 s). Ein Deploy
+    dauert also grob **5-8 Minuten**, das meiste davon Tests. Die echte Zahl
+    vom eigenen Server steht nach dem naechsten Deploy im Panel.
+  - Nachgewiesen durch AUSFUEHREN (vorgetaeuschtes docker/git/update.sh, wie
+    beim Gate v201): gelungener Lauf -> `phase=ok` mit Dauer, gescheiterter
+    Lauf -> `phase=fehler` mit dem Gate-Befund. Eine Quelltext-Suche haette
+    hier nichts bewiesen.
 - **v230i DER TAB STIRBT AM SPEICHER - PLAYER WERDEN JETZT WIRKLICH
   FREIGEGEBEN.** Ismets Screenshot ist NICHT unsere Oberflaeche, sondern
   Chrome selbst: "Diese Seite kann nicht geoeffnet werden" (iPhone, 11 Tabs

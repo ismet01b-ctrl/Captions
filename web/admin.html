@@ -654,6 +654,35 @@ async function loadAbuse(){
 /* ---------- SYSTEM ---------- */
 async function loadSystem(){
   let d;try{d=await api('/api/admin/system');}catch(e){el('view').innerHTML=err(e);return;}
+/* v230j WAS GERADE PASSIERT, NICHT NUR WAS LAEUFT.
+   Das Panel zeigte ausschliesslich den laufenden Stand - damit liess sich
+   "dauert noch" nicht von "haengt" unterscheiden (Ismets Befund: er sah
+   v230h, waehrend v230i vier Minuten alt und noch im Bau war). autodeploy.sh
+   schreibt seinen Zustand jetzt mit, inklusive der GEMESSENEN Dauer der
+   letzten Runde - eine echte Zahl vom eigenen Server, keine Schaetzung. */
+function mmss(s) {
+  s = Math.max(0, Math.round(s || 0));
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
+}
+function deployZeile(dp) {
+  if (!dp || !dp.phase) return '';
+  const c = esc(String(dp.commit_kurz || '').slice(0, 8));
+  if (dp.phase === 'baut')
+    return `<div style="margin-top:6px;color:#6ea8ff;font-size:12px">`
+      + `${c} wird ausgerollt \u00b7 seit ${mmss(dp.laeuft_seit)}</div>`;
+  if (dp.phase === 'haengt')
+    return `<div style="margin-top:6px;color:var(--warn,#e0a33e);font-size:12px">`
+      + `${c} baut seit ${mmss(dp.laeuft_seit)} - das dauert zu lange, auf dem `
+      + `Server nachsehen (journalctl -u douchko-deploy).</div>`;
+  if (dp.phase === 'fehler')
+    return `<div style="margin-top:6px;color:var(--bad,#e0574e);font-size:12px">`
+      + `${c} ging NICHT live (nach ${mmss(dp.dauer_s)}). Die laufende Fassung `
+      + `ist unveraendert.` + (dp.grund ? '<br><span style="opacity:.75">'
+        + esc(String(dp.grund).slice(0, 200)) + '</span>' : '') + `</div>`;
+  return `<div class="k" style="margin-top:6px">letzter Deploy ${c} \u00b7 `
+    + `${mmss(dp.dauer_s)}</div>`;
+}
+
   const k=d.keys,c=d.config,led=(x,w)=>`<span class="led ${x?'ok':(w?'warn':'bad')}"></span>`;
   const cfg=Object.entries(c).map(([kk,v])=>`<tr><td class="subtle">${esc(kk)}</td><td class="mono">${esc(v)}</td></tr>`).join('');
   el('view').innerHTML=`
@@ -673,7 +702,8 @@ async function loadSystem(){
             : 'Stand unbekannt'}</div>` : ''}
         ${d.deploy && d.deploy.warnung
             ? `<div style="margin-top:6px;color:var(--warn,#e0a33e);font-size:12px">${esc(d.deploy.warnung)}</div>`
-            : ''}</div>
+            : ''}
+        ${deployZeile(d.deploy && d.deploy.deploy)}</div>
       <div class="card"><div class="k">Disk free</div><div class="v">${d.disk?d.disk.free_gb+'G':'?'} <small>${d.disk?d.disk.used_pct+'%':''}</small></div></div>
       <div class="card"><div class="k">DB size</div><div class="v">${d.db_mb??'?'} <small>MB</small></div></div>
       <div class="card"><div class="k">Last backup</div><div class="v" style="font-size:16px">${d.last_backup?fdate(d.last_backup):'none'}</div></div>

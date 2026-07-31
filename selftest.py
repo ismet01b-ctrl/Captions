@@ -9341,6 +9341,68 @@ def _scenario_betrieb(tmp):
           os.path.exists(_bef201) and 'FAIL testname xy' in open(_bef201).read()
           and open(_bef201).read().startswith('rot'),
           open(_bef201).read()[:80] if os.path.exists(_bef201) else 'fehlt')
+    # ---- v230j: der Deploy meldet, dass er laeuft - und misst sich selbst ----
+    # Ismets Befund "habe es satt, dass die Builds nicht uebernommen werden":
+    # das Panel zeigte nur den LAUFENDEN Stand, er sah v230h waehrend v230i
+    # vier Minuten alt und noch im Bau war. "dauert noch" liess sich nicht
+    # von "haengt" unterscheiden. Geprueft wird durch AUSFUEHREN mit
+    # vorgetaeuschtem docker/git/update.sh - eine Quelltext-Suche haette hier
+    # nichts bewiesen (dieselbe Lehre wie beim Gate, v201).
+    import sqlite3
+    _t230 = tempfile.mkdtemp(prefix='dve_dep_')
+    _b230 = os.path.join(_t230, 'bin')
+    os.makedirs(_b230, exist_ok=True)
+    os.makedirs(os.path.join(_t230, 'data'), exist_ok=True)
+    sqlite3.connect(os.path.join(_t230, 'data', 'users.db')).close()
+    with open(os.path.join(_b230, 'docker'), 'w') as fh:
+        fh.write('#!/usr/bin/env bash\nshift 3\nshift\nexec "$@"\n')
+    with open(os.path.join(_b230, 'git'), 'w') as fh:
+        fh.write('#!/usr/bin/env bash\ncase "$*" in\n'
+                 '  *"--abbrev-ref HEAD"*) echo "claude/test" ;;\n'
+                 '  *"rev-parse HEAD"*) echo "' + '1' * 40 + '" ;;\n'
+                 '  *"rev-parse origin/"*) echo "abcdef1234567890'
+                 'abcdef1234567890abcdef12" ;;\n  *) exit 0 ;;\nesac\n')
+    for _f in ('docker', 'git'):
+        os.chmod(os.path.join(_b230, _f), 0o755)
+    shutil.copy(os.path.join(HERE, 'autodeploy.sh'), _t230)
+    with open(os.path.join(_t230, '.deploy_gate_last.txt'), 'w') as fh:
+        fh.write('FAIL testname xy')
+
+    def _dep230(rc):
+        with open(os.path.join(_t230, 'update.sh'), 'w') as fh:
+            fh.write(f'#!/usr/bin/env bash\nsleep 1\nexit {rc}\n')
+        os.chmod(os.path.join(_t230, 'update.sh'), 0o755)
+        run(['bash', 'autodeploy.sh'], cwd=_t230,
+            env=dict(os.environ, INSTALL_DIR=_t230,
+                     DVE_DATA=os.path.join(_t230, 'data'),
+                     PATH=_b230 + ':' + os.environ.get('PATH', '')))
+        _c = sqlite3.connect(os.path.join(_t230, 'data', 'users.db'))
+        try:
+            _r = _c.execute('SELECT phase, commit_kurz, dauer_s, grund '
+                            'FROM deploy_state WHERE id = 1').fetchone()
+        except Exception:
+            _r = None
+        _c.close()
+        return _r
+
+    _ok230 = _dep230(0)
+    check('v230j: ein gelungener Deploy hinterlaesst Zustand UND Dauer',
+          _ok230 and _ok230[0] == 'ok' and _ok230[1] == 'abcdef123456'
+          and _ok230[2] >= 1, str(_ok230))
+    _bad230 = _dep230(1)
+    check('v230j: ein gescheiterter Deploy hinterlaesst den Grund',
+          _bad230 and _bad230[0] == 'fehler'
+          and 'FAIL testname xy' in (_bad230[3] or ''), str(_bad230))
+    shutil.rmtree(_t230, ignore_errors=True)
+    # Und das Panel muss den Zustand auch ANZEIGEN.
+    _adm230 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v230j: das Panel zeigt den Deploy-Zustand an',
+          'function deployZeile(' in _adm230
+          and 'wird ausgerollt' in _adm230 and 'letzter Deploy' in _adm230)
+    check('v230j: der Server reicht den Zustand durch',
+          'FROM deploy_state WHERE id = 1' in _sv203
+          and "d['phase'] = 'haengt'" in _sv203)
+
     _gate201('echo "1391/1391 Tests bestanden"', 0)
     check('v201a: bei gruen steht die Bilanz drin, keine FAIL-Zeilen',
           open(_bef201).read().startswith('gruen')
