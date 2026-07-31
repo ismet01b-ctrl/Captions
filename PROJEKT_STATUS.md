@@ -3,6 +3,73 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c-sec SIEBEN BESTAETIGTE LUECKEN GESCHLOSSEN (Runde 1 des Audits).**
+  Ismets Frage nach der Cyber-Sicherheit. Ein Pruef-Durchlauf mit
+  adversarieller Gegenprobe (jeder Befund musste einen Widerlegungs-Versuch
+  ueberstehen) hat sieben ausnutzbare Wege gefunden - **kein Diebstahl
+  fremder Kundendaten, sondern Sabotage und Kosten**. Roter Faden: ein
+  Riegel, den nur die halbe Nachbarschaft hat.
+  1. **Ungeklemmte Regler waren der schwerste Fall.** `_sanitize_overrides`
+     klemmte genau fuenf Werte; alles andere lief ungeprueft in die
+     Render-Config. `matting_downsample` laesst das KI-Netz das Bild
+     GROESSER statt kleiner rechnen (gemessen Faktor 50-90 an Zeit, bis
+     5 GB Speicher bei 6 GB Containergrenze), `effects.bg_blur` steuert den
+     Gauss-Radius linear (gemessen ~12 s je EINZELBILD bei 100 statt
+     0.25 s). Ein Gratis-Konto konnte den EINEN Render-Worker damit
+     stundenlang belegen; der Wachhund greift NICHT, weil der Fortschritt
+     ja weiterlaeuft. Jetzt gilt: **was keine Grenze in der Tabelle hat,
+     kommt gar nicht erst durch** (`_EFFECT_RANGE`/`_CAMERA_RANGE`,
+     `_klemm_zahlen`), plus Klemmung in render.py selbst - die Desktop-App
+     schreibt dieselbe Datei.
+  2. **`fonts.*` war ein freier Dateipfad.** Ein Pfad auf das eigene
+     Kundenvideo liess render.py NACH der Transkription mit einem
+     unbehandelten Fehler sterben; der Transkript-Zwischenspeicher wird nur
+     bei Erfolg geschrieben, also lief bei jedem Versuch ein neuer,
+     kostenpflichtiger Whisper-Aufruf. Jetzt geschlossener Satz aus
+     `/api/fonts` + Presets. Dasselbe fuer `keywords.include: 123`.
+  3. **Der Preisriegel hing am MODUS statt am JOB.** `_render_gebucht(...)
+     if (u and mode == 'full')` - mit `mode='analyze'` war "schon gebucht"
+     zwangsweise 0. Erst 1080p starten (einmal gebucht), dann denselben Job
+     mit analyze + `output.height=2160` aufrufen: der folgende
+     'inklusive'-Re-Render lief in 4K zum 1080p-Preis. Exakt der
+     v203-sec-Fehlertyp, eine Tuer weiter.
+  4. **Erstattet wurde, was `cost_sec` behauptete.** Dieses Feld liess sich
+     nach der Reservierung erhoehen - ein fehlgeschlagener Render gab dann
+     MEHR zurueck als je gezahlt wurde: aus einem Abbruch liess sich
+     Guthaben erzeugen und die Ledger-Invariante brach. `_refund_credits`
+     liest den Betrag jetzt aus der Ledger-ZEILE selbst.
+  5. **`/api/feedback` hatte weder Bremse noch Eigentumspruefung.** Die
+     Dubletten-Sperre haengt am Paar (user_id, jid), und `jid` kam roh aus
+     dem Formular - mit erfundenen Nummern ergaben 500 Anfragen 500 Zeilen
+     (nachgestellt). Der Sterne-Durchschnitt im Panel liess sich auf 1.0
+     ziehen und die einzige geschaeftskritische Datenbank vollschreiben.
+     Der Nachbar-Endpunkt `/api/support` hat sein Rate-Limit seit jeher.
+     **`_job_owner_ok` reicht hier nicht** - es laesst eine unbekannte jid
+     durch (kein Job -> kein Eigentuemer -> True); genau das war der Weg.
+  6. **Der Upload hatte gar keine Bremse** (`_rate_limit_ok` deckte nur
+     reg/login/goauth/support/admin) und der Flooding-Deckel zaehlte nur,
+     was GERADE laeuft. Ein 'pre'-Upload steht danach auf 'vorbereitet' und
+     faellt heraus - unbegrenzt Whisper-Aufrufe und bis 300 MB je Upload
+     fuer 7 Tage auf derselben Platte wie die Kundendatenbank. Jetzt
+     60 Uploads/h je IP plus ein SUMMEN-Deckel (`_vorbereitet_count`, 8).
+  7. **Nur die LANGE Bildkante war gedeckelt.** Ein 8x4096-Clip (Datei
+     wenige KB, unter jeder Dauer- und Bildratengrenze) wird im
+     Standbild-Zwischenspeicher durch `scale=384:-2` auf 384x196608
+     HOCHskaliert: gemessen 226 MB je Bild, bis 156 Bilder im Speicher,
+     Container hat 6 GB. Jetzt kurze Kante >= 120 px und
+     Seitenverhaeltnis <= 6:1.
+  Dazu drei Betriebs-Befunde: **die `.env` fehlte in `.dockerignore`**
+  (`COPY . /app/` backt Stripe-LIVE-Key, Admin-Key, SMTP-Passwort und
+  OpenAI-Key ins Image - ausgerechnet ins Arbeitsverzeichnis des
+  Render-Subprozesses, dem v204-sec sie per Allowlist genommen hat);
+  **`restore.sh` fiel auf `./web/data` zurueck** und meldete "OK", ohne
+  etwas wiederherzustellen (der Container liest das Volume `dve-data`);
+  **das Test-Gate haengte das echte Daten-Volume an**, obwohl sein Kommentar
+  das Gegenteil behauptet - der Selftest raeumt seine Verzeichnisse per
+  rmtree weg, und die einzige Schranke war eine Umgebungsvariable.
+  Regression **1761/1762 logic + 7/1/5/2 Renders** (der eine Fehlschlag ist
+  "GUI startet ohne Fehler" - dieser Container hat fuer python3.11 kein
+  tkinter, das Docker-Image schon).
 - **v230b DER FUNKELNDE SAUM AN HAAR UND SCHULTER (Ismets "das Auge glitcht") -
   GEFUNDEN UND BEHOBEN.** Ismet hat die Quelldatei geschickt und den Look
   genannt (Editorial); damit liess sich der Fehler lokal nachstellen. Er ist

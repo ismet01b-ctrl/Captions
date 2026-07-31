@@ -18,7 +18,28 @@
 #   4. Einspielen, App starten, Health pruefen.
 set -euo pipefail
 cd "$(dirname "$0")"
-DATA_DIR="${DVE_DATA:-./web/data}"
+# v230c-sec: DIE VORGABE ZEIGTE AUF DEN FALSCHEN ORT.
+# Auf dem Server steht DVE_DATA nur IM Container (Dockerfile-ENV); im Terminal
+# ist es leer, also fiel das Skript auf ./web/data zurueck - ein Verzeichnis,
+# das der laufende Container gar nicht benutzt (er liest das Docker-Volume
+# dve-data:/data). Ein Restore meldete damit "OK", ohne irgendetwas
+# wiederherzustellen, und legte die volle Kundendatenbank in den
+# Docker-Bauordner, wo der naechste Deploy sie ins Image gebacken haette.
+# Jetzt: auf dem Server ueber den Container arbeiten, nur lokal ./web/data.
+DATA_DIR="${DVE_DATA:-}"
+if [ -z "$DATA_DIR" ]; then
+  if command -v docker >/dev/null 2>&1 && docker volume inspect dve-data >/dev/null 2>&1; then
+    echo "FEHLER: Auf diesem Server liegt die Datenbank im Docker-Volume"
+    echo "        'dve-data' (/data im Container), NICHT in ./web/data."
+    echo ""
+    echo "  Normalweg: Admin-Panel -> Backup -> Zuruecksetzen (kein Neustart noetig)."
+    echo "  Notnagel, wenn die App gar nicht mehr startet:"
+    echo "    docker compose run --rm --entrypoint bash app \\"
+    echo "      -c 'DVE_DATA=/data bash /app/restore.sh --letztes'"
+    exit 2
+  fi
+  DATA_DIR="./web/data"
+fi
 DB="$DATA_DIR/users.db"
 BDIR="$DATA_DIR/backups"
 

@@ -32,9 +32,21 @@ BEFUND="$(dirname "$0")/.deploy_gate_last.txt"
 trap 'rm -f "$LOG"' EXIT
 
 echo "==> Test-Gate: Selftest im neuen Image"
+# Leeres Wegwerf-Verzeichnis, das gleich ueber das echte /data gehaengt wird.
+mkdir -p /tmp/dve_gate_leer
 
 set +e
 docker compose run --rm --no-deps \
+  `# v230c-sec: OHNE DAS ECHTE DATEN-VOLUME. 'docker compose run' uebernimmt` \
+  `# die komplette Service-Konfiguration, also auch 'volumes: dve-data:/data'` \
+  `# - der Wegwerf-Container sah die echte users.db, obwohl der Kommentar` \
+  `# oben das Gegenteil behauptet. Das einzige, was den Selftest davon` \
+  `# fernhielt, war die eine Zeile DVE_DATA=/tmp/gate_data; der Selftest` \
+  `# raeumt seine Datenverzeichnisse per rmtree weg. Faellt die Zeile bei` \
+  `# einem Umbau weg, loescht der DEPLOY die Konten- und Guthaben-Datenbank,` \
+  `# von der es keine Kopie ausser Haus gibt. Jetzt haengt ein leeres` \
+  `# Wegwerf-Volume an /data - der Test kann nicht mehr hinsehen.` \
+  -v /tmp/dve_gate_leer:/data \
   -e DVE_DATA=/tmp/gate_data \
   -e DVE_LOGFILE=0 \
   -e OPENAI_API_KEY= \

@@ -832,6 +832,43 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   `admin.html`). Und ein `try/catch` um einen Renderer muss loggen: ein
   leeres Banner sieht sonst aus wie "nichts vorhanden".
 
+## Sicherheit: Lehren aus dem zweiten Audit (v230c-sec)
+Sieben bestätigte Wege, alle aus derselben Familie: **Sabotage und Kosten,
+nicht Diebstahl.** Wer hier etwas ergänzt, prüft zuerst diese vier Fragen.
+- **Jede Zahl aus dem Client braucht eine Grenze — und was keine hat, kommt
+  gar nicht erst durch.** `_sanitize_overrides` klemmte fünf Werte und ließ
+  den Rest laufen. Zwei davon steuern direkt die Rechenzeit
+  (`matting_downsample` Faktor 50–90, `effects.bg_blur` Faktor 48) und ein
+  einziges Gratis-Konto konnte den EINEN Worker stundenlang belegen. Eine
+  Allowlist mit Bereichen (`_EFFECT_RANGE`) ist die einzige Form, die beim
+  nächsten neuen Regler nicht wieder aufgeht. **Geklemmt wird auf beiden
+  Seiten** — die Desktop-App schreibt dieselbe Config-Datei.
+- **Der Wachhund rettet nicht vor einem LANGSAMEN Job.** Sein Fingerabdruck
+  ist (Status, Fortschritt, Phase); solange der Fortschritt kriecht, läuft
+  die Uhr immer neu. Rechenzeit begrenzt man am Eingang, nicht am Timeout.
+- **Ein Riegel darf nicht am MODUS hängen, wenn die Eigenschaft am JOB
+  hängt.** `_render_gebucht(...) if mode == 'full'` machte aus "schon
+  bezahlt" ein "je nach Aufruf" — 4K zum 1080p-Preis. Und **erstattet wird,
+  was in der Ledger-Zeile steht**, nie was ein überschreibbares Feld
+  (`cost_sec`) behauptet: sonst erzeugt ein Abbruch Guthaben.
+- **`_job_owner_ok` beweist kein Eigentum an einer UNBEKANNTEN jid.** Kein
+  Job → kein Eigentümer → `True`. Wo eine ID aus dem Formular kommt, muss
+  der Job EXISTIEREN und dem Aufrufer gehören.
+- **Ein Deckel auf das Gleichzeitige ist kein Deckel auf die Summe.**
+  `_inflight_count` zählt 'wartet'/'laeuft'; ein vorbereiteter Upload fällt
+  heraus und der nächste ist sofort erlaubt. Wer nichts abbucht, braucht
+  eine Summen-Grenze (`_vorbereitet_count`) — sonst sind Whisper-Rechnung
+  und Plattenplatz unbegrenzt.
+- **Eine Grenze auf die lange Kante ist keine auf die Fläche.** 8x4096 ist
+  unter jedem Limit und wird intern auf 384x196608 hochskaliert (226 MB je
+  zwischengespeichertem Bild). Kurze Kante und Seitenverhältnis mitprüfen.
+- **Betrieb: was neben dem Repo liegt, landet im Image.** `.env` fehlte in
+  `.dockerignore`, also backte `COPY . /app/` den Stripe-LIVE-Key ins
+  Arbeitsverzeichnis genau des Prozesses, dem v204-sec ihn weggenommen hat.
+  Und ein Skript, dessen Standard-Pfad auf dem Server nicht existiert
+  (`restore.sh` → `./web/data` statt Volume `dve-data`), meldet Erfolg,
+  ohne etwas zu tun — die gefährlichste Sorte Fehler bei einem Notfall-Werkzeug.
+
 ## Sicherheit: Lehren aus dem Audit (v203-sec)
 Zwei adversariell gegengeprüfte Audits, 30 bestätigte Befunde. Die Muster,
 die sich wiederholen:
@@ -1121,7 +1158,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1738/1738 grün (Stand v230b)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1762/1762 grün (Stand v230c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

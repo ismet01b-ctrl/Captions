@@ -69,6 +69,14 @@ CHUNK_MAX_BYTES = int(os.environ.get('DVE_CHUNK_MB', '32')) * 1024 * 1024
 MAX_PIXEL_LANG = int(os.environ.get('DVE_MAX_PIXEL', '4096'))
 MAX_FPS = float(os.environ.get('DVE_MAX_FPS', '60'))
 MAX_SECONDS = int(os.environ.get('DVE_MAX_SECONDS', '180'))
+# v230c-sec: Seitenverhaeltnis. 16:9 ist 1.78, ein Kinoformat 2.4 - 6:1 laesst
+# jedem echten Video Luft und stoppt die Streifen, die den Speicher sprengen.
+MAX_ASPECT = float(os.environ.get('DVE_MAX_ASPECT', '6'))
+# Wie viele fertig vorbereitete, aber nie gerenderte Uploads ein Konto
+# gleichzeitig liegen haben darf. Der bisherige Deckel zaehlte nur, was
+# GERADE laeuft - ein 'pre'-Upload faellt danach heraus und der naechste war
+# sofort erlaubt: unbegrenzt Plattenplatz und Whisper-Aufrufe je Konto.
+MAX_VORBEREITET = int(os.environ.get('DVE_MAX_PRE', '8'))
 SESSION_DAYS = 30
 TRIAL_SECONDS = int(os.environ.get('DVE_TRIAL_SECONDS', '120'))  # 2 Min gratis
 RETENTION_DAYS = float(os.environ.get('DVE_RETENTION_DAYS', '7'))
@@ -1813,13 +1821,24 @@ def _refund_credits(uid, jid, need, resv_like=None):
     try:
         con.isolation_level = None
         con.execute('BEGIN IMMEDIATE')                # Schreibsperre gegen TOCTOU
+        # v230c-sec ERSTATTET WIRD, WAS WIRKLICH RESERVIERT WURDE.
+        # Bis v230b kam der Betrag von aussen (`need` = _job_cost(j), also aus
+        # j['cost_sec']). Dieses Feld laesst sich nach der Reservierung noch
+        # erhoehen (Aufloesung hochstufen) - eine fehlgeschlagene Reservierung
+        # gab dann MEHR zurueck, als je gezahlt wurde: aus einem Abbruch liess
+        # sich Guthaben erzeugen und die Ledger-Invariante brach. Der einzige
+        # Wert, der nicht luegen kann, steht in der Zeile selbst.
+        _row = con.execute(
+            "SELECT COALESCE(SUM(delta_sec), 0) FROM ledger "
+            "WHERE user_id = ? AND grund LIKE ?", (uid, like)).fetchone()
+        _resv = -int(_row[0] or 0)                    # Reservierungen sind negativ
         cur = con.execute("DELETE FROM ledger WHERE user_id = ? AND grund LIKE ?",
                           (uid, like))
-        if cur.rowcount < 1:
+        if cur.rowcount < 1 or _resv <= 0:
             con.execute('ROLLBACK')
             return                                    # nichts offen -> schon erstattet
         con.execute("UPDATE users SET balance_sec = balance_sec + ? WHERE id = ?",
-                    (need, uid))
+                    (_resv, uid))
         con.execute('COMMIT')
     finally:
         con.close()
@@ -2001,7 +2020,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230b'
+DVE_VERSION = 'v230c'
 
 
 def _build_datei():
@@ -2606,6 +2625,33 @@ def _inflight_count(uid):
                and j.get('status') in ('wartet', 'laeuft'))
 
 
+def _vorbereitet_count(uid):
+    """v230c-sec: fertig transkribierte, aber nie gerenderte Uploads.
+    Genau die zaehlt _inflight_count NICHT - ein 'pre'-Upload steht danach auf
+    'vorbereitet' und faellt heraus. Damit war der Deckel eine RATEN-Bremse und
+    keine Summe: ein Gratis-Konto konnte in Schleife hochladen, jedes Mal eine
+    kostenpflichtige Whisper-Transkription ausloesen und bis 300 MB je Upload
+    fuer 7 Tage auf derselben Platte ablegen, auf der die Kundendatenbank
+    liegt. Abgebucht wird beim Pre-Upload bewusst nichts (das ist der
+    Geschwindigkeitsvorteil) - also braucht es hier eine SUMMEN-Grenze."""
+    if not uid:
+        return 0
+    return sum(1 for j in list(JOBS.values())
+               if j.get('user_id') == uid and j.get('kind') != 'motion'
+               and j.get('status') == 'vorbereitet')
+
+
+def _upload_rate_guard(request):
+    """v230c-sec: Bremse pro IP auf den Upload-Wegen. Es gab hier gar keine -
+    `_rate_limit_ok` deckte nur reg/login/goauth/support/admin ab. Der Deckel
+    ist bewusst grosszuegig (60/h): ein Kunde, der zehn Videos hintereinander
+    hochlaedt, ist normal; 600 sind es nicht."""
+    if not _rate_limit_ok(_client_ip(request), window_sec=3600,
+                          max_attempts=60, bucket='upload'):
+        raise HTTPException(429, 'Too many uploads from this connection. '
+                                 'Please try again later.')
+
+
 def _enqueue_guard(uid):
     if uid and _inflight_count(uid) >= CAPTION_INFLIGHT_CAP:
         raise HTTPException(429, 'You already have several renders in the queue. '
@@ -2747,6 +2793,87 @@ def deep_merge(base, override):
 _OV_SECTIONS = {'effects', 'camera', 'colors', 'fonts', 'keywords', 'output',
                 'matting_quality', 'matting_downsample', 'language'}
 
+# v230c-sec JEDE ZAHL AUS DEM CLIENT BEKOMMT EINE GRENZE.
+# Bis v230b klemmte _sanitize_overrides genau fuenf Regler; alles andere lief
+# ungeprueft in die Render-Config. Zwei davon steuern direkt die Rechenzeit:
+# `matting_downsample` (das KI-Netz rechnet das Bild GROESSER statt kleiner,
+# gemessen Faktor 50-90 und bis 5 GB Speicher) und `effects.bg_blur` (der
+# Gauss-Radius haengt linear daran, gemessen Faktor 48 bei 100). Ein einziges
+# Gratis-Konto konnte damit den EINEN Render-Worker stundenlang belegen - der
+# Wachhund greift nicht, weil der Fortschritt ja weiterlaeuft.
+# Regel jetzt: was hier keine Grenze hat, kommt gar nicht erst durch.
+_EFFECT_RANGE = {
+    'words_per_group': (1, 8), 'words_per_group_max': (1, 10),
+    'chunk_hold_min': (0.10, 5.0), 'caption_contrast': (1.0, 21.0),
+    'caption_kontur': (0.0, 0.30), 'punch_silence': (0.0, 2.0),
+    'zahl_gap': (0, 300), 'beat_sync': (0.0, 1.0), 'person_shadow': (0.0, 1.0),
+    'dim_behind': (0.0, 1.0), 'dim_blurin': (0.0, 1.0), 'sfx_volume': (0.0, 2.0),
+    'intro_seconds': (0, 300), 'hook_seconds': (0, 300),
+    'hook_strength': (0.0, 1.0), 'retention_gap': (0, 300),
+    'pattern_interrupt': (0, 300), 'bg_blur': (0.0, 1.0),
+    'music_beat': (0.0, 1.0), 'freeze_frame': (0.0, 1.0), 'trail': (0.0, 1.0),
+    'counter_ring': (0.0, 1.0), 'split_screen': (0.0, 1.0),
+    'env_shadow': (0.0, 1.0), 'caption_scale': (0.60, 1.80),
+    'caption_hierarchie': (1.40, 5.00), 'blender_samples': (1, 256),
+    'blender_anim_frames': (1, 24), 'blender_width': (16, 1920),
+}
+_CAMERA_RANGE = {'strength': (0.0, 1.0), 'crash': (0.0, 1.0),
+                 'side_every': (1, 60)}
+_FX_IDS = {'behind', 'cascade', 'blurin', 'outline', 'ground'}
+_CAM_IDS = {'caption', 'punch', 'pan', 'push', 'pullback', 'crash', 'capzoom',
+            'drift', 'none'}
+
+
+def _klemm_zahlen(d, tabelle):
+    """Zahlenwerte gegen die Tabelle klemmen. Ein Zahlenwert OHNE Eintrag
+    fliegt raus - eine Grenze, die niemand aufgeschrieben hat, gibt es
+    nicht. Wahrheitswerte und Texte bleiben (sie treiben keine Rechenzeit),
+    Texte werden nur in der Laenge gedeckelt."""
+    for k in list(d):
+        v = d[k]
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, (int, float)):
+            r = tabelle.get(k)
+            if not r:
+                d.pop(k, None)
+                continue
+            try:
+                d[k] = min(max(float(v), r[0]), r[1])
+                if isinstance(r[0], int) and isinstance(r[1], int):
+                    d[k] = int(round(d[k]))
+            except Exception:
+                d.pop(k, None)
+        elif isinstance(v, str) and len(v) > 64:
+            d[k] = v[:64]
+
+
+def _erlaubte_fonts():
+    """Geschlossener Satz zulaessiger Schriftdateien: die Kacheln aus /api/fonts
+    plus alles, was die eigenen Presets setzen. Alles andere ist ein freier
+    Pfad in einen Dateinamen - und ein Pfad, der auf ein Kundenvideo zeigt,
+    laesst den Render mit einem unbehandelten Fehler sterben (ein Gratis-Konto
+    konnte so den Worker dauerhaft beschaeftigen)."""
+    global _FONT_OK
+    if _FONT_OK is None:
+        ok = set()
+        for f in FONTS:
+            ok.add(f.get('file'))
+            if f.get('script'):
+                ok.add(f['script'])
+        try:
+            for name in ('creator', 'clean', 'editorial', 'viral'):
+                for v in (build_config(name).get('fonts') or {}).values():
+                    if isinstance(v, str):
+                        ok.add(v)
+        except Exception:
+            pass
+        _FONT_OK = {v for v in ok if isinstance(v, str)}
+    return _FONT_OK
+
+
+_FONT_OK = None
+
 def _sanitize_overrides(ov):
     """v92 SECURITY: cfg_overrides kommt vom Client und wird tief in die
     Render-Config gemerged. Ohne Filter koennte ein Nutzer beliebige Keys
@@ -2771,6 +2898,24 @@ def _sanitize_overrides(ov):
         _KW_OK = {'include', 'exclude', 'auto', 'emphasize_last',
                   'min_gap_seconds'}
         out['keywords'] = {k: v for k, v in kwo.items() if k in _KW_OK}
+        # v230c-sec: die TYPEN muessen auch stimmen. `include: 123` kam bis
+        # v230b durch und liess render.py NACH der Transkription mit einem
+        # unbehandelten TypeError sterben - der Transkript-Zwischenspeicher
+        # wird nur bei Erfolg geschrieben, also lief bei jedem Versuch ein
+        # neuer, kostenpflichtiger Whisper-Aufruf. Ein Gratis-Konto konnte so
+        # beliebig oft auf Rechnung des Betreibers transkribieren lassen.
+        for _lk in ('include', 'exclude'):
+            if _lk in out['keywords']:
+                v = out['keywords'][_lk]
+                if isinstance(v, str):
+                    v = [v]
+                if isinstance(v, list):
+                    out['keywords'][_lk] = [str(x)[:60] for x in v[:200]
+                                            if isinstance(x, (str, int, float))
+                                            and not isinstance(x, bool)]
+                else:
+                    out['keywords'].pop(_lk, None)
+        _klemm_zahlen(out['keywords'], {'min_gap_seconds': (0.0, 60.0)})
         if not out['keywords']:
             out.pop('keywords')
     # v92-sec: language fliesst bis in einen Dateinamen (Transkript-Cache).
@@ -2798,6 +2943,21 @@ def _sanitize_overrides(ov):
         if 'platform' in o and str(o.get('platform')).lower() not in \
                 ('generic', 'tiktok', 'reels', 'shorts'):
             o.pop('platform', None)
+        # v230c-sec: crf/preset/speed steuern die Encode-Zeit und die
+        # Dateigroesse. crf 0 plus preset 'placebo' ist ein Vielfaches an
+        # Rechenzeit und Bytes - beides auf Kosten des Betreibers.
+        if 'crf' in o:
+            try:
+                o['crf'] = int(min(max(int(o['crf']), 14), 34))
+            except Exception:
+                o.pop('crf', None)
+        if 'preset' in o and str(o.get('preset')).lower() not in \
+                ('ultrafast', 'veryfast', 'faster', 'fast', 'medium', 'slow'):
+            o.pop('preset', None)
+        if 'speed' in o and str(o.get('speed')).lower() not in \
+                ('schnell', 'standard', 'fein'):
+            o.pop('speed', None)
+        _klemm_zahlen(o, {'height': (480, 2160), 'crf': (14, 34)})
     e = out.get('effects')
     if isinstance(e, dict):
         # v153: Caption-Regler aus der UI. Groessen hart deckeln - ein Client
@@ -2824,13 +2984,68 @@ def _sanitize_overrides(ov):
         if 'sfx_dichte' in e and str(e.get('sfx_dichte')).lower() \
                 not in ('sparsam', 'normal', 'dicht'):
             e.pop('sfx_dichte', None)
-        for k, cap in (('blender_samples', 256), ('blender_anim_frames', 24),
-                       ('blender_width', 1920)):
-            if k in e:
-                try:
-                    e[k] = min(int(e[k]), cap)
-                except Exception:
-                    e.pop(k, None)
+        # v230c-sec: ab hier gilt die Tabelle fuer ALLE Zahlen (auch
+        # blender_*, bg_blur, freeze_frame, trail, person_shadow ...).
+        for _lk in ('keyword_rotation',):
+            if _lk in e:
+                if isinstance(e[_lk], list):
+                    e[_lk] = [x for x in e[_lk][:12]
+                              if isinstance(x, str) and x in _FX_IDS]
+                    if not e[_lk]:
+                        e.pop(_lk, None)
+                else:
+                    e.pop(_lk, None)
+        _klemm_zahlen(e, _EFFECT_RANGE)
+    c = out.get('camera')
+    if isinstance(c, dict):
+        for _lk in ('keyword_rotation', 'side_rotation'):
+            if _lk in c:
+                if isinstance(c[_lk], list):
+                    c[_lk] = [x for x in c[_lk][:12]
+                              if isinstance(x, str) and x in _CAM_IDS]
+                    if not c[_lk]:
+                        c.pop(_lk, None)
+                else:
+                    c.pop(_lk, None)
+        _klemm_zahlen(c, _CAMERA_RANGE)
+    col = out.get('colors')
+    if isinstance(col, dict):
+        if 'style' in col and str(col.get('style')).lower() \
+                not in ('auto', 'schwarz', 'weiss'):
+            col.pop('style', None)
+        for _ck in ('text', 'accent'):
+            if _ck in col:
+                v = col[_ck]
+                if (isinstance(v, list) and len(v) == 3
+                        and all(isinstance(x, (int, float))
+                                and not isinstance(x, bool) for x in v)):
+                    col[_ck] = [int(min(max(x, 0), 255)) for x in v]
+                else:
+                    col.pop(_ck, None)
+        _klemm_zahlen(col, {})       # sonstige Zahlen: raus
+    # Schriften: nur aus dem geschlossenen Satz (siehe _erlaubte_fonts).
+    fo = out.get('fonts')
+    if isinstance(fo, dict):
+        _ok = _erlaubte_fonts()
+        out['fonts'] = {k: v for k, v in fo.items()
+                        if k in ('display', 'italic', 'support', 'script',
+                                 'strong') and isinstance(v, str) and v in _ok}
+        if not out['fonts']:
+            out.pop('fonts', None)
+    # Der teuerste Regler der ganzen Pipeline: er skaliert das Bild, das ins
+    # KI-Netz geht. Ueber 0.8 rechnet das Netz GROESSER als das Original.
+    if 'matting_downsample' in out:
+        _md = out['matting_downsample']
+        if isinstance(_md, str) and _md.strip().lower() == 'auto':
+            out['matting_downsample'] = 'auto'
+        else:
+            try:
+                out['matting_downsample'] = min(max(float(_md), 0.125), 0.8)
+            except Exception:
+                out.pop('matting_downsample', None)
+    if 'matting_quality' in out and str(out['matting_quality']).lower() \
+            not in ('standard', 'hoch', 'maximum'):
+        out.pop('matting_quality', None)
     return out
 
 
@@ -5428,6 +5643,22 @@ def api_feedback(request: Request, note: int = Form(...), text: str = Form(''),
     text = (text or '').strip()[:2000]
     jid = (jid or '').strip()[:64]
     look = (look or '').strip()[:32]
+    # v230c-sec ZWEI RIEGEL, DIE HIER FEHLTEN.
+    # 1) Die Dubletten-Sperre unten haengt am PAAR (user_id, jid) - mit einer
+    #    frei erfundenen jid war sie damit wirkungslos: 500 Anfragen ergaben
+    #    500 Zeilen. Der Sterne-Durchschnitt im Panel liess sich so auf 1.0
+    #    ziehen, und die einzige geschaeftskritische Datenbank vollschreiben.
+    #    Bewertet wird jetzt nur der EIGENE Render.
+    # 2) Der Nachbar-Endpunkt /api/support hat seit jeher ein Rate-Limit,
+    #    dieser hatte keins. Ein Riegel, den nur die halbe Nachbarschaft hat,
+    #    ist keiner.
+    if not _rate_limit_ok(_client_ip(request), window_sec=3600,
+                          max_attempts=30, bucket='feedback'):
+        raise HTTPException(429, 'Too many ratings. Please try again later.')
+    # _job_owner_ok reicht hier NICHT: es laesst eine unbekannte jid durch
+    # (kein Job -> kein Eigentuemer -> True). Genau das war der Angriff.
+    if jid and (JOBS.get(jid) or {}).get('user_id') != u['id']:
+        raise HTTPException(403, 'Not your video.')
     # Ein Kunde darf zu EINEM Render einmal bewerten - sonst kippt jeder
     # Durchschnitt, sobald jemand den Knopf mehrfach drueckt.
     con = _db()
@@ -6305,6 +6536,23 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
         shutil.rmtree(d, ignore_errors=True)
         raise HTTPException(413, f'Video resolution too high ({_dw}x{_dh}). '
                                  f'Maximum {MAX_PIXEL_LANG} px on the long edge.')
+    # v230c-sec DIE KURZE KANTE UND DAS SEITENVERHAELTNIS FEHLTEN.
+    # Bis v230b war nur die LANGE Kante gedeckelt. Ein 8x4096-Clip (Datei nur
+    # wenige KB gross, unter jeder Dauer-/Bildraten-Grenze) laeuft im
+    # Standbild-Zwischenspeicher durch den festen Filter 'scale=384:-2' und
+    # wird auf 384x196608 HOCHskaliert: gemessen 226 MB je zwischengespeichertem
+    # Bild, und der Speicher haelt bis zu 156 davon. Der Container hat 6 GB.
+    if _dw and _dh:
+        _kurz, _lang = min(_dw, _dh), max(_dw, _dh)
+        if _kurz < 120:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(413, f'Video too small ({_dw}x{_dh}). '
+                                     f'The short edge needs at least 120 px.')
+        if _lang > _kurz * MAX_ASPECT:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(
+                413, f'Unusual aspect ratio ({_dw}x{_dh}). Supported up to '
+                     f'{MAX_ASPECT}:1 - please export as 9:16, 1:1 or 16:9.')
     if _fps > MAX_FPS + 0.5:
         shutil.rmtree(d, ignore_errors=True)
         raise HTTPException(413, f'Frame rate too high ({_fps:.0f} fps). '
@@ -6321,6 +6569,12 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
             shutil.rmtree(d, ignore_errors=True)
             raise HTTPException(429, 'You already have several videos in the queue. '
                                      'Please wait for one to finish before uploading more.')
+        # v230c-sec: dazu die SUMMEN-Grenze (siehe _vorbereitet_count).
+        if mode == 'pre' and _vorbereitet_count(uid) >= MAX_VORBEREITET:
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(
+                429, 'Too many prepared uploads waiting. Please render or '
+                     'delete some of them before uploading more.')
         # v149: 4K erst bezahlen, wenn es auch 4K WIRD. Die Pruefung sitzt
         # bewusst hier, vor der Reservierung - nicht im Render.
         _uhd = _will_uhd(overrides, src)
@@ -6412,6 +6666,7 @@ async def upload_init(request: Request, filename: str = Form(...),
         ok, msg = check_auth(code, request)
         if not ok:
             raise HTTPException(403, msg)
+    _upload_rate_guard(request)
     if look not in LOOKS:
         look = 'creator'
     ext = os.path.splitext(filename or '')[1].lower() or '.mp4'
@@ -6520,6 +6775,7 @@ async def upload(request: Request, datei: UploadFile = File(...),
         ok, msg = check_auth(code, request)
         if not ok:
             raise HTTPException(403, msg)
+    _upload_rate_guard(request)
     if look not in LOOKS:
         look = 'creator'
     try:
@@ -6613,7 +6869,15 @@ async def render_start(jid: str, request: Request, look: str = Form('creator'),
     # der Riegel sass hinter der Mutation.
     # Ist bereits gebucht, gilt der GEBUCHTE Stand. Wer 4K will, startet einen
     # neuen Render und zahlt ihn.
-    _schon = _render_gebucht(uid, jid) if (u and mode == 'full') else 0
+    # v230c-sec: DER RIEGEL DARF NICHT AM MODUS HAENGEN. Bis v230b stand hier
+    # `if (u and mode == 'full')` - mit mode='analyze' war `_schon` also
+    # zwangsweise 0, und der else-Zweig schrieb uhd/cost_sec ungeprueft hoch.
+    # Ein Kunde startete normal in 1080p (einmal gebucht), rief denselben Job
+    # dann mit mode='analyze' und output.height=2160 auf und bekam den
+    # anschliessenden 'inklusive'-Re-Render in 4K zum 1080p-Preis. Was bereits
+    # gebucht wurde, ist eine Eigenschaft des JOBS, nicht des Aufrufs -
+    # derselbe Fehlertyp wie v203-sec, eine Tuer weiter.
+    _schon = _render_gebucht(uid, jid) if u else 0
     if _schon > 0:
         _neu_kosten = cost_seconds(j.get('dauer', 0), uhd=bool(_uhd2))
         if _neu_kosten > _schon:

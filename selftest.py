@@ -5709,6 +5709,117 @@ def _scenario_security(tmp):
           and ovk['keywords']['include'] == ['Zins']
           and ovk['keywords']['min_gap_seconds'] == 8
           and 'effects' not in ovk and 'camera' not in ovk, str(ovk))
+
+    # ---- v230c-sec: JEDE Zahl aus dem Client hat eine Grenze ----
+    # Zwei Regler steuerten bis v230b direkt die Rechenzeit und waren
+    # ungeklemmt. Ein Gratis-Konto konnte damit den EINEN Render-Worker
+    # stundenlang belegen; der Wachhund greift nicht, weil der Fortschritt
+    # ja weiterlaeuft.
+    _md = SV._sanitize_overrides({'matting_downsample': 16})
+    check('v230c-sec: matting_downsample gedeckelt (teuerster Regler)',
+          _md.get('matting_downsample') == 0.8, str(_md))
+    check('v230c-sec: matting_downsample "auto" bleibt erlaubt',
+          SV._sanitize_overrides(
+              {'matting_downsample': 'auto'}).get('matting_downsample') == 'auto')
+    _bb = SV._sanitize_overrides({'effects': {'bg_blur': 5000, 'trail': 99,
+                                              'freeze_frame': -3,
+                                              'person_shadow': 1e9}})['effects']
+    check('v230c-sec: bg_blur/trail/freeze_frame/person_shadow geklemmt',
+          _bb['bg_blur'] == 1.0 and _bb['trail'] == 1.0
+          and _bb['freeze_frame'] == 0.0 and _bb['person_shadow'] == 1.0, str(_bb))
+    # Was keine Grenze in der Tabelle hat, kommt gar nicht erst durch.
+    check('v230c-sec: unbekannte Zahl in effects fliegt raus',
+          'was_neues' not in SV._sanitize_overrides(
+              {'effects': {'was_neues': 1e9}}).get('effects', {}))
+    check('v230c-sec: camera.strength geklemmt, Rotation nur bekannte Namen',
+          SV._sanitize_overrides({'camera': {'strength': 1000}}
+                                 )['camera']['strength'] == 1.0
+          and 'keyword_rotation' not in SV._sanitize_overrides(
+              {'camera': {'keyword_rotation': ['../boese']}}).get('camera', {}))
+    check('v230c-sec: effects.keyword_rotation nur bekannte Effekte',
+          SV._sanitize_overrides({'effects': {'keyword_rotation':
+                                              ['behind', 'boese']}}
+                                 )['effects']['keyword_rotation'] == ['behind'])
+    # Schriften: freier Pfad liess render.py NACH der Transkription sterben -
+    # der Transkript-Cache fuellt sich nur bei Erfolg, also lief bei jedem
+    # Versuch ein neuer kostenpflichtiger Whisper-Aufruf.
+    check('v230c-sec: fonts nur aus dem geschlossenen Satz',
+          'fonts' not in SV._sanitize_overrides({'fonts': {'display': '/etc/passwd'}})
+          and SV._sanitize_overrides({'fonts': {'display': 'fonts/anton.ttf'}}
+                                     )['fonts']['display'] == 'fonts/anton.ttf')
+    check('v230c-sec: keywords.include muss eine Wortliste sein',
+          'keywords' not in SV._sanitize_overrides({'keywords': {'include': 123}})
+          and SV._sanitize_overrides({'keywords': {'include': 'Zins'}}
+                                     )['keywords']['include'] == ['Zins'])
+    _oc = SV._sanitize_overrides({'output': {'crf': 0, 'preset': 'placebo'}})
+    check('v230c-sec: crf/preset gedeckelt (Encode-Zeit + Dateigroesse)',
+          _oc['output']['crf'] == 14 and 'preset' not in _oc['output'], str(_oc))
+    check('v230c-sec: colors nur gueltige Farbwerte',
+          SV._sanitize_overrides({'colors': {'accent': [999, -5, 3]}}
+                                 )['colors']['accent'] == [255, 0, 3]
+          and 'accent' not in SV._sanitize_overrides(
+              {'colors': {'accent': 'rot'}}).get('colors', {}))
+    # Engine-Seite: die Desktop-App schreibt dieselbe Config-Datei, deshalb
+    # klemmt auch render.py (auf BEIDEN Seiten, v203-sec-Regel).
+    _rsrc_sec = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230c-sec: render.py klemmt matting_downsample selbst',
+          'md_val = min(max(float(md), 0.125), 0.8)' in _rsrc_sec)
+    check('v230c-sec: render.py klemmt bg_blur selbst',
+          "float(cfg['effects'].get('bg_blur', 0.0) or 0.0), 0.0), 1.0)" in _rsrc_sec)
+
+    # ---- v230c-sec: Erstattet wird, was reserviert wurde ----
+    # j['cost_sec'] laesst sich nach der Reservierung erhoehen; kam der
+    # Erstattungsbetrag von dort, liess sich aus einem Abbruch Guthaben
+    # erzeugen. Jetzt zaehlt nur die Ledger-Zeile selbst.
+    _cr = SV._db()
+    _uid_r = _cr.execute(
+        "INSERT INTO users (email, pw_hash, balance_sec, created_at) "
+        "VALUES ('refund-v230c@test.local', 'x', 600, 0)").lastrowid
+    _cr.commit()
+    _cr.close()
+    check('v230c-sec: Reservierung wird gebucht',
+          SV._reserve_credits(_uid_r, 60, 'jobA'))
+    # Angriff: cost_sec nachtraeglich verdoppeln und erstatten lassen.
+    SV._refund_credits(_uid_r, 'jobA', 120)
+    _bal = SV._db().execute("SELECT balance_sec FROM users WHERE id = ?",
+                            (_uid_r,)).fetchone()['balance_sec']
+    check('v230c-sec: Erstattung gibt nur das Reservierte zurueck',
+          _bal == 600, f'{_bal} statt 600')
+    _sum = SV._db().execute(
+        "SELECT COALESCE(SUM(delta_sec),0) s FROM ledger WHERE user_id = ?",
+        (_uid_r,)).fetchone()['s']
+    check('v230c-sec: Ledger-Invariante haelt (Summe == 0 nach Erstattung)',
+          _sum == 0, str(_sum))
+    check('v230c-sec: zweite Erstattung bucht nichts nach (idempotent)',
+          (SV._refund_credits(_uid_r, 'jobA', 60) or True)
+          and SV._db().execute("SELECT balance_sec FROM users WHERE id = ?",
+                               (_uid_r,)).fetchone()['balance_sec'] == 600)
+
+    # ---- v230c-sec: Riegel, die es gar nicht gab ----
+    _ssrc_sec = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230c-sec: Preisriegel haengt am JOB, nicht am Modus',
+          '_schon = _render_gebucht(uid, jid) if u else 0' in _ssrc_sec
+          and "_render_gebucht(uid, jid) if (u and mode == 'full')" not in _ssrc_sec)
+    check('v230c-sec: Upload-Wege haben eine Bremse',
+          _ssrc_sec.count('_upload_rate_guard(request)') >= 2
+          and 'def _upload_rate_guard' in _ssrc_sec)
+    check('v230c-sec: Feedback braucht Bremse UND den eigenen Job',
+          "bucket='feedback'" in _ssrc_sec
+          and "raise HTTPException(403, 'Not your video.')" in _ssrc_sec)
+    check('v230c-sec: Summen-Deckel fuer vorbereitete Uploads',
+          'def _vorbereitet_count' in _ssrc_sec
+          and '_vorbereitet_count(uid) >= MAX_VORBEREITET' in _ssrc_sec)
+    check('v230c-sec: kurze Kante + Seitenverhaeltnis werden geprueft',
+          'MAX_ASPECT' in _ssrc_sec and '_kurz < 120' in _ssrc_sec)
+    check('v230c-sec: .env kommt nicht ins Docker-Image',
+          '\n.env\n' in open(os.path.join(HERE, '.dockerignore'), encoding='utf-8').read())
+    check('v230c-sec: Test-Gate sieht die echte Datenbank nicht',
+          '-v /tmp/dve_gate_leer:/data' in
+          open(os.path.join(HERE, 'deploy_gate.sh'), encoding='utf-8').read())
+    check('v230c-sec: restore.sh faellt nicht auf ./web/data zurueck',
+          'docker volume inspect dve-data' in
+          open(os.path.join(HERE, 'restore.sh'), encoding='utf-8').read())
+
     # v117d: Transkript-Datei-Parser — SRT/VTT/JSON echte Timings, TXT synthetisch, verbatim.
     _srt = ("1\n00:00:00,000 --> 00:00:02,000\nHello there\n\n"
             "2\n00:00:02,000 --> 00:00:04,000\nfully customizable\n")

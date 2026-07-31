@@ -11979,7 +11979,11 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
     # weichzeichnen. Staerke folgt der max. Moment-Fade-Kurve, damit der
     # Blur mit dem Text ein/ausblendet. Auf B-Roll aus - dort ist der
     # Hintergrund das Motiv, nicht die Person.
-    bg_blur = float(cfg['effects'].get('bg_blur', 0.0) or 0.0)
+    # v230c-sec: 0..1 ist der Bereich, den der Regler kennt. Der Gauss-Radius
+    # haengt linear daran (sigma = staerke * W/4 * 0.04); bei 100 sind das
+    # gemessen ~12 s je EINZELBILD statt 0.25 s. Geklemmt wird auf beiden
+    # Seiten - die Desktop-App schreibt dieselbe Config-Datei.
+    bg_blur = min(max(float(cfg['effects'].get('bg_blur', 0.0) or 0.0), 0.0), 1.0)
     if bg_blur > 0.02 and active and (alpha is not None or depth_n is not None):
         bstr = 0.0
         for p in active:
@@ -14181,7 +14185,16 @@ def main():
         md_val = min(max(base * min(1080.0 / H, 1.0) * md_mult * q_mult,
                          0.125), 0.8)
     else:
-        md_val = float(md)
+        # v230c-sec: derselbe Deckel wie im Auto-Pfad. Ueber 0.8 rechnet das
+        # Netz das Bild GROESSER als das Original - gemessen Faktor 50-90 an
+        # Zeit und bis 5 GB Speicher, ohne jeden Qualitaetsgewinn. Der Wert
+        # kommt aus einer Config-Datei, die auch der Web-Kunde beeinflusst;
+        # geklemmt wird auf BEIDEN Seiten (Server + Engine), weil die
+        # Desktop-App dieselbe Datei schreibt.
+        try:
+            md_val = min(max(float(md), 0.125), 0.8)
+        except (TypeError, ValueError):
+            md_val = 0.25
     dsr = np.array([md_val], dtype=np.float32)
     refine_str = float(cfg['effects'].get('refine', 1.0)) * q_refine
     print(f"Matting: {active_prov}, quality '{q_name}' "
