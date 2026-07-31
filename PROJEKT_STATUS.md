@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230k ZWEI FLIESSTEXT-BLOECKE GLEICHZEITIG - DER LETZTE OFFENE PUNKT IST
+  ZU.** Ismets Video (Stempel v230j 558ff5d9, also der neueste Stand): bei
+  0.83 s stehen "EVERYONE'S" oben und "CAPTIONS LOOK" unten gleichzeitig im
+  Bild. Ueber das ganze Video 146 Bilder mit zwei getrennten Textbaendern.
+  - **Nicht die Blockzeit war schuld, sondern das AUSKLINGEN.** An den
+    Plaenen gemessen: Block 1 endet 1.00, Block 2 beginnt 1.12 - sauber
+    getrennt. Aber ein Plan bleibt nach `end` noch 0.40 s im Bild, und damit
+    ueberschneidet sich JEDES aufeinanderfolgende Paar um exakt 0.28 s (eine
+    Wortlaenge). Weil die Platzierungs-Regie zwei Bloecke an verschiedene
+    Stellen setzt, sieht man in dieser Zeit zwei.
+  - **Gekuerzt wird der VORHERIGE, nie der naechste verschoben.** Genau das
+    hat der v216-Versuch getan (den wartenden Block verlaengert) und damit
+    ein Doppelbild erzeugt; die v217-Lehre lautet: eine Regel gegen
+    Doppelbilder darf nur KUERZEN. Das Ausklingen faellt auf den Abstand zum
+    naechsten Block, Untergrenze 0.10 s (keine harte Kante). Die gesprochenen
+    Woerter sind unangetastet - `end` liegt ohnehin davor.
+  - Beweis: an den Plaenen 4 Ueberschneidungen -> 0; am gerenderten Bild
+    (composite_frame wirklich aufgerufen, Bloecke wie in der Praxis weit
+    auseinander gesetzt) 1 Bild mit zwei Bloecken -> 0.
+  - **Testfehler unterwegs, zweimal:** mein Bild-Detektor zaehlte erst die
+    Treppen-Anordnung EINES Blocks als zwei (Schwelle 90 px statt 250), und
+    danach war die Helligkeitsschwelle 150 zu hoch - ein AUSBLENDENDER Block
+    ist blasser und fiel durch. Beide Male war der Test gruen und mass
+    nichts (Checkliste Punkt 7).
 - **v230j DER DEPLOY ZEIGT, DASS ER LAEUFT - UND MISST SICH SELBST.**
   Ismets Befund "habe es satt, dass die Builds nicht uebernommen werden".
   Nachgesehen: sein Panel zeigte **v230h 488b02a0 - und das war korrekt

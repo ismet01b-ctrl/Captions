@@ -1280,7 +1280,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1823/1823 grün (Stand v230j)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1827/1827 grün (Stand v230k)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).
@@ -1502,10 +1502,14 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
   Quelltext-Suche plus reine Funktionspruefung waren gruen (v193-Fehler).
 
 ### Noch offen aus den Renders
-- **Zwei Fliesstext-Bloecke gleichzeitig: WEITER OFFEN** ('EVERYONE'S' oben,
-  'CAPTIONS LOOK' unten). Der v216-Versuch ist zurueckgebaut, er erzeugte ein
-  Doppelbild. Karte gegen Fliesstext deckt v185/v215 ab, Karte gegen Karte
-  v209a/v213.
+- **Zwei Fliesstext-Bloecke gleichzeitig: BEHOBEN (v230k).** Nicht die
+  Blockzeit war schuld, sondern das AUSKLINGEN: ein Plan bleibt nach `end`
+  noch 0.40 s im Bild, der naechste Block beginnt aber schon eine Wortlaenge
+  frueher. An den Plaenen gemessen ueberschnitt sich JEDES aufeinanderfolgende
+  Paar um 0.28 s. Jetzt wird das Ausklingen des VORHERIGEN Blocks gekappt
+  (`Flow solo`), nie der naechste verschoben - der v216-Versuch tat genau das
+  und erzeugte ein Doppelbild (v217-Lehre: nur kuerzen). Untergrenze 0.10 s,
+  damit es keine harte Kante gibt.
 - **Der Anschnitt ist mit v216 generell abgeriegelt** (`fit_into_frame` misst
   das FERTIGE Bild und verkleinert notfalls). Die URSACHE ist weiterhin nicht
   bekannt - sie liess sich mit nachgebautem Transkript nicht ausloesen. Wenn

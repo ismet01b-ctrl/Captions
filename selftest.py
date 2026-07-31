@@ -12865,6 +12865,42 @@ def _scenario_premium(tmp):
           and 'tdx = min(max(tdx, 2.0 - _ib[0]), (W - 2.0) - _ib[1])'
           in _rsrc_sec230)
 
+    # (1d) v230k: NIE ZWEI FLIESSTEXT-BLOECKE GLEICHZEITIG.
+    # Der letzte offene Punkt aus Ismets Renders ("EVERYONE'S" oben,
+    # "CAPTIONS LOOK" unten). An den Plaenen gemessen ueberschnitt sich JEDES
+    # aufeinanderfolgende Paar um genau eine Wortlaenge - nicht die Blockzeit
+    # war schuld, sondern das AUSKLINGEN (ein Plan bleibt nach `end` noch
+    # 0.40 s stehen). Der v216-Versuch verlaengerte den wartenden Block und
+    # erzeugte damit ein Doppelbild; die v217-Lehre lautet: nur KUERZEN.
+    _wk = [{'word': w, 'start': 0.28 * i, 'end': 0.28 * i + 0.25}
+           for i, w in enumerate(("everyone's captions look the same file same "
+                                  "yellow word a thousand times this next line "
+                                  "goes behind me").split())]
+    _Sk = R.Sprites(_cg, _Wg, _Hg)
+    _plk = R.build_plans(_wk, set(), _cg, _Sk, _Wg, _Hg, lambda a, b: True, {})
+
+    def _fenster(p):
+        return (float(p.get('t0', p['start'])),
+                float(p['end']) + (0.40 if p.get('aus') is None
+                                   else float(p['aus'])))
+
+    _flk = sorted([p for p in _plk if p.get('tpl') == 'flow'],
+                  key=lambda p: _fenster(p)[0])
+    _ueb = [round(_fenster(a)[1] - _fenster(b)[0], 2)
+            for a, b in zip(_flk, _flk[1:])
+            if _fenster(b)[0] < _fenster(a)[1] - 1e-3]
+    check('v230k: nie zwei Fliesstext-Bloecke gleichzeitig im Bild',
+          not _ueb, f'{len(_ueb)} Ueberschneidung(en): {_ueb[:4]}')
+    check('v230k: dabei wird nur GEKUERZT, nie verlaengert (v217)',
+          all((p.get('aus') is None or float(p['aus']) <= 0.40)
+              for p in _flk),
+          str([p.get('aus') for p in _flk]))
+    check('v230k: das Ausklingen wird nicht auf null gekappt',
+          all((p.get('aus') is None or float(p['aus']) >= 0.10)
+              for p in _flk))
+    check('v230k: die gesprochenen Woerter bleiben unangetastet',
+          all(_fenster(p)[1] >= float(p['end']) for p in _flk))
+
     # (2) Der Abzug der halben Hoehenzunahme verankerte die UNTERKANTE der
     # Anim-Leinwand. Am Tinten-Schwerpunkt gemessen profitiert davon KEINE
     # Animation, fuenf werden dauerhaft nach oben verschoben.

@@ -11360,6 +11360,35 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     if _n_ank:
         print(f"  Object anchor: {_n_ank} moment(s) placed next to their object")
 
+    # v230k ZWEI FLIESSTEXT-BLOECKE GLEICHZEITIG - der letzte offene Punkt.
+    # Ismets Bild bei 0.83 s: "EVERYONE'S" oben, "CAPTIONS LOOK" unten. An den
+    # Plaenen gemessen ueberschneidet sich JEDES aufeinanderfolgende Paar um
+    # genau 0.28 s - eine Wortlaenge. Der Grund ist nicht die Blockzeit
+    # (Block 1 endet 1.00, Block 2 beginnt 1.12), sondern das AUSKLINGEN:
+    # ein Plan bleibt nach `end` noch 0.40 s im Bild. Da die Bloecke an
+    # verschiedenen Stellen stehen koennen, sieht man in dieser Zeit zwei.
+    # Der v216-Versuch hat den wartenden Block VERLAENGERT und damit ein
+    # Doppelbild erzeugt - die v217-Lehre lautet: eine Regel gegen
+    # Doppelbilder darf nur KUERZEN. Genau das passiert hier: nur das
+    # Ausklingen des VORHERIGEN Blocks wird gekappt, seine gesprochenen
+    # Woerter bleiben unangetastet (sein `end` liegt ohnehin davor).
+    _fl = sorted([p for p in plans if p.get('tpl') == 'flow'],
+                 key=lambda p: float(p.get('t0', p['start'])))
+    _n_fsolo = 0
+    for _a, _b in zip(_fl, _fl[1:]):
+        _ae = float(_a['end'])
+        _bs = float(_b.get('t0', _b['start']))
+        _aus_ist = _a.get('aus')
+        _aus_ist = 0.40 if _aus_ist is None else float(_aus_ist)
+        # Nur so lange ausklingen, bis der naechste Block anfaengt.
+        _aus_soll = max(min(_aus_ist, _bs - _ae - 0.02), 0.10)
+        if _aus_soll < _aus_ist - 1e-3:
+            _a['aus'] = round(_aus_soll, 3)
+            _n_fsolo += 1
+    if _n_fsolo:
+        print(f"  Flow solo: {_n_fsolo} block(s) fade out before the next one "
+              f"appears")
+
     # v216 GANZ ZUM SCHLUSS: nichts wird vom Bildrand angeschnitten. Hier
     # steht die endgueltige Groesse UND Position jedes Moments fest - davor
     # koennten Objekt-Anker, Platzierungs-Regie oder Referenz-Skalierung noch
