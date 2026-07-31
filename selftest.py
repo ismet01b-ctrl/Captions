@@ -12730,6 +12730,8 @@ def _scenario_premium(tmp):
     _cg = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
     _cg['effects']['anim'] = False
     _Sg = R.Sprites(_cg, _Wg, _Hg)
+    _rsrc_sec230 = open(os.path.join(HERE, 'render.py'),
+                        encoding='utf-8').read()
 
     # (1) Der Riegel gegen den Anschnitt hat SELBST angeschnitten: er
     # skalierte auf W*(1+2*rand) = 1.024 W, also breiter als das Bild.
@@ -12743,6 +12745,54 @@ def _scenario_premium(tmp):
         check(f'v230g: Frame guard laesst bei {_fk:.2f}x nichts draussen',
               _bg is not None and _bg[0] >= -1 and _bg[1] <= _Wg + 1,
               f'{_bg[0] / _Wg:.4f}..{_bg[1] / _Wg:.4f} W' if _bg else 'keine Tinte')
+
+    # (1b) v230h: DER GEWOLLTE RANDABFALL DARF NUR EIN WORT KOSTEN.
+    # v152 laesst das Schlusswort am Bildrand auslaufen; dafuer nimmt der
+    # Riegel die 'bleed'-Items aus der MESSUNG. Geschoben wurde danach aber
+    # der ganze Block - ein breites Schlusswort zog den Rest auf der ANDEREN
+    # Seite hinaus. In Ismets Render: 'CAPTIONS' links ohne C, 'LOOK THE'
+    # rechts heraus. Gemessen: ohne bleed 0.012..0.988 W, mit bleed auf dem
+    # letzten Wort -0.284..0.988 W.
+    def _flow_bleed(_bl):
+        _it, _x = [], -120.0
+        for _k, _w in enumerate(('CAPTIONS', 'LOOK', 'THE')):
+            _a = _Sg.text(_w, 150, (255, 255, 255))[0]
+            _e = {'i': _k, 'arr': _a, 'cx': _x + _a.shape[1] / 2,
+                  'cy': _Hg * 0.72, 'w': _a.shape[1]}
+            if _k in _bl:
+                _e['bleed'] = True
+            _it.append(_e); _x += _a.shape[1] + 20
+        return {'tpl': 'flow', 'front': _it, 'start': 0.0, 'end': 3.0,
+                'layout': 'flow', 'punch': False, 'side': 0, 'ccam': 'none',
+                'broll': False, 'target': (_Wg / 2, _Hg * 0.72), 'fol_lim': 0.0}
+
+    for _nm, _bl in (('ohne Randabfall', set()),
+                     ('Randabfall am Schlusswort', {2}),
+                     ('Randabfall ueberall', {0, 1, 2})):
+        _pb = _flow_bleed(_bl)
+        R.fit_into_frame([_pb], _Wg, _Hg)
+        _bb = R.ink_box(_pb, _Wg, _Hg)
+        _l, _r = _bb[0] / _Wg, _bb[1] / _Wg
+        check(f'v230h: {_nm} - nur EINE Seite laeuft aus, hoechstens 10 %',
+              -0.11 <= _l and _r <= 1.11 and not (_l < -0.005 and _r > 1.005),
+              f'{_l:+.3f}..{_r:.3f} W')
+    check('v230h: der Deckel fuer den Randabfall steht als eine Zahl da',
+          hasattr(R, '_BLEED_MAX_REL'))
+
+    # (1c) v230h: die Kanten-Schaerfung wird nicht mehr an EINEM Bild
+    # entschieden. Die Einzelmessung ist ein Muenzwurf (an Ismets Video:
+    # 0.1s->1.0, 1.0s->0.3, 3.0s->1.0, 6.0s->0.3 ...) und sein Render
+    # erwischte die 1.0 - 15 Sekunden lang volle Schaerfung, Kantenrauigkeit
+    # 2.42 statt 1.51 und 104 Kruemel statt 2.
+    check('v230h: die Schaerfung wird ueber mehrere Stellen bestimmt',
+          'def _refine_wahl(' in _rsrc_sec230
+          and '_refine_auto = None if not _rz else _refine_wahl(' in _rsrc_sec230)
+    check('v230h: dabei gewinnt die strengste Antwort',
+          'beste = min(beste, _refine_pruefen(' in _rsrc_sec230)
+    check('v230h: kein Versatz schiebt Text aus dem Bild',
+          "_ib = p.get('_ink')" in _rsrc_sec230
+          and 'tdx = min(max(tdx, 2.0 - _ib[0]), (W - 2.0) - _ib[1])'
+          in _rsrc_sec230)
 
     # (2) Der Abzug der halben Hoehenzunahme verankerte die UNTERKANTE der
     # Anim-Leinwand. Am Tinten-Schwerpunkt gemessen profitiert davon KEINE

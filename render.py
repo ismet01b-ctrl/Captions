@@ -8408,6 +8408,11 @@ def _skaliere_sprite(a, s):
     return cv2.resize(a, (nw, nh), interpolation=cv2.INTER_AREA)
 
 
+# v230h: so weit darf das Schlusswort (v152 'bleed') hoechstens hinauslaufen -
+# und nur auf EINER Seite. Mehr ist kein Stilmittel mehr, sondern ein Fehler.
+_BLEED_MAX_REL = 0.10
+
+
 def fit_into_frame(plans, W, H, rand=0.012):
     """v216 KEIN TEXT WIRD VOM BILDRAND ANGESCHNITTEN.
 
@@ -8430,6 +8435,7 @@ def fit_into_frame(plans, W, H, rand=0.012):
     er ist Absicht und auf 8 Zeichen begrenzt. Rueckgabe: Anzahl korrigierter
     Momente."""
     links, rechts = -W * rand, W * (1.0 + rand)
+    _BLEED_MAX = W * _BLEED_MAX_REL
     n = 0
     for p in plans:
         if 'target' not in p:
@@ -8445,6 +8451,13 @@ def fit_into_frame(plans, W, H, rand=0.012):
         if box is None:
             continue
         x0, x1 = box[0], box[1]
+        # v230h: die endgueltige Tinten-Box am Plan merken. Der Riegel hier
+        # misst die RUHELAGE - beim Zeichnen kommen aber noch Gesichts-
+        # Tracking (bis +-30 px), Hand-Impuls und Objekt-Anker dazu, und
+        # genau die haben Ismets 'CAPTIONS LOOK THE' aus dem Bild geschoben
+        # (gemessen: Text an der Bildkante in 35 Frames). composite_frame
+        # klemmt den Versatz jetzt gegen diese Box.
+        p['_ink'] = (x0, x1)
         if x0 >= links and x1 <= rechts:
             continue
         breite = x1 - x0
@@ -8477,6 +8490,54 @@ def fit_into_frame(plans, W, H, rand=0.012):
             dx = ziel_r - x1
         if abs(dx) > 0.5:
             _verschiebe_plan(p, dx)
+            x0, x1 = x0 + dx, x1 + dx
+        p['_ink'] = (x0, x1)
+        n += 1
+    # v230h DER GEWOLLTE RANDABFALL DARF NUR EIN WORT KOSTEN, NICHT DEN BLOCK.
+    # v152 laesst das Schlusswort bewusst am Bildrand auslaufen - und genau
+    # dafuer nimmt die Messung oben die 'bleed'-Items heraus. Nur: geschoben
+    # und skaliert wird danach der GANZE Plan. Ein breites Schlusswort zieht
+    # den Rest damit auf der ANDEREN Seite hinaus. An Ismets Render zu sehen
+    # ('CAPTIONS' links ohne C, 'LOOK THE' rechts heraus) und hier
+    # nachgestellt: ohne bleed 0.012..0.988 W, mit bleed auf dem letzten Wort
+    # -0.284..0.988 W - 28 % der Bildbreite links abgeschnitten.
+    # Zweiter Durchgang deshalb MIT allen Items: der Ueberstand ist auf EINE
+    # Seite und auf _BLEED_MAX begrenzt.
+    for p in plans:
+        if 'target' not in p or not any(it.get('bleed')
+                                        for it in (p.get('front') or [])):
+            continue
+        box = ink_box(p, W, H)
+        if box is None:
+            continue
+        x0, x1 = box[0], box[1]
+        ueb_l, ueb_r = max(-x0, 0.0), max(x1 - W, 0.0)
+        # Ein paar Pixel Ueberstand sind kein Anschnitt, sondern eine Glyphe,
+        # die die Kante beruehrt - dieselbe Toleranz wie oben.
+        _tol = W * rand
+        if ueb_l <= _BLEED_MAX and ueb_r <= _BLEED_MAX \
+                and (ueb_l <= _tol or ueb_r <= _tol):
+            p['_ink'] = (x0, x1)
+            continue                     # ein Wort laeuft aus - so gewollt
+        breite = x1 - x0
+        ziel = W + _BLEED_MAX            # ein Rand darf ueberstehen, nicht zwei
+        s = min(1.0, ziel / breite) if breite > 1 else 1.0
+        if s < 0.999:
+            _skaliere_plan(p, s, W, H)
+            box = ink_box(p, W, H)
+            if box is None:
+                continue
+            x0, x1 = box[0], box[1]
+        # Der Ueberstand gehoert auf die Seite, auf der er groesser ist -
+        # dort steht das Schlusswort.
+        if max(-x0, 0.0) >= max(x1 - W, 0.0):
+            dx = -_BLEED_MAX - x0        # links auslaufen lassen
+        else:
+            dx = (W + _BLEED_MAX) - x1   # rechts auslaufen lassen
+        if abs(dx) > 0.5:
+            _verschiebe_plan(p, dx)
+            x0, x1 = x0 + dx, x1 + dx
+        p['_ink'] = (x0, x1)
         n += 1
     return n
 
@@ -11594,8 +11655,57 @@ def matte_muell(a):
     return kr + lo
 
 
-def _refine_pruefen(alpha, frame, wunsch):
-    """v228b Die Nachschaerfung EINMAL gegenpruefen und notfalls zuruecknehmen.
+def _refine_wahl(sess, dsr, video_path, W, H, wunsch, zeiten):
+    """v230h DIE KANTEN-SCHAERFUNG WIRD NICHT MEHR AN EINEM BILD ENTSCHIEDEN.
+
+    v228b prueft die Staerke am ERSTEN Bild und benutzt das Ergebnis fuer den
+    ganzen Render. An Ismets Video gemessen ist diese Einzelmessung aber ein
+    MUENZWURF: 0.1s->1.0, 1.0s->0.3, 3.0s->1.0, 6.0s->0.3, 8.0s->1.0,
+    10.0s->0.3, 13.0s->1.0. Sein Render erwischte am ersten Bild die 1.0 -
+    und lief 15 Sekunden lang mit voller Schaerfung, obwohl die Pruefung
+    genau in den Einstellungen, wo es sichtbar wird, selbst 0.3 verlangt.
+    Ergebnis im Bild: die Kontur des ausgestreckten Arms wird wellig und
+    blasig, wie ein zweiter Rand (Ismets "sein Arm wird doppelt").
+    Gemessen an derselben Stelle: Kantenrauigkeit 1.49 px roh, 1.51 bei
+    Staerke 0.3, 2.42 bei 1.0 - und 1 Kruemel gegen 104.
+
+    Jetzt: mehrere Stellen ueber das Video pruefen und die NIEDRIGSTE
+    Staerke nehmen, die irgendeine davon verlangt. Eine zu schwache
+    Schaerfung kostet etwas Feinheit an den Haaren; eine zu starke zerfetzt
+    die Silhouette - und das sieht jeder. Kostet einmal je Render ein paar
+    Sekunden, nicht je Bild."""
+    if not zeiten:
+        return wunsch
+    beste = wunsch
+    _z = [t for t in zeiten if t is not None]
+    _frame_bgr_vorab(video_path, _z, w=W)          # parallel vorladen (v227a)
+    _rec = [np.zeros([1, 1, 1, 1], dtype=np.float32)] * 4
+    for _t in _z:
+        try:
+            _f = _frame_bgr(video_path, _t, w=W)
+            if _f is None:
+                continue
+            if _f.shape[0] != H or _f.shape[1] != W:
+                _f = cv2.resize(_f, (W, H))
+            _src = np.transpose(cv2.cvtColor(_f, cv2.COLOR_BGR2RGB)
+                                .astype(np.float32) / 255.0, (2, 0, 1))[None]
+            _, _pha, *_ = sess.run(None, {'src': _src, 'r1i': _rec[0],
+                                          'r2i': _rec[1], 'r3i': _rec[2],
+                                          'r4i': _rec[3], 'downsample_ratio': dsr})
+            _a = _pha[0].transpose(1, 2, 0).astype(np.float32)
+            beste = min(beste, _refine_pruefen(_a, _f.astype(np.float32),
+                                               wunsch, still=True))
+        except Exception:
+            continue
+    if beste < wunsch - 1e-6:
+        print(f"  Matte check: edge sharpening set to {beste:.2f} "
+              f"(checked {len(_z)} shots, the strictest one wins - full "
+              f"strength was shredding the silhouette)")
+    return beste
+
+
+def _refine_pruefen(alpha, frame, wunsch, still=False):
+    """v228b Die Nachschaerfung gegenpruefen und notfalls zuruecknehmen.
 
     Der Guided Filter zieht die Maskenkante an die Bildkante - auf echtem
     Kameramaterial holt das Haare und Finger zurueck. Auf weichem, rauschfreiem
@@ -11612,13 +11722,14 @@ def _refine_pruefen(alpha, frame, wunsch):
         for _st in (wunsch, wunsch * 0.6, wunsch * 0.3):
             _m = matte_muell(refine_alpha(alpha, frame, _st)[..., 0])
             if _m <= roh * 4 + 20:
-                if _st < wunsch - 1e-6:
+                if _st < wunsch - 1e-6 and not still:
                     print(f"  Matte check: edge sharpening turned down to "
                           f"{_st:.2f} ({_m} specks vs {roh} raw) - it was "
                           f"shredding the silhouette")
                 return _st
-        print(f"  Matte check: edge sharpening OFF - it shredded the "
-              f"silhouette on this footage ({roh} specks raw)")
+        if not still:
+            print(f"  Matte check: edge sharpening OFF - it shredded the "
+                  f"silhouette on this footage ({roh} specks raw)")
         return 0.0
     except Exception:
         return wunsch
@@ -12623,6 +12734,17 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         # v161: der Objekt-Anker zieht den Text mit seinem Gegenstand mit
         tdx += p.get('_ank_dx', 0.0)
         tdy += p.get('_ank_dy', 0.0)
+        # v230h KEIN VERSATZ SCHIEBT TEXT AUS DEM BILD.
+        # fit_into_frame misst die RUHELAGE eines Moments; hier oben kommen
+        # danach Gesichts-Tracking (bis +-30 px), Hand-Impuls und
+        # Objekt-Anker dazu. In Ismets Render lag 'CAPTIONS LOOK THE' nach
+        # dem Riegel bei 0.988 W - und wurde vom Tracking ueber die Kante
+        # geschoben (gemessen: Text an der Bildkante in 35 von 361 Bildern).
+        # Der Riegel gehoert deshalb auch HIER hin, wo der Versatz feststeht.
+        # Die Bewegung bleibt sichtbar, sie endet nur an der Bildkante.
+        _ib = p.get('_ink')
+        if _ib and (_ib[1] - _ib[0]) < W - 4:
+            tdx = min(max(tdx, 2.0 - _ib[0]), (W - 2.0) - _ib[1])
         if p.get('front_layer') and p['tpl'] == 'ground':
             # Boden-Text VOR der Person (kein freier Boden im Bild): liegt
             # perspektivisch flach ueber allem - lesbar statt unsichtbar.
@@ -14524,7 +14646,18 @@ def main():
     import time as _time
     t_start = _time.time()
     _zt_ende = None                 # v227: Marke fuer die Dekodierzeit je Frame
-    _refine_auto = None             # v228b: Staerke der Kanten-Nachschaerfung
+    # v230h: Kanten-Schaerfung EINMAL fuer den ganzen Render bestimmen - aber
+    # aus MEHREREN Einstellungen, nicht aus dem ersten Bild (siehe
+    # _refine_wahl). Geprueft werden die Schnitte plus gleichmaessig verteilte
+    # Stellen; die strengste Antwort gewinnt.
+    _refine_wunsch = float(cfg['effects'].get('matte_refine', 1.0)) * q_refine
+    _rz = sorted({round(max(float(c) + 0.20, 0.0), 2) for c in (cut_times or [])}
+                 | {round(src_dur * f, 2)
+                    for f in (0.05, 0.25, 0.45, 0.65, 0.85)})
+    _rz = [t for t in _rz if 0.0 <= t < max(src_dur - 0.1, 0.1)][:10]
+    _refine_auto = None if not _rz else _refine_wahl(
+        sess, dsr, args.input, W, H, _refine_wunsch, _rz)
+    _zt_x = zt('matte-check', _zt_x)
     max_frames = int(args.duration * fps) if args.duration else None
     if max_frames:
         print(f'Preview mode: only the first {args.duration:.0f} seconds')

@@ -3,6 +3,45 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230h ISMETS BEFUND AM v230g-RENDER: BEIDE URSACHEN GEFUNDEN.**
+  Build-Stempel geprueft (`comment=DouchkoVE v230g f96ee854 ... job
+  991ea812e9ae`) - es war der NEUESTE Stand, also echte, aktuelle Fehler.
+  1. **"Sein Arm wird doppelt" = die Kanten-Schaerfung wurde an EINEM Bild
+     entschieden.** v228b prueft am ersten Bild, ob die Nachschaerfung die
+     Maske schmutziger macht, und benutzt das Ergebnis fuer den ganzen
+     Render. An Ismets Video gemessen ist diese Einzelmessung ein
+     **Muenzwurf**: 0.1s->1.0, 1.0s->0.3, 3.0s->1.0, 6.0s->0.3, 8.0s->1.0,
+     10.0s->0.3, 13.0s->1.0. Sein Render erwischte am ersten Bild die 1.0 -
+     und lief 15 Sekunden mit voller Schaerfung. Folge an derselben Stelle
+     gemessen: Kantenrauigkeit des ausgestreckten Arms **1.49 px roh, 1.51
+     bei Staerke 0.3, 2.42 bei 1.0** - und **1 Kruemel gegen 104**. Im Bild
+     ist das ein welliger, blasiger Doppelrand am Arm.
+     **Die Aufloesung des Matting-Netzes ist NICHT die Ursache** (0.21 bis
+     0.80 durchgemessen: Rauigkeit 1.45-1.54, also unveraendert) - und
+     `matte_loecher_fuellen` (v230a) auch nicht (Alpha innen 0.999 in jeder
+     Stufe). `_refine_wahl()` prueft jetzt die Schnitte plus gleichmaessig
+     verteilte Stellen und nimmt die **strengste** Antwort. An seinem Video
+     nachgestellt: alt 1.0, neu 0.30.
+  2. **"Captions nicht im Bild" = der gewollte Randabfall zieht den ganzen
+     Block mit hinaus.** v152 laesst das Schlusswort am Bildrand auslaufen;
+     dafuer nimmt `fit_into_frame` die `bleed`-Items aus der MESSUNG.
+     Geschoben und skaliert wird danach aber der GANZE Plan - ein breites
+     Schlusswort zieht den Rest auf der ANDEREN Seite hinaus. Nachgestellt:
+     ohne bleed 0.012..0.988 W, mit bleed auf dem letzten Wort
+     **-0.284..0.988 W** (28 % der Bildbreite links abgeschnitten). Genau
+     Ismets Bild: 'CAPTIONS' ohne C, 'LOOK THE' rechts heraus. Zweiter
+     Durchgang mit ALLEN Items: der Ueberstand ist auf EINE Seite und auf
+     10 % der Bildbreite begrenzt.
+  3. Dazu ein zweiter Riegel an der richtigen Stelle: `fit_into_frame` misst
+     die RUHELAGE, beim Zeichnen kommen Gesichts-Tracking (bis +-30 px),
+     Hand-Impuls und Objekt-Anker dazu. Die endgueltige Tinten-Box steht
+     jetzt als `p['_ink']` am Plan, und `composite_frame` klemmt den Versatz
+     dagegen - die Bewegung bleibt sichtbar, sie endet an der Bildkante.
+  **Ehrlich dazu:** der alte v216-Test verlangte, dass ein Plan mit
+  Randabfall GAR NICHT angefasst wird - er hat den Fehler mitgeschuetzt
+  (dieselbe v132-Falle wie schon dreimal). Er verlangt jetzt: ein Wort darf
+  auslaufen, der Block nicht.
+  Regression **1814/1815 logic + 7/1/5/2 Renders**.
 - **v230g DIE NEUN BEFUNDE DER BUG-JAGD - ALLE BEHOBEN.** Fuenf Pruefer auf
   Zeiten, Platzierung, Animationen, Kunden-App und Job-Ablauf, jeder Befund
   adversariell gegengeprueft. Nach Schwere:
