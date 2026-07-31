@@ -292,5 +292,60 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
         State.pollErrs === 0, 'Zaehler ' + State.pollErrs);
 }
 
+// ---- v230i: Player wirklich freigeben, nicht nur verstecken ----
+// Ismets Screenshot: Chrome selbst meldet "Diese Seite kann nicht geoeffnet
+// werden", nachdem der Tab im Hintergrund war - das iPhone hat den Inhalt
+// weggeraeumt. Jedes angetippte Bibliotheks-Video blieb als eigener
+// <video>-Player mit voller Quelle im DOM. Ein verstecktes Element gibt
+// nichts frei; die Quelle muss weg und load() laufen.
+{
+  const videoFreigeben = eval('(' + schneide('videoFreigeben') + ')');
+  const gemacht = [];
+  const bau = (n) => {
+    const kacheln = [];
+    for (let k = 0; k < n; k++) {
+      const v = {
+        tag: 'video', _src: '/api/video/j' + k,
+        pause() { gemacht.push('pause'); },
+        removeAttribute(a) { if (a === 'src') this._src = null; },
+        load() { gemacht.push('load'); },
+        remove() { this._weg = true; },
+        closest: () => kachel,
+      };
+      const kachel = {
+        _cls: new Set(['lib-thumb', 'playing']), dataset: { thumb: '<img>' },
+        innerHTML: '<video>', style: {},
+        classList: { remove: c => kachel._cls.delete(c),
+                     add: c => kachel._cls.add(c) },
+        _v: v,
+      };
+      v.closest = () => kachel;
+      kacheln.push(kachel);
+    }
+    return {
+      querySelectorAll: (sel) => (sel === 'video' ? kacheln.map(k => k._v) : []),
+      _k: kacheln,
+    };
+  };
+  const wurzel = bau(6);
+  videoFreigeben(wurzel);
+  const alle = wurzel._k.map(k => k._v);
+  pruef('v230i: jeder Player wird angehalten und entladen',
+        gemacht.filter(x => x === 'pause').length === 6
+        && gemacht.filter(x => x === 'load').length === 6, gemacht.length + ' Schritte');
+  pruef('v230i: die Quelle wird wirklich entfernt',
+        alle.every(v => v._src === null));
+  pruef('v230i: das Element fliegt aus der Kachel',
+        alle.every(v => v._weg === true));
+  pruef('v230i: die Kachel wird wieder zum Vorschaubild',
+        wurzel._k.every(k => !k._cls.has('playing') && k.innerHTML === '<img>'));
+  // Der gerade laufende Player bleibt.
+  const w2 = bau(3);
+  const behalten = w2._k[1]._v;
+  videoFreigeben(w2, behalten);
+  pruef('v230i: der gerade laufende Player bleibt stehen',
+        behalten._src !== null && behalten._weg !== true);
+}
+
 console.log(fails ? `\n${fails} FEHLER` : '\nalle Nachweise gruen');
 process.exit(fails ? 1 : 0);

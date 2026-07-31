@@ -3397,8 +3397,42 @@ const MOTION_ENABLED = false;
 const PAGES = MOTION_ENABLED
   ? ['create', 'motion', 'library', 'billing', 'support', 'account']
   : ['create', 'library', 'billing', 'support', 'account'];
+/* v230i SPEICHER WIRKLICH FREIGEBEN, NICHT NUR VERSTECKEN.
+   Ismets Screenshot: Chrome selbst meldet "Diese Seite kann nicht geoeffnet
+   werden", nachdem der Tab im Hintergrund war. Das ist kein Fenster von uns -
+   auf dem iPhone raeumt das System den Inhalt eines Hintergrund-Tabs weg,
+   wenn er zu viel Speicher haelt, und beim Zurueckkommen scheitert das
+   Wiederherstellen. Unsere Seite hielt mehr, als sie muss: jedes in der
+   Bibliothek angetippte Video blieb als eigener <video>-Player mit voller
+   Quelle im DOM - bei mehreren geoeffneten Clips liegen so mehrere dekodierte
+   Videos gleichzeitig im Speicher. Ein verstecktes Element gibt NICHTS frei;
+   dafuer muss die Quelle weg und `load()` laufen.
+   Ein Player nach dem anderen, und beim Seitenwechsel alle zu. */
+function videoFreigeben(root, ausser) {
+  if (!root) return;
+  root.querySelectorAll('video').forEach(v => {
+    if (v === ausser) return;
+    try {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();                       // erst das gibt den Dekoder frei
+    } catch (e) {}
+    const box = v.closest('.lib-thumb');
+    if (box) {                        // Kachel wieder zum Vorschaubild machen
+      box.classList.remove('playing');
+      v.remove();
+      if (box.dataset.thumb) box.innerHTML = box.dataset.thumb;
+      box.style.cursor = '';
+    }
+  });
+}
+
 function showSection(name, fromHistory) {
   if (!PAGES.includes(name)) name = 'create';
+  // v230i: beim Verlassen einer Seite ihre Player abraeumen.
+  PAGES.forEach(p => {
+    if (p !== name) videoFreigeben(document.getElementById('page-' + p));
+  });
   PAGES.forEach(p => {
     const pg = document.getElementById('page-' + p);
     if (pg) pg.classList.toggle('on', p === name);
@@ -4216,10 +4250,16 @@ async function renderLibrary() {
         </div>
       </div>`;
     // Klick auf Thumbnail -> inline Player
-    card.querySelector('.lib-thumb').addEventListener('click', function () {
+    const _tb = card.querySelector('.lib-thumb');
+    _tb.dataset.thumb = _tb.innerHTML;      // v230i: Vorschaubild zum Zurueckholen
+    _tb.addEventListener('click', function () {
       if (this.querySelector('video')) return;
+      // v230i: NUR EIN Player gleichzeitig. Jeder offene Clip haelt ein
+      // dekodiertes Video im Speicher; auf dem Handy kostet das den Tab.
+      videoFreigeben(document.getElementById('page-library'));
       const v = document.createElement('video');
       v.src = '/api/video/' + it.jid;
+      v.preload = 'metadata';
       v.controls = true; v.autoplay = true; v.playsInline = true;
       this.innerHTML = '';
       this.style.cursor = 'default';

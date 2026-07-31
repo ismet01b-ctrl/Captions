@@ -3211,7 +3211,16 @@ def _scenario_logic(clip, transcript, tmp):
                       'v230e: im Hintergrund wird gar nicht erst gefragt',
                       'v230e: keine Fehlerkarte, waehrend der Tab weg ist',
                       'v230e: ein Abbruch im Hintergrund erhoeht den',
-                      'v230e: zurueck im Vordergrund faengt der Zaehler'):
+                      'v230e: zurueck im Vordergrund faengt der Zaehler',
+                      # v230i: Chrome selbst gibt die Seite auf, wenn der Tab
+                      # im Hintergrund zu viel Speicher haelt. Jedes
+                      # angetippte Bibliotheks-Video blieb als eigener Player
+                      # mit voller Quelle im DOM - ein verstecktes Element
+                      # gibt nichts frei.
+                      'v230i: jeder Player wird angehalten und entladen',
+                      'v230i: die Quelle wird wirklich entfernt',
+                      'v230i: die Kachel wird wieder zum Vorschaubild',
+                      'v230i: der gerade laufende Player bleibt stehen'):
             _ok220 = ('PASS ' + _n220) in _out220
             check('v220: ' + _n220, _ok220,
                   '' if _ok220 else 'Sonde meldet den Fall nicht bestanden')

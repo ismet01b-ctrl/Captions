@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230i DER TAB STIRBT AM SPEICHER - PLAYER WERDEN JETZT WIRKLICH
+  FREIGEGEBEN.** Ismets Screenshot ist NICHT unsere Oberflaeche, sondern
+  Chrome selbst: "Diese Seite kann nicht geoeffnet werden" (iPhone, 11 Tabs
+  offen), nachdem der Tab im Hintergrund war. Auf iOS raeumt das System den
+  Inhalt eines Hintergrund-Tabs weg, wenn er zu viel Speicher haelt; beim
+  Zurueckkommen scheitert das Wiederherstellen und genau diese Seite kommt.
+  Unsere App hielt mehr, als sie muss: **jedes in der Bibliothek angetippte
+  Video blieb als eigener `<video>`-Player mit voller Quelle im DOM.** Bei
+  mehreren geoeffneten Clips liegen so mehrere dekodierte Videos gleichzeitig
+  im Speicher, und ein verstecktes Element gibt NICHTS frei - dafuer muss die
+  Quelle weg und `load()` laufen.
+  - `videoFreigeben()`: ein Player nach dem anderen (beim Antippen wird der
+    vorherige abgeraeumt), und beim Seitenwechsel gehen alle zu. Die Kachel
+    wird dabei wieder zum Vorschaubild.
+  - Nachgewiesen durch AUSFUEHREN (`web/_dom_probe.mjs`, vier neue Faelle):
+    6 offene Player -> 0, Quelle entfernt, `pause()` + `load()` je Player,
+    der gerade laufende bleibt stehen. Zusaetzlich im echten Chromium mit
+    echten Video-Elementen gegengeprueft.
+  - **EHRLICH: das ist eine Verkleinerung des Verbrauchs, kein Beweis der
+    Ursache.** Ein iOS-Speicherabbruch laesst sich hier nicht nachstellen
+    (der Container hat kein WKWebView), und Chromes Seite nennt keinen
+    Grund. Kommt die Meldung wieder, brauche ich Geraet, iOS-Version und ob
+    zu dem Zeitpunkt ein Render lief. Was in jedem Fall gilt: der Render
+    laeuft auf dem Server weiter und das Video landet in der Bibliothek -
+    verloren geht nichts.
 - **v230h ISMETS BEFUND AM v230g-RENDER: BEIDE URSACHEN GEFUNDEN.**
   Build-Stempel geprueft (`comment=DouchkoVE v230g f96ee854 ... job
   991ea812e9ae`) - es war der NEUESTE Stand, also echte, aktuelle Fehler.
