@@ -3,6 +3,72 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230g DIE NEUN BEFUNDE DER BUG-JAGD - ALLE BEHOBEN.** Fuenf Pruefer auf
+  Zeiten, Platzierung, Animationen, Kunden-App und Job-Ablauf, jeder Befund
+  adversariell gegengeprueft. Nach Schwere:
+  1. **KRITISCH - der Momente-Editor war komplett wirkungslos.**
+     `_momente.json` ist eine LISTE von Eintraegen mit dem Wortindex in 'i' -
+     so schreibt und liest render.py sie, so schickt die App sie zurueck.
+     `sanitize_moments` verlangte ein DICT und stieg bei allem anderen mit
+     `{}` aus; der Server hat die Datei danach mit `{}` ueberschrieben. Jeder
+     Klick (Effekt, Animation, Wucht, Text, Moment abschalten) ging beim
+     Speichern verloren, der Re-Render war bitgleich zum Original (gemessen:
+     mittlere Bilddifferenz 0.000). `aktiv` fehlte zusaetzlich in der
+     Allowlist. **Warum es nie aufgefallen ist: der Selftest pruefte die
+     Funktion mit der falschen FORM** - ein Test mit einem Dict, wo im
+     Betrieb eine Liste kommt, ist so gut wie kein Test.
+  2. **KRITISCH - die Ursache des angeschnittenen Texts, endlich gefunden.**
+     Der Analyse-Lauf exportiert `_bloecke.json` und schreibt dort IMMER das
+     Feld `text` (den Automatik-Wortlaut des Blocks, damit der Editor etwas
+     anzeigt). Beim naechsten Lauf wurde er als NUTZER-Textueberschreibung
+     fuer das Schluesselwort gelesen - aus 'CAPTIONS' wurde
+     'WIE WIR CAPTIONS AUF', quer durchs Bild und beidseitig angeschnitten.
+     **Genau deshalb liess sich der Fehler mit nachgebautem Transkript nie
+     ausloesen: er braucht die Sidecar-Datei, die erst der erste Lauf
+     schreibt.** Uebernommen wird der Text jetzt nur, wenn er sich vom
+     Automatik-Wortlaut unterscheidet. Beweis am Job-Log:
+     alt `Living typography: enthuellen on 'WIE WIR CAPTIONS AUF'` +
+     `<-- RAGT AUS DEM BILD`, neu `... on 'CAPTIONS'`, keine Warnung.
+  3. **Der Riegel gegen den Anschnitt hat selbst angeschnitten.**
+     `fit_into_frame` skalierte auf `W*(1+2*rand)` = 1.024 W - breiter als
+     das Bild. Jeder korrigierte Block landete exakt bei -0.012..1.012 W,
+     also 1.2 % Tinte auf JEDER Seite draussen. Toleranz und Zielbreite sind
+     jetzt getrennt; gemessen bei vier Ueberbreiten: alles im Bild.
+  4. **Bis 0.84 s leeres Bild mitten im Sprechen.** Die Stuetzzeile
+     (`p['small']`) ist wortgetaktet, wurde aber nur INNERHALB der
+     Zeichenzweige gemalt - und die haengen an der KARTEN-Uhr (`dt >= 0`).
+     Lag das Schluesselwort nicht am Gruppenanfang, war zwischen dem ersten
+     gesprochenen Wort und dem Erscheinen der Karte GAR NICHTS im Bild. Nur
+     `behind` machte es richtig. Gemessen an `composite_frame` mit frischen
+     Plaenen: alt 5 von 6 Bildern komplett leer, neu 0.
+  5. **Ein Fliesstext-Block konnte hinter sein eigenes Ende geschoben
+     werden** und kam dann in KEINEM Bild vor (`start=2.82, end=2.00`). Der
+     `intent`-Zweig des Solo-Riegels umging die Laengenpruefung komplett.
+     Die Ansage behaelt ihren Vorrang - aber nur, solange danach noch etwas
+     vom Block steht.
+  6. **Animierte Karten sassen dauerhaft zu hoch** (regen 123 px, bruch
+     68 px, schweben 22 px). Acht Zeichenpfade zogen nach `anim_apply` die
+     halbe Hoehenzunahme ab - das verankert die UNTERKANTE der Leinwand.
+     **Gemessen am Tinten-Schwerpunkt ueber alle 26 Animationen: KEINE
+     profitiert davon, fuenf werden verschoben.** Alle acht Stellen raus.
+  7. **Look 'TikTok': bei `behind` lief die gewaehlte Animation NIE.** Der
+     buchstabenweise Aufbau (`S.kinetic`) legt `p['letters']` an, und dieser
+     Zeichenast ruft `anim_apply` gar nicht auf - gemessen 1 Aufruf je Bild
+     bei text_style '3d', 0 bei '3d kinetisch'. Beides gleichzeitig geht
+     nicht, also gewinnt die Animation (sie ist die ausdrueckliche Wahl).
+  8. **Der Wachhund beendete Jobs, die nur in der Schlange WARTETEN.** Sein
+     Fingerabdruck ist (Status, Fortschritt, Phase); ein wartender Job hat
+     konstant ('wartet', 0.0, 'Queued …'). Nach 40 Minuten reinen Wartens
+     wurde er als haengend abgeraeumt - falsches "timed out", und das
+     fertige Video verschwand spaeter aus der Bibliothek. Genau der Fall,
+     der bei VOLLER Schlange eintritt. Die Uhr laeuft jetzt erst, wenn der
+     Job wirklich dran ist.
+  9. **Der Support-Zaehler liess sich nicht mehr wegklicken**, wenn die
+     letzte ungelesene Antwort in einem ausgeblendeten (geschlossenen)
+     Ticket stand: der Zaehler zaehlte alles, die Liste zeigte es nicht.
+     Beide haben jetzt denselben Filter - der Riegel gehoert an den ZAEHLER,
+     nicht an den Browser.
+  Regression **1807/1808 logic + 7/1/5/2 Renders**.
 - **v230f MEINE REGRESSION: DIE CAPTION-ZONE FIEL AUS JEDEM GESPEICHERTEN
   SETUP.** Ismets Befund "die Captions respektieren die Safe Zones nicht
   mehr" - verursacht von v230c-sec. Dort liess `_sanitize_overrides` nur

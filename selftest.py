@@ -8714,16 +8714,36 @@ def _scenario_betrieb(tmp):
           _uid203 is not None and _row203 is not None)
 
     # (4) Nutzerdaten, die in die Engine laufen
-    _m203 = _SV198.sanitize_moments({'3': {'power': 10 ** 9, 'n': 9999,
-                                           'fx': 'behind'},
-                                     '5': {'power': 3, 'fx': 'boese'},
-                                     'kaputt': {'power': 2}})
+    # v230g: DIE FORM, DIE WIRKLICH GESCHICKT WIRD. Der alte Test benutzte ein
+    # Dict - genau deshalb ist nie aufgefallen, dass sanitize_moments bei der
+    # echten LISTE mit {} aussteigt und der Server damit den ganzen
+    # Momente-Editor unwirksam machte. Ein Test mit der falschen Form ist so
+    # gut wie kein Test.
+    _m203 = _SV198.sanitize_moments([{'i': 3, 'power': 10 ** 9, 'n': 9999,
+                                      'fx': 'behind'},
+                                     {'i': 5, 'power': 3, 'fx': 'boese'},
+                                     {'power': 2},            # ohne 'i'
+                                     'kaputt'])
+    _m3 = next((m for m in _m203 if m.get('i') == 3), {})
+    _m5 = next((m for m in _m203 if m.get('i') == 5), {})
     check('v203-sec: ein absurdes power faellt weg (Gauss-Radius ins Unendliche)',
-          'power' not in _m203.get('3', {}) and _m203['3']['fx'] == 'behind')
+          'power' not in _m3 and _m3.get('fx') == 'behind', str(_m3))
     check('v203-sec: ein unbekanntes fx faellt weg, gueltige Werte bleiben',
-          'fx' not in _m203.get('5', {}) and _m203['5']['power'] == 3)
-    check('v203-sec: ein kaputter Schluessel verwirft nicht den ganzen Plan',
-          'kaputt' not in _m203 and len(_m203) == 2)
+          'fx' not in _m5 and _m5.get('power') == 3, str(_m5))
+    check('v203-sec: ein kaputter Eintrag verwirft nicht den ganzen Plan',
+          len(_m203) == 2, str(_m203))
+    # v230g: die Rueckgabe MUSS die Form haben, die Engine und App sprechen -
+    # eine Liste mit 'i'. render.py liest sie als {m['i']: m for m in ...}.
+    check('v230g: sanitize_moments liefert eine Liste mit Wort-Index',
+          isinstance(_m203, list) and all(isinstance(m, dict) and 'i' in m
+                                          for m in _m203), str(_m203)[:120])
+    _mAus = _SV198.sanitize_moments([{'i': 7, 'aktiv': False, 'fx': 'ground'}])
+    check('v230g: ein abgeschalteter Moment bleibt abgeschaltet',
+          _mAus and _mAus[0].get('aktiv') is False, str(_mAus))
+    _mAlt = _SV198.sanitize_moments({'9': {'fx': 'behind'}})
+    check('v230g: die alte Dict-Form wird noch angenommen (Alt-Clients)',
+          _mAlt and _mAlt[0].get('i') == 9 and _mAlt[0].get('fx') == 'behind',
+          str(_mAlt))
     check('v203-sec: die Momente werden beim Speichern geprueft',
           'sanitize_moments(json.loads(moments))' in _sv203)
     _b203 = _SV198.sanitize_blocks([{'i0': 0, 'i1': 2, 'start': 0, 'end': 36000}],
@@ -12703,6 +12723,105 @@ def _scenario_premium(tmp):
     _var_nach = float(_bl2[10:40, 10:100].std())
     check('Hintergrund bleibt trotzdem unscharf', _var_nach < _var_vor * 0.5,
           f'{_var_nach:.1f} < {_var_vor:.1f}*0.5')
+
+    # ---- v230g: die neun Befunde der Bug-Jagd ----
+    print('\n--- Bug-Jagd (v230g) ---')
+    _Wg, _Hg = 540, 960
+    _cg = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
+    _cg['effects']['anim'] = False
+    _Sg = R.Sprites(_cg, _Wg, _Hg)
+
+    # (1) Der Riegel gegen den Anschnitt hat SELBST angeschnitten: er
+    # skalierte auf W*(1+2*rand) = 1.024 W, also breiter als das Bild.
+    for _fk in (1.04, 1.20, 1.60, 2.50):
+        _ag = _Sg.text('BREITESWORT', int(_Wg * _fk / 6), (255, 255, 255))[0]
+        _pg = {'tpl': 'behind', 'kw_i': 0, 'start': 0.0, 'end': 3.0, 'arr': _ag,
+               'cx': _Wg / 2, 'cy': _Hg * 0.5, 'small': [], 'front': [],
+               'target': (_Wg / 2, _Hg / 2)}
+        R.fit_into_frame([_pg], _Wg, _Hg)
+        _bg = R.ink_box(_pg, _Wg, _Hg)
+        check(f'v230g: Frame guard laesst bei {_fk:.2f}x nichts draussen',
+              _bg is not None and _bg[0] >= -1 and _bg[1] <= _Wg + 1,
+              f'{_bg[0] / _Wg:.4f}..{_bg[1] / _Wg:.4f} W' if _bg else 'keine Tinte')
+
+    # (2) Der Abzug der halben Hoehenzunahme verankerte die UNTERKANTE der
+    # Anim-Leinwand. Am Tinten-Schwerpunkt gemessen profitiert davon KEINE
+    # Animation, fuenf werden dauerhaft nach oben verschoben.
+    _bg2 = _Sg.text('WUCHT', 110, (255, 255, 255))[0]
+
+    def _cy_ink(_a, _cy):
+        _al = _a[:, :, 3].astype(np.float32)
+        _ys = np.arange(_a.shape[0], dtype=np.float32) - _a.shape[0] / 2.0
+        return _cy + float((_ys[:, None] * _al).sum() / max(_al.sum(), 1))
+
+    _ref_g = _cy_ink(_bg2, _Hg * 0.5)
+    for _an, _alt in (('regen', 123), ('bruch', 68), ('schweben', 22)):
+        _pa = {'anim': _an, 'start': 0.0, 'kw_i': 3}
+        _aa, _adx, _ady, _asc, _aop = R.anim_apply(_pa, _bg2, (0.5, 0.4, 0.3), 1.2)
+        _ver = abs(_cy_ink(_aa, _Hg * 0.5 + _ady) - _ref_g)
+        check(f'v230g: Animation {_an} sitzt nicht mehr zu hoch', _ver < 12,
+              f'{_ver:.1f} px (alt ~{_alt} px)')
+    check('v230g: der Abzug ist ueberall raus',
+          '.shape[0]) / 2' not in open(os.path.join(HERE, 'render.py'),
+                                       encoding='utf-8').read())
+
+    # (3) DIE URSACHE DES ANGESCHNITTENEN TEXTS: der Analyse-Lauf schreibt in
+    # JEDEN Block den Automatik-Wortlaut ins Feld 'text' - und der wurde beim
+    # naechsten Lauf als NUTZER-Textueberschreibung fuer das Keyword gelesen.
+    # Aus 'CAPTIONS' wurde 'WIE WIR CAPTIONS AUF', quer durchs Bild.
+    check('v230g: Automatik-Blocktext gilt nicht als Nutzeraenderung',
+          R._norm_txt('WIE WIR CAPTIONS AUF') == R._norm_txt('wie wir captions auf.')
+          and R._norm_txt('CAPTIONS') != R._norm_txt('wie wir captions auf'))
+
+    # (4) Der Solo-Riegel schob bei einer Ansage den Block ohne Obergrenze
+    # nach hinten - notfalls hinter sein eigenes Ende. Dann ist das
+    # Anzeigefenster leer und der Block kommt in KEINEM Bild vor.
+    def _solo_g(_end, _spaet, _intent):
+        # _FLOW_MIN ist lokal in build_plans - hier derselbe Wert.
+        return (_end - _spaet >= 0.55) or (_intent and _spaet < _end - 0.12)
+
+    check('v230g: eine Ansage schiebt keinen Block hinter sein Ende',
+          not _solo_g(2.00, 2.82, True) and not _solo_g(4.44, 4.47, True))
+    check('v230g: eine Ansage darf weiter schieben, solange der Block steht',
+          _solo_g(3.00, 2.50, True))
+
+    # (5) DER EIGENTLICHE BEWEIS (composite_frame wirklich aufrufen, frische
+    # Plaene je Lauf - v221): die Stuetzzeile haengt am WORT, nicht an der
+    # Karte. Lag das Schluesselwort nicht am Gruppenanfang, war bis zu 0.84 s
+    # GAR NICHTS im Bild, obwohl durchgehend gesprochen wurde.
+    _wg = [{'word': w, 'start': 0.20 + i * 0.28, 'end': 0.20 + i * 0.28 + 0.24}
+           for i, w in enumerate(['but', 'captions', 'we', 'MASSIVE',
+                                  'here', 'now'])]
+    _fr_g = np.full((_Hg, _Wg, 3), 40.0, np.float32)
+    for _fxg in ('outline', 'cascade', 'blurin'):
+        _leer = 0
+        for _j in range(6):
+            _tg = 0.55 + _j * 0.10
+            _Sx = R.Sprites(_cg, _Wg, _Hg)
+            _plx = R.build_plans(_wg, {3}, _cg, _Sx, _Wg, _Hg,
+                                 lambda a, b: True,
+                                 {3: {'fx': _fxg, 'power': 2, 'n': 1}})
+            _cx = R.composite_frame(_fr_g.copy(), None, _tg, _plx, _wg,
+                                    (_Wg * 0.5, _Hg * 0.42), _cg, _Sx, _Wg, _Hg)
+            if int((np.abs(_cx - _fr_g).max(axis=2) > 12).sum()) == 0:
+                _leer += 1
+        check(f'v230g: {_fxg} zeigt die Stuetzzeile schon vor der Karte',
+              _leer == 0, f'{_leer} von 6 Bildern leer')
+
+    # (6) Look 'TikTok': der buchstabenweise Aufbau ruft anim_apply gar nicht
+    # auf - eine gewaehlte Animation lief damit NIE. Sie gewinnt jetzt.
+    _rsrc_g = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230g: kinetischer Aufbau weicht einer gewaehlten Animation',
+          _rsrc_g.count("and not p.get('anim')") >= 2)
+
+    # (7) Der Wachhund raeumte Jobs ab, die nur in der Schlange warteten.
+    _ssrc_g = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230g: ein wartender Job in der Schlange gilt nicht als haengend',
+          '_in_schlange' in _ssrc_g and "stt == 'wartet' and jid in _in_schlange"
+          in _ssrc_g)
+    # (8) Support-Zaehler: derselbe Filter wie die Liste, sonst bleibt er stehen.
+    check('v230g: der Support-Zaehler kennt ausgeblendete Tickets',
+          _ssrc_g.count("t.status = 'closed' AND t.updated_at < ?") >= 2)
 
     # ---- v70: Musik-Beat-Erkennung ----
     print('\n--- Musik-Beat ---')

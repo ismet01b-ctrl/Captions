@@ -2054,7 +2054,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230f'
+DVE_VERSION = 'v230g'
 
 
 def _build_datei():
@@ -5074,9 +5074,31 @@ def _watchdog_worker():
             with LOCK:
                 items = [(jid, j.get('status'), round(j.get('progress') or 0, 3),
                           j.get('phase')) for jid, j in JOBS.items()]
+            # v230g EIN JOB, DER BRAV IN DER SCHLANGE STEHT, HAENGT NICHT.
+            # Der Fingerabdruck ist (Status, Fortschritt, Phase); ein
+            # wartender Job hat konstant ('wartet', 0.0, 'Queued …') - der
+            # Warteschlangenplatz landet nur in der ANTWORT von /api/status,
+            # nie im Job-Zustand. Nach 40 Minuten reinen WARTENS wurde er
+            # deshalb als haengend abgeraeumt: Status 'fehler', Meldung
+            # „This render timed out", und das fertige Video verschwand
+            # spaeter aus der Bibliothek. Genau der Fall, der bei voller
+            # Schlange eintritt - also wenn viel los ist. Die Uhr laeuft
+            # jetzt erst, wenn der Job wirklich dran ist.
+            _in_schlange = set()
+            try:
+                _in_schlange = {e[-1] for e in list(getattr(QUEUE, 'queue', []))
+                                if isinstance(e, tuple)} | \
+                               {e for e in list(getattr(MQUEUE, 'queue', []))
+                                if isinstance(e, str)}
+            except Exception:
+                _in_schlange = set()
             live = set()
             for jid, stt, prog, phase in items:
                 if stt not in ('wartet', 'laeuft'):
+                    continue
+                if stt == 'wartet' and jid in _in_schlange:
+                    stuck.pop(jid, None)      # wartet regulaer -> Uhr aus
+                    live.add(jid)
                     continue
                 live.add(jid)
                 fp = (stt, prog, phase)
@@ -5599,7 +5621,8 @@ def api_me(request: Request):
     sup_neu = con.execute(
         "SELECT COUNT(*) c FROM ticket_messages m JOIN tickets t "
         "ON t.id = m.ticket_id WHERE t.user_id = ? AND m.von = 'admin' "
-        "AND m.gelesen = 0", (u['id'],)).fetchone()['c']
+        "AND m.gelesen = 0 AND NOT (t.status = 'closed' AND t.updated_at < ?)",
+        (u['id'], int(time.time()) - TICKET_CLOSED_TTL)).fetchone()['c']
     con.close()
     # v124 Stil-Gedaechtnis: eigene Editor-Korrekturen, aus denen die Regie lernt.
     style_prefs = sum(1 for c in _load_corrections()
@@ -5898,10 +5921,21 @@ def api_support_tickets(request: Request):
         aus.append({'id': t['id'], 'subject': t['subject'], 'status': t['status'],
                     'created_at': t['created_at'], 'updated_at': t['updated_at'],
                     'messages': _ticket_verlauf(con, t['id'])})
+    # v230g DER ZAEHLER MUSS DENSELBEN FILTER HABEN WIE DIE LISTE.
+    # Er zaehlte ALLE ungelesenen Antworten, die Liste blendet geschlossene
+    # Tickets aber 24 h nach dem Schliessen aus (v212). Stand die letzte
+    # ungelesene Antwort in so einem Ticket, war sie fuer den Kunden
+    # unerreichbar - die Liste kam leer zurueck, der Browser markierte
+    # nichts als gelesen, und die Zahl am Support-Link blieb fuer immer
+    # stehen. Ein Zaehler, der stehen bleibt, nachdem man hingeschaut hat,
+    # ist Muell (v202). Der Riegel gehoert an den ZAEHLER, nicht an den
+    # Browser: mit demselben Filter faellt er von selbst, sobald das Ticket
+    # ausblendet.
     neu = con.execute(
         "SELECT COUNT(*) c FROM ticket_messages m JOIN tickets t "
         "ON t.id = m.ticket_id WHERE t.user_id = ? AND m.von = 'admin' "
-        "AND m.gelesen = 0", (u['id'],)).fetchone()['c']
+        "AND m.gelesen = 0 AND NOT (t.status = 'closed' AND t.updated_at < ?)",
+        (u['id'], _zu)).fetchone()['c']
     con.close()
     return {'items': aus, 'ungelesen': neu}
 
@@ -7347,20 +7381,38 @@ def sanitize_moments(roh):
 
     Gleiche Bauart wie sanitize_blocks: unbekannte Felder fallen weg, ein
     kaputter Eintrag wird uebersprungen und verwirft NIE den ganzen Plan.
-    Der Schluessel ist der Wort-Index (String im JSON)."""
-    if not isinstance(roh, dict):
-        return {}
-    aus = {}
-    for k, m in list(roh.items())[:_MOM_MAX]:
+
+    v230g DIE FORM WAR DIE FALSCHE - UND DAMIT WAR DER GANZE EDITOR TOT.
+    `_momente.json` ist eine LISTE von Eintraegen mit dem Wort-Index im Feld
+    'i'; so schreibt render.py sie (13655), so liest render.py sie zurueck
+    (`{m['i']: m for m in json.load(...)}`), so liefert `/api/moments/{jid}`
+    sie an die App, und genau so schickt die App sie zurueck. Diese Funktion
+    verlangte ein Dict und stieg bei allem anderen mit `{}` aus - der Server
+    hat die Datei danach mit `{}` ueberschrieben. Ergebnis: JEDER Klick im
+    Momente-Editor (Effekt, Animation, Wucht, Text, Moment abschalten) ging
+    beim Speichern verloren, und der Re-Render war bitgleich zum Original.
+    `aktiv` fehlte ausserdem in der Allowlist - ein abgeschalteter Moment
+    liess sich also selbst dann nicht abschalten, wenn die Form gestimmt
+    haette. Beides gemessen: Datei nach dem Speichern exakt `{}`, mittlere
+    Bilddifferenz Original gegen "gespeicherten" Re-Render 0.000.
+    Die Dict-Form wird weiter angenommen (Alt-Clients), aber immer als LISTE
+    zurueckgegeben - das ist die Form, die Engine und App sprechen."""
+    if isinstance(roh, dict):
+        # Alt-Form {"12": {...}} -> Liste mit 'i'
+        roh = [dict(m, i=k) for k, m in roh.items() if isinstance(m, dict)]
+    if not isinstance(roh, list):
+        return []
+    aus = []
+    for m in roh[:_MOM_MAX]:
         if not isinstance(m, dict):
             continue
         try:
-            i = int(k)
+            i = int(m.get('i'))
         except (TypeError, ValueError):
             continue
         if not 0 <= i <= 10 ** 6:
             continue
-        e = {}
+        e = {'i': i}
         f = str(m.get('fx') or '').strip().lower()
         if f in _MOM_FX and f:
             e['fx'] = f
@@ -7392,6 +7444,11 @@ def sanitize_moments(roh):
         for feld in ('nah', 'intent', 'user_pick'):
             if m.get(feld) is True:
                 e[feld] = True
+        # v230g: 'aktiv' ist der Schalter "Moment abschalten" - er MUSS auch
+        # als False durchkommen, sonst laesst sich nichts abschalten. Die
+        # anderen Flags oben sind Zusagen, die es nur als True gibt.
+        if 'aktiv' in m:
+            e['aktiv'] = bool(m.get('aktiv'))
         anker = m.get('anker')
         if isinstance(anker, (list, tuple)) and len(anker) == 2:
             try:
@@ -7399,8 +7456,7 @@ def sanitize_moments(roh):
                               round(max(0.0, min(1.0, float(anker[1]))), 4)]
             except (TypeError, ValueError):
                 pass
-        if e:
-            aus[str(i)] = e
+        aus.append(e)
     return aus
 
 

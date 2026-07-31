@@ -176,6 +176,14 @@ def rng(i, salt=0):
     return v - math.floor(v)
 def clean(w): return w.rstrip('.,!?').strip()
 
+
+def _norm_txt(s):
+    """Vergleichsform fuer Blocktexte (v230g): Gross-/Kleinschreibung,
+    Mehrfach-Leerzeichen und Satzzeichen sind kein 'der Nutzer hat den Text
+    geaendert'. Nur ein echter Wortlaut-Unterschied zaehlt."""
+    import re as _re
+    return _re.sub(r'[^a-z0-9äöüß]+', ' ', str(s or '').lower()).strip()
+
 def iter_frames(path, w, h, rate, start=None):
     """Liefert Frames als konstante Framerate ueber eine ffmpeg-Pipe.
     Dupliziert/verwirft Frames nach ihren echten Zeitstempeln - VFR-Videos bleiben synchron.
@@ -8440,7 +8448,15 @@ def fit_into_frame(plans, W, H, rand=0.012):
         if x0 >= links and x1 <= rechts:
             continue
         breite = x1 - x0
-        nutzbar = W * (1.0 + 2 * rand)
+        # v230g TOLERANZ IST NICHT ZIELBREITE. `nutzbar` stand auf
+        # W * (1 + 2*rand) = 1.024 W - also auf einer Breite, die GROESSER ist
+        # als das Bild. Jeder korrigierte Block landete danach exakt bei
+        # -0.012..1.012 W, es wurde also auf JEDER Seite 1.2 % der Bildbreite
+        # abgeschnitten (bei 1080 px gemessen: 26 px Tinte ausserhalb). Der
+        # Riegel gegen den Anschnitt hat selbst angeschnitten.
+        # `rand` bleibt die AUSLOESE-Schwelle (nicht wegen 3 px eingreifen),
+        # die Zielbreite ist jetzt das Bild abzueglich derselben Toleranz.
+        nutzbar = W * (1.0 - 2 * rand)
         s = min(1.0, nutzbar / breite) if breite > 1 else 1.0
         if s < 0.999:
             _skaliere_plan(p, s, W, H)
@@ -8450,11 +8466,15 @@ def fit_into_frame(plans, W, H, rand=0.012):
             x0, x1 = box[0], box[1]
         # Nach dem Verkleinern kann der Block noch aussermittig stehen
         # (die Tinte sitzt nicht zwangslaeufig mittig im Sprite).
+        # v230g: verschoben wird auf die INNEN-Kante, nicht auf die
+        # Ausloese-Schwelle - sonst bleibt der Block per Konstruktion mit
+        # `rand` der Bildbreite draussen.
+        ziel_l, ziel_r = W * rand, W * (1.0 - rand)
         dx = 0.0
-        if x0 < links:
-            dx = links - x0
-        elif x1 > rechts:
-            dx = rechts - x1
+        if x0 < ziel_l:
+            dx = ziel_l - x0
+        elif x1 > ziel_r:
+            dx = ziel_r - x1
         if abs(dx) > 0.5:
             _verschiebe_plan(p, dx)
         n += 1
@@ -9917,7 +9937,18 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 sz = S.fit(txt, int((H * 0.213 if not portrait else H * 0.11) * _ugrf), _bh_limit)
 
                 def _build_behind(_s):
-                    if S.kinetic and not p.get('count'):
+                    # v230g EINE GEWAEHLTE ANIMATION MUSS LAUFEN.
+                    # Der buchstabenweise Aufbau (S.kinetic, z.B. Look
+                    # 'TikTok') legt p['letters'] an - und der Zeichenzweig
+                    # dafuer ruft anim_apply GAR NICHT auf. Gemessen: bei
+                    # text_style '3d' 1 Aufruf je Bild und sichtbare
+                    # Bewegung, bei '3d kinetisch' 0 Aufrufe und ein
+                    # stehendes Wort. Die Animation fiel also ersatzlos weg,
+                    # sobald der Look kinetisch war. Beides gleichzeitig geht
+                    # nicht (der Aufbau schneidet das Wort in Slices), also
+                    # gewinnt die ANIMATION - sie ist die ausdrueckliche
+                    # Wahl der Regie bzw. des Nutzers.
+                    if S.kinetic and not p.get('count') and not p.get('anim'):
                         arr, tot, lets = S.text(txt, _s, S.accent, glow=True,
                                                 per_letter=True, extrude=S.ex)
                         p['arr'] = arr
@@ -10133,7 +10164,10 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                 sz = S.fit(txt, int(H * 0.20) if not portrait else int(H * 0.10),
                            int(W * _gw), font=S.f_serif)
                 g_yaw = -6 if (side_toggle % 2 == 0) else 6
-                if S.kinetic and not p.get('count') and not lying:
+                # v230g: siehe _build_behind - eine gewaehlte Animation
+                # schlaegt den buchstabenweisen Aufbau, sonst laeuft sie nie.
+                if S.kinetic and not p.get('count') and not lying \
+                        and not p.get('anim'):
                     flat, tot, lets = S.text(txt, sz, S.white, per_letter=True, extrude=g_ex)
                     p['arr'] = flat
                     p['letters'] = letter_slices(flat, lets)
@@ -11024,7 +11058,19 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     # ist woertlich bestellt ("this one sticks on the wall") -
                     # dass sie ihre Lesezeit behaelt, ist die ganze Zusage des
                     # intent-Flags. Der Fliesstext wartet dann eben laenger.
-                    if _b['end'] - _spaet >= _FLOW_MIN or _k.get('intent'):
+                    # v230g EIN BLOCK DARF NIE HINTER SEIN EIGENES ENDE.
+                    # Der intent-Zweig umging die _FLOW_MIN-Pruefung KOMPLETT
+                    # und setzte den Start ohne jede Obergrenze. War das Ende
+                    # des Blocks vorher schon gekuerzt worden (frueherer
+                    # Riegel oder resolve_overlaps), landete der Start HINTER
+                    # dem Ende - das Anzeigefenster ist dann leer und der
+                    # Block kommt in KEINEM Bild vor. Gemessen: `start=2.82,
+                    # end=2.00`, seine Woerter fehlen im Video komplett, und
+                    # das Luecken-Netz laeuft vorher, haelt sie also fuer
+                    # gezeigt. Die Ansage behaelt ihren Vorrang - aber nur,
+                    # solange danach ueberhaupt noch etwas vom Block steht.
+                    if _b['end'] - _spaet >= _FLOW_MIN or (
+                            _k.get('intent') and _spaet < _b['end'] - 0.12):
                         _b['t0'] = _b['start'] = _spaet
                         _n_solo += 1
                     else:
@@ -12109,8 +12155,15 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     zz, adx_t, aop_t = 1.0, 0.0, 1.0
                     if tok.get('role') == 'core':
                         arr_t, adx_t, ady_t, zz, aop_t = anim_apply(p, arr_t, aud, dtt)
-                        oy_t = tok['oy'] + ady_t - (arr_t.shape[0]
-                                                    - tok['arr'].shape[0]) / 2
+                        # v230g: kein Abzug der halben Hoehenzunahme mehr.
+                        # Am Tinten-Schwerpunkt gemessen: KEINE Animation
+                        # profitiert davon, fuenf werden dadurch dauerhaft
+                        # nach oben verschoben (regen 126 px, bruch 69 px,
+                        # druck 30 px, schweben 24 px, wackel 7 px). Der
+                        # Abzug verankert die UNTERKANTE der Leinwand - das
+                        # waere nur bei Stauch-Animationen richtig, und seit
+                        # v194 polstern alle betroffenen symmetrisch.
+                        oy_t = tok['oy'] + ady_t
                     role = tok.get('role')
                     if role == 'pre':
                         e = ease_expo(dtt / 0.5)
@@ -12182,7 +12235,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 e = smoothstep(dt / 0.8)
                 live = 1.0 + 0.018 * min(dt / max(dur, 1.0), 1.0)   # Micro-Drift: lebt weiter
                 arr_b, adx_b, ady_b, asc_b, aop_b = anim_apply(p, p['arr'], aud, dt)
-                oy_b = ady_b - (arr_b.shape[0] - p['arr'].shape[0]) / 2
+                oy_b = ady_b            # v230g: siehe oben, kein Abzug
                 live *= asc_b
                 # v82: Entrance-Dauer streut +-10% pro Wort (Hand-Keyframe)
                 ex = ease_expo(dt / (0.60 * (1 + 0.10 * hand_jitter(p['kw_i']))))
@@ -12269,7 +12322,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             e = ease_out(min(dt / 0.34, 1))
             sdx, sdy = scene_shift(p)
             arr_bl, adx, ady, asc, aop = anim_apply(p, p['arr'], aud, dt)
-            ady -= (arr_bl.shape[0] - p['arr'].shape[0]) / 2
+            # v230g: kein Abzug der halben Hoehenzunahme (gemessen)
             paste(comp, arr_bl, W / 2 + sdx + adx, p.get('by', H * 0.333) + sdy + ady,
                   W, H, scale=(1.16 - 0.16 * e) * asc,
                   opacity=smoothstep(dt / 0.20) * (strength if dt > dur else 1) * aop,
@@ -12579,7 +12632,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 _sdx, _sdy = scene_shift(p)
                 _e = smoothstep(_dtf / 0.75)
                 arr_fl, adx_fl, dy_fl, asc_fl, aop_fl = anim_apply(p, p['arr'], aud, _dtf)
-                dy_fl -= (arr_fl.shape[0] - p['arr'].shape[0]) / 2
+                # v230g: kein Abzug der halben Hoehenzunahme (gemessen)
                 paste_scene(comp, arr_fl, p.get('cx', W / 2) + _sdx + adx_fl,
                             p['cy'] + _sdy + dy_fl + (1 - _e) * H * 0.03,
                             W, H, scale=(0.97 + 0.03 * _e) * asc_fl,
@@ -12811,6 +12864,21 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             continue                       # Kamera-Impulse: kein Text zu zeichnen
         wd = words[p['kw_i']]
         dt = t - p.get('t0', wd['start'])  # Sofort-Hook: Karte laeuft ab Frame 1
+        # v230g DIE STUETZZEILE HAENGT AM WORT, NICHT AN DER KARTE.
+        # Die uebrigen Woerter der Gruppe (p['small']) sind wortgetaktet
+        # gebaut (eigenes dt je Wort, v82-Lesevorlauf). Gezeichnet wurden sie
+        # aber nur INNERHALB der Zeichenzweige, und die sind gegen die
+        # KARTEN-Uhr verriegelt (`dt >= 0`). Liegt das Schluesselwort nicht am
+        # Gruppenanfang, ist zwischen dem ersten gesprochenen Wort und dem
+        # Erscheinen der Karte GAR NICHTS im Bild - gemessen bis 0.84 s
+        # voellig leer, waehrend drei Woerter gesprochen werden, und das
+        # betrifft typisch den Videoanfang (im Hook-Fenster ist `small` auch
+        # bei Dichte 'akzente' gefuellt). Nur `behind` machte es richtig.
+        # Deshalb hier, VOR der Weiche: solange die Karte noch nicht laeuft,
+        # traegt die Stuetzzeile das Bild allein. Ab dt >= 0 bleibt alles wie
+        # gehabt - die Zweige zeichnen sie mit ihren eigenen Versaetzen.
+        if dt < 0 and p.get('small'):
+            draw_small(p, g_out, tdx, tdy, x_sc, x_dv)
         if p['tpl'] == 'cascade' and dt >= 0:
             n = len(p['letters'])
             # v82: Wipe mit ease_out - startet schnell, landet weich. Ein
@@ -12824,7 +12892,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 l0, l1 = p['letters'][k_full]
                 vis_px = (l0 + (l1 - l0) * frac) + 40
             arr_c, adx, ady, asc, aop = anim_apply(p, p['arr'], aud, dt)
-            ady -= (arr_c.shape[0] - p['arr'].shape[0]) / 2
+            # v230g: kein Abzug der halben Hoehenzunahme (gemessen)
             paste(comp, arr_c,
                   p['cx'] + tdx + adx - (0 if vis_px is None
                                          else (p['arr'].shape[1] - vis_px) / 2),
@@ -13014,7 +13082,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                     arr_t3, adx_g, dy_f, aop_g = p['arr'], 0.0, 0.0, 1.0
                 else:
                     arr_t3, adx_g, dy_f, asc_g, aop_g = anim_apply(p, p['arr'], aud, dt)
-                    dy_f -= (arr_t3.shape[0] - p['arr'].shape[0]) / 2
+                    # v230g: kein Abzug der halben Hoehenzunahme (gemessen)
                 g_op = g_opac
                 # "Aus dem Wasser": Glas-Text steigt aus der Flaeche auf -
                 # erst tief und verschwommen wie unter der Oberflaeche, dann klar
@@ -13092,7 +13160,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                     grain_seed=_gs)
                     else:
                         arr_s, adx_s, dy_s, asc_s, aop_s = anim_apply(p, p['arr'], aud, dt)
-                        dy_s -= (arr_s.shape[0] - p['arr'].shape[0]) / 2
+                        # v230g: kein Abzug der halben Hoehenzunahme (gemessen)
                         paste_scene(comp, arr_s, p.get('cx', W / 2) + sdx + adx_s,
                                     p['cy'] + sdy + dy_s + (1 - e) * H * 0.03,
                                     W, H, scale=(0.97 + 0.03 * e) * live * asc_s,
@@ -13131,7 +13199,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             if fill_t > 0:
                 pop = 1.0 + 0.05 * math.sin(min(fill_t, 1) * math.pi)
                 arr_o, adx, ady, asc, aop = anim_apply(p, p['f_arr'], aud, dt)
-                ady -= (arr_o.shape[0] - p['f_arr'].shape[0]) / 2
+                # v230g: kein Abzug der halben Hoehenzunahme (gemessen)
                 paste(comp, arr_o, p['cx'] + tdx + adx,
                       p['cy'] + tdy + ady + x_dv * p['f_arr'].shape[0], W, H,
                       scale=pop * asc * x_sc, opacity=fill_t * g_out * aop)
@@ -13877,8 +13945,26 @@ def main():
                 _e['user_pick'] = True
             if _b.get('anim'):
                 _e['anim'] = _b['anim']
-            if _b.get('text'):
-                _e['txt'] = _b['text']
+            # v230g DAS WAR DIE URSACHE DES ANGESCHNITTENEN TEXTS.
+            # Der Export schreibt in JEDEN Block das Feld 'text' - den
+            # automatisch erzeugten Blockwortlaut, damit der Editor etwas
+            # anzeigen kann. Hier wurde er als NUTZER-TEXTUEBERSCHREIBUNG
+            # gelesen, obwohl niemand etwas geaendert hatte: aus dem EINEN
+            # Schluesselwort wurde die ganze Zeile, und die passt naturgemaess
+            # nicht in die Kartenbreite. Am Bild gemessen (540 px breit):
+            # Karte 'CAPTIONS' 0.110..0.829 W wird nach EINEM Analyse-Lauf zu
+            # 'WIE WIR CAPTIONS AUF' bei -0.052..0.987 W, also beidseitig
+            # angeschnitten. Genau deshalb liess sich der Anschnitt mit einem
+            # nachgebauten Transkript NIE ausloesen: er braucht die
+            # Sidecar-Datei, die erst der erste Lauf schreibt.
+            # Uebernommen wird der Text nur noch, wenn er sich vom
+            # Automatik-Wortlaut UNTERSCHEIDET - dann hat ihn wirklich jemand
+            # geaendert.
+            _btxt = _b.get('text')
+            if _btxt and _btxt.strip():
+                _auto = ' '.join(clean(words[j].get('word', '')) for j in _g)
+                if _norm_txt(_btxt) != _norm_txt(_auto):
+                    _e['txt'] = _btxt
             fx_map[_ki] = _e
         if _b_moment:
             print(f"Block editor: {_b_moment} block(s) promoted to a moment")
