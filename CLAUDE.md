@@ -832,6 +832,37 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   `admin.html`). Und ein `try/catch` um einen Renderer muss loggen: ein
   leeres Banner sieht sonst aus wie "nichts vorhanden".
 
+## Sicherheit: Lehren aus Audit-Runde 2 (v230d-sec)
+- **Ein mehrstufiger Vorgang wird an JEDER Stufe geprüft, und die
+  Berechtigung gehört an den VORGANG, nicht an den einzelnen Request.** Der
+  resumable Upload sind drei Anfragen; geprüft wurde nur die erste, und der
+  Kunde kam aus dem Cookie der gerade laufenden. Wer beim Abschluss das
+  Cookie wegließ, bekam einen Job ohne Eigentümer — und damit **kein
+  Wasserzeichen, keine Abbuchung, keinen Flut-Deckel**, weil alle drei an
+  `user_id` hängen. Wo eine Kette aus mehreren Aufrufen besteht, gehört der
+  Eigentümer in den Sitzungszustand.
+- **Ein Riegel, den nur die halbe Nachbarschaft hat, ist keiner** — dreimal
+  in dieser Runde: die Code-Bremse saß an einem von sieben `check_auth`-
+  Aufrufern, `/api/resend_verification` war der einzige Mail-Endpunkt ohne
+  Limit, `/admin/codes` benutzte noch den `str`-Vergleich, den v203-sec in
+  `_admin_ok` längst durch Bytes ersetzt hatte. Wer einen Riegel baut,
+  sucht ALLE Aufrufer der geschützten Funktion ab und hängt ihn möglichst
+  in die Funktion selbst.
+- **Ein Protokoll, das ein Fremder füllen kann und niemand aufräumt, ist
+  ein Angriff.** Ein anonymer 500er schrieb einen vollen Traceback in
+  `alerts` — 452 KB je 100 Aufrufe, in derselben Datei wie Konten und
+  Guthaben. Jede Log-Tabelle braucht einen Wiederholungs- und einen
+  Mengendeckel.
+- **Gleichheit von E-Mail-Adressen ist nicht Groß-/Kleinschreibung.**
+  Plus-Tags und (bei Gmail) Punkte bezeichnen dasselbe Postfach. Für
+  Missbrauchs-Sperren normalisieren — für die Anmelde-Identität NICHT,
+  sonst sperrt man bestehende Kunden aus.
+- **Der Wirksamkeits-Nachweis hat hier einen wirkungslosen Fix gefangen:**
+  `(_current_user(request) or {}).get('id')` wirft einen AttributeError
+  (`sqlite3.Row` hat kein `.get()`, v96p-Falle). Alle Quelltext-Tests waren
+  grün, im echten Lauf ging der Angriff weiter durch. Sicherheits-Riegel
+  gehören per echtem Angriff getestet, nicht per Textsuche.
+
 ## Sicherheit: Lehren aus dem zweiten Audit (v230c-sec)
 Sieben bestätigte Wege, alle aus derselben Familie: **Sabotage und Kosten,
 nicht Diebstahl.** Wer hier etwas ergänzt, prüft zuerst diese vier Fragen.
@@ -1158,7 +1189,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1762/1762 grün (Stand v230c)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
+Gesamt **1777/1777 grün (Stand v230d)** + Renders 7/1/5/2 + GUI. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
 Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
 Test-DB, Quelltext-Garantien).

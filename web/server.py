@@ -869,9 +869,33 @@ def _ref_salt():
         return 'dve-static-ref-salt'          # Notnagel: immerhin konsistent im Prozess
 
 
+def _email_normal(email):
+    """v230d-sec: EIN POSTFACH, EIN GRATIS-GUTHABEN.
+    Alle Sperren gegen Mehrfach-Kassieren (credit_claims, referral_claims)
+    haengen am Hash der eingegebenen Adresse - und die wurde nur
+    kleingeschrieben. Bei Gmail landen ismet+1@gmail.com, ismet+2@gmail.com
+    und is.met@gmail.com im SELBEN Postfach, ergaben aber drei verschiedene
+    Hashes: Willkommens- und Werbe-Guthaben liessen sich beliebig oft
+    einsammeln, jede Bestaetigungsmail kam ja real an.
+    Normalisiert wird NUR fuer diesen Vergleich - die Anmelde-Identitaet
+    bleibt die Adresse, die der Kunde eingegeben hat (sonst koennte sich
+    ein bestehendes Konto ploetzlich nicht mehr anmelden).
+    Punkte werden nur bei Anbietern entfernt, die sie nachweislich
+    ignorieren; ein Plus-Tag ignorieren praktisch alle."""
+    e = str(email or '').strip().lower()
+    if '@' not in e:
+        return e
+    lokal, _, domain = e.partition('@')
+    lokal = lokal.split('+', 1)[0]
+    if domain in ('gmail.com', 'googlemail.com'):
+        lokal = lokal.replace('.', '')
+        domain = 'gmail.com'
+    return f'{lokal}@{domain}' if lokal else e
+
+
 def _email_hash(email):
     import hashlib
-    return hashlib.sha256((_ref_salt() + ':' + str(email or '').strip().lower())
+    return hashlib.sha256((_ref_salt() + ':' + _email_normal(email))
                           .encode('utf-8')).hexdigest()
 
 
@@ -1630,6 +1654,16 @@ def _current_user(request):
     return _session_user(request.cookies.get('dve_session'))
 
 
+def _sitzungs_uid(request):
+    """Konto-Nummer der aktuellen Sitzung oder None.
+    Eigene Funktion, weil _current_user eine sqlite3.Row liefert - die hat
+    KEIN .get(), und `(_current_user(r) or {}).get('id')` wirft deshalb einen
+    AttributeError statt None zu liefern (dieselbe Falle wie bei _owner_ok,
+    v96p; gefunden hat sie ein echter Durchlauf, nicht das Lesen)."""
+    u = _current_user(request)
+    return u['id'] if u else None
+
+
 def _require_user(request):
     """FastAPI-Dependency-Style: wirft 401 wenn kein User."""
     u = _current_user(request)
@@ -2020,7 +2054,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230c'
+DVE_VERSION = 'v230d'
 
 
 def _build_datei():
@@ -2763,6 +2797,20 @@ def check_auth(code, request):
         u = _current_user(request)
         if u:
             return True, ''
+    # v230d-sec DIE BREMSE GEHOERT HIERHIN, NICHT AN EIN GATE.
+    # v203-sec hat richtig erkannt, dass ein Alt-Code NAME-1234 nur 10.000
+    # Moeglichkeiten hat und eine vollwertige zweite Identitaet ist - und die
+    # Bremse an genau EINEN Endpunkt gehaengt (/api/pruefe-code). check_auth
+    # hat sieben Aufrufer; ueber POST /api/templates liefen 4712 Rateversuche
+    # ohne ein einziges 429 durch und der Treffer wurde mit 200 gemeldet.
+    # Derselbe Fehlertyp wie v159/v170/v176: Riegel am falschen Gate.
+    # Der Zaehler laeuft nur, wenn ueberhaupt ein Code geschickt wurde -
+    # ein anonymer Aufruf ohne Code ist kein Rateversuch.
+    if request is not None and (code or '').strip():
+        if not _rate_limit_ok(_client_ip(request), window_sec=900,
+                              max_attempts=10, bucket='code'):
+            return False, ('Too many attempts. Please try again in a few '
+                           'minutes.')
     return check_code(code)
 
 
@@ -3700,15 +3748,45 @@ if ALERT_LEVEL not in ('all', 'important', 'off'):
     ALERT_LEVEL = 'important'
 
 
+ALERT_TAGE = int(os.environ.get('DVE_ALERT_DAYS', '90'))
+ALERT_MAX = int(os.environ.get('DVE_ALERT_MAX', '5000'))
+_ALERT_LETZT = {}          # Schluessel -> letzter Schreibzeitpunkt
+
+
 def _alert_log(key, subject, body, gemailt=False):
     """v147: Stoerung in die alerts-Tabelle schreiben. Scheitert leise - eine
     kaputte Meldung darf nie den Betrieb reissen."""
+    # v230d-sec ZWEI DECKEL. Die Tabelle wurde NIRGENDS aufgeraeumt, und ein
+    # anonymer Aufruf konnte einen 500er ausloesen - gemessen 452 KB je 100
+    # Anfragen in genau der Datei, in der auch Konten und Guthaben liegen und
+    # die per Mail gesichert wird. Zwei Riegel: (1) derselbe Schluessel
+    # hoechstens alle 5 Minuten (ein Fehler, der 1000-mal auftritt, ist
+    # EIN Befund - die Wiederholungen sagen nichts Neues), (2) alte Zeilen
+    # fliegen raus. Ein Alarmprotokoll, das ueberlaufen kann, verdeckt genau
+    # die Stoerung, wegen der es angelegt wurde.
+    _k = str(key)[:120]
+    _now = time.time()
+    _letzt = _ALERT_LETZT.get(_k, 0)
+    if _now - _letzt < 300:
+        return
+    _ALERT_LETZT[_k] = _now
+    if len(_ALERT_LETZT) > 500:                     # Speicher-Deckel
+        for _alt in sorted(_ALERT_LETZT, key=_ALERT_LETZT.get)[:200]:
+            _ALERT_LETZT.pop(_alt, None)
     try:
         con = _db()
         con.execute("INSERT INTO alerts (schluessel, betreff, text, gemailt, "
                     "gelesen, created_at) VALUES (?,?,?,?,0,?)",
-                    (str(key)[:120], str(subject)[:200], str(body)[:4000],
-                     1 if gemailt else 0, int(time.time())))
+                    (_k, str(subject)[:200], str(body)[:4000],
+                     1 if gemailt else 0, int(_now)))
+        con.execute("DELETE FROM alerts WHERE created_at < ? AND gelesen = 1",
+                    (int(_now) - ALERT_TAGE * 86400,))
+        # Harte Obergrenze, unabhaengig vom Alter: was aelter ist als die
+        # letzten ALERT_MAX Zeilen, ist ohnehin nicht mehr die Stoerung von
+        # heute.
+        con.execute("DELETE FROM alerts WHERE id NOT IN "
+                    "(SELECT id FROM alerts ORDER BY id DESC LIMIT ?)",
+                    (ALERT_MAX,))
         con.commit()
         con.close()
     except Exception as e:
@@ -5598,6 +5676,19 @@ def api_resend_verification(request: Request):
     u = _require_user(request)
     if u['verified']:
         return {'ok': True, 'msg': 'Already verified.'}
+    # v230d-sec: der einzige mailversendende Kunden-Endpunkt OHNE Bremse
+    # (forgot_password 5/h, support 10/h, ticket-reply 20/h - dieser nichts).
+    # Ein einziges unbestaetigtes Konto konnte damit das Sende-Kontingent des
+    # Betreibers leerlaufen lassen; danach bekommt KEIN echter Kunde mehr eine
+    # Passwort-Reset- oder Kaufbeleg-Mail. Und _send_mail blockiert bis zu
+    # 20 s je Aufruf in einem Thread, den sich alle Kunden-Endpunkte teilen.
+    # Zwei Riegel: pro Konto (der Angreifer hat immer eins) und pro IP.
+    if not _rate_limit_ok(str(u['id']), window_sec=3600, max_attempts=5,
+                          bucket='verifymail') \
+            or not _rate_limit_ok(_client_ip(request), window_sec=3600,
+                                  max_attempts=10, bucket='verifymail-ip'):
+        raise HTTPException(429, 'Verification email already sent. Please check '
+                                 'your inbox (and spam) and try again later.')
     ok = _send_verify_mail(u['id'], u['email'], u['name'] or '')
     if not ok:
         raise HTTPException(500, 'Could not send the email. Try again later.')
@@ -6685,9 +6776,22 @@ async def upload_init(request: Request, filename: str = Form(...),
     os.makedirs(d, exist_ok=True)
     src = os.path.join(d, 'quelle' + ext)
     open(src, 'wb').close()
+    # v230d-sec DIE SITZUNG MERKT SICH, WEM SIE GEHOERT.
+    # Der resumable Upload sind drei Anfragen (init/chunk/finish), und geprueft
+    # wurde nur die erste. `_finalize_upload` bestimmte den Kunden aus dem
+    # Cookie der GERADE laufenden Anfrage - wer die Abschluss-Anfrage ohne
+    # Cookie schickte, bekam einen HERRENLOSEN Job: nichts abgebucht, kein
+    # Wasserzeichen (weder der Demo- noch der Free-Zweig greift ohne user_id),
+    # kein Flut-Deckel, und abholbar blieb er trotzdem, weil `_job_owner_ok`
+    # einen Job ohne Eigentuemer immer durchlaesst. Das komplette Bezahlprodukt
+    # war damit gratis und unbegrenzt. Der Eigentuemer steht jetzt an der
+    # SITZUNG, nicht am einzelnen Request.
     UPLOADS[up] = {'jid': jid, 'dir': d, 'src': src, 'received': 0,
                    'size': int(size or 0), 'look': look, 'code': code,
                    'mode': mode, 'overrides': overrides, 'filename': filename,
+                   # Achtung: _current_user liefert eine sqlite3.Row - die hat
+                   # KEIN .get() (dieselbe Falle wie bei _owner_ok, v96p).
+                   'owner': _sitzungs_uid(request) if mode != 'demo' else None,
                    'ts': time.time()}
     return {'upload_id': up, 'received': 0}
 
@@ -6757,6 +6861,14 @@ async def upload_finish(up: str, request: Request):
     if not os.path.exists(s['src']) or os.path.getsize(s['src']) == 0:
         shutil.rmtree(s['dir'], ignore_errors=True)
         raise HTTPException(400, 'Upload incomplete - please try again.')
+    # v230d-sec: derselbe Kunde muss abschliessen, der begonnen hat. Ohne das
+    # liess sich der Job durch Weglassen des Cookies herrenlos machen (siehe
+    # upload_init). Ein Wechsel des Kontos mitten im Upload ist kein Szenario,
+    # das es zu unterstuetzen gaebe.
+    if s.get('owner') != _sitzungs_uid(request):
+        shutil.rmtree(s['dir'], ignore_errors=True)
+        raise HTTPException(403, 'Session changed during upload - '
+                                 'please sign in and upload again.')
     return await _finalize_upload(request, s['jid'], s['dir'], s['src'],
                                   s['filename'], s['look'], s['code'], s['mode'],
                                   s['overrides'])
@@ -8138,10 +8250,16 @@ def admin_codes(request: Request):
     (fehlt DVE_ADMIN -> Endpoint tot), (2) per Header X-Admin-Key statt
     Query-Parameter (landet sonst in Access-Logs/History/Referer),
     (3) timing-safe verglichen."""
-    key = os.environ.get('DVE_ADMIN', '').strip()
-    given = request.headers.get('x-admin-key', '')
-    if not key or not hmac.compare_digest(given, key):
-        raise HTTPException(403, 'Access denied.')
+    # v230d-sec: DIESELBE PRUEFUNG WIE UEBERALL. Hier stand noch der alte
+    # str-Vergleich - und `hmac.compare_digest` auf Strings wirft bei einem
+    # Header mit Umlaut einen TypeError. Ergebnis: ein anonymer Aufruf mit
+    # einem Nicht-ASCII-Zeichen im Schluessel erzeugte einen 500er, und seit
+    # v197 schreibt jeder 500er eine Zeile mit vollem Traceback in die
+    # alerts-Tabelle derselben Datenbank, in der die Konten liegen (gemessen
+    # 452 KB je 100 Aufrufe, ohne Anmeldung, ohne Bremse). v203-sec hat genau
+    # das in `_admin_ok` behoben - aber nur dort. Ein Riegel, den nur die
+    # halbe Nachbarschaft hat, ist keiner.
+    _require_admin(request)
     return load_codes()
 
 

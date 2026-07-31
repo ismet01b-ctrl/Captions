@@ -5820,6 +5820,131 @@ def _scenario_security(tmp):
           'docker volume inspect dve-data' in
           open(os.path.join(HERE, 'restore.sh'), encoding='utf-8').read())
 
+    # ---- v230d-sec: Runde 2 des Audits ----
+    # 1) KRITISCH: der resumable Upload sind DREI Anfragen, geprueft wurde nur
+    #    die erste. Wer die Abschluss-Anfrage ohne Cookie schickte, bekam einen
+    #    HERRENLOSEN Job: nichts abgebucht, kein Wasserzeichen (weder der
+    #    Demo- noch der Free-Zweig greift ohne user_id), kein Flut-Deckel -
+    #    und abholbar blieb er, weil _job_owner_ok einen Job ohne Eigentuemer
+    #    durchlaesst. Das ganze Bezahlprodukt war gratis.
+    check('v230d-sec: die Upload-Sitzung merkt sich ihren Eigentuemer',
+          "'owner': _sitzungs_uid(request) if mode != 'demo' else None"
+          in _ssrc_sec
+          and "if s.get('owner') != _sitzungs_uid(request):" in _ssrc_sec)
+    # 2) Die Bremse gegen das Code-Raten sass an EINEM Endpunkt, check_auth
+    #    hat sieben Aufrufer. Sie gehoert in check_auth selbst.
+    _ca = _ssrc_sec[_ssrc_sec.index('def check_auth('):]
+    _ca = _ca[:_ca.index('\ndef ', 5)]
+    check('v230d-sec: Code-Raten wird in check_auth gebremst, nicht am Gate',
+          "bucket='code'" in _ca and '_rate_limit_ok' in _ca)
+    check('v230d-sec: ein Aufruf OHNE Code ist kein Rateversuch',
+          "if request is not None and (code or '').strip():" in _ca)
+    # 3) Der einzige mailversendende Kunden-Endpunkt ohne Bremse.
+    _rv = _ssrc_sec[_ssrc_sec.index('def api_resend_verification('):]
+    _rv = _rv[:_rv.index('\n# ---')]
+    check('v230d-sec: Bestaetigungsmail hat eine Bremse (Konto UND IP)',
+          "bucket='verifymail'" in _rv and "bucket='verifymail-ip'" in _rv)
+    # 4) Ein Postfach, ein Gratis-Guthaben. Plus-Tags und Gmail-Punkte ergaben
+    #    verschiedene Hashes - Willkommens- und Werbe-Guthaben beliebig oft.
+    check('v230d-sec: Plus-Tag zaehlt als dasselbe Postfach',
+          SV._email_hash('a+1@gmail.com') == SV._email_hash('a@gmail.com'))
+    check('v230d-sec: Gmail-Punkte zaehlen als dasselbe Postfach',
+          SV._email_hash('is.met@googlemail.com') == SV._email_hash('ismet@gmail.com'))
+    check('v230d-sec: verschiedene Postfaecher bleiben verschieden',
+          SV._email_hash('a@gmail.com') != SV._email_hash('b@gmail.com')
+          and SV._email_hash('a@gmail.com') != SV._email_hash('a@web.de'))
+    check('v230d-sec: Punkte werden NUR bei Gmail entfernt',
+          SV._email_normal('a.b@web.de') == 'a.b@web.de'
+          and SV._email_normal('a+x@web.de') == 'a@web.de')
+    # 5) /admin/codes verglich noch mit str -> ein Header mit Umlaut warf einen
+    #    TypeError, und jeder 500er schreibt seit v197 eine Zeile mit vollem
+    #    Traceback in die alerts-Tabelle. Anonym, ohne Bremse, nie aufgeraeumt.
+    _ac = _ssrc_sec[_ssrc_sec.index("@app.get('/admin/codes')"):]
+    _ac = _ac[:_ac.index('\n# ====')]
+    check('v230d-sec: /admin/codes nutzt denselben Riegel wie alle anderen',
+          '_require_admin(request)' in _ac
+          and 'hmac.compare_digest(given, key)' not in _ac)
+    check('v230d-sec: Alarm-Tabelle hat Wiederholungs- und Mengendeckel',
+          '_ALERT_LETZT' in _ssrc_sec and 'ALERT_MAX' in _ssrc_sec
+          and 'DELETE FROM alerts WHERE id NOT IN' in _ssrc_sec)
+    # Beweis statt Quelltext-Suche: derselbe Schluessel darf nicht zweimal
+    # hintereinander eine Zeile schreiben.
+    _vor = SV._db().execute("SELECT COUNT(*) c FROM alerts").fetchone()['c']
+    for _i in range(20):
+        SV._alert_log('v230d-flut', 'Test', 'x')
+    _nach = SV._db().execute("SELECT COUNT(*) c FROM alerts").fetchone()['c']
+    check('v230d-sec: 20 gleiche Stoerungen ergeben EINE Zeile',
+          _nach - _vor == 1, f'{_nach - _vor} Zeilen')
+
+    # DER EIGENTLICHE BEWEIS: der Angriff wird gegen den ECHTEN Pfad gefahren.
+    # Eine Quelltext-Suche haette hier nichts bewiesen - der erste Entwurf des
+    # Riegels warf im echten Lauf einen AttributeError ('sqlite3.Row' hat kein
+    # .get()), war also wirkungslos, und alle Quelltext-Tests waren gruen.
+    from fastapi.testclient import TestClient as _TC230
+    _c230 = _TC230(SV.app, base_url='https://test')      # secure-Cookie -> https
+    _m230 = f'up{int(_t.time())}@test.invalid'
+    _c230.post('/api/register', data={'email': _m230, 'password': 'passwort123',
+                                      'name': 'Uploadtest'})
+    _c230.post('/api/login', data={'email': _m230, 'password': 'passwort123'})
+    _u230 = SV._db().execute("SELECT id FROM users WHERE email = ?",
+                             (_m230,)).fetchone()['id']
+    with SV._db() as _cn:
+        _cn.execute("UPDATE users SET verified = 1, balance_sec = 600 "
+                    "WHERE id = ?", (_u230,))
+    # Echtes Mini-Video: der Kontroll-Lauf muss durch ffprobe kommen.
+    _clip230 = os.path.join(tmp, 'up230.mp4')
+    run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi',
+         '-i', 'color=c=black:s=540x960:d=3:r=25', '-c:v', 'libx264',
+         '-pix_fmt', 'yuv420p', _clip230])
+    _daten230 = open(_clip230, 'rb').read()
+    _qp230, SV.q_put = SV.q_put, lambda *a, **k: None     # nichts wirklich rendern
+
+    def _upload230(cookie_am_ende):
+        _r = _c230.post('/api/upload/init',
+                        data={'filename': 'a.mp4', 'size': len(_daten230),
+                              'look': 'creator', 'mode': 'full'})
+        if _r.status_code != 200:
+            return _r
+        _up = _r.json()['upload_id']
+        _c230.post(f"/api/upload/chunk/{_up}?offset=0", content=_daten230)
+        _kek = dict(_c230.cookies)
+        if not cookie_am_ende:
+            _c230.cookies.clear()
+        _r = _c230.post(f'/api/upload/finish/{_up}')
+        for _k, _v in _kek.items():
+            _c230.cookies.set(_k, _v)
+        return _r
+
+    _r230 = _upload230(False)
+    _herrenlos = [k for k, v in SV.JOBS.items()
+                  if v.get('user_id') is None and not v.get('demo')]
+    check('v230d-sec: Upload-Abschluss ohne Anmeldung wird abgewiesen',
+          _r230.status_code == 403, f'{_r230.status_code} {_r230.text[:90]}')
+    check('v230d-sec: dabei entsteht KEIN herrenloser Job',
+          not _herrenlos, str(_herrenlos[:3]))
+    # Gegenprobe: der normale Weg muss weiter funktionieren UND abbuchen -
+    # sonst haette man den Angriff nur durch Kaputtmachen "geloest".
+    _r230b = _upload230(True)
+    _bal230 = SV._db().execute("SELECT balance_sec b FROM users WHERE id = ?",
+                               (_u230,)).fetchone()['b']
+    check('v230d-sec: der normale Upload laeuft weiter und bucht ab',
+          _r230b.status_code == 200 and _bal230 == 540,
+          f'{_r230b.status_code}, Guthaben {_bal230}')
+    # Code-Raten ueber einen Endpunkt, der NICHT /api/pruefe-code ist.
+    _c230.cookies.clear()
+    _alt230 = SV.load_codes()
+    SV.save_codes({'MAX-4711': {'aktiv': True, 'limit': 5, 'name': 'Max'}})
+    _folge230 = []
+    for _i in range(24):
+        _rr = _c230.post('/api/templates', data={'name': 'x', 'settings': '{}',
+                                                 'code': f'MAX-{1000 + _i}'})
+        _folge230.append('Too many' in _rr.text)
+    SV.save_codes(_alt230)
+    SV.q_put = _qp230
+    check('v230d-sec: Code-Raten wird auch abseits von /api/pruefe-code gebremst',
+          sum(_folge230) >= 10,
+          ''.join('9' if x else '4' for x in _folge230))
+
     # v117d: Transkript-Datei-Parser — SRT/VTT/JSON echte Timings, TXT synthetisch, verbatim.
     _srt = ("1\n00:00:00,000 --> 00:00:02,000\nHello there\n\n"
             "2\n00:00:02,000 --> 00:00:04,000\nfully customizable\n")
@@ -6307,9 +6432,16 @@ def _scenario_security(tmp):
           and 'DELETE FROM verify_tokens' in _src
           and 'startswith(pref)' in _src)
     # 12) Admin-Endpoint gehaertet (kein Default, Header, timing-safe)
-    check('Admin: kein Default admin, Header + timing-safe',
+    # v230d-sec: der Test verlangte hier bis eben AUSDRUECKLICH den
+    # str-Vergleich `compare_digest(given, key)` - und genau der wirft bei
+    # einem Header mit Umlaut einen TypeError (500er + Zeile in der
+    # alerts-Tabelle). Ein Test kann eine Luecke als Zusage festschreiben
+    # (v132-Falle). Verlangt wird jetzt der BYTE-Vergleich, und zwar an
+    # jeder Stelle.
+    check('Admin: kein Default admin, Header + timing-safe (ueber Bytes)',
           "os.environ.get('DVE_ADMIN', 'admin')" not in _src
-          and 'hmac.compare_digest(given, key)' in _src
+          and "hmac.compare_digest(given.encode('utf-8', 'ignore')" in _src
+          and 'hmac.compare_digest(given, key)' not in _src
           and "request.headers.get('x-admin-key'" in _src)
     # 13) Security-Header werden auf jeder Antwort gesetzt
     check('Security-Header (CSP/XFO/nosniff) aktiv',

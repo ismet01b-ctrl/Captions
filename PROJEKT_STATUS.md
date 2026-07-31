@@ -3,6 +3,61 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230d-sec RUNDE 2 DES AUDITS: FUENF WEITERE LUECKEN, EINE KRITISCH.**
+  Sechs Pruefer auf noch nicht abgesuchten Flaechen (Anmeldung, Eigentum,
+  Dateipfade, HTML/Panel, Geld, Admin), jeder Befund musste einen
+  Widerlegungs-Versuch ueberstehen. 8 Befunde, 5 haben ueberlebt.
+  1. **KRITISCH - der Chunk-Upload liess sich herrenlos machen.** Der
+     resumable Upload sind DREI Anfragen (init/chunk/finish), geprueft wurde
+     nur die erste; `_finalize_upload` bestimmte den Kunden aus dem Cookie
+     der GERADE laufenden Anfrage. Wer die Abschluss-Anfrage ohne Cookie
+     schickte, bekam einen Job mit `user_id=None`: **nichts abgebucht, kein
+     Wasserzeichen** (weder der Demo- noch der Free-Zweig greift ohne
+     user_id), kein Flut-Deckel - und abholbar blieb er trotzdem, weil
+     `_job_owner_ok` einen Job ohne Eigentuemer immer durchlaesst. Das
+     komplette Bezahlprodukt war damit gratis, unbegrenzt und ohne
+     Wasserzeichen. Der Eigentuemer steht jetzt an der SITZUNG.
+  2. **Die Bremse gegen das Code-Raten sass am falschen Gate.** v203-sec hat
+     richtig erkannt, dass ein Alt-Code NAME-1234 nur 10.000 Moeglichkeiten
+     hat, und die Bremse an genau EINEN Endpunkt gehaengt. `check_auth` hat
+     sieben Aufrufer; ueber `POST /api/templates` liefen 4712 Rateversuche
+     ohne ein einziges 429 und der Treffer wurde mit 200 gemeldet. Die
+     Bremse sitzt jetzt IN `check_auth` (derselbe Fehlertyp wie v159/v170).
+  3. **`/api/resend_verification` war der einzige mailversendende
+     Kunden-Endpunkt ohne Bremse** (forgot_password 5/h, support 10/h,
+     ticket-reply 20/h). Ein unbestaetigtes Konto konnte das Sende-Kontingent
+     leerlaufen lassen - danach bekommt KEIN echter Kunde mehr eine
+     Passwort-Reset- oder Kaufbeleg-Mail. Jetzt 5/h je Konto, 10/h je IP.
+  4. **Gratis-Guthaben war unbegrenzt farmbar.** Alle Sperren haengen am
+     Hash der Adresse, und die wurde nur kleingeschrieben - `a+1@gmail.com`,
+     `a+2@gmail.com` und `a.b@gmail.com` landen im SELBEN Postfach, ergaben
+     aber verschiedene Hashes. `_email_normal` normalisiert jetzt fuer den
+     VERGLEICH (Plus-Tag ueberall, Punkte nur bei Gmail); die
+     Anmelde-Identitaet bleibt unveraendert, sonst koennte sich ein
+     bestehendes Konto ploetzlich nicht mehr anmelden.
+  5. **`/admin/codes` verglich den Schluessel noch mit `str`.**
+     `hmac.compare_digest` auf Strings wirft bei einem Header mit Umlaut
+     einen TypeError - jeder anonyme Aufruf erzeugte einen 500er, und seit
+     v197 schreibt jeder 500er eine Zeile mit vollem Traceback in die
+     alerts-Tabelle derselben Datei, in der Konten und Guthaben liegen
+     (gemessen 452 KB je 100 Aufrufe, nie aufgeraeumt). v203-sec hat genau
+     das in `_admin_ok` behoben - nur dort. Jetzt `_require_admin`, plus
+     zwei Deckel an der Tabelle (derselbe Schluessel hoechstens alle 5 Min,
+     harte Obergrenze `ALERT_MAX`).
+  **Wirksamkeits-Nachweis, und er hat sich gelohnt:** der erste Entwurf des
+  Upload-Riegels war Quelltext-gruen und im echten Lauf WIRKUNGSLOS -
+  `(_current_user(request) or {}).get('id')` wirft einen AttributeError,
+  weil `_current_user` eine `sqlite3.Row` liefert (dieselbe Falle wie v96p).
+  Gefunden hat das erst der echte Angriff gegen die echte App. Der Selftest
+  faehrt ihn jetzt: Angriff -> 403 und kein herrenloser Job, Gegenprobe ->
+  normaler Upload 200 und Guthaben 600 -> 540, Code-Raten -> nach 10
+  Versuchen dicht.
+  **Verworfen (Gegenprobe hat sie umgestossen):** E-Mail-Enumeration ueber
+  die Antwortzeit von forgot_password, `/api/checkout` ohne Rate-Limit,
+  Admin-Schluessel ueber `/admin/codes` durchprobierbar.
+  Regression **1776/1777 logic + 7/1/5/2 Renders** (der eine Fehlschlag ist
+  "GUI startet ohne Fehler" - dieser Container hat fuer python3.11 kein
+  tkinter, das Docker-Image schon).
 - **v230c-sec SIEBEN BESTAETIGTE LUECKEN GESCHLOSSEN (Runde 1 des Audits).**
   Ismets Frage nach der Cyber-Sicherheit. Ein Pruef-Durchlauf mit
   adversarieller Gegenprobe (jeder Befund musste einen Widerlegungs-Versuch
