@@ -13071,6 +13071,52 @@ def _scenario_premium(tmp):
     check('v230m: das Ankerwort weicht auch einer anderen Karte',
           "(q.get('front') or q.get('kw_txt'))" in _rsrc_sec230)
 
+    # (5b2) v230n: DIE STUETZZEILE ZAEHLT ZUR TINTE. Der Riegel gegen den
+    # Anschnitt kannte drei Formen (Karte, Komposition, Fliesstext) - die
+    # Stuetzzeile nicht. Sie lief deshalb aus dem Bild ('THIS ONE STICKS'
+    # ohne das T, Ismets Screenshot). Genau der Fehlertyp, vor dem der
+    # Docstring von ink_box selbst warnt.
+    def _q(w, h):
+        _a = np.zeros((h, w, 4), np.uint8)
+        _a[10:h - 10, 10:w - 10] = 255
+        return _a
+
+    _pn = {'tpl': 'ground', 'kw_i': 0, 'kw_txt': 'ON THE WALL',
+           'cx': _Wg * 0.5, 'cy': _Hg * 0.45, 'arr': _q(300, 120),
+           'start': 0.0, 'end': 2.0,
+           'target': (int(_Wg * 0.5), int(_Hg * 0.45)),
+           'small': [{'i': 0, 'arr': _q(520, 70), 'w': 500, 'cx': 180.0,
+                      'cy': _Hg * 0.38}]}
+    _lr = lambda it: it['cx'] - it['arr'].shape[1] / 2 + 10   # noqa: E731
+    _vor_n = _lr(_pn['small'][0])
+    _kx_vor = _pn['cx']
+    R.fit_into_frame([_pn], _Wg, _Hg)
+    check('v230n: die Stuetzzeile wird in das Bild geholt',
+          _vor_n < 0 and _lr(_pn['small'][0]) >= 0,
+          f'linker Rand {_vor_n:.1f} -> {_lr(_pn["small"][0]):.1f} px')
+    check('v230n: die Karte wandert mit (der Satz bleibt zusammen)',
+          abs((_pn['cx'] - _kx_vor)
+              - (_lr(_pn['small'][0]) - _vor_n)) < 1.0,
+          f'Karte {_kx_vor:.1f} -> {_pn["cx"]:.1f}')
+    # Und beim VERKLEINERN schrumpft sie um die Kartenmitte mit.
+    _pn2 = {'tpl': 'ground', 'kw_i': 0, 'kw_txt': 'X', 'cx': _Wg * 0.5,
+            'cy': _Hg * 0.45, 'arr': _q(200, 100), 'start': 0.0, 'end': 2.0,
+            'target': (int(_Wg * 0.5), int(_Hg * 0.45)),
+            'small': [{'i': 0, 'arr': _q(int(_Wg * 1.6), 70),
+                       'w': _Wg * 1.5, 'cx': _Wg * 0.5, 'cy': _Hg * 0.38}]}
+    R.fit_into_frame([_pn2], _Wg, _Hg)
+    _b2 = _pn2['small'][0]
+    _ink2 = np.where(_b2['arr'][..., 3] > 80)
+    _iw2 = (float(_ink2[1].max()) - float(_ink2[1].min())) if len(_ink2[0]) else 0
+    check('v230n: eine zu breite Stuetzzeile wird verkleinert',
+          _b2['arr'].shape[1] < _Wg * 1.6 and _iw2 <= _Wg,
+          f'Sprite {_b2["arr"].shape[1]} (war {int(_Wg * 1.6)}), '
+          f'Tinte {_iw2:.0f} bei Bild {_Wg}')
+    check('v230n: das Ankerwort weicht der eigenen Stuetzzeile - aber nur,'
+          ' wo sie es ueberdeckt',
+          '_deckt = True' in _rsrc_sec230
+          and "t < float(words[_it['i']]['start']) - 0.07" in _rsrc_sec230)
+
     # (5d) v230m: SCHNITTE OHNE FARBUNTERSCHIED. Das Farb-Histogramm ist auf
     # einem Studio-Set blind - in Ismets Werbespot fand es KEINEN der vier
     # Schnitte (bestes Signal 0.935 gegen die Schwelle 0.55). Der Bildaufbau

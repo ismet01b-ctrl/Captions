@@ -931,6 +931,20 @@ Preset-Werte.
 - Und wieder die v132-Falle: der v230c-Test verlangte ausdruecklich, dass
   eine unbekannte Zahl VERWORFEN wird — er hat den Fehler festgeschrieben.
 
+## Eine Pruefung, die nur EINE Form kennt (v230n)
+`ink_box` misst drei Formen eines Textmoments — Karte, Komposition,
+Fliesstext. Die **Stuetzzeile (`small`) war nicht dabei**, also war sie fuer
+den Anschnitt-Riegel unsichtbar und lief aus dem Bild ('HIS ONE STICKS' ohne
+das T, Ismets Standbild). Genau davor warnt der Docstring dieser Funktion
+selbst — und trotzdem ist die vierte Form dazugekommen, ohne dort eingetragen
+zu werden. Wer eine neue Textform baut, traegt sie in `ink_box`,
+`_verschiebe_plan` UND `_skaliere_plan` ein; sonst misst der Riegel sie nicht,
+oder er verschiebt die Karte und laesst die Zeile stehen.
+Und: **ein Riegel mit `q is not p` uebersieht die eigene Karte.** Das
+Ankerwort wich jedem fremden Block, nur nicht der Stuetzzeile derselben
+Karte. Beim Nachbessern nicht ueberdrehen — die erste Fassung unterdrueckte
+das Ankerwort immer und brach v221; der bestehende Test hat es gefangen.
+
 ## Eine Erkennung mit EINEM Merkmal ist blind — und schweigt (v230m)
 Ismets `ABOVE ME` überlebte den Schnitt und wanderte in der Nahaufnahme nach
 unten. Die Schnitt-Disziplin war NICHT schuld: die Schnitt-Erkennung hatte in
@@ -1338,7 +1352,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1836/1837 (Stand v230m)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1840/1841 (Stand v230n)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

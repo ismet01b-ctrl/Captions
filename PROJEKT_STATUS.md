@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230n DIE STUETZZEILE LIEF AUS DEM BILD UND LAG AUF DEM ORTSWORT.**
+  Ismets Standbild: 'HIS ONE STICKS' (das T fehlt) quer ueber 'WALL'.
+  - **Der Anschnitt-Riegel kannte die Stuetzzeile gar nicht.** `ink_box`
+    misst drei Formen (Karte, Komposition, Fliesstext) - `small` war nicht
+    dabei, also war sie fuer `fit_into_frame` unsichtbar. Genau der
+    Fehlertyp, vor dem der Docstring dieser Funktion selbst warnt.
+    Beweis: linker Rand einer zu weit links stehenden Stuetzzeile
+    -70 px -> +6.5 px, die Karte wandert um denselben Betrag mit.
+    Mitgezogen wird sie jetzt auch beim Verschieben und Verkleinern
+    (Sprite 864 -> 540 px, Tinte 527 bei 540 Bildbreite).
+  - **Das Ankerwort weicht jetzt auch der EIGENEN Stuetzzeile** - der
+    bisherige Riegel verglich nur mit ANDEREN Plaenen (`q is not p`), und
+    die Stuetzzeile gehoert zur selben Karte. Es weicht aber nur dort, wo
+    sie es wirklich ueberdeckt: die erste Fassung unterdrueckte es immer und
+    hat damit v221 gebrochen (das Ortswort liegt vor dem Satz schon da) -
+    der bestehende Test hat den Fehler gefangen.
 - **v230m DREI BEFUNDE AUS ISMETS RENDER (Stempel v230l 737ac4f8).**
   - **`THIS ONE FLOATS` stand zweimal im Bild - mein eigener v230g-Fehler.**
     Der `behind`-Zweig ist der EINZIGE Zeichenweg ohne `dt >= 0`; er malt die

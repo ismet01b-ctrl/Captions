@@ -8377,6 +8377,7 @@ def ink_box(p, W, H):
       * Karte          -> 'arr' (der Look 'outline' legt sein Bild in 'o_arr')
       * Komposition    -> 'tokens' (jedes Wort mit eigenem Versatz 'ox'/'oy')
       * Fliesstext     -> 'front' (Items mit eigenen absoluten Koordinaten)
+      * Stuetzzeile    -> 'small' (v230n, ebenfalls absolute Koordinaten)
     Gemessen wird der deckende Glyphenkoerper, NICHT das Sprite-Rechteck: ein
     Text-Sprite traegt bis zu 180 px durchsichtigen Rand (Glow-Polster). Mit
     dem Rechteck gerechnet meldet jede Pruefung Verstoesse, wo im Bild nichts
@@ -8408,7 +8409,11 @@ def ink_box(p, W, H):
                _tx - _t['arr'].shape[1] / 2.0 + _m[1]]
         ys += [_ty - _t['arr'].shape[0] / 2.0 + _m[2],
                _ty - _t['arr'].shape[0] / 2.0 + _m[3]]
-    for _it in (p.get('front') or []):
+    # v230n DIE STUETZZEILE WAR HIER NICHT DABEI - und lief deshalb aus dem
+    # Bild ('THIS ONE STICKS' begann bei -0.03 W, das T fehlte). Genau der
+    # Fehler, vor dem der Docstring oben warnt: eine Pruefung, die nur eine
+    # der Formen kennt, ist blind fuer die anderen.
+    for _it in (p.get('small') or []) + (p.get('front') or []):
         if _it.get('cx') is None or _it.get('_bleed_aus'):
             continue                       # v152: gewollter Randabfall
         _m = _nz(_it.get('arr'))
@@ -8583,6 +8588,21 @@ def _skaliere_plan(p, s, W, H):
         t['oy'] = float(t.get('oy', 0.0)) * s
         if t.get('sz'):
             t['sz'] = max(int(t['sz'] * s), 8)
+    # v230n: die Stuetzzeile schrumpft um die KARTENMITTE mit. Sie gehoert
+    # zur selben Karte; um ihre eigene Mitte geschrumpft wandert sie relativ
+    # zur Karte und der Satz faellt auseinander.
+    _sm = [it for it in (p.get('small') or []) if it.get('cx') is not None]
+    if _sm:
+        _kx = float(p.get('cx', W / 2.0))
+        _ky = float(p.get('cy', p.get('by', H * 0.398)))
+        for it in _sm:
+            if it.get('arr') is not None:
+                it['arr'] = _skaliere_sprite(it['arr'], s)
+            it['cx'] = _kx + (float(it['cx']) - _kx) * s
+            it['cy'] = _ky + (float(it['cy']) - _ky) * s
+            for k in ('w', 'adv', 'sz'):
+                if it.get(k):
+                    it[k] = it[k] * s
     fr = p.get('front') or []
     if fr:
         # Fliesstext-Items tragen absolute Koordinaten: um die Blockmitte
@@ -8605,7 +8625,10 @@ def _verschiebe_plan(p, dx):
         p['cx'] = float(p['cx']) + dx
     for t in (p.get('tokens') or []):
         t['ox'] = float(t.get('ox', 0.0)) + dx
-    for it in (p.get('front') or []):
+    # v230n: die Stuetzzeile wird MITGEZOGEN. Sie zaehlt jetzt zur gemessenen
+    # Tinte (ink_box) - haenge sie hier nicht mit ein, verschiebt der Riegel
+    # die Karte und laesst die Zeile stehen.
+    for it in (p.get('small') or []) + (p.get('front') or []):
         if it.get('cx') is not None:
             it['cx'] = float(it['cx']) + dx
     if p.get('target') is not None:
@@ -12824,6 +12847,38 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                                             else 0.40))
                for q in plans):
             continue
+        # v230n: und es weicht der EIGENEN Stuetzzeile. Der bisherige Riegel
+        # verglich nur mit ANDEREN Plaenen (`q is not p`) - die Stuetzzeile
+        # gehoert aber zur selben Karte, und genau sie lag auf dem Ankerwort
+        # ('THIS ONE STICKS' quer ueber 'WALL', Ismets Screenshot).
+        # Es weicht nur, wo sie es WIRKLICH ueberdeckt: die Stuetzzeile steht
+        # oft ganz woanders im Bild, und dort ist das Ankerwort richtig
+        # (v221 - das Ortswort liegt vor dem Satz schon da).
+        _ank = p.get('anker_arr')
+        if _ank is not None:
+            _ax0 = float(p.get('cx', W / 2)) - _ank.shape[1] / 2.0
+            _ax1 = _ax0 + _ank.shape[1]
+            _ay0 = float(p.get('cy', H * 0.45)) - _ank.shape[0] / 2.0
+            _ay1 = _ay0 + _ank.shape[0]
+            _deckt = False
+            for _it in (p.get('small') or []):
+                _sa = _it.get('arr')
+                if _sa is None or _it.get('cx') is None:
+                    continue
+                if not (isinstance(_it.get('i'), int)
+                        and 0 <= _it['i'] < len(words)):
+                    continue
+                if t < float(words[_it['i']]['start']) - 0.07:
+                    continue               # dieses Wort steht noch nicht
+                _sx0 = float(_it['cx']) - _sa.shape[1] / 2.0
+                _sy0 = float(_it['cy']) - _sa.shape[0] / 2.0
+                if (min(_ax1, _sx0 + _sa.shape[1]) - max(_ax0, _sx0) > 8
+                        and min(_ay1, _sy0 + _sa.shape[0])
+                        - max(_ay0, _sy0) > 8):
+                    _deckt = True
+                    break
+            if _deckt:
+                continue
         _adt = t - _at0
         # v224d: die Wandmessung MUSS hier auch laufen. Sie stand nur im
         # ground-Zweig, und der greift erst, wenn die Karte im Anzeigefenster
