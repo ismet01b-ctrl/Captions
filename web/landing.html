@@ -173,14 +173,23 @@ nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
   display: flex; align-items: center; justify-content: center; gap: 2px;
   color: #0c0b0c; background: rgba(255,255,255,.92); pointer-events: none;
   box-shadow: 0 6px 22px rgba(0,0,0,.55); }
-/* Der Schieber liegt als unsichtbares Feld ueber dem ganzen Bild: man kann
-   ueberall greifen, nicht nur auf einem 38-px-Knopf. */
+/* v230t DAS ZIEHEN LAEUFT UEBER ZEIGER-EREIGNISSE, NICHT UEBER DEN
+   RANGE-REGLER. Ein `input[type=range]` mit Deckkraft 0 ueber dem Bild sah
+   nach der eleganten Loesung aus, verhaelt sich aber je nach Browser und
+   Eingabeart verschieden: der Griff muss teils exakt getroffen werden, ein
+   Wisch daneben tut nichts (Ismets Befund: "ich kann das Ding in der Mitte
+   nicht ziehen, nur klicken verschiebt"). Pointer-Events sind fuer Maus,
+   Finger und Stift derselbe Weg.
+   Der Regler bleibt fuer die TASTATUR (Pfeiltasten) - aber ohne
+   Zeiger-Ereignisse, damit er nichts mehr abfaengt. */
+.demo { touch-action: pan-y; }        /* senkrecht scrollen bleibt moeglich */
 .demo-range { position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%;
-  margin: 0; opacity: 0; cursor: ew-resize; -webkit-appearance: none; appearance: none;
-  background: transparent; }
-.demo-range::-webkit-slider-thumb { -webkit-appearance: none; width: 44px; height: 100%; }
-.demo-range::-moz-range-thumb { width: 44px; height: 100%; border: 0; background: transparent; }
-.demo-range:focus-visible + .demo-line { outline: 2px solid var(--acc); }
+  margin: 0; opacity: 0; pointer-events: none; -webkit-appearance: none;
+  appearance: none; background: transparent; }
+.demo-range:focus-visible ~ .demo-line { outline: 2px solid var(--acc); }
+.demo.zieht { cursor: ew-resize; }
+.demo.zieht .demo-grip { transform: translate(-50%, -50%) scale(1.08); }
+.demo-grip { transition: transform .12s ease; }
 .demo-side { position: absolute; top: 13px; z-index: 3; pointer-events: none;
   font-family: var(--mono); font-size: 9.5px; letter-spacing: .15em;
   text-transform: uppercase; color: rgba(255,255,255,.82);
@@ -666,8 +675,55 @@ footer .links a:hover { color: var(--ink); }
   const wrap = document.getElementById('demoWrap');
   if (rng && wrap) {
     const setz = () => { wrap.style.setProperty('--split', rng.value + '%'); };
-    rng.addEventListener('input', setz);
+    rng.addEventListener('input', setz);          // Pfeiltasten
     setz();
+    const ausX = (x) => {
+      const r = wrap.getBoundingClientRect();
+      if (!r.width) return;
+      rng.value = Math.max(0, Math.min(100, ((x - r.left) / r.width) * 100));
+      setz();
+    };
+    let zieht = false;
+    wrap.addEventListener('pointerdown', (e) => {
+      const r = wrap.getBoundingClientRect();
+      const linie = r.left + r.width * (parseFloat(rng.value) / 100);
+      // Am FINGER wird nur direkt an der Linie gegriffen - sonst kann man
+      // ueber dem Bild nicht mehr scrollen, und das waere ein schlechter
+      // Tausch fuer einen Schieber.
+      if (e.pointerType === 'touch' && Math.abs(e.clientX - linie) > 44) return;
+      zieht = true;
+      wrap.classList.add('zieht');
+      try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
+      ausX(e.clientX);
+      e.preventDefault();
+    });
+    wrap.addEventListener('pointermove', (e) => {
+      if (!zieht) return;
+      ausX(e.clientX);
+      e.preventDefault();
+    });
+    const schluss = (e) => {
+      if (!zieht) return;
+      zieht = false;
+      wrap.classList.remove('zieht');
+      try { wrap.releasePointerCapture(e.pointerId); } catch (err) {}
+    };
+    wrap.addEventListener('pointerup', schluss);
+    wrap.addEventListener('pointercancel', schluss);
+    // Ein Tipp neben der Linie soll trotzdem springen (Ismets Verhalten von
+    // vorher) - aber nur, wenn wirklich getippt und nicht gewischt wurde.
+    let tippX = null, tippY = null;
+    wrap.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      tippX = e.clientX; tippY = e.clientY;
+    });
+    wrap.addEventListener('pointerup', (e) => {
+      if (e.pointerType !== 'touch' || tippX === null) return;
+      if (Math.abs(e.clientX - tippX) < 8 && Math.abs(e.clientY - tippY) < 8) {
+        ausX(e.clientX);
+      }
+      tippX = tippY = null;
+    });
   }
   if (vor) {
     v.addEventListener('timeupdate', () => {

@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230t DER VERGLEICHS-SCHIEBER LIESS SICH NICHT ZIEHEN** (Ismets Befund:
+  "ich kann das Ding in der Mitte nicht ziehen, nur wenn ich auf das Video
+  klicke, verschiebt sich das").
+  - Ursache: ein `input[type=range]` mit Deckkraft 0 ueber dem Bild sah nach
+    der eleganten Loesung aus, verhaelt sich aber je nach Browser und
+    Eingabeart verschieden - der Griff muss teils exakt getroffen werden, ein
+    Wisch daneben tut nichts. Jetzt laeuft das Ziehen ueber Pointer-Events
+    (`pointerdown` + `setPointerCapture` + `pointermove`): fuer Maus, Finger
+    und Stift derselbe Weg. Der Regler bleibt nur noch fuer die TASTATUR und
+    hat `pointer-events: none`, faengt also nichts mehr ab.
+  - **Am Finger wird nur an der Linie gegriffen** (44 px), sonst frisst der
+    Schieber das Scrollen ueber dem Video - ein schlechter Tausch. Ein TIPP
+    neben der Linie springt trotzdem (das Verhalten von vorher).
+  - Im Browser gemessen, Maus: ziehen 52 -> 12, Klick -> 85, Ton-Knopf geht
+    weiter. Finger: Tipp -> 82, an der Linie ziehen 82 -> 52, senkrechter
+    Wisch weit weg -> unveraendert.
+  - **Mein Testfehler davor:** der v230s-Lauf hat den Schieber nur ueber ein
+    `input`-Ereignis gesetzt - also nie GEZOGEN. Er war gruen, und im Browser
+    ging es nicht. Wer ein Bedienelement prueft, muss es wirklich bedienen.
 - **v230s VORHER/NACHHER IM HERO + der Gratis-Test wird ein Knopf.**
   - **Nur das Ergebnis zu zeigen beweist nichts.** Der Besucher sah den
     fertigen Render, aber nicht, wie nackt das Rohvideo war - und genau darin

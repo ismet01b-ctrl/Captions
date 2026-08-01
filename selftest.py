@@ -3364,6 +3364,28 @@ def _scenario_logic(clip, transcript, tmp):
     # billigste Einstieg als unwichtigstes Element der Seite.
     check('v230s: der Gratis-Test ist ein Knopf, keine Nebenzeile',
           'class="btn-ghost"' in _land and 'class="link-quiet">Try' not in _land)
+
+    # v230t DAS ZIEHEN LAEUFT UEBER ZEIGER-EREIGNISSE. Ein `input[type=range]`
+    # mit Deckkraft 0 ueber dem Bild sah elegant aus, verhaelt sich aber je
+    # nach Browser und Eingabeart anders: der Griff muss teils exakt getroffen
+    # werden (Ismets Befund: "ich kann das Ding in der Mitte nicht ziehen,
+    # nur klicken verschiebt"). Pointer-Events sind fuer Maus, Finger und
+    # Stift derselbe Weg.
+    check('v230t: gezogen wird ueber Zeiger-Ereignisse',
+          "wrap.addEventListener('pointerdown'" in _land
+          and 'setPointerCapture' in _land
+          and "wrap.addEventListener('pointermove'" in _land)
+    check('v230t: der Regler faengt keine Zeiger mehr ab (nur Tastatur)',
+          '.demo-range { position: absolute; inset: 0; z-index: 5;' in _land
+          and 'pointer-events: none; -webkit-appearance: none;' in _land)
+    # Am Finger darf der Schieber das Scrollen nicht auffressen: gegriffen
+    # wird nur an der Linie, sonst bleibt der Wisch beim Blaettern.
+    check('v230t: senkrecht scrollen bleibt am Finger moeglich',
+          'touch-action: pan-y' in _land
+          and "e.pointerType === 'touch' && Math.abs(e.clientX - linie) > 44"
+          in _land)
+    check('v230t: ein Tipp neben der Linie springt trotzdem',
+          "Math.abs(e.clientX - tippX) < 8" in _land)
     # Eine Startseite, die 5 MB nachlaedt, verliert den Besucher vor dem
     # ersten Bild - die Kopie fuer das Web ist deshalb neu kodiert.
     _mb = _os210.path.getsize(_os210.path.join(_adir, 'demo.mp4')) / 1e6

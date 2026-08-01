@@ -1363,7 +1363,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1866/1867 (Stand v230s)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1870/1871 (Stand v230t)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1517,6 +1517,15 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   Fall den Zusatz ganz weglassen. Der Layout-Test muss das MESSEN
   (Rechtecke vergleichen) - ein Test, der nur Groesse und Wiedergabe prueft,
   ist gruen, waehrend der Knopf die Beschriftung verdeckt.
+- **Ziehen gehoert an Pointer-Events, nicht an einen unsichtbaren
+  Range-Regler (v230t).** Ein `input[type=range]` mit Deckkraft 0 ueber einem
+  Bild verhaelt sich je nach Browser und Eingabeart anders - mal muss der
+  Griff exakt getroffen werden, mal springt ein Klick, mal passiert nichts.
+  `pointerdown` + `setPointerCapture` + `pointermove` ist fuer Maus, Finger
+  und Stift derselbe Weg. Am Finger nur an der Linie greifen (sonst frisst
+  das Element das Scrollen) und `touch-action: pan-y` setzen. Und: ein Test,
+  der den Wert per `input`-Ereignis setzt, hat NIE gezogen - er ist gruen,
+  waehrend es im Browser nicht geht.
 - **Ein unsichtbares Bedienfeld frisst die Klicks darunter (v230s).** Der
   Vergleichs-Schieber liegt als transparentes `input[type=range]` ueber dem
   ganzen Bild - damit war der Ton-Knopf nicht mehr bedienbar. Alles, was auf
