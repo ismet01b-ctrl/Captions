@@ -2071,7 +2071,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230z'
+DVE_VERSION = 'v230aa'
 
 
 def _build_datei():
@@ -4832,7 +4832,7 @@ def _db_geaendert():
 _EINMAL = {}
 
 
-def _snapshot_gegenprobe(dest):
+def _snapshot_gegenprobe(dest, soll=None):
     """v230z DIE SICHERUNG PRUEFT SICH SELBST.
 
     Ein Netz, das sich nicht selbst prueft, ist Dekoration: die taegliche
@@ -4859,14 +4859,22 @@ def _snapshot_gegenprobe(dest):
                           'Die Datei liegt da, taugt aber nichts. Bitte im '
                           'Panel unter Betrieb -> System nachsehen.', mail=True)
             return False
-        con = _db()
-        jetzt = {
-            'konten': con.execute('SELECT COUNT(*) c FROM users').fetchone()['c'],
-            'kaeufe': con.execute('SELECT COUNT(*) c FROM purchases').fetchone()['c'],
-        }
-        fehlt = [f"{k}: {zahlen.get(k)} statt {jetzt[k]}"
+        # v230aa VERGLICHEN WIRD MIT DEM STAND BEIM SICHERN, NICHT MIT JETZT.
+        # Ein Snapshot ist ein Zeitpunkt: meldet sich eine Sekunde spaeter
+        # jemand an, hat die laufende Datenbank mehr Konten - das ist normal
+        # und darf kein Alarm sein. Sonst regnet es Fehlalarme, und nach der
+        # dritten Mail schaut niemand mehr hin (die schlimmste Sorte Wachhund).
+        # `soll` sind die Zahlen VOR dem Kopieren; der Snapshot muss sie
+        # mindestens enthalten.
+        if soll is None:
+            con = _db()
+            soll = {
+                'konten': con.execute('SELECT COUNT(*) c FROM users').fetchone()['c'],
+                'kaeufe': con.execute('SELECT COUNT(*) c FROM purchases').fetchone()['c'],
+            }
+        fehlt = [f"{k}: {zahlen.get(k)} statt {soll[k]}"
                  for k in ('konten', 'kaeufe')
-                 if int(zahlen.get(k, -1)) < int(jetzt[k])]
+                 if int(zahlen.get(k, -1)) < int(soll[k])]
         if fehlt:
             _notify_admin('backup_pruef', 'Die Sicherung ist unvollstaendig',
                           f'{os.path.basename(dest)} enthaelt weniger als die '
@@ -4906,7 +4914,17 @@ def _backup_users_db(force=False):
     neu = not os.path.exists(dest)
     if not neu and not force:
         try:
-            if _db_geaendert() <= os.path.getmtime(dest):
+            # v230aa GLEICHSTAND HEISST NICHT "NICHTS PASSIERT".
+            # Die Zeitstempel des Dateisystems sind im Container auf die
+            # Sekunde genau. Wird in DERSELBEN Sekunde gesichert und
+            # geschrieben, sind beide Zeiten gleich - mit `<=` galt das als
+            # "seit dem Snapshot nichts geschrieben", und der Schreibzugriff
+            # fiel bis zum naechsten Tag aus der Sicherung. Lokal (Nanosekunden)
+            # trat der Fall nie ein, im Test-Gate jedes Mal.
+            # Bei Gleichstand wird jetzt AUFGEFRISCHT. Der Preis ist eine
+            # 370-KB-Kopie pro Stunde; eine Sicherung, die einen Schreibzugriff
+            # verschluckt, waere der falsche Tausch.
+            if _db_geaendert() < os.path.getmtime(dest):
                 return                       # seit dem Snapshot nichts geschrieben
         except OSError:
             pass
@@ -4920,6 +4938,15 @@ def _backup_users_db(force=False):
     # Der Fehler war immer da; meine Offsite-Kopie hat den ersten Lauf
     # laenger gemacht und damit das Zeitfenster aufgerissen.
     tmp = f'{dest}.{os.getpid()}.{threading.get_ident()}.tmp'
+    # v230aa: die Zahlen VOR dem Kopieren merken - der Snapshot muss sie
+    # mindestens enthalten. Mit den Zahlen von NACHHER verglichen waere jede
+    # Anmeldung in der Zwischenzeit ein Fehlalarm.
+    try:
+        _c0 = _db()
+        soll = {'konten': _c0.execute('SELECT COUNT(*) c FROM users').fetchone()['c'],
+                'kaeufe': _c0.execute('SELECT COUNT(*) c FROM purchases').fetchone()['c']}
+    except Exception:
+        soll = None
     try:
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -4944,7 +4971,7 @@ def _backup_users_db(force=False):
                 except OSError:
                     pass
         print(f"DB-Backup: {dest}{'' if neu else ' (aufgefrischt)'}")
-        _snapshot_gegenprobe(dest)
+        _snapshot_gegenprobe(dest, soll)
         if neu:
             # v230v: die Kopie ausser Haus zuerst - sie ist die einzige, die
             # einen Plattenschaden ueberlebt. Scheitert sie, ist das ein

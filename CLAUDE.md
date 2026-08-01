@@ -1241,6 +1241,14 @@ die sich wiederholen:
   Stand beim Worker-Start - alles danach fehlte. Ein Deckel, der auf den
   KALENDERTAG schaut statt auf den Inhalt, deckelt den falschen Wert
   (derselbe Fehlertyp wie v194b/c bei den Mails).
+- **Zeitstempel sind im Container auf die SEKUNDE genau (v230aa).** Wer
+  "hat sich seit X etwas geaendert?" mit `<=` beantwortet, verschluckt alles,
+  was in derselben Sekunde passiert ist - im Gate jedes Mal, lokal nie
+  (Nanosekunden). Bei Gleichstand im Zweifel ARBEITEN, nicht ueberspringen.
+- **Eine Gegenprobe vergleicht mit dem Stand VON DAMALS (v230aa).** Der
+  Snapshot gegen die Zahlen von JETZT geprueft meldet Alarm, sobald sich in
+  der Zwischenzeit jemand anmeldet. Ein Wachhund, der grundlos bellt, wird
+  nach drei Mails ignoriert - das ist schlimmer als keiner.
 - **Im WAL-Modus aendert ein Schreibzugriff die HAUPTDATEI nicht (v230y).**
   Ein INSERT landet in `users.db-wal`; `users.db` behaelt ihre Zeit bis zum
   naechsten Checkpoint. Wer "hat sich seit X etwas geaendert?" ueber
@@ -1435,7 +1443,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1913/1914 (Stand v230z)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1916/1917 (Stand v230aa)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

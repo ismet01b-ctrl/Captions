@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230aa GLEICHSTAND HEISST NICHT "NICHTS PASSIERT".** Nach v230y war der
+  Gate-Befund `3 -> 3` statt `3 -> 0`: die leere Sicherung war weg, die
+  Auffrischung griff aber immer noch nicht.
+  - **Die Zeitstempel im Container sind auf die SEKUNDE genau.** Wird in
+    derselben Sekunde gesichert und geschrieben, sind beide Zeiten gleich -
+    mit `<=` galt das als "seit dem Snapshot nichts geschrieben", und der
+    Schreibzugriff fiel bis zum naechsten Tag aus der Sicherung. Lokal
+    (Nanosekunden) trat der Fall nie ein, im Gate jedes Mal.
+  - Bei Gleichstand wird jetzt AUFGEFRISCHT. Preis: eine 370-KB-Kopie pro
+    Stunde. Eine Sicherung, die einen Schreibzugriff verschluckt, waere der
+    falsche Tausch.
+  - **Und die Gegenprobe aus v230z hatte einen Denkfehler:** sie verglich den
+    Snapshot mit dem Stand JETZT. Meldet sich eine Sekunde spaeter jemand an,
+    haette sie "unvollstaendig" gemeldet - Fehlalarm bei jeder Anmeldung, und
+    nach der dritten Mail schaut niemand mehr hin. Verglichen wird jetzt mit
+    den Zahlen VOR dem Kopieren. Gefunden hat das ein bestehender Test
+    (Alarm-Drosselung), nicht ich.
+  - Beweis: `3 -> 4` und `4 -> 5` Konten im Snapshot, Anmeldung nach dem
+    Sichern loest keinen Alarm aus, leere und kaputte Sicherung schon.
 - **v230z DIE SICHERUNG PRUEFT SICH SELBST.** Die Luecke, die den
   WAL-Fehler (v230y) so lange verdeckt hat: NIEMAND hat je den Inhalt einer
   automatischen Sicherung angesehen. Der Pruefknopf im Panel ist Handarbeit;

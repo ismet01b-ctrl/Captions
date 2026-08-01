@@ -8642,11 +8642,41 @@ def _scenario_betrieb(tmp):
           _mdb0 == _mdb1, f'{_mdb0:.3f} -> {_mdb1:.3f}')
     check('v230y: die WAL-Datei zeigt die Aenderung',
           _mall > _mdb0, f'{_mdb0:.3f} -> {_mall:.3f}')
+    # v230aa: ein Schreibzugriff in DERSELBEN Sekunde wie die Sicherung darf
+    # nicht verschluckt werden. Im Container sind die Zeitstempel auf die
+    # Sekunde genau - mit `<=` galt Gleichstand als "nichts passiert", und
+    # der Schreibzugriff fehlte bis zum naechsten Tag in der Sicherung.
+    check('v230aa: bei Gleichstand wird aufgefrischt, nicht uebersprungen',
+          '_db_geaendert() < os.path.getmtime(dest)' in _sv197
+          and '_db_geaendert() <= os.path.getmtime(dest)' not in _sv197)
+    _dz = os.path.join(_SV197.DATA, 'backups')
+    _snapz = sorted(_gl197.glob(os.path.join(_dz, 'users_2*.db')))
+    if _snapz:
+        # Sicherung und Schreibzugriff auf DIESELBE Sekunde stellen.
+        _sek = int(_tm197.time())
+        os.utime(_snapz[-1], (_sek, _sek))
+        _conz = _SV197._db()
+        _conz.execute("INSERT INTO users (email, pw_hash, balance_sec, created_at)"
+                      " VALUES (?,?,?,?)",
+                      (f'gleich{_sek}@test.invalid', 'x', 0, _sek))
+        _conz.commit(); _conz.close()
+        for _suf in ('', '-wal', '-shm'):
+            if os.path.exists(_SV197.USERS_DB + _suf):
+                os.utime(_SV197.USERS_DB + _suf, (_sek, _sek))
+        _vorz = _sq197.connect(_snapz[-1])
+        _n_vor = _vorz.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        _vorz.close()
+        _SV197._backup_users_db()
+        _nachz = _sq197.connect(_snapz[-1])
+        _n_nach = _nachz.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        _nachz.close()
+        check('v230aa: derselbe Zeitstempel verschluckt keinen Schreibzugriff',
+              _n_nach > _n_vor, f'{_n_vor} -> {_n_nach} Konten im Snapshot')
+
     check('v230y: der Frische-Test schaut auf ALLE drei Dateien',
-          '_db_geaendert() <= os.path.getmtime(dest)' in _sv197
+          '_db_geaendert() < os.path.getmtime(dest)' in _sv197
           and "for suf in ('', '-wal', '-shm')" in _sv197
-          and 'os.path.getmtime(USERS_DB) <= os.path.getmtime(dest)'
-          not in _sv197)
+          and 'os.path.getmtime(USERS_DB) <' not in _sv197)
 
     # v230z DIE SICHERUNG PRUEFT SICH SELBST. Ein Netz, das sich nicht selbst
     # prueft, ist Dekoration: die taegliche Sicherung lief jahrelang, meldete
@@ -8659,6 +8689,20 @@ def _scenario_betrieb(tmp):
         _SV197._backup_users_db(force=True)
         check('v230z: eine gute Sicherung loest KEINEN Alarm aus',
               not _alarm230z, str(_alarm230z[:1]))
+        # v230aa: eine Anmeldung NACH dem Sichern ist kein Fehler.
+        _conaa = _SV197._db()
+        _conaa.execute("INSERT INTO users (email, pw_hash, balance_sec, created_at)"
+                       " VALUES (?,?,?,?)",
+                       (f'spaeter{int(_tm197.time())}@test.invalid', 'x', 0,
+                        int(_tm197.time())))
+        _conaa.commit(); _conaa.close()
+        _alarm230z.clear()
+        _snapaa = sorted(_gl197.glob(os.path.join(_SV197.DATA, 'backups',
+                                                  'users_2*.db')))
+        _SV197._snapshot_gegenprobe(_snapaa[-1], {'konten': 0, 'kaeufe': 0})
+        check('v230aa: eine Anmeldung nach dem Sichern ist KEIN Alarm',
+              not _alarm230z, str(_alarm230z[:1]))
+
         # Jetzt eine absichtlich unvollstaendige Sicherung unterschieben.
         _leer230z = os.path.join(_SV197.DATA, 'backups', 'users_leer_test.db')
         _cz = _sq197.connect(_leer230z)
