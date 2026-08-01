@@ -1311,8 +1311,10 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
   eingerichtet und geprueft: Probe hoch, zurueck, entschluesselt, verglichen;
   erste Kopie `users_20260801.db.enc`, 368 KB). Nicht mehr als offen fuehren.
   Wer daran etwas aendert, prueft mit dem Knopf "Verbindung pruefen".
-- OFFEN (Ismet): UptimeRobot auf /api/health,
-  Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
+- **UptimeRobot LAEUFT** (01.08.2026): HTTP-Monitor auf
+  `https://douchko.eu/api/health`, alle 5 Minuten, Mail an Ismet. Nicht mehr
+  als offen fuehren.
+- OFFEN (Ismet): Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Matte-Bleed (v230b) — ein Weichzeichner darf die Person nicht ansaugen
 Ismets "das Auge glitcht" war ein **heller, flimmernder Saum an Haar und
@@ -1686,7 +1688,8 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 - 'above me' greift jetzt, am echten Material noch nicht bestaetigt.
 
 ### Vor dem Launch (Ismets Seite)
-1. UptimeRobot auf /api/health.
+(Nichts mehr offen - Sicherung ausser Haus und Uptime-Waechter sind
+eingerichtet, siehe unten.)
 
 ## Offene echte Punkte
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
