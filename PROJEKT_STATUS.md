@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230w DER DEPLOY BRACH ZU RECHT AB - EIN ALTER WETTLAUF IN DER SICHERUNG.**
+  Das Test-Gate meldete nach v230v: `FAIL v197: der Snapshot wird am selben
+  Tag aufgefrischt (3 -> 0 Konten im Snapshot)`. Es ging also NICHTS live -
+  genau dafuer gibt es das Gate.
+  - **Ursache:** `_backup_users_db` schreibt in eine Zwischendatei und
+    benennt sie dann um. Die hiess fuer ALLE Laeufe gleich (`<dest>.tmp`) -
+    und die Funktion laeuft an zwei Stellen: im Cleanup-Arbeiter
+    (Hintergrund-Thread, startet mit dem Server) und auf Knopfdruck bzw. im
+    Test. Laufen beide gleichzeitig, loescht der eine die halb geschriebene
+    Datei des anderen, und `os.replace` schiebt einen LEEREN Stand ueber den
+    guten Snapshot.
+  - **Der Fehler war immer da.** Meine Offsite-Kopie (v230v) hat den ersten
+    Lauf laenger gemacht und damit das Zeitfenster aufgerissen - lokal blieb
+    er unsichtbar (3 -> 4), im Container fiel er sofort auf.
+  - Jetzt hat jeder Lauf seine eigene Zwischendatei (PID + Thread), und
+    liegengebliebene Bruchstuecke aelter als eine Stunde werden aufgeraeumt.
+  - Beweis: vier Threads sichern gleichzeitig dreimal, danach stehen alle
+    Konten im Snapshot (vorher konnte er leer sein).
+  - **Und wieder ein Test an der SCHREIBWEISE:** `"tmp = dest + '.tmp'"` war
+    woertlich festgenagelt. Er prueft jetzt die Regel - Zwischendatei plus
+    Umbenennen, und die Zwischendatei ist je Lauf eigen.
 - **v230v SICHERUNG AUSSER HAUS (Cloudflare R2) - das groesste Einzelrisiko
   ist zu.** Bis hierher lag die einzige Sicherung auf DERSELBEN Platte wie die
   Datenbank; der Mail-Weg lief nur bei `DVE_ALERTS=all`, also im Normalbetrieb

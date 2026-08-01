@@ -2071,7 +2071,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230v'
+DVE_VERSION = 'v230w'
 
 
 def _build_datei():
@@ -4829,7 +4829,16 @@ def _backup_users_db(force=False):
                 return                       # seit dem Snapshot nichts geschrieben
         except OSError:
             pass
-    tmp = dest + '.tmp'
+    # v230w EIGENE .tmp-DATEI JE LAUF. Bis hierher hiess sie fuer alle
+    # gleich `<dest>.tmp` - und `_backup_users_db` laeuft an ZWEI Stellen:
+    # im Cleanup-Arbeiter (Hintergrund-Thread, startet mit dem Server) und
+    # auf Knopfdruck bzw. im Test. Laufen beide gleichzeitig, loescht der
+    # eine die halb geschriebene Datei des anderen, und `os.replace` schiebt
+    # einen LEEREN Stand ueber den guten Snapshot. Genau das ist im
+    # Test-Gate passiert: 3 Konten in der Datenbank, 0 im Snapshot.
+    # Der Fehler war immer da; meine Offsite-Kopie hat den ersten Lauf
+    # laenger gemacht und damit das Zeitfenster aufgerissen.
+    tmp = f'{dest}.{os.getpid()}.{threading.get_ident()}.tmp'
     try:
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -4843,6 +4852,16 @@ def _backup_users_db(force=False):
                        if f.startswith('users_') and f.endswith('.db'))
         for old in snaps[:-14]:
             os.remove(os.path.join(bdir, old))
+        # Liegengebliebene Bruchstuecke abgebrochener Laeufe (aelter als eine
+        # Stunde) wegraeumen - sonst fuellen sie ueber Monate die Platte.
+        for f in os.listdir(bdir):
+            if f.endswith('.tmp') and f != os.path.basename(tmp):
+                pf = os.path.join(bdir, f)
+                try:
+                    if time.time() - os.path.getmtime(pf) > 3600:
+                        os.remove(pf)
+                except OSError:
+                    pass
         print(f"DB-Backup: {dest}{'' if neu else ' (aufgefrischt)'}")
         if neu:
             # v230v: die Kopie ausser Haus zuerst - sie ist die einzige, die

@@ -8587,8 +8587,36 @@ def _scenario_betrieb(tmp):
           _n197b > _n197a, f'{_n197a} -> {_n197b} Konten im Snapshot')
     check('v197: der Admin-Knopf sichert IMMER (force)',
           '_backup_users_db(force=True)' in _sv197)
+    # v230w: geprueft wird die REGEL (ueber eine Zwischendatei, dann
+    # umbenennen) UND dass die Zwischendatei je Lauf EIGEN ist. Der frueher
+    # feste Name `<dest>.tmp` war ein Wettlauf: der Cleanup-Arbeiter und ein
+    # Knopfdruck schreiben gleichzeitig, einer loescht die halbfertige Datei
+    # des anderen, und os.replace schiebt einen LEEREN Stand darueber.
     check('v197: geschrieben wird ueber .tmp + os.replace',
-          "tmp = dest + '.tmp'" in _sv197 and 'os.replace(tmp, dest)' in _sv197)
+          'os.replace(tmp, dest)' in _sv197
+          and "tmp = f'{dest}.{os.getpid()}.{threading.get_ident()}.tmp'" in _sv197)
+    # DER BEWEIS: zwei Laeufe gleichzeitig duerfen den Snapshot nicht leeren.
+    import threading as _th230w
+    _fehler230w = []
+
+    def _parallel230w():
+        try:
+            for _ in range(3):
+                _SV197._backup_users_db(force=True)
+        except Exception as _e:
+            _fehler230w.append(repr(_e))
+    _thr230w = [_th230w.Thread(target=_parallel230w) for _ in range(4)]
+    for _t230w in _thr230w:
+        _t230w.start()
+    for _t230w in _thr230w:
+        _t230w.join()
+    _snapw = sorted(_gl197.glob(os.path.join(_SV197.DATA, 'backups', 'users_*.db')))
+    _cw = _sq197.connect(_snapw[-1])
+    _nw = _cw.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    _cw.close()
+    check('v230w: gleichzeitige Sicherungen leeren den Snapshot nicht',
+          _nw >= _n197a and not _fehler230w,
+          f'{_nw} Konten im Snapshot, Fehler {_fehler230w[:1]}')
     # v230v: der Mail-Weg ist der RUECKFALL, die Kopie ausser Haus kommt
     # zuerst. Die alte Zusage (nur beim ersten Anlegen) gilt weiter.
     check('v230v: die Kopie ausser Haus laeuft beim ersten Anlegen',

@@ -1212,6 +1212,14 @@ die sich wiederholen:
   Stand beim Worker-Start - alles danach fehlte. Ein Deckel, der auf den
   KALENDERTAG schaut statt auf den Inhalt, deckelt den falschen Wert
   (derselbe Fehlertyp wie v194b/c bei den Mails).
+- **Eine gemeinsame `.tmp`-Datei ist ein Wettlauf (v230w).** `_backup_users_db`
+  laeuft im Cleanup-Arbeiter UND auf Knopfdruck; mit festem Namen loescht der
+  eine Lauf die halbfertige Datei des anderen und `os.replace` schiebt einen
+  LEEREN Stand ueber den guten Snapshot (im Gate gemessen: 3 Konten in der
+  Datenbank, 0 im Snapshot). Zwischendateien gehoeren pro Lauf eindeutig
+  benannt (PID + Thread). Der Fehler war Jahre alt und wurde erst sichtbar,
+  als der erste Lauf laenger dauerte - Wettlaeufe zeigen sich nach einer
+  harmlosen Aenderung woanders.
 - **`print()` ruft `write()` je Argument einzeln.** Ein Log-Tee ohne
   Zeilenpuffer schreibt jedes Argument in eine eigene Zeile.
 - **Die URSACHE gehoert an den ANFANG der Meldung (v208b).** Ein Traceback
@@ -1383,7 +1391,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1900/1901 (Stand v230v)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1901/1902 (Stand v230w)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
