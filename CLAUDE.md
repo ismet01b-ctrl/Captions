@@ -1220,6 +1220,15 @@ die sich wiederholen:
   Stand beim Worker-Start - alles danach fehlte. Ein Deckel, der auf den
   KALENDERTAG schaut statt auf den Inhalt, deckelt den falschen Wert
   (derselbe Fehlertyp wie v194b/c bei den Mails).
+- **Im WAL-Modus aendert ein Schreibzugriff die HAUPTDATEI nicht (v230y).**
+  Ein INSERT landet in `users.db-wal`; `users.db` behaelt ihre Zeit bis zum
+  naechsten Checkpoint. Wer "hat sich seit X etwas geaendert?" ueber
+  `getmtime(users.db)` beantwortet, bekommt NEIN, obwohl Konten dazukamen -
+  die taegliche Sicherung konnte damit still veralten (im Gate gemessen:
+  3 Konten in der Datenbank, 0 im Snapshot), und seit v230v waere dieser
+  leere Stand auch noch ausser Haus gewandert. Immer die NEUESTE von
+  `users.db`, `-wal`, `-shm` nehmen (`_db_geaendert()`). Lokal fiel es nie
+  auf, weil im langen Testlauf zufaellig ein Checkpoint dazwischenlief.
 - **Eine gemeinsame `.tmp`-Datei ist ein Wettlauf (v230w).** `_backup_users_db`
   laeuft im Cleanup-Arbeiter UND auf Knopfdruck; mit festem Namen loescht der
   eine Lauf die halbfertige Datei des anderen und `os.replace` schiebt einen
@@ -1405,7 +1414,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1905/1906 (Stand v230x)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1908/1909 (Stand v230y)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

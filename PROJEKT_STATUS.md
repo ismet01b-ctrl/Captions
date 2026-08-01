@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230y DIE TAEGLICHE SICHERUNG KONNTE STILL VERALTEN (WAL).** Das
+  Test-Gate hielt drei Deploys auf: `FAIL v197: der Snapshot wird am selben
+  Tag aufgefrischt (3 -> 0 Konten im Snapshot)`. Der v230w-Verdacht (Wettlauf
+  um die .tmp-Datei) war NICHT die Ursache - der Fix bleibt trotzdem richtig,
+  aber der Fehler stand woanders.
+  - **Die Datenbank laeuft im WAL-Modus.** Ein INSERT landet in
+    `users.db-wal`; die Datei `users.db` selbst wird dabei GAR NICHT
+    angefasst und behaelt ihre alte Zeit, bis irgendwann ein Checkpoint
+    laeuft. Der Frische-Test (`getmtime(USERS_DB) <= getmtime(dest)`) schaute
+    genau auf diese Datei und entschied "seit dem Snapshot wurde nichts
+    geschrieben" - obwohl Konten dazugekommen waren.
+  - **Folge in der Produktion:** "die Sicherung von heute" konnte den leeren
+    Stand vom Serverstart enthalten. Mit v230v waere genau der auch noch
+    ausser Haus gewandert. Das ist kein Test-Problem, das ist der Ernstfall.
+  - Gemessen wird jetzt die NEUESTE der drei Dateien (`users.db`, `-wal`,
+    `-shm`). Beweis im Test: nach einem INSERT ohne Checkpoint ist die Zeit
+    von `users.db` unveraendert (1785612962.760 -> 1785612962.760), die der
+    WAL-Datei nicht (-> 1785612963.872).
+  - **Warum es lokal nie auffiel:** im langen Testlauf lief zufaellig vorher
+    ein Checkpoint. Derselbe Code, dieselben Daten, anderes Ergebnis - genau
+    die Sorte Fehler, die nur eine ECHTE Umgebung zeigt. Das Gate hat seinen
+    Zweck erfuellt.
 - **v230x PASSWORT DER SICHERUNG NACHSCHLAGEN.** Ismets Frage: "was, wenn ich
   das Passwort vergesse?" Zwei Faelle, und nur einer ist gefaehrlich.
   - **Server lebt:** kein Problem. Das Zurueckspielen im Panel nimmt das

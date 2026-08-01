@@ -8614,6 +8614,40 @@ def _scenario_betrieb(tmp):
     _cw = _sq197.connect(_snapw[-1])
     _nw = _cw.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     _cw.close()
+    # v230y DER SNAPSHOT DARF NICHT STILL VERALTEN.
+    # Die Datenbank laeuft im WAL-Modus: ein INSERT landet in `users.db-wal`,
+    # `users.db` selbst wird GAR NICHT angefasst. Der Frische-Test schaute
+    # genau auf diese Datei und entschied darum "seit dem Snapshot nichts
+    # geschrieben" - der Snapshot blieb stehen. Im Container ist genau das
+    # passiert (3 Konten in der Datenbank, 0 im Snapshot); lokal lief
+    # zufaellig vorher ein Checkpoint, deshalb war es hier nie zu sehen.
+    # Der Test faehrt den Fall NACH: schreiben, ohne einen Checkpoint
+    # auszuloesen, und die Zeitmessung muss die Aenderung trotzdem sehen.
+    import tempfile as _tf230y
+    _d230y = _tf230y.mkdtemp()
+    _p230y = os.path.join(_d230y, 'users.db')
+    _c230y = _sq197.connect(_p230y)
+    _c230y.execute('PRAGMA journal_mode=WAL')
+    _c230y.execute('CREATE TABLE users(id INTEGER PRIMARY KEY, email TEXT)')
+    _c230y.commit()
+    _mdb0 = os.path.getmtime(_p230y)
+    _tm197.sleep(1.1)
+    _c230y.execute("INSERT INTO users(email) VALUES('a@b.c')")
+    _c230y.commit()
+    _mdb1 = os.path.getmtime(_p230y)
+    _mall = max([os.path.getmtime(_p230y + _s) for _s in ('', '-wal', '-shm')
+                 if os.path.exists(_p230y + _s)])
+    _c230y.close()
+    check('v230y: im WAL-Modus aendert ein Schreibzugriff users.db NICHT',
+          _mdb0 == _mdb1, f'{_mdb0:.3f} -> {_mdb1:.3f}')
+    check('v230y: die WAL-Datei zeigt die Aenderung',
+          _mall > _mdb0, f'{_mdb0:.3f} -> {_mall:.3f}')
+    check('v230y: der Frische-Test schaut auf ALLE drei Dateien',
+          '_db_geaendert() <= os.path.getmtime(dest)' in _sv197
+          and "for suf in ('', '-wal', '-shm')" in _sv197
+          and 'os.path.getmtime(USERS_DB) <= os.path.getmtime(dest)'
+          not in _sv197)
+
     check('v230w: gleichzeitige Sicherungen leeren den Snapshot nicht',
           _nw >= _n197a and not _fehler230w,
           f'{_nw} Konten im Snapshot, Fehler {_fehler230w[:1]}')

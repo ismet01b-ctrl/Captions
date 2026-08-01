@@ -2071,7 +2071,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230x'
+DVE_VERSION = 'v230y'
 
 
 def _build_datei():
@@ -4802,6 +4802,30 @@ def _offsite_r2(dest):
     return True
 
 
+def _db_geaendert():
+    """v230y WANN WURDE ZULETZT IN DIE DATENBANK GESCHRIEBEN?
+
+    NICHT `getmtime(USERS_DB)`. Die Datenbank laeuft im WAL-Modus: ein
+    INSERT landet in `users.db-wal`, die Datei `users.db` selbst wird dabei
+    GAR NICHT angefasst und behaelt ihre alte Zeit - bis irgendwann ein
+    Checkpoint laeuft. Der Frische-Test des Snapshots hat genau auf diese
+    Datei geschaut und darum entschieden "seit dem Snapshot wurde nichts
+    geschrieben", obwohl Konten dazugekommen waren.
+    Folge: der taegliche Snapshot konnte STILL veralten - im schlimmsten Fall
+    enthielt "die Sicherung von heute" den leeren Stand vom Serverstart. Im
+    Test-Gate im Container genau so aufgetreten (3 Konten in der Datenbank,
+    0 im Snapshot); lokal lief zufaellig vorher ein Checkpoint, deshalb war
+    es hier nie zu sehen.
+    Gemessen wird deshalb die NEUESTE der drei Dateien."""
+    m = 0.0
+    for suf in ('', '-wal', '-shm'):
+        try:
+            m = max(m, os.path.getmtime(USERS_DB + suf))
+        except OSError:
+            pass
+    return m
+
+
 def _backup_users_db(force=False):
     """v80x: Taeglicher Snapshot der users.db nach DATA/backups.
     14 Stueck rotierend. SQLite-Online-Backup-API - konsistent auch
@@ -4825,7 +4849,7 @@ def _backup_users_db(force=False):
     neu = not os.path.exists(dest)
     if not neu and not force:
         try:
-            if os.path.getmtime(USERS_DB) <= os.path.getmtime(dest):
+            if _db_geaendert() <= os.path.getmtime(dest):
                 return                       # seit dem Snapshot nichts geschrieben
         except OSError:
             pass
