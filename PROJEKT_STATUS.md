@@ -3,6 +3,33 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230m DREI BEFUNDE AUS ISMETS RENDER (Stempel v230l 737ac4f8).**
+  - **`THIS ONE FLOATS` stand zweimal im Bild - mein eigener v230g-Fehler.**
+    Der `behind`-Zweig ist der EINZIGE Zeichenweg ohne `dt >= 0`; er malt die
+    Stuetzzeile schon vor der Karte, und genau deshalb war er in v230g das
+    Vorbild. Der neue Vorlauf VOR der Weiche kam bei ihm also obendrauf -
+    einmal mit Gesichts-Versatz, einmal ohne: dieselbe Zeile doppelt, 58 px
+    rechts und 75 px tiefer. Beweis: Tinte ueber 14 Bilder 72027 -> 46522,
+    Beweisbild alt/neu. Messweg-Lehre: Tinte ist gegen Verschieben
+    unempfindlich - mit Versatz muss genauso viel Tinte im Bild sein wie
+    ohne (31213 gegen 31335), damit braucht der Test keinen Referenzwert.
+  - **Drei Texte gleichzeitig an der Wand** (Karte `BEHIND ME` klingt aus,
+    Ankerwort `WALL` liegt schon da, Stuetzzeile `THIS ONE STICKS` darueber).
+    Ismets Entscheidung: zwei sind in Ordnung, drei nicht. Jetzt ist die
+    ALTE Karte weg, bevor die naechste ihr erstes Element zeigt (nur das
+    Ausklingen wird gekuerzt, v217), und das Ankerwort weicht auch einer
+    Karte - bis hierher wich es nur einem Fliesstext-Block.
+  - **`ABOVE ME` ueberlebte den Schnitt und wanderte nach unten.** Die
+    Ursache war NICHT die Schnitt-Disziplin, sondern ihr Eingang: die
+    Schnitt-Erkennung fand in dem Video KEINEN EINZIGEN Schnitt. Sie
+    vergleicht Farb-Histogramme, und ein graues Studio mit dunkler Kleidung
+    hat ueber einen Schnitt hinweg fast dieselbe Farbverteilung (staerkstes
+    Signal 0.935 gegen die Schwelle 0.55). Zweites Signal ist jetzt der
+    BILDAUFBAU (mittlere Helligkeitsabweichung eines 32x32-Miniaturbildes,
+    Schwelle als Vielfaches des Medians - materialabhaengig, nicht fest):
+    an Ismets Video 0 -> 3 Schnitte, Werte 34/67/56 bei Median 2.2.
+    Lehre: eine Erkennung, die nur EIN Merkmal kennt, ist auf dem Material
+    blind, das dieses Merkmal nicht hat - und schweigt dabei.
 - **v230l DASSELBE GESPROCHENE WORT STAND ZWEIMAL IM BILD.** Ismets Befund
   nach v230k: "das Gesagte wird zweimal im Bild eingeblendet" - nicht zwei
   verschiedene Bloecke, sondern DIESELBEN Woerter ein zweites Mal.

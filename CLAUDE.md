@@ -931,6 +931,28 @@ Preset-Werte.
 - Und wieder die v132-Falle: der v230c-Test verlangte ausdruecklich, dass
   eine unbekannte Zahl VERWORFEN wird — er hat den Fehler festgeschrieben.
 
+## Eine Erkennung mit EINEM Merkmal ist blind — und schweigt (v230m)
+Ismets `ABOVE ME` überlebte den Schnitt und wanderte in der Nahaufnahme nach
+unten. Die Schnitt-Disziplin war NICHT schuld: die Schnitt-Erkennung hatte in
+dem Video **keinen einzigen Schnitt** gefunden. Sie vergleicht Farb-Histogramme,
+und ein graues Studio mit dunkler Kleidung sieht vor und nach dem Schnitt fast
+gleich aus (stärkstes Signal 0.935 gegen die Schwelle 0.55).
+- **Zweites Signal: der BILDAUFBAU** (mittlere Helligkeitsabweichung eines
+  32x32-Miniaturbildes). Schwelle als Vielfaches des Medians, nicht fest — ein
+  Handyvideo wackelt durchgehend, ein Stativ-Interview nie.
+- **Wer eine Erkennung baut, fragt: auf welchem Material hat mein Merkmal
+  keinen Kontrast?** Dort liefert sie nicht "unsicher", sondern "nichts" — und
+  alles, was darauf aufbaut (Schnitt-Disziplin, Farbwelt pro Shot,
+  Ton-Dramaturgie, Raum-Karte), fällt lautlos aus.
+- **Der `behind`-Zweig ist der einzige Zeichenweg ohne `dt >= 0`.** Er malt die
+  Stützzeile schon vor der Karte. Wer etwas "vor die Weiche" zieht, weil ein
+  Zweig es richtig macht, baut es bei genau diesem Zweig DOPPELT ein (v230g →
+  dieselbe Zeile zweimal, um den Gesichts-Versatz verschoben).
+- **Tinte ist gegen Verschieben unempfindlich** — mit Versatz muss genauso viel
+  Tinte im Bild sein wie ohne. So braucht ein Doppel-Test keinen Referenzwert.
+  Zeilen-Erkennung taugt dafür NICHT: zwei Kopien, die sich um 20 px
+  überlappen, verschmelzen zu einem Band und der Test misst nichts.
+
 ## Ein Sidecar schreibt zurueck, was es liest (v230l — zweimal derselbe Fehler)
 Ismets „das Gesagte wird zweimal im Bild eingeblendet" hatte dieselbe Wurzel
 wie der Anschnitt in v230g, nur eine Datei weiter: der Analyse-Lauf schreibt
@@ -1316,7 +1338,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1831/1832 (Stand v230l)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1836/1837 (Stand v230m)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

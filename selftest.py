@@ -13005,6 +13005,119 @@ def _scenario_premium(tmp):
         check(f'v230g: {_fxg} zeigt die Stuetzzeile schon vor der Karte',
               _leer == 0, f'{_leer} von 6 Bildern leer')
 
+    # (5b) v230m: BEI 'behind' STAND DIE STUETZZEILE ZWEIMAL IM BILD.
+    # Der behind-Zweig ist der einzige ohne `dt >= 0` - er zeichnet die
+    # Stuetzzeile schon vor der Karte, und genau deshalb war er in v230g das
+    # Vorbild. Der Vorlauf aus (5) kam bei ihm also OBENDRAUF, mit dem
+    # Gesichts-Versatz statt ohne: dieselbe Zeile zweimal, um (tdx, tdy)
+    # verschoben (an Ismets Render gemessen: 'THIS ONE FLOATS' doppelt,
+    # 58 px rechts und 75 px tiefer).
+    # Messweg: TINTE ist gegen Verschieben unempfindlich. Steht die Zeile
+    # einmal, ist die Tintenmenge MIT Gesichts-Versatz dieselbe wie ohne;
+    # steht sie zweimal, waechst sie deutlich. Ein Vergleich zweier
+    # Positionen braucht keinen Referenzwert im Test.
+    def _ink_bei(_face, _t):
+        _Sm = R.Sprites(_cg, _Wg, _Hg)
+        _plm = R.build_plans(_wg, {3}, _cg, _Sm, _Wg, _Hg, lambda a, b: True,
+                             {3: {'fx': 'behind', 'power': 2, 'n': 1}},
+                             face_pos=lambda a, b: (_Wg * 0.42, _Hg * 0.30,
+                                                    _Hg * 0.16))
+        _cm = R.composite_frame(_fr_g.copy(), None, _t, _plm, _wg, _face,
+                                _cg, _Sm, _Wg, _Hg)
+        return int((np.abs(_cm - _fr_g).max(axis=2) > 12).sum())
+
+    _ruhe = sum(_ink_bei((_Wg * 0.42, _Hg * 0.30), 0.55 + _j * 0.10)
+                for _j in range(5))
+    _vers = sum(_ink_bei((_Wg * 0.66, _Hg * 0.46), 0.55 + _j * 0.10)
+                for _j in range(5))
+    check('v230m: behind zeichnet die Stuetzzeile nur EINMAL',
+          _ruhe > 0 and abs(_vers - _ruhe) <= _ruhe * 0.08,
+          f'ohne Versatz {_ruhe}, mit Versatz {_vers} Tintenpixel')
+    check('v230m: der Vorlauf laesst den behind-Zweig aus',
+          "if dt < 0 and p.get('small') and p['tpl'] != 'behind':" in _rsrc_sec230)
+
+    # (5c) v230m: HOECHSTENS ZWEI TEXTE, NIE DREI (Ismets Ansage).
+    # An der Wand standen Karte + Ankerwort + Stuetzzeile gleichzeitig.
+    # Karte plus eigene Stuetzzeile sind erlaubt - die ALTE Karte muss weg
+    # sein, bevor die naechste ihr erstes Element zeigt.
+    _wz = [{'word': w, 'start': 0.36 * i, 'end': 0.36 * i + 0.30}
+           for i, w in enumerate(('this next line goes behind me this one '
+                                  'sticks on the wall this one floats above '
+                                  'me now').split())]
+    for _p2 in (5, 11, 16):
+        _wz[_p2]['word'] += '.'
+    _fxz = {4: {'fx': 'behind', 'power': 3, 'n': 2, 'intent': True},
+            9: {'fx': 'ground', 'power': 3, 'n': 3, 'intent': True,
+                'szene': 'wand', 'lage': 'stehend'},
+            15: {'fx': 'behind', 'power': 3, 'n': 2, 'intent': True,
+                 'szene': 'himmel'}}
+    _Sz = R.Sprites(_cg, _Wg, _Hg)
+    _plz = R.build_plans(_wz, set(_fxz), _cg, _Sz, _Wg, _Hg, lambda a, b: True,
+                         dict(_fxz))
+    _kz = sorted([p for p in _plz if p.get('kw_txt')],
+                 key=lambda p: float(p['start']))
+
+    def _weg(p):
+        _a = p.get('aus')
+        return float(p['end']) + (0.40 if _a is None else float(_a))
+
+    _kol = [(a.get('kw_txt'), b.get('kw_txt'))
+            for a, b in zip(_kz, _kz[1:]) if _weg(a) > float(b['start']) + 1e-3]
+    check('v230m: eine Karte ist weg, bevor die naechste anfaengt',
+          len(_kz) >= 2 and not _kol, f'{len(_kz)} Karten, Kollisionen {_kol}')
+    check('v230m: gekuerzt wird nur das Ausklingen, nie unter 0.10 s',
+          all(p.get('aus') is None or 0.10 - 1e-6 <= float(p['aus']) <= 0.40
+              for p in _kz), str([p.get('aus') for p in _kz]))
+    check('v230m: das Ankerwort weicht auch einer anderen Karte',
+          "(q.get('front') or q.get('kw_txt'))" in _rsrc_sec230)
+
+    # (5d) v230m: SCHNITTE OHNE FARBUNTERSCHIED. Das Farb-Histogramm ist auf
+    # einem Studio-Set blind - in Ismets Werbespot fand es KEINEN der vier
+    # Schnitte (bestes Signal 0.935 gegen die Schwelle 0.55). Der Bildaufbau
+    # aendert sich dagegen massiv. Testvideo: gleiche Farben, gleiche
+    # Helligkeit im Mittel, nur die ANORDNUNG springt.
+    _cv = os.path.join(tempfile.gettempdir(), 'st_grau_cut.mp4')
+    _vw = cv2.VideoWriter(_cv, cv2.VideoWriter_fourcc(*'mp4v'), 24, (240, 426))
+    for _f in range(72):
+        _img = np.full((426, 240, 3), 128, np.uint8)
+        _x = 20 if _f < 36 else 130         # Block springt bei Frame 36
+        _img[120:300, _x:_x + 90] = 40
+        _vw.write(_img)
+    _vw.release()
+    _hs, _th = [], []
+    _cap = cv2.VideoCapture(_cv)
+    while True:
+        _ok, _f2 = _cap.read()
+        if not _ok:
+            break
+        _tiny = cv2.resize(_f2, (160, 90))
+        _h2 = cv2.calcHist([cv2.cvtColor(_tiny, cv2.COLOR_BGR2HSV)], [0, 1],
+                           None, [16, 16], [0, 180, 0, 256])
+        cv2.normalize(_h2, _h2)
+        _hs.append(_h2)
+        _th.append(cv2.resize(cv2.cvtColor(_tiny, cv2.COLOR_BGR2GRAY),
+                              (32, 32)).astype(np.float32))
+    _cap.release()
+    _korr = min(float(cv2.compareHist(_hs[i - 1], _hs[i], cv2.HISTCMP_CORREL))
+                for i in range(1, len(_hs)))
+    _madl = [float(np.abs(_th[i] - _th[i - 1]).mean())
+             for i in range(1, len(_th))]
+    _gr = max(12.0, 6.0 * float(np.median(_madl)))
+    check('v230m: die Farbe verraet diesen Schnitt NICHT (Studio-Grau)',
+          _korr >= 0.55, f'beste Farb-Abweichung {_korr:.3f}')
+    check('v230m: der Bildaufbau verraet ihn',
+          max(_madl) >= _gr, f'max {max(_madl):.1f} gegen Schwelle {_gr:.1f}')
+    check('v230m: und zwar genau an der Sprungstelle',
+          abs(int(np.argmax(_madl)) + 1 - 36) <= 1,
+          f'gefunden bei Frame {int(np.argmax(_madl)) + 1}')
+    check('v230m: die Schnitt-Suche nutzt beide Signale',
+          '_mad_gr = (max(12.0, 6.0 * float(np.median(_mad)))' in _rsrc_sec230
+          and 'or (_mad and _mad[i - 1] >= _mad_gr)' in _rsrc_sec230)
+    try:
+        os.remove(_cv)
+    except OSError:
+        pass
+
     # (6) Look 'TikTok': der buchstabenweise Aufbau ruft anim_apply gar nicht
     # auf - eine gewaehlte Animation lief damit NIE. Sie gewinnt jetzt.
     _rsrc_g = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()

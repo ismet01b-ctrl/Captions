@@ -2057,6 +2057,13 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     det_up = 1.8
     det_w, det_h = int(work_w * det_up), int(work_h * det_up)
     raw, hists, face_hists = [], [], []
+    # v230m: zusaetzlich ein winziges GRAUSTUFEN-Bild je Frame. Das
+    # Farb-Histogramm ist auf einem Studio-Set blind - alles ist grau, und
+    # ein Schnitt von der Totale in die Nahaufnahme aendert die Farbverteilung
+    # kaum (an Ismets Werbespot gemessen: staerkstes Signal 0.935 bei einer
+    # Schwelle von 0.55, also KEIN einziger Schnitt gefunden, obwohl das Video
+    # vier hat). Der Bildaufbau aendert sich dagegen massiv.
+    thumbs = []
     dets_seq = []                  # v96: ALLE Gesichter pro Frame [cx,cy,w,motion]
     last_dets = []
     prev_gray = None
@@ -2067,6 +2074,8 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
         hist = cv2.calcHist([hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
         cv2.normalize(hist, hist)
         hists.append(hist)
+        thumbs.append(cv2.resize(cv2.cvtColor(tiny, cv2.COLOR_BGR2GRAY),
+                                 (32, 32)).astype(np.float32))
         if fi_a % det_step != 0:
             dets_seq.append([list(d) for d in last_dets])   # halten
             raw.append(list(last_dets[0][:3]) if last_dets else None)
@@ -2150,9 +2159,24 @@ def track_faces(video_path, out_w, out_h, fps_str='25', det_step=2):
     multi_person = sum(len(fr) >= 2 for fr in smooth_boxes) > 0.10 * max(n, 1)
 
     # --- Schnitte finden (Histogramm-Korrelation zwischen Nachbar-Frames)
+    # v230m ZWEITES SIGNAL: der BILDAUFBAU. Auf einem Studio-Set (grauer
+    # Hintergrund, dunkle Kleidung) traegt die Farbe keine Information - in
+    # Ismets Werbespot fand das Histogramm KEINEN der vier Schnitte (bestes
+    # Signal 0.935 gegen die Schwelle 0.55). Die mittlere Helligkeits-
+    # Abweichung eines 32x32-Miniaturbildes trennt dort sauber: Median 2.2,
+    # 95. Perzentil 5.8, an den drei Schnitten 34 / 67 / 56.
+    # Die Schwelle haengt am MATERIAL (Vielfaches des Medians), nicht an einer
+    # festen Zahl - ein wackliges Handyvideo hat durchgehend hohe Werte, ein
+    # Stativ-Interview durchgehend niedrige.
+    _mad = [float(np.abs(thumbs[i] - thumbs[i - 1]).mean())
+            for i in range(1, n)] if len(thumbs) == n and n > 1 else []
+    _mad_gr = (max(12.0, 6.0 * float(np.median(_mad))) if _mad else 1e9)
     cuts = [0]
     for i in range(1, n):
-        if cv2.compareHist(hists[i - 1], hists[i], cv2.HISTCMP_CORREL) < 0.55:
+        _harter_schnitt = (
+            cv2.compareHist(hists[i - 1], hists[i], cv2.HISTCMP_CORREL) < 0.55
+            or (_mad and _mad[i - 1] >= _mad_gr))
+        if _harter_schnitt:
             if i - cuts[-1] >= 5:            # Mini-Szenen (Blitze) nicht splitten
                 cuts.append(i)
     # Weiche Uebergaenge (Crossfades): Vergleich ueber 12 Frames Abstand
@@ -11236,6 +11260,32 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             print(f"  Solo guard: {_n_solo} moment(s) trimmed so the "
                   f"keyword card stands alone")
 
+    # v230m HOECHSTENS ZWEI TEXTE, NIE DREI (Ismets Ansage, 01.08.2026).
+    # An der Wand standen drei Sachen gleichzeitig: die Karte 'BEHIND ME'
+    # klang noch aus, das Ankerwort 'WALL' lag schon an der Wand, und die
+    # Stuetzzeile 'THIS ONE STICKS' lief darueber. Karte plus eigene
+    # Stuetzzeile sind in Ordnung - die ALTE Karte muss weg sein, bevor die
+    # naechste ihr erstes Element zeigt.
+    # Gekuerzt wird nur das AUSKLINGEN der vorherigen Karte (v217: eine Regel
+    # gegen Doppelbilder darf nie verlaengern). Ihr `end` liegt davor, die
+    # gesprochenen Woerter bleiben unangetastet.
+    _kt = sorted([p for p in plans if p.get('kw_i') is not None
+                  and p.get('kw_txt')],
+                 key=lambda p: float(p.get('start', 0.0)))
+    _n_zwei = 0
+    for _a, _b in zip(_kt, _kt[1:]):
+        _ae = float(_a['end'])
+        _bs = float(_b.get('start', _b.get('t0', 0.0)))
+        _aus_ist = _a.get('aus')
+        _aus_ist = 0.40 if _aus_ist is None else float(_aus_ist)
+        _aus_soll = max(min(_aus_ist, _bs - _ae - 0.02), 0.10)
+        if _aus_soll < _aus_ist - 1e-3:
+            _a['aus'] = round(_aus_soll, 3)
+            _n_zwei += 1
+    if _n_zwei:
+        print(f"  Card solo: {_n_zwei} card(s) fade out before the next one "
+              f"starts")
+
     # v85: SCHNITT-DISZIPLIN (Broadcast-Regel, BBC/Netflix). Ein Untertitel darf
     # nicht ueber einen harten Schnitt hinweg stehen bleiben - das ist der
     # deutlichste "unbeaufsichtigte Auto-Pipeline"-Tell. Schnitte kennen wir aus
@@ -12762,9 +12812,16 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         # Fliesstext-Block, weicht der Anker (am Beweisbild gesehen: 'WALL' lag
         # auf 'this one'). Damit fuellt er genau die Pausen, in denen sonst
         # nichts im Bild ist - und tritt nie in Konkurrenz.
-        if any(q is not p and q.get('front')
+        # v230m: das gilt auch gegen eine andere KARTE. Bis hierher wich der
+        # Anker nur einem Fliesstext-Block; die ausklingende Karte 'BEHIND ME'
+        # war kein Hinderungsgrund, und mit der eigenen Stuetzzeile standen
+        # drei Texte gleichzeitig im Bild (Ismets Befund an der Wand).
+        if any(q is not p and (q.get('front') or q.get('kw_txt'))
                and q.get('start', 0.0) <= t
-               < q.get('end', 0.0) + float(q.get('aus', 0.15))
+               < q.get('end', 0.0) + float(q.get('aus') if q.get('aus')
+                                           is not None else
+                                           (0.15 if q.get('tpl') == 'flow'
+                                            else 0.40))
                for q in plans):
             continue
         _adt = t - _at0
@@ -13079,7 +13136,13 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
         # Deshalb hier, VOR der Weiche: solange die Karte noch nicht laeuft,
         # traegt die Stuetzzeile das Bild allein. Ab dt >= 0 bleibt alles wie
         # gehabt - die Zweige zeichnen sie mit ihren eigenen Versaetzen.
-        if dt < 0 and p.get('small'):
+        # v230m: der `behind`-Zweig hat als EINZIGER kein `dt >= 0` und
+        # zeichnet die Stuetzzeile schon vorher - genau deshalb war er in
+        # v230g der Massstab. Der Vorlauf hier oben kam bei ihm also OBENDRAUF,
+        # mit dem Gesichts-Versatz statt ohne: dieselbe Zeile stand zweimal im
+        # Bild, um genau (tdx, tdy) verschoben (an Ismets Render gemessen:
+        # 'THIS ONE FLOATS' zweimal, 58 px rechts und 75 px tiefer).
+        if dt < 0 and p.get('small') and p['tpl'] != 'behind':
             draw_small(p, g_out, tdx, tdy, x_sc, x_dv)
         if p['tpl'] == 'cascade' and dt >= 0:
             n = len(p['letters'])

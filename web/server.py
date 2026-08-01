@@ -2065,7 +2065,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230l'
+DVE_VERSION = 'v230m'
 
 
 def _build_datei():
