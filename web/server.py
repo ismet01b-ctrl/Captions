@@ -2071,7 +2071,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230w'
+DVE_VERSION = 'v230x'
 
 
 def _build_datei():
@@ -10255,6 +10255,29 @@ def admin_offsite_settings(request: Request, endpoint: str = Form(''),
     _sec_event('offsite_settings', request,
                detail='Zugaenge fuer die Sicherung ausser Haus geaendert')
     return {'ok': True, 'bereit': _r2_bereit()}
+
+
+@app.post('/api/admin/offsite/passwort')
+def admin_offsite_passwort(request: Request):
+    """v230x DAS PASSWORT NACHSCHLAGEN.
+
+    Ismets Frage: "was, wenn ich das Passwort vergesse?" Zwei Faelle - solange
+    der Server lebt, braucht er es gar nicht (das Zurueckspielen nimmt das
+    gespeicherte). Ist die Platte tot, ist es MIT ihr weg, und die Kopie ist
+    unwiderruflich unlesbar. Genau dafuer gibt es diesen Knopf: nachschlagen,
+    solange es noch geht.
+
+    Bewusst POST und ein eigener Aufruf, nicht im Zustand mitgeliefert - so
+    steht es nicht bei jedem Laden der Seite im Speicher des Browsers. Wer
+    den Admin-Schluessel hat, kaeme ohnehin an die ganze Datenbank; der
+    Aufruf wird trotzdem protokolliert."""
+    _require_admin(request)
+    pw = _set_get('r2_pass')
+    if not pw:
+        raise HTTPException(400, 'No password set yet.')
+    _sec_event('offsite_passwort', request,
+               detail='Verschluesselungs-Passwort im Panel angesehen')
+    return {'passwort': pw}
 
 
 @app.post('/api/admin/offsite/test')

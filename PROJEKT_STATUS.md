@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230x PASSWORT DER SICHERUNG NACHSCHLAGEN.** Ismets Frage: "was, wenn ich
+  das Passwort vergesse?" Zwei Faelle, und nur einer ist gefaehrlich.
+  - **Server lebt:** kein Problem. Das Zurueckspielen im Panel nimmt das
+    gespeicherte Passwort, er braucht es gar nicht zu kennen.
+  - **Platte tot:** genau dann braucht er es, und dann ist es mit der Platte
+    weg. Ohne Passwort ist die Kopie unwiderruflich unlesbar - das ist der
+    Sinn der Verschluesselung, das kann niemand reparieren.
+  - Deshalb ein Knopf **Passwort anzeigen** (Panel -> Betrieb -> Sicherung):
+    nachschlagen, solange es noch geht, und in den Passwort-Speicher kopieren.
+  - Bewusst ein eigener POST statt im Zustand mitgeliefert - sonst laege das
+    Passwort bei JEDEM Laden der Seite im Browser. Der Aufruf steht in der
+    Chronik. Wer den Admin-Schluessel hat, kaeme ohnehin an die ganze
+    Datenbank; der Zugewinn fuer einen Angreifer ist damit klein, der Nutzen
+    im Ernstfall gross.
 - **v230w DER DEPLOY BRACH ZU RECHT AB - EIN ALTER WETTLAUF IN DER SICHERUNG.**
   Das Test-Gate meldete nach v230v: `FAIL v197: der Snapshot wird am selben
   Tag aufgefrischt (3 -> 0 Konten im Snapshot)`. Es ging also NICHTS live -

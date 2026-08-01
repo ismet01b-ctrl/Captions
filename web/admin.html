@@ -805,11 +805,13 @@ async function loadOffsite(){
         <button class="btn sm" onclick="offSave()">Speichern</button>
         <button class="btn ghost sm" onclick="offTest()">Verbindung pruefen</button>
         <button class="btn ghost sm" onclick="offRun()">Jetzt sichern</button>
+        <button class="btn ghost sm" onclick="offPw()">Passwort anzeigen</button>
       </div>
       <div class="note" style="margin-top:10px"><b>Das Passwort ausser Haus aufheben.</b>
         Ohne es laesst sich die Kopie NICHT lesen &mdash; und liegt es nur auf
-        diesem Server, ist es zusammen mit der Platte weg. Schreib es in deinen
-        Passwort-Speicher, bevor du weitermachst.</div>
+        diesem Server, ist es zusammen mit der Platte weg. &bdquo;Passwort
+        anzeigen&ldquo; holt es hervor, solange der Server laeuft; kopier es in
+        deinen Passwort-Speicher.</div>
     </div>
     <h3>Vorhandene Staende</h3>
     <div id="offList" class="subtle">&ndash;</div>`;
@@ -836,6 +838,15 @@ async function offTest(){
     alert('Funktioniert: '+d.bytes+' Bytes hoch, wieder heruntergeholt, '
       +'entschluesselt und verglichen.');}
   catch(e){alert('Fehlgeschlagen:\n'+e.message);}
+}
+/* v230x: das Passwort nachschlagen, solange der Server noch lebt. Ist die
+   Platte tot, ist es mit ihr weg - und die Kopie damit unlesbar. Der Aufruf
+   steht in der Chronik. */
+async function offPw(){
+  try{const d=await api('/api/admin/offsite/passwort',{method:'POST'});
+    prompt('Passwort der Sicherung. Kopier es in deinen Passwort-Speicher '
+      +'- ohne es ist die Kopie im Ernstfall unlesbar.', d.passwort);}
+  catch(e){alert(e.message);}
 }
 async function offRun(){
   try{const d=await api('/api/admin/offsite/run',{method:'POST'});

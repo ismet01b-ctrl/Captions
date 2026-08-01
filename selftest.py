@@ -8725,6 +8725,20 @@ def _scenario_betrieb(tmp):
           "raise RuntimeError('endpoint must start with https://')" in _sv230v)
     check('v230v: es bleiben 30 Staende liegen',
           'R2_STAENDE = 30' in _sv230v and 'alt[R2_STAENDE:]' in _sv230v)
+    # v230x: das Passwort nachschlagen. Es steht NICHT im Zustand (der wird
+    # bei jedem Laden geholt), sondern hinter einem eigenen POST - und der
+    # Aufruf steht in der Chronik.
+    _pwr = _cl197.post('/api/admin/offsite/passwort', headers=_hd197)
+    check('v230x: das Passwort laesst sich nachschlagen',
+          _pwr.status_code == 200
+          and _pwr.json().get('passwort') == 'ein-langes-passwort')
+    check('v230x: ohne Schluessel nicht',
+          _cl197.post('/api/admin/offsite/passwort').status_code == 403)
+    check('v230x: es steht weiterhin NICHT im Zustand',
+          'ein-langes-passwort' not in _cl197.get(
+              '/api/admin/offsite', headers=_hd197).text)
+    check('v230x: das Nachschlagen wird protokolliert',
+          "_sec_event('offsite_passwort'" in _sv230v)
     os.environ.pop('DVE_ADMIN', None)
 
     # --- B) Restore. Ein Backup, das man nie zurueckgespielt hat, ist kein
