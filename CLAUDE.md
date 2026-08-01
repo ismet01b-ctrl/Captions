@@ -1383,7 +1383,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1870/1871 (Stand v230t)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1878/1879 (Stand v230u)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1552,6 +1552,13 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   so einem Feld liegen soll, braucht eine hoehere Ebene; das Feld selbst
   bleibt ganzflaechig, sonst kann man nur auf einem 38-px-Knopf ziehen.
   Gefunden hat das nur ein echter Klick im Browser.
+- **Zwei laufende Videos halbieren die Bildrate (v230u).** Am gedrosselten
+  Handy gemessen: zwei Spuren 30 fps, eine 60; pausiert oder ausgeblendet
+  sofort wieder 60. Eine kleinere Aufloesung aendert NICHTS - es kostet der
+  zweite Decoder, nicht die Pixelzahl. Darum laeuft im Ruhezustand nur eine
+  Spur; der Vergleich startet auf Beruehrung (plus einmaliges Aufblitzen).
+  Und: Zeit-Sprunge (`currentTime`) sind selbst ein Ruckler - kleinen
+  Versatz ueber `playbackRate` nachregeln, springen erst ab 0.6 s.
 - **Landing:** im Hero steht der VERGLEICH (`demo_before.mp4` links,
   `demo.mp4` rechts, Schieber dazwischen) - nur das Ergebnis zu zeigen
   beweist nichts. Beide Spuren werden nachgezogen, sonst zeigen sie zwei

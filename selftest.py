@@ -3380,12 +3380,45 @@ def _scenario_logic(clip, transcript, tmp):
           and 'pointer-events: none; -webkit-appearance: none;' in _land)
     # Am Finger darf der Schieber das Scrollen nicht auffressen: gegriffen
     # wird nur an der Linie, sonst bleibt der Wisch beim Blaettern.
+    # v230u: geprueft wird die REGEL (am Finger wird nicht ueberall gezogen),
+    # nicht der genaue Ausdruck - der Riegel ist seither strenger geworden
+    # (bei geschlossenem Vergleich zieht der Finger gar nicht).
     check('v230t: senkrecht scrollen bleibt am Finger moeglich',
           'touch-action: pan-y' in _land
-          and "e.pointerType === 'touch' && Math.abs(e.clientX - linie) > 44"
-          in _land)
+          and "e.pointerType === 'touch'" in _land
+          and 'Math.abs(e.clientX - linie) > 44' in _land)
     check('v230t: ein Tipp neben der Linie springt trotzdem',
           "Math.abs(e.clientX - tippX) < 8" in _land)
+
+    # v230u NUR EIN VIDEO IM RUHEZUSTAND. Gemessen (Handy-Ansicht, CPU 4x
+    # gedrosselt): zwei laufende Videos halbieren die Bildrate (60 -> 30);
+    # pausiert oder ausgeblendet sind es sofort wieder 60, und eine kleinere
+    # Aufloesung aendert NICHTS - es kostet der zweite Decoder, nicht die
+    # Pixelzahl. Deshalb startet die Vorher-Spur erst, wenn der Vergleich
+    # gebraucht wird.
+    check('v230u: die Vorher-Spur startet nicht von selbst',
+          'muted loop playsinline preload="auto"' in _land
+          and 'autoplay muted loop playsinline preload="auto"' not in _land)
+    check('v230u: der Vergleich ist im Ruhezustand zu',
+          'step="0.1" value="0"' in _land and 'AN_SCHWELLE' in _land)
+    check('v230u: sie haelt wieder an, sobald der Vergleich zu ist',
+          'const vorAus = () =>' in _land and 'vor.pause();' in _land)
+    # Ohne einen kurzen Blick wuerde niemand merken, dass zwei Fassungen da
+    # sind - aber JEDE Bedienung muss ihn abbrechen, sonst ueberschreibt die
+    # Animation die Einstellung des Nutzers.
+    check('v230u: ein einmaliger Blick zeigt den Vergleich',
+          'const zeigeKurz = () =>' in _land and 'blickGetan' in _land)
+    check('v230u: jede Bedienung bricht den Blick ab',
+          'if (zieht || benutzt) { blick = false; vorAus(); return; }' in _land)
+    check('v230u: bei "weniger Bewegung" gibt es keinen Blick',
+          "'(prefers-reduced-motion: reduce)').matches" in _land)
+    # Ein `currentTime`-Sprung leert den Decoder und ist selbst ein Ruckler.
+    check('v230u: der Versatz wird sanft nachgeregelt, nicht gesprungen',
+          'vor.playbackRate = Math.abs(d) < 0.03' in _land
+          and 'Math.abs(d) > 0.6' in _land)
+    # Am Finger darf ein senkrechter Wisch NIE den Schieber aufreissen.
+    check('v230u: bei geschlossenem Vergleich zieht der Finger nicht',
+          "(auf <= AN_SCHWELLE || Math.abs(e.clientX - linie) > 44)" in _land)
     # Eine Startseite, die 5 MB nachlaedt, verliert den Besucher vor dem
     # ersten Bild - die Kopie fuer das Web ist deshalb neu kodiert.
     _mb = _os210.path.getsize(_os210.path.join(_adir, 'demo.mp4')) / 1e6

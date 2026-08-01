@@ -165,6 +165,9 @@ nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
   pointer-events: none; z-index: 2;
   background: linear-gradient(to top, rgba(6,6,7,.78), rgba(6,6,7,.34) 42%, transparent);
 }
+.demo-side, .demo-line, .demo-grip { opacity: 0; transition: opacity .22s ease; }
+.demo.vergleich .demo-side, .demo.vergleich .demo-line,
+.demo.vergleich .demo-grip { opacity: 1; }
 .demo-line { position: absolute; top: 0; bottom: 0; left: var(--split); width: 2px;
   margin-left: -1px; background: rgba(255,255,255,.85); z-index: 3;
   pointer-events: none; box-shadow: 0 0 14px rgba(0,0,0,.6); }
@@ -413,7 +416,7 @@ footer .links a:hover { color: var(--ink); }
       <div class="demo" id="demoWrap">
         <video id="demoBefore" src="/assets/demo_before.mp4"
                poster="/assets/demo_before_poster.jpg"
-               autoplay muted loop playsinline preload="metadata"
+               muted loop playsinline preload="auto"
                aria-label="The same clip before captioning"></video>
         <video id="demoVid" class="after" src="/assets/demo.mp4"
                poster="/assets/demo_poster.jpg"
@@ -422,7 +425,7 @@ footer .links a:hover { color: var(--ink); }
         <span class="demo-side l">Your upload</span>
         <span class="demo-side r">DouchkoVE</span>
         <input type="range" class="demo-range" id="demoRange" min="0" max="100"
-               step="0.1" value="52" aria-label="Drag to compare before and after">
+               step="0.1" value="0" aria-label="Drag to compare before and after">
         <div class="demo-line"></div>
         <div class="demo-grip" aria-hidden="true">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -430,7 +433,7 @@ footer .links a:hover { color: var(--ink); }
                d="M9 6 4 12l5 6M15 6l5 6-5 6"/></svg>
         </div>
         <div class="demo-bar">
-          <span class="demo-tag"><b>Same clip</b><i>· drag to compare</i></span>
+          <span class="demo-tag"><b>Rendered output</b><i>· drag to compare</i></span>
           <button class="demo-snd" id="demoSnd" type="button" aria-pressed="false"
                   aria-label="Turn sound on" title="Sound">
             <svg class="off" width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -673,9 +676,41 @@ footer .links a:hover { color: var(--ink); }
   const vor = document.getElementById('demoBefore');
   const rng = document.getElementById('demoRange');
   const wrap = document.getElementById('demoWrap');
+  // v230u NUR EIN VIDEO LAEUFT IM RUHEZUSTAND.
+  // Gemessen (Handy-Ansicht, gedrosselte CPU): zwei laufende Videos halbieren
+  // die Bildrate (60 -> 30). Pausiert oder ausgeblendet sind es sofort wieder
+  // 60, und eine kleinere Aufloesung aendert NICHTS - es kostet der zweite
+  // Decoder, nicht die Pixelzahl. Deshalb laeuft im Ruhezustand nur der
+  // fertige Render; das Original startet erst, wenn der Vergleich gebraucht
+  // wird (einmaliger Blick nach dem Laden, oder sobald jemand zieht).
   if (rng && wrap) {
-    const setz = () => { wrap.style.setProperty('--split', rng.value + '%'); };
-    rng.addEventListener('input', setz);          // Pfeiltasten
+    const AN_SCHWELLE = 0.4;             // ab hier ist der Vergleich sichtbar
+    const setz = () => {
+      const v2 = parseFloat(rng.value) || 0;
+      wrap.style.setProperty('--split', v2 + '%');
+      wrap.classList.toggle('vergleich', v2 > AN_SCHWELLE);
+    };
+    const sync = () => {                 // gleicher Moment auf beiden Spuren
+      if (!vor) return;
+      try { vor.currentTime = v.currentTime; } catch (e) {}
+    };
+    let zieht = false, blick = false, benutzt = false;
+    const vorAn = () => {
+      if (!vor || !vor.paused) return;
+      sync();
+      vor.play().catch(() => {});
+    };
+    const vorAus = () => {
+      if (!vor || vor.paused) return;
+      if (zieht || blick) return;
+      if ((parseFloat(rng.value) || 0) > AN_SCHWELLE) return;
+      vor.pause();
+    };
+    rng.addEventListener('input', () => {        // Pfeiltasten
+      benutzt = true;
+      setz();
+      if ((parseFloat(rng.value) || 0) > AN_SCHWELLE) vorAn(); else vorAus();
+    });
     setz();
     const ausX = (x) => {
       const r = wrap.getBoundingClientRect();
@@ -683,17 +718,24 @@ footer .links a:hover { color: var(--ink); }
       rng.value = Math.max(0, Math.min(100, ((x - r.left) / r.width) * 100));
       setz();
     };
-    let zieht = false;
     wrap.addEventListener('pointerdown', (e) => {
       const r = wrap.getBoundingClientRect();
-      const linie = r.left + r.width * (parseFloat(rng.value) / 100);
+      const auf = parseFloat(rng.value) || 0;
+      const linie = r.left + r.width * (auf / 100);
       // Am FINGER wird nur direkt an der Linie gegriffen - sonst kann man
       // ueber dem Bild nicht mehr scrollen, und das waere ein schlechter
-      // Tausch fuer einen Schieber.
-      if (e.pointerType === 'touch' && Math.abs(e.clientX - linie) > 44) return;
+      // Tausch fuer einen Schieber. Ist der Vergleich noch zu, wird gar nicht
+      // gezogen: dann OEFFNET ihn ein Tipp. (Der erste Entwurf liess am Rand
+      // ueberall greifen - damit hat ein senkrechter Wisch den Schieber
+      // aufgerissen statt zu scrollen, im Browser gemessen.)
+      if (e.pointerType === 'touch'
+          && (auf <= AN_SCHWELLE || Math.abs(e.clientX - linie) > 44)) return;
       zieht = true;
+      blick = false;
+      benutzt = true;
       wrap.classList.add('zieht');
       try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
+      vorAn();
       ausX(e.clientX);
       e.preventDefault();
     });
@@ -707,23 +749,76 @@ footer .links a:hover { color: var(--ink); }
       zieht = false;
       wrap.classList.remove('zieht');
       try { wrap.releasePointerCapture(e.pointerId); } catch (err) {}
+      vorAus();
     };
     wrap.addEventListener('pointerup', schluss);
     wrap.addEventListener('pointercancel', schluss);
-    // Ein Tipp neben der Linie soll trotzdem springen (Ismets Verhalten von
-    // vorher) - aber nur, wenn wirklich getippt und nicht gewischt wurde.
+    // Ein Tipp neben der Linie soll trotzdem springen - aber nur, wenn
+    // wirklich getippt und nicht gewischt wurde.
     let tippX = null, tippY = null;
     wrap.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch') return;
+      benutzt = true;
       tippX = e.clientX; tippY = e.clientY;
     });
     wrap.addEventListener('pointerup', (e) => {
       if (e.pointerType !== 'touch' || tippX === null) return;
       if (Math.abs(e.clientX - tippX) < 8 && Math.abs(e.clientY - tippY) < 8) {
+        vorAn();
         ausX(e.clientX);
+        // Landet der Tipp wieder am Rand, muss die zweite Spur auch wieder
+        // anhalten - sonst laeuft sie fuer immer weiter und die Bildrate
+        // bleibt halbiert, ohne dass etwas zu sehen waere.
+        vorAus();
       }
       tippX = tippY = null;
     });
+    // EINMALIGER BLICK: ohne ihn wuerde niemand merken, dass hier zwei
+    // Fassungen liegen. Danach laeuft wieder nur eine Spur. Wer weniger
+    // Bewegung eingestellt hat, bekommt ihn nicht.
+    const ruhig = window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let blickGetan = ruhig;
+    const zeigeKurz = () => {
+      if (blickGetan || zieht || document.hidden) return;
+      blickGetan = true;
+      blick = true;
+      vorAn();
+      const t0 = performance.now(), ZIEL = 46, HIN = 620, HALT = 1500;
+      const lauf = (t) => {
+        // JEDE Bedienung bricht den Blick ab - auch ein Tipp, der kein Ziehen
+        // ist. Sonst ueberschreibt die Animation, was der Nutzer gerade
+        // eingestellt hat (im Browser gemessen: der Tipp sprang zurueck).
+        if (zieht || benutzt) { blick = false; vorAus(); return; }
+        const d = t - t0;
+        let w2;
+        if (d < HIN) w2 = ZIEL * (d / HIN);
+        else if (d < HIN + HALT) w2 = ZIEL;
+        else if (d < HIN + HALT + HIN) w2 = ZIEL * (1 - (d - HIN - HALT) / HIN);
+        else w2 = 0;
+        rng.value = w2;
+        setz();
+        if (d < HIN + HALT + HIN) requestAnimationFrame(lauf);
+        else { blick = false; vorAus(); }
+      };
+      requestAnimationFrame(lauf);
+    };
+    if (!blickGetan) {
+      const start = () => setTimeout(zeigeKurz, 1800);
+      if (v.readyState >= 3) start();
+      else v.addEventListener('canplay', start, { once: true });
+    }
+    // Nachziehen OHNE Sprung: ein `currentTime`-Sprung leert den Decoder und
+    // ist selbst ein sichtbarer Ruckler. Kleine Abweichungen holt die
+    // Abspielgeschwindigkeit auf, nur ein grosser Versatz wird gesetzt.
+    if (vor) {
+      v.addEventListener('timeupdate', () => {
+        if (vor.paused) return;
+        const d = v.currentTime - vor.currentTime;
+        if (Math.abs(d) > 0.6) { try { vor.currentTime = v.currentTime; } catch (e) {} }
+        else vor.playbackRate = Math.abs(d) < 0.03 ? 1 : (d > 0 ? 1.03 : 0.97);
+      });
+    }
   }
   if (vor) {
     v.addEventListener('timeupdate', () => {

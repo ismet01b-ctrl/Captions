@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230u DIE VORSCHAU RUCKELTE - ZWEI DECODER HALBIEREN DIE BILDRATE.**
+  Ismets Befund: "das Vorschau-Video ist sehr laggy, manchmal sind die Videos
+  auch nicht ganz synchron".
+  - **Gemessen** (Handy-Ansicht 390x844, CPU 4x gedrosselt): zwei laufende
+    Videos 30 Bilder/s, EINES 60. Pausiert oder ausgeblendet: sofort wieder
+    60. Und eine kleinere Aufloesung (720 -> 540 -> 480) aendert NICHTS - es
+    kostet der zweite Decoder, nicht die Pixelzahl. Genau deshalb war
+    "einfach kleiner kodieren" die falsche Vermutung.
+  - **Ismets Entscheidung:** der Vergleich laeuft erst auf Beruehrung. Im
+    Ruhezustand spielt nur der fertige Render (60), nach dem Laden blitzt
+    der Vergleich EINMAL kurz auf (sonst entdeckt ihn niemand), danach
+    pausiert die Vorher-Spur wieder. Beim Ziehen laufen beide - das ist der
+    Preis des Vergleichs, aber nur solange man ihn ansieht.
+  - **Der Versatz kam vom Nachziehen selbst.** Ein `currentTime`-Sprung
+    leert den Decoder und ist ein sichtbarer Ruckler. Jetzt regelt die
+    Abspielgeschwindigkeit (0.97/1.03) nach, gesprungen wird erst ab 0.6 s.
+  - Zwei eigene Fehler dabei gefunden, beide nur im echten Browser: ein
+    senkrechter Wisch riss den Schieber auf, statt die Seite zu scrollen
+    (am Rand durfte man ueberall greifen), und ein Tipp waehrend des
+    Aufblitzens wurde von der Animation ueberschrieben.
+  - Bewiesen: Ruhe 60.4 fps, waehrend des Vergleichs 34.8, danach wieder
+    60.5; Tipp oeffnet (0 -> 82), Ziehen an der Linie (82 -> 52), senkrechter
+    Wisch unveraendert.
+  - **Und schon wieder ein Test am AUSDRUCK statt an der Regel** (v230t,
+    Finger-Riegel): der Riegel ist strenger geworden, der Test fiel. Die
+    Regel (am Finger wird nicht ueberall gezogen) gilt unveraendert.
 - **v230t DER VERGLEICHS-SCHIEBER LIESS SICH NICHT ZIEHEN** (Ismets Befund:
   "ich kann das Ding in der Mitte nicht ziehen, nur wenn ich auf das Video
   klicke, verschiebt sich das").
