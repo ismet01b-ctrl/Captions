@@ -163,6 +163,14 @@ ist noch offen. Tabellen, Aufzählungen von Nebenbefunden und Belegketten nur
 auf Nachfrage. Wer sich beim Schreiben denkt "das gehört noch dazu", liegt
 fast immer falsch — es gehört in den Commit, nicht in die Antwort.
 
+**IMMER LINKS SCHICKEN, NIE WEGE BESCHREIBEN (Ismets Ansage, 01.08.2026,
+"behandle mich wie den faulsten Menschen der Welt").** Wenn irgendwo etwas
+angeklickt werden muss: den **direkten Link** dazu, nicht "geh in die
+Einstellungen und dann...". Dazu die Werte zum Kopieren, fertig ausgefüllt,
+in der Reihenfolge der Felder. Ziel ist die kleinste Zahl an Klicks, nicht
+die vollständigste Beschreibung. Was ich selbst erledigen kann, erledige ich —
+gefragt wird nur, wo es ohne ihn nicht geht (Zugangsdaten, Geld, Geschmack).
+
 **FÜR LAIEN ERKLÄREN (Ismets Ansage, Juli 2026 — gilt dauerhaft).** Ismet ist
 kein Entwickler. Erklärungen kommen ohne Fachwörter: was ist es, was heißt das
 für ihn, was kostet es ihn wenn nichts passiert. Ein Bild statt eines
