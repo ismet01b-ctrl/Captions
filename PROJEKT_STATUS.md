@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230z DIE SICHERUNG PRUEFT SICH SELBST.** Die Luecke, die den
+  WAL-Fehler (v230y) so lange verdeckt hat: NIEMAND hat je den Inhalt einer
+  automatischen Sicherung angesehen. Der Pruefknopf im Panel ist Handarbeit;
+  lief die taegliche Sicherung leer, merkte es keiner - bis sie gebraucht
+  wird, und dann ist es zu spaet.
+  - Nach JEDER Sicherung: Konten und Kaeufe im Snapshot gegen die laufende
+    Datenbank. Weniger als jetzt = Alarm mit Mail (mehr ist in Ordnung,
+    dazwischen kann ein Konto geloescht worden sein). Unlesbare Datei =
+    Alarm. Faellt die Pruefung selbst aus = auch Alarm; eine Pruefung, die
+    still ausfaellt, ist genau das Problem, das sie loesen soll.
+  - Dazu der Fall "es kommt gar keine Sicherung mehr": ist die neueste aelter
+    als 26 Stunden, meldet sich der Wachhund - einmal je Programmlauf, sonst
+    kaeme stuendlich dieselbe Post (v194b-Lehre).
+  - **Damit waere v230y am ERSTEN Tag aufgefallen** statt im Ernstfall.
+  - Beweis im Test: gute Sicherung -> kein Alarm; untergeschobene leere
+    Sicherung -> Alarm 'backup_pruef'; kaputte Datei -> Alarm.
 - **v230y DIE TAEGLICHE SICHERUNG KONNTE STILL VERALTEN (WAL).** Das
   Test-Gate hielt drei Deploys auf: `FAIL v197: der Snapshot wird am selben
   Tag aufgefrischt (3 -> 0 Konten im Snapshot)`. Der v230w-Verdacht (Wettlauf

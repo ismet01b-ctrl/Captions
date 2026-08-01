@@ -8648,6 +8648,47 @@ def _scenario_betrieb(tmp):
           and 'os.path.getmtime(USERS_DB) <= os.path.getmtime(dest)'
           not in _sv197)
 
+    # v230z DIE SICHERUNG PRUEFT SICH SELBST. Ein Netz, das sich nicht selbst
+    # prueft, ist Dekoration: die taegliche Sicherung lief jahrelang, meldete
+    # Erfolg und konnte trotzdem leer sein (v230y). Nach JEDER Sicherung
+    # werden die Zahlen im Snapshot gegen die laufende Datenbank gehalten.
+    _alarm230z = []
+    _orig_notify = _SV197._notify_admin
+    _SV197._notify_admin = lambda k, b, t='', **kw: _alarm230z.append((k, b))
+    try:
+        _SV197._backup_users_db(force=True)
+        check('v230z: eine gute Sicherung loest KEINEN Alarm aus',
+              not _alarm230z, str(_alarm230z[:1]))
+        # Jetzt eine absichtlich unvollstaendige Sicherung unterschieben.
+        _leer230z = os.path.join(_SV197.DATA, 'backups', 'users_leer_test.db')
+        _cz = _sq197.connect(_leer230z)
+        _cz.executescript('CREATE TABLE users(id INTEGER PRIMARY KEY);'
+                          'CREATE TABLE sessions(id INTEGER PRIMARY KEY);'
+                          'CREATE TABLE ledger(id INTEGER PRIMARY KEY);'
+                          'CREATE TABLE purchases(session_id TEXT PRIMARY KEY);')
+        _cz.commit(); _cz.close()
+        _alarm230z.clear()
+        _ok230z = _SV197._snapshot_gegenprobe(_leer230z)
+        check('v230z: eine unvollstaendige Sicherung schlaegt Alarm',
+              _ok230z is False and _alarm230z
+              and _alarm230z[0][0] == 'backup_pruef',
+              str(_alarm230z[:1]))
+        os.remove(_leer230z)
+        # Und eine kaputte Datei ebenso.
+        _kaputt230z = os.path.join(_SV197.DATA, 'backups', 'users_kaputt_test.db')
+        with open(_kaputt230z, 'wb') as _f:
+            _f.write(b'das ist keine datenbank' * 40)
+        _alarm230z.clear()
+        check('v230z: eine unlesbare Sicherung schlaegt Alarm',
+              _SV197._snapshot_gegenprobe(_kaputt230z) is False and _alarm230z)
+        os.remove(_kaputt230z)
+    finally:
+        _SV197._notify_admin = _orig_notify
+    check('v230z: der Alarm geht per MAIL raus, nicht nur ins Panel',
+          "_notify_admin('backup_pruef'" in _sv197 and 'mail=True' in _sv197)
+    check('v230z: ohne jede Sicherung meldet sich der Wachhund',
+          "_notify_admin('backup_alt'" in _sv197 and '_alter > 26' in _sv197)
+
     check('v230w: gleichzeitige Sicherungen leeren den Snapshot nicht',
           _nw >= _n197a and not _fehler230w,
           f'{_nw} Konten im Snapshot, Fehler {_fehler230w[:1]}')

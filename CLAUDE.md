@@ -1227,6 +1227,12 @@ die sich wiederholen:
   kein Dateitausch, kein Neustart, offene Verbindungen sehen danach den neuen
   Inhalt. Der Skript-Weg (`restore.sh`) bleibt als Notnagel, wenn die App gar
   nicht mehr startet. Wer eine neue Betriebs-Aufgabe baut, baut sie ins Panel.
+- **Die Sicherung prueft sich selbst (v230z).** Nach jeder Sicherung werden
+  Konten und Kaeufe im Snapshot gegen die laufende Datenbank gehalten -
+  weniger als jetzt, unlesbar oder Pruefung selbst kaputt: Alarm mit Mail.
+  Dazu ein Riegel gegen "es kommt gar nichts mehr" (neueste Sicherung aelter
+  als 26 h). Ohne diese Gegenprobe blieb der WAL-Fehler v230y unsichtbar,
+  obwohl das Log jeden Tag "DB-Backup: ..." meldete.
 - **Ein Backup, das man nie zurueckgespielt hat, ist kein Backup.**
   `restore.sh` prueft den Kandidaten (integrity_check + Pflichttabellen),
   BEVOR es die laufende DB anfasst, und legt den jetzigen Stand als
@@ -1429,7 +1435,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1908/1909 (Stand v230y)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1913/1914 (Stand v230z)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

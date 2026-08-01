@@ -2071,7 +2071,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230y'
+DVE_VERSION = 'v230z'
 
 
 def _build_datei():
@@ -4826,6 +4826,63 @@ def _db_geaendert():
     return m
 
 
+# v230z: Meldungen, die genau EINMAL je Programmlauf kommen sollen. Ein
+# Zustand, der stuendlich dieselbe Mail ausloest, wird nach zwei Tagen
+# weggefiltert - und dann sieht ihn niemand mehr.
+_EINMAL = {}
+
+
+def _snapshot_gegenprobe(dest):
+    """v230z DIE SICHERUNG PRUEFT SICH SELBST.
+
+    Ein Netz, das sich nicht selbst prueft, ist Dekoration: die taegliche
+    Sicherung lief jahrelang, meldete "DB-Backup: ..." und konnte trotzdem
+    den LEEREN Stand vom Serverstart enthalten (v230y, WAL-Falle). Aufgefallen
+    ist das nur, weil ein Test im Container zufaellig hinsah - im Betrieb
+    haette es niemand gemerkt, bis die Sicherung gebraucht wird. Und dann ist
+    es zu spaet.
+
+    Also nach JEDER Sicherung: die Zahlen im Snapshot gegen die laufende
+    Datenbank halten. Weniger Konten oder weniger Kaeufe als jetzt = Alarm
+    mit Mail. Mehr ist in Ordnung (zwischen Sicherung und Vergleich kann ein
+    Konto geloescht worden sein), weniger nie - der Snapshot wird direkt aus
+    der laufenden Datenbank gezogen.
+
+    Scheitert die Gegenprobe selbst, ist das AUCH ein Alarm: eine Pruefung,
+    die still ausfaellt, ist genau das Problem, das sie loesen soll.
+    """
+    try:
+        ok, meldung, zahlen = _pruefe_sicherung(dest)
+        if not ok:
+            _notify_admin('backup_pruef', 'Die Sicherung ist nicht lesbar',
+                          f'{os.path.basename(dest)}: {meldung}\n\n'
+                          'Die Datei liegt da, taugt aber nichts. Bitte im '
+                          'Panel unter Betrieb -> System nachsehen.', mail=True)
+            return False
+        con = _db()
+        jetzt = {
+            'konten': con.execute('SELECT COUNT(*) c FROM users').fetchone()['c'],
+            'kaeufe': con.execute('SELECT COUNT(*) c FROM purchases').fetchone()['c'],
+        }
+        fehlt = [f"{k}: {zahlen.get(k)} statt {jetzt[k]}"
+                 for k in ('konten', 'kaeufe')
+                 if int(zahlen.get(k, -1)) < int(jetzt[k])]
+        if fehlt:
+            _notify_admin('backup_pruef', 'Die Sicherung ist unvollstaendig',
+                          f'{os.path.basename(dest)} enthaelt weniger als die '
+                          f'laufende Datenbank:\n  ' + '\n  '.join(fehlt) +
+                          '\n\nDas heisst: im Ernstfall fehlen diese Daten.',
+                          mail=True)
+            return False
+        print(f"  Backup-Gegenprobe: {zahlen.get('konten')} Konten, "
+              f"{zahlen.get('kaeufe')} Kaeufe - stimmt mit der Datenbank")
+        return True
+    except Exception as e:
+        _notify_admin('backup_pruef', 'Die Sicherung liess sich nicht pruefen',
+                      f'{type(e).__name__}: {e}', mail=True)
+        return False
+
+
 def _backup_users_db(force=False):
     """v80x: Taeglicher Snapshot der users.db nach DATA/backups.
     14 Stueck rotierend. SQLite-Online-Backup-API - konsistent auch
@@ -4887,6 +4944,7 @@ def _backup_users_db(force=False):
                 except OSError:
                     pass
         print(f"DB-Backup: {dest}{'' if neu else ' (aufgefrischt)'}")
+        _snapshot_gegenprobe(dest)
         if neu:
             # v230v: die Kopie ausser Haus zuerst - sie ist die einzige, die
             # einen Plattenschaden ueberlebt. Scheitert sie, ist das ein
@@ -5099,6 +5157,24 @@ def _cleanup_worker():
     while True:
         _HEARTBEAT['cleanup'] = time.time()          # v130: Liveness-Beweis
         _backup_users_db()
+        # v230z: Und wenn ueberhaupt nichts mehr gesichert wird, faellt das
+        # ohne diese Zeile niemandem auf - die Gegenprobe oben laeuft ja nur,
+        # WENN eine Sicherung geschrieben wurde. Einmal pro Programmlauf
+        # gemeldet, sonst kaeme stuendlich dieselbe Post.
+        try:
+            _bdir = os.path.join(DATA, 'backups')
+            _snaps = sorted(f for f in os.listdir(_bdir)
+                            if f.startswith('users_') and f.endswith('.db'))
+            _alter = (time.time() - os.path.getmtime(os.path.join(_bdir, _snaps[-1]))
+                      ) / 3600.0 if _snaps else 1e9
+            if _alter > 26 and not _EINMAL.get('backup_alt'):
+                _EINMAL['backup_alt'] = True
+                _notify_admin('backup_alt', 'Seit ueber einem Tag keine Sicherung',
+                              f'Die neueste Sicherung ist {_alter:.0f} Stunden alt'
+                              if _snaps else 'Es gibt ueberhaupt keine Sicherung.',
+                              mail=True)
+        except Exception:
+            pass
         try:
             _sec_event_purge()               # v204-sec: Chronik begrenzen
             _trichter_purge()                # v208: Trichter begrenzen
