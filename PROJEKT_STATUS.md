@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230o SOUND-SPAM: DIE ROTATION LIEF IM FALSCHEN RING.** Ismets Befund:
+  "es werden nicht alle benutzt, der spammt denselben Sound immer wieder".
+  - **Am echten Job gemessen:** 11 von 25 Dateien wurden ueberhaupt benutzt,
+    27 % aller Einsaetze kamen aus EINER Datei (impact), weitere 23 % aus
+    einer zweiten (whoosh). Beide Plaetze haben - wie 6 andere - nur eine
+    einzige Datei; nur `tick` hat 6, `counter` 3, vier weitere je 2.
+  - **Ursache:** `V()` wechselt die VARIANTE innerhalb eines Platzes. Wo es
+    nur eine Datei gibt, bleibt nichts zu wechseln - dort muss der PLATZ
+    wechseln. Der Einflug-Sound stand fest auf `whoosh_soft`, der Einschlag
+    fest auf `impact`, der Schnitt-Boom fest auf `boom`.
+  - Drei Ketten aus gleichwertigen Plaetzen mit Pegelausgleich: Einflug
+    (whoosh_soft/vanish/whoosh/turn), Wucht (impact/slam/boom), Luft
+    (whoosh/whoosh_soft/vanish/fall). Startversatz aus dem INHALT, damit
+    nicht jedes Video gleich anfaengt und ein Re-Render trotzdem dieselbe
+    Tonspur ergibt (nie `hash()`, v200).
+  - Beweis (Herkunfts-Etikett am Signal, Produktivcode unangetastet):
+    11 -> 15 benutzte Dateien, haeufigste Datei 27.3 % -> 13.6 %.
+  - **Ein Test hing an den Slot-NAMEN, nicht an der Regel.** Die
+    v143-Rezeptur ist "Ton fuehrt Bild" (Impact 30 ms davor, Whoosh-Spitze
+    115 ms davor, Boom 40 ms danach) - er prueft jetzt die ZEITEN. Sonst
+    haette er die gewollte Rotation als Fehler gemeldet (Checkliste Punkt 3).
 - **v230n DIE STUETZZEILE LIEF AUS DEM BILD UND LAG AUF DEM ORTSWORT.**
   Ismets Standbild: 'HIS ONE STICKS' (das T fehlt) quer ueber 'WALL'.
   - **Der Anschnitt-Riegel kannte die Stuetzzeile gar nicht.** `ink_box`

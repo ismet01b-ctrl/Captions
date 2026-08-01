@@ -203,6 +203,50 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
         sig = vs[(c + _saat) % len(vs)]
         j = c + _jsaat
         return _pitch(sig, _JIT_P[j % len(_JIT_P)]) * _JIT_G[(j * 3) % len(_JIT_G)]
+    # v230o DER EINFLUG WECHSELT DEN SLOT, NICHT NUR DIE VARIANTE.
+    # Bis v230n stand hier EIN fester Platz - und ausgerechnet die
+    # meistgehoerten Plaetze haben nur eine einzige Datei (8 von 14). Jede
+    # Folge-Caption bekam damit dieselbe Aufnahme, nur um bis zu 8 % in der
+    # Tonhoehe versetzt: Ismets Befund "der spammt denselben Sound immer
+    # wieder". V() variiert INNERHALB eines Platzes - wo es nichts zu
+    # variieren gibt, muss der Platz selbst wechseln.
+    # Die Reihenfolge ist Absicht: alle vier sind Luft-/Wisch-Geraeusche, aber
+    # mit hoerbar anderem Charakter (subby / airy / kinematisch / kurz). Der
+    # Pegel gleicht die unterschiedliche Wucht aus, damit keiner heraussticht.
+    _SOFT_KETTE = (('whoosh_soft', 1.00), ('vanish', 0.95),
+                   ('whoosh', 0.62), ('turn', 0.80))
+    _soft_kette = [(s, gk) for s, gk in _SOFT_KETTE if s in bank]
+    if not _soft_kette:
+        _soft_kette = [('tick', 1.00)]
+    # v230o: dieselbe Not bei den WUCHT- und LUFT-Geraeuschen. Am echten
+    # Job gemessen kamen impact 6x (27 %) und whoosh 5x (23 %) aus je EINER
+    # Datei - das war der eigentliche Spam, nicht der Einflug. Drei bzw. vier
+    # vorhandene Plaetze tragen dieselbe Rolle mit anderem Klang.
+    _WUCHT_KETTE = (('impact', 1.00), ('slam', 0.92), ('boom', 0.88))
+    _LUFT_KETTE = (('whoosh', 1.00), ('whoosh_soft', 1.05),
+                   ('vanish', 0.95), ('fall', 0.90))
+    _wucht_kette = [(x, gk) for x, gk in _WUCHT_KETTE if x in bank] or \
+                   [('impact', 1.00)]
+    _luft_kette = [(x, gk) for x, gk in _LUFT_KETTE if x in bank] or \
+                  [('whoosh', 1.00)]
+    _weich_i = [0]
+    _wucht_i = [0]
+    _luft_i = [0]
+
+    def _aus_kette(kette, zaehler):
+        i = zaehler[0]
+        zaehler[0] = i + 1
+        return kette[(i + _saat) % len(kette)]
+
+    def _weich_naechste():
+        """Naechster Einflug-Platz aus der Kette (Slot, Pegelfaktor).
+        Der Startversatz kommt aus dem INHALT (_saat), damit nicht jedes
+        Video mit demselben Geraeusch anfaengt - und ein Re-Render trotzdem
+        dieselbe Tonspur ergibt (nie hash(), v200)."""
+        i = _weich_i[0]
+        _weich_i[0] = i + 1
+        return _soft_kette[(i + _saat) % len(_soft_kette)]
+
     total = np.zeros(int((duration + 1.5) * SR), dtype=np.float32)
 
     env, hop, ref = None, 441, None
@@ -278,17 +322,19 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
             if _rs is not None:
                 place(_rs, _ct - min(1.60, len(_rs) / float(SR)), 0.30 * _g)
                 n_placed += 1
-        _wh = V('whoosh') if 'whoosh' in bank else (
-            V('whoosh_soft') if 'whoosh_soft' in bank else None)
+        _ls6, _lg6 = _aus_kette(_luft_kette, _luft_i)
+        _wh = V(_ls6)
         if _wh is not None:
             # Spitze 15 ms vor dem Bild: der Sound muss also frueher starten.
-            place(_wh, _ct - 0.115, 0.55 * _g)
+            place(_wh, _ct - 0.115, 0.55 * _lg6 * _g)
             n_placed += 1
-        if 'impact' in bank:
-            place(V('impact'), _ct - 0.030, 0.85 * _g)   # Ton fuehrt Bild
+        if _wucht_kette:
+            _ws4, _wg4 = _aus_kette(_wucht_kette, _wucht_i)
+            place(V(_ws4), _ct - 0.030, 0.85 * _wg4 * _g)   # Ton fuehrt Bild
             n_placed += 1
-        if 'boom' in bank:
-            place(V('boom'), _ct + 0.040, 0.70 * _g)     # traegt die neue Szene
+        if _wucht_kette:
+            _ws5, _wg5 = _aus_kette(_wucht_kette, _wucht_i)
+            place(V(_ws5), _ct + 0.040, 0.70 * _wg5 * _g)  # traegt die neue Szene
             n_placed += 1
     if _cuts:
         print(f"  Cut dramaturgy: {len(_cuts)} transitions scored "
@@ -408,21 +454,28 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
             n_placed += 1
             print(f"  SFX '{clean_word(words[p['kw_i']]['word'])}': count-up ({cdur:.1f}s)")
             continue
+        # v230o: auch der Karten-Einflug wechselt den Platz. Drei Karten
+        # in einem Video ergaben sonst dreimal exakt dieselbe Aufnahme -
+        # 'whoosh_soft' hat, wie 7 weitere Plaetze, nur EINE Datei.
+        _kslot, _kgain = _weich_naechste()
         if tpl == 'behind':
-            place(V('whoosh'), t0 - 0.30, 0.8 * g)
-            place(V('impact'), t0 - 0.02, 1.0 * g)
+            _ls, _lg2 = _aus_kette(_luft_kette, _luft_i)
+            _ws, _wg2 = _aus_kette(_wucht_kette, _wucht_i)
+            place(V(_ls), t0 - 0.30, 0.8 * _lg2 * g)
+            place(V(_ws), t0 - 0.02, 1.0 * _wg2 * g)
         elif tpl == 'blurin':
             place(V('riser'), t0 - 0.78, 0.9 * g)
             place(V('tick'), t0 + 0.12, 0.5 * g)           # v96g: naeher am Wort
         elif tpl == 'cascade':
-            place(V('whoosh_soft'), t0 - 0.05, 0.9 * g)
+            place(V(_kslot), t0 - 0.05, 0.9 * _kgain * g)
             for k, dt_l in enumerate((0.04, 0.11, 0.18)):     # Buchstaben-Laeufer, enger am Onset
                 place(V('tick'), t0 + dt_l, (0.30 - k * 0.07) * g)
         elif tpl == 'ground':
-            place(V('whoosh_soft'), t0 - 0.05, 0.9 * g)
-            place(V('impact'), t0 + 0.08, 0.45 * g)        # der Text "steht"
+            place(V(_kslot), t0 - 0.05, 0.9 * _kgain * g)
+            _ws3, _wg3 = _aus_kette(_wucht_kette, _wucht_i)
+            place(V(_ws3), t0 + 0.08, 0.45 * _wg3 * g)     # der Text "steht"
         elif tpl == 'outline':
-            place(V('whoosh_soft'), t0 - 0.05, 0.55 * g)
+            place(V(_kslot), t0 - 0.05, 0.55 * _kgain * g)
             place(V('tick'), t0 + 0.08, 0.9 * g)           # v96g: sitzt auf dem Wort
         n_placed += 1
         w = words[p['kw_i']]['word'].strip()
@@ -437,8 +490,6 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
     last_tick = -9.0
     n_ticks = 0
     _acc_i = 0
-    _soft_slot = ('whoosh_soft' if 'whoosh_soft' in bank
-                  else 'whoosh' if 'whoosh' in bank else 'tick')
     for p in plans:
         if p.get('tpl') != 'stack':
             continue
@@ -448,7 +499,11 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
         if any(abs(ts - kt) < 0.32 for kt in kw_times):
             continue                       # nicht direkt auf den Keyword-Einschlag
         g_soft = local_gain(ts)
-        place(V(_soft_slot), ts - 0.04, 0.42 * g_soft)   # weicher Einflug, variiert
+        # v230o: Platz UND Variante wechseln. Der Startversatz kommt aus dem
+        # Inhalt (_saat), damit nicht jedes Video mit demselben Geraeusch
+        # anfaengt - und ein Re-Render trotzdem dieselbe Tonspur ergibt.
+        _sslot, _sgain = _weich_naechste()
+        place(V(_sslot), ts - 0.04, 0.42 * _sgain * g_soft)
         # v96g: der Klick-Akzent lief bisher auf JEDER Folge-Caption -> im dichten
         # Hook ein monotoner Klick-Teppich. Jetzt im 3er-Zyklus: lauter Tick /
         # leiser Tick / GAR KEINER (Atempause) - dazu variiert V() Pitch/Pegel.

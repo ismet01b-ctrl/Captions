@@ -1352,7 +1352,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1840/1841 (Stand v230n)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1844/1845 (Stand v230o)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1470,6 +1470,15 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   Mindestabstand (`effects.sfx_dichte`, Standard 'normal' = 1.8 s). Gemessen
   3 -> 8 Sounds auf 15.6 s. Wer eine Referenz-Regel uebernimmt, fragt: was
   macht sie, wenn das Merkmal (hier: der Schnitt) FEHLT?
+- **Eine Rotation muss im richtigen Ring laufen (v230o).** `V()` wechselt die
+  VARIANTE innerhalb eines Slots - 8 der 14 Slots haben aber nur EINE Datei.
+  Dort muss der SLOT wechseln, sonst hoert man dieselbe Aufnahme mit
+  +-8 % Tonhoehe (Ismets "spammt denselben Sound"). Drei Ketten aus
+  gleichwertigen Slots mit Pegelausgleich: Einflug, Wucht, Luft. Gemessen am
+  echten Job: 11 -> 15 benutzte Dateien, haeufigste 27.3 % -> 13.6 %.
+  Wer hier prueft, misst die HERKUNFT der Signale (Etikett am Array), nicht
+  den Quelltext - und ein Test darf an der REGEL haengen (Ton fuehrt Bild),
+  nie am Slot-Namen, sonst meldet er die gewollte Abwechslung als Fehler.
 - **Sound:** nur echte CC0-Library-Sounds (Freesound), kein Synthetik-Fallback.
   Stille ist besser als billiger Ton. Ohne `sfx/pack` liefe alles STUMM —
   der Pack IST da (14/14 Slots, v175 geprüft), also klingt es.

@@ -608,10 +608,14 @@ def _scenario_logic(clip, transcript, tmp):
     check('v143: Schnittzeiten erreichen die Sound-Engine',
           'cut_times=None' in _sfxsrc.split('def build_sfx_track')[1][:220]
           and 'cut_times=cut_times' in _rsrc143)
+    # v230o: geprueft werden die ZEITEN, nicht die Slot-Namen. Die Rezeptur
+    # ist "Ton fuehrt Bild" (Impact 30 ms davor, Whoosh-Spitze 115 ms davor,
+    # Boom 40 ms danach) - WELCHE Datei den Schlag traegt, wechselt seither
+    # bewusst durch (sonst klingt jeder Schnitt gleich). Der alte Test hing an
+    # den Namen und haette die Rotation als Fehler gemeldet.
     check('v143: Ton laeuft dem Bild voraus (gemessene Rezeptur)',
-          "place(V('impact'), _ct - 0.030" in _sfxsrc
-          and '_ct - 0.115' in _sfxsrc
-          and "place(V('boom'), _ct + 0.040" in _sfxsrc
+          '_ct - 0.030' in _sfxsrc and '_ct - 0.115' in _sfxsrc
+          and '_ct + 0.040' in _sfxsrc
           and 'len(_rs) / float(SR)' in _sfxsrc)
     # v230: die REGEL ("kein Maschinengewehr") gilt weiter, die Umsetzung hat
     # sich geaendert. Bis v229 war sie "nur in den ersten 1.6 s einer
@@ -1414,6 +1418,78 @@ def _scenario_logic(clip, transcript, tmp):
           and 't0 + 0.26' not in _se_src and 't0 + 0.30' not in _se_src)
     check('SFX-Hook: Folge-Akzent im 3er-Zyklus (nicht auf jeder Caption)',
           '_cyc = _acc_i % 3' in _se_src and '_cyc == 2' in _se_src)
+
+    # v230o KEIN SOUND-SPAM. Ismets Befund: "es werden nicht alle benutzt, der
+    # spammt denselben Sound immer wieder". Am echten Job gemessen kamen 27 %
+    # aller Einsaetze aus EINER Datei (impact) und 23 % aus einer zweiten
+    # (whoosh) - beide Plaetze haben, wie 6 weitere, nur eine einzige Datei.
+    # V() variiert INNERHALB eines Platzes; wo es nichts zu variieren gibt,
+    # muss der PLATZ wechseln. Gemessen wird ueber ein Herkunfts-Etikett am
+    # Signal - der Produktivcode bleibt unangetastet.
+    check('v230o: der Einflug wechselt den Platz, nicht nur die Variante',
+          '_SOFT_KETTE' in _se_src and '_WUCHT_KETTE' in _se_src
+          and '_LUFT_KETTE' in _se_src and '_aus_kette(' in _se_src)
+    check('v230o: der Startversatz kommt aus dem Inhalt (Re-Render gleich)',
+          '(i + _saat) % len(kette)' in _se_src)
+    if os.path.isdir(os.path.join(HERE, 'sfx', 'pack')):
+        import collections as _coll
+
+        class _Sig(np.ndarray):
+            def __new__(cls, a, tag):
+                o = np.asarray(a).view(cls)
+                o.tag = tag
+                return o
+
+            def __array_finalize__(self, o):
+                if o is not None:
+                    self.tag = getattr(o, 'tag', '?')
+
+        _benutzt = _coll.Counter()
+        _lb0, _lv0, _pi0 = (sfx_engine.load_bank, sfx_engine.load_variants,
+                            sfx_engine._pitch)
+        try:
+            sfx_engine.load_bank = lambda f=None: {
+                k: _Sig(v, k) for k, v in _lb0(f).items()}
+            sfx_engine.load_variants = lambda f=None: {
+                k: [_Sig(s, f'{k}_{i}') for i, s in enumerate(v)]
+                for k, v in _lv0(f).items()}
+
+            def _pi_spion(sig, fq):
+                if sig is not None:
+                    _benutzt[getattr(sig, 'tag', '?')] += 1
+                return _pi0(sig, fq)
+            sfx_engine._pitch = _pi_spion
+            # Zehn Momente in den Formen, die im echten Job vorkommen.
+            _wo = [{'word': f'w{i}', 'start': 0.9 * i, 'end': 0.9 * i + 0.6}
+                   for i in range(12)]
+            _tpls = ['behind', 'ground', 'outline', 'behind', 'ground',
+                     'outline', 'behind', 'ground']
+            _pls = [{'tpl': _tp, 'kw_i': i, 'kw_txt': f'W{i}',
+                     'start': _wo[i]['start'], 'end': _wo[i]['start'] + 0.7,
+                     'small': []}
+                    for i, _tp in enumerate(_tpls)]
+            _sfx_out = os.path.join(tempfile.gettempdir(), 'st_sfx_o.wav')
+            sfx_engine.build_sfx_track(_pls, _wo, 12.0,
+                                       os.path.join(HERE, 'sfx', 'pack'),
+                                       _sfx_out, cut_times=[3.0, 7.0],
+                                       dichte='dicht')
+        finally:
+            (sfx_engine.load_bank, sfx_engine.load_variants,
+             sfx_engine._pitch) = _lb0, _lv0, _pi0
+        _ges_o = sum(_benutzt.values())
+        _top_o = (_benutzt.most_common(1)[0][1] / _ges_o) if _ges_o else 1.0
+        check('v230o: keine Datei traegt mehr als ein Fuenftel der Tonspur',
+              _ges_o >= 8 and _top_o <= 0.21,
+              f'{len(_benutzt)} Dateien, haeufigste {_top_o * 100:.0f} % '
+              f'von {_ges_o} Einsaetzen')
+        check('v230o: die schweren Momente verteilen sich auf mehrere Plaetze',
+              len({k.rsplit('_', 1)[0] for k in _benutzt
+                   if k.rsplit('_', 1)[0] in ('impact', 'slam', 'boom')}) >= 2,
+              str(sorted(_benutzt)))
+        try:
+            os.remove(_sfx_out)
+        except OSError:
+            pass
     # LIZENZ: es darf NUR CC0 durchkommen. Andere Lizenzen = Rechtsproblem.
     _fake = {'results': [
         {'id': 1, 'name': 'CC0 Sound', 'duration': 0.5, 'num_downloads': 9,
