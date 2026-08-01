@@ -121,28 +121,63 @@ nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
   color: var(--mut); background: rgba(10,10,11,.55); border: 1px solid var(--line);
   border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
 
-/* ---- Demo-Video im Hero (v230q) ----
-   Das Vorbild-Standbild daneben war eine ATTRAPPE aus HTML und CSS. Der
-   Satz darunter hiess "Rendered output - not a template", und genau das
-   stimmte nicht. Jetzt laeuft dort ein echter Render. 9:16, weil das Produkt
-   fuer Hochformat gebaut ist - ein 4:5-Rahmen mit `cover` haette ein
-   Drittel abgeschnitten (v228-Lehre aus der Bibliothek). */
+/* ---- Demo-Video im Hero (v230q, Gestaltung v230r) ----
+   Das Standbild daneben war eine ATTRAPPE aus HTML und CSS. Der Satz
+   darunter hiess "Rendered output - not a template", und genau das stimmte
+   nicht. Jetzt laeuft dort ein echter Render. 9:16, weil das Produkt fuer
+   Hochformat gebaut ist - ein 4:5-Rahmen mit `cover` haette ein Drittel
+   abgeschnitten (v228-Lehre aus der Bibliothek).
+
+   v230r GESTALTUNG. Erst standen dort ZWEI frei schwebende Kaestchen, eines
+   links, eines rechts - auf dem Handy sind sie uebereinander gelaufen und
+   die Bildunterschrift war halb verdeckt (Ismets Screenshot). Ein Element,
+   dessen Breite vom TEXT abhaengt, darf nicht gegen ein zweites gesetzt
+   werden, das an der anderen Kante klebt: irgendeine Breite bringt sie
+   immer zur Deckung. Jetzt EINE Leiste als Flex-Zeile - die beiden koennen
+   sich nicht mehr beruehren, und die Schrift kuerzt notfalls mit Ellipse.
+   Statt zweier Kaestchen traegt ein Verlauf am unteren Rand die Lesbarkeit;
+   das ist die ruhigere Loesung und verdeckt kein Bild. */
 .demo {
   position: relative; aspect-ratio: 9/16; max-height: 74vh; margin: 0 auto;
   border-radius: 20px; overflow: hidden; background: #0c0b0c;
   border: 1px solid var(--line); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8);
 }
 .demo video { width: 100%; height: 100%; object-fit: contain; display: block; }
-.demo-tag { position: absolute; left: 16px; bottom: 16px; z-index: 2;
-  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--mut); background: rgba(10,10,11,.55); border: 1px solid var(--line);
-  border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
-.demo-snd { position: absolute; right: 16px; bottom: 16px; z-index: 2;
-  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
-  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--ink); background: rgba(10,10,11,.62); border: 1px solid var(--line);
-  border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
-.demo-snd:hover { border-color: var(--acc); color: var(--acc); }
+/* Lese-Verlauf: nur so stark, dass die Zeile traegt - das Bild bleibt Bild. */
+.demo::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+  pointer-events: none; z-index: 1;
+  background: linear-gradient(to top, rgba(6,6,7,.78), rgba(6,6,7,.34) 42%, transparent);
+}
+.demo-bar {
+  position: absolute; left: 14px; right: 14px; bottom: 13px; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  pointer-events: none;
+}
+.demo-tag {
+  min-width: 0; flex: 1 1 auto;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .15em;
+  text-transform: uppercase; color: rgba(255,255,255,.72);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 1px 10px rgba(0,0,0,.9);
+}
+.demo-tag b { color: rgba(255,255,255,.94); font-weight: 600; }
+.demo-tag i { font-style: normal; margin-left: .45em; }
+.demo-snd {
+  pointer-events: auto; flex: 0 0 auto; cursor: pointer;
+  width: 34px; height: 34px; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0;
+  color: rgba(255,255,255,.9); background: rgba(12,12,14,.55);
+  border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.demo-snd:hover { color: var(--acc); border-color: var(--acc); background: rgba(12,12,14,.72); }
+.demo-snd:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.demo-snd .on { display: none; }
+.demo-snd[aria-pressed="true"] { color: var(--acc); border-color: var(--acc); }
+.demo-snd[aria-pressed="true"] .on { display: block; }
+.demo-snd[aria-pressed="true"] .off { display: none; }
 
 /* ---- index strip ---- */
 .index { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
@@ -270,6 +305,9 @@ footer .links a:hover { color: var(--ink); }
   .hero-grid { grid-template-columns: 1fr; gap: 40px; }
   .specimen { max-width: 420px; margin: 0 auto; }
   .demo { max-width: 300px; max-height: 62vh; }
+  /* Der Zusatz passt im schmalen Rahmen nicht mehr. Eine Ellipse
+     mitten im Satz sieht nach Fehler aus - also lieber weglassen. */
+  .demo-tag i { display: none; }
   .row .body { grid-template-columns: 1fr; gap: 10px; }
   .steps { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2,1fr); gap: 34px 24px; }
@@ -321,13 +359,20 @@ footer .links a:hover { color: var(--ink); }
         <video id="demoVid" src="/assets/demo.mp4" poster="/assets/demo_poster.jpg"
                autoplay muted loop playsinline preload="metadata"
                aria-label="Example output rendered by DouchkoVE"></video>
-        <span class="demo-tag">Rendered output · not a template</span>
-        <button class="demo-snd" id="demoSnd" type="button" aria-pressed="false">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path
-               d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>
-          Sound
-        </button>
+        <div class="demo-bar">
+          <span class="demo-tag"><b>Rendered output</b><i>· not a template</i></span>
+          <button class="demo-snd" id="demoSnd" type="button" aria-pressed="false"
+                  aria-label="Turn sound on" title="Sound">
+            <svg class="off" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.1" stroke-linecap="round"
+                 stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path
+                 d="M22 9l-6 6M16 9l6 6"/></svg>
+            <svg class="on" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.1" stroke-linecap="round"
+                 stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path
+                 d="M15.5 8.5a5 5 0 0 1 0 7M19 5.5a9 9 0 0 1 0 13"/></svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -551,9 +596,10 @@ footer .links a:hover { color: var(--ink); }
   if (!v || !b) return;
   b.addEventListener('click', () => {
     v.muted = !v.muted;
+    // Der Zustand haengt am aria-pressed, nicht an Inline-Styles: so sieht
+    // das CSS ihn, und Screenreader auch.
     b.setAttribute('aria-pressed', v.muted ? 'false' : 'true');
-    b.style.color = v.muted ? '' : 'var(--acc)';
-    b.style.borderColor = v.muted ? '' : 'var(--acc)';
+    b.setAttribute('aria-label', v.muted ? 'Turn sound on' : 'Turn sound off');
     if (!v.muted) { v.play().catch(() => {}); }
   });
   // Ein Fehler blendet den Schalter aus - aber NICHT fuer immer: sobald

@@ -3313,6 +3313,23 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230q: ein Fehler blendet den Schalter nicht FUER IMMER aus',
           "v.addEventListener('playing', () => { b.style.display = ''; });"
           in _land)
+    # v230r: Beschriftung und Ton-Schalter lagen als ZWEI frei schwebende
+    # Kaestchen an den beiden Kanten - auf dem Handy sind sie uebereinander
+    # gelaufen (Ismets Screenshot). Ein Element, dessen Breite vom TEXT
+    # abhaengt, darf nicht gegen ein zweites gesetzt werden, das an der
+    # anderen Kante klebt: irgendeine Breite bringt sie immer zur Deckung.
+    # Jetzt EINE Flex-Zeile - sie koennen sich nicht mehr beruehren.
+    check('v230r: Beschriftung und Ton-Schalter stehen in EINER Leiste',
+          '.demo-bar {' in _land and 'justify-content: space-between' in _land
+          and '<div class="demo-bar">' in _land)
+    check('v230r: die Beschriftung kuerzt, statt den Schalter zu schieben',
+          'text-overflow: ellipsis' in _land
+          and 'min-width: 0; flex: 1 1 auto' in _land)
+    check('v230r: im schmalen Rahmen faellt der Zusatz weg statt zu brechen',
+          '.demo-tag i { display: none; }' in _land)
+    check('v230r: der Zustand haengt am aria-pressed, nicht an Inline-Styles',
+          '.demo-snd[aria-pressed="true"]' in _land
+          and 'b.style.color' not in _land)
     # Eine Startseite, die 5 MB nachlaedt, verliert den Besucher vor dem
     # ersten Bild - die Kopie fuer das Web ist deshalb neu kodiert.
     _mb = _os210.path.getsize(_os210.path.join(_adir, 'demo.mp4')) / 1e6

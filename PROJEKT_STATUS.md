@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230r DIE BILDUNTERSCHRIFT LAG UNTER DEM TON-KNOPF (Ismets Screenshot).**
+  Beschriftung und Ton-Schalter waren ZWEI frei schwebende Kaestchen, eines
+  an der linken, eines an der rechten Kante. Auf dem Handy sind sie
+  uebereinander gelaufen: "RENDERED OUTPUT - NOT A..." verschwand hinter dem
+  Knopf.
+  - **Regel:** ein Element, dessen Breite vom TEXT abhaengt, darf nicht gegen
+    ein zweites gesetzt werden, das an der anderen Kante klebt - irgendeine
+    Bildschirmbreite bringt sie immer zur Deckung. Jetzt EINE Flex-Zeile
+    (`space-between`): sie koennen sich nicht mehr beruehren, die Schrift
+    kuerzt notfalls, und im schmalen Rahmen faellt der Zusatz ganz weg statt
+    mit Auslassungspunkten zu enden.
+  - Gestaltung dazu: statt zweier Kaestchen ein weicher Verlauf am unteren
+    Rand (traegt die Lesbarkeit, verdeckt kein Bild), der Ton-Schalter ist
+    ein runder Icon-Knopf, dessen Symbol umschaltet. Der Zustand haengt am
+    `aria-pressed` statt an Inline-Styles - so sieht ihn das CSS und der
+    Screenreader auch.
+  - Im echten Browser bei 1440, 390 und 320 px gemessen: Abstand konstant
+    12 px, keine Ueberlappung, kein abgeschnittener Text, kein Querscrollen.
+  - **Mein Testfehler:** der v230q-Lauf hat Layout und Wiedergabe geprueft,
+    aber nicht, ob sich zwei Bedienelemente ueberdecken. Er war gruen, und
+    der Fehler war im ersten Screenshot zu sehen.
 - **v230q DEMO-VIDEO IM HERO (Ismets Ansage).** Rechts oben stand eine
   ATTRAPPE aus HTML und CSS - drei Textzeilen, die wie eine Caption aussahen -
   und darunter der Satz "Rendered output, not a template". Genau das stimmte
