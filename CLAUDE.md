@@ -2,10 +2,12 @@
 
 Automatische Premium-Untertitel im Editorial-Stil + Apple-Style Motion-Graphics.
 **Eine gemeinsame Engine, zwei Gesichter:**
-1. **Windows-Desktop-App** (`gui.py`) — läuft lokal auf Ismets PC mit seinem
-   `OPENAI_API_KEY`.
-2. **Web-Produkt douchko.eu** (`web/server.py`, FastAPI) — das ist inzwischen der
-   Hauptweg: echte Kunden, Credits, Stripe. **Beta.**
+1. **Web-Produkt douchko.eu** (`web/server.py`, FastAPI) — das ist der EINZIGE
+   Weg, den Ismet nutzt: echte Kunden, Credits, Stripe. **Beta.**
+2. **Windows-Desktop-App** (`gui.py`) — liegt weiter im Repo und wird
+   mitgetestet, aber Ismet arbeitet ausschliesslich ueber das Web (Ansage
+   01.08.2026). Kein Windows-Test mehr als offener Punkt fuehren, und keine
+   Aussage mehr auf "sieht er auf Windows" verschieben.
 
 **Jede Entscheidung dient der Qualität.** Stand: v101k (Juli 2026) —
 Innovations-Batch komplett: Betonungs-Typografie (Variable-Font nach
@@ -51,8 +53,8 @@ Hook-A/B-Varianten.
    eine andere Klasse als "Daten lesen" und verlangt eine eigene Schranke.
 6. **Ehrlich bleiben.** Tests laufen hier auf Linux/CPU mit synthetischem
    Material und OHNE OpenAI-Key (Heuristik-Pfad). Echte GPU-/KI-/Qualitäts-
-   wirkung sieht Ismet erst auf Windows bzw. live auf douchko.eu mit echtem
-   Material — das immer klar sagen, nie so tun als sei es final verifiziert.
+   wirkung sieht Ismet erst live auf douchko.eu mit echtem Material — das
+   immer klar sagen, nie so tun als sei es final verifiziert.
 
 ## ERST FRAGEN, DANN BAUEN (Ismets Ansage, 31.07.2026, "merk dir das fuer
 ## immer")
@@ -1614,13 +1616,10 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 1. **Sicherung ausser Haus fehlt komplett** - Cloudflare R2, Schluessel in die
    .env auf dem Server, NIE im Chat. Groesstes Risiko.
 2. UptimeRobot auf /api/health.
-3. Ein echter Windows-Render mit echtem Material.
-4. Demo-Video auf die Startseite.
 
 ## Offene echte Punkte
-- Windows-Test mit echtem Material + Maskenqualität 'hoch' + MOV-Import Premiere.
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
-  Heuristik/CPU/synthetisch getestet).
+  Heuristik/CPU/synthetisch getestet) — das geschieht ueber douchko.eu.
 
 ### Sicherheits-Rückstand (Stand v221, am Code nachgeprüft)
 **Nur noch ZWEI Punkte offen — der Rest ist gebaut.** Nicht wieder als offen
