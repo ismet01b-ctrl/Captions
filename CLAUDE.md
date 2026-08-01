@@ -87,6 +87,12 @@ Versions-Abschnitt.
    (v230f "unbekannte Zahl fliegt raus", v230d der `str`-Vergleich beim
    Admin-Key, v222 `_al is None or _al > 7`). Wer einen Test anpassen muss,
    um seinen Fix grün zu bekommen, prüft zuerst, welcher von beiden recht hat.
+   **Und ein Test darf nie an einem NAMEN oder einer ZEILE hängen, wenn er
+   eine Regel meint.** An einem Tag dreimal passiert: der SFX-Test verlangte
+   `place(V('impact')…` statt "Ton führt Bild 30 ms" (v230o), der
+   Landing-Test eine bestimmte `.demo video`-CSS-Zeile statt "9:16, nichts
+   abgeschnitten" (v230s). Beide meldeten eine gewollte Verbesserung als
+   Fehler. Formuliere die ZUSAGE, nicht die Schreibweise.
 4. **Ein Riegel gehört in die Funktion, nicht an EIN Gate.** Erst ALLE
    Aufrufer suchen. v230d gleich dreimal (`check_auth` 1 von 7,
    `resend_verification`, `/admin/codes`), davor v159/v170/v176.
@@ -106,6 +112,13 @@ Versions-Abschnitt.
    Effekt ist, und Werkzeuge haben eigene Fallen (`schneide()` verlor das
    `async`, ein früherer Abschnitt ersetzte `setTimeout` durch eine
    Warteschlange). Symptom: der Test ist grün und misst nichts.
+   Weitere Fälle, alle am selben Tag: ohne `face_pos` ist der
+   Gesichts-Versatz 0, also lagen die beiden Kopien exakt übereinander und
+   der Doppel-Test sah nichts (v230m); zwei Kopien 20 px versetzt
+   verschmelzen in einer Zeilen-Erkennung zu EINEM Band (deshalb Tinte
+   messen, die ist gegen Verschieben unempfindlich); und der Test-Chromium
+   im Container kann kein H.264 — eine Wiedergabe-Prüfung braucht dort eine
+   WebM-Kopie, sonst prüft sie den Fehlerfall.
 8. **Eine Regel, die Zeiten ändert, darf nur kürzen.** Verlängern beseitigt
    die Überschneidung in den Zahlen und erzeugt sie im Bild (v216/v217).
    Und jede neue Zeit-, Bewegungs- oder Platzierungsregel muss zuerst
@@ -113,7 +126,14 @@ Versions-Abschnitt.
 9. **Vor der Ursachensuche prüfen, WELCHE Fassung lief.** Build-Stempel im
    Video (`ffprobe -show_entries format_tags`) bzw. Panel-Ansicht Build.
    Drei Runden gingen verloren, weil der Stempel log (v222/v225c).
-10. **Sagen, was NICHT bewiesen ist.** Kein "gefixt", wenn nur ein
+10. **Ein Bedienelement wird BEDIENT, nicht simuliert.** Den Wert per
+    `input`-Ereignis zu setzen beweist nur, dass die Zuweisung funktioniert —
+    nicht, dass man ziehen kann (v230t: grün, im Browser ging es nicht).
+    Ebenso: ein Layout-Test, der Größe und Wiedergabe prüft, sieht nicht,
+    dass ein Knopf die Beschriftung verdeckt (v230r) oder ein unsichtbares
+    Feld den Klick abfängt (v230s). Also: echter Klick, echtes Ziehen, mit
+    Maus UND Finger, und die Rechtecke der Bedienelemente vergleichen.
+11. **Sagen, was NICHT bewiesen ist.** Kein "gefixt", wenn nur ein
     Ersatzpfad grün ist; nicht reproduzierbar heißt: nicht reproduzierbar
     (v230e Renderer-Absturz). Lieber eine Zeile Unsicherheit als eine
     Runde umsonst.
