@@ -1383,7 +1383,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1878/1879 (Stand v230u)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1900/1901 (Stand v230v)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1666,8 +1666,11 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 - 'above me' greift jetzt, am echten Material noch nicht bestaetigt.
 
 ### Vor dem Launch (Ismets Seite)
-1. **Sicherung ausser Haus fehlt komplett** - Cloudflare R2, Schluessel in die
-   .env auf dem Server, NIE im Chat. Groesstes Risiko.
+1. **Sicherung ausser Haus: GEBAUT (v230v), muss von Ismet eingerichtet
+   werden.** Panel -> Betrieb -> Sicherung: Endpoint, Bucket, Key, Secret und
+   ein Verschluesselungs-Passwort eintragen, dann "Verbindung pruefen".
+   Das Passwort MUSS ausser Haus liegen (Passwort-Speicher) - ohne es ist die
+   Kopie nicht lesbar. Schluessel NIE im Chat.
 2. UptimeRobot auf /api/health.
 
 ## Offene echte Punkte

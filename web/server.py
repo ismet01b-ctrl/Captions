@@ -623,6 +623,12 @@ def _init_users_db():
     con.execute("CREATE TABLE IF NOT EXISTS purchases ("
                 "session_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, pack TEXT, "
                 "cents INTEGER NOT NULL, sekunden INTEGER NOT NULL, created_at INTEGER NOT NULL)")
+    # v230v Betriebs-Einstellungen, die NICHT ins Repo gehoeren: die Zugaenge
+    # zur Sicherung ausser Haus. Sie kommen ueber das Panel herein, nicht ueber
+    # eine Datei auf dem Server - Ismet arbeitet nicht im Terminal (v197).
+    # Geheimnisse werden NIE wieder ausgeliefert, nur "gesetzt: ja/nein".
+    con.execute("CREATE TABLE IF NOT EXISTS app_settings ("
+                "k TEXT PRIMARY KEY, v TEXT NOT NULL, ts INTEGER NOT NULL)")
     con.commit()
     # v92-sec: Kauf-Gutschriften gegen Doppelbuchung absichern. Stripe kann
     # denselben Webhook mehrfach senden; ohne DB-Constraint konnten zwei
@@ -2065,7 +2071,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230u'
+DVE_VERSION = 'v230v'
 
 
 def _build_datei():
@@ -4576,6 +4582,226 @@ def run_job(jid):
     # Erst beim Job-Cleanup loeschen.
 
 
+# ======================================================================
+# v230v SICHERUNG AUSSER HAUS (Cloudflare R2)
+# ----------------------------------------------------------------------
+# Bis hierher lag die einzige Sicherung auf DERSELBEN Platte wie die
+# Datenbank. Stirbt sie, ist das Guthaben zahlender Kunden weg - das
+# groesste Einzelrisiko im ganzen Betrieb. Der Mail-Weg (_mail_backup_offsite)
+# lief nur bei DVE_ALERTS=all, also im Normalbetrieb GAR NICHT, und er
+# verschickte die Datenbank unverschluesselt.
+#
+# Vier Entscheidungen, jede mit Grund:
+#  * Die Zugaenge kommen ueber das PANEL, nicht ueber eine Datei auf dem
+#    Server. Alles laeuft ueber das Panel (Ismets Ansage, v197) - ein Weg,
+#    der ein Terminal braucht, wird nie benutzt.
+#  * Verschluesselt wird VOR dem Verlassen des Servers. Wer den Bucket
+#    aufmacht, sieht Zufallsrauschen.
+#  * Das Passwort wird EINMAL angezeigt und muss ausser Haus liegen. Eine
+#    verschluesselte Kopie, deren Schluessel nur auf der toten Platte lag,
+#    ist keine Sicherung.
+#  * Keine neue Abhaengigkeit erzwungen: gibt es `cryptography` im Bild,
+#    laeuft AES-256-GCM. Sonst greift ein Verfahren aus der Standard-
+#    bibliothek (scrypt + HMAC-SHA256 als Schluesselstrom, danach HMAC ueber
+#    den Geheimtext). Welches benutzt wurde, steht IM Kopf der Datei - das
+#    Zurueckspielen findet es also selbst heraus.
+# ======================================================================
+R2_FELDER = ('r2_endpoint', 'r2_key', 'r2_secret', 'r2_bucket')
+R2_GEHEIM = ('r2_secret', 'r2_pass')
+R2_STAENDE = 30                      # so viele Sicherungen bleiben liegen
+
+
+def _set_get(k, default=''):
+    try:
+        con = _db()
+        r = con.execute('SELECT v FROM app_settings WHERE k=?', (k,)).fetchone()
+        return r['v'] if r else default
+    except Exception:
+        return default
+
+
+def _set_put(k, v):
+    con = _db()
+    con.execute('INSERT INTO app_settings(k,v,ts) VALUES(?,?,?) '
+                'ON CONFLICT(k) DO UPDATE SET v=excluded.v, ts=excluded.ts',
+                (k, str(v), int(time.time())))
+    con.commit()
+
+
+def _r2_bereit():
+    """Sind alle vier Zugangsdaten UND ein Passwort gesetzt?
+
+    `bool(...)` ist hier KEINE Kosmetik: `a and b` gibt in Python b zurueck,
+    also stand ohne die Klammer das PASSWORT in der Antwort von
+    /api/admin/offsite. Ein Geheimnis darf den Server nie wieder verlassen -
+    darum steht in der Antwort ausschliesslich 'gesetzt: ja/nein'."""
+    return bool(all(_set_get(k).strip() for k in R2_FELDER)
+                and _set_get('r2_pass').strip())
+
+
+# ---- Verschluesselung --------------------------------------------------
+_KRYPT_KOPF = b'DVE1'
+
+
+def _krypt_schluessel(pw, salz):
+    """scrypt: aus einem Passwort werden zwei 32-Byte-Schluessel."""
+    roh = hashlib.scrypt(pw.encode('utf-8'), salt=salz, n=2 ** 14, r=8, p=1,
+                         dklen=64)
+    return roh[:32], roh[32:]
+
+
+def _hmac_strom(k, nonce, laenge):
+    """Schluesselstrom aus HMAC-SHA256 im Zaehlerbetrieb. HMAC (nicht der
+    nackte Hash) ist hier Absicht: damit gibt es die Laengen-Verlaengerungs-
+    Falle gar nicht erst."""
+    out = bytearray()
+    i = 0
+    while len(out) < laenge:
+        out += hmac.new(k, nonce + i.to_bytes(8, 'big'), hashlib.sha256).digest()
+        i += 1
+    return bytes(out[:laenge])
+
+
+def _krypt_pack(roh, pw):
+    """Klartext -> Datei. Kopf: DVE1 | Verfahren | Salz | Nonce."""
+    salz = os.urandom(16)
+    nonce = os.urandom(16)
+    k_enc, k_mac = _krypt_schluessel(pw, salz)
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        art = b'G'                                   # AES-256-GCM
+        ct = AESGCM(k_enc).encrypt(nonce[:12], roh, _KRYPT_KOPF + art)
+        return _KRYPT_KOPF + art + salz + nonce + ct
+    except Exception:
+        art = b'H'                                   # Standardbibliothek
+        ct = bytes(a ^ b for a, b in zip(roh, _hmac_strom(k_enc, nonce, len(roh))))
+        tag = hmac.new(k_mac, _KRYPT_KOPF + art + salz + nonce + ct,
+                       hashlib.sha256).digest()
+        return _KRYPT_KOPF + art + salz + nonce + ct + tag
+
+
+def _krypt_unpack(blob, pw):
+    """Datei -> Klartext. Wirft ValueError bei falschem Passwort oder wenn
+    jemand die Datei angefasst hat - beides darf NIE stillschweigend als
+    'Sicherung ist in Ordnung' durchgehen."""
+    if len(blob) < 5 + 32 or blob[:4] != _KRYPT_KOPF:
+        raise ValueError('not a DouchkoVE backup file')
+    art = blob[4:5]
+    salz, nonce, rest = blob[5:21], blob[21:37], blob[37:]
+    k_enc, k_mac = _krypt_schluessel(pw, salz)
+    if art == b'G':
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        try:
+            return AESGCM(k_enc).decrypt(nonce[:12], rest, _KRYPT_KOPF + art)
+        except Exception:
+            raise ValueError('wrong password or damaged file')
+    if art != b'H':
+        raise ValueError('unknown backup format')
+    ct, tag = rest[:-32], rest[-32:]
+    soll = hmac.new(k_mac, _KRYPT_KOPF + art + salz + nonce + ct,
+                    hashlib.sha256).digest()
+    if not hmac.compare_digest(soll, tag):
+        raise ValueError('wrong password or damaged file')
+    return bytes(a ^ b for a, b in zip(ct, _hmac_strom(k_enc, nonce, len(ct))))
+
+
+# ---- S3-Signatur (SigV4) ----------------------------------------------
+def _sig_hmac(k, m):
+    return hmac.new(k, m.encode('utf-8'), hashlib.sha256).digest()
+
+
+def _r2_ruf(method, pfad, daten=b'', query='', timeout=30):
+    """EIN signierter Aufruf gegen R2. R2 spricht die S3-Schnittstelle;
+    signiert wird mit AWS SigV4, Region 'auto'. Absichtlich ohne boto3 -
+    die Abhaengigkeiten sind exakt festgenagelt (v205a-sec), und fuer vier
+    Aufrufe lohnt kein neues Bauteil."""
+    import requests
+    import urllib.parse
+    ep = _set_get('r2_endpoint').strip().rstrip('/')
+    key = _set_get('r2_key').strip()
+    secret = _set_get('r2_secret').strip()
+    bucket = _set_get('r2_bucket').strip()
+    if not (ep and key and secret and bucket):
+        raise RuntimeError('offsite storage is not configured')
+    if not ep.startswith('https://'):
+        raise RuntimeError('endpoint must start with https://')
+    host = ep.split('://', 1)[1].split('/')[0]
+    kanon_pfad = '/' + bucket + (('/' + pfad) if pfad else '')
+    kanon_pfad = urllib.parse.quote(kanon_pfad, safe='/~')
+    jetzt = time.gmtime()
+    stamp = time.strftime('%Y%m%dT%H%M%SZ', jetzt)
+    tag = time.strftime('%Y%m%d', jetzt)
+    hash_body = hashlib.sha256(daten or b'').hexdigest()
+    kopf = {'host': host, 'x-amz-content-sha256': hash_body, 'x-amz-date': stamp}
+    signierte = ';'.join(sorted(kopf))
+    kanon = '\n'.join([
+        method, kanon_pfad, query,
+        ''.join(f'{k}:{kopf[k]}\n' for k in sorted(kopf)),
+        signierte, hash_body])
+    bereich = f'{tag}/auto/s3/aws4_request'
+    zu_signieren = '\n'.join(['AWS4-HMAC-SHA256', stamp, bereich,
+                              hashlib.sha256(kanon.encode()).hexdigest()])
+    k = _sig_hmac(('AWS4' + secret).encode('utf-8'), tag)
+    k = _sig_hmac(k, 'auto')
+    k = _sig_hmac(k, 's3')
+    k = _sig_hmac(k, 'aws4_request')
+    sig = hmac.new(k, zu_signieren.encode('utf-8'), hashlib.sha256).hexdigest()
+    kopf['Authorization'] = (f'AWS4-HMAC-SHA256 Credential={key}/{bereich}, '
+                             f'SignedHeaders={signierte}, Signature={sig}')
+    url = f'https://{host}{kanon_pfad}' + (f'?{query}' if query else '')
+    r = requests.request(method, url, data=daten or None, headers=kopf,
+                         timeout=timeout)
+    if r.status_code >= 400:
+        raise RuntimeError(f'offsite storage said {r.status_code}: '
+                           f'{r.text[:200]}')
+    return r
+
+
+def _r2_put(name, blob):
+    _r2_ruf('PUT', name, blob)
+
+
+def _r2_get(name):
+    return _r2_ruf('GET', name).content
+
+
+def _r2_del(name):
+    _r2_ruf('DELETE', name)
+
+
+def _r2_liste():
+    """Namen und Groessen im Bucket, neueste zuerst."""
+    import xml.etree.ElementTree as ET
+    r = _r2_ruf('GET', '', query='list-type=2&max-keys=200')
+    ns = '{http://s3.amazonaws.com/doc/2006-03-01/}'
+    out = []
+    for c in ET.fromstring(r.content).findall(f'{ns}Contents'):
+        out.append({'name': (c.findtext(f'{ns}Key') or ''),
+                    'bytes': int(c.findtext(f'{ns}Size') or 0),
+                    'ts': (c.findtext(f'{ns}LastModified') or '')})
+    return sorted(out, key=lambda x: x['name'], reverse=True)
+
+
+def _offsite_r2(dest):
+    """Einen Snapshot verschluesselt hochladen und alte Staende aufraeumen.
+    Scheitert LAUT (Alarm im Panel): eine Sicherung, von der man erst im
+    Ernstfall erfaehrt, dass sie nicht lief, ist keine."""
+    if not _r2_bereit():
+        return False
+    name = os.path.basename(dest) + '.enc'
+    roh = open(dest, 'rb').read()
+    _r2_put(name, _krypt_pack(roh, _set_get('r2_pass')))
+    _set_put('r2_letzte', f'{int(time.time())}|{name}|{len(roh)}')
+    try:
+        alt = [x['name'] for x in _r2_liste() if x['name'].endswith('.enc')]
+        for weg in alt[R2_STAENDE:]:
+            _r2_del(weg)
+    except Exception as e:
+        print(f'Offsite-Rotation uebersprungen: {type(e).__name__}: {e}')
+    print(f'Offsite: {name} hochgeladen ({len(roh)} Bytes)')
+    return True
+
+
 def _backup_users_db(force=False):
     """v80x: Taeglicher Snapshot der users.db nach DATA/backups.
     14 Stueck rotierend. SQLite-Online-Backup-API - konsistent auch
@@ -4619,7 +4845,16 @@ def _backup_users_db(force=False):
             os.remove(os.path.join(bdir, old))
         print(f"DB-Backup: {dest}{'' if neu else ' (aufgefrischt)'}")
         if neu:
-            _mail_backup_offsite(dest)
+            # v230v: die Kopie ausser Haus zuerst - sie ist die einzige, die
+            # einen Plattenschaden ueberlebt. Scheitert sie, ist das ein
+            # ECHTER Alarm: eine Sicherung, von deren Ausfall man erst im
+            # Ernstfall erfaehrt, ist keine.
+            try:
+                if not _offsite_r2(dest):
+                    _mail_backup_offsite(dest)      # alter Weg als Rueckfall
+            except Exception as e:
+                _notify_admin('offsite', 'Sicherung ausser Haus fehlgeschlagen',
+                              f'{type(e).__name__}: {e}', mail=True)
     except Exception as e:
         try:
             if os.path.exists(tmp):
@@ -9941,6 +10176,148 @@ async def admin_backup_upload(request: Request, file: UploadFile = File(...),
         return _restore_users_db(ziel)
     except HTTPException:
         os.remove(ziel)                  # untaugliche Datei nicht liegenlassen
+        raise
+
+
+@app.get('/api/admin/offsite')
+def admin_offsite(request: Request):
+    """Zustand der Sicherung ausser Haus. Geheimnisse werden NIE
+    ausgeliefert - nur 'gesetzt: ja/nein'. Wer den Bildschirm sieht, soll
+    nicht den Schluessel mitlesen koennen."""
+    _require_admin(request)
+    letzte = _set_get('r2_letzte')
+    t, name, groesse = 0, '', 0
+    if '|' in letzte:
+        teile = letzte.split('|')
+        t = int(teile[0] or 0)
+        name = teile[1] if len(teile) > 1 else ''
+        groesse = int(teile[2] or 0) if len(teile) > 2 else 0
+    out = {'bereit': _r2_bereit(),
+           'endpoint': _set_get('r2_endpoint'),
+           'bucket': _set_get('r2_bucket'),
+           'key_gesetzt': bool(_set_get('r2_key').strip()),
+           'secret_gesetzt': bool(_set_get('r2_secret').strip()),
+           'pass_gesetzt': bool(_set_get('r2_pass').strip()),
+           'letzte_ts': t, 'letzte_name': name, 'letzte_bytes': groesse,
+           'staende': R2_STAENDE, 'dateien': []}
+    if out['bereit']:
+        try:
+            out['dateien'] = _r2_liste()[:40]
+        except Exception as e:
+            out['fehler'] = f'{type(e).__name__}: {e}'
+    return out
+
+
+@app.post('/api/admin/offsite/settings')
+def admin_offsite_settings(request: Request, endpoint: str = Form(''),
+                           key: str = Form(''), secret: str = Form(''),
+                           bucket: str = Form(''), passwort: str = Form('')):
+    """Zugaenge speichern. Leer gelassene Felder bleiben, wie sie sind -
+    sonst muesste man das Geheimnis bei jeder Kleinigkeit neu eintippen."""
+    _require_admin(request)
+    if endpoint.strip():
+        e = endpoint.strip().rstrip('/')
+        if not e.startswith('https://'):
+            raise HTTPException(400, 'Endpoint must start with https://')
+        _set_put('r2_endpoint', e)
+    if bucket.strip():
+        b = bucket.strip()
+        if not re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,62}', b):
+            raise HTTPException(400, 'Invalid bucket name.')
+        _set_put('r2_bucket', b)
+    if key.strip():
+        _set_put('r2_key', key.strip())
+    if secret.strip():
+        _set_put('r2_secret', secret.strip())
+    if passwort.strip():
+        if len(passwort.strip()) < 12:
+            raise HTTPException(400, 'Password needs at least 12 characters.')
+        _set_put('r2_pass', passwort.strip())
+    _sec_event('offsite_settings', request,
+               detail='Zugaenge fuer die Sicherung ausser Haus geaendert')
+    return {'ok': True, 'bereit': _r2_bereit()}
+
+
+@app.post('/api/admin/offsite/test')
+def admin_offsite_test(request: Request):
+    """Probe: eine kleine Datei hoch, wieder herunter, entschluesseln und
+    VERGLEICHEN, danach wieder loeschen. Ein Backup, das man nie
+    zurueckgeholt hat, ist kein Backup (v197)."""
+    _require_admin(request)
+    if not _r2_bereit():
+        raise HTTPException(400, 'Not configured yet.')
+    name = f'probe_{int(time.time())}.enc'
+    inhalt = os.urandom(2048)
+    # Ein falscher Zugang ist ein BEDIENFEHLER, kein Serverfehler: die
+    # Meldung muss lesbar zurueckkommen (und nicht als 500er im Alarm-Log
+    # landen, wo die echten Stoerungen stehen).
+    try:
+        _r2_put(name, _krypt_pack(inhalt, _set_get('r2_pass')))
+        try:
+            zurueck = _krypt_unpack(_r2_get(name), _set_get('r2_pass'))
+            gleich = (zurueck == inhalt)
+        finally:
+            try:
+                _r2_del(name)
+            except Exception:
+                pass
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f'{type(e).__name__}: {e}'[:300])
+    if not gleich:
+        raise HTTPException(500, 'Probe came back different.')
+    return {'ok': True, 'bytes': len(inhalt)}
+
+
+@app.post('/api/admin/offsite/run')
+def admin_offsite_run(request: Request):
+    """Jetzt sichern und hochladen."""
+    _require_admin(request)
+    if not _r2_bereit():
+        raise HTTPException(400, 'Not configured yet.')
+    _backup_users_db(force=True)
+    bdir = os.path.join(DATA, 'backups')
+    snaps = sorted(f for f in os.listdir(bdir)
+                   if f.startswith('users_') and f.endswith('.db'))
+    if not snaps:
+        raise HTTPException(500, 'No snapshot to upload.')
+    try:
+        _offsite_r2(os.path.join(bdir, snaps[-1]))
+    except Exception as e:
+        raise HTTPException(502, f'{type(e).__name__}: {e}'[:300])
+    return {'ok': True, 'datei': snaps[-1] + '.enc'}
+
+
+@app.post('/api/admin/offsite/restore')
+def admin_offsite_restore(request: Request, datei: str = Form(...),
+                          bestaetigung: str = Form(''),
+                          passwort: str = Form('')):
+    """Stand aus dem Bucket zurueckholen und einspielen. `passwort` nur,
+    wenn die Kopie mit einem ANDEREN Passwort verschluesselt wurde (etwa
+    nach einem Serverwechsel) - sonst nimmt er das gespeicherte."""
+    _require_admin(request)
+    if bestaetigung.strip().upper() != 'RESTORE':
+        raise HTTPException(400, 'Confirmation missing.')
+    if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', datei or ''):
+        raise HTTPException(400, 'Invalid file name.')
+    try:
+        blob = _r2_get(datei)
+    except Exception as e:
+        raise HTTPException(502, f'{type(e).__name__}: {e}'[:300])
+    try:
+        roh = _krypt_unpack(blob, (passwort.strip() or _set_get('r2_pass')))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    bdir = os.path.join(DATA, 'backups')
+    os.makedirs(bdir, exist_ok=True)
+    ziel = os.path.join(bdir, f'offsite_{time.strftime("%Y%m%d_%H%M%S")}.db')
+    with open(ziel, 'wb') as f:
+        f.write(roh)
+    try:
+        return _restore_users_db(ziel)
+    except HTTPException:
+        os.remove(ziel)
         raise
 
 

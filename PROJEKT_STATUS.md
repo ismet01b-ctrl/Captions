@@ -3,6 +3,43 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230v SICHERUNG AUSSER HAUS (Cloudflare R2) - das groesste Einzelrisiko
+  ist zu.** Bis hierher lag die einzige Sicherung auf DERSELBEN Platte wie die
+  Datenbank; der Mail-Weg lief nur bei `DVE_ALERTS=all`, also im Normalbetrieb
+  GAR NICHT, und verschickte die Datenbank unverschluesselt.
+  - **Die Zugaenge kommen ueber das PANEL** (Betrieb -> Sicherung), nicht ueber
+    eine Datei auf dem Server. Alles laeuft ueber das Panel (Ismets Ansage,
+    v197) - ein Weg mit Terminal wird nie benutzt. Endpoint, Bucket, Key,
+    Secret, Passwort; leere Felder lassen den alten Wert stehen.
+  - **Verschluesselt wird VOR dem Verlassen des Servers.** Gibt es
+    `cryptography` im Bild, laeuft AES-256-GCM, sonst ein Verfahren aus der
+    Standardbibliothek (scrypt + HMAC-SHA256 als Schluesselstrom,
+    Verschluesseln-dann-Beglaubigen). Welches benutzt wurde, steht im Kopf der
+    Datei - das Zurueckspielen findet es selbst heraus. KEINE neue
+    Abhaengigkeit erzwungen (v205a-sec: die Versionen sind festgenagelt).
+  - **Kein Geheimnis verlaesst den Server.** Die Zustandsabfrage gab in der
+    ersten Fassung das PASSWORT zurueck: `all(...) and passwort` liefert in
+    Python den PASSWORT-String, nicht True. Jetzt `bool(...)`, und ein Test
+    prueft, dass weder Secret noch Passwort in der Antwort stehen.
+  - Signiert wird selbst (AWS SigV4, Region 'auto', Dienst 's3') - fuer vier
+    Aufrufe lohnt kein boto3. Rotation: 30 Staende.
+  - Knoepfe im Panel: **Verbindung pruefen** (kleine Datei hoch, wieder
+    herunter, entschluesseln, VERGLEICHEN, loeschen - ein Backup, das man nie
+    zurueckgeholt hat, ist kein Backup), **Jetzt sichern**,
+    **Zurueckspielen** (mit Tippbestaetigung wie beim Factory-Reset).
+  - Scheitert die Kopie, ist das ein ECHTER Alarm mit Mail. Eine Sicherung,
+    von deren Ausfall man erst im Ernstfall erfaehrt, ist keine.
+  - **Ehrlich:** gegen einen ECHTEN Bucket ist das hier nicht geprueft - der
+    Container kommt nicht heraus. Geprueft sind Verschluesselung (hin und
+    zurueck, veraenderte Datei und falsches Passwort fallen auf), alle
+    Eingabe-Riegel, dass kein Geheimnis ausgeliefert wird, und dass ein
+    kaputter Zugang eine lesbare Meldung gibt statt eines 500ers. Der Beweis
+    am Ende ist der Knopf "Verbindung pruefen" mit Ismets echten Schluesseln.
+  - **Zwei Tests hingen wieder an einer Zahl statt an der Regel:** die
+    Restore-Bestaetigung war auf "genau zwei Vorkommen" festgenagelt (der
+    dritte, ZUSAETZLICHE Riegel liess sie fallen), und die Panel-Ansichten auf
+    eine exakte Liste (eine NEUE Ansicht ist keine Regression). Beide pruefen
+    jetzt die Zusage.
 - **v230u DIE VORSCHAU RUCKELTE - ZWEI DECODER HALBIEREN DIE BILDRATE.**
   Ismets Befund: "das Vorschau-Video ist sehr laggy, manchmal sind die Videos
   auch nicht ganz synchron".

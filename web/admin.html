@@ -208,6 +208,7 @@ const AUTO={start:30000, live:15000, jobs:5000, alerts:20000};
    Reihenfolge folgt dem Arbeitsalltag: erst was gerade passiert, dann Geld,
    dann Kunden, dann Betrieb und Recht. */
 const ICON={
+  offsite:'<path d="M20 16.6A5 5 0 0 0 18 7h-1.3A8 8 0 1 0 4 15.2"/><path d="M12 12v9m0 0 3.5-3.5M12 21l-3.5-3.5"/>',
   start:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/>',
   live:'<path d="M3 12h4l3 8 4-16 3 8h4"/>',
   alerts:'<path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
@@ -232,7 +233,7 @@ const NAV=[
   ['Umsatz', [['revenue','Revenue'],['trichter','Trichter'],['credits','Credits'],['codes','Codes']]],
   ['Kunden', [['users','Users'],['support','Support'],['abuse','Abuse']]],
   ['Produkt', [['feedback','Feedback'],['ann','Announcements']]],
-  ['Betrieb', [['system','System'],['events','Chronik'],['logs','Logs'],['compliance','Compliance'],['legal','Recht & Steuern']]],
+  ['Betrieb', [['system','System'],['offsite','Sicherung'],['events','Chronik'],['logs','Logs'],['compliance','Compliance'],['legal','Recht & Steuern']]],
 ];
 const TABS=NAV.flatMap(([,items])=>items);
 const TITEL=Object.fromEntries(TABS);
@@ -761,6 +762,100 @@ function deployZeile(dp) {
       <code>vor_restore_*.db</code> — you can go back the same way.</div>`;
   loadBackups();
   loadBetrieb();
+}
+/* v230v SICHERUNG AUSSER HAUS (Cloudflare R2). Bis hierher lag die einzige
+   Kopie auf derselben Platte wie die Datenbank - stirbt sie, ist das Guthaben
+   zahlender Kunden weg. Die Zugaenge kommen HIER herein, nicht ueber eine
+   Datei auf dem Server: alles laeuft ueber das Panel, ein Weg mit Terminal
+   wird nie benutzt. Geheimnisse zeigt der Server nie wieder her - hier steht
+   nur "gesetzt: ja/nein". */
+async function loadOffsite(){
+  const v=el('view');
+  let d;try{d=await api('/api/admin/offsite');}catch(e){v.innerHTML=err(e);return;}
+  const ja=x=>x?'<span class="tag ok">gesetzt</span>':'<span class="tag no">fehlt</span>';
+  v.innerHTML=`<h2>Sicherung ausser Haus</h2>
+    <div class="note" style="margin-bottom:14px">Taeglich wandert eine
+      <b>verschluesselte</b> Kopie der Datenbank zu Cloudflare R2. Verschluesselt
+      wird auf DIESEM Server &mdash; wer den Speicher aufmacht, sieht Rauschen.
+      Es bleiben ${d.staende} Staende liegen.</div>
+    <div class="grid3">
+      <div class="card"><div class="k">Zustand</div><div class="v" style="font-size:16px">
+        ${d.bereit?'<span class="tag ok">eingerichtet</span>':'<span class="tag no">noch nicht eingerichtet</span>'}</div></div>
+      <div class="card"><div class="k">Letzte Kopie</div><div class="v" style="font-size:16px">
+        ${d.letzte_ts?fdt(d.letzte_ts):'&ndash;'}</div></div>
+      <div class="card"><div class="k">Staende im Speicher</div><div class="v" style="font-size:16px">
+        ${d.dateien.length}</div></div>
+    </div>
+    ${d.fehler?`<div class="note bad" style="margin-top:12px">Speicher nicht erreichbar: ${esc(d.fehler)}</div>`:''}
+    <h3>Zugang</h3>
+    <div class="card">
+      <div style="display:grid;gap:9px;max-width:640px">
+        <label class="k">Endpoint <span class="subtle">(aus Cloudflare, beginnt mit https://)</span>
+          <input id="oEp" placeholder="https://….r2.cloudflarestorage.com" value="${esc(d.endpoint)}"></label>
+        <label class="k">Bucket
+          <input id="oBk" placeholder="douchkove-backup" value="${esc(d.bucket)}"></label>
+        <label class="k">Access Key ID ${ja(d.key_gesetzt)}
+          <input id="oKey" placeholder="${d.key_gesetzt?'unveraendert lassen':'aus Cloudflare'}"></label>
+        <label class="k">Secret Access Key ${ja(d.secret_gesetzt)}
+          <input id="oSec" type="password" placeholder="${d.secret_gesetzt?'unveraendert lassen':'wird nur EINMAL angezeigt'}"></label>
+        <label class="k">Passwort fuer die Verschluesselung ${ja(d.pass_gesetzt)}
+          <input id="oPw" type="password" placeholder="${d.pass_gesetzt?'unveraendert lassen':'mind. 12 Zeichen'}"></label>
+      </div>
+      <div class="row-actions" style="margin-top:12px">
+        <button class="btn sm" onclick="offSave()">Speichern</button>
+        <button class="btn ghost sm" onclick="offTest()">Verbindung pruefen</button>
+        <button class="btn ghost sm" onclick="offRun()">Jetzt sichern</button>
+      </div>
+      <div class="note" style="margin-top:10px"><b>Das Passwort ausser Haus aufheben.</b>
+        Ohne es laesst sich die Kopie NICHT lesen &mdash; und liegt es nur auf
+        diesem Server, ist es zusammen mit der Platte weg. Schreib es in deinen
+        Passwort-Speicher, bevor du weitermachst.</div>
+    </div>
+    <h3>Vorhandene Staende</h3>
+    <div id="offList" class="subtle">&ndash;</div>`;
+  const box=el('offList');
+  if(!d.dateien.length){box.innerHTML='<div class="subtle">Noch nichts hochgeladen.</div>';}
+  else{box.innerHTML=`<table><thead><tr><th>Datei</th><th>Groesse</th><th>Wann</th><th></th></tr></thead>
+    <tbody>${d.dateien.map(f=>`<tr><td>${esc(f.name)}</td>
+      <td class="subtle">${(f.bytes/1024).toFixed(0)} KB</td>
+      <td class="subtle" style="white-space:nowrap">${esc((f.ts||'').replace('T',' ').slice(0,16))}</td>
+      <td><button class="btn bad sm" onclick="offRestore('${esc(f.name)}')">Zurueckspielen</button></td>
+    </tr>`).join('')}</tbody></table>`;}
+}
+async function offSave(){
+  const fd=new FormData();
+  fd.append('endpoint',el('oEp').value.trim()); fd.append('bucket',el('oBk').value.trim());
+  fd.append('key',el('oKey').value.trim()); fd.append('secret',el('oSec').value.trim());
+  fd.append('passwort',el('oPw').value.trim());
+  try{await api('/api/admin/offsite/settings',{method:'POST',body:fd});
+    alert('Gespeichert.'); loadOffsite();}
+  catch(e){alert(e.message);}
+}
+async function offTest(){
+  try{const d=await api('/api/admin/offsite/test',{method:'POST'});
+    alert('Funktioniert: '+d.bytes+' Bytes hoch, wieder heruntergeholt, '
+      +'entschluesselt und verglichen.');}
+  catch(e){alert('Fehlgeschlagen:\n'+e.message);}
+}
+async function offRun(){
+  try{const d=await api('/api/admin/offsite/run',{method:'POST'});
+    alert('Hochgeladen: '+d.datei); loadOffsite();}
+  catch(e){alert('Fehlgeschlagen:\n'+e.message);}
+}
+/* Zurueckspielen ueberschreibt ALLE Konten - dieselbe Tipp-Bestaetigung wie
+   beim Factory-Reset. Der jetzige Stand bleibt als vor_restore_*.db liegen. */
+async function offRestore(name){
+  const t=prompt('Das ueberschreibt die laufende Datenbank mit "'+name+'".\n'
+    +'Der jetzige Stand bleibt als vor_restore_*.db liegen.\n'
+    +'Tippe RESTORE zum Bestaetigen.');
+  if(!t)return;
+  const pw=prompt('Passwort der Kopie. Leer lassen, wenn es dasselbe ist wie '
+    +'oben gespeichert.')||'';
+  const fd=new FormData(); fd.append('datei',name); fd.append('bestaetigung',t);
+  fd.append('passwort',pw);
+  try{const d=await api('/api/admin/offsite/restore',{method:'POST',body:fd});
+    alert('Eingespielt: '+(d.konten!=null?d.konten+' Konten':'ok')); loadOffsite();}
+  catch(e){alert(e.message);}
 }
 /* v197a: Die Sicherungen lagen nur auf der Platte und im Postfach. Im Panel
    stand bloss ein Datum - man sah also, DASS gesichert wurde, kam aber nicht
@@ -1349,7 +1444,7 @@ async function loadTrichter(silent){
       ${d.seit?' Erste Zaehlung: '+fdt(d.seit)+'.':''}</div>`;
 }
 
-const RENDER={start:loadStart,trichter:loadTrichter,live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
+const RENDER={start:loadStart,trichter:loadTrichter,live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,offsite:loadOffsite,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
 if(KEY)boot();
 </script>
 </body>

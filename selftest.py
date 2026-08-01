@@ -8589,8 +8589,115 @@ def _scenario_betrieb(tmp):
           '_backup_users_db(force=True)' in _sv197)
     check('v197: geschrieben wird ueber .tmp + os.replace',
           "tmp = dest + '.tmp'" in _sv197 and 'os.replace(tmp, dest)' in _sv197)
-    check('v197: die Offsite-Mail geht nur beim ersten Anlegen raus',
-          'if neu:\n            _mail_backup_offsite(dest)' in _sv197)
+    # v230v: der Mail-Weg ist der RUECKFALL, die Kopie ausser Haus kommt
+    # zuerst. Die alte Zusage (nur beim ersten Anlegen) gilt weiter.
+    check('v230v: die Kopie ausser Haus laeuft beim ersten Anlegen',
+          'if not _offsite_r2(dest):' in _sv197
+          and '_mail_backup_offsite(dest)      # alter Weg als Rueckfall' in _sv197)
+
+    # --- v230v SICHERUNG AUSSER HAUS (Cloudflare R2) --------------------
+    # (a) Verschluesselung: hin und zurueck, und JEDE Aenderung an der Datei
+    #     muss auffallen. Beide Wege pruefen - im Bild kann `cryptography`
+    #     fehlen, dann greift der Weg aus der Standardbibliothek.
+    _kt = os.urandom(50000)
+    for _art in ('auto', 'stdlib'):
+        if _art == 'stdlib':
+            _orig_imp = __builtins__['__import__'] if isinstance(__builtins__, dict) \
+                else __builtins__.__import__
+
+            def _kein_crypto(name, *a, **k):
+                if name.startswith('cryptography'):
+                    raise ImportError('abgeschaltet fuer den Test')
+                return _orig_imp(name, *a, **k)
+            import builtins as _bi
+            _bi.__import__ = _kein_crypto
+        try:
+            _blob = _SV197._krypt_pack(_kt, 'ein-langes-passwort')
+            _zur = _SV197._krypt_unpack(_blob, 'ein-langes-passwort')
+            check(f'v230v: verschluesselt und wieder lesbar ({_art})',
+                  _zur == _kt, f'{len(_blob) - len(_kt)} Bytes Aufschlag')
+            check(f'v230v: der Geheimtext sieht NICHT nach der Datenbank aus ({_art})',
+                  _blob[37:37 + 64] != _kt[:64])
+            _kaputt = bytearray(_blob)
+            _kaputt[60] ^= 1
+            _erkannt = False
+            try:
+                _SV197._krypt_unpack(bytes(_kaputt), 'ein-langes-passwort')
+            except Exception:
+                _erkannt = True
+            check(f'v230v: eine veraenderte Datei faellt auf ({_art})', _erkannt)
+            _falsch = False
+            try:
+                _SV197._krypt_unpack(_blob, 'anderes-passwort')
+            except Exception:
+                _falsch = True
+            check(f'v230v: falsches Passwort faellt auf ({_art})', _falsch)
+        finally:
+            if _art == 'stdlib':
+                import builtins as _bi
+                _bi.__import__ = _orig_imp
+    # Fuer die Panel-Aufrufe: eigener Client und ein Admin-Key nur hier.
+    from fastapi.testclient import TestClient as _TC230v
+    _cl197 = _TC230v(_SV197.app, base_url='https://test')
+    _KEY197 = 'testkey_offsite'
+    os.environ['DVE_ADMIN'] = _KEY197
+    # (b) Kein Geheimnis verlaesst den Server. `a and b` gibt in Python b
+    #     zurueck - ohne bool() stand das PASSWORT in der Antwort.
+    for _k, _v in (('r2_endpoint', 'https://x.r2.cloudflarestorage.com'),
+                   ('r2_key', 'AKTEST'), ('r2_secret', 'SECRETWERT'),
+                   ('r2_bucket', 'douchkove-backup'),
+                   ('r2_pass', 'ein-langes-passwort')):
+        _SV197._set_put(_k, _v)
+    check('v230v: "bereit" ist ja/nein, kein Passwort',
+          _SV197._r2_bereit() is True)
+    _off = _cl197.get('/api/admin/offsite', headers={'X-Admin-Key': _KEY197})
+    check('v230v: der Zustand ist ohne Schluessel nicht abrufbar',
+          _cl197.get('/api/admin/offsite').status_code == 403)
+    _otxt = _off.text
+    check('v230v: weder Geheimnis noch Passwort stehen in der Antwort',
+          'SECRETWERT' not in _otxt and 'ein-langes-passwort' not in _otxt,
+          _otxt[:120])
+    check('v230v: aber "gesetzt: ja" steht drin',
+          _off.json().get('secret_gesetzt') is True
+          and _off.json().get('pass_gesetzt') is True)
+    # (c) Eingaben pruefen: http:// waere im Klartext unterwegs, ein zu
+    #     kurzes Passwort ist keins.
+    _hd197 = {'X-Admin-Key': _KEY197}
+    check('v230v: ein http-Endpoint wird abgelehnt',
+          _cl197.post('/api/admin/offsite/settings', headers=_hd197,
+                      data={'endpoint': 'http://x.example'}).status_code == 400)
+    check('v230v: ein kurzes Passwort wird abgelehnt',
+          _cl197.post('/api/admin/offsite/settings', headers=_hd197,
+                      data={'passwort': 'kurz'}).status_code == 400)
+    check('v230v: ein unsinniger Bucket-Name wird abgelehnt',
+          _cl197.post('/api/admin/offsite/settings', headers=_hd197,
+                      data={'bucket': '../../etc'}).status_code == 400)
+    _cl197.post('/api/admin/offsite/settings', headers=_hd197,
+                data={'bucket': 'zweiter-eimer'})
+    check('v230v: leere Felder lassen den alten Wert stehen',
+          _SV197._set_get('r2_secret') == 'SECRETWERT'
+          and _SV197._set_get('r2_bucket') == 'zweiter-eimer')
+    # (d) Der Dateiname beim Zurueckholen kommt aus dem Formular - er darf
+    #     nicht aus dem Bucket herausfuehren.
+    check('v230v: ein Pfad im Dateinamen wird abgelehnt',
+          _cl197.post('/api/admin/offsite/restore', headers=_hd197,
+                      data={'datei': '../geheim', 'bestaetigung': 'RESTORE'}
+                      ).status_code == 400)
+    check('v230v: ohne Tippbestaetigung passiert nichts',
+          _cl197.post('/api/admin/offsite/restore', headers=_hd197,
+                      data={'datei': 'users_20260101.db.enc'}).status_code == 400)
+    # (e) Die Signatur: Bucket im Pfad, Region 'auto', Dienst 's3'.
+    _sv230v = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230v: signiert wird fuer Region auto und Dienst s3',
+          "_sig_hmac(k, 'auto')" in _sv230v and "_sig_hmac(k, 's3')" in _sv230v
+          and "bereich = f'{tag}/auto/s3/aws4_request'" in _sv230v)
+    check('v230v: der Bucket steht im Pfad',
+          "kanon_pfad = '/' + bucket" in _sv230v)
+    check('v230v: ein nicht-https-Endpoint kommt gar nicht erst durch',
+          "raise RuntimeError('endpoint must start with https://')" in _sv230v)
+    check('v230v: es bleiben 30 Staende liegen',
+          'R2_STAENDE = 30' in _sv230v and 'alt[R2_STAENDE:]' in _sv230v)
+    os.environ.pop('DVE_ADMIN', None)
 
     # --- B) Restore. Ein Backup, das man nie zurueckgespielt hat, ist kein
     # Backup. Geprueft wird die REIHENFOLGE der Sicherungsnetze im Skript.
@@ -8757,9 +8864,17 @@ def _scenario_betrieb(tmp):
                                       _erg197['vorher_gesichert'])))
     check('v197b: das Schema wird nach einer alten Sicherung nachgezogen',
           '_init_users_db()                     # Schema nachziehen' in _sv197)
+    # v230v: geprueft wird die REGEL - JEDER Weg, der die Datenbank
+    # ueberschreibt, verlangt die Tippbestaetigung. Die feste Zahl 2 war eine
+    # Falle: mit dem Weg aus der Sicherung ausser Haus sind es jetzt drei, und
+    # der Test meldete ausgerechnet den ZUSAETZLICHEN Riegel als Fehler.
+    _rest_wege = [_z for _z in _sv197.split('@app.post(')[1:]
+                  if '/restore' in _z.split(')')[0] or '/backup/upload' in _z.split(')')[0]]
     check('v197b: ohne Tippbestaetigung passiert nichts',
-          "bestaetigung.strip().upper() != 'RESTORE'" in _sv197
-          and _sv197.count("bestaetigung.strip().upper() != 'RESTORE'") == 2)
+          len(_rest_wege) >= 3
+          and all("bestaetigung.strip().upper() != 'RESTORE'" in _z
+                  for _z in _rest_wege),
+          f'{len(_rest_wege)} Wege, die die Datenbank ueberschreiben')
     check('v197b: die Offsite-Kopie aus der Mail kann hochgeladen werden',
           "@app.post('/api/admin/backup/upload')" in _sv197
           and 'gzip.decompress' in _sv197)
@@ -9760,8 +9875,11 @@ def _scenario_betrieb(tmp):
     _soll195 = {'live', 'alerts', 'jobs', 'revenue', 'credits', 'codes',
                 'users', 'support', 'abuse', 'system', 'compliance', 'legal',
                 'feedback', 'ann', 'logs', 'events', 'start', 'trichter'}
+    # v230v: die ZUSAGE ist "nichts verschwindet" - eine NEUE Ansicht ist
+    # keine Regression. Auf Gleichheit geprueft meldete der Test jede
+    # Erweiterung als Fehler (Checkliste Punkt 3).
     check('v195: alle Ansichten sind weiter erreichbar',
-          _ids195 == _soll195, f"fehlt: {_soll195 - _ids195}  neu: {_ids195 - _soll195}")
+          not (_soll195 - _ids195), f"fehlt: {_soll195 - _ids195}")
     check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',
           'const TABS=NAV.flatMap(' in _adm195)
     check('v195: die aktive Zeile wird in der Seitenleiste markiert',
