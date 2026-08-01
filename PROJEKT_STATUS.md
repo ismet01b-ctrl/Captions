@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230p ZWEI KI-SYSTEME FIELEN STILL AUS - DIE ANTWORT WAR NICHT KAPUTT,
+  SIE WAR NICHT DA.** In Ismets Job-Log (Stempel v230l): "Vision director
+  unavailable (JSONDecodeError)" und "AI flow unavailable (JSONDecodeError)".
+  Beide sind lautlos auf die Heuristik zurueckgefallen, 66 s Rechenzeit
+  (Bild-Regie 40.5 + Text-Fluss 25.7) waren trotzdem weg.
+  - **Die v210-Untergrenze von 2500 Tokens hat nicht gereicht.** Bei den
+    Denk-Modellen zaehlen die internen Denk-Tokens in dasselbe Budget wie die
+    Antwort. Ist es aufgebraucht, kommt `finish_reason='length'` mit LEEREM
+    Inhalt - und `json.loads('')` meldet einen JSONDecodeError, der den Grund
+    verschweigt. Die Text-Regie mit 3000 lief durch, die Bild-Regie mit 24
+    Bildern und der Text-Fluss mit 14 Bloecken nicht.
+  - **Drei Riegel:** (1) `_oai_text` ist jetzt die EINE Stelle fuer jeden
+    KI-Aufruf und wiederholt eine leere Antwort EINMAL mit doppeltem Budget -
+    die Regie ist das Herz des Produkts, ein zweiter Aufruf ist billiger als
+    ein stiller Rueckfall. (2) Bleibt sie leer, nennt die Meldung den Grund
+    (finish_reason, Budget, verbrauchte und davon Denk-Tokens). (3) Das
+    Budget waechst mit dem Umfang: +260 Tokens je Bild, +90 je Textblock.
+  - Alle neun Aufrufer lesen die Antwort nicht mehr selbst aus - sonst faellt
+    der naechste wieder auf den nichtssagenden JSONDecodeError zurueck.
+  - **Ehrlich:** ohne echten Schluessel laesst sich das hier nicht am
+    Live-System beweisen. Geprueft ist der Weg mit einer nachgebauten
+    Antwort (leer -> Wiederholung -> Erfolg, und leer -> sprechender Fehler).
 - **v230o SOUND-SPAM: DIE ROTATION LIEF IM FALSCHEN RING.** Ismets Befund:
   "es werden nicht alle benutzt, der spammt denselben Sound immer wieder".
   - **Am echten Job gemessen:** 11 von 25 Dateien wurden ueberhaupt benutzt,

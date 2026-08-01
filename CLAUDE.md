@@ -275,6 +275,15 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
 - **Ein Fallback, der jeden Fehler schluckt, macht aus einem
   Programmierfehler ein Feature, das niemand vermisst.** Vier Systeme waren
   monatelang aus, ohne dass ein Test oder ein Kunde es merkte.
+- **Und 2500 haben nicht gereicht (v230p).** Dieselben zwei Systeme fielen
+  in Ismets v230l-Log wieder aus. Die Antwort war nicht kaputt, sie war
+  NICHT DA: `finish_reason='length'`, Inhalt leer, das Denken hatte das
+  ganze Budget. Ein JSONDecodeError nennt diesen Grund NICHT. Jetzt geht
+  jeder Aufruf ueber `_oai_text` — eine leere Antwort wird EINMAL mit
+  doppeltem Budget wiederholt, danach nennt die Meldung finish_reason,
+  Budget und Denk-Tokens. Das Budget waechst ausserdem mit dem Umfang
+  (+260 je Bild, +90 je Textblock). Merksatz: wer eine Fehlermeldung baut,
+  fragt, ob sie die URSACHE nennt oder nur das Symptom.
 
 ### Hand-Regie (v174) — "der Text weicht der Hand, die ihn schubst"
 **Angesagt schlägt beiläufig (v177/v178).** Der angesagte Wisch hat eigene
@@ -1352,7 +1361,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1844/1845 (Stand v230o)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1849/1850 (Stand v230p)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

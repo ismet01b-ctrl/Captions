@@ -1518,14 +1518,11 @@ def silent_score(out_video, words, fx_map, model='gpt-5'):
         if not content:
             return None
         import requests as _rq
-        r = _rq.post('https://api.openai.com/v1/chat/completions',
-                     headers={'Authorization': f'Bearer {key}'},
-                     json=_oai_json(model,
-                                    [{'role': 'system', 'content': SILENT_PROMPT},
-                                     {'role': 'user', 'content': content}],
-                                    max_toks=500, temperature=0.1),
-                     timeout=90)
-        data = json.loads(r.json()['choices'][0]['message']['content'])
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'system', 'content': SILENT_PROMPT},
+                    {'role': 'user', 'content': content}],
+            max_toks=500, temperature=0.1), timeout=90)
+        data = json.loads(_txt)
         score = min(max(int(data.get('score', -1)), 0), 100)
         hints = []
         for h in (data.get('hinweise') or [])[:3]:
@@ -1608,6 +1605,53 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     return body
 
 
+def _oai_text(key, body, timeout=120):
+    """v230p EINE STELLE FUER DEN AUFRUF - UND EINE EHRLICHE FEHLERMELDUNG.
+
+    Bis v230o las jeder Aufrufer selbst
+    `r.json()['choices'][0]['message']['content']`. Ist die Antwort LEER,
+    meldet `json.loads('')` einen JSONDecodeError - und genau das stand in
+    Ismets Job-Log bei der Bild-Regie und beim Text-Fluss. Die Meldung nennt
+    aber nicht die Ursache: die Antwort war nicht kaputt, sie war NICHT DA.
+    Bei den Denk-Modellen zaehlen die internen Denk-Tokens in dasselbe
+    Budget wie die Antwort (v210); reicht es nicht, kommt
+    `finish_reason='length'` mit leerem Inhalt zurueck.
+
+    Deshalb hier: EIN Wiederholversuch mit doppeltem Budget (die Regie ist
+    das Herz des Produkts - ein stiller Rueckfall auf die Heuristik kostet
+    mehr als ein zweiter Aufruf), und wenn es dann immer noch leer ist, eine
+    Meldung, die den Grund NENNT (finish_reason plus Denk-Tokens) statt
+    eines nichtssagenden JSONDecodeError.
+    """
+    import requests
+    url = 'https://api.openai.com/v1/chat/completions'
+    kopf = {'Authorization': f'Bearer {key}'}
+    _tk = 'max_completion_tokens' if 'max_completion_tokens' in body \
+        else 'max_tokens'
+    letzte = ''
+    for versuch in (0, 1):
+        r = requests.post(url, headers=kopf, json=body, timeout=timeout)
+        r.raise_for_status()
+        d = r.json()
+        ch = (d.get('choices') or [{}])[0]
+        txt = ((ch.get('message') or {}).get('content') or '').strip()
+        if txt:
+            return txt
+        u = d.get('usage') or {}
+        det = u.get('completion_tokens_details') or {}
+        letzte = (f"empty answer (finish_reason={ch.get('finish_reason')}, "
+                  f"budget={body.get(_tk)}, used={u.get('completion_tokens')}, "
+                  f"thereof reasoning={det.get('reasoning_tokens')})")
+        if versuch == 0 and ch.get('finish_reason') == 'length' \
+                and body.get(_tk):
+            body = dict(body)
+            body[_tk] = int(body[_tk]) * 2
+            print(f"  AI: {letzte} - retrying with {body[_tk]} tokens")
+            continue
+        break
+    raise ValueError(letzte + ' - token budget too small')
+
+
 def ai_scene_direct(words, fx_map, video_path, model='gpt-5', min_power=2,
                     face_cover=None):
     """Regie v4 (Vision): schaut sich pro gewaehltem Moment einen Frame an und
@@ -1650,16 +1694,15 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-5', min_power=2,
     if not sent:
         return fx_map
     try:
-        r = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={'Authorization': f'Bearer {key}'},
-            json=_oai_json(model,
-                           [{'role': 'system', 'content': SZENE_PROMPT},
-                            {'role': 'user', 'content': content}],
-                           max_toks=1500, temperature=0.1),
-            timeout=180)
-        r.raise_for_status()
-        data = json.loads(r.json()['choices'][0]['message']['content'])
+        # v230p: das Budget waechst mit der Zahl der BILDER. Ein Denk-Modell
+        # denkt pro Bild nach, und die Denk-Tokens gehen vom selben Budget ab -
+        # mit festen 1500 (Untergrenze 2500) war die Antwort bei 24 Bildern
+        # leer, bevor sie anfing (Ismets Job-Log).
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'system', 'content': SZENE_PROMPT},
+                    {'role': 'user', 'content': content}],
+            max_toks=1500 + 260 * len(sent), temperature=0.1), timeout=180)
+        data = json.loads(_txt)
         n_v = 0
         for m in data.get('momente', []):
             i = int(m.get('i', -1))
@@ -2796,16 +2839,11 @@ def ai_objekt_anker(words, fx_map, video_path, model='gpt-5', min_power=2):
     if not sent:
         return fx_map
     try:
-        r = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={'Authorization': f'Bearer {key}'},
-            json=_oai_json(model,
-                           [{'role': 'system', 'content': OBJEKT_PROMPT},
-                            {'role': 'user', 'content': content}],
-                           max_toks=900, temperature=0.1),
-            timeout=180)
-        r.raise_for_status()
-        data = json.loads(r.json()['choices'][0]['message']['content'])
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'system', 'content': OBJEKT_PROMPT},
+                    {'role': 'user', 'content': content}],
+            max_toks=900 + 200 * len(sent), temperature=0.1), timeout=180)
+        data = json.loads(_txt)
     except Exception as e:
         print(f"Object anchor: vision skipped ({type(e).__name__})")
         return fx_map
@@ -4976,14 +5014,10 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
                         'image_url': {'url': f'data:image/jpeg;base64,{b}',
                                       'detail': 'low'}})
     try:
-        r = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={'Authorization': f'Bearer {key}'},
-            json=_oai_json(model, [{'role': 'user', 'content': content}],
-                           max_toks=400, temperature=0.3, json_mode=False),
-            timeout=120)
-        r.raise_for_status()
-        desc = r.json()['choices'][0]['message']['content'].strip()
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'user', 'content': content}],
+            max_toks=400, temperature=0.3, json_mode=False), timeout=120)
+        desc = _txt
     except Exception as e:
         print(f"Style learning unavailable ({type(e).__name__})")
         desc = ''
@@ -5168,14 +5202,10 @@ def _style_params_from_desc(desc, model='gpt-5', key=None, frames=None):
                         'image_url': {'url': f'data:image/jpeg;base64,{b}',
                                       'detail': 'low'}})
     try:
-        r = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={'Authorization': f'Bearer {key}'},
-            json=_oai_json(model, [{'role': 'user', 'content': content}],
-                           max_toks=200, temperature=0.0),
-            timeout=90)
-        r.raise_for_status()
-        data = json.loads(r.json()['choices'][0]['message']['content'])
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'user', 'content': content}],
+            max_toks=200, temperature=0.0), timeout=90)
+        data = json.loads(_txt)
         out = {}
         try:
             out['words_per_group'] = min(max(int(data.get('words_per_group')), 1), 5)
@@ -5588,17 +5618,12 @@ def _regie_validate(fx_map, words, model, key):
         "Antworte NUR mit JSON: {\"entfernen\": [<Index>, ...]}"
     )
     try:
-        r = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={'Authorization': f'Bearer {key}'},
-            json=_oai_json(model,
-                           [{'role': 'system', 'content': prompt},
-                            {'role': 'user', 'content': json.dumps(
-                                entries, ensure_ascii=False)}],
-                           max_toks=800, temperature=0.0),
-            timeout=90)
-        r.raise_for_status()
-        data = json.loads(r.json()['choices'][0]['message']['content'])
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'system', 'content': prompt},
+                    {'role': 'user', 'content': json.dumps(
+                        entries, ensure_ascii=False)}],
+            max_toks=800, temperature=0.0), timeout=90)
+        data = json.loads(_txt)
         drop = {int(i) for i in data.get('entfernen', []) if i in fx_map}
         if drop:
             for i in drop:
@@ -6259,15 +6284,11 @@ def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None,
     usr = (f"Sprache: {language}\nWORTLISTE (Index in eckigen Klammern):\n{wl}\n\n"
            "Gib die dezenten Akzente als JSON zurueck.")
     try:
-        r = requests.post('https://api.openai.com/v1/chat/completions',
-                          headers={'Authorization': f'Bearer {key}'},
-                          json=_oai_json(model,
-                                         [{'role': 'system', 'content': sys_p},
-                                          {'role': 'user', 'content': usr}],
-                                         max_toks=1200, temperature=0.3),
-                          timeout=90)
-        r.raise_for_status()
-        data = json.loads(r.json()['choices'][0]['message']['content'])
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'system', 'content': sys_p},
+                    {'role': 'user', 'content': usr}],
+            max_toks=1200, temperature=0.3), timeout=90)
+        data = json.loads(_txt)
         arr = data.get('akzente') if isinstance(data, dict) else data
         san = sanitize_accents(arr, words, profile, kw)
         for a in san:
@@ -6664,16 +6685,11 @@ def ai_direct(words, language, model='gpt-5', voice_wav=None, validate=True):
                   '\n\nWORTLISTE (nur waehlbare Substanz-Woerter, ' \
                   'Fuellwoerter wurden entfernt):\n' + ' '.join(wl_toks) + pegel_hint
         try:
-            r = requests.post(
-                'https://api.openai.com/v1/chat/completions',
-                headers={'Authorization': f'Bearer {key}'},
-                json=_oai_json(model,
-                               [{'role': 'system', 'content': REGIE_PROMPT},
-                                {'role': 'user', 'content': listing}],
-                               max_toks=3000, temperature=0.2),
-                timeout=120)
-            r.raise_for_status()
-            res = parse_regie(r.json()['choices'][0]['message']['content'], words, language)
+            _txt = _oai_text(key, _oai_json(
+                model, [{'role': 'system', 'content': REGIE_PROMPT},
+                        {'role': 'user', 'content': listing}],
+                max_toks=3000, temperature=0.2), timeout=180)
+            res = parse_regie(_txt, words, language)
             if res:
                 # Overlap-Bereich: Momente aus dem Kontext-Vorlauf verwerfen,
                 # der vorherige Chunk hat sie bereits (oder bewusst uebergangen).
@@ -8057,16 +8073,16 @@ def ai_flow_direct(words, groups, language='de', model='gpt-5'):
     # Funktion ohne echten Schluessel NICHT mit NameError endet.
     import requests
     try:
-        r = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={'Authorization': f'Bearer {key}'},
-            json=_oai_json(model, [{'role': 'system', 'content': sysm},
-                                   {'role': 'user', 'content': '\n'.join(lines)}],
-                           max_toks=min(120 + 30 * len(groups), 4000),
-                           temperature=0.0),
-            timeout=120)
-        r.raise_for_status()
-        data = json.loads(r.json()['choices'][0]['message']['content'])
+        # v230p: das Budget waechst mit der Zahl der Bloecke. 120 + 30 je
+        # Block ergab bei 14 Bloecken 540 Tokens - nach der Untergrenze 2500,
+        # und davon ging bei einem Denk-Modell alles ins Nachdenken. Die
+        # Antwort kam leer (Ismets Job-Log: "AI flow unavailable").
+        _txt = _oai_text(key, _oai_json(
+            model, [{'role': 'system', 'content': sysm},
+                    {'role': 'user', 'content': '\n'.join(lines)}],
+            max_toks=min(600 + 90 * len(groups), 12000),
+            temperature=0.0), timeout=180)
+        data = json.loads(_txt)
     except Exception as e:
         print(f"AI flow unavailable ({type(e).__name__}), falling back to the heuristic.")
         return None

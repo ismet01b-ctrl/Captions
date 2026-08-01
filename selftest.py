@@ -3224,6 +3224,69 @@ def _scenario_logic(clip, transcript, tmp):
           "and not _himmel" in _src210
           and "if _tw < _kopf * 1.10 or _himmel" in _src210)
 
+    # v230p: DIE 2500 HABEN NICHT GEREICHT. In Ismets Job-Log (v230l) fielen
+    # trotz v210 zwei Systeme aus - "Vision director unavailable
+    # (JSONDecodeError)" und "AI flow unavailable (JSONDecodeError)". Die
+    # Antwort war nicht kaputt, sie war NICHT DA: das Denken hat das ganze
+    # Budget verbraucht (finish_reason='length', Inhalt leer). Ein
+    # JSONDecodeError nennt diesen Grund nicht - und ein Fallback, der ihn
+    # schluckt, macht daraus ein Feature, das niemand vermisst (v210-Lehre).
+    class _FakeR:
+        def __init__(self, d):
+            self._d = d
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self._d
+
+    _leer = {'choices': [{'message': {'content': ''},
+                          'finish_reason': 'length'}],
+             'usage': {'completion_tokens': 2500,
+                       'completion_tokens_details': {'reasoning_tokens': 2500}}}
+    _voll = {'choices': [{'message': {'content': '{"ok":1}'},
+                          'finish_reason': 'stop'}]}
+    import requests as _rq230
+    _budgets, _post0 = [], _rq230.post
+
+    def _fp(url, headers=None, json=None, timeout=None):
+        _budgets.append(json.get('max_completion_tokens')
+                        or json.get('max_tokens'))
+        return _FakeR(_leer if len(_budgets) == 1 else _voll)
+    try:
+        _rq230.post = _fp
+        _body230 = R._oai_json('gpt-5', [{'role': 'user', 'content': 'x'}],
+                               max_toks=1500, temperature=0.1)
+        _ant = R._oai_text('KEY', _body230)
+        check('v230p: eine leere Antwort wird EINMAL mit doppeltem Budget '
+              'wiederholt',
+              _ant == '{"ok":1}' and len(_budgets) == 2
+              and _budgets[1] == _budgets[0] * 2, str(_budgets))
+        _budgets.clear()
+        _rq230.post = lambda url, headers=None, json=None, timeout=None: (
+            _budgets.append(1), _FakeR(_leer))[1]
+        _fehler = ''
+        try:
+            R._oai_text('KEY', dict(_body230))
+        except Exception as _e230:
+            _fehler = str(_e230)
+        check('v230p: bleibt sie leer, NENNT die Meldung den Grund',
+              'finish_reason=length' in _fehler and 'reasoning=2500' in _fehler
+              and 'budget' in _fehler, _fehler[:110])
+    finally:
+        _rq230.post = _post0
+    # Kein Aufrufer liest die Antwort mehr selbst aus - sonst faellt der
+    # naechste wieder auf den nichtssagenden JSONDecodeError zurueck.
+    check('v230p: alle KI-Aufrufe gehen ueber _oai_text',
+          _src210.count("r.json()['choices'][0]['message']['content']") == 1,
+          f"{_src210.count(chr(114) + '.json()')} direkte Zugriffe")
+    # Und das Budget waechst mit dem Umfang: Bilder bzw. Bloecke.
+    check('v230p: das Bild-Budget waechst mit der Zahl der Bilder',
+          'max_toks=1500 + 260 * len(sent)' in _src210)
+    check('v230p: das Fluss-Budget waechst mit der Zahl der Bloecke',
+          'max_toks=min(600 + 90 * len(groups), 12000)' in _src210)
+
     # v211: Die gemessene Blockbreite gehoert INS LOG. Fuenf Theorien zum
     # angeschnittenen Text, fuenf widerlegt - weil die Zahl nur im Bild stand.
     _r211 = open(_os210.path.join(HERE, 'render.py'), encoding='utf-8').read()
