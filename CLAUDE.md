@@ -133,7 +133,22 @@ Versions-Abschnitt.
     dass ein Knopf die Beschriftung verdeckt (v230r) oder ein unsichtbares
     Feld den Klick abfängt (v230s). Also: echter Klick, echtes Ziehen, mit
     Maus UND Finger, und die Rechtecke der Bedienelemente vergleichen.
-11. **Sagen, was NICHT bewiesen ist.** Kein "gefixt", wenn nur ein
+11. **Ein Sicherheitsnetz, das sich nicht selbst prueft, ist Dekoration.**
+    Die taegliche Sicherung lief jahrelang, meldete "DB-Backup: …" und konnte
+    trotzdem den LEEREN Stand vom Serverstart enthalten (v230y, WAL). Niemand
+    hat je den INHALT einer automatischen Sicherung mit der laufenden
+    Datenbank verglichen - der Fehler kam nur ans Licht, weil ein Test im
+    Container zufaellig hinsah. Wer ein Netz baut (Sicherung, Wachhund,
+    Alarm), baut die Gegenprobe MIT: Zahlen aus dem Ergebnis gegen Zahlen aus
+    der Quelle, regelmaessig, mit Alarm bei Abweichung.
+12. **Dieselbe Frage, andere Umgebung, andere Antwort.** `getmtime` bei WAL,
+    H.264 im Test-Chromium, tkinter im Container, ein Checkpoint, der lokal
+    zufaellig laeuft: derselbe Code kann anderswo das Gegenteil sagen. Wenn
+    ein Test nur DORT faellt, ist die erste Frage nicht "welcher Test ist
+    kaputt", sondern "welche Annahme gilt dort nicht" - und die Antwort wird
+    am echten Verhalten gemessen (v230y: die WAL-Datei hat eine neuere Zeit
+    als die Datenbank, in drei Zeilen bewiesen).
+13. **Sagen, was NICHT bewiesen ist.** Kein "gefixt", wenn nur ein
     Ersatzpfad grün ist; nicht reproduzierbar heißt: nicht reproduzierbar
     (v230e Renderer-Absturz). Lieber eine Zeile Unsicherheit als eine
     Runde umsonst.
