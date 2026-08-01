@@ -3303,10 +3303,13 @@ def _scenario_logic(clip, transcript, tmp):
           and "app.mount('/assets'" in _asrv)
     # Hochformat: `cover` in einem 4:5-Rahmen wuerde ein Drittel abschneiden
     # (v228-Lehre aus der Bibliothek).
+    # v230s: geprueft wird die REGEL (9:16, nichts abgeschnitten), nicht die
+    # genaue CSS-Zeile - die hat sich mit dem Vorher/Nachher-Vergleich
+    # geaendert (die Spuren liegen jetzt uebereinander).
     check('v230q: der Rahmen ist 9:16 und schneidet nichts ab',
           'aspect-ratio: 9/16' in _land
-          and '.demo video { width: 100%; height: 100%; object-fit: contain;'
-          in _land)
+          and 'object-fit: contain' in _land
+          and 'object-fit: cover' not in _land.split('.demo {')[1][:900])
     check('v230q: Autoplay laeuft stumm, der Ton ist ein Schalter',
           'autoplay muted loop playsinline' in _land
           and "getElementById('demoSnd')" in _land)
@@ -3330,6 +3333,37 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230r: der Zustand haengt am aria-pressed, nicht an Inline-Styles',
           '.demo-snd[aria-pressed="true"]' in _land
           and 'b.style.color' not in _land)
+
+    # v230s VORHER/NACHHER. Nur das Ergebnis zu zeigen beweist nichts - man
+    # sieht nicht, wie nackt das Original war. Jetzt liegen beide Spuren
+    # uebereinander, der Schieber beschneidet die obere.
+    check('v230s: der Hero vergleicht Original und Ergebnis',
+          '/assets/demo_before.mp4' in _land and 'id="demoRange"' in _land
+          and '.demo .after { clip-path: inset(0 0 0 var(--split));' in _land)
+    check('v230s: die Datei fuer das Original liegt im Repo',
+          _os210.path.isfile(_os210.path.join(_adir, 'demo_before.mp4'))
+          and _os210.path.isfile(_os210.path.join(_adir,
+                                                  'demo_before_poster.jpg')))
+    # Der Schieber liegt als unsichtbares Feld ueber dem ganzen Bild. Ohne
+    # eine hoehere Ebene fuer die Leiste faengt er den Klick auf den
+    # Ton-Knopf ab - im Browser gemessen: der Knopf war nicht bedienbar.
+    check('v230s: der Schieber verdeckt den Ton-Knopf nicht',
+          'bottom: 13px; z-index: 6;' in _land)
+    # Beide Spuren muessen denselben Moment zeigen, sonst beweist der
+    # Vergleich nichts.
+    check('v230s: die beiden Spuren werden nachgezogen',
+          'Math.abs(vor.currentTime - v.currentTime) > 0.15' in _land)
+    # Eine einmalige Stoerung darf den Vergleich nicht dauerhaft abschalten
+    # (derselbe Fehler wie beim Ton-Knopf in v230q).
+    check('v230s: nach einer Stoerung kommt der Vergleich zurueck',
+          "vor.addEventListener('playing', () => vergleich(true));" in _land)
+    _mb2 = _os210.path.getsize(_os210.path.join(_adir, 'demo_before.mp4')) / 1e6
+    check('v230s: auch das Original ist fuer das Web kodiert (< 1.5 MB)',
+          _mb2 < 1.5, f'{_mb2:.2f} MB')
+    # Der 10-Sekunden-Test ohne Konto war eine graue Nebenzeile - der
+    # billigste Einstieg als unwichtigstes Element der Seite.
+    check('v230s: der Gratis-Test ist ein Knopf, keine Nebenzeile',
+          'class="btn-ghost"' in _land and 'class="link-quiet">Try' not in _land)
     # Eine Startseite, die 5 MB nachlaedt, verliert den Besucher vor dem
     # ersten Bild - die Kopie fuer das Web ist deshalb neu kodiert.
     _mb = _os210.path.getsize(_os210.path.join(_adir, 'demo.mp4')) / 1e6

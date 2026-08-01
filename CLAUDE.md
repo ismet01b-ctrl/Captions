@@ -1363,7 +1363,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1859/1860 (Stand v230r)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1866/1867 (Stand v230s)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1517,7 +1517,16 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   Fall den Zusatz ganz weglassen. Der Layout-Test muss das MESSEN
   (Rechtecke vergleichen) - ein Test, der nur Groesse und Wiedergabe prueft,
   ist gruen, waehrend der Knopf die Beschriftung verdeckt.
-- **Landing:** das Demo-Video im Hero liegt als `web/assets/demo.mp4` im Repo
+- **Ein unsichtbares Bedienfeld frisst die Klicks darunter (v230s).** Der
+  Vergleichs-Schieber liegt als transparentes `input[type=range]` ueber dem
+  ganzen Bild - damit war der Ton-Knopf nicht mehr bedienbar. Alles, was auf
+  so einem Feld liegen soll, braucht eine hoehere Ebene; das Feld selbst
+  bleibt ganzflaechig, sonst kann man nur auf einem 38-px-Knopf ziehen.
+  Gefunden hat das nur ein echter Klick im Browser.
+- **Landing:** im Hero steht der VERGLEICH (`demo_before.mp4` links,
+  `demo.mp4` rechts, Schieber dazwischen) - nur das Ergebnis zu zeigen
+  beweist nichts. Beide Spuren werden nachgezogen, sonst zeigen sie zwei
+  verschiedene Momente. Beide liegen als
   und wird ueber den Mount `/assets` ausgeliefert (kein Job, keine Anmeldung).
   Wer es tauscht: fuers Web neu kodieren (Ziel < 2.5 MB), Standbild daneben,
   Rahmen bleibt 9:16 mit `contain`. Der Test-Chromium im Container kennt kein

@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230s VORHER/NACHHER IM HERO + der Gratis-Test wird ein Knopf.**
+  - **Nur das Ergebnis zu zeigen beweist nichts.** Der Besucher sah den
+    fertigen Render, aber nicht, wie nackt das Rohvideo war - und genau darin
+    liegt der Beweis. Jetzt liegen beide Spuren desselben Clips uebereinander,
+    der Schieber beschneidet die obere (`clip-path: inset(0 0 0 var(--split))`).
+    Links "Your upload", rechts "DouchkoVE".
+  - Die beiden werden **nachgezogen** (Abweichung > 0.15 s): sonst zeigen
+    links und rechts zwei verschiedene Momente und der Vergleich beweist
+    wieder nichts. Gemessen im Browser: Versatz 0.01-0.02 s.
+  - **Im Browser gefunden, nicht im Quelltext:** der Schieber liegt als
+    unsichtbares Feld ueber dem ganzen Bild und hat den Klick auf den
+    Ton-Knopf abgefangen - der Knopf war gar nicht bedienbar. Die Leiste
+    liegt jetzt eine Ebene hoeher. Und ein Ladefehler haette den Vergleich
+    dauerhaft abgeschaltet; er kommt bei `playing` zurueck (derselbe Fehler
+    wie beim Ton-Knopf in v230q).
+  - **Der 10-Sekunden-Test ohne Konto war eine graue Nebenzeile** - der
+    billigste Einstieg als unwichtigstes Element der Seite. Jetzt ein
+    Umriss-Knopf neben dem Hauptknopf.
+  - Bei 1440, 390 und 320 px geprueft: kein Querscrollen, keine
+    Ueberlappung, Schieber und Ton funktionieren.
+  - **Wieder ein Test an der CSS-ZEILE statt an der Regel:** der
+    v230q-Test verlangte eine bestimmte `.demo video`-Zeile und fiel, weil
+    die Spuren jetzt uebereinander liegen. Die Regel (9:16, nichts
+    abgeschnitten) gilt unveraendert - er prueft sie jetzt direkt.
 - **v230r DIE BILDUNTERSCHRIFT LAG UNTER DEM TON-KNOPF (Ismets Screenshot).**
   Beschriftung und Ton-Schalter waren ZWEI frei schwebende Kaestchen, eines
   an der linken, eines an der rechten Kante. Auf dem Handy sind sie

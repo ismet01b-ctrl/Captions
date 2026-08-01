@@ -91,6 +91,20 @@ nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
   box-shadow: 0 10px 30px -12px rgba(255,122,26,.6);
 }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -12px rgba(255,122,26,.75); }
+/* v230s ZWEITER WEG HINEIN. Der 10-Sekunden-Test ohne Konto stand als graue
+   Nebenzeile neben dem Hauptknopf - das ist der billigste Einstieg ueberhaupt
+   und war optisch der unwichtigste Punkt der Seite. Jetzt ein Umriss-Knopf:
+   gleiche Groesse, klar zweite Wahl, aber sichtbar. */
+.btn-ghost {
+  font-family: var(--sans); color: var(--ink); background: transparent;
+  padding: 15px 24px; border-radius: 999px; font-weight: 600; font-size: 15px;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 9px;
+  border: 1px solid rgba(255,255,255,.22);
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+.btn-ghost:hover { border-color: var(--acc); color: var(--acc); background: rgba(255,122,26,.06); }
+.btn-ghost small { font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--mut); font-weight: 500; }
 .link-quiet { font-family: var(--sans); color: var(--ink2); text-decoration: none;
   font-size: 15px; font-weight: 500; border-bottom: 1px solid var(--line); padding-bottom: 3px;
   transition: color .18s, border-color .18s; }
@@ -121,36 +135,66 @@ nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
   color: var(--mut); background: rgba(10,10,11,.55); border: 1px solid var(--line);
   border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
 
-/* ---- Demo-Video im Hero (v230q, Gestaltung v230r) ----
-   Das Standbild daneben war eine ATTRAPPE aus HTML und CSS. Der Satz
-   darunter hiess "Rendered output - not a template", und genau das stimmte
-   nicht. Jetzt laeuft dort ein echter Render. 9:16, weil das Produkt fuer
-   Hochformat gebaut ist - ein 4:5-Rahmen mit `cover` haette ein Drittel
-   abgeschnitten (v228-Lehre aus der Bibliothek).
+/* ---- Demo im Hero: VORHER/NACHHER (v230q, v230r, v230s) ----
+   Das Standbild hier war eine Attrappe aus HTML und CSS (v230q). Seit v230s
+   steht daneben nicht nur das Ergebnis, sondern der VERGLEICH: links das
+   Rohvideo, rechts derselbe Moment gerendert, mit einem Schieber dazwischen.
+   Nur das Ergebnis zu zeigen beweist nichts - man sieht nicht, wie nackt das
+   Original war, und genau darin liegt der Beweis.
+   9:16 mit `contain`, weil das Produkt fuer Hochformat gebaut ist - ein
+   4:5-Rahmen mit `cover` haette ein Drittel abgeschnitten (v228-Lehre).
 
-   v230r GESTALTUNG. Erst standen dort ZWEI frei schwebende Kaestchen, eines
-   links, eines rechts - auf dem Handy sind sie uebereinander gelaufen und
-   die Bildunterschrift war halb verdeckt (Ismets Screenshot). Ein Element,
-   dessen Breite vom TEXT abhaengt, darf nicht gegen ein zweites gesetzt
-   werden, das an der anderen Kante klebt: irgendeine Breite bringt sie
-   immer zur Deckung. Jetzt EINE Leiste als Flex-Zeile - die beiden koennen
-   sich nicht mehr beruehren, und die Schrift kuerzt notfalls mit Ellipse.
-   Statt zweier Kaestchen traegt ein Verlauf am unteren Rand die Lesbarkeit;
-   das ist die ruhigere Loesung und verdeckt kein Bild. */
+   v230r LEISTE: Beschriftung und Ton-Schalter lagen als zwei frei schwebende
+   Kaestchen an den beiden Kanten und liefen auf dem Handy uebereinander.
+   Ein Element, dessen Breite vom TEXT abhaengt, darf nicht gegen ein zweites
+   gesetzt werden, das an der anderen Kante klebt. Jetzt EINE Flex-Zeile. */
 .demo {
   position: relative; aspect-ratio: 9/16; max-height: 74vh; margin: 0 auto;
   border-radius: 20px; overflow: hidden; background: #0c0b0c;
   border: 1px solid var(--line); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8);
+  --split: 52%;
 }
-.demo video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.demo video { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block; }
+/* Das Ergebnis liegt OBEN und wird links beschnitten - der Schieber gibt es
+   frei. So bleibt das Original sichtbar, ohne dass etwas skaliert wird. */
+.demo .after { clip-path: inset(0 0 0 var(--split)); z-index: 1; }
 /* Lese-Verlauf: nur so stark, dass die Zeile traegt - das Bild bleibt Bild. */
 .demo::after {
   content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
-  pointer-events: none; z-index: 1;
+  pointer-events: none; z-index: 2;
   background: linear-gradient(to top, rgba(6,6,7,.78), rgba(6,6,7,.34) 42%, transparent);
 }
+.demo-line { position: absolute; top: 0; bottom: 0; left: var(--split); width: 2px;
+  margin-left: -1px; background: rgba(255,255,255,.85); z-index: 3;
+  pointer-events: none; box-shadow: 0 0 14px rgba(0,0,0,.6); }
+.demo-grip { position: absolute; top: 50%; left: var(--split); z-index: 4;
+  transform: translate(-50%, -50%); width: 38px; height: 38px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; gap: 2px;
+  color: #0c0b0c; background: rgba(255,255,255,.92); pointer-events: none;
+  box-shadow: 0 6px 22px rgba(0,0,0,.55); }
+/* Der Schieber liegt als unsichtbares Feld ueber dem ganzen Bild: man kann
+   ueberall greifen, nicht nur auf einem 38-px-Knopf. */
+.demo-range { position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: ew-resize; -webkit-appearance: none; appearance: none;
+  background: transparent; }
+.demo-range::-webkit-slider-thumb { -webkit-appearance: none; width: 44px; height: 100%; }
+.demo-range::-moz-range-thumb { width: 44px; height: 100%; border: 0; background: transparent; }
+.demo-range:focus-visible + .demo-line { outline: 2px solid var(--acc); }
+.demo-side { position: absolute; top: 13px; z-index: 3; pointer-events: none;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .15em;
+  text-transform: uppercase; color: rgba(255,255,255,.82);
+  background: rgba(10,10,11,.42); border-radius: 5px; padding: 4px 7px;
+  backdrop-filter: blur(4px); text-shadow: 0 1px 8px rgba(0,0,0,.9); }
+.demo-side.l { left: 13px; }
+.demo-side.r { right: 13px; color: var(--acc); }
+/* Die Leiste liegt UEBER dem Schieber (z-index 5). Sonst faengt das
+   unsichtbare Schieber-Feld den Klick auf den Ton-Knopf ab - im Browser
+   gemessen: der Knopf war gar nicht bedienbar. Die Leiste selbst laesst
+   Zeiger durch (`pointer-events: none`), nur der Knopf nimmt sie an, das
+   Ziehen funktioniert also weiter auf der ganzen Flaeche. */
 .demo-bar {
-  position: absolute; left: 14px; right: 14px; bottom: 13px; z-index: 2;
+  position: absolute; left: 14px; right: 14px; bottom: 13px; z-index: 6;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   pointer-events: none;
 }
@@ -347,7 +391,9 @@ footer .links a:hover { color: var(--ink); }
         <a href="/app/create" class="btn-primary">Caption my video
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
-        <a href="/app" class="link-quiet">Try the 10-second demo, no account</a>
+        <a href="/app" class="btn-ghost">Try 10 seconds free
+          <small>no account</small>
+        </a>
       </div>
       <div class="hero-note">
         3 free minutes every month · <span>No card</span> · <span>No subscription, ever</span>
@@ -355,12 +401,27 @@ footer .links a:hover { color: var(--ink); }
       </div>
     </div>
     <div data-reveal>
-      <div class="demo">
-        <video id="demoVid" src="/assets/demo.mp4" poster="/assets/demo_poster.jpg"
+      <div class="demo" id="demoWrap">
+        <video id="demoBefore" src="/assets/demo_before.mp4"
+               poster="/assets/demo_before_poster.jpg"
+               autoplay muted loop playsinline preload="metadata"
+               aria-label="The same clip before captioning"></video>
+        <video id="demoVid" class="after" src="/assets/demo.mp4"
+               poster="/assets/demo_poster.jpg"
                autoplay muted loop playsinline preload="metadata"
                aria-label="Example output rendered by DouchkoVE"></video>
+        <span class="demo-side l">Your upload</span>
+        <span class="demo-side r">DouchkoVE</span>
+        <input type="range" class="demo-range" id="demoRange" min="0" max="100"
+               step="0.1" value="52" aria-label="Drag to compare before and after">
+        <div class="demo-line"></div>
+        <div class="demo-grip" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path
+               d="M9 6 4 12l5 6M15 6l5 6-5 6"/></svg>
+        </div>
         <div class="demo-bar">
-          <span class="demo-tag"><b>Rendered output</b><i>· not a template</i></span>
+          <span class="demo-tag"><b>Same clip</b><i>· drag to compare</i></span>
           <button class="demo-snd" id="demoSnd" type="button" aria-pressed="false"
                   aria-label="Turn sound on" title="Sound">
             <svg class="off" width="15" height="15" viewBox="0 0 24 24" fill="none"
@@ -594,6 +655,41 @@ footer .links a:hover { color: var(--ink); }
 (function () {
   const v = document.getElementById('demoVid'), b = document.getElementById('demoSnd');
   if (!v || !b) return;
+  // v230s VORHER/NACHHER. Zwei Spuren desselben Clips uebereinander; der
+  // Schieber beschneidet die obere. Beide sind gleich lang und aus derselben
+  // Quelle, laufen also synchron - kleine Abweichungen (Dekoder-Ruckler,
+  // Tab im Hintergrund) werden nachgezogen. Ohne das Nachziehen sieht man
+  // links und rechts zwei verschiedene Momente, und der Vergleich beweist
+  // nichts mehr.
+  const vor = document.getElementById('demoBefore');
+  const rng = document.getElementById('demoRange');
+  const wrap = document.getElementById('demoWrap');
+  if (rng && wrap) {
+    const setz = () => { wrap.style.setProperty('--split', rng.value + '%'); };
+    rng.addEventListener('input', setz);
+    setz();
+  }
+  if (vor) {
+    v.addEventListener('timeupdate', () => {
+      if (Math.abs(vor.currentTime - v.currentTime) > 0.15) {
+        try { vor.currentTime = v.currentTime; } catch (e) {}
+      }
+    });
+    // Faellt die Vorher-Spur aus, bleibt das Ergebnis allein stehen - ein
+    // halb leerer Vergleich waere schlimmer als gar keiner.
+    const vergleich = (an) => {
+      wrap.style.setProperty('--split', an ? (rng ? rng.value + '%' : '52%') : '0%');
+      if (rng) rng.style.display = an ? '' : 'none';
+      document.querySelectorAll('.demo-line, .demo-grip, .demo-side')
+        .forEach(e => { e.style.display = an ? '' : 'none'; });
+    };
+    // Faellt die Vorher-Spur aus, bleibt das Ergebnis allein stehen - ein halb
+    // leerer Vergleich waere schlimmer als gar keiner. Laeuft sie wieder, kommt
+    // der Vergleich zurueck: eine einmalige Stoerung darf ihn nicht dauerhaft
+    // abschalten (derselbe Fehler wie beim Ton-Knopf in v230q).
+    vor.addEventListener('error', () => vergleich(false));
+    vor.addEventListener('playing', () => vergleich(true));
+  }
   b.addEventListener('click', () => {
     v.muted = !v.muted;
     // Der Zustand haengt am aria-pressed, nicht an Inline-Styles: so sieht
@@ -610,7 +706,9 @@ footer .links a:hover { color: var(--ink); }
   // Nicht im Hintergrund weiterlaufen lassen - das kostet Akku und Daten,
   // ohne dass jemand hinschaut.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { v.pause(); } else { v.play().catch(() => {}); }
+    const alle = [v, document.getElementById('demoBefore')].filter(Boolean);
+    if (document.hidden) { alle.forEach(x => x.pause()); }
+    else { alle.forEach(x => x.play().catch(() => {})); }
   });
 })();
 
