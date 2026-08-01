@@ -1299,6 +1299,10 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - Betrieb: `/api/health` (für externen Uptime-Pinger), Admin-Störungsmails
   (1/h/Schlüssel), Watchdog killt hängende Renders (45min) + erstattet,
   Offsite-DB-Backup per Mail, Warm-Preview-Daemon (~0.5s statt 2s).
+- **Sicherung ausser Haus LAEUFT** (v230v/v230w, 01.08.2026 von Ismet
+  eingerichtet und geprueft: Probe hoch, zurueck, entschluesselt, verglichen;
+  erste Kopie `users_20260801.db.enc`, 368 KB). Nicht mehr als offen fuehren.
+  Wer daran etwas aendert, prueft mit dem Knopf "Verbindung pruefen".
 - OFFEN (Ismet): UptimeRobot auf /api/health,
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
@@ -1674,39 +1678,20 @@ sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
 - 'above me' greift jetzt, am echten Material noch nicht bestaetigt.
 
 ### Vor dem Launch (Ismets Seite)
-1. **Sicherung ausser Haus: GEBAUT (v230v), muss von Ismet eingerichtet
-   werden.** Panel -> Betrieb -> Sicherung: Endpoint, Bucket, Key, Secret und
-   ein Verschluesselungs-Passwort eintragen, dann "Verbindung pruefen".
-   Das Passwort MUSS ausser Haus liegen (Passwort-Speicher) - ohne es ist die
-   Kopie nicht lesbar. Schluessel NIE im Chat.
-2. UptimeRobot auf /api/health.
+1. UptimeRobot auf /api/health.
 
 ## Offene echte Punkte
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
   Heuristik/CPU/synthetisch getestet) — das geschieht ueber douchko.eu.
 
-### Sicherheits-Rückstand (Stand v221, am Code nachgeprüft)
-**Nur noch ZWEI Punkte offen — der Rest ist gebaut.** Nicht wieder als offen
-führen: Dienst-Nutzer statt root (v204/v205a), Sicherheits-Ereignisprotokoll
-(Tabelle `security_events`), FPS-/Auflösungsgrenze (`DVE_MAX_FPS`, Default 60),
-Render-Subprozess bekommt nur noch eine Allowlist (`_ERLAUBT`, das einzige
-echte Geheimnis darin ist `OPENAI_API_KEY`), Notaus (`_BETRIEB_STUFEN`
-normal/pausiert/notaus, beendet auf Wunsch alle Sitzungen), `security.txt`
-unter `/.well-known/`, gepinnte Bauteile in EINER requirements.txt.
+### Sicherheits-Rückstand (Stand v230w, am Code nachgeprüft)
+**Nur noch EIN Punkt offen.** Nicht wieder als offen führen: Dienst-Nutzer
+statt root (v204/v205a), Sicherheits-Ereignisprotokoll, FPS-/Auflösungsgrenze,
+Allowlist für den Render-Subprozess, Notaus, `security.txt`, gepinnte Bauteile
+— und seit v230v/v230w die **Sicherung ausser Haus** (Cloudflare R2,
+verschlüsselt, 30 Stände, im Panel eingerichtet und mit der Probe bestätigt).
 
-1. **Sicherung außer Haus fehlt komplett. OFFEN — braucht Ismets Zugang.**
-   `_mail_backup_offsite` steigt bei `ALERT_LEVEL != 'all'` sofort aus, und
-   der Standard ist `important` — im Normalbetrieb liegt also KEINE Kopie
-   außerhalb des Servers, und die vorhandene wäre unverschlüsselt (gzip per
-   Mail). Stirbt die Platte, ist das Credit-Ledger zahlender Kunden weg.
-   **Das größte Risiko im ganzen Betrieb.** Ismets Entscheidung (Juli 2026):
-   **Cloudflare R2** (10 GB gratis). Hetzner Object Storage ist mit 7,72 €/
-   Monat Grundpreis für eine 0,2-MB-Datei der falsche Dienst. Zu bauen:
-   verschlüsseln vor dem Verlassen des Servers, eigener Schalter (NICHT an
-   DVE_ALERTS hängen), 30 Stände, Prüf- und Rückhol-Knopf im Panel. Ismet
-   legt Bucket + Schlüssel selbst an und trägt sie in die `.env` ein —
-   **niemals im Chat.**
-2. **Kein Lockfile mit Hashes.** Die Versionen sind exakt gepinnt (v205a), aber
+1. **Kein Lockfile mit Hashes.** Die Versionen sind exakt gepinnt (v205a), aber
    ohne Hash-Prüfung; die KI-Modelle werden weiter ohne Prüfsumme über
    `resolve/main` geladen. Wer das angeht, braucht ein `pip freeze` AUS DEM
    CONTAINER — die Sandbox-Versionen widersprechen requirements.txt, geraten
