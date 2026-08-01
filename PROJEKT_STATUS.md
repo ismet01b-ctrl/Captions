@@ -3,6 +3,31 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ab DER VERGLEICH AUF DER LANDING PAGE LAEUFT 1:1 SYNCHRON.** Ismets
+  Befund nach v230aa: "ist es immer noch nicht 1:1 synchron". Im Browser
+  gemessen (Chromium, echter Mausklick auf den Schieber, 22 s Abtastung
+  inklusive Schleifen-Neustart) war der Dauerversatz 0.026 s und die Spitze
+  0.103 s - rund zweieinhalb Bilder, im Vorher/Nachher-Vergleich sichtbar.
+  - **Ursache 1: nachgezogen wurde nur bei `timeupdate`.** Das Ereignis
+    feuert etwa viermal je Sekunde; dazwischen laeuft der Versatz frei.
+    Jetzt laeuft die Nachregelung ueber `requestAnimationFrame`, also zu
+    JEDEM Bild.
+  - **Ursache 2: die Korrektur hatte nur EINE Stufe** (+-3 %). Damit dauert
+    das Einholen von 0.1 s rund drei Sekunden - und genau in dieser Zeit
+    schaut der Besucher hin. Jetzt drei Stufen: grob 25 % (ab 0.05 s), fein
+    5 % (ab 0.02 s), ganz fein 2 % (ab 0.008 s), darunter exakt 1.0. Ein
+    einziger grober Wert waere hoerbar/sichtbar geruckelt, ein einziger
+    feiner zu langsam.
+  - **Ursache 3: einem Sprung darf man nicht glauben.** `currentTime = x`
+    braucht Zeit, waehrend die andere Spur weiterlaeuft - der Sprung selbst
+    erzeugt also den naechsten Versatz. Jetzt wird nach `seeked` einmal
+    nachgemessen und bei mehr als 0.03 s noch einmal gesetzt.
+  - Beweis (dieselbe Messung, vorher/nachher): Spitze **0.103 -> 0.055 s**,
+    Mittel 0.026 -> 0.009 s, Dauerversatz **0.026 -> 0.008 s** - etwa ein
+    Fuenftel Bild bei 24 fps. Der Schleifen-Neustart bleibt sauber.
+  - Tests: drei neue Sonden-Pruefungen in `selftest.py` (Stufen statt
+    Sprung, Nachziehen je Bild, Nachmessen nach dem Sprung). Sie haengen an
+    der REGEL, nicht an einer CSS-Zeile - das war der v230q/v230t-Fehler.
 - **v230aa GLEICHSTAND HEISST NICHT "NICHTS PASSIERT".** Nach v230y war der
   Gate-Befund `3 -> 3` statt `3 -> 0`: die leere Sicherung war weg, die
   Auffrischung griff aber immer noch nicht.

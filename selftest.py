@@ -3413,9 +3413,21 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230u: bei "weniger Bewegung" gibt es keinen Blick',
           "'(prefers-reduced-motion: reduce)').matches" in _land)
     # Ein `currentTime`-Sprung leert den Decoder und ist selbst ein Ruckler.
-    check('v230u: der Versatz wird sanft nachgeregelt, nicht gesprungen',
-          'vor.playbackRate = Math.abs(d) < 0.03' in _land
-          and 'Math.abs(d) > 0.6' in _land)
+    # v230ab: der Versatz wird in DREI Stufen nachgezogen. Die alte
+    # Ein-Stufen-Korrektur (3 %) brauchte fuer die 0.10 s, die ein Sprung
+    # kostet, rund drei Sekunden - und genau die sah man. Im Browser
+    # gemessen: Spitze 0.103 -> 0.055 s, Dauerversatz 0.026 -> 0.008 s
+    # (ein Fuenftel Bild bei 24 fps).
+    check('v230ab: der Versatz wird in Stufen nachgeregelt, nicht gesprungen',
+          'if (ad > 0.35)' in _land
+          and 'vor.playbackRate = d > 0 ? 1.25 : 0.8' in _land
+          and 'vor.playbackRate = d > 0 ? 1.02 : 0.98' in _land)
+    # `timeupdate` kommt nur alle 200-250 ms - zu selten fuer die grobe Phase.
+    check('v230ab: nachgezogen wird jedes Bild, nicht nur bei timeupdate',
+          'const takt = () =>' in _land and 'requestAnimationFrame(takt)' in _land)
+    # Ein Sprung braucht Zeit; erst wenn das Zielbild steht, stimmt er.
+    check('v230ab: nach dem Sprung wird noch einmal nachgezogen',
+          "vor.addEventListener('seeked'" in _land)
     # Am Finger darf ein senkrechter Wisch NIE den Schieber aufreissen.
     check('v230u: bei geschlossenem Vergleich zieht der Finger nicht',
           "(auf <= AN_SCHWELLE || Math.abs(e.clientX - linie) > 44)" in _land)

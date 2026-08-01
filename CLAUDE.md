@@ -1443,7 +1443,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1916/1917 (Stand v230aa)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1918/1919 (Stand v230ab)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1622,11 +1622,21 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
 - **Landing:** im Hero steht der VERGLEICH (`demo_before.mp4` links,
   `demo.mp4` rechts, Schieber dazwischen) - nur das Ergebnis zu zeigen
   beweist nichts. Beide Spuren werden nachgezogen, sonst zeigen sie zwei
-  verschiedene Momente. Beide liegen als
-  und wird ueber den Mount `/assets` ausgeliefert (kein Job, keine Anmeldung).
+  verschiedene Momente. Beide liegen unter `web/assets/` und werden ueber den
+  Mount `/assets` ausgeliefert (kein Job, keine Anmeldung).
   Wer es tauscht: fuers Web neu kodieren (Ziel < 2.5 MB), Standbild daneben,
   Rahmen bleibt 9:16 mit `contain`. Der Test-Chromium im Container kennt kein
   H.264 - die Wiedergabe laesst sich dort nur mit einer WebM-Kopie pruefen.
+- **Zwei Videospuren laufen NIE von selbst synchron (v230ab).** Der Browser
+  gibt keine Garantie, dass zwei `<video>` denselben Moment zeigen; jeder
+  Sprung (`currentTime`) laeuft ausserdem verzoegert, waehrend die andere
+  Spur weiterlaeuft. Drei Dinge sind noetig, und einzeln taugt keines:
+  nachziehen JEDES Bild (`requestAnimationFrame`, nicht nur `timeupdate` -
+  das feuert 4x/s), die Korrektur in STUFEN ueber `playbackRate` (grob 25 %,
+  fein 2 %; eine einzige Stufe braucht Sekunden oder ruckelt hoerbar), und
+  nach jedem Sprung EINMAL nachmessen (`seeked`) statt dem Sprung zu
+  glauben. Gemessen im Browser: Spitze 0.103 -> 0.055 s, Dauerversatz
+  0.026 -> 0.008 s (rund ein Fuenftel Bild bei 24 fps).
 - **Landing:** Englisch, international, Modellnamen unsichtbar (kein "GPT-4o"
   im Hero), keine Konkurrenz-Namen, kein Datenschutz-Block (gehört in /privacy).
 

@@ -690,9 +690,21 @@ footer .links a:hover { color: var(--ink); }
       wrap.style.setProperty('--split', v2 + '%');
       wrap.classList.toggle('vergleich', v2 > AN_SCHWELLE);
     };
+    // v230ab: EIN Sprung reicht nicht. Ein `currentTime`-Sprung braucht
+    // Zeit (dekodieren bis zum Zielbild), und waehrend dessen laeuft die
+    // andere Spur weiter - gemessen 0.10 s Versatz direkt nach dem Start,
+    // also 2 bis 3 Bilder. Danach zog die alte Feinkorrektur (3 %) das ueber
+    // rund drei Sekunden gerade, und genau die sieht man.
+    // Jetzt: nach dem Sprung NOCH EINMAL nachziehen, sobald das Zielbild
+    // wirklich steht (`seeked`), und die Korrektur ist am Anfang grob.
     const sync = () => {                 // gleicher Moment auf beiden Spuren
       if (!vor) return;
       try { vor.currentTime = v.currentTime; } catch (e) {}
+      vor.addEventListener('seeked', () => {
+        if (Math.abs(v.currentTime - vor.currentTime) > 0.03) {
+          try { vor.currentTime = v.currentTime; } catch (e) {}
+        }
+      }, { once: true });
     };
     let zieht = false, blick = false, benutzt = false;
     const vorAn = () => {
@@ -812,12 +824,28 @@ footer .links a:hover { color: var(--ink); }
     // ist selbst ein sichtbarer Ruckler. Kleine Abweichungen holt die
     // Abspielgeschwindigkeit auf, nur ein grosser Versatz wird gesetzt.
     if (vor) {
-      v.addEventListener('timeupdate', () => {
+      // Nachziehen in drei Stufen. Ein Sprung ist selbst ein Ruckler, also
+      // nur bei grossem Versatz; darunter regelt die Geschwindigkeit. Grob
+      // (25 %) holt 0.1 s in 0.4 s auf - bei einem stummen Video sieht man
+      // das nicht, den Versatz dagegen schon. Fein (5 %) haelt es danach.
+      const nachziehen = () => {
         if (vor.paused) return;
         const d = v.currentTime - vor.currentTime;
-        if (Math.abs(d) > 0.6) { try { vor.currentTime = v.currentTime; } catch (e) {} }
-        else vor.playbackRate = Math.abs(d) < 0.03 ? 1 : (d > 0 ? 1.03 : 0.97);
-      });
+        const ad = Math.abs(d);
+        if (ad > 0.35) { try { vor.currentTime = v.currentTime; } catch (e) {} }
+        else if (ad > 0.05) vor.playbackRate = d > 0 ? 1.25 : 0.8;
+        else if (ad > 0.02) vor.playbackRate = d > 0 ? 1.05 : 0.95;
+        else if (ad > 0.008) vor.playbackRate = d > 0 ? 1.02 : 0.98;
+        else vor.playbackRate = 1;
+      };
+      v.addEventListener('timeupdate', nachziehen);
+      // `timeupdate` kommt nur alle 200-250 ms - zu selten fuer die grobe
+      // Phase. Solange der Vergleich offen ist, wird jedes Bild nachgezogen.
+      const takt = () => {
+        if (!vor.paused) nachziehen();
+        requestAnimationFrame(takt);
+      };
+      requestAnimationFrame(takt);
     }
   }
   if (vor) {
