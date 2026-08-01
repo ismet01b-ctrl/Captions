@@ -1269,7 +1269,7 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - Betrieb: `/api/health` (für externen Uptime-Pinger), Admin-Störungsmails
   (1/h/Schlüssel), Watchdog killt hängende Renders (45min) + erstattet,
   Offsite-DB-Backup per Mail, Warm-Preview-Daemon (~0.5s statt 2s).
-- OFFEN (Ismet): Demo-Video in den Hero, UptimeRobot auf /api/health,
+- OFFEN (Ismet): UptimeRobot auf /api/health,
   Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
 
 ## Matte-Bleed (v230b) — ein Weichzeichner darf die Person nicht ansaugen
@@ -1361,7 +1361,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1849/1850 (Stand v230p)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1855/1856 (Stand v230q)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1507,6 +1507,11 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   echten wäre echtes Geld erstattet worden. Der Gate-Aufruf leert dieselben
   Werte ein zweites Mal — ein Testlauf, der Geld bewegen kann, darf nicht an
   EINER Vorsichtsmaßnahme hängen.
+- **Landing:** das Demo-Video im Hero liegt als `web/assets/demo.mp4` im Repo
+  und wird ueber den Mount `/assets` ausgeliefert (kein Job, keine Anmeldung).
+  Wer es tauscht: fuers Web neu kodieren (Ziel < 2.5 MB), Standbild daneben,
+  Rahmen bleibt 9:16 mit `contain`. Der Test-Chromium im Container kennt kein
+  H.264 - die Wiedergabe laesst sich dort nur mit einer WebM-Kopie pruefen.
 - **Landing:** Englisch, international, Modellnamen unsichtbar (kein "GPT-4o"
   im Hero), keine Konkurrenz-Namen, kein Datenschutz-Block (gehört in /privacy).
 

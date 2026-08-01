@@ -2065,7 +2065,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230p'
+DVE_VERSION = 'v230q'
 
 
 def _build_datei():
@@ -2641,6 +2641,12 @@ def api_history(request: Request):
 _fonts_dir = os.path.join(ROOT, 'fonts')
 if os.path.isdir(_fonts_dir):
     app.mount('/fonts', StaticFiles(directory=_fonts_dir), name='fonts')
+# v230q: Assets der Landing-Page (Demo-Video + Standbild). Eigener Mount,
+# damit sie ohne Anmeldung und ohne Job-Logik ausgeliefert werden - sie
+# gehoeren zur Seite, nicht zu einem Kunden.
+_assets_dir = os.path.join(HERE, 'assets')
+if os.path.isdir(_assets_dir):
+    app.mount('/assets', StaticFiles(directory=_assets_dir), name='assets')
 _mprev_dir = os.path.join(HERE, 'motion_previews')
 if os.path.isdir(_mprev_dir):
     app.mount('/motion_previews', StaticFiles(directory=_mprev_dir),

@@ -3287,6 +3287,38 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230p: das Fluss-Budget waechst mit der Zahl der Bloecke',
           'max_toks=min(600 + 90 * len(groups), 12000)' in _src210)
 
+    # v230q DEMO-VIDEO IM HERO. Das Standbild daneben war eine Attrappe aus
+    # HTML und CSS - mit dem Satz "Rendered output, not a template" darunter.
+    # Jetzt laeuft dort ein echter Render.
+    _land = open(_os210.path.join(HERE, 'web', 'landing.html'),
+                 encoding='utf-8').read()
+    _asrv = open(_os210.path.join(HERE, 'web', 'server.py'),
+                 encoding='utf-8').read()
+    _adir = _os210.path.join(HERE, 'web', 'assets')
+    check('v230q: der Hero zeigt einen echten Render, keine CSS-Attrappe',
+          '/assets/demo.mp4' in _land and 'class="specimen"' not in _land)
+    check('v230q: die Datei liegt im Repo und der Server liefert /assets aus',
+          _os210.path.isfile(_os210.path.join(_adir, 'demo.mp4'))
+          and _os210.path.isfile(_os210.path.join(_adir, 'demo_poster.jpg'))
+          and "app.mount('/assets'" in _asrv)
+    # Hochformat: `cover` in einem 4:5-Rahmen wuerde ein Drittel abschneiden
+    # (v228-Lehre aus der Bibliothek).
+    check('v230q: der Rahmen ist 9:16 und schneidet nichts ab',
+          'aspect-ratio: 9/16' in _land
+          and '.demo video { width: 100%; height: 100%; object-fit: contain;'
+          in _land)
+    check('v230q: Autoplay laeuft stumm, der Ton ist ein Schalter',
+          'autoplay muted loop playsinline' in _land
+          and "getElementById('demoSnd')" in _land)
+    check('v230q: ein Fehler blendet den Schalter nicht FUER IMMER aus',
+          "v.addEventListener('playing', () => { b.style.display = ''; });"
+          in _land)
+    # Eine Startseite, die 5 MB nachlaedt, verliert den Besucher vor dem
+    # ersten Bild - die Kopie fuer das Web ist deshalb neu kodiert.
+    _mb = _os210.path.getsize(_os210.path.join(_adir, 'demo.mp4')) / 1e6
+    check('v230q: das Demo-Video ist fuer das Web kodiert (< 2.5 MB)',
+          _mb < 2.5, f'{_mb:.2f} MB')
+
     # v211: Die gemessene Blockbreite gehoert INS LOG. Fuenf Theorien zum
     # angeschnittenen Text, fuenf widerlegt - weil die Zahl nur im Bild stand.
     _r211 = open(_os210.path.join(HERE, 'render.py'), encoding='utf-8').read()

@@ -3,6 +3,23 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230q DEMO-VIDEO IM HERO (Ismets Ansage).** Rechts oben stand eine
+  ATTRAPPE aus HTML und CSS - drei Textzeilen, die wie eine Caption aussahen -
+  und darunter der Satz "Rendered output, not a template". Genau das stimmte
+  nicht. Dort laeuft jetzt ein echter Render.
+  - Rahmen 9:16 mit `contain`: das Produkt ist fuer Hochformat gebaut, ein
+    4:5-Rahmen mit `cover` haette ein Drittel abgeschnitten (v228-Lehre).
+  - Autoplay geht nur STUMM (Browser-Regel), daneben steht deshalb ein
+    Ton-Schalter - die Sounds sind Teil des Produkts. Ein Fehler blendet ihn
+    aus, `playing` holt ihn zurueck: ein Schalter, der nach einer einmaligen
+    Stoerung dauerhaft weg ist, ist schlimmer als keiner. Im Hintergrund
+    pausiert das Video (Akku und Daten).
+  - Fuer das Web neu kodiert: 3.4 -> 1.3 MB. Eigener Mount `/assets`.
+  - Im ECHTEN Browser geprueft (Chromium 1440x900 und 390x844): laeuft,
+    9:16 (0.561), kein Querscrollen, Ton-Schalter schaltet um.
+    **Ehrlich:** der Test-Chromium kennt kein H.264 (`canPlayType` leer) -
+    die MECHANIK ist mit einer WebM-Kopie geprueft, die Wiedergabe der
+    MP4-Datei selbst nur ueber die Auslieferung (200 plus 206 auf Range).
 - **v230p ZWEI KI-SYSTEME FIELEN STILL AUS - DIE ANTWORT WAR NICHT KAPUTT,
   SIE WAR NICHT DA.** In Ismets Job-Log (Stempel v230l): "Vision director
   unavailable (JSONDecodeError)" und "AI flow unavailable (JSONDecodeError)".

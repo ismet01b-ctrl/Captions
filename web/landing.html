@@ -121,6 +121,29 @@ nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
   color: var(--mut); background: rgba(10,10,11,.55); border: 1px solid var(--line);
   border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
 
+/* ---- Demo-Video im Hero (v230q) ----
+   Das Vorbild-Standbild daneben war eine ATTRAPPE aus HTML und CSS. Der
+   Satz darunter hiess "Rendered output - not a template", und genau das
+   stimmte nicht. Jetzt laeuft dort ein echter Render. 9:16, weil das Produkt
+   fuer Hochformat gebaut ist - ein 4:5-Rahmen mit `cover` haette ein
+   Drittel abgeschnitten (v228-Lehre aus der Bibliothek). */
+.demo {
+  position: relative; aspect-ratio: 9/16; max-height: 74vh; margin: 0 auto;
+  border-radius: 20px; overflow: hidden; background: #0c0b0c;
+  border: 1px solid var(--line); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8);
+}
+.demo video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.demo-tag { position: absolute; left: 16px; bottom: 16px; z-index: 2;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--mut); background: rgba(10,10,11,.55); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
+.demo-snd { position: absolute; right: 16px; bottom: 16px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink); background: rgba(10,10,11,.62); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
+.demo-snd:hover { border-color: var(--acc); color: var(--acc); }
+
 /* ---- index strip ---- */
 .index { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
 .index .wrap { display: flex; flex-wrap: wrap; gap: 8px 30px; padding-top: 22px; padding-bottom: 22px; }
@@ -246,6 +269,7 @@ footer .links a:hover { color: var(--ink); }
 @media (max-width: 900px) {
   .hero-grid { grid-template-columns: 1fr; gap: 40px; }
   .specimen { max-width: 420px; margin: 0 auto; }
+  .demo { max-width: 300px; max-height: 62vh; }
   .row .body { grid-template-columns: 1fr; gap: 10px; }
   .steps { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2,1fr); gap: 34px 24px; }
@@ -293,13 +317,17 @@ footer .links a:hover { color: var(--ink); }
       </div>
     </div>
     <div data-reveal>
-      <div class="specimen" aria-hidden="true">
-        <div class="spec-cap">
-          <div class="l1">this part right here is</div>
-          <div class="big">the <span class="hit">hook</span></div>
-          <div class="l3">and the AI knows it.</div>
-        </div>
-        <span class="spec-tag">Rendered output · not a template</span>
+      <div class="demo">
+        <video id="demoVid" src="/assets/demo.mp4" poster="/assets/demo_poster.jpg"
+               autoplay muted loop playsinline preload="metadata"
+               aria-label="Example output rendered by DouchkoVE"></video>
+        <span class="demo-tag">Rendered output · not a template</span>
+        <button class="demo-snd" id="demoSnd" type="button" aria-pressed="false">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path
+               d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>
+          Sound
+        </button>
       </div>
     </div>
   </div>
@@ -513,6 +541,33 @@ footer .links a:hover { color: var(--ink); }
 </footer>
 
 <script>
+// v230q Demo-Video im Hero. Autoplay geht nur STUMM (Browser-Regel), also
+// steht daneben ein Ton-Schalter - die Sounds sind Teil des Produkts, ein
+// dauerhaft stummes Beispiel zeigt die Haelfte. Laeuft die Datei nicht, faellt
+// der Rahmen auf das Standbild zurueck; ein kaputter Player darf die Seite
+// nicht leer aussehen lassen.
+(function () {
+  const v = document.getElementById('demoVid'), b = document.getElementById('demoSnd');
+  if (!v || !b) return;
+  b.addEventListener('click', () => {
+    v.muted = !v.muted;
+    b.setAttribute('aria-pressed', v.muted ? 'false' : 'true');
+    b.style.color = v.muted ? '' : 'var(--acc)';
+    b.style.borderColor = v.muted ? '' : 'var(--acc)';
+    if (!v.muted) { v.play().catch(() => {}); }
+  });
+  // Ein Fehler blendet den Schalter aus - aber NICHT fuer immer: sobald
+  // wieder Bild laeuft, kommt er zurueck. Ein Schalter, der nach einer
+  // einmaligen Stoerung dauerhaft weg ist, ist schlimmer als keiner.
+  v.addEventListener('error', () => { b.style.display = 'none'; });
+  v.addEventListener('playing', () => { b.style.display = ''; });
+  // Nicht im Hintergrund weiterlaufen lassen - das kostet Akku und Daten,
+  // ohne dass jemand hinschaut.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { v.pause(); } else { v.play().catch(() => {}); }
+  });
+})();
+
 // Live render count (only shown once it is meaningfully high).
 fetch('/api/stats').then(r => r.json()).then(d => {
   if (d && d.renders > 100) {
