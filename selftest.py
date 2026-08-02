@@ -3431,6 +3431,20 @@ def _scenario_logic(clip, transcript, tmp):
     # Am Finger darf ein senkrechter Wisch NIE den Schieber aufreissen.
     check('v230u: bei geschlossenem Vergleich zieht der Finger nicht',
           "(auf <= AN_SCHWELLE || Math.abs(e.clientX - linie) > 44)" in _land)
+    # v230ac EIN BEDIENELEMENT IM BILD DARF DAS ZIEHEN NICHT AUSLOESEN.
+    # Der Ton-Knopf liegt IM Vergleich; sein pointerdown steigt zum Rahmen
+    # auf, und `setPointerCapture` haengt danach alles an den Rahmen - der
+    # Klick kam beim Knopf nie an (im Browser gemessen: Ton blieb aus, der
+    # Schieber sprang auf 91.5 %). Geprueft wird die REGEL: JEDER
+    # pointerdown-Horcher am Rahmen muss den Riegel haben, sonst reisst der
+    # naechste neue Horcher dieselbe Luecke wieder auf.
+    _pd = [_land[i:i + 400] for i in range(len(_land))
+           if _land.startswith("wrap.addEventListener('pointerdown'", i)]
+    check('v230ac: jeder Zieh-Horcher laesst Bedienelemente in Ruhe',
+          bool(_pd) and all('bedienelement(e)' in _b for _b in _pd),
+          f'{len(_pd)} Horcher')
+    check('v230ac: der Riegel kennt Knopf, Link und Eingabefeld',
+          "closest('button, a, input" in _land)
     # Eine Startseite, die 5 MB nachlaedt, verliert den Besucher vor dem
     # ersten Bild - die Kopie fuer das Web ist deshalb neu kodiert.
     _mb = _os210.path.getsize(_os210.path.join(_adir, 'demo.mp4')) / 1e6
@@ -6935,9 +6949,15 @@ def _scenario_betrieb(tmp):
     a = SV._notify_admin('k1', 'T', 'x')
     b = SV._notify_admin('k1', 'T', 'x')
     c = SV._notify_admin('k2', 'T', 'x')
+    # Gezaehlt werden NUR die Mails dieses Tests. Die globale Laenge zu
+    # pruefen war flatterhaft: die Hintergrund-Arbeiter (Sicherungs-
+    # Gegenprobe, Wachhund) melden waehrenddessen mit, und dann stand da
+    # eine 3. Ein Test, der mal faellt und mal nicht, ist schlimmer als
+    # keiner - geprueft wird die REGEL (ein Schluessel, eine Mail).
+    _meine = [m for m in sent if m[1].endswith('] T')]
     check('Admin-Alarm gedrosselt (1 Mail/h pro Schluessel)',
-          a and not b and c and len(sent) == 2
-          and all(m[0] == SV.ADMIN_MAIL for m in sent))
+          a and not b and c and len(_meine) == 2
+          and all(m[0] == SV.ADMIN_MAIL for m in _meine))
     # v132: Regressionsschutz gegen den "in .env gesetzt, aber kommt nicht im
     # Container an"-Fehler. Jede Variable, die server.py aus der Umgebung liest
     # UND in .env.example dokumentiert ist, MUSS in docker-compose.yml an den

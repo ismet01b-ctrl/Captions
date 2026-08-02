@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ac DER TON-KNOPF LIESS SICH NICHT DRUECKEN.** Ismets Befund. Im
+  Browser nachgestellt (echter Mausklick auf die Mitte des Knopfes): der Ton
+  blieb aus, und stattdessen sprang der Vergleichs-Schieber von 46 % auf
+  91.5 %.
+  - **Ursache: das Ziehen fing den Klick ab.** Der Knopf liegt IM Bild; sein
+    `pointerdown` steigt zum Rahmen auf, der daraufhin `setPointerCapture`
+    setzt - danach gehen alle Zeiger-Ereignisse an den Rahmen, und der Klick
+    kommt beim Knopf nie an. Zusaetzlich wurde der Schieber auf die
+    Klickstelle gezogen.
+  - **`z-index` und `pointer-events: auto` reichen dagegen NICHT.** Sie
+    regeln, wer das Ereignis ZUERST bekommt - nicht, wer es danach abfaengt.
+    Genau darauf ist v230s hereingefallen (dort war das unsichtbare
+    Regler-Feld schuld, jetzt der Zeiger-Fang) - derselbe Befund, zweite
+    Ursache.
+  - Behoben mit einem Riegel in BEIDEN pointerdown-Horchern: liegt der
+    Ursprung auf einem Bedienelement (`button, a, input, select, textarea,
+    [role=button]`), wird gar nicht erst gezogen.
+  - Beweis (dieselbe Messung, alt/neu, Maus 1440 und Finger 390):
+    alt Maus `Ton aus, Schieber 46 % -> 91.5 %`, alt Finger
+    `Schieber 46 % -> 89.1 %`; neu beide `Ton an, Schieber unveraendert`.
+  - Test: geprueft wird die REGEL - JEDER pointerdown-Horcher am Rahmen muss
+    den Riegel tragen (sonst reisst der naechste neue Horcher dieselbe Luecke
+    wieder auf), nicht eine bestimmte Zeile.
+  - Nebenbefund behoben: der Test "Admin-Alarm gedrosselt" zaehlte ALLE
+    Mails im Prozess und fiel, sobald ein Hintergrund-Arbeiter dazwischen
+    meldete. Er zaehlt jetzt nur die eigenen.
 - **v230ab DER VERGLEICH AUF DER LANDING PAGE LAEUFT 1:1 SYNCHRON.** Ismets
   Befund nach v230aa: "ist es immer noch nicht 1:1 synchron". Im Browser
   gemessen (Chromium, echter Mausklick auf den Schieber, 22 s Abtastung

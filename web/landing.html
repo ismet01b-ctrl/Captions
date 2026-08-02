@@ -730,7 +730,17 @@ footer .links a:hover { color: var(--ink); }
       rng.value = Math.max(0, Math.min(100, ((x - r.left) / r.width) * 100));
       setz();
     };
+    // v230ac: WAS BEDIENT WERDEN SOLL, DARF DAS ZIEHEN NICHT AUSLOESEN.
+    // Der Ton-Knopf liegt IM Bild; sein pointerdown steigt bis hierher auf,
+    // und `setPointerCapture` haengt danach alle Zeiger-Ereignisse an den
+    // Rahmen - der Klick kommt beim Knopf gar nicht mehr an (im Browser
+    // gemessen: Ton blieb aus, dafuer sprang der Schieber auf 91.5 %).
+    // z-index und `pointer-events: auto` reichen dagegen NICHT, die regeln
+    // nur, wer das Ereignis ZUERST bekommt, nicht wer es danach abfaengt.
+    const bedienelement = (e) => !!(e.target && e.target.closest
+      && e.target.closest('button, a, input, select, textarea, [role="button"]'));
     wrap.addEventListener('pointerdown', (e) => {
+      if (bedienelement(e)) return;
       const r = wrap.getBoundingClientRect();
       const auf = parseFloat(rng.value) || 0;
       const linie = r.left + r.width * (auf / 100);
@@ -769,7 +779,7 @@ footer .links a:hover { color: var(--ink); }
     // wirklich getippt und nicht gewischt wurde.
     let tippX = null, tippY = null;
     wrap.addEventListener('pointerdown', (e) => {
-      if (e.pointerType !== 'touch') return;
+      if (e.pointerType !== 'touch' || bedienelement(e)) return;
       benutzt = true;
       tippX = e.clientX; tippY = e.clientY;
     });

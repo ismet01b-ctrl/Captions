@@ -1443,7 +1443,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1918/1919 (Stand v230ab)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1920/1921 (Stand v230ac)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1606,6 +1606,23 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   das Element das Scrollen) und `touch-action: pan-y` setzen. Und: ein Test,
   der den Wert per `input`-Ereignis setzt, hat NIE gezogen - er ist gruen,
   waehrend es im Browser nicht geht.
+- **Wer den Zeiger FAENGT, nimmt jedem Knopf darunter den Klick (v230ac).**
+  `setPointerCapture` haengt ab dem `pointerdown` alle Zeiger-Ereignisse an
+  das fangende Element - der Klick kommt beim Knopf nie an, obwohl der
+  ordentlich oben liegt und Zeiger annimmt. `z-index` und `pointer-events`
+  regeln nur, wer das Ereignis ZUERST bekommt, nicht wer es danach abfaengt
+  (Ismets "ich kann den Mute-Button nicht druecken", im Browser gemessen:
+  Ton blieb aus, Schieber sprang 46 % -> 91.5 %). Wer eine Zieh-Geste auf
+  eine ganze Flaeche legt, setzt in JEDEN pointerdown-Horcher den Riegel
+  `e.target.closest('button, a, input, ...')` - und der Test haengt an
+  dieser Regel, nicht an einer Zeile, sonst reisst der naechste neue
+  Horcher dieselbe Luecke wieder auf. Zweiter Anlauf desselben Befunds:
+  v230s hatte dieselbe Wirkung aus anderer Ursache.
+- **Ein Test, der ALLE Nebenwirkungen im Prozess zaehlt, flattert (v230ac).**
+  Die Alarm-Drosselung wurde ueber `len(sent) == 2` geprueft; meldete
+  waehrenddessen ein Hintergrund-Arbeiter (Sicherungs-Gegenprobe, Wachhund),
+  stand da eine 3 und der Test fiel - mal so, mal so. Gezaehlt wird, was der
+  Test selbst ausgeloest hat.
 - **Ein unsichtbares Bedienfeld frisst die Klicks darunter (v230s).** Der
   Vergleichs-Schieber liegt als transparentes `input[type=range]` ueber dem
   ganzen Bild - damit war der Ton-Knopf nicht mehr bedienbar. Alles, was auf
