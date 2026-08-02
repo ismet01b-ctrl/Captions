@@ -3,6 +3,18 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230af DER KONTAKTBOGEN IST RAUS AUS DER KUNDENANSICHT.** Ismets
+  Entscheidung nach der Frage "was soll das bringen?". Antwort ehrlich: fuer
+  den Kunden nichts - niemand prueft seine Untertitel auf einer Collage, er
+  schaut das Video an. Der Knopf stand in der Bibliothek UND im
+  Ergebnis-Bildschirm und war dort nur ein weiterer Knopf.
+  - Das Bild wird beim Render weiter erzeugt und bleibt ueber seinen
+    Endpunkt erreichbar (Support/Fehlersuche, alte Links) - entfernt ist
+    nur der Weg dorthin in der App.
+  - Der alte Test verlangte ausdruecklich, dass der Knopf DA ist (v101g).
+    Wer eine Funktion herausnimmt, muss den Test umdrehen, nicht loeschen:
+    jetzt wird geprueft, dass kein Knopf mehr darauf zeigt UND dass das
+    Bild trotzdem entsteht.
 - **v230ae DER EBENEN-RENDER WAR EIN BLINDFLUG.** Ismets Befund: "ich klicke
   darauf und da steht rendering, aber es kommt nichts - dauert jetzt 30 min
   fuer ein 15-Sekunden-Video". Zwei Fehler, beide in der Anzeige:

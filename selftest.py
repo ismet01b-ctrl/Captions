@@ -4134,9 +4134,14 @@ def _scenario_logic(clip, transcript, tmp):
           "'/api/contact/{jid}'" in _srv_g
           and 'fertig_kontakt.jpg' in _srv_g
           and "kontakt=True" in _srv_g)
-    check('v101g: UI zeigt Moment sheet (Success + Library)',
-          'dlKontakt' in _ui_g and '/api/contact/' in _ui_g
-          and 'State.kontakt' in _ui_g)
+    # v230af: der Kontaktbogen ist RAUS aus der Kundenansicht (Ismets
+    # Entscheidung: kein Kunde prueft Untertitel auf einer Collage). Das
+    # Bild wird weiter erzeugt und bleibt ueber den Endpunkt erreichbar -
+    # geprueft wird jetzt, dass kein Knopf mehr darauf zeigt.
+    check('v230af: kein Kontaktbogen-Knopf mehr in der Kundenansicht',
+          'dlKontakt' not in _ui_g and '/api/contact/' not in _ui_g)
+    check('v230af: das Bild wird trotzdem weiter erzeugt und ausgeliefert',
+          '_kontakt.jpg' in _src99 and "'/api/contact/{jid}'" in _srv_g)
 
     # v101h Caption-Alpha-Export: Difference-Matting-Doppelpass.
     _acb = np.zeros((8, 8, 3), np.float32)
