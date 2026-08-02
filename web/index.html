@@ -3766,8 +3766,14 @@ document.addEventListener('click', async (e) => {
         showPricing(); al.disabled = false; al.textContent = 'Editor layer';
       } else if (d.ready) { toast('Editor layer is ready!', 'ok'); renderLibrary(); }
       else if (r.ok && d.queued) {
-        toast(`Editor layer is rendering (${d.cost_min || 1} credit/min charged). Check back here in a few minutes.`, 'ok');
-        al.textContent = 'Rendering …';
+        toast(`Editor layer is rendering (${d.cost_min || 1} credit/min charged).`, 'ok');
+        // v230ae: ab hier zeigt der Knopf den Fortschritt und wird von
+        // selbst zum Download - kein Neuladen, kein Blindflug.
+        const _jid = al.dataset.alpha;
+        al.textContent = 'Layer …';
+        al.removeAttribute('data-alpha');
+        al.dataset.alphawait = _jid;
+        alphaWatch(_jid, al);
       } else {
         toast(d.detail || 'Could not start the editor layer.', 'err');
         al.disabled = false; al.textContent = 'Editor layer';
@@ -4256,7 +4262,8 @@ async function renderLibrary() {
           ${it.has_srt ? `<a class="btn secondary" href="/api/subtitles/${it.jid}" title="Subtitle file for YouTube or your editing software">SRT</a>` : ''}
           ${it.kontakt ? `<a class="btn secondary" href="/api/contact/${it.jid}" target="_blank" rel="noopener" title="One image with every rendered caption moment">Moments</a>` : ''}
           ${it.has_alpha ? `<a class="btn secondary" href="/api/alpha_file/${it.jid}" title="Transparent caption layer (ProRes 4444) for Premiere or Resolve">Layer&nbsp;(MOV)</a>`
-                         : (it.can_alpha ? `<button class="btn secondary" data-alpha="${it.jid}" title="Render a transparent caption layer (ProRes 4444) to drop over your original in Premiere or Resolve. Billed like a further render: 1 credit per started minute.">Editor&nbsp;layer&nbsp;(1&nbsp;cr/min)</button>` : '')}
+                         : (it.alpha_running ? `<button class="btn secondary" data-alphawait="${it.jid}" disabled>Layer&nbsp;…</button>`
+                         : (it.can_alpha ? `<button class="btn secondary" data-alpha="${it.jid}" title="Render a transparent caption layer (ProRes 4444) to drop over your original in Premiere or Resolve. Billed like a further render: 1 credit per started minute.">Editor&nbsp;layer&nbsp;(1&nbsp;cr/min)</button>` : ''))}
           ${it.wm ? `<button class="btn" data-unlock="${it.jid}" title="Your first purchase removes the watermark from this exact video - no re-render">Unlock&nbsp;HD</button>` : ''}
         </div>
       </div>`;
@@ -4281,6 +4288,60 @@ async function renderLibrary() {
     });
     grid.appendChild(card);
   });
+  // v230ae: laufende Ebenen-Renders bekommen sofort ihre Anzeige zurueck -
+  // auch nach einem Neuladen.
+  grid.querySelectorAll('[data-alphawait]').forEach(b => alphaWatch(b.dataset.alphawait, b));
+}
+
+/* v230ae DER EBENEN-RENDER ZEIGT, WIE WEIT ER IST. Der Knopf sprang auf
+   "Rendering …" und blieb dort stehen - auch wenn die Datei laengst fertig
+   war (Ismets Befund: "da steht rendering, aber es kommt nichts"). Ein
+   Zustand ohne Fortschritt ist von einem Haenger nicht zu unterscheiden.
+   Gefragt wird derselbe Endpunkt wie beim normalen Render, und nach
+   v230e-Lehre NUR im sichtbaren Tab - im Hintergrund bricht das Handy die
+   Anfrage ab, und ein Fehler waere dort keiner. */
+const ALPHA_WATCH = new Set();
+async function alphaWatch(jid, btn) {
+  if (ALPHA_WATCH.has(jid)) return;         // nie zwei Poller je Job
+  ALPHA_WATCH.add(jid);
+  let fehler = 0;
+  try {
+    while (true) {
+      if (document.hidden) { await whenVisible(); fehler = 0; }
+      if (!document.body.contains(btn)) return;   // Karte neu gezeichnet
+      let st;
+      try {
+        st = await (await fetch('/api/status/' + jid)).json();
+        fehler = 0;
+      } catch (e) {
+        if (document.hidden) { await new Promise(r => setTimeout(r, 1500)); continue; }
+        if (++fehler > 10) {
+          btn.textContent = 'Layer status unknown';
+          toast('Lost contact while the editor layer was rendering - reload to check.', 'err');
+          return;
+        }
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      if (st.status === 'fertig' || st.status === 'fehler') {
+        if (st.alpha === false || st.status === 'fehler') {
+          toast(st.msg || 'Editor layer failed - your credits were refunded.', 'err');
+        } else {
+          toast('Editor layer is ready!', 'ok');
+        }
+        refreshBalanceInHeader();
+        ALPHA_WATCH.delete(jid);
+        renderLibrary();
+        return;
+      }
+      const pz = Math.round((st.progress || 0) * 100);
+      btn.textContent = st.status === 'wartet'
+        ? (st.queue_pos ? `Layer · queued #${st.queue_pos}` : 'Layer · queued')
+        : `Layer · ${pz} %`;
+      btn.title = st.phase || 'Rendering the transparent caption layer …';
+      await new Promise(r => setTimeout(r, 2500));
+    }
+  } finally { ALPHA_WATCH.delete(jid); }
 }
 
 /* v84: Account-Seite fuellen. Frische Daten holen (created_at/purchased

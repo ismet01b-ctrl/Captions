@@ -2071,7 +2071,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230ad'
+DVE_VERSION = 'v230ae'
 
 
 def _build_datei():
@@ -7636,7 +7636,13 @@ def api_library(request: Request):
     for jid, j in list(JOBS.items()):
         if j.get('user_id') != u['id']:
             continue
-        if j.get('status') != 'fertig':
+        # v230ae: waehrend eines EBENEN-Renders steht der Job wieder auf
+        # 'wartet'/'laeuft' - das fertige Video verschwand dadurch komplett
+        # aus der Bibliothek, obwohl die Datei da liegt. Ein laufender
+        # Zusatz-Render darf das Ergebnis nicht wegnehmen.
+        _alpha_run = (j.get('status') in ('wartet', 'laeuft')
+                      and 'alpha' in j and j.get('alpha') is None)
+        if j.get('status') != 'fertig' and not _alpha_run:
             continue
         d = job_dir(jid)
         mp4 = os.path.join(d, 'fertig.mp4')
@@ -7664,6 +7670,12 @@ def api_library(request: Request):
             # (sonst kann keine Ebene mehr gebaut werden)?
             'has_alpha': os.path.exists(os.path.join(d, 'fertig_captions.mov')),
             'can_alpha': bool(j.get('input')) and os.path.exists(j.get('input', '')),
+            # v230ae: laeuft gerade ein Ebenen-Render? Sonst steht der Knopf
+            # nach einem Neuladen wieder auf "Editor layer", obwohl der Job
+            # laeuft - und ein zweiter Klick bekommt nur einen 409er.
+            # Der Worker setzt `mode` sofort auf 'full' zurueck; der Marker
+            # ist deshalb `alpha is None` waehrend Job laeuft/wartet.
+            'alpha_running': _alpha_run,
             # v124: Scores fuer den Verlauf im Konto (Bestwert, Trend).
             'hook_score': int(j.get('hook_score') or 0),
             'silent_score': int(j.get('silent_score') or 0),

@@ -3,6 +3,30 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ae DER EBENEN-RENDER WAR EIN BLINDFLUG.** Ismets Befund: "ich klicke
+  darauf und da steht rendering, aber es kommt nichts - dauert jetzt 30 min
+  fuer ein 15-Sekunden-Video". Zwei Fehler, beide in der Anzeige:
+  - **Das Video verschwand komplett aus der Bibliothek.** `/api/alpha` setzt
+    den Job zurueck auf 'wartet', und die Bibliothek zeigte nur Jobs mit
+    Status 'fertig' - die Kachel war weg, obwohl `fertig.mp4` unveraendert
+    dort liegt. Ein laufender ZUSATZ-Render darf das fertige Ergebnis nicht
+    wegnehmen.
+  - **Der Knopf war ein Standbild.** Er sprang auf "Rendering …" und blieb
+    dort - auch nach dem Ende. Ein Zustand ohne Fortschritt ist von einem
+    Haenger nicht zu unterscheiden; genau deshalb konnte Ismet nicht sagen,
+    ob 30 Minuten normal sind.
+  - Jetzt: `alpha_running` in der Bibliotheks-Antwort, der Knopf zeigt
+    "Layer · queued #2" bzw. "Layer · 42 %" und wird von selbst zum
+    Download, wenn die Datei da ist. Gefragt wird nur im sichtbaren Tab
+    (v230e-Lehre), hoechstens ein Poller je Job.
+  - Nachweis in der SPA-Sonde (echte Funktion, Mini-DOM): Warteschlange ->
+    Prozente -> Neuzeichnen; im Hintergrund 0 Anfragen. Dazu ein Test, der
+    den echten Bibliotheks-Endpunkt aufruft: waehrend des Ebenen-Renders
+    bleibt der Eintrag da und traegt den Marker.
+  - **Offen:** ob 30 Minuten fuer 15 s tatsaechlich normal sind, ist damit
+    NICHT beantwortet - der Doppelpass plus ProRes-4444 kostet grob das
+    2-3-Fache eines normalen Renders, gemessen ist das hier nicht (die
+    Render-Tests laufen in diesem Container nicht).
 - **v230ad DIE KNOEPFE IN DER BIBLIOTHEK WAREN ABGESCHNITTEN.** Ismets
   Befund. Eine Kachel kann sechs Knoepfe tragen (Download, MOV·Alpha, SRT,
   Moments, Editor-Ebene, Unlock HD); die Zeile war ein Flexbox ohne Umbruch.

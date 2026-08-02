@@ -3523,7 +3523,16 @@ def _scenario_logic(clip, transcript, tmp):
                       'v230i: jeder Player wird angehalten und entladen',
                       'v230i: die Quelle wird wirklich entfernt',
                       'v230i: die Kachel wird wieder zum Vorschaubild',
-                      'v230i: der gerade laufende Player bleibt stehen'):
+                      'v230i: der gerade laufende Player bleibt stehen',
+                      # v230ae: der Ebenen-Render zeigt, wie weit er ist -
+                      # "Rendering ..." ohne Fortschritt ist von einem
+                      # Haenger nicht zu unterscheiden.
+                      'v230ae: die Warteschlange steht am Knopf',
+                      'v230ae: der Fortschritt steht am Knopf',
+                      'v230ae: am Ende wird die Bibliothek neu gezeichnet',
+                      'v230ae: im Hintergrund wird nicht gefragt',
+                      'v230ae: ein zweiter Poller fuer denselben Job startet nicht',
+                      'v230ae: eine neu gezeichnete Kachel beendet ihren Poller'):
             _ok220 = ('PASS ' + _n220) in _out220
             check('v220: ' + _n220, _ok220,
                   '' if _ok220 else 'Sonde meldet den Fall nicht bestanden')
@@ -12536,6 +12545,36 @@ def _scenario_v98(tmp):
                                         encoding='utf-8').read()
           and 'data-unlock' in open(os.path.join(HERE, 'web', 'index.html'),
                                     encoding='utf-8').read())
+
+    # v230ae WAEHREND DES EBENEN-RENDERS DARF DAS VIDEO NICHT VERSCHWINDEN.
+    # /api/alpha setzt den Job auf 'wartet' - und die Bibliothek zeigte nur
+    # Jobs mit Status 'fertig'. Die Kachel war also weg, solange die Ebene
+    # rechnete (bei Ismet ueber 30 Minuten), und mit ihr jeder Hinweis
+    # darauf, dass ueberhaupt etwas laeuft. Geprueft wird die echte
+    # Endpunkt-Funktion, nicht der Quelltext.
+    _ajid = 'aa11bb22cc33'
+    _ad = SV.job_dir(_ajid)
+    os.makedirs(_ad, exist_ok=True)
+    open(os.path.join(_ad, 'fertig.mp4'), 'wb').write(b'VID')
+    SV.JOBS[_ajid] = {'user_id': uid_free, 'status': 'wartet', 'alpha': None,
+                      'dauer': 15, 'name': 'alpha.mp4'}
+    _echt_user = SV._require_user
+    SV._require_user = lambda r: {'id': uid_free}
+    try:
+        _lib_run = SV.api_library(None)
+        _eintrag = [x for x in _lib_run['items'] if x['jid'] == _ajid]
+        SV.JOBS[_ajid]['status'] = 'fertig'
+        SV.JOBS[_ajid]['alpha'] = True
+        _lib_fertig = SV.api_library(None)
+        _eintrag2 = [x for x in _lib_fertig['items'] if x['jid'] == _ajid]
+    finally:
+        SV._require_user = _echt_user
+    check('v230ae: das Video bleibt waehrend des Ebenen-Renders sichtbar',
+          len(_eintrag) == 1, f'{len(_eintrag)} Eintraege')
+    check('v230ae: und die Bibliothek sagt, dass die Ebene gerade rechnet',
+          bool(_eintrag) and _eintrag[0]['alpha_running'] is True)
+    check('v230ae: nach dem Lauf ist der Marker wieder aus',
+          bool(_eintrag2) and _eintrag2[0]['alpha_running'] is False)
 
     # v101h Caption-Alpha-Export serverseitig: Kaeufer-Gate, eigener Ledger-
     # Text (Alpha ...), Refund-Pfad, Worker-Modus, Auslieferung, UI-Buttons.

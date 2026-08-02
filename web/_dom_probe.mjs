@@ -347,5 +347,95 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
         behalten._src !== null && behalten._weg !== true);
 }
 
+// ---- v230ae: der Ebenen-Render zeigt seinen Fortschritt ----
+// Ismets Befund: "ich klicke darauf und da steht rendering, aber es kommt
+// nichts". Der Knopf war ein Standbild - er sagte weder, wie weit der Job
+// ist, noch wurde er von selbst zum Download. Geprueft wird das VERHALTEN:
+// Warteschlange -> Prozente -> fertig, und im Hintergrund keine Anfrage.
+{
+  globalThis.setTimeout = ECHTER_TIMEOUT;
+  const warte = (ms) => new Promise(r => ECHTER_TIMEOUT(r, ms));
+  let versteckt = false, gefragt = 0, neuGezeichnet = 0;
+  const horcher = [];
+  globalThis.document = {
+    get hidden() { return versteckt; },
+    addEventListener: (n, f) => horcher.push(f),
+    removeEventListener: () => {},
+    body: { contains: (b) => !b._weg },
+  };
+  const umschalten = (v) => { versteckt = v; horcher.slice().forEach(f => f()); };
+  globalThis.whenVisible = eval('(' + schneide('whenVisible') + ')');
+  globalThis.toast = () => {};
+  globalThis.refreshBalanceInHeader = () => {};
+  globalThis.renderLibrary = () => { neuGezeichnet++; };
+  globalThis.ALPHA_WATCH = new Set();     // Modul-Zustand aus index.html
+  const alphaWatch = eval('(' + schneide('alphaWatch') + ')');
+  globalThis.alphaWatch = alphaWatch;
+
+  const antworten = [
+    { status: 'wartet', progress: 0, queue_pos: 2, phase: 'Queued …' },
+    { status: 'laeuft', progress: 0.42, phase: 'Compositing …' },
+    { status: 'fertig', progress: 1, alpha: true, phase: 'Editor layer ready' },
+  ];
+  const gesehen = [];
+  // Gezaehlt wird NUR die eigene Job-Nummer: aus frueheren Abschnitten
+  // laufen noch Poll-Ketten, die dieselbe fetch-Attrappe benutzen - deren
+  // Anfragen wuerden sonst die Antwortfolge weiterschalten und der Test
+  // misst etwas anderes, als er glaubt (v230ac-Lehre).
+  let schritt = 0;
+  globalThis.fetch = async (url = '') => {
+    if (!String(url).includes('/j1')) {
+      if (String(url).includes('/j2')) gefragt++;
+      return { json: async () => ({ status: 'laeuft', progress: 0.5, phase: 'x' }) };
+    }
+    schritt++;
+    return { json: async () => antworten[Math.min(schritt - 1, antworten.length - 1)] };
+  };
+  const knopf = { textContent: 'Layer …', title: '', dataset: {} };
+  // Gewartet wird auf den ZUSTAND, nicht auf eine Uhrzeit - sonst haengt der
+  // Test an der Taktrate und flattert (v230ac-Lehre).
+  const bis = async (pruefen, ms = 8000) => {
+    const t0 = Date.now();
+    while (!pruefen() && Date.now() - t0 < ms) await warte(50);
+    return pruefen();
+  };
+  const lauf = alphaWatch('j1', knopf);
+  await bis(() => /queued/i.test(knopf.textContent));
+  gesehen.push(knopf.textContent);                      // Warteschlange
+  await bis(() => knopf.textContent.includes('%'));
+  gesehen.push(knopf.textContent);                      // Prozente
+  await lauf;
+  pruef('v230ae: die Warteschlange steht am Knopf',
+        /queued/i.test(gesehen[0]) && gesehen[0].includes('2'), gesehen[0]);
+  pruef('v230ae: der Fortschritt steht am Knopf',
+        gesehen[1].includes('42'), gesehen[1]);
+  pruef('v230ae: am Ende wird die Bibliothek neu gezeichnet (Knopf -> Download)',
+        neuGezeichnet === 1, neuGezeichnet + 'x');
+
+  // v230e-Lehre: im Hintergrund gar nicht erst fragen.
+  gefragt = 0; neuGezeichnet = 0;
+  const antw2 = { status: 'laeuft', progress: 0.5, phase: 'Compositing …' };
+  globalThis.fetch = async () => { gefragt++; return { json: async () => antw2 }; };
+  const k2 = { textContent: '', title: '', dataset: {} };
+  const lauf2 = alphaWatch('j2', k2);
+  await bis(() => gefragt > 0);
+  // Ein zweiter Aufruf fuer denselben Job darf nichts anstossen - sonst
+  // fragen nach jedem Neuzeichnen der Kachel mehrere Poller parallel.
+  const vorZweit = gefragt;
+  await alphaWatch('j2', k2);
+  pruef('v230ae: ein zweiter Poller fuer denselben Job startet nicht',
+        gefragt === vorZweit, gefragt + ' Anfragen');
+  const vorher = gefragt;
+  umschalten(true);
+  await warte(3000);
+  pruef('v230ae: im Hintergrund wird nicht gefragt',
+        gefragt === vorher, (gefragt - vorher) + ' Anfragen');
+  k2._weg = true;                       // Karte neu gezeichnet -> Poller endet
+  umschalten(false);
+  await lauf2;
+  pruef('v230ae: eine neu gezeichnete Kachel beendet ihren Poller',
+        !globalThis.ALPHA_WATCH.has('j2'));
+}
+
 console.log(fails ? `\n${fails} FEHLER` : '\nalle Nachweise gruen');
 process.exit(fails ? 1 : 0);

@@ -913,6 +913,15 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   beim Rollenwechsel umschalten (`.playing` -> `aspect-ratio: auto` +
   `contain`). Und `width:100%` + `max-height` ohne `object-fit` VERZERRT ein
   Hochformat-Video, weil die Voreinstellung `fill` ist.
+- **Ein Zustand ohne Fortschritt ist von einem Haenger nicht zu
+  unterscheiden (v230ae).** Der Ebenen-Render (`/api/alpha`) setzte den Knopf
+  auf "Rendering …" und liess ihn dort stehen - auch nach dem Ende. Und weil
+  der Job dabei wieder auf 'wartet' steht, fiel die Kachel aus der
+  Bibliothek (die zeigte nur Status 'fertig'): das fertige Video war
+  waehrend des Zusatz-Renders unsichtbar. Zwei Regeln: ein laufender
+  ZUSATZ-Vorgang darf das fertige Ergebnis nie wegnehmen, und wer einen
+  Vorgang anstoesst, zeigt seinen Fortschritt und loest sich selbst ab
+  (Poller nur im sichtbaren Tab, hoechstens einer je Job).
 - **Eine Knopfzeile, die nicht umbricht, waechst die KACHEL (v230ad).** Die
   Bibliotheks-Kachel kann sechs Knoepfe tragen; ohne `flex-wrap: wrap` zog
   ihr Inhalt am Handy die Kachel auf 712 px (Bildschirm 390) und am Desktop
@@ -1451,7 +1460,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1922/1923 (Stand v230ad)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1931/1932 (Stand v230ae)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
