@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ad DIE KNOEPFE IN DER BIBLIOTHEK WAREN ABGESCHNITTEN.** Ismets
+  Befund. Eine Kachel kann sechs Knoepfe tragen (Download, MOV·Alpha, SRT,
+  Moments, Editor-Ebene, Unlock HD); die Zeile war ein Flexbox ohne Umbruch.
+  - **Am Handy wuchs dadurch die KACHEL**, nicht die Zeile: 712 px bei
+    390 px Bildschirm - alles ab dem dritten Knopf lag ausserhalb. Ein
+    Grid-Kind ohne `min-width: 0` laesst den breitesten Inhalt die ganze
+    Spalte aufziehen (dieselbe Falle wie im Admin-Panel).
+  - **Am Desktop schnitt die Kachel ab** (`overflow: hidden`): bis zu 399 px,
+    drei Knoepfe komplett weg.
+  - Zweite Haelfte des Fehlers: `flex: 1` (Basis 0) zwingt jeden Knopf in
+    dieselbe Spur, statt ihn seine eigene Breite behalten zu lassen. Jetzt
+    `flex-wrap: wrap` + `flex: 1 1 auto`.
+  - Beweis (im Browser gemessen, Kachel mit allen sechs Knoepfen):
+    Handy 712 -> 358 px Kachelbreite, Desktop 399 -> 0 px Ueberhang,
+    kein Knopf mehr ausserhalb der Kachel (390 / 768 / 1440 geprueft).
 - **v230ac DER TON-KNOPF LIESS SICH NICHT DRUECKEN.** Ismets Befund. Im
   Browser nachgestellt (echter Mausklick auf die Mitte des Knopfes): der Ton
   blieb aus, und stattdessen sprang der Vergleichs-Schieber von 46 % auf

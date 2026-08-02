@@ -913,6 +913,14 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   beim Rollenwechsel umschalten (`.playing` -> `aspect-ratio: auto` +
   `contain`). Und `width:100%` + `max-height` ohne `object-fit` VERZERRT ein
   Hochformat-Video, weil die Voreinstellung `fill` ist.
+- **Eine Knopfzeile, die nicht umbricht, waechst die KACHEL (v230ad).** Die
+  Bibliotheks-Kachel kann sechs Knoepfe tragen; ohne `flex-wrap: wrap` zog
+  ihr Inhalt am Handy die Kachel auf 712 px (Bildschirm 390) und am Desktop
+  schnitt sie ueber `overflow: hidden` bis zu 399 px ab. Zwei Regeln: eine
+  Zeile mit unbekannt vielen Elementen bricht um, und ein Grid-Kind bekommt
+  `min-width: 0` - sonst zieht der breiteste Inhalt die ganze Spalte auf.
+  `flex: 1` (Basis 0) ist dabei das Gegenteil von dem, was man will: es
+  presst alle Knoepfe in EINE Spur; richtig ist `flex: 1 1 auto`.
 - Am Handy geprueft wird im BROWSER (Chromium, 390x844) und ueber
   `web/_dom_probe.mjs`, nicht per Quelltext-Suche. `scrollHeight` ist nur bei
   `overflow: hidden` aussagekraeftig - bei `visible` liefert es die eigene
@@ -1443,7 +1451,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1920/1921 (Stand v230ac)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1922/1923 (Stand v230ad)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

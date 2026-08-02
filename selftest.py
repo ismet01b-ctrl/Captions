@@ -3570,6 +3570,21 @@ def _scenario_logic(clip, transcript, tmp):
     # gegen 540x960 Video).
     check('v228: der Ergebnis-Player verzerrt kein Hochformat',
           'max-height: 480px; object-fit: contain;' in _ix226)
+    # v230ad DIE KNOPFZEILE DER BIBLIOTHEK MUSS UMBRECHEN. Eine Kachel kann
+    # sechs Knoepfe tragen; ohne Umbruch wuchs sie am Handy auf 712 px (Rest
+    # ausserhalb des Bildschirms) und am Desktop schnitt die Kachel bis zu
+    # 399 px ab - drei Knoepfe ganz weg (Ismets "die Buttons sind
+    # abgeschnitten", im Browser gemessen, danach 358 px bzw. 0 px).
+    # Geprueft wird die REGEL, nicht die Schreibweise: umbrechen JA,
+    # Basis 0 NEIN (`flex: 1` zwingt alle Knoepfe in eine Spur).
+    _akt = _ix226[_ix226.find('.lib-actions {'):][:400]
+    check('v230ad: die Knopfzeile der Bibliothek bricht um',
+          'flex-wrap: wrap' in _akt and 'flex: 1;' not in _akt
+          and 'flex: 1 1 auto' in _akt)
+    # Ein Grid-Kind ohne `min-width: 0` laesst den breitesten Inhalt die
+    # ganze Spalte aufziehen - dieselbe Falle wie im Admin-Panel.
+    check('v230ad: die Kachel zieht die Spalte nicht auf',
+          'min-width: 0; }' in _ix226[_ix226.find('.lib-card {'):][:260])
     # v229 AUSGEGRAUTE AUFLOESUNGS-STUFEN. Die Engine skaliert NIE hoch
     # (H = min(Wunsch, Quelle)) - eine 720p-Quelle bleibt 720p, egal was
     # angehakt ist. Bis hier standen alle drei Stufen waehlbar da: eine

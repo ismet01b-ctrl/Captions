@@ -237,7 +237,7 @@ body {
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr));
   gap: 18px; }
 .lib-card { background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
-  overflow: hidden; display: flex; flex-direction: column; }
+  overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
 .lib-thumb { position: relative; aspect-ratio: 16/9; background: #000;
   display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; }
 .lib-thumb img, .lib-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -262,8 +262,19 @@ body {
 .lib-count { font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .lib-count.warn { color: #e88a5a; }
 .lib-count.ok { color: var(--mut); }
-.lib-actions { display: flex; gap: 8px; margin-top: 2px; }
-.lib-actions .btn { padding: 8px 12px; font-size: 13px; flex: 1; }
+/* v230ad DIE KNOPFZEILE MUSS UMBRECHEN. Eine Kachel kann bis zu sechs
+   Knoepfe tragen (Download, MOV, SRT, Moments, Editor-Ebene, Unlock HD).
+   Ohne Umbruch stand alles in EINER Zeile: am Handy wuchs die Kachel dadurch
+   auf 712 px und ragte aus dem Bildschirm, am Desktop schnitt die Kachel
+   (overflow: hidden) die letzten Knoepfe ab - bis zu 399 px, drei Knoepfe
+   ganz weg (im Browser gemessen, Ismets "die Buttons sind abgeschnitten").
+   `flex: 1` mit Basis 0 war die zweite Haelfte des Fehlers: es zwingt jeden
+   Knopf in dieselbe Spur, statt ihn seine eigene Breite behalten zu lassen.
+   Und ein Grid-Kind braucht `min-width: 0`, sonst zieht der breiteste Inhalt
+   die ganze Spalte auf (dieselbe Falle wie im Admin-Panel). */
+.lib-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.lib-actions .btn { padding: 8px 12px; font-size: 13px;
+  flex: 1 1 auto; max-width: 100%; }
 
 /* Account & Billing generic */
 .panel { background: var(--surf); border: 1px solid var(--line); border-radius: 16px;
