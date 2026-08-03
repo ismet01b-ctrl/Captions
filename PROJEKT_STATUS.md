@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230am TEILEN-VORSCHAU + STRUKTURDATEN.** Aus einem fremden SEO-Vorschlag
+  ist der Teil uebernommen, der wirklich etwas bringt: Canonical, Open Graph,
+  Twitter Card, ein 1200x630-Vorschaubild und drei Schema-Bloecke
+  (Organization, WebSite, SoftwareApplication).
+  - **Der Nutzen ist die Vorschaukarte, nicht Google.** Wer den Link postet
+    (WhatsApp, LinkedIn, Discord, X), hatte bisher einen grauen Kasten. Eine
+    neue Domain ohne Verweise rankt auf Monate nicht - das ist kein Argument
+    gegen die zehn Minuten Arbeit, aber eines gegen jede Erwartung.
+  - **Zwei Aussagen aus dem Vorschlag sind RAUS, weil sie nicht stimmen:**
+    "EU-hosted / no data leaves the EU" (der Server steht in Deutschland,
+    die Transkription laeuft ueber OpenAI in den USA - eine Zusage, die
+    nicht haelt, gehoert nicht in Werbetext und schon gar nicht in
+    Strukturdaten) und das FAQ-Schema (Google zeigt es seit 2023 praktisch
+    nur noch fuer grosse Medienseiten).
+  - **Alle Zahlen stammen aus dem Code** (26 Animationen, 9 Looks, 3 Minuten,
+    3 Gratis-Minuten) - der Vorschlag enthielt "5 minutes" und "4 presets".
+  - **NICHT gebaut: fuenf Keyword-Landeseiten.** Fuer eine Domain ohne
+    Verweise sind das fuenf duenne Seiten, die dieselbe Botschaft
+    wiederholen - Google wertet so etwas als Tuersteher-Seiten ab, und
+    gepflegt werden muessten sie auch. Erst Besucher, dann optimieren.
+  - Dritter Fall derselben Test-Falle: die BEGRUENDUNG einer Regel enthaelt
+    genau das Wort, das die Regel verbietet. Die Pruefungen schneiden
+    HTML-Kommentare jetzt weg.
 - **v230al 4K IST AUS DEM PRODUKT RAUS** (Ismets Entscheidung). Begruendung
   ist geschaeftlich, nicht technisch:
   - **Beim Zuschauer kam es nie an.** TikTok, Reels und Shorts rechnen jedes

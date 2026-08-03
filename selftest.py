@@ -3547,18 +3547,63 @@ def _scenario_logic(clip, transcript, tmp):
     # Gemeint sind RESSOURCEN (Stil, Skript, Bild, Schrift) - ein normaler
     # Link auf eine fremde Seite ist voellig in Ordnung und in der
     # Datenschutzerklaerung sogar Pflicht.
+    def _ohne_kommentar(text):
+        """HTML-Kommentare raus. Dritter Fall derselben Falle: die ERKLAERUNG
+        einer Regel enthaelt fast immer genau das Wort, das die Regel
+        verbietet - und der Test faellt ueber die eigene Begruendung."""
+        return re.sub(r'<!--.*?-->', '', text, flags=re.S)
+    # Gemeint sind RESSOURCEN, die der Browser LAEDT. Ein `rel="canonical"`
+    # ist eine Angabe, kein Download - genauso wenig wie ein normaler Link.
     _fremd230 = [n for n in _SEITEN230
                  if os.path.exists(os.path.join(HERE, 'web', n))
-                 and re.search(r'<(?:link|script|img|iframe|source)\b[^>]*'
-                               r'\b(?:href|src)\s*=\s*"https?://',
-                               open(os.path.join(HERE, 'web', n),
-                                    encoding='utf-8').read())]
+                 and re.search(r'<(?:script|img|iframe|source)\b[^>]*\bsrc\s*=\s*"https?://'
+                               r'|<link\b(?![^>]*rel\s*=\s*"(?:canonical|alternate)")'
+                               r'[^>]*\bhref\s*=\s*"https?://',
+                               _ohne_kommentar(open(os.path.join(HERE, 'web', n),
+                                                    encoding='utf-8').read()))]
     check('v230ah: keine Seite laedt Stil oder Skript von aussen',
           not _fremd230, ', '.join(_fremd230) or 'alle lokal')
     check('v230ah: die Schriften liegen wirklich im Repo',
           all(os.path.exists(os.path.join(HERE, 'web', 'assets', 'fonts', f))
               for f in ('fonts.css', 'inter.woff2', 'newsreader.woff2',
                         'jetbrains-mono.woff2')))
+    # ===== v230am TEILEN-VORSCHAU + STRUKTURDATEN =======================
+    # Nutzen ist die Vorschaukarte beim Posten (grauer Kasten vorher), nicht
+    # Google. Geprueft wird, dass die Angaben WAHR sind - eine falsche Zahl
+    # in Strukturdaten ist schlimmer als gar keine (v230ag-Lehre).
+    check('v230am: die Startseite hat Canonical, Vorschaubild und Beschreibung',
+          '<link rel="canonical" href="https://douchko.eu/">' in _land
+          and 'property="og:image" content="https://douchko.eu/assets/og-image.png"' in _land
+          and 'name="twitter:card" content="summary_large_image"' in _land)
+    _og230 = os.path.join(HERE, 'web', 'assets', 'og-image.png')
+    check('v230am: das Vorschaubild existiert und hat 1200x630',
+          os.path.exists(_og230)
+          and __import__('PIL.Image', fromlist=['Image']).open(_og230).size == (1200, 630),
+          f'{os.path.getsize(_og230) // 1024} KB' if os.path.exists(_og230) else 'fehlt')
+    import json as _json230
+    _ld230 = re.findall(r'<script type="application/ld\+json">(.*?)</script>',
+                        _land, re.S)
+    _typen230 = []
+    for _blk in _ld230:
+        try:
+            _typen230.append(_json230.loads(_blk)['@type'])
+        except Exception as _e:
+            _typen230.append(f'KAPUTT: {_e}')
+    check('v230am: die Strukturdaten sind gueltiges JSON',
+          set(_typen230) == {'Organization', 'WebSite', 'SoftwareApplication'},
+          str(_typen230))
+    # Keine Aussage ueber Datenhaltung: der Server steht in Deutschland, die
+    # Transkription laeuft ueber OpenAI in den USA. "EU-hosted" liest sich als
+    # "meine Daten bleiben hier" - das waere eine Zusage, die nicht haelt.
+    _land_txt = re.sub(r'<!--.*?-->', '', _land, flags=re.S)   # ohne Kommentare
+    check('v230am: keine unhaltbare Datenschutz-Zusage in der Werbung',
+          'EU-hosted' not in _land_txt and 'no data leaves' not in _land_txt.lower())
+    # Und keine erfundenen Zahlen: 26 Animationen und 9 Looks stehen im Code.
+    check('v230am: die genannten Zahlen stammen aus dem Code',
+          '"26 word-aware caption animations"' in _land
+          and '"9 editorial looks"' in _land
+          and '5 minutes' not in _land)
+
     # v230ag DIE SEITE DARF NICHTS VERSPRECHEN, WAS DIE ENGINE NICHT KANN.
     # "50+ languages" stand da, waehrend keine Hausschrift auch nur
     # Kyrillisch setzen konnte. Und umgekehrt fehlten drei Dinge, die es

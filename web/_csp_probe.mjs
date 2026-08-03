@@ -9,7 +9,7 @@
 // Nicht Teil des Selftests: der braucht keinen Serverstart. Wer an CSP,
 // Handlern oder den Seiten etwas aendert, laesst sie EINMAL von Hand laufen.
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
-const B = 'http://127.0.0.1:8952';
+const B = 'http://127.0.0.1:8954';
 const br = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   args: ['--no-sandbox'] });
 const ctx = await br.newContext();
