@@ -9458,6 +9458,35 @@ def _scenario_betrieb(tmp):
               _SV198._csp() == _vorher230)      # Inhalt gleich -> gleicher Hash
     finally:
         os.utime(_tmp230, (_stat230.st_atime, _stat230.st_mtime))
+    # ===== v230aj EIN ABGESCHOSSENER RENDER SAGT, WARUM ==================
+    # Ismets 4K-Job starb bei Bild 100 von 293. Im Log stand nur ffmpegs
+    # "Broken pipe" - die Meldung des Zulieferers, der ins Leere schreibt.
+    # Der Prozess selbst war weg, ohne Spur: kein Speicherstand, kein Grund.
+    check('v230aj: ein Kill wegen Speichermangel wird als solcher benannt',
+          'out of memory' in _SV198._render_fehler_text(-9, []).lower()
+          and 'out of memory' in _SV198._render_fehler_text(137, []).lower())
+    check('v230aj: der letzte Speicherstand steht in der Meldung',
+          '5.83 GB' in _SV198._render_fehler_text(
+              -9, ['  Frame 100/293 | 0.5 f/s | ~6:35 left | '
+                   'Memory: 5.83 GB peak of 6.0 GB limit (97%)']))
+    check('v230aj: ein normaler Fehlschlag bleibt ein normaler Fehlschlag',
+          _SV198._render_fehler_text(1, ['ERROR: irgendwas']) == 'Render failed.')
+    _mem230 = _SV198._mem_info()
+    check('v230aj: der Server kennt seinen Speicher-Deckel (oder die Maschine)',
+          isinstance(_mem230, dict)
+          and (_mem230.get('limit_gb') or _mem230.get('host_gb')),
+          str(_mem230))
+    check('v230aj: das Panel zeigt den Speicher an',
+          'Speicher (RAM)' in open(os.path.join(HERE, 'web', 'admin.html'),
+                                   encoding='utf-8').read())
+    # Die Engine misst mit - eine Zahl, die nur im Kopf steht, ist beim
+    # naechsten Absturz wieder weg (v230z-Lehre).
+    _rsrc230aj = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230aj: die Engine schreibt ihren Speicherverbrauch mit',
+          'def mem_zeile(' in _rsrc230aj
+          and 'left | {mem_zeile()}' in _rsrc230aj
+          and _rsrc230aj.count('print(mem_zeile())') >= 1)
+
     # v230ah DER BUILD-STEMPEL GEHT NUR NOCH AN DEN ADMIN.
     _c230 = _TC198(_SV198.app, base_url='https://test')
     # Den Admin-Key NUR fuer diese Pruefung setzen und danach zurueckgeben -

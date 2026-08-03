@@ -706,6 +706,12 @@ function deployZeile(dp) {
             : ''}
         ${deployZeile(d.deploy && d.deploy.deploy)}</div>
       <div class="card"><div class="k">Disk free</div><div class="v">${d.disk?d.disk.free_gb+'G':'?'} <small>${d.disk?d.disk.used_pct+'%':''}</small></div></div>
+      <div class="card"><div class="k">Speicher (RAM)</div><div class="v">${
+        d.mem ? (d.mem.limit_gb ? d.mem.limit_gb+'G Limit' : (d.mem.host_gb??'?')+'G Maschine') : '?'
+      } <small>${d.mem ? (d.mem.limit_gb
+          ? (d.mem.used_gb??'?')+'G belegt'
+          : (d.mem.frei_gb??'?')+'G frei') : ''}</small></div>
+        <div class="subtle" style="font-size:11px;margin-top:4px">4K-Renders brauchen mehrere GB</div></div>
       <div class="card"><div class="k">DB size</div><div class="v">${d.db_mb??'?'} <small>MB</small></div></div>
       <div class="card"><div class="k">Last backup</div><div class="v" style="font-size:16px">${d.last_backup?fdate(d.last_backup):'none'}</div></div>
     </div>

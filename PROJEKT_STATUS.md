@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230aj EIN ABGESCHOSSENER RENDER SAGT JETZT, WARUM.** Ismets 4K-Job
+  (3840x2160) starb bei Bild 100 von 293. Im Log stand nur ffmpegs
+  "Broken pipe" - das ist die Meldung des ZULIEFERERS, der ins Leere
+  schreibt, nicht die Ursache. Der Prozess selbst war spurlos weg: kein
+  Traceback, kein Speicherstand, kein Grund. Damit liess sich "zu wenig
+  Speicher", "Absturz" und "Zeitlimit" nicht unterscheiden.
+  - **Die Engine misst jetzt mit:** jede Fortschrittszeile und die
+    Schlusszeile nennen `Memory: X GB peak of Y GB limit`. Steigt der Wert
+    Bild fuer Bild, sieht man das Ende KOMMEN.
+  - **Der Server benennt den Tod:** ein Kill durch das Betriebssystem kommt
+    als negativer Rueckgabewert an (-9) und heisst jetzt im Klartext "ran
+    out of memory", mitsamt dem letzten gemessenen Wert - statt "Render
+    failed." fuer alles.
+  - **Das Panel zeigt den Speicher** (Ansicht System): Deckel des Containers
+    bzw. RAM der Maschine. Ohne diese Zahl ist jede Diagnose Raten, und ins
+    Terminal geht Ismet nicht.
+  - **Noch NICHT bewiesen:** dass es wirklich der Speicher war. Das ist die
+    wahrscheinlichste Erklaerung (ein 4K-Bild als Float belegt ~100 MB, die
+    Pipeline haelt mehrere davon plus die KI-Modelle, Deckel 6 GB) - aber
+    gemessen ist sie erst beim naechsten 4K-Render mit diesen Zeilen. Genau
+    dafuer sind sie da.
 - **v230ai DER DEPLOY SIEHT NACH, OB CADDY DIE ADRESSE WIRKLICH FAEHRT.**
   www blieb tot, obwohl Neustart (v230ah-1) und Selbst-Neustart (v230ah-2)
   eingebaut waren - und weil ich die Versionsnummer bei allen dreien auf

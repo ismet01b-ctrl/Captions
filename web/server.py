@@ -2120,7 +2120,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230ai'
+DVE_VERSION = 'v230aj'
 
 
 def _build_datei():
@@ -4127,6 +4127,38 @@ def _notify_admin(key, subject, body, routine=False, mail=True):
         return False
 
 
+def _render_fehler_text(rc, log):
+    """v230aj: WARUM ist der Render gestorben? Bis hier stand in jedem Fall
+    'Render failed.' - auch dann, wenn das Betriebssystem den Prozess wegen
+    Speichermangels ABGESCHOSSEN hat. Im Log sieht man davon nichts: der
+    Prozess ist einfach weg, und die letzten Zeilen kommen vom ffmpeg-
+    Zulieferer, der ins Leere schreibt ('Broken pipe'). Genau so ist ein
+    4K-Job bei Bild 100 von 293 gestorben, und niemand konnte sagen, ob
+    Speicher, Absturz oder Zeitlimit schuld war.
+    Ein Signal-Tod kommt bei subprocess als NEGATIVE Rueckgabe an (-9 =
+    KILL); manche Shells melden ihn als 137 (128 + 9)."""
+    sig = -rc if rc is not None and rc < 0 else (rc - 128 if rc and rc > 128 else 0)
+    text = '\n'.join(log[-40:]) if log else ''
+    mem = ''
+    for zeile in reversed(log or []):
+        if zeile.startswith('Memory:') or ' | Memory:' in zeile:
+            mem = zeile[zeile.index('Memory:'):].strip()
+            break
+    if sig == 9:
+        return ('The render was stopped by the server - it ran out of memory. '
+                + (f'Last reading: {mem}. ' if mem else '')
+                + 'A 4K render needs several gigabytes; try 1080p, or tell us '
+                  'and we will raise the limit. Your credits were refunded.')
+    if sig in (11, 6, 7):
+        return ('The render crashed (signal %d). Your credits were refunded - '
+                'please send us the job number, this is on us.' % sig)
+    if 'MemoryError' in text:
+        return ('The render ran out of memory. '
+                + (f'Last reading: {mem}. ' if mem else '')
+                + 'Your credits were refunded.')
+    return 'Render failed.'
+
+
 def _notify_job_fail(jid):
     """Nach jedem Job pruefen: fehlgeschlagen -> Eintrag im Admin-Panel.
     v147: KEINE Mail mehr (Ismets Wunsch). Der Eintrag bleibt persistent in
@@ -4636,7 +4668,7 @@ def run_job(jid):
     else:
         letzte = [x for x in log[-15:] if x.strip()]
         set_state(jid, status='fehler', progress=0,
-                  msg='Render failed.',
+                  msg=_render_fehler_text(rc, log),
                   detail='\n'.join(letzte))
         _maybe_refund(jid)
     # Quellvideo aufheben, damit "Momente-Editor" nach Analyse den Re-Render kann.
@@ -8995,6 +9027,44 @@ def _disk_info():
         return None
 
 
+def _mem_info():
+    """v230aj: Wieviel Speicher hat dieser Container, und was ist gerade frei?
+    Ohne diese Zahl war 'der Render ist gestorben' nicht von 'zu wenig RAM'
+    zu unterscheiden - und Ismet geht nicht ins Terminal. cgroup v2 zuerst,
+    v1 als Rueckfall, sonst die Maschine (MemTotal/MemAvailable)."""
+    def lies(p):
+        try:
+            return open(p).read().strip()
+        except OSError:
+            return ''
+    out = {'limit_gb': None, 'used_gb': None, 'host_gb': None, 'frei_gb': None}
+    for lim, cur in (('/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory.current'),
+                     ('/sys/fs/cgroup/memory/memory.limit_in_bytes',
+                      '/sys/fs/cgroup/memory/memory.usage_in_bytes')):
+        roh = lies(lim)
+        if roh and roh != 'max':
+            try:
+                n = int(roh)
+            except ValueError:
+                continue
+            if 0 < n < (1 << 62):
+                out['limit_gb'] = round(n / 2 ** 30, 1)
+                try:
+                    out['used_gb'] = round(int(lies(cur) or 0) / 2 ** 30, 2)
+                except ValueError:
+                    pass
+                break
+    try:
+        for zeile in open('/proc/meminfo'):
+            if zeile.startswith('MemTotal:'):
+                out['host_gb'] = round(int(zeile.split()[1]) / 2 ** 20, 1)
+            elif zeile.startswith('MemAvailable:'):
+                out['frei_gb'] = round(int(zeile.split()[1]) / 2 ** 20, 1)
+    except OSError:
+        pass
+    return out
+
+
 def _last_backup_ts():
     try:
         bdir = os.path.join(DATA, 'backups')
@@ -9749,6 +9819,8 @@ def admin_system(request: Request):
                  'ref_salt': bool(os.environ.get('DVE_REF_SALT', '').strip())
                  or os.path.exists(os.path.join(DATA, 'ref_salt'))},
         'disk': _disk_info(), 'db_mb': _db_size_mb(), 'last_backup': _last_backup_ts(),
+        'mem': _mem_info(),
+
         'heartbeats': {'watchdog': hb.get('watchdog'), 'cleanup': hb.get('cleanup')},
         'alerts_active': len(_ADMIN_NOTIFIED),
         'alerts_offen': _alerts_offen(),

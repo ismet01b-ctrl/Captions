@@ -1452,6 +1452,22 @@ Tiefen-Unschaerfe hinter einem `behind`-Text in `composite_frame`.
   (0.00) — Dekodieren und Matting waren damit raus, ohne sie einzeln
   durchzuprobieren.
 
+## Speicher (v230aj) — ein Kill sieht aus wie ein ffmpeg-Fehler
+Wird der Render-Prozess vom Betriebssystem abgeschossen (Speichermangel),
+steht im Log NUR die Meldung des ffmpeg-Zulieferers ("Broken pipe") - der
+eigentliche Prozess ist spurlos weg. Deshalb:
+- **Jede Fortschrittszeile nennt den Speicherstand** (`mem_zeile()`:
+  Spitzenwert und Container-Deckel). Wer eine Speicherfrage stellt, liest
+  DIESE Zeile aus einem echten Job-Log.
+- **`_render_fehler_text(rc, log)` im Server uebersetzt den Rueckgabewert**:
+  negativ = Signal (-9 = Kill = Speicher), >128 = dasselbe in Shell-Zaehlung.
+  "Render failed." ist nur noch der Rest.
+- **Das Panel zeigt Deckel und Verbrauch** (Ansicht System) - ohne Zahl ist
+  jede Diagnose Raten.
+- Ein 4K-Bild als Float belegt ~100 MB; die Pipeline haelt mehrere davon plus
+  ONNX- und MediaPipe-Modelle. Der Container-Deckel steht in
+  `docker-compose.yml` (`DVE_MEM_LIMIT`, Standard 6g).
+
 ## Renderzeit (v227) — messen ist Pflicht, raten ist verboten
 Jeder Render endet mit `Timing (total …)`: alle Phasen absteigend nach Kosten
 plus `other` für alles Ungemessene. Wer an der Geschwindigkeit dreht, liest
@@ -1513,7 +1529,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1963/1964 (Stand v230ai)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1969/1970 (Stand v230aj)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

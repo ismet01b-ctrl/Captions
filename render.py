@@ -42,6 +42,50 @@ _ZEIT_KIND = {'regie+plaene': ('ki-textregie', 'ki-bildregie+anker',
                                'ki-textfluss', 'raumkarte', 'zeige-regie')}
 
 
+def _mem_limit_gb():
+    """Speicher-Deckel dieses Containers in GB, oder None (kein Deckel).
+    cgroup v2 zuerst, v1 als Rueckfall - beides gibt es in freier Wildbahn."""
+    for pfad in ('/sys/fs/cgroup/memory.max',
+                 '/sys/fs/cgroup/memory/memory.limit_in_bytes'):
+        try:
+            roh = open(pfad).read().strip()
+        except OSError:
+            continue
+        if roh in ('max', ''):
+            return None
+        try:
+            n = int(roh)
+        except ValueError:
+            continue
+        if n > 0 and n < (1 << 62):       # v1 schreibt bei "kein Limit" Unsinn
+            return n / (1024 ** 3)
+    return None
+
+
+def mem_peak_gb():
+    """Hoechster Speicherverbrauch DIESES Prozesses bisher, in GB."""
+    try:
+        import resource
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 ** 2)
+    except Exception:
+        return 0.0
+
+
+def mem_zeile():
+    """v230aj: 'Memory: 3.4 GB peak of 6.0 GB limit'. Ohne diese Zeile sieht
+    man einem abgeschossenen Render nicht an, WARUM er starb: der Prozess ist
+    einfach weg, im Log stehen nur die ffmpeg-Meldungen des Zulieferers
+    ('Broken pipe'). Genau so ist Ismets 4K-Job bei Bild 100 von 293
+    gestorben - und niemand konnte sagen, ob Speicher, Absturz oder Timeout."""
+    peak = mem_peak_gb()
+    deckel = _mem_limit_gb()
+    if deckel:
+        anteil = peak / deckel * 100
+        return (f"Memory: {peak:.2f} GB peak of {deckel:.1f} GB limit "
+                f"({anteil:.0f}%)")
+    return f"Memory: {peak:.2f} GB peak (no container limit)"
+
+
 def zeit_report(gesamt):
     """Eine Zeile, absteigend nach Kosten. 'rest' ist alles Ungemessene -
     ist der gross, ist die Messung selbst unvollstaendig und sagt das."""
@@ -15392,8 +15436,13 @@ def main():
             el = _time.time() - t_start
             rate = fi / max(el, 0.01)
             rest = int(((max_frames or n_frames) - fi) / max(rate, 0.01))
+            # v230aj: der Speicherstand gehoert MIT in die Fortschrittszeile.
+            # Steigt er Bild fuer Bild, sieht man das Ende kommen, bevor der
+            # Prozess abgeschossen wird - danach ist es zu spaet, dann steht
+            # im Log nur noch "Broken pipe".
             print(f"  Frame {fi}/{max_frames or n_frames} | {rate:.1f} f/s | "
-                  f"~{rest // 60}:{rest % 60:02d} left", flush=True)
+                  f"~{rest // 60}:{rest % 60:02d} left | {mem_zeile()}",
+                  flush=True)
     enc.stdin.close()
     enc_err = b''
     try:
@@ -15514,6 +15563,7 @@ def main():
     _rep = zeit_report(time.time() - _zt_main)
     if _rep:
         print(_rep)
+    print(mem_zeile())
     print(f"Done: {out_path}")
 
     # v101 Silent-Score: das fertige Video stumm bewerten (74% der Views
