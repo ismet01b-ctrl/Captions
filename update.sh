@@ -83,6 +83,32 @@ fi
 echo "==> [4/5] Container neu starten"
 docker compose up -d --force-recreate app
 
+# v230ah CADDY MUSS SEINE KONFIGURATION AUCH LESEN. Bis hier wurde nur die
+# APP neu gestartet; das Caddyfile liegt als Datei im Container (read-only
+# gemountet), und eine geaenderte Datei wird von sich aus NIE neu gelesen.
+# Ergebnis: jede Aenderung an Weiterleitungen oder Sicherheits-Headern lag
+# tot im Repo - sichtbar geworden an www.douchko.eu, das trotz fertigem
+# Caddy-Block weiter ins Leere lief (ERR_SSL_PROTOCOL_ERROR, weil Caddy die
+# Adresse gar nicht kannte und kein Zertifikat holte).
+# `caddy reload` prueft die Datei ZUERST und laedt sie ohne Unterbrechung;
+# nur wenn das scheitert, wird hart neu gestartet. Ein Fehler hier darf den
+# Deploy nicht abbrechen - die App laeuft dann schon, und ein stiller
+# Fehlschlag waere schlimmer als eine laute Zeile.
+echo "  Caddy-Konfiguration neu laden ..."
+if docker compose exec -T caddy caddy validate --config /etc/caddy/Caddyfile \
+     >/dev/null 2>&1; then
+  if docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
+       >/dev/null 2>&1; then
+    echo "  ✓ Caddy hat neu geladen"
+  else
+    echo "  ! Reload fehlgeschlagen - Caddy wird neu gestartet"
+    docker compose restart caddy || true
+  fi
+else
+  echo "  ✗ Caddyfile ist FEHLERHAFT - Caddy laeuft mit der alten Fassung weiter."
+  echo "    (Absicht: eine kaputte Konfiguration darf die Seite nicht abschalten.)"
+fi
+
 echo "==> [5/5] Health-Check (max 30s) ..."
 for i in $(seq 1 30); do
   if docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/pricing', timeout=2)" 2>/dev/null; then

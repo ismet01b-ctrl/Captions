@@ -9496,6 +9496,24 @@ def _scenario_betrieb(tmp):
     check('v230ah: www leitet dauerhaft auf die Hauptadresse um',
           'www.{$DOMAIN}' in _caddy230 and 'redir https://{$DOMAIN}{uri} permanent'
           in _caddy230)
+    # v230ah DER DEPLOY MUSS CADDY AUCH NEU LADEN. Bis hier startete er nur
+    # die App neu; das Caddyfile liegt als Datei im Container und wird von
+    # sich aus nie neu gelesen. Jede Aenderung an Weiterleitung oder Headern
+    # lag damit tot im Repo (sichtbar an www.douchko.eu: fertiger Block,
+    # trotzdem kein Zertifikat). Geprueft wird die REGEL, nicht der Wortlaut:
+    # der Deploy fasst Caddy an, und er prueft die Datei vorher.
+    _up230 = open(os.path.join(HERE, 'update.sh'), encoding='utf-8').read()
+    check('v230ah: der Deploy laedt Caddy neu, nicht nur die App',
+          'caddy reload' in _up230
+          and ('restart caddy' in _up230 or 'up -d --force-recreate caddy' in _up230))
+    # Kommentarzeilen zaehlen nicht mit: im Kommentar steht "caddy reload"
+    # schon vorher, und der Test haette an der Erklaerung gehangen statt am
+    # Befehl (derselbe Fehlertyp wie v230q/v230af).
+    _up230_cmd = '\n'.join(z for z in _up230.splitlines()
+                            if not z.lstrip().startswith('#'))
+    check('v230ah: eine kaputte Caddy-Konfiguration schaltet die Seite nicht ab',
+          'caddy validate' in _up230_cmd
+          and _up230_cmd.index('caddy validate') < _up230_cmd.index('caddy reload'))
     check('v230ah: die CSP hat genau EINE Quelle (die App)',
           'Content-Security-Policy' not in _caddy230
           and 'Permissions-Policy' in _caddy230)

@@ -40,6 +40,17 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
     eine umgebaute Kachel wirkt (`dve_tool=create`), Enter im
     Admin-Schluesselfeld entsperrt, Ansichtswechsel im Panel funktioniert;
     alle 10 Schriftschnitte laden.
+  - **NACHTRAG (derselbe Tag): der Deploy hat Caddy nie neu geladen.** Ismet
+    sah nach dem Deploy `ERR_SSL_PROTOCOL_ERROR` auf www. Ursache war NICHT
+    das DNS (der A-Eintrag stand) und nicht der Caddy-Block, sondern
+    `update.sh`: es startete ausschliesslich die APP neu. Das Caddyfile liegt
+    als Datei im Container - eine geaenderte Datei wird von sich aus nie
+    gelesen. Jede Aenderung an Weiterleitungen oder Sicherheits-Headern lag
+    also seit jeher tot im Repo, ohne dass es jemand gemerkt haette; sichtbar
+    wurde es erst, weil diesmal eine ganze Adresse davon abhing.
+    Jetzt: `caddy validate` -> `caddy reload` (ohne Unterbrechung), Rueckfall
+    auf Neustart. Eine fehlerhafte Konfiguration bricht den Deploy NICHT ab -
+    Caddy laeuft dann mit der alten Fassung weiter, die Seite bleibt online.
   - Nicht gemacht (und warum): die Renderer-Tests laufen in diesem Container
     weiterhin nicht (fehlendes KI-Modell, gesperrter Download) - geaendert
     wurden aber nur Web-Dateien.

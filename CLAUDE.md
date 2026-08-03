@@ -1085,6 +1085,13 @@ NUTZER-Ueberschreibung — obwohl niemand etwas geaendert hat.
   Ersatzschriften - gefunden hat das erst ein echter Browser-Lauf, keine
   Quelltext-Suche. Schriften und Assets liegen jetzt lokal (`web/assets/`);
   das erspart nebenbei die Google-Fonts-Abmahnungen.
+- **Der Deploy startet nur die APP neu - Caddy muss eigens neu laden.**
+  `update.sh` macht das seit v230ah (`caddy validate` -> `caddy reload`,
+  Rueckfall Neustart). Davor lag jede Caddyfile-Aenderung tot im Repo: die
+  Datei ist read-only in den Container gemountet und wird nie von selbst neu
+  gelesen. Aufgefallen ist es erst, als eine ganze Adresse davon abhing
+  (www ohne Zertifikat). Wer am Caddyfile etwas aendert, prueft danach am
+  echten Server, ob es angekommen ist.
 - **Der Nachweis ist `web/_csp_probe.mjs`** (Chromium gegen einen laufenden
   Server, zaehlt `securitypolicyviolation` und klickt umgebaute Knoepfe). Wer
   an CSP, Handlern oder Seiten etwas aendert, laesst sie einmal laufen.
@@ -1506,7 +1513,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1958/1959 (Stand v230ah)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1960/1961 (Stand v230ah)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
