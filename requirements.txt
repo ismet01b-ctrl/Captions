@@ -21,6 +21,12 @@
 # --- Bild/Video: parsen fremde Dateien, hier ist Sorgfalt am wichtigsten ---
 opencv-python==4.11.0.86
 Pillow==12.3.0
+# v230ag: liest die Zeichentabelle einer Schrift. Damit weiss die Engine VOR
+# dem Zeichnen, ob ein Zeichen ueberhaupt eine Glyphe hat - sonst stuenden
+# leere Kaesten im Video. Fehlt das Paket, faellt die Engine auf feste
+# Unicode-Bloecke zurueck (Chinesisch, Japanisch, Koreanisch, Kyrillisch,
+# Griechisch, Vietnamesisch bleiben also auch dann richtig gesetzt).
+fonttools==4.63.0
 onnxruntime==1.27.0
 # v80m: mediapipe auf 0.10.14 - neuere Versionen haben in Docker/Python3.12
 # den 'dispatcher_wrapper NoneType' Bug bei bestimmten Aufrufen (Face-Detection).

@@ -498,6 +498,96 @@ def _scenario_logic(clip, transcript, tmp):
           0.045 <= _kh9 <= 0.092, f'{_kh9:.4f} H (Referenz 0.051-0.085)')
     check('v143: Hierarchie Schluesselwort zu Kleintext wie in der Referenz',
           2.0 <= _r9 <= 2.9, f'{_r9:.2f}x (Referenz 2.2-2.6, vorher 1.10)')
+
+    # ===== v230ag FREMDE SCHRIFTSYSTEME: KEINE LEEREN KAESTEN MEHR =========
+    # Die Landing Page versprach "50+ languages"; gemessen konnte KEINE
+    # Hausschrift Chinesisch, Japanisch, Koreanisch, Kyrillisch oder
+    # Griechisch darstellen - Whisper haette sauber transkribiert, im Bild
+    # waeren Kaesten gestanden. Geprueft wird die REGEL (jedes Zeichen des
+    # Texts hat eine Glyphe), nicht ein Dateiname.
+    _S230 = R.Sprites(_cfg143, 1080, 1920)
+    _SPRACHEN = {'Englisch': 'HELLO WORLD', 'Deutsch': 'GRÜSSE',
+                 'Russisch': 'ПРИВЕТ', 'Griechisch': 'ΓΕΙΑ ΣΟΥ',
+                 'Chinesisch': '你好世界', 'Japanisch': 'こんにちは',
+                 'Koreanisch': '안녕하세요', 'Vietnamesisch': 'CHÀO BẠN'}
+    _fehlt230 = [n for n, t in _SPRACHEN.items()
+                 if not R._font_kann(R.script_font(t, _S230.f_serif), t)]
+    check('v230ag: jede unterstuetzte Sprache hat fuer JEDES Zeichen eine Glyphe',
+          not _fehlt230, 'ohne Glyphe: ' + ', '.join(_fehlt230) if _fehlt230 else
+          f'{len(_SPRACHEN)} Sprachen geprueft')
+    # Der Look eines lateinischen Videos darf sich NICHT aendern - der
+    # Rueckfall greift nur, wenn die Hausschrift wirklich nicht kann.
+    check('v230ag: lateinischer Text behaelt die Schrift des Looks',
+          R.script_font('HELLO WORLD', _S230.f_serif) == _S230.f_serif
+          and R.script_font('GRÜSSE', _S230.f_serif) == _S230.f_serif)
+    check('v230ag: fremde Schrift wird nur getauscht, weil die Hausschrift NICHT kann',
+          not R._font_kann(_S230.f_serif, '你好世界')
+          and not R._font_kann(_S230.f_serif, 'ПРИВЕТ'))
+    # WIRKSAMKEITS-NACHWEIS: der Tausch passiert IN Sprites.text, nicht nur in
+    # der Hilfsfunktion. Gemessen am Sprite: gleich wie mit der Noto-Schrift
+    # gezeichnet, verschieden von der Hausschrift (die nur Kaesten hat).
+    # ALT gegen NEU am selben Aufruf: einmal mit Rueckfall, einmal ohne
+    # (script_font kurz auf "gib zurueck, was reinkam" gesetzt). Anders geht
+    # es nicht - eine explizit uebergebene Hausschrift wuerde ja ebenfalls
+    # getauscht, und dann waeren alle drei Bilder gleich.
+    _zh230 = _S230.text('你好世界', 90, (255, 255, 255))[0]
+    _zh_noto = _S230.text('你好世界', 90, (255, 255, 255),
+                          font=os.path.join(HERE, 'fonts', 'noto', 'noto_sc.ttf'))[0]
+    _sf_echt = R.script_font
+    R.script_font = lambda t, f: f
+    try:
+        _zh_haus = _S230.text('你好世界', 90, (255, 255, 255))[0]
+    finally:
+        R.script_font = _sf_echt
+    def _bildvergleich(a, b):
+        """Mittlere Abweichung zweier Sprites - auf gemeinsame Groesse gelegt.
+        Ueber die FORM zu vergleichen taugt nicht: eine Kasten-Glyphe ist
+        zufaellig genauso breit wie das echte Zeichen (im Test gemessen,
+        beide 452 px)."""
+        h = max(a.shape[0], b.shape[0]); w = max(a.shape[1], b.shape[1])
+        pa = np.zeros((h, w, 4), np.int16); pb = np.zeros((h, w, 4), np.int16)
+        pa[:a.shape[0], :a.shape[1]] = a; pb[:b.shape[0], :b.shape[1]] = b
+        return float(np.abs(pa - pb).mean())
+    _d_noto = _bildvergleich(_zh230, _zh_noto)
+    _d_haus = _bildvergleich(_zh230, _zh_haus)
+    check('v230ag: Sprites.text nimmt die Ersatzschrift wirklich',
+          _d_noto < 0.5 and _d_haus > 3.0,
+          f'Abstand zu Noto {_d_noto:.2f}, zur Hausschrift {_d_haus:.2f}')
+    check('v230ag: und es steht wirklich Tinte im Bild',
+          int((_zh230[..., 3] > 8).sum()) > 2000,
+          f'{int((_zh230[..., 3] > 8).sum())} Pixel')
+    # Was wir NICHT koennen, wird VOR dem Rechnen gesagt: der Zeichenpfad
+    # setzt jeden Buchstaben einzeln, verbundene und Rechts-nach-links-
+    # Schriften brauchen den ganzen String. Ein Render, der Kaesten liefert
+    # und Guthaben kostet, waere der schlechteste Ausgang.
+    check('v230ag: Arabisch/Hebraeisch/Thai werden vorher abgefangen',
+          R.schrift_unsupported('مرحبا بالعالم هذا اختبار') == 'Arabisch'
+          and R.schrift_unsupported('שלום עולם זה מבחן') == 'Hebraeisch'
+          and R.schrift_unsupported('สวัสดีชาวโลก') == 'Thai')
+    check('v230ag: ein einzelnes fremdes Wort bricht nichts ab',
+          R.schrift_unsupported('das wort مرحبا kam heute vor') is None
+          and R.schrift_unsupported('hello world this is a test') is None
+          and R.schrift_unsupported('你好世界 这是一个测试') is None)
+    _rsrc230 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230ag: der Abbruch nennt dem Kunden den Grund im Klartext',
+          'not supported yet' in _rsrc230 and 'were not used' in _rsrc230)
+    # Die Zeichentabelle zu lesen braucht ein Zusatzpaket (fontTools). Faellt
+    # es aus, darf das Feature NICHT stillschweigend verschwinden - genau der
+    # v210-Fehler. Gegenprobe: `_font_kann` sagt zu allem ja (so verhaelt es
+    # sich ohne das Paket), der Rueckfall muss trotzdem greifen.
+    _fk_echt = R._font_kann
+    R._font_kann = lambda p, t: True
+    try:
+        _ohne = {t: os.path.basename(R.script_font(t, _S230.f_serif))
+                 for t in ('你好世界', 'ПРИВЕТ', 'こんにちは', '안녕하세요',
+                           'CHÀO BẠN', 'HELLO')}
+    finally:
+        R._font_kann = _fk_echt
+    check('v230ag: der Rueckfall haengt nicht am Zusatzpaket',
+          _ohne['你好世界'].startswith('noto') and _ohne['ПРИВЕТ'].startswith('noto')
+          and _ohne['こんにちは'].startswith('noto') and _ohne['안녕하세요'].startswith('noto')
+          and _ohne['CHÀO BẠN'].startswith('noto')
+          and not _ohne['HELLO'].startswith('noto'), str(_ohne))
     # v154 GEAENDERTE ERWARTUNG, kein Testkosmetik-Fix: Ismet hat die Schrift
     # dreimal als zu gross beanstandet, das Hausmass ist von 0.115 ueber 0.098
     # und 0.088 auf 0.076 em gefallen. Ein langes Schluesselwort spannt die
@@ -3431,6 +3521,18 @@ def _scenario_logic(clip, transcript, tmp):
     # Am Finger darf ein senkrechter Wisch NIE den Schieber aufreissen.
     check('v230u: bei geschlossenem Vergleich zieht der Finger nicht',
           "(auf <= AN_SCHWELLE || Math.abs(e.clientX - linie) > 44)" in _land)
+    # v230ag DIE SEITE DARF NICHTS VERSPRECHEN, WAS DIE ENGINE NICHT KANN.
+    # "50+ languages" stand da, waehrend keine Hausschrift auch nur
+    # Kyrillisch setzen konnte. Und umgekehrt fehlten drei Dinge, die es
+    # wirklich gibt - unter Wert verkauft.
+    check('v230ag: keine Sprachzahl, die die Schriften nicht hergeben',
+          '50+ languages' not in _land and '40+ languages' in _land)
+    check('v230ag: die Seite sagt, welche Schriftsysteme gehen - und welche nicht',
+          'Which languages work?' in _land
+          and 'Arabic, Hebrew, Hindi and Thai are not supported yet' in _land)
+    check('v230ag: SRT, transparente Ebene und Motion stehen auf der Seite',
+          'SRT' in _land and 'transparent caption layer' in _land
+          and 'Motion graphics' in _land)
     # v230ac EIN BEDIENELEMENT IM BILD DARF DAS ZIEHEN NICHT AUSLOESEN.
     # Der Ton-Knopf liegt IM Vergleich; sein pointerdown steigt zum Rahmen
     # auf, und `setPointerCapture` haengt danach alles an den Rahmen - der

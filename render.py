@@ -362,6 +362,148 @@ def var_font_for(path):
     return full if os.path.exists(full) else None
 
 
+# v230ag SCHRIFT-RUECKFALL FUER FREMDE SCHRIFTSYSTEME.
+# Die Landing Page versprach "50+ languages" - gemessen konnte KEINE der
+# Hausschriften Chinesisch, Japanisch, Koreanisch, Kyrillisch oder Griechisch
+# darstellen: Whisper haette sauber transkribiert, im Bild waeren leere
+# Kaesten gestanden. Jetzt liegt fuer jedes unterstuetzte Schriftsystem eine
+# Noto-Schrift bei (OFL, siehe fonts/noto/LIZENZ.txt); fehlt ein Zeichen in
+# der gewaehlten Schrift, uebernimmt sie den ganzen Textblock - eine Zeile in
+# zwei Schriften saehe schlimmer aus als ein neutraler Schnitt.
+# BEWUSSTE GRENZE: Arabisch, Hebraeisch, Devanagari und Thai sind NICHT
+# dabei. Der Zeichenpfad setzt jeden Buchstaben EINZELN (fuer Schatten,
+# Extrusion und Buchstaben-Boxen); verbundene Schriften und Rechts-nach-links
+# brauchen aber den ganzen String am Stueck. Die Schrift mitzuliefern wuerde
+# nur Buchstaben zeigen, die in falscher Form und Reihenfolge dastehen - das
+# waere schlimmer als eine ehrliche Absage.
+_NOTO_DIR = os.path.join(HERE, 'fonts', 'noto')
+_NOTO_FUER = (                       # (Pruefzeichen, Datei) - Reihenfolge zaehlt
+    ('kana', 'あア', 'noto_jp.ttf'),      # Hiragana/Katakana -> Japanisch
+    ('hangul', '가한', 'noto_kr.ttf'),    # Hangul -> Koreanisch
+    ('han', '中文', 'noto_sc.ttf'),       # Han -> Chinesisch (verein.)
+    ('kyrillisch', 'Ая', 'noto_sans.ttf'),
+    ('griechisch', 'Αω', 'noto_sans.ttf'),
+    # Vietnamesisch: Doppel-Diakritika (Ạ, ế, ữ) liegen in "Latein
+    # erweitert zusaetzlich" und fehlen JEDER Hausschrift. Als Block
+    # gefuehrt, damit es auch ohne fontTools erkannt wird.
+    ('vietnamesisch', 'ạ', 'noto_sans.ttf'),
+)
+_NOTO_NICHT = (                      # erkannt, aber bewusst nicht unterstuetzt
+    ('Arabisch', '؀', 'ۿ'), ('Hebraeisch', '֐', '׿'),
+    ('Devanagari', 'ऀ', 'ॿ'), ('Thai', '฀', '๿'),
+)
+_CMAP_CACHE = {}
+_SCRIPT_GEMELDET = set()
+
+
+def _font_kann(pfad, txt):
+    """Deckt die Schrift JEDES Zeichen ab? Leerzeichen zaehlen nicht."""
+    cm = _CMAP_CACHE.get(pfad)
+    if cm is None:
+        try:
+            from fontTools.ttLib import TTFont
+            tt = TTFont(pfad, fontNumber=0, lazy=True)
+            cm = set()
+            for t in tt['cmap'].tables:
+                cm |= set(t.cmap.keys())
+            tt.close()
+        except Exception:
+            cm = set()
+        _CMAP_CACHE[pfad] = cm
+    if not cm:
+        return True                  # unlesbare Schrift: nicht auch noch tauschen
+    return all(ord(c) in cm for c in txt if not c.isspace())
+
+
+def script_font(txt, font):
+    """Schrift fuer diesen Text. Deckt die gewuenschte Schrift alles ab, bleibt
+    sie stehen (der Look eines lateinischen Videos aendert sich NIE). Sonst die
+    passende Noto-Schrift; gibt es keine, bleibt es beim Original und der
+    Job-Log nennt das Schriftsystem beim Namen - stumme Kaesten sind der
+    schlimmste Ausgang."""
+    if not txt or not font:
+        return font
+    # Zuerst die BLOECKE, dann die Zeichentabelle. Die Blockfrage braucht kein
+    # zusaetzliches Paket: faellt fontTools aus, wuerde `_font_kann` alles
+    # durchwinken und wir stuenden wieder bei leeren Kaesten - ein stiller
+    # Rueckfall, der ein Feature abschaltet (v210-Falle). Chinesisch,
+    # Japanisch, Koreanisch, Kyrillisch und Griechisch sind an ihren Bloecken
+    # eindeutig zu erkennen, dafuer ist keine Messung noetig.
+    _fremd = any(_zeichen_in(txt, p) for _n, proben, _d in _NOTO_FUER
+                 for p in proben)
+    if not _fremd:
+        try:
+            if _font_kann(font, txt):
+                return font
+        except Exception:
+            return font
+    for name, proben, datei in _NOTO_FUER:
+        if not any(_zeichen_in(txt, p) for p in proben):
+            continue
+        pfad = os.path.join(_NOTO_DIR, datei)
+        if not os.path.exists(pfad):
+            break
+        if not _font_kann(pfad, txt) and datei == 'noto_sc.ttf':
+            alt = os.path.join(_NOTO_DIR, 'noto_tc.ttf')   # traditionelle Zeichen
+            if os.path.exists(alt) and _font_kann(alt, txt):
+                pfad = alt
+        if name not in _SCRIPT_GEMELDET:
+            _SCRIPT_GEMELDET.add(name)
+            print(f'Font: {name} detected - using {os.path.basename(pfad)}')
+        return pfad
+    for name, a, b in _NOTO_NICHT:
+        if any(a <= c <= b for c in txt):
+            if name not in _SCRIPT_GEMELDET:
+                _SCRIPT_GEMELDET.add(name)
+                print(f'WARNING: {name} script is not supported yet - '
+                      f'captions may be unreadable.')
+            break
+    else:
+        # Auch LATEINISCH kann fehlen: die Hausschriften kennen die
+        # vietnamesischen Doppel-Diakritika (Ạ, ế, ữ) nicht, und ein
+        # fehlendes Zeichen ist ein leerer Kasten mitten im Wort - der Test
+        # hat genau das gefangen. Noto Sans deckt Latein erweitert ab.
+        breit = os.path.join(_NOTO_DIR, 'noto_sans.ttf')
+        if os.path.exists(breit) and _font_kann(breit, txt):
+            if 'latein_plus' not in _SCRIPT_GEMELDET:
+                _SCRIPT_GEMELDET.add('latein_plus')
+                print('Font: characters missing in the look font - '
+                      'using noto_sans.ttf')
+            return breit
+    return font
+
+
+def schrift_unsupported(txt, anteil=0.40):
+    """Name des Schriftsystems, wenn der Text ueberwiegend eines benutzt, das
+    wir NICHT setzen koennen - sonst None. Ein einzelnes fremdes Zeichen (ein
+    Name, ein Zitat) bricht nichts ab; erst ab `anteil` der Buchstaben ist es
+    die Sprache des Videos."""
+    zeichen = [c for c in (txt or '') if not c.isspace()]
+    if not zeichen:
+        return None
+    for name, a, b in _NOTO_NICHT:
+        n = sum(1 for c in zeichen if a <= c <= b)
+        if n and n / len(zeichen) >= anteil:
+            return name
+    return None
+
+
+def _zeichen_in(txt, probe):
+    """Kommt ein Zeichen aus demselben Block wie `probe` im Text vor?"""
+    lo, hi = _BLOCK.get(probe, (probe, probe))
+    return any(lo <= c <= hi for c in txt)
+
+
+_BLOCK = {                            # Pruefzeichen -> Unicode-Block
+    'あ': ('぀', 'ゟ'), 'ア': ('゠', 'ヿ'),
+    '가': ('가', '힯'), '한': ('ᄀ', 'ᇿ'),
+    '中': ('一', '鿿'), '文': ('㐀', '䶿'),
+    'А': ('Ѐ', 'ӿ'), 'я': ('Ԁ', 'ԯ'),
+    'Α': ('Ͱ', 'Ͽ'), 'ω': ('ἀ', '῿'),
+    'ạ': ('Ḁ', 'ỿ'),                    # Latein erweitert zusaetzlich
+}
+
+
 def _pad_to(arr, w, h):
     """Zentriert ein Bild auf eine gemeinsame Leinwand (Gewichts-Leiter)."""
     ph, pw = arr.shape[:2]
@@ -2354,6 +2496,10 @@ class Sprites:
         """Rendert in doppelter Aufloesung und rechnet mit INTER_AREA herunter (Supersampling).
         wght setzt - falls ein variabler Schnitt vorliegt - die echte Gewichts-Achse."""
         font = font or self.f_serif
+        # v230ag: fremdes Schriftsystem -> passende Noto-Schrift. Der Riegel
+        # sitzt HIER, in der Funktion, die jeder Textweg benutzt - nicht an
+        # einem einzelnen Aufrufer (v159-Lehre).
+        font = script_font(txt, font)
         SS = 2
         size2, tracking2 = size * SS, tracking * SS
         f = ImageFont.truetype(font, size2)
@@ -2496,6 +2642,7 @@ class Sprites:
 
     def fit(self, txt, base, max_w, font=None, tracking=4):
         font = font or self.f_serif
+        font = script_font(txt, font)     # v230ag: gleiche Schrift wie beim Setzen
         f = ImageFont.truetype(font, base)
         if 'playfair' in os.path.basename(font):
             try:
@@ -13769,6 +13916,18 @@ def main():
     if args.transcribe_only:
         print('Transcript ready - you can review it now.')
         sys.exit(0)
+
+    # v230ag: Schriftsystem PRUEFEN, bevor gerechnet wird. Arabisch, Hebraeisch,
+    # Devanagari und Thai kann der Zeichenpfad nicht setzen (er zeichnet
+    # Buchstabe fuer Buchstabe, diese Schriften brauchen den ganzen String am
+    # Stueck). Ohne diese Pruefung liefe ein voller Render durch und der Kunde
+    # bekaeme leere Kaesten - fuer sein Guthaben. Hier abbrechen heisst:
+    # Meldung im Klartext, und der Server erstattet automatisch.
+    _fehl = schrift_unsupported(' '.join(str(w.get('word', '')) for w in words))
+    if _fehl:
+        sys.exit(f'ERROR: {_fehl} captions are not supported yet. Your credits '
+                 f'were not used. Latin, Cyrillic, Greek, Chinese, Japanese '
+                 f'and Korean all work.')
 
     # --- Wort-Timing am echten Audio nachjustieren
     voice_wav = os.path.join(tempfile.gettempdir(), 'dve_voice.wav')

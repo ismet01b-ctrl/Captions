@@ -3,6 +3,42 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ag "50+ LANGUAGES" WAR EINE LUEGE - JETZT SIND ES ECHTE 40+.** Auf
+  Ismets Frage "entspricht die Landing Page dem Produkt?" nachgemessen:
+  Preise, 3 Gratis-Minuten, 7-Tage-Loeschung, 3-Minuten-Limit, 26
+  Animationen und 9 Looks stimmen alle. Die Sprachzahl NICHT - keine
+  einzige Hausschrift hatte Zeichen fuer Chinesisch, Japanisch, Koreanisch,
+  Kyrillisch oder Griechisch. Whisper haette sauber transkribiert, im Bild
+  waeren leere Kaesten gestanden, und der Kunde haette dafuer bezahlt.
+  - **Fuenf Noto-Schriften liegen jetzt bei** (OFL, `fonts/noto/`, 29 MB):
+    Noto Sans (Latein erweitert, Kyrillisch, Griechisch, Vietnamesisch),
+    SC/TC (Chinesisch), JP (Japanisch), KR (Koreanisch). `script_font()`
+    tauscht die Schrift NUR, wenn die gewaehlte das Zeichen nicht hat -
+    ein lateinisches Video sieht aus wie vorher.
+  - **Der Riegel sitzt in `Sprites.text` und `Sprites.fit`**, also in den
+    Funktionen, durch die JEDER Text laeuft - nicht bei einem Aufrufer
+    (v159-Lehre).
+  - **Bewusste Grenze: Arabisch, Hebraeisch, Devanagari, Thai gehen NICHT.**
+    Der Zeichenpfad setzt jeden Buchstaben EINZELN (fuer Schatten,
+    Extrusion, Buchstaben-Boxen); verbundene Schriften und
+    Rechts-nach-links brauchen den ganzen String am Stueck. Die Schrift
+    mitzuliefern haette nur falsch geformte Buchstaben in falscher
+    Reihenfolge ergeben. Deshalb bricht der Render VOR der Rechenarbeit ab,
+    nennt den Grund im Klartext, und der Server erstattet automatisch.
+  - **Ohne fontTools faellt nichts still aus.** Erst die Unicode-Bloecke,
+    dann die Zeichentabelle: fehlt das Paket, wuerde die Tabellen-Pruefung
+    alles durchwinken und wir staenden wieder bei Kaesten (v210-Falle). Ein
+    Test simuliert genau diesen Ausfall.
+  - **Der Test hat zwei eigene Fehler gefangen:** Vietnamesisch (Ạ, ế, ữ)
+    fehlt JEDER Hausschrift und war im ersten Entwurf nicht abgedeckt; und
+    der Wirksamkeits-Nachweis ueber die SPRITE-GROESSE war wertlos, weil
+    eine Kasten-Glyphe zufaellig genauso breit ist wie das echte Zeichen
+    (452 px, beide). Gemessen wird jetzt der Bildunterschied: 0.00 zur
+    Noto-Fassung, 41.15 zur Hausschrift.
+  - **Landing (C):** Sprachzahl ehrlich (40+), eine FAQ-Antwort nennt die
+    Schriftsysteme UND was fehlt, und die drei Dinge, die das Produkt kann
+    und nie auf der Seite standen, sind jetzt drauf: SRT-Datei,
+    transparente Caption-Ebene, Motion-Grafiken.
 - **v230af DER KONTAKTBOGEN IST RAUS AUS DER KUNDENANSICHT.** Ismets
   Entscheidung nach der Frage "was soll das bringen?". Antwort ehrlich: fuer
   den Kunden nichts - niemand prueft seine Untertitel auf einer Collage, er

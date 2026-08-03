@@ -1310,6 +1310,28 @@ in die Tabelle `alerts` und den Admin-Tab **Alerts**. `_notify_admin(...,
 mail=False)`. Echte Betriebsstoerungen (Platte knapp, Ghost-Buy, Stripe)
 mailen weiter. Routine-Post (Backup) wird gar nicht protokolliert.
 
+## Schriftsysteme (v230ag) — was die Seite verspricht, muss die Schrift koennen
+`script_font(txt, font)` in `render.py` tauscht die Schrift, wenn die
+gewaehlte ein Zeichen nicht hat. Fuenf Noto-Schnitte liegen in `fonts/noto/`
+(OFL): Noto Sans (Latein erweitert inkl. Vietnamesisch, Kyrillisch,
+Griechisch), SC/TC, JP, KR. Der Riegel sitzt in `Sprites.text` UND
+`Sprites.fit` — den Funktionen, durch die jeder Text laeuft.
+- **Erst Unicode-BLOCK, dann Zeichentabelle.** Die Tabellenpruefung braucht
+  fontTools; fehlt es, winkt sie alles durch und es stuenden wieder leere
+  Kaesten im Bild (v210-Falle). Die Blockfrage braucht kein Paket.
+- **Ein lateinisches Video aendert sich NIE** — nur wo ein Zeichen fehlt,
+  wird getauscht.
+- **Arabisch, Hebraeisch, Devanagari, Thai gehen bewusst NICHT.** Der
+  Zeichenpfad setzt Buchstabe fuer Buchstabe (Schatten, Extrusion,
+  Buchstaben-Boxen); verbundene und Rechts-nach-links-Schriften brauchen den
+  ganzen String. `schrift_unsupported()` bricht den Render VOR der
+  Rechenarbeit ab, nennt den Grund, der Server erstattet.
+- **Eine Kasten-Glyphe ist genauso breit wie das echte Zeichen** (gemessen:
+  beide 452 px). Wer den Tausch nachweisen will, misst den BILDUNTERSCHIED,
+  nicht die Sprite-Groesse — und vergleicht gegen einen Lauf mit
+  abgeschaltetem Rueckfall, weil eine explizit uebergebene Schrift ja
+  ebenfalls getauscht wird.
+
 ## Transkription
 Nur OpenAI Whisper API (`whisper-1`) — beste Qualität für Namen/Fachbegriffe.
 Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
@@ -1460,7 +1482,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1932/1933 (Stand v230af)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1944/1945 (Stand v230ag)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

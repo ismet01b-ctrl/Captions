@@ -1,0 +1,14 @@
+Noto Sans (Latein/Kyrillisch/Griechisch), Noto Sans SC/TC (Chinesisch),
+Noto Sans JP (Japanisch), Noto Sans KR (Koreanisch).
+
+Copyright The Noto Project Authors (https://github.com/notofonts).
+Lizenz: SIL Open Font License, Version 1.1 (OFL-1.1).
+Volltext: https://openfontlicense.org/open-font-license-official-text/
+
+Die OFL erlaubt Verwendung, Einbettung und Weitergabe - auch kommerziell -
+solange die Schriften nicht einzeln verkauft werden und dieser Hinweis
+mitgeliefert wird. Genau dafuer liegt diese Datei hier.
+
+Bezogen ueber die Google-Fonts-API (WOFF), verlustfrei nach TTF gewandelt
+(fontTools, nur Container-Format geaendert - Glyphen unveraendert).
+Stand: August 2026.
