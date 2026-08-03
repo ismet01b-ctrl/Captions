@@ -1,18 +1,35 @@
 # Caddy zieht Let's Encrypt-Zertifikat automatisch fuer {$DOMAIN}.
 # Uploads gehen ueber Caddy an den App-Container (Port 8000).
 
+# v230ah WWW LANDET NICHT MEHR IM NICHTS. Wer "www.douchko.eu" tippt, bekam
+# gar nichts - kein DNS-Eintrag, kein Zertifikat, tote Seite. Jetzt leitet
+# www dauerhaft (301) auf die Hauptadresse um. Vorbedingung ist ein
+# DNS-Eintrag fuer www (A oder CNAME auf dieselbe Adresse) - erst dann kann
+# Caddy ein Zertifikat dafuer holen. Fehlt er, laeuft die Hauptadresse
+# unveraendert weiter; Caddy versucht das Zertifikat nur erfolglos.
+www.{$DOMAIN} {
+    redir https://{$DOMAIN}{uri} permanent
+}
+
 {$DOMAIN} {
     encode gzip
     request_body {
         max_size 500MB
     }
     # v92-sec: Security-Header zentral am Rand (zusaetzlich zur App-Middleware).
+    # v230ah: die CSP steht NICHT mehr hier. Sie traegt jetzt die
+    # Fingerabdruecke der Inline-Skripte, und die kennt nur die App - sie liest
+    # die Dateien. Zwei Quellen fuer dieselbe Regel waeren zwei Fassungen, die
+    # auseinanderlaufen; der Browser erzwingt bei zwei Kopfzeilen BEIDE, die
+    # strengere gewinnt - eine vergessene Zeile hier haette die App lahmgelegt.
+    # Alles andere bleibt doppelt, damit auch Caddys eigene Fehlerseiten
+    # (App antwortet nicht) die Header tragen.
     header {
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://api.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://checkout.stripe.com"
         X-Frame-Options "DENY"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()"
         -Server
     }
     reverse_proxy app:8000 {

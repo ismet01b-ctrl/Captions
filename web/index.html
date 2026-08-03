@@ -1582,7 +1582,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       </button>
     </div>
 
-    <form id="authForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;
+    <form id="authForm" data-nosubmit="1" style="display:flex; flex-direction:column; gap:10px;
           max-width:340px; margin:0 auto;">
       <input type="text" id="authName" placeholder="Username"
              autocomplete="username" maxlength="24" style="text-transform:none;">
@@ -1697,14 +1697,14 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <h2 id="tcTitle">What are you here to make?</h2>
       <p class="tc-sub">Two separate tools, one credit balance. Switch anytime up top.</p>
       <div class="tc-cards">
-        <button class="tc-card" type="button" onclick="pickTool('create')">
+        <button class="tc-card" type="button" data-act="pickTool" data-arg="create">
           <div class="tc-ic">✍️</div>
           <h3>Auto-Captions</h3>
           <p>Upload a talking-head video. An AI director places editorial captions,
             effects and camera moves that fit what you say.</p>
           <span class="tc-go">Start captioning →</span>
         </button>
-        <button class="tc-card" type="button" onclick="pickTool('motion')">
+        <button class="tc-card" type="button" data-act="pickTool" data-arg="motion">
           <div class="tc-ic">🌀</div>
           <h3>Motion Graphics</h3>
           <p>Describe a clip in one line. Get high-end 3D motion graphics — lit
@@ -1915,7 +1915,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     </div>
     <div class="panel">
       <h3>New message</h3>
-      <form id="supportForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:520px;">
+      <form id="supportForm" data-nosubmit="1" style="display:flex; flex-direction:column; gap:10px; max-width:520px;">
         <input type="text" id="supSubject" placeholder="Subject (optional)" maxlength="200" style="text-transform:none;">
         <textarea id="supMessage" placeholder="How can we help?" rows="5" maxlength="5000"
                   required style="text-transform:none; resize:vertical; width:100%;"></textarea>
@@ -1994,7 +1994,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           their email, you both get <span id="refMin">10</span> free minutes.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
           <input type="text" id="refLink" readonly style="flex:1; min-width:240px;"
-                 onclick="this.select()">
+                 data-selectall="1">
           <button class="btn secondary" type="button" id="btnRefCopy" style="padding:9px 16px;">Copy link</button>
         </div>
         <p class="hint" style="margin-top:8px;"><span id="refUsed">0</span> of
@@ -2009,7 +2009,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <div class="panel">
         <h3>Security</h3>
         <p class="hint" id="secHint">Change your password.</p>
-        <form id="pwForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
+        <form id="pwForm" data-nosubmit="1" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
           <input type="password" id="pwOld" placeholder="Current password" required autocomplete="current-password">
           <input type="password" id="pwNew" placeholder="New password (min. 8 chars)" required autocomplete="new-password" minlength="8">
           <button class="btn" type="submit" id="btnPwSave" style="align-self:flex-start; padding:9px 18px;">Change password</button>
@@ -2082,7 +2082,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
               Permanently deletes your account, all library videos, saved setups, and any
               remaining credit. <b style="color:var(--fg);">This cannot be undone.</b>
             </p>
-            <form id="delForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
+            <form id="delForm" data-nosubmit="1" style="display:flex; flex-direction:column; gap:10px; max-width:380px;">
               <input type="password" id="delPw" placeholder="Confirm with your password" required>
               <!-- v137a: Google-Konten haben kein Passwort - E-Mail als Bestaetigung -->
               <input type="email" id="delMail" placeholder="Type your account email to confirm"
@@ -2596,8 +2596,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <pre id="errDetail" style="background:var(--surf2); padding:14px; border-radius:10px;
              margin-top:12px; font-size:12px; overflow-x:auto; color:var(--mut);
              white-space:pre-wrap; max-height: 300px;"></pre>
-        <button class="btn secondary" onclick="$('#errCard').classList.add('hidden');
-                $('#btnRender').disabled=false;">Try again</button>
+        <button class="btn secondary" data-act="errRetry">Try again</button>
       </div>
     </div>
 
@@ -2614,7 +2613,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <p>Enter your account email. We'll send you a reset link.</p>
       </div>
       <div class="body">
-        <form id="forgotForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
+        <form id="forgotForm" data-nosubmit="1" style="display:flex; flex-direction:column; gap:10px;">
           <input type="email" id="forgotEmail" placeholder="Email" required
                  autocomplete="email" style="text-transform:none;">
           <button class="btn" type="submit" id="forgotSend">Send reset link</button>
@@ -2635,7 +2634,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <p>Minimum 8 characters. You'll be signed in right after.</p>
       </div>
       <div class="body">
-        <form id="resetForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:10px;">
+        <form id="resetForm" data-nosubmit="1" style="display:flex; flex-direction:column; gap:10px;">
           <input type="password" id="resetPw" placeholder="New password" required
                  minlength="8" autocomplete="new-password">
           <button class="btn" type="submit" id="resetGo">Set password</button>
@@ -3736,6 +3735,45 @@ async function motionPoll(jid, st, btn, orig){
   setTimeout(()=>motionPoll(jid, st, btn, orig), 1500);
 }
 
+/* v230ah KEINE INLINE-HANDLER MEHR. Sie zwangen die CSP zu
+   `script-src 'unsafe-inline'` - und damit haette der Browser auch einen
+   eingeschleusten <script>-Block ausgefuehrt. Jetzt tragen die Knoepfe nur
+   Daten; die ERLAUBT-Liste ist der Riegel (was nicht darin steht, wird nicht
+   gerufen). Die vier Sonderfaelle darunter waren kein reiner Funktionsaufruf. */
+const ERLAUBT_AKT = { pickTool: 1, threadReply: 1, annWeg: 1, fbPick: 1, errRetry: 0 };
+const ZAHL_AKT = { threadReply: true, annWeg: true, fbPick: true };
+function errRetry() {
+  $('#errCard').classList.add('hidden');
+  $('#btnRender').disabled = false;
+}
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const name = el.dataset.act;
+  if (!(name in ERLAUBT_AKT)) return;
+  const fn = window[name];
+  if (typeof fn !== 'function') return;
+  e.preventDefault();
+  const roh = el.dataset.arg;
+  fn.apply(null, ERLAUBT_AKT[name]
+           ? [ZAHL_AKT[name] && roh !== undefined ? Number(roh) : roh] : []);
+});
+// Ein Formular in dieser App schickt NIE ab - abgeschickt wird ueber JS.
+document.addEventListener('submit', (e) => {
+  if (e.target instanceof Element && e.target.hasAttribute('data-nosubmit')) e.preventDefault();
+});
+// Klick ins Empfehlungs-Feld markiert den Link.
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-selectall]');
+  if (el && typeof el.select === 'function') el.select();
+});
+// Ein kaputtes Vorschaubild verschwindet, statt als Bruchsymbol dazustehen.
+// `error` steigt nicht auf - deshalb in der EINFANG-Phase horchen.
+document.addEventListener('error', (e) => {
+  const el = e.target;
+  if (el instanceof Element && el.hasAttribute('data-hideonerror')) el.style.display = 'none';
+}, true);
+
 document.addEventListener('click', async (e) => {
   const ul = e.target.closest('[data-unlock]');
   if (ul) {
@@ -4243,7 +4281,7 @@ async function renderLibrary() {
     card.innerHTML = `
       <div class="lib-thumb" data-jid="${it.jid}">
         <img src="/api/poster/${it.jid}" alt="" loading="lazy"
-             onerror="this.style.display='none'">
+             data-hideonerror="1">
         <div class="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
       </div>
       <div class="lib-meta">
@@ -4809,7 +4847,7 @@ async function loadThreads() {
         : `<textarea id="tr${t.id}" rows="2" maxlength="5000" placeholder="Reply …"
           style="text-transform:none; resize:vertical; width:100%; margin-top:6px;"></textarea>
         <button class="btn" style="margin-top:6px; padding:7px 14px;"
-          onclick="threadReply(${t.id})">Reply</button>`}
+          data-act="threadReply" data-arg="${t.id}">Reply</button>`}
       </div>`;
     }).join('');
     if (d.ungelesen) {
@@ -5680,7 +5718,7 @@ async function loadAnnouncements() {
           <b style="font-size:14px;">${escHtml(a.titel)}</b>
           <div style="color:var(--mut); font-size:13.5px; white-space:pre-wrap;">${escHtml(a.text)}</div>
         </div>
-        <button onclick="annWeg(${a.id})" aria-label="Dismiss" style="background:none;
+        <button data-act="annWeg" data-arg="${a.id}" aria-label="Dismiss" style="background:none;
                 border:0; color:var(--mut); cursor:pointer; font-size:18px; line-height:1;
                 flex:none;">&times;</button>
       </div>`;
@@ -5698,7 +5736,7 @@ function fbMalen(aktiv) {
   const box = $('#fbStars');
   if (!box) return;
   box.innerHTML = [1, 2, 3, 4, 5].map(n =>
-    `<button type="button" onclick="fbPick(${n})" aria-label="${n} of 5"
+    `<button type="button" data-act="fbPick" data-arg="${n}" aria-label="${n} of 5"
        style="background:none;border:0;cursor:pointer;font-size:22px;line-height:1;padding:0 1px;
        color:${n <= aktiv ? 'var(--acc)' : 'var(--line)'};">★</button>`).join('');
 }

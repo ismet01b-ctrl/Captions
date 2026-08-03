@@ -164,8 +164,8 @@ select.search{cursor:pointer}
   <div id="gate" class="gate">
     <h1>DouchkoVE <span class="dot">Admin</span></h1>
     <p class="subtle" style="margin-top:6px">Enter the admin key (server env DVE_ADMIN).</p>
-    <input type="password" id="keyIn" placeholder="Admin key" autocomplete="off" onkeydown="if(event.key==='Enter')saveKey()">
-    <button class="btn" onclick="saveKey()">Unlock</button>
+    <input type="password" id="keyIn" placeholder="Admin key" autocomplete="off" data-enter="saveKey">
+    <button class="btn" data-act="saveKey">Unlock</button>
     <p class="msg" id="gateMsg"></p>
   </div>
 
@@ -174,7 +174,7 @@ select.search{cursor:pointer}
       <aside class="side zu" id="side">
         <div class="brand">
           <b>DouchkoVE <span class="dot">Admin</span></b>
-          <button class="navtog" onclick="navTog()" id="navBtn">Menu</button>
+          <button class="navtog" data-act="navTog" id="navBtn">Menu</button>
         </div>
         <nav id="nav"></nav>
       </aside>
@@ -187,8 +187,8 @@ select.search{cursor:pointer}
           </div>
           <div class="live">
             <span class="pulse" id="pulse"></span><span id="liveTxt">live</span>
-            <button class="btn ghost sm" onclick="togglePause()" id="pauseBtn">Pause</button>
-            <button class="btn ghost sm" onclick="logout()">Lock</button>
+            <button class="btn ghost sm" data-act="togglePause" id="pauseBtn">Pause</button>
+            <button class="btn ghost sm" data-act="logout">Lock</button>
           </div>
         </div>
         <div id="view" style="margin-top:16px"><div class="spin">Loading…</div></div>
@@ -197,7 +197,7 @@ select.search{cursor:pointer}
   </div>
 </div>
 
-<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"></div></div>
+<div class="overlay" id="overlay" data-overlay="1"><div class="modal" id="modal"></div></div>
 
 <script>
 let KEY = sessionStorage.getItem('dve_admin_key') || '';
@@ -297,7 +297,7 @@ function boot(){
   el('nav').innerHTML=NAV.map(([grp,items])=>
     (grp?`<div class="navgrp">${grp}</div>`:'')
     + items.map(([id,t])=>
-        `<a data-t="${id}" onclick="go('${id}')">`
+        `<a data-t="${id}" data-act="go" data-arg="${id}">`
         + `<svg viewBox="0 0 24 24">${ICON[id]||''}</svg>`
         + `<span>${t}</span><span class="badge hidden" id="bdg-${id}"></span></a>`).join('')
   ).join('');
@@ -412,12 +412,12 @@ async function loadJobs(silent){
     <td>${esc(j.kind)}${j.wm?' <span class="tag">wm</span>':''}</td>
     <td class="subtle">${j.updated_at?ago(j.updated_at):'–'}</td>
     <td><div class="row-actions">
-      <button class="btn ghost sm" onclick="jobLog('${j.jid}')">Log</button>
-      ${j.status==='fehler'?`<button class="btn ghost sm" onclick="jobAct('${j.jid}','retry','Retry job?')">Retry</button>`:''}
-      ${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" onclick="jobAct('${j.jid}','kill','Kill & refund this job?')">Kill</button>`:''}
-      <button class="btn warn sm" onclick="jobRefund('${j.jid}')">Refund</button>
-      ${j.wm?`<button class="btn ghost sm" onclick="jobAct('${j.jid}','unlock','Force-unlock watermark? This PERMANENTLY replaces the file with the clean master.')">Unlock</button>`:''}
-      <button class="btn ghost sm" onclick="jobAct('${j.jid}','delete','Delete this job dir? Removes its files.')">Del</button>
+      <button class="btn ghost sm" data-act="jobLog" data-arg="${j.jid}">Log</button>
+      ${j.status==='fehler'?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="retry" data-arg3="Retry job?">Retry</button>`:''}
+      ${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="kill" data-arg3="Kill & refund this job?">Kill</button>`:''}
+      <button class="btn warn sm" data-act="jobRefund" data-arg="${j.jid}">Refund</button>
+      ${j.wm?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="unlock" data-arg3="Force-unlock watermark? This PERMANENTLY replaces the file with the clean master.">Unlock</button>`:''}
+      <button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="delete" data-arg3="Delete this job dir? Removes its files.">Del</button>
     </div></td></tr>`).join(''):`<tr><td colspan="7" class="subtle">No jobs.</td></tr>`;
   el('view').innerHTML=`
     <div class="grid g4">
@@ -426,7 +426,7 @@ async function loadJobs(silent){
         <div class="subtle" style="margin-top:4px">waiting paid ${q.paid_waiting} · free ${q.free_waiting}</div></div>
       <div class="card"><div class="k">Avg render time</div><div class="v">${dur(d.avg_render_sec)}</div></div>
     </div>
-    <div style="display:flex;justify-content:flex-end;margin:14px 0 4px"><button class="btn bad sm" onclick="reapStuck()">Stop all stuck</button></div>
+    <div style="display:flex;justify-content:flex-end;margin:14px 0 4px"><button class="btn bad sm" data-act="reapStuck">Stop all stuck</button></div>
     <table><thead><tr><th>Job</th><th>User</th><th>Status</th><th>Phase</th><th>Kind</th><th>Updated</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function jobAct(jid,act,msg){if(msg&&!danger(msg))return;try{await api('/api/admin/jobs/'+jid+'/'+act,{method:'POST'});loadJobs();}catch(e){alert(e.message);}}
@@ -454,10 +454,10 @@ async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');
   const tl=(LOG_TXT.split('\n').filter(l=>l.startsWith('Timing (total'))||[]).pop()||'';
   el('modal').innerHTML=`<h2>Log · ${esc(jid)}</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px">
-      <button class="btn sm" onclick="copyText(LOG_TXT,this)">Log kopieren</button>
-      ${tl?`<button class="btn ghost sm" onclick="copyText(${JSON.stringify(tl).replace(/"/g,'&quot;')},this)">Timing kopieren</button>`:''}
+      <button class="btn sm" data-act="copyLog">Log kopieren</button>
+      ${tl?`<button class="btn ghost sm" data-act="copyArg" data-arg="${esc(tl)}">Timing kopieren</button>`:''}
     </div>
-    <div class="scroll" style="max-height:60vh"><pre class="mono" onclick="copyText(LOG_TXT,null)" title="Klick kopiert den ganzen Log" style="padding:12px;font-size:11.5px;white-space:pre-wrap;cursor:copy">${esc(d.log)}</pre></div>`;
+    <div class="scroll" style="max-height:60vh"><pre class="mono" data-act="copyLog" data-arg="still" title="Klick kopiert den ganzen Log" style="padding:12px;font-size:11.5px;white-space:pre-wrap;cursor:copy">${esc(d.log)}</pre></div>`;
   el('overlay').classList.add('on');}catch(e){alert(e.message);}}
 
 /* ---------- REVENUE ---------- */
@@ -467,7 +467,7 @@ async function loadRevenue(){
   const chart=ts?barChart('Revenue per day (90d)',ts.labels,ts.revenue_eur,v=>eur(v),120):'<div class="subtle">No sales yet.</div>';
   const packShare=hbars(d.per_pack.map(p=>({l:p.pack,v:p.eur})),v=>eur(v));
   const packs=d.per_pack.map(p=>`<tr><td>${esc(p.pack)}</td><td>${p.count}</td><td>${eur(p.eur)}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
-  const tops=d.top_spenders.map(t=>`<tr class="click" onclick="openUser(${t.uid})"><td>${esc(t.email)}</td><td>${eur(t.eur)}</td><td>${t.orders}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
+  const tops=d.top_spenders.map(t=>`<tr class="click" data-act="openUser" data-arg="${t.uid}"><td>${esc(t.email)}</td><td>${eur(t.eur)}</td><td>${t.orders}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
   const cat=d.catalog.map(c=>`<tr><td>${esc(c.id)}</td><td>${eur(c.eur)}</td><td>${c.credits}</td><td>${eur(c.per_credit)}</td></tr>`).join('');
   el('view').innerHTML=`
     <div class="grid g4">
@@ -488,7 +488,7 @@ async function loadRevenue(){
       <div><h3>Top spenders</h3><table><thead><tr><th>Email</th><th>LTV</th><th>Orders</th></tr></thead><tbody>${tops}</tbody></table></div>
       <div><h3>Pricing catalog</h3><table><thead><tr><th>Pack</th><th>Price</th><th>Cr.</th><th>/cr</th></tr></thead><tbody>${cat}</tbody></table></div>
     </div>
-    <h3>Export</h3><div class="row-actions"><button class="btn ghost sm" onclick="dl('purchases')">purchases.csv</button><button class="btn ghost sm" onclick="dl('ledger')">ledger.csv</button></div>
+    <h3>Export</h3><div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button></div>
     <div class="note">Revenue = real paid amounts from Stripe (purchases table, v128+). Pre-v128 is an estimate mapped from ledger seconds.</div>`;
 }
 function dl(t){const u='/api/admin/export/'+t+'.csv';fetch(u,{headers:hdr()}).then(r=>r.blob()).then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=t+'.csv';a.click();}).catch(e=>alert(e.message));}
@@ -554,17 +554,17 @@ let uState={q:'',flt:'',sort:'created_at',offset:0};
 async function loadUsers(){
   el('view').innerHTML=`
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <input class="search" id="uq" placeholder="Search email…" value="${esc(uState.q)}" oninput="uSearch()">
-      <select class="search" id="uflt" onchange="uState.flt=this.value;uState.offset=0;fetchUsers()">
+      <input class="search" id="uq" placeholder="Search email…" value="${esc(uState.q)}" data-input="uSearch">
+      <select class="search" id="uflt" data-change="flt">
         <option value="">all</option><option value="verified">verified</option><option value="unverified">unverified</option><option value="disabled">disabled</option></select>
-      <select class="search" id="usort" onchange="uState.sort=this.value;fetchUsers()">
+      <select class="search" id="usort" data-change="sort">
         <option value="created_at">newest</option><option value="balance">most credits</option><option value="email">email</option></select>
       <span class="subtle" id="uCount"></span>
     </div>
     <table><thead><tr><th>Email</th><th>Status</th><th>Credits</th><th>Type</th><th>Joined</th></tr></thead><tbody id="uRows"></tbody></table>
     <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-      <button class="btn ghost sm" onclick="uPage(-1)">◀ Prev</button>
-      <button class="btn ghost sm" onclick="uPage(1)">Next ▶</button>
+      <button class="btn ghost sm" data-act="uPage" data-arg="-1">◀ Prev</button>
+      <button class="btn ghost sm" data-act="uPage" data-arg="1">Next ▶</button>
       <span class="subtle" id="uPageInfo"></span></div>`;
   el('uflt').value=uState.flt; el('usort').value=uState.sort; fetchUsers();
 }
@@ -576,7 +576,7 @@ async function fetchUsers(){
   let d;try{d=await api('/api/admin/users?'+p);}catch(e){el('uRows').innerHTML='<tr><td colspan=5>'+esc(e.message)+'</td></tr>';return;}
   el('uCount').textContent=d.total+' users';
   el('uPageInfo').textContent=`${d.offset+1}–${d.offset+d.users.length} of ${d.total}`;
-  el('uRows').innerHTML=d.users.length?d.users.map(u=>`<tr class="click" onclick="openUser(${u.id})">
+  el('uRows').innerHTML=d.users.length?d.users.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}">
     <td>${esc(u.email)}${u.disabled?' <span class="tag no">suspended</span>':''}</td>
     <td>${u.verified?'<span class="tag ok">verified</span>':'<span class="tag no">unverified</span>'}</td>
     <td>${u.credits}</td>
@@ -587,7 +587,7 @@ async function openUser(uid){
   let d;try{d=await api('/api/admin/users/'+uid);}catch(e){alert(e.message);return;}
   const u=d.user;
   const led=d.ledger.map(l=>`<tr><td class="${l.delta_sec>=0?'pos':'neg'}">${l.delta_sec>=0?'+':''}${Math.round(l.delta_sec/60)}m</td><td>${esc(l.grund)}</td><td class="subtle">${fdate(l.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">–</td></tr>';
-  const pur=d.purchases.map(p=>`<tr><td>${esc(p.pack)}</td><td>${eur(p.eur)}</td><td class="mono subtle">${esc((p.session_id||'').slice(0,14))}</td><td><button class="btn warn sm" onclick="refundSession('${esc(p.session_id)}')">Refund</button></td></tr>`).join('')||'<tr><td colspan=4 class="subtle">no purchases</td></tr>';
+  const pur=d.purchases.map(p=>`<tr><td>${esc(p.pack)}</td><td>${eur(p.eur)}</td><td class="mono subtle">${esc((p.session_id||'').slice(0,14))}</td><td><button class="btn warn sm" data-act="refundSession" data-arg="${esc(p.session_id)}">Refund</button></td></tr>`).join('')||'<tr><td colspan=4 class="subtle">no purchases</td></tr>';
   const cons=d.consents.map(c=>`${esc(c.kind)} (${fdate(c.created_at)})`).join(', ')||'none';
   el('modal').innerHTML=`
     <h2>${esc(u.email)} ${u.is_owner?'<span class="tag buy">owner</span>':''}${u.disabled?'<span class="tag no">suspended</span>':''}</h2>
@@ -602,13 +602,13 @@ async function openUser(uid){
     </div>
     <div class="acts">
       <input type="number" id="mDelta" placeholder="±min"><input type="text" class="reason" id="mReason" placeholder="reason">
-      <button class="btn sm" onclick="grantCredits(${uid})">Adjust credits</button>
-      ${u.verified?'':`<button class="btn ghost sm" onclick="uAct(${uid},'verify')">Verify</button><button class="btn ghost sm" onclick="uAct(${uid},'resend_verify')">Resend</button>`}
-      <button class="btn ghost sm" onclick="uAct(${uid},'reset')">Reset pw</button>
-      <button class="btn ghost sm" onclick="uAct(${uid},'revoke_sessions')">Revoke sessions</button>
-      <button class="btn ${u.disabled?'':'warn'} sm" onclick="disableUser(${uid},${u.disabled?0:1})">${u.disabled?'Unsuspend':'Suspend'}</button>
-      <button class="btn ghost sm" onclick="exportUser(${uid})">Export</button>
-      <button class="btn bad sm" onclick="delUser(${uid},'${esc(u.email).replace(/'/g,'')}')">Delete</button>
+      <button class="btn sm" data-act="grantCredits" data-arg="${uid}">Adjust credits</button>
+      ${u.verified?'':`<button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="verify">Verify</button><button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="resend_verify">Resend</button>`}
+      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="reset">Reset pw</button>
+      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="revoke_sessions">Revoke sessions</button>
+      <button class="btn ${u.disabled?'':'warn'} sm" data-act="disableUser" data-arg="${uid}" data-arg2="${u.disabled?0:1}">${u.disabled?'Unsuspend':'Suspend'}</button>
+      <button class="btn ghost sm" data-act="exportUser" data-arg="${uid}">Export</button>
+      <button class="btn bad sm" data-act="delUser" data-arg="${uid}" data-arg2="${esc(u.email)}">Delete</button>
     </div>
     <p class="msg" id="mMsg"></p>
     <div class="grid g2">
@@ -628,8 +628,8 @@ async function refundSession(sid){if(!danger('Refund Stripe session '+sid+' AND 
 /* ---------- ABUSE ---------- */
 async function loadAbuse(){
   let d;try{d=await api('/api/admin/abuse');}catch(e){el('view').innerHTML=err(e);return;}
-  const disp=d.disposable_accounts.map(u=>`<tr class="click" onclick="openUser(${u.id})"><td>${esc(u.email)}</td></tr>`).join('')||'<tr><td class="subtle">none</td></tr>';
-  const unv=d.unverified_accounts.map(u=>`<tr class="click" onclick="openUser(${u.id})"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
+  const disp=d.disposable_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td></tr>`).join('')||'<tr><td class="subtle">none</td></tr>';
+  const unv=d.unverified_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
   const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
   const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(l.key)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
   const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
@@ -736,11 +736,11 @@ function deployZeile(dp) {
     <div id="betriebBox" class="subtle">loading …</div>
     <h3>Ops actions</h3>
     <div class="row-actions">
-      <button class="btn ghost sm" onclick="sysAct('backup/run','Run a DB backup now?')">Backup now</button>
-      <button class="btn ghost sm" onclick="sysAct('mail/test','Send a test mail to the admin address?')">Send test mail</button>
-      <button class="btn bad sm" onclick="factoryReset()">Factory reset (wipe ALL data)</button>
-      <button class="btn warn sm" onclick="sysAct('cleanup/run','Run the retention cleanup sweep now? Deletes job dirs older than retention.')">Run cleanup</button>
-      <button class="btn warn sm" onclick="sysAct('expiry/run','Run the credit-expiry sweep now?')">Run expiry sweep</button>
+      <button class="btn ghost sm" data-act="sysAct" data-arg="backup/run" data-arg2="Run a DB backup now?">Backup now</button>
+      <button class="btn ghost sm" data-act="sysAct" data-arg="mail/test" data-arg2="Send a test mail to the admin address?">Send test mail</button>
+      <button class="btn bad sm" data-act="factoryReset">Factory reset (wipe ALL data)</button>
+      <button class="btn warn sm" data-act="sysAct" data-arg="cleanup/run" data-arg2="Run the retention cleanup sweep now? Deletes job dirs older than retention.">Run cleanup</button>
+      <button class="btn warn sm" data-act="sysAct" data-arg="expiry/run" data-arg2="Run the credit-expiry sweep now?">Run expiry sweep</button>
     </div>
     <div class="note">Config values are set via env at boot — change them in .env + docker restart. The panel cannot live-toggle them.</div>
     <h3>Backups</h3>
@@ -752,7 +752,7 @@ function deployZeile(dp) {
         Accepts <code>.db</code> or <code>.db.gz</code>.</p>
       <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
         <input type="file" id="bkFile" accept=".db,.gz">
-        <button class="btn bad sm" onclick="bkUpload()">Upload and restore</button>
+        <button class="btn bad sm" data-act="bkUpload">Upload and restore</button>
       </div>
     </div>
     <div class="note">Every backup is verified here (integrity check, required tables,
@@ -802,10 +802,10 @@ async function loadOffsite(){
           <input id="oPw" type="password" placeholder="${d.pass_gesetzt?'unveraendert lassen':'mind. 12 Zeichen'}"></label>
       </div>
       <div class="row-actions" style="margin-top:12px">
-        <button class="btn sm" onclick="offSave()">Speichern</button>
-        <button class="btn ghost sm" onclick="offTest()">Verbindung pruefen</button>
-        <button class="btn ghost sm" onclick="offRun()">Jetzt sichern</button>
-        <button class="btn ghost sm" onclick="offPw()">Passwort anzeigen</button>
+        <button class="btn sm" data-act="offSave">Speichern</button>
+        <button class="btn ghost sm" data-act="offTest">Verbindung pruefen</button>
+        <button class="btn ghost sm" data-act="offRun">Jetzt sichern</button>
+        <button class="btn ghost sm" data-act="offPw">Passwort anzeigen</button>
       </div>
       <div class="note" style="margin-top:10px"><b>Das Passwort ausser Haus aufheben.</b>
         Ohne es laesst sich die Kopie NICHT lesen &mdash; und liegt es nur auf
@@ -821,7 +821,7 @@ async function loadOffsite(){
     <tbody>${d.dateien.map(f=>`<tr><td>${esc(f.name)}</td>
       <td class="subtle">${(f.bytes/1024).toFixed(0)} KB</td>
       <td class="subtle" style="white-space:nowrap">${esc((f.ts||'').replace('T',' ').slice(0,16))}</td>
-      <td><button class="btn bad sm" onclick="offRestore('${esc(f.name)}')">Zurueckspielen</button></td>
+      <td><button class="btn bad sm" data-act="offRestore" data-arg="${esc(f.name)}">Zurueckspielen</button></td>
     </tr>`).join('')}</tbody></table>`;}
 }
 async function offSave(){
@@ -883,9 +883,9 @@ async function loadBackups(){
       <td class="subtle">${(b.bytes/1024).toFixed(0)} KB</td>
       <td class="subtle" style="white-space:nowrap">${fdt(b.zeit)}</td>
       <td style="white-space:nowrap">
-        <button class="btn ghost sm" onclick="bkDl('${esc(b.datei)}')">Download</button>
-        <button class="btn ghost sm" onclick="bkCheck('${esc(b.datei)}')">Verify</button>
-        <button class="btn bad sm" onclick="bkRestore('${esc(b.datei)}',${b.konten==null?-1:b.konten})">Restore</button></td>
+        <button class="btn ghost sm" data-act="bkDl" data-arg="${esc(b.datei)}">Download</button>
+        <button class="btn ghost sm" data-act="bkCheck" data-arg="${esc(b.datei)}">Verify</button>
+        <button class="btn bad sm" data-act="bkRestore" data-arg="${esc(b.datei)}" data-arg2="${b.konten==null?-1:b.konten}">Restore</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 async function bkCheck(datei){
@@ -957,7 +957,7 @@ async function loadCompliance(){
     <h3>GoBD purchase archive (deleted accounts, 10y retention)</h3>
     <div class="scroll" style="max-height:260px"><table><thead><tr><th>Email</th><th>Min</th><th>Grund</th><th>Archived</th></tr></thead><tbody>${ar}</tbody></table></div>
     <h3>Accounting export</h3>
-    <div class="row-actions"><button class="btn ghost sm" onclick="dl('purchases')">purchases.csv</button><button class="btn ghost sm" onclick="dl('ledger')">ledger.csv</button><button class="btn ghost sm" onclick="dl('users')">users.csv</button></div>`;
+    <div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button><button class="btn ghost sm" data-act="dl" data-arg="users">users.csv</button></div>`;
 }
 
 /* ---------- RECHT & STEUERN (v142) ----------
@@ -1024,7 +1024,7 @@ async function loadLegal(){
       <tr><td>Customer videos deleted after</td><td>${a.video_tage} days</td></tr>
       <tr><td>Credits expire after</td><td>${a.credit_tage} days</td></tr>
     </tbody></table>
-    <div class="row-actions"><button class="btn ghost sm" onclick="dl('purchases')">purchases.csv</button><button class="btn ghost sm" onclick="dl('ledger')">ledger.csv</button><button class="btn ghost sm" onclick="dl('users')">users.csv</button></div>
+    <div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button><button class="btn ghost sm" data-act="dl" data-arg="users">users.csv</button></div>
 
     <h3>Purchase records (newest first)</h3>
     <div class="scroll" style="max-height:320px"><table><thead><tr><th>Stripe session</th><th>Customer</th><th>Pack</th><th>Gross</th><th>When</th></tr></thead><tbody>${br}</tbody></table></div>
@@ -1041,13 +1041,13 @@ async function loadLegal(){
 async function loadCodes(){
   let d;try{d=await api('/api/admin/codes');}catch(e){el('view').innerHTML=err(e);return;}
   const rows=d.codes.map(c=>`<tr><td class="mono">${esc(c.code)}</td><td>${esc(c.name||'')}</td><td>${c.genutzt||0}/${c.limit||'-'}</td><td>${c.aktiv?'<span class="tag ok">active</span>':'<span class="tag no">blocked</span>'}</td>
-    <td><button class="btn ghost sm" onclick="codeAct('${c.aktiv?'block':'unblock'}','${esc(c.code)}')">${c.aktiv?'Block':'Unblock'}</button></td></tr>`).join('')||'<tr><td colspan=5 class="subtle">no codes</td></tr>';
+    <td><button class="btn ghost sm" data-act="codeAct" data-arg="${c.aktiv?'block':'unblock'}" data-arg2="${esc(c.code)}">${c.aktiv?'Block':'Unblock'}</button></td></tr>`).join('')||'<tr><td colspan=5 class="subtle">no codes</td></tr>';
   el('view').innerHTML=`
     <h3>Tester access codes</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       <input class="search" id="cName" placeholder="Tester name">
       <input class="search" id="cLimit" type="number" placeholder="video limit" value="5" style="width:120px">
-      <button class="btn sm" onclick="newCode()">Create code</button></div>
+      <button class="btn sm" data-act="newCode">Create code</button></div>
     <table><thead><tr><th>Code</th><th>Name</th><th>Used</th><th>State</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     <div class="note">Access codes let testers use the app without an account or your OpenAI key exposure.</div>`;
 }
@@ -1085,8 +1085,8 @@ async function loadSupport(silent){
         : `<textarea class="search" id="rp${t.id}" rows="3" placeholder="Write your reply …"
         style="width:100%;margin-top:8px"></textarea>`}
       <div style="display:flex;gap:9px;margin-top:8px;flex-wrap:wrap">
-        ${t.status==='closed' ? '' : `<button class="btn sm" onclick="ticketReply(${t.id})">Send reply</button>`}
-        <button class="btn ghost sm" onclick="ticketAct(${t.id},'${t.status==='closed'?'open':'closed'}')">
+        ${t.status==='closed' ? '' : `<button class="btn sm" data-act="ticketReply" data-arg="${t.id}">Send reply</button>`}
+        <button class="btn ghost sm" data-act="ticketAct" data-arg="${t.id}" data-arg2="${t.status==='closed'?'open':'closed'}">
           ${t.status==='closed'?'Reopen':'Close'}</button>
       </div>
     </div>`;}).join('')||'<div class="subtle">no tickets</div>';
@@ -1119,11 +1119,11 @@ async function loadAlerts(silent){
     <td><pre class="mono" style="white-space:pre-wrap;font-size:11.5px;margin:0">${esc(a.text)}</pre></td>
     <td class="subtle">${a.gemailt?'mailed':'panel only'}</td>
     <td class="subtle">${new Date(a.created_at*1000).toLocaleString()}</td>
-    <td>${a.gelesen?'':`<button class="btn" onclick="alertRead(${a.id})">Mark read</button>`}</td>
+    <td>${a.gelesen?'':`<button class="btn" data-act="alertRead" data-arg="${a.id}">Mark read</button>`}</td>
   </tr>`).join(''):'<tr><td colspan="6" class="subtle">No alerts.</td></tr>';
   el('view').innerHTML=`
     <h3>Alerts <span class="subtle">${d.offen} unread</span>
-      <button class="btn" style="float:right" onclick="alertRead(0)">Mark all read</button></h3>
+      <button class="btn" style="float:right" data-act="alertRead" data-arg="0">Mark all read</button></h3>
     <p class="subtle">Render failures and job timeouts are logged here only, no email.
       Credits are refunded automatically.</p>
     <table><thead><tr><th></th><th>What</th><th>Detail</th><th>Mail</th><th>When</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -1160,7 +1160,7 @@ async function loadFeedback(silent){
       <td>${esc(f.look||'–')}</td>
       <td style="max-width:420px;white-space:pre-wrap">${esc(f.text)||'<span class="subtle">no comment</span>'}</td>
       <td class="subtle" style="white-space:nowrap">${fdt(f.created_at)}</td>
-      <td>${f.gelesen?'':`<button class="btn ghost sm" onclick="fbRead(${f.id})">Mark read</button>`}</td>
+      <td>${f.gelesen?'':`<button class="btn ghost sm" data-act="fbRead" data-arg="${f.id}">Mark read</button>`}</td>
     </tr>`).join(''):'<tr><td colspan="6" class="subtle">Nothing here yet.</td></tr>';
   el('view').innerHTML=`
     <div class="grid g4">
@@ -1176,7 +1176,7 @@ async function loadFeedback(silent){
     </div>
     <h3>Comments
       <span style="float:right;font-weight:600;text-transform:none;letter-spacing:0">
-      ${['all','neu','schlecht'].map(f=>`<button class="btn ${fbFilt===f?'':'ghost'} sm" onclick="fbSet('${f}')">${f==='all'?'All':f==='neu'?'Unread':'1-2 stars'}</button>`).join(' ')}
+      ${['all','neu','schlecht'].map(f=>`<button class="btn ${fbFilt===f?'':'ghost'} sm" data-act="fbSet" data-arg="${f}">${f==='all'?'All':f==='neu'?'Unread':'1-2 stars'}</button>`).join(' ')}
       </span></h3>
     <table><tr><th>Rating</th><th>Customer</th><th>Look</th><th>Comment</th><th>When</th><th></th></tr>${rows}</table>`;
 }
@@ -1201,8 +1201,8 @@ async function loadAnn(silent){
       <td class="subtle" style="white-space:nowrap">${ab}${weg?' <span class="tag no">expired</span>':''}</td>
       <td>${a.aktiv?'<span class="tag ok">live</span>':'<span class="tag">off</span>'}</td>
       <td style="white-space:nowrap">
-        <button class="btn ghost sm" onclick="annTog(${a.id})">${a.aktiv?'Turn off':'Turn on'}</button>
-        <button class="btn ghost sm" onclick="annDel(${a.id})">Delete</button></td>
+        <button class="btn ghost sm" data-act="annTog" data-arg="${a.id}">${a.aktiv?'Turn off':'Turn on'}</button>
+        <button class="btn ghost sm" data-act="annDel" data-arg="${a.id}">Delete</button></td>
     </tr>`;}).join(''):'<tr><td colspan="6" class="subtle">No announcements yet.</td></tr>';
   el('view').innerHTML=`
     <div class="card">
@@ -1221,7 +1221,7 @@ async function loadAnn(silent){
           <input class="search" id="annD" type="number" min="0" max="365" step="0.5" value="0"
                  style="width:120px" title="Auto-expire after N days (0 = never)">
           <span class="subtle">days until it expires (0 = never)</span>
-          <button class="btn" onclick="annSave()">Publish</button>
+          <button class="btn" data-act="annSave">Publish</button>
         </div>
         <p class="msg subtle" id="annMsg"></p>
       </div>
@@ -1252,14 +1252,14 @@ async function loadLogs(silent){
   lastLoad.logs=Date.now()/1000;
   const wahl=d.dateien.map(f=>{
     const t=f.includes('.log.')?f.split('.log.')[1]:'';
-    return `<button class="btn ghost sm${t===logTeil?' on':''}" onclick="logPick('${t}')">${esc(f)}</button>`;
+    return `<button class="btn ghost sm${t===logTeil?' on':''}" data-act="logPick" data-arg="${t}">${esc(f)}</button>`;
   }).join(' ');
   el('view').innerHTML=`
     <div class="card">
       <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
         ${wahl}
         <span class="subtle" style="margin-left:auto">${(d.bytes/1024).toFixed(0)} KB</span>
-        <button class="btn ghost sm" onclick="loadLogs()">Refresh</button>
+        <button class="btn ghost sm" data-act="loadLogs">Refresh</button>
       </div>
       <pre style="max-height:64vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
         font-size:12px;line-height:1.5;margin:0">${esc(d.text)}</pre>
@@ -1276,7 +1276,7 @@ async function loadEvents(silent){
   let d;try{d=await api('/api/admin/events?limit=300'+(evFilt?'&aktion='+encodeURIComponent(evFilt):''));}
   catch(e){if(!silent)el('view').innerHTML=err(e);return;}
   lastLoad.events=Date.now()/1000;
-  const knopf=(k,t)=>`<button class="btn ghost sm${evFilt===k?' on':''}" onclick="evSet('${k}')">${t}</button>`;
+  const knopf=(k,t)=>`<button class="btn ghost sm${evFilt===k?' on':''}" data-act="evSet" data-arg="${k}">${t}</button>`;
   const filter=[knopf('','Alle')].concat(d.arten.map(a=>knopf(a,a))).join(' ');
   const rows=d.events.length?d.events.map(e=>`<tr>
     <td class="subtle" style="white-space:nowrap">${fdt(e.ts)}</td>
@@ -1309,9 +1309,9 @@ async function loadBetrieb(){
       <span class="subtle">${esc(txt[d.stufe]||'')}</span>
     </div>
     <div class="row-actions">
-      <button class="btn ghost sm" onclick="setBetrieb('normal')">Normalbetrieb</button>
-      <button class="btn warn sm" onclick="setBetrieb('pausiert')">Pausieren</button>
-      <button class="btn bad sm" onclick="setBetrieb('notaus')">NOTAUS</button>
+      <button class="btn ghost sm" data-act="setBetrieb" data-arg="normal">Normalbetrieb</button>
+      <button class="btn warn sm" data-act="setBetrieb" data-arg="pausiert">Pausieren</button>
+      <button class="btn bad sm" data-act="setBetrieb" data-arg="notaus">NOTAUS</button>
     </div>`;
 }
 async function setBetrieb(stufe){
@@ -1361,7 +1361,7 @@ async function loadStart(silent){
         <div class="satz">Heute ${eur(g.heute.eur)} &middot; Woche ${eur(g.woche.eur)} &middot;
           insgesamt ${eur(g.gesamt.eur)}. Das ist, was nach Erstattungen geblieben ist.</div>
         ${erstattet}
-        <div class="tuwas"><button class="btn ghost sm" onclick="go('revenue')">Details</button></div>
+        <div class="tuwas"><button class="btn ghost sm" data-act="go" data-arg="revenue">Details</button></div>
       </div>
 
       <div class="box ${b.ampel}">
@@ -1372,8 +1372,8 @@ async function loadStart(silent){
         <div class="satz">${b.laeuft_gerade} Video(s) werden gerade gerendert,
           ${b.wartet} warten.</div>
         <div class="tuwas">
-          <button class="btn ghost sm" onclick="go('alerts')">Stoerungen</button>
-          <button class="btn ghost sm" onclick="go('system')">System</button>
+          <button class="btn ghost sm" data-act="go" data-arg="alerts">Stoerungen</button>
+          <button class="btn ghost sm" data-act="go" data-arg="system">System</button>
         </div>
       </div>
 
@@ -1384,8 +1384,8 @@ async function loadStart(silent){
         ${p.note?`<div class="satz">Durchschnittliche Bewertung ${p.note} von 5
           (${p.bewertungen} Stimmen).</div>`:''}
         <div class="tuwas">
-          <button class="btn ghost sm" onclick="go('support')">Support</button>
-          <button class="btn ghost sm" onclick="go('feedback')">Bewertungen</button>
+          <button class="btn ghost sm" data-act="go" data-arg="support">Support</button>
+          <button class="btn ghost sm" data-act="go" data-arg="feedback">Bewertungen</button>
         </div>
       </div>
 
@@ -1395,7 +1395,7 @@ async function loadStart(silent){
         <div class="satz">${w.neu_7t} neu in den letzten 7 Tagen.
           ${w.zahler} davon haben schon einmal gekauft.</div>
         <div class="satz">${w.renders_7t} Videos in den letzten 7 Tagen gerendert.</div>
-        <div class="tuwas"><button class="btn ghost sm" onclick="go('users')">Kunden</button></div>
+        <div class="tuwas"><button class="btn ghost sm" data-act="go" data-arg="users">Kunden</button></div>
       </div>
     </div>
     <div class="note" style="margin-top:14px">Diese Seite beantwortet die vier Fragen,
@@ -1438,7 +1438,7 @@ async function loadTrichter(silent){
     <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
       <span class="subtle">Zeitraum:</span>
       ${[7,30,90,365].map(t=>`<button class="btn ${t===triTage?'':'ghost'} sm"
-        onclick="triSetTage(${t})">${t===365?'1 Jahr':t+' Tage'}</button>`).join('')}
+        data-act="triSetTage" data-arg="${t}">${t===365?'1 Jahr':t+' Tage'}</button>`).join('')}
     </div>
     <div class="tri" style="margin-top:12px">${rows}</div>
     <div class="chart" style="margin-top:14px">
@@ -1455,6 +1455,72 @@ async function loadTrichter(silent){
       ${d.seit?' Erste Zaehlung: '+fdt(d.seit)+'.':''}</div>`;
 }
 
+/* v230ah KEINE INLINE-HANDLER MEHR. Bis hierher stand an jedem Knopf ein
+   ein Klick-Attribut; damit die Seite lief, musste die CSP `unsafe-inline` fuer
+   Skripte erlauben - und genau das haette auch einen eingeschleusten
+   <script>-Block ausgefuehrt. Jetzt traegt jeder Knopf nur noch DATEN
+   (data-act + data-arg...), und dieser eine Verteiler ruft die Funktion auf.
+   Die ERLAUBT-Liste ist der Riegel: was nicht darin steht, wird nicht
+   gerufen - ein data-act aus fremdem Text kann also nichts ausloesen. */
+const ERLAUBT = {
+  saveKey:0, navTog:0, togglePause:0, logout:0, reapStuck:0, factoryReset:0,
+  bkUpload:0, offSave:0, offTest:0, offRun:0, offPw:0, newCode:0, annSave:0,
+  loadLogs:0,
+  go:1, jobLog:1, jobRefund:1, copyLog:1, copyArg:1, openUser:1, dl:1,
+  uPage:1, refundSession:1, grantCredits:1, exportUser:1, offRestore:1,
+  bkDl:1, bkCheck:1, ticketReply:1, alertRead:1, fbRead:1, fbSet:1,
+  annTog:1, annDel:1, logPick:1, evSet:1, setBetrieb:1, triSetTage:1,
+  uAct:2, disableUser:2, delUser:2, sysAct:2, bkRestore:2, codeAct:2,
+  ticketAct:2,
+  jobAct:3,
+};
+/* Welche Argumente ZAHLEN sind. Pauschal alles Numerische zu wandeln waere
+   falsch: eine Job-Nummer oder ein Gutschein-Code kann zufaellig nur aus
+   Ziffern bestehen. uPage(-1) dagegen MUSS eine Zahl sein, sonst rechnet
+   die Seitenzahl mit Text weiter. */
+const ZAHL_ARG = {
+  openUser:[0], grantCredits:[0], uAct:[0], disableUser:[0, 1], exportUser:[0],
+  delUser:[0], ticketReply:[0], ticketAct:[0], alertRead:[0], fbRead:[0],
+  annTog:[0], annDel:[0], triSetTage:[0], uPage:[0], bkRestore:[1],
+};
+function _args(el, name, n) {
+  const roh = [el.dataset.arg, el.dataset.arg2, el.dataset.arg3].slice(0, n);
+  const zahlen = ZAHL_ARG[name] || [];
+  return roh.map((v, i) => (zahlen.includes(i) && v !== undefined && v !== ''
+                            ? Number(v) : v));
+}
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const name = el.dataset.act;
+  if (!(name in ERLAUBT)) return;
+  const fn = (name === 'copyLog' ? (a) => copyText(LOG_TXT, a === 'still' ? null : el)
+              : name === 'copyArg' ? (a) => copyText(a, el)
+              : window[name]);
+  if (typeof fn !== 'function') return;
+  e.preventDefault();
+  fn.apply(null, _args(el, name, ERLAUBT[name]));
+});
+/* Die vier Faelle, die kein reiner Funktionsaufruf waren. */
+document.addEventListener('keydown', (e) => {
+  const el = e.target.closest('[data-enter]');
+  if (el && e.key === 'Enter' && typeof window[el.dataset.enter] === 'function') {
+    window[el.dataset.enter]();
+  }
+});
+document.addEventListener('click', (e) => {
+  if (e.target instanceof Element && e.target.hasAttribute('data-overlay')) closeModal();
+});
+document.addEventListener('input', (e) => {
+  const el = e.target.closest('[data-input]');
+  if (el && typeof window[el.dataset.input] === 'function') window[el.dataset.input]();
+});
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('[data-change]');
+  if (!el) return;
+  if (el.dataset.change === 'flt') { uState.flt = el.value; uState.offset = 0; fetchUsers(); }
+  else if (el.dataset.change === 'sort') { uState.sort = el.value; fetchUsers(); }
+});
 const RENDER={start:loadStart,trichter:loadTrichter,live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,offsite:loadOffsite,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
 if(KEY)boot();
 </script>

@@ -3521,6 +3521,44 @@ def _scenario_logic(clip, transcript, tmp):
     # Am Finger darf ein senkrechter Wisch NIE den Schieber aufreissen.
     check('v230u: bei geschlossenem Vergleich zieht der Finger nicht',
           "(auf <= AN_SCHWELLE || Math.abs(e.clientX - linie) > 44)" in _land)
+    # ===== v230ah KEINE INLINE-HANDLER, KEIN `unsafe-inline` =============
+    # Aus dem externen Audit: `script-src 'unsafe-inline'` haette auch einen
+    # eingeschleusten <script>-Block ausgefuehrt. Der Grund dafuer waren 95
+    # onclick=/onsubmit=-Attribute. Geprueft wird die REGEL: in keiner
+    # ausgelieferten Seite steht mehr ein Ereignis-Attribut - sonst reisst
+    # der naechste neue Knopf die Luecke wieder auf.
+    _SEITEN230 = ('index.html', 'landing.html', 'admin.html', 'imprint.html',
+                  'privacy.html', 'terms.html')
+    _mit_handler = []
+    for _n in _SEITEN230:
+        _p = os.path.join(HERE, 'web', _n)
+        if not os.path.exists(_p):
+            continue
+        _t = open(_p, encoding='utf-8').read()
+        if re.search(r'\son(click|submit|change|input|error|keydown|keyup|load|'
+                     r'focus|blur|mouseover)\s*=\s*"', _t):
+            _mit_handler.append(_n)
+    check('v230ah: keine Seite traegt mehr ein Ereignis-Attribut',
+          not _mit_handler, ', '.join(_mit_handler) or f'{len(_SEITEN230)} Seiten')
+    # Und die Seiten holen nichts mehr von fremden Servern - die CSP erlaubt
+    # ohnehin nur 'self', ein Fremd-Link waere also ein toter Link (genau das
+    # war er: die Google-Schriften wurden seit v92 blockiert, die Landing lief
+    # mit Ersatzschriften. Gefunden hat es erst ein echter Browser-Lauf).
+    # Gemeint sind RESSOURCEN (Stil, Skript, Bild, Schrift) - ein normaler
+    # Link auf eine fremde Seite ist voellig in Ordnung und in der
+    # Datenschutzerklaerung sogar Pflicht.
+    _fremd230 = [n for n in _SEITEN230
+                 if os.path.exists(os.path.join(HERE, 'web', n))
+                 and re.search(r'<(?:link|script|img|iframe|source)\b[^>]*'
+                               r'\b(?:href|src)\s*=\s*"https?://',
+                               open(os.path.join(HERE, 'web', n),
+                                    encoding='utf-8').read())]
+    check('v230ah: keine Seite laedt Stil oder Skript von aussen',
+          not _fremd230, ', '.join(_fremd230) or 'alle lokal')
+    check('v230ah: die Schriften liegen wirklich im Repo',
+          all(os.path.exists(os.path.join(HERE, 'web', 'assets', 'fonts', f))
+              for f in ('fonts.css', 'inter.woff2', 'newsreader.woff2',
+                        'jetbrains-mono.woff2')))
     # v230ag DIE SEITE DARF NICHTS VERSPRECHEN, WAS DIE ENGINE NICHT KANN.
     # "50+ languages" stand da, waehrend keine Hausschrift auch nur
     # Kyrillisch setzen konnte. Und umgekehrt fehlten drei Dinge, die es
@@ -9385,6 +9423,82 @@ def _scenario_betrieb(tmp):
     # richtig, aber es pruefte die falsche Zusage.
     for _k in [k for k in _SV198._REG_ATTEMPTS if k.startswith('admin:')]:
         _SV198._REG_ATTEMPTS.pop(_k, None)
+    # Die CSP selbst: keine Inline-Erlaubnis fuer Skripte mehr, dafuer der
+    # Fingerabdruck JEDES Inline-Blocks - und object-src zu.
+    import base64 as _b64230, hashlib as _hl230
+    _SEITEN230 = ('index.html', 'landing.html', 'admin.html', 'imprint.html',
+                  'privacy.html', 'terms.html')
+    _csp230 = _SV198._csp()
+    _skript = re.search(r'script-src ([^;]+);', _csp230).group(1)
+    check('v230ah: Skripte duerfen nicht mehr pauschal inline laufen',
+          "'unsafe-inline'" not in _skript and "'unsafe-eval'" not in _skript,
+          _skript[:70])
+    _fehlend = []
+    for _n in _SEITEN230:
+        _p = os.path.join(HERE, 'web', _n)
+        if not os.path.exists(_p):
+            continue
+        for _m in re.finditer(r'<script(?![^>]*\ssrc=)[^>]*>(.*?)</script>',
+                              open(_p, encoding='utf-8').read(), re.S):
+            _h = _b64230.b64encode(_hl230.sha256(
+                _m.group(1).encode('utf-8')).digest()).decode()
+            if f"'sha256-{_h}'" not in _csp230:
+                _fehlend.append(_n)
+    check('v230ah: jeder Inline-Block steht mit Fingerabdruck in der Regel',
+          not _fehlend, ', '.join(_fehlend) or 'alle erfasst')
+    check('v230ah: <object>/<embed> sind zu', "object-src 'none'" in _csp230)
+    # Der Fingerabdruck muss der DATEI folgen - sonst steht die Regel nach
+    # einem Deploy gegen die alte Fassung und die Seite ist tot.
+    _vorher230 = _SV198._csp()
+    _tmp230 = os.path.join(HERE, 'web', 'index.html')
+    _stat230 = os.stat(_tmp230)
+    os.utime(_tmp230, (_stat230.st_atime, _stat230.st_mtime + 1))
+    try:
+        check('v230ah: aendert sich die Datei, wird die Regel neu gebaut',
+              _SV198._csp() == _vorher230)      # Inhalt gleich -> gleicher Hash
+    finally:
+        os.utime(_tmp230, (_stat230.st_atime, _stat230.st_mtime))
+    # v230ah DER BUILD-STEMPEL GEHT NUR NOCH AN DEN ADMIN.
+    _c230 = _TC198(_SV198.app, base_url='https://test')
+    # Den Admin-Key NUR fuer diese Pruefung setzen und danach zurueckgeben -
+    # die Nachbartests arbeiten mit ihrem eigenen Key, und ein hier
+    # liegengelassener Wert bringt sie zu Fall (genau das ist passiert).
+    _key230_alt = os.environ.get('DVE_ADMIN')
+    os.environ['DVE_ADMIN'] = 'testkey_v230ah'
+    try:
+        _h230 = _c230.get('/').headers
+        _h230a = _c230.get('/', headers={'X-Admin-Key': 'testkey_v230ah'}).headers
+    finally:
+        if _key230_alt is None:
+            os.environ.pop('DVE_ADMIN', None)
+        else:
+            os.environ['DVE_ADMIN'] = _key230_alt
+    check('v230ah: der Build-Stempel geht nicht mehr an jeden',
+          'x-dve-version' not in {k.lower() for k in _h230.keys()}
+          and 'x-dve-version' in {k.lower() for k in _h230a.keys()},
+          f"ohne Key: {_h230.get('x-dve-version')}")
+    check('v230ah: Kamera, Mikrofon und Standort sind abgeschaltet',
+          'camera=()' in (_h230.get('permissions-policy') or '')
+          and 'geolocation=()' in (_h230.get('permissions-policy') or ''))
+    check('v230ah: HSTS ist fuer die Preload-Liste vorbereitet',
+          'preload' in (_h230.get('strict-transport-security') or ''))
+    _rob230 = _c230.get('/robots.txt')
+    _map230 = _c230.get('/sitemap.xml')
+    check('v230ah: robots.txt haelt Crawler aus App und API heraus',
+          _rob230.status_code == 200 and 'Disallow: /app' in _rob230.text
+          and 'Disallow: /api/' in _rob230.text)
+    check('v230ah: sitemap.xml nennt nur die oeffentlichen Seiten',
+          _map230.status_code == 200 and '/terms' in _map230.text
+          and '/app' not in _map230.text)
+    # Caddy: www leitet um, und die CSP steht dort NICHT mehr (sonst haette
+    # der Browser zwei Regeln und die strengere gewaenne - die App waere tot).
+    _caddy230 = open(os.path.join(HERE, 'Caddyfile'), encoding='utf-8').read()
+    check('v230ah: www leitet dauerhaft auf die Hauptadresse um',
+          'www.{$DOMAIN}' in _caddy230 and 'redir https://{$DOMAIN}{uri} permanent'
+          in _caddy230)
+    check('v230ah: die CSP hat genau EINE Quelle (die App)',
+          'Content-Security-Policy' not in _caddy230
+          and 'Permissions-Policy' in _caddy230)
     check('v203-sec: mit Key antwortet er weiterhin',
           _c203.get('/api/admin/alerts', headers=_H203).status_code == 200)
     check('v203-sec: der schreibende Alerts-Endpunkt ist ebenfalls dicht',

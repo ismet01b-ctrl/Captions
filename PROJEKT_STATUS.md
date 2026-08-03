@@ -3,6 +3,46 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ah AUDIT VON AUSSEN ABGEARBEITET - UND DABEI EINEN STILLEN FEHLER
+  GEFUNDEN.** Ismet hat einen fremden KI-Sicherheitsbericht zu douchko.eu
+  gebracht. Die Befunde stimmten; alle sieben sind erledigt.
+  - **`script-src 'unsafe-inline'` ist raus.** Der Grund dafuer waren 95
+    `onclick=`/`onsubmit=`-Attribute (81 im Panel, 14 in der App). Sie sind
+    alle weg: die Knoepfe tragen nur noch Daten (`data-act`), EIN Verteiler
+    je Seite ruft die Funktion auf, und eine ERLAUBT-Liste ist der Riegel -
+    was nicht darin steht, wird nicht gerufen. Die Inline-Bloecke selbst
+    (je einer pro Seite, die Seiten sind bewusst je EINE Datei) stehen mit
+    ihrem SHA256-Fingerabdruck in der Regel; `_csp()` baut sie aus den
+    Dateien und erneuert sie bei jeder Aenderung.
+  - **`style-src 'unsafe-inline'` BLEIBT** - `style="..."` steht an
+    hunderten Stellen, und ein Fingerabdruck deckt Attribute gar nicht ab.
+    Bewusste Entscheidung, nicht Vergessen.
+  - **Der Browser-Test hat einen Fehler gefunden, den niemand gesucht hat:**
+    die Landing Page holte ihre drei Schriften von Google - und die CSP
+    blockiert Fremd-Hosts seit v92. Die Seite lief also die GANZE ZEIT mit
+    Ersatzschriften (Georgia statt Newsreader). Jetzt liegen sie unter
+    `web/assets/fonts/` (368 KB, OFL, entdoppelt: 4 Dateien fuer 11
+    Schnitte). Nebeneffekt: kein Besucher-Browser meldet sich mehr bei
+    Google - die deutschen Google-Fonts-Abmahnungen gehen damit ins Leere.
+  - **Build-Stempel nur noch fuer den Admin.** `X-DVE-Version` nannte jedem
+    Aufrufer Version, Commit UND Branch.
+  - Dazu: `object-src 'none'`, `Permissions-Policy` (Kamera, Mikrofon,
+    Standort, Bezahl-API aus), HSTS mit `preload`, `robots.txt` +
+    `sitemap.xml`, und **www.douchko.eu leitet auf die Hauptadresse um**
+    (Caddy-Block steht; es fehlt nur noch Ismets DNS-Eintrag).
+  - **Die CSP hat jetzt genau EINE Quelle.** Sie stand in Caddy UND in der
+    App; mit Fingerabdruecken waeren das zwei Fassungen geworden, die
+    auseinanderlaufen - und der Browser erzwingt bei zwei Kopfzeilen BEIDE,
+    die strengere gewinnt. Eine vergessene Zeile in Caddy haette die App
+    lahmgelegt.
+  - **Beweis (Chromium, echter Server, `web/_csp_probe.mjs`):** Landing, App
+    und Panel jeweils **0 CSP-Verstoesse, 0 JS-Fehler**; echter Klick auf
+    eine umgebaute Kachel wirkt (`dve_tool=create`), Enter im
+    Admin-Schluesselfeld entsperrt, Ansichtswechsel im Panel funktioniert;
+    alle 10 Schriftschnitte laden.
+  - Nicht gemacht (und warum): die Renderer-Tests laufen in diesem Container
+    weiterhin nicht (fehlendes KI-Modell, gesperrter Download) - geaendert
+    wurden aber nur Web-Dateien.
 - **v230ag "50+ LANGUAGES" WAR EINE LUEGE - JETZT SIND ES ECHTE 40+.** Auf
   Ismets Frage "entspricht die Landing Page dem Produkt?" nachgemessen:
   Preise, 3 Gratis-Minuten, 7-Tage-Loeschung, 3-Minuten-Limit, 26

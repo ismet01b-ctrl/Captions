@@ -14,6 +14,7 @@ Was NEU vs. v59:
 - Font-Auswahl, Fein-Regler, Momente-Rerender.
 - Preset (Look) als Startpunkt, individuelles Feintuning per JSON-Overrides.
 """
+import base64
 import copy
 import glob
 import hashlib
@@ -2038,17 +2039,65 @@ app = FastAPI(title='DouchkoVE')
 # XSS (CSP), Clickjacking (frame-ancestors/XFO), Token-Leak per Referer
 # (Referrer-Policy) und MIME-Sniffing (nosniff). Caddy setzt sie am Rand
 # zusaetzlich - hier greifen sie auch, falls die App direkt erreichbar ist.
-_CSP = (
-    "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "        # index.html nutzt Inline-<script> + onclick=
-    "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data: blob:; "
-    "media-src 'self' blob:; "
-    "font-src 'self'; "
-    "connect-src 'self' https://api.stripe.com; "
-    "frame-ancestors 'none'; base-uri 'none'; "
-    "form-action 'self' https://checkout.stripe.com"
-)
+# v230ah SCRIPT-CSP OHNE `unsafe-inline`. Bis hierher durfte jedes Inline-
+# Skript laufen - also auch eines, das ein Angreifer irgendwo hineinbekommt.
+# Die Seiten sind bewusst je EINE Datei (Markup, Stil und Skript zusammen);
+# statt sie aufzuteilen, steht der SHA256-Fingerabdruck jedes Inline-Blocks
+# in der Regel. Der Browser laesst dann genau diese Bloecke laufen und sonst
+# keinen. Die Fingerabdruecke werden aus den ausgelieferten Dateien berechnet
+# und bei jeder Aenderung neu (mtime), damit die Regel nach einem Deploy nicht
+# gegen die alte Fassung steht.
+# Style bleibt bei 'unsafe-inline': `style="..."` steht an hunderten Stellen im
+# Markup, und ein Fingerabdruck deckt Attribute gar nicht ab. Der Gewinn waere
+# klein, der Umbau riesig - bewusste Entscheidung, nicht Vergessen.
+_CSP_HTML = ('index.html', 'landing.html', 'admin.html',
+             'imprint.html', 'privacy.html', 'terms.html')
+_CSP_CACHE = {'stempel': None, 'wert': None}
+_CSP_LOCK = threading.Lock()
+
+
+def _inline_script_hashes():
+    """SHA256 jedes Inline-<script>-Blocks der ausgelieferten Seiten."""
+    hashes, stempel = [], []
+    for name in _CSP_HTML:
+        p = os.path.join(HERE, name)
+        try:
+            stt = os.stat(p)
+        except OSError:
+            continue
+        stempel.append((name, stt.st_mtime_ns, stt.st_size))
+        try:
+            txt = open(p, encoding='utf-8').read()
+        except OSError:
+            continue
+        for m in re.finditer(r'<script(?![^>]*\ssrc=)[^>]*>(.*?)</script>',
+                             txt, re.S):
+            h = base64.b64encode(
+                hashlib.sha256(m.group(1).encode('utf-8')).digest()).decode()
+            hashes.append(f"'sha256-{h}'")
+    return tuple(stempel), sorted(set(hashes))
+
+
+def _csp():
+    """Die Regel selbst - mit den Fingerabdruecken der aktuellen Dateien."""
+    with _CSP_LOCK:
+        stempel, hashes = _inline_script_hashes()
+        if _CSP_CACHE['stempel'] == stempel and _CSP_CACHE['wert']:
+            return _CSP_CACHE['wert']
+        wert = (
+            "default-src 'self'; "
+            "script-src 'self' " + ' '.join(hashes) + "; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "media-src 'self' blob:; "
+            "font-src 'self'; "
+            "object-src 'none'; "                 # kein <object>/<embed>
+            "connect-src 'self' https://api.stripe.com; "
+            "frame-ancestors 'none'; base-uri 'none'; "
+            "form-action 'self' https://checkout.stripe.com"
+        )
+        _CSP_CACHE['stempel'], _CSP_CACHE['wert'] = stempel, wert
+        return wert
 
 
 # Build-Stempel: zeigt an, welcher Stand wirklich live ist (per Header sichtbar).
@@ -2071,7 +2120,7 @@ _CSP = (
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230ag'
+DVE_VERSION = 'v230ah'
 
 
 def _build_datei():
@@ -2242,12 +2291,24 @@ async def _security_headers(request, call_next):
     # Invalidierung vergessen (Kauf, Refund, Credits, Factory-Reset).
     if request.method not in ('GET', 'HEAD', 'OPTIONS') and resp.status_code < 400:
         _ttl_drop('adm:')
-    resp.headers['Content-Security-Policy'] = _CSP
+    resp.headers['Content-Security-Policy'] = _csp()
     resp.headers['X-Frame-Options'] = 'DENY'
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    resp.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    resp.headers['X-DVE-Version'] = DVE_BUILD
+    resp.headers['Strict-Transport-Security'] = ('max-age=31536000; '
+                                                 'includeSubDomains; preload')
+    # v230ah: die Seite braucht KEINE Kamera, kein Mikrofon, keinen Standort -
+    # also bekommt sie sie auch nicht. Ein eingeschleustes Skript kann damit
+    # nicht einmal fragen.
+    resp.headers['Permissions-Policy'] = (
+        'camera=(), microphone=(), geolocation=(), payment=(), usb=(), '
+        'magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()')
+    # v230ah: der Build-Stempel ging bisher an JEDEN Aufrufer und nannte
+    # Version, Commit UND Branch. Fuer Fremde ist das nur ein Fingerabdruck
+    # der Fassung; gebraucht wird er von Ismet. Also nur noch mit Admin-Key
+    # (das Panel und /api/health zeigen ihn ohnehin).
+    if _admin_ok(request):
+        resp.headers['X-DVE-Version'] = DVE_BUILD
     return resp
 
 
@@ -6692,6 +6753,41 @@ def security_txt():
                  f"# report, including the ones that turn out to be false\n"
                  f"# alarms.\n"),
         media_type='text/plain; charset=utf-8')
+
+
+@app.get('/robots.txt')
+def robots_txt():
+    """v230ah: Suchmaschinen sollen die Startseite und die Rechtstexte finden -
+    und sonst nichts. Alles hinter /app ist privat (Kundendaten, Jobs), das
+    Panel erst recht; ein Crawler dort erzeugt nur Last und Fehlermeldungen.
+    KEIN Schutz, sondern eine Bitte - der Riegel bleibt die Anmeldung."""
+    basis = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    return Response(
+        content=("User-agent: *\n"
+                 "Allow: /$\n"
+                 "Disallow: /app\n"
+                 "Disallow: /api/\n"
+                 "Disallow: /admin\n"
+                 "Disallow: /assets/\n"
+                 f"\nSitemap: {basis}/sitemap.xml\n"),
+        media_type='text/plain; charset=utf-8')
+
+
+@app.get('/sitemap.xml')
+def sitemap_xml():
+    """v230ah: die oeffentlichen Seiten, mehr gibt es nicht zu indexieren."""
+    basis = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
+    heute = time.strftime('%Y-%m-%d', time.gmtime())
+    seiten = [('/', '1.0'), ('/terms', '0.3'), ('/privacy', '0.3'),
+              ('/imprint', '0.3')]
+    eintraege = ''.join(
+        f'<url><loc>{basis}{p}</loc><lastmod>{heute}</lastmod>'
+        f'<priority>{prio}</priority></url>' for p, prio in seiten)
+    return Response(
+        content=('<?xml version="1.0" encoding="UTF-8"?>'
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                 f'{eintraege}</urlset>'),
+        media_type='application/xml')
 
 
 @app.get('/api/looks')

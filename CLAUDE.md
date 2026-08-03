@@ -1066,6 +1066,30 @@ NUTZER-Ueberschreibung — obwohl niemand etwas geaendert hat.
   einen Kundenbefund nicht reproduziert, hat meistens den ERSTEN Lauf
   getestet.
 
+## Sicherheit: Header + CSP (v230ah)
+- **Keine Ereignis-Attribute im Markup.** `onclick=`/`onsubmit=` zwangen die
+  CSP zu `script-src 'unsafe-inline'` - und das haette auch ein
+  eingeschleustes `<script>` ausgefuehrt. Jeder Knopf traegt nur Daten
+  (`data-act` + `data-arg…`), EIN Verteiler je Seite ruft die Funktion; die
+  ERLAUBT-Liste ist der Riegel. Wer einen neuen Knopf baut, traegt ihn dort
+  ein - der Selftest faellt sonst.
+- **Die CSP hat GENAU EINE Quelle: `_csp()` in `web/server.py`.** Sie enthaelt
+  die SHA256-Fingerabdruecke der Inline-Bloecke und wird bei Datei-Aenderung
+  neu gebaut. Im Caddyfile steht sie NICHT mehr: zwei Kopfzeilen werden vom
+  Browser BEIDE erzwungen (die strengere gewinnt), eine vergessene Zeile
+  haette die App lahmgelegt.
+- **`style-src 'unsafe-inline'` bleibt bewusst** (hunderte `style="…"`;
+  Fingerabdruecke decken Attribute nicht ab).
+- **Ein Fremd-Host im Markup ist unter dieser CSP ein toter Link.** Die
+  Landing holte ihre Schriften von Google und lief deshalb seit v92 mit
+  Ersatzschriften - gefunden hat das erst ein echter Browser-Lauf, keine
+  Quelltext-Suche. Schriften und Assets liegen jetzt lokal (`web/assets/`);
+  das erspart nebenbei die Google-Fonts-Abmahnungen.
+- **Der Nachweis ist `web/_csp_probe.mjs`** (Chromium gegen einen laufenden
+  Server, zaehlt `securitypolicyviolation` und klickt umgebaute Knoepfe). Wer
+  an CSP, Handlern oder Seiten etwas aendert, laesst sie einmal laufen.
+- Build-Stempel (`X-DVE-Version`) geht nur noch an Aufrufer mit Admin-Key.
+
 ## Sicherheit: Lehren aus Audit-Runde 2 (v230d-sec)
 - **Ein mehrstufiger Vorgang wird an JEDER Stufe geprüft, und die
   Berechtigung gehört an den VORGANG, nicht an den einzelnen Request.** Der
@@ -1482,7 +1506,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1944/1945 (Stand v230ag)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1958/1959 (Stand v230ah)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
