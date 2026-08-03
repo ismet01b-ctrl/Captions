@@ -127,7 +127,27 @@ if docker compose exec -T caddy caddy validate --config /etc/caddy/Caddyfile \
     echo "  ! Reload fehlgeschlagen - Caddy wird neu gestartet"
     docker compose restart caddy || true
   fi
-  CADDY_OK=1
+  # v230ai GEGENPROBE: hat Caddy die neue Fassung WIRKLICH uebernommen?
+  # Ein "reload" ohne Fehlermeldung heisst noch nicht, dass die Adresse jetzt
+  # bedient wird - und genau das war tagelang nicht zu sehen. Also nachsehen,
+  # was Caddy gerade FAEHRT (seine Admin-Schnittstelle im Container), und
+  # notfalls hart neu starten.
+  if docker compose exec -T caddy wget -qO- http://127.0.0.1:2019/config/ 2>/dev/null \
+       | grep -q "www\."; then
+    echo "  ✓ Caddy faehrt die neue Fassung (www ist dabei)"
+  else
+    echo "  ! Caddy kennt www noch nicht - harter Neustart"
+    docker compose restart caddy || true
+    sleep 4
+    if docker compose exec -T caddy wget -qO- http://127.0.0.1:2019/config/ 2>/dev/null \
+         | grep -q "www\."; then
+      echo "  ✓ nach dem Neustart ist www dabei"
+    else
+      echo "  ✗ Caddy faehrt www immer noch nicht"
+      CADDY_OK=0
+    fi
+  fi
+  CADDY_OK="${CADDY_OK:-1}"
 else
   echo "  ✗ Caddyfile ist FEHLERHAFT - Caddy laeuft mit der alten Fassung weiter."
   echo "    (Absicht: eine kaputte Konfiguration darf die Seite nicht abschalten.)"

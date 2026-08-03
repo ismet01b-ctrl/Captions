@@ -3,6 +3,19 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ai DER DEPLOY SIEHT NACH, OB CADDY DIE ADRESSE WIRKLICH FAEHRT.**
+  www blieb tot, obwohl Neustart (v230ah-1) und Selbst-Neustart (v230ah-2)
+  eingebaut waren - und weil ich die Versionsnummer bei allen dreien auf
+  'v230ah' stehen liess, war von aussen nicht zu unterscheiden, WELCHER
+  Stand lief. Zwei Lehren, beide alt:
+  - **Wer eine Fassung ausliefert, gibt ihr eine eigene Nummer.** Sonst ist
+    `/api/health` wertlos und jede Diagnose beginnt mit Raten (v222-Lehre,
+    hier von mir selbst gebrochen).
+  - **Ein 'reload' ohne Fehlermeldung ist kein Beweis.** Der Deploy fragt
+    jetzt Caddys eigene Schnittstelle, ob die neue Adresse in der laufenden
+    Konfiguration steht; fehlt sie, harter Neustart, danach nochmal
+    nachsehen - und erst wenn sie dann immer noch fehlt, Meldung ins Panel
+    (v230z-Lehre: ein Netz, das sich nicht selbst prueft, ist Dekoration).
 - **v230ah AUDIT VON AUSSEN ABGEARBEITET - UND DABEI EINEN STILLEN FEHLER
   GEFUNDEN.** Ismet hat einen fremden KI-Sicherheitsbericht zu douchko.eu
   gebracht. Die Befunde stimmten; alle sieben sind erledigt.

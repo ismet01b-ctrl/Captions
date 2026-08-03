@@ -9522,6 +9522,11 @@ def _scenario_betrieb(tmp):
     check('v230ah: der Deploy startet neu, wenn der pull ihn veraendert hat',
           'exec bash "$0"' in _up230 and 'DVE_UPDATE_NEUSTART' in _up230
           and _up230.index('git pull') < _up230.index('exec bash "$0"'))
+    # v230ai: nach dem Laden wird NACHGESEHEN, ob Caddy die Adresse jetzt
+    # wirklich bedient. Ein 'reload' ohne Fehler ist noch kein Beweis -
+    # ein Netz, das sich nicht selbst prueft, ist Dekoration (v230z-Lehre).
+    check('v230ai: der Deploy prueft nach, ob Caddy www wirklich faehrt',
+          '2019/config/' in _up230 and 'restart caddy' in _up230)
     check('v230ah: ein misslungener Caddy-Reload landet im Panel',
           "'caddy', 'Caddy-Konfiguration nicht uebernommen'" in _up230)
     check('v230ah: die CSP hat genau EINE Quelle (die App)',
