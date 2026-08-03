@@ -6,12 +6,35 @@
 set -e
 cd "$(dirname "$0")"
 
+# v230ah-2 DAS SKRIPT AENDERT SICH WAEHREND ES LAEUFT. `git pull` weiter unten
+# schreibt update.sh NEU - und bash liest ein Skript nicht am Stueck ein,
+# sondern haeppchenweise, gemerkt wird nur die BYTE-POSITION. Wird die Datei
+# unter ihm laenger oder kuerzer, macht bash an derselben Position in der
+# NEUEN Datei weiter: mitten in einer Zeile, im schlimmsten Fall in einem
+# halben Befehl. Genau darum ist der Caddy-Neustart aus v230ah beim ersten
+# Deploy nicht gelaufen (www blieb ohne Zertifikat) - der Block stand hinter
+# dem pull und wurde nie sauber erreicht.
+# Loesung: nach dem pull EINMAL neu starten, wenn sich die Datei geaendert
+# hat. Der Marker verhindert eine Endlosschleife.
+_selbst_pruefsumme() { md5sum "$0" 2>/dev/null | cut -c1-32; }
+DVE_UPDATE_HASH_VOR="${DVE_UPDATE_HASH_VOR:-$(_selbst_pruefsumme)}"
+export DVE_UPDATE_HASH_VOR
+
 echo "==> [0/5] System-Check"
 df -h / | tail -1 | awk '{print "  Festplatte: " $4 " frei (" $5 " belegt)"}'
 free -h | awk '/^Mem:/{print "  RAM: " $7 " verfuegbar"}'
 
 echo "==> [1/5] Code aktualisieren"
 git pull
+
+# Hat der pull DIESES Skript veraendert? Dann ab hier neu starten, damit der
+# Rest garantiert aus der neuen Fassung kommt (siehe Erklaerung ganz oben).
+if [ "${DVE_UPDATE_NEUSTART:-0}" != "1" ] \
+   && [ "$(_selbst_pruefsumme)" != "$DVE_UPDATE_HASH_VOR" ]; then
+  echo "  update.sh hat sich geaendert - starte mit der neuen Fassung neu"
+  export DVE_UPDATE_NEUSTART=1
+  exec bash "$0" "$@"
+fi
 
 # v222 WELCHE FASSUNG LAEUFT? Bis v221 stand die Build-Kennung als fester
 # Text im Server ('v213-ansage') und wurde monatelang nicht mitgezogen. Sie
@@ -104,9 +127,29 @@ if docker compose exec -T caddy caddy validate --config /etc/caddy/Caddyfile \
     echo "  ! Reload fehlgeschlagen - Caddy wird neu gestartet"
     docker compose restart caddy || true
   fi
+  CADDY_OK=1
 else
   echo "  ✗ Caddyfile ist FEHLERHAFT - Caddy laeuft mit der alten Fassung weiter."
   echo "    (Absicht: eine kaputte Konfiguration darf die Seite nicht abschalten.)"
+  CADDY_OK=0
+fi
+# Und wenn es schiefging, MUSS es im Panel stehen. Ein stiller Fehlschlag an
+# genau dieser Stelle ist der Grund, warum www tagelang tot war, ohne dass
+# jemand etwas sehen konnte.
+if [ "${CADDY_OK:-1}" = "0" ]; then
+  docker compose exec -T app python - <<'CADDYPY' >/dev/null 2>&1 || true
+import os, sqlite3, time
+con = sqlite3.connect(os.path.join(os.environ.get('DVE_DATA', '/app/web/data'),
+                                   'users.db'), timeout=10)
+con.execute("INSERT INTO alerts (schluessel,betreff,text,gemailt,gelesen,"
+            "created_at) VALUES (?,?,?,0,0,?)",
+            ('caddy', 'Caddy-Konfiguration nicht uebernommen',
+             'Der Deploy ist durchgelaufen, aber Caddy konnte die neue '
+             'Konfiguration nicht laden (Pruefung fehlgeschlagen). Die Seite '
+             'laeuft weiter, aber Aenderungen an Weiterleitungen oder '
+             'Sicherheits-Headern sind NICHT aktiv.', int(time.time())))
+con.commit(); con.close()
+CADDYPY
 fi
 
 echo "==> [5/5] Health-Check (max 30s) ..."

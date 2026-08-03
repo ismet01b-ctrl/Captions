@@ -51,6 +51,16 @@ Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions,
     Jetzt: `caddy validate` -> `caddy reload` (ohne Unterbrechung), Rueckfall
     auf Neustart. Eine fehlerhafte Konfiguration bricht den Deploy NICHT ab -
     Caddy laeuft dann mit der alten Fassung weiter, die Seite bleibt online.
+  - **NACHTRAG 2: der erste Versuch lief gar nicht durch.** www blieb tot,
+    obwohl der Caddy-Neustart eingebaut war. Ursache: `git pull` schreibt
+    update.sh, WAEHREND bash es liest - bash merkt sich nur die Byte-Position
+    und macht danach in der neuen Datei an derselben Stelle weiter, also
+    mitten in einer Zeile. Alles hinter dem pull ist damit Glueckssache; der
+    Caddy-Block stand genau dort. Jetzt startet update.sh sich nach dem pull
+    EINMAL selbst neu, wenn seine Pruefsumme sich geaendert hat. Und ein
+    misslungener Caddy-Reload schreibt eine Meldung ins Panel - ein stiller
+    Fehlschlag an dieser Stelle war der Grund, warum tagelang niemand etwas
+    sehen konnte.
   - Nicht gemacht (und warum): die Renderer-Tests laufen in diesem Container
     weiterhin nicht (fehlendes KI-Modell, gesperrter Download) - geaendert
     wurden aber nur Web-Dateien.

@@ -9514,6 +9514,16 @@ def _scenario_betrieb(tmp):
     check('v230ah: eine kaputte Caddy-Konfiguration schaltet die Seite nicht ab',
           'caddy validate' in _up230_cmd
           and _up230_cmd.index('caddy validate') < _up230_cmd.index('caddy reload'))
+    # v230ah-2 EIN SKRIPT, DAS SICH SELBST UEBERSCHREIBT, MUSS NEU STARTEN.
+    # `git pull` schreibt update.sh, WAEHREND bash es liest; bash merkt sich
+    # nur die Byte-Position und macht in der NEUEN Datei an derselben Stelle
+    # weiter - mitten in einer Zeile. Genau daran ist der Caddy-Neustart beim
+    # ersten Deploy gescheitert (www blieb ohne Zertifikat).
+    check('v230ah: der Deploy startet neu, wenn der pull ihn veraendert hat',
+          'exec bash "$0"' in _up230 and 'DVE_UPDATE_NEUSTART' in _up230
+          and _up230.index('git pull') < _up230.index('exec bash "$0"'))
+    check('v230ah: ein misslungener Caddy-Reload landet im Panel',
+          "'caddy', 'Caddy-Konfiguration nicht uebernommen'" in _up230)
     check('v230ah: die CSP hat genau EINE Quelle (die App)',
           'Content-Security-Policy' not in _caddy230
           and 'Permissions-Policy' in _caddy230)
