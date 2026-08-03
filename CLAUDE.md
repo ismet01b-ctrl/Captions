@@ -833,7 +833,15 @@ Muster, Tremor statt Weißrauschen. Keine Anim darf mechanisch/synthetisch/
 1-Frame-zufällig wirken. Katalog: `ANIM_LIST`; Keyword→Anim-Heuristik
 `ANIM_HINTS`/`anim_for` (DE+EN, an Satzgrenzen gekappt via `anim_ctx`).
 
-## Aufloesung (v149)
+## Aufloesung (v149, 4K abgeschaltet in v230al)
+**4K ist seit v230al aus der Oberflaeche raus** (Ismets Entscheidung): die
+Plattformen liefern ohnehin nur 1080p aus, die Stufe kostete doppelt und war
+die einzige, die am Speicher starb. `DVE_4K=1` schaltet sie wieder frei;
+`_4k_erlaubt()` ist der EINE Riegel, an dem Preis, Klemmung und Erkennung
+haengen. Abgeschaltet heisst nicht ungeprueft - der Selftest fährt den Pfad
+mit gesetztem Schalter weiter durch.
+
+
 `output.height` ist das Zielmass der **kurzen Kante**, nicht der Bildhoehe
 (hoch 1080x1920, quer 1920x1080). `output.quality: 4k` hebt es auf 2160.
 Es wird **nie hochskaliert** — `H = min(H, src_h)`. 4K kostet im Web-Produkt
@@ -1541,7 +1549,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1976/1977 (Stand v230ak)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1980/1981 (Stand v230al)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

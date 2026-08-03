@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230al 4K IST AUS DEM PRODUKT RAUS** (Ismets Entscheidung). Begruendung
+  ist geschaeftlich, nicht technisch:
+  - **Beim Zuschauer kam es nie an.** TikTok, Reels und Shorts rechnen jedes
+    Video auf 1080p herunter - der Kunde zahlte den doppelten Satz und die
+    doppelte Renderzeit fuer ein identisches Ergebnis.
+  - **Die teuerste Stufe war die fragilste** (Speicher-Tod, v230aj/v230ak).
+    Das ist die schlechteste Kombination, die ein Feature haben kann.
+  - **Null Nachfrage-Signal**: kein Kunde hat je danach gefragt.
+  - **Der Code bleibt vollstaendig.** `DVE_4K=1` in der .env schaltet die
+    Stufe wieder frei; abgeschaltet heisst NICHT ungeprueft - die Tests
+    fahren den Pfad mit gesetztem Schalter weiter durch, sonst waere er beim
+    Wiedereinschalten verrottet.
+  - Serverseitig wird GEKLEMMT, nicht verworfen (v230f-Lehre): eine
+    2160er-Hoehe aus einem alten Setup wird zu 1080, nicht zu "Feld fehlt".
+  - Angepasst: Aufloesungs-Regler in der App, Preis-Zeile und FAQ auf der
+    Landing. Vier Tests wurden UMGEDREHT statt geloescht.
 - **v230ak NIE WIEDER EIN RENDER, DER EINFACH STIRBT.** Ismets Ansage nach
   dem 4K-Absturz. Drei Stufen, jede fuer sich geprueft:
   1. **Die Engine bricht selbst ab, bevor das System sie abschiesst.**

@@ -6175,8 +6175,9 @@ def _scenario_security(tmp):
     ov = SV._sanitize_overrides({'output': {'height': 4320, 'master': True},
                                  'effects': {'blender_samples': 99999, 'bg_blur': 0.5},
                                  'boeses': {'x': 1}})
+    # v230al: der Hoehen-Deckel haengt jetzt am 4K-Schalter (ohne ihn 1080).
     check('cfg_overrides: Whitelist + Ressourcen-Deckel',
-          ov.get('output', {}).get('height') == 2160
+          ov.get('output', {}).get('height') == 1080
           and 'master' not in ov.get('output', {})
           and ov['effects']['blender_samples'] == 256
           and ov['effects']['bg_blur'] == 0.5 and 'boeses' not in ov)
@@ -7404,9 +7405,20 @@ def _scenario_betrieb(tmp):
                             f'testsrc=size={_sz}:rate=10:duration=1',
                             '-pix_fmt', 'yuv420p', _pth], check=True,
                            capture_output=True)
-    check('v157: 4K als HOEHE wird als 4K erkannt',
-          SV._will_uhd({'output': {'height': 2160}}, _uhd157) is True
-          and SV._will_uhd({'output': {'height': 1080}}, _uhd157) is False)
+    # v230al: die Erkennung wird MIT Schalter geprueft - abgeschaltet heisst
+    # nicht ungeprueft (sonst verrottet der Pfad bis zum Wiedereinschalten).
+    _alt157 = os.environ.pop('DVE_4K', None)
+    check('v230al: ohne Schalter wird nichts als 4K erkannt',
+          SV._will_uhd({'output': {'height': 2160}}, _uhd157) is False)
+    os.environ['DVE_4K'] = '1'
+    try:
+        check('v157: 4K als HOEHE wird als 4K erkannt',
+              SV._will_uhd({'output': {'height': 2160}}, _uhd157) is True
+              and SV._will_uhd({'output': {'height': 1080}}, _uhd157) is False)
+    finally:
+        os.environ.pop('DVE_4K', None)
+        if _alt157 is not None:
+            os.environ['DVE_4K'] = _alt157
     check('v157: 4K kostet wirklich das Doppelte',
           SV.credits_of(SV.cost_seconds(90, uhd=True))
           == 2 * SV.credits_of(SV.cost_seconds(90))
@@ -7424,12 +7436,27 @@ def _scenario_betrieb(tmp):
     check('v157: abgelehntes 4K wird auch aus der Hoehe zurueckgesetzt',
           _srv157.count("overrides['output']['height'] = 1080") == 3)
     _ui157 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
-    check('v157: 4K steht als dritte Stufe neben 720p und 1080p',
-          '720p:720,1080p:1080,4K &middot; 2&times; credits:2160' in _ui157
+    # v230al: 4K ist aus der Oberflaeche RAUS (Ismets Entscheidung, kaufmaennisch:
+    # die Plattformen liefern ohnehin nur 1080p aus). Der Test wird nicht
+    # geloescht, sondern UMGEDREHT - und der Code-Pfad bleibt ueber den
+    # Schalter geprueft, damit er beim Wiedereinschalten nicht verrottet.
+    check('v230al: 4K steht NICHT mehr in der Oberflaeche',
+          '720p:720,1080p:1080"' in _ui157
+          and '4K &middot; 2&times; credits:2160' not in _ui157
           and 'data-cfg="output.quality"' not in _ui157)
-    check('v157: die Hoehen-Stufe kommt durch die Whitelist',
-          SV._sanitize_overrides({'output': {'height': 2160}})
-          == {'output': {'height': 2160}})
+    _alt4k = os.environ.pop('DVE_4K', None)
+    try:
+        check('v230al: ohne Schalter wird 4K auf 1080p geklemmt, nicht verworfen',
+              SV._sanitize_overrides({'output': {'height': 2160}})
+              == {'output': {'height': 1080}})
+        os.environ['DVE_4K'] = '1'
+        check('v157/v230al: mit Schalter kommt die Stufe weiterhin durch',
+              SV._sanitize_overrides({'output': {'height': 2160}})
+              == {'output': {'height': 2160}})
+    finally:
+        os.environ.pop('DVE_4K', None)
+        if _alt4k is not None:
+            os.environ['DVE_4K'] = _alt4k
 
     # ======= v159: Captions folgen dem, was gesagt wird (Audit-Batch) =======
     # Ergebnis eines Audits mit 47 Agenten: 41 gemeldete Luecken, 29 haben die
@@ -12106,29 +12133,41 @@ def _scenario_betrieb(tmp):
                             f'testsrc=size={_sz}:rate=10:duration=1',
                             '-pix_fmt', 'yuv420p', _pth], check=True,
                            capture_output=True)
-    check('v149: 4K nur wenn die Quelle es hergibt',
-          SV._will_uhd({'output': {'quality': '4k'}}, _uh149) is True
-          and SV._will_uhd({'output': {'quality': '4k'}}, _hd149) is False
-          and SV._will_uhd({'output': {'quality': 'hd'}}, _uh149) is False,
-          f'1440p {SV._will_uhd({"output": {"quality": "4k"}}, _uh149)}, '
-          f'360p {SV._will_uhd({"output": {"quality": "4k"}}, _hd149)}')
+    # v230al: der 4K-Pfad wird MIT Schalter geprueft - abgeschaltet heisst
+    # nicht ungeprueft, sonst ist er beim Wiedereinschalten verrottet.
+    _alt149 = os.environ.pop('DVE_4K', None)
+    check('v230al: ohne Schalter gilt kein Job als 4K (und kostet nichts extra)',
+          SV._will_uhd({'output': {'quality': '4k'}}, _uh149) is False)
+    os.environ['DVE_4K'] = '1'
+    try:
+        check('v149: 4K nur wenn die Quelle es hergibt',
+              SV._will_uhd({'output': {'quality': '4k'}}, _uh149) is True
+              and SV._will_uhd({'output': {'quality': '4k'}}, _hd149) is False
+              and SV._will_uhd({'output': {'quality': 'hd'}}, _uh149) is False,
+              f'1440p {SV._will_uhd({"output": {"quality": "4k"}}, _uh149)}, '
+              f'360p {SV._will_uhd({"output": {"quality": "4k"}}, _hd149)}')
+    finally:
+        os.environ.pop('DVE_4K', None)
+        if _alt149 is not None:
+            os.environ['DVE_4K'] = _alt149
     check('v149: Erstattung gibt den WIRKLICH gezahlten Betrag zurueck',
           SV._job_cost({'dauer': 60, 'cost_sec': 120}) == 120
           and SV._job_cost({'dauer': 60, 'uhd': True}) == 120
           and SV._job_cost({'dauer': 60}) == 60)
     check('v149: freie Hoehen bleiben gedeckelt, quality nur als Stufe',
           SV._sanitize_overrides({'output': {'height': 9999, 'quality': '8k'}})
-          == {'output': {'height': 2160}}
+          == {'output': {'height': 1080}}
           and SV._sanitize_overrides({'output': {'quality': '4k'}})
-          == {'output': {'quality': '4k'}})
+          == {'output': {'quality': 'hd'}})
     _ui149 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
     # v157: 4K steht als HOEHEN-Stufe in derselben Zeile wie 720p/1080p
     # (Ismets Wunsch), nicht mehr als eigenes Quality-Feld.
-    check('v149/v157: die UI nennt Aufpreis und Upscale-Grenze beim Namen',
+    # v230al: kein Aufpreis mehr zu nennen - die Stufe gibt es nicht mehr.
+    # Die andere Zusage (nie hochskalieren) bleibt und wird weiter geprueft.
+    check('v230al: die UI nennt die Upscale-Grenze, aber keinen 4K-Aufpreis',
           'data-cfg="output.height"' in _ui149
-          and '2&times; credits' in _ui149
-          and 'we never upscale' in _ui149
-          and 'at least 1440p' in _ui149)
+          and '2&times; credits' not in _ui149
+          and 'we never upscale' in _ui149)
 
     # ============ v147: Render-Fehler ins Panel statt ins Postfach ============
     # Ismets Wunsch: keine Mail mehr bei fehlgeschlagenem Render, nur noch im
@@ -12833,9 +12872,14 @@ def _scenario_v98(tmp):
     # v157: 4K ist zurueck - als dritte Stufe neben 720p/1080p, mit
     # verdoppeltem Credit-Satz und nur ab 1440p Quelle. Die alte Aussage
     # "Server cappt auf 1080p" gilt seit v149 nicht mehr.
-    check('v157: 4K ist eine ehrliche Stufe (Aufpreis + Quellen-Grenze genannt)',
-          '4K &middot; 2&times; credits:2160' in _idx
-          and 'we never upscale' in _idx and 'at least 1440p' in _idx)
+    # v230al: die Stufe ist raus - die Seite darf sie also auch nicht mehr
+    # bewerben. Der Rest der Zusage (nie hochskalieren) bleibt.
+    check('v230al: die App bewirbt kein 4K mehr',
+          '4K &middot; 2&times; credits:2160' not in _idx
+          and 'we never upscale' in _idx)
+    _land_al = open(os.path.join(HERE, 'web', 'landing.html'), encoding='utf-8').read()
+    check('v230al: auch die Landing verspricht kein 4K mehr',
+          '4K renders cost' not in _land_al and '4K costs double' not in _land_al)
     check('Frontend: Billing-Historie eigene Funktion + SRT-Buttons',
           'renderBillingHistory' in _idx and '/api/subtitles/' in _idx
           and 'wmUpsell' in _idx)

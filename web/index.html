@@ -2354,11 +2354,16 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
             <div class="seg" data-cfg="effects.sfx_dichte" data-opts="Sparse:sparsam,Balanced:normal,Busy:dicht"></div>
           </div>
           <div class="setting"><div class="setting-label">Resolution of the finished video</div>
+            <!-- v230al: 4K ist raus. Nicht technisch, sondern geschaeftlich:
+                 TikTok, Reels und Shorts rechnen jedes Video auf 1080p
+                 herunter - der Kunde zahlte den doppelten Satz fuer ein
+                 Ergebnis, das beim Zuschauer identisch ankommt. Der Code
+                 bleibt, `DVE_4K=1` schaltet die Stufe wieder frei. -->
             <div class="setting-desc">Sets the short edge: 1080p gives 1080&times;1920 upright
               and 1920&times;1080 wide. 720p is smaller and quicker.
-              4K doubles the credit cost. We never upscale: settings above your
-              upload's own resolution are greyed out.</div>
-            <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080,4K &middot; 2&times; credits:2160"></div>
+              We never upscale: settings above your upload's own resolution
+              are greyed out.</div>
+            <div class="seg" data-cfg="output.height" data-opts="720p:720,1080p:1080"></div>
             <div id="resNote" class="setting-desc" style="display:none; margin-top:8px;"></div>
             <div id="uhdNote" class="setting-desc" style="display:none; margin-top:8px; color:var(--acc);"></div>
           </div>

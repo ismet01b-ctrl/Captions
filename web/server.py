@@ -246,6 +246,17 @@ def _quelle_kurze_kante(pfad):
         return 0
 
 
+# v230al 4K IST AUS DER OBERFLAECHE RAUS (Ismets Entscheidung). Begruendung
+# geschaeftlich, nicht technisch: TikTok, Reels und Shorts rechnen jedes Video
+# auf 1080p herunter - der Kunde zahlt also den doppelten Satz und die doppelte
+# Renderzeit fuer ein Ergebnis, das bei seinem Zuschauer identisch ankommt. Und
+# ausgerechnet diese teuerste Stufe war die fragilste (Speicher-Tod, v230ak).
+# Der CODE bleibt vollstaendig: ein `DVE_4K=1` in der .env schaltet die Stufe
+# wieder frei - Ausbauen und spaeter neu bauen waere Verschwendung.
+def _4k_erlaubt():
+    return str(os.environ.get('DVE_4K', '')).strip().lower() in ('1', 'true', 'ja', 'yes')
+
+
 def _will_uhd(overrides, pfad):
     """Wird dieser Job wirklich in 4K gerendert? Nur dann darf er auch das
     Doppelte kosten. Der Wunsch allein reicht nicht - eine 1080p-Quelle
@@ -261,6 +272,8 @@ def _will_uhd(overrides, pfad):
     # wuerde 4K gerendert, aber nur der einfache Satz berechnet.
     if q not in ('4k', 'uhd') and h < 2160:
         return False
+    if not _4k_erlaubt():
+        return False                   # v230al: Stufe abgeschaltet
     return _quelle_kurze_kante(pfad) >= UHD_MIN_KURZE_KANTE
 
 
@@ -2120,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230ak'
+DVE_VERSION = 'v230al'
 
 
 def _build_datei():
@@ -3113,13 +3126,19 @@ def _sanitize_overrides(ov):
     if isinstance(o, dict):
         if 'height' in o:
             try:
-                o['height'] = min(max(int(o['height']), 480), 2160)
+                # v230al: Deckel haengt am Schalter. Geklemmt wird, NICHT
+                # verworfen - ein stiller Wegfall schaltet ein Feature ab,
+                # ohne dass es jemand merkt (v230f-Lehre).
+                _max_h = 2160 if _4k_erlaubt() else 1080
+                o['height'] = min(max(int(o['height']), 480), _max_h)
             except Exception:
                 o.pop('height', None)
         # v149: 4K nur als bekannte Stufe, nie als freie Zahl. Die Hoehe
         # rechnet die Engine selbst aus dem Quellformat aus.
         if 'quality' in o and str(o.get('quality')).lower() not in ('hd', '4k'):
             o.pop('quality', None)
+        if not _4k_erlaubt() and str(o.get('quality', '')).lower() in ('4k', 'uhd'):
+            o['quality'] = 'hd'        # v230al: geklemmt, nicht entfernt
         o.pop('master', None)          # ProRes-Master nie per Override (Riesen-Files)
         # v101d: Safe-Zone-Plattform - nur bekannte Masken zulassen.
         if 'platform' in o and str(o.get('platform')).lower() not in \
@@ -3139,7 +3158,8 @@ def _sanitize_overrides(ov):
         if 'speed' in o and str(o.get('speed')).lower() not in \
                 ('schnell', 'standard', 'fein'):
             o.pop('speed', None)
-        _klemm_zahlen(o, {'height': (480, 2160), 'crf': (14, 34)},
+        _klemm_zahlen(o, {'height': (480, 2160 if _4k_erlaubt() else 1080),
+                          'crf': (14, 34)},
                       allgemein=(0.0, 10000.0))
     e = out.get('effects')
     if isinstance(e, dict):
