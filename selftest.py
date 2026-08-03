@@ -9487,6 +9487,56 @@ def _scenario_betrieb(tmp):
           and 'left | {mem_zeile()}' in _rsrc230aj
           and _rsrc230aj.count('print(mem_zeile())') >= 1)
 
+    # ===== v230ak NIE WIEDER EIN RENDER, DER EINFACH STIRBT =============
+    # Ismets Ansage nach dem 4K-Absturz: "Es soll ja nie wieder passieren."
+    # Drei Stufen, jede fuer sich geprueft: die Engine bricht selbst ab, bevor
+    # das System sie abschiesst; der Server erkennt beide Tode; und statt
+    # "kein Video" bekommt der Kunde 1080p plus Erstattung des Aufschlags.
+    for _rc, _log, _soll in ((3, [], True), (-9, [], True), (137, [], True),
+                             (1, ['ERROR: not enough memory - stopping'], True),
+                             (1, ['ERROR: irgendwas anderes'], False),
+                             (0, [], False)):
+        if _SV198._ist_speicher_tod(_rc, _log) != _soll:
+            check('v230ak: Speicher-Tod wird erkannt', False,
+                  f'rc={_rc} log={_log} erwartet {_soll}')
+            break
+    else:
+        check('v230ak: Speicher-Tod wird erkannt (Abbruch, Kill und MemoryError)',
+              True, '6 Faelle')
+    _srv_ak = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230ak: nach einem Speicher-Tod laeuft 4K einmal in 1080p nach',
+          "uhd_fallback" in _srv_ak and "out_cfg['height'] = 1080" in _srv_ak)
+    check('v230ak: der 4K-Aufschlag wird dabei erstattet',
+          "4K-Aufschlag" in _srv_ak
+          and _srv_ak.index('_refund_credits(uid, f\'{jid} 4K-Aufschlag\'')
+              < _srv_ak.index('rc, log, out = _run_render(jid, extra_args=_extra)',
+                              _srv_ak.index('uhd_fallback')))
+    check('v230ak: der Kunde erfaehrt den Tausch (kein stiller Downgrade)',
+          'did not fit into this' in _srv_ak
+          and 'id="jobHinweis"' in open(os.path.join(HERE, 'web', 'index.html'),
+                                        encoding='utf-8').read())
+    _rsrc_ak = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230ak: die Engine bricht VOR dem Kill selbst ab',
+          'def mem_wache(' in _rsrc_ak and 'sys.exit(3)' in _rsrc_ak
+          and 'mem_wache(fi,' in _rsrc_ak)
+    # Und die Wache muss WIRKLICH ausloesen - nicht nur dastehen.
+    import render as _R_ak
+    _deckel_alt = _R_ak._MEM_DECKEL
+    _R_ak._MEM_DECKEL, _R_ak._MEM_GEWARNT = 0.001, False
+    try:
+        _geworfen = False
+        try:
+            _R_ak.mem_wache(42, 100)
+        except SystemExit as _e:
+            _geworfen = (_e.code == 3)
+        check('v230ak: die Wache bricht bei vollem Speicher wirklich ab',
+              _geworfen)
+        _R_ak._MEM_DECKEL, _R_ak._MEM_GEWARNT = 10000.0, False
+        _R_ak.mem_wache(43, 100)              # viel Luft -> kein Abbruch
+        check('v230ak: mit Luft laeuft sie durch', True)
+    finally:
+        _R_ak._MEM_DECKEL, _R_ak._MEM_GEWARNT = _deckel_alt, False
+
     # v230ah DER BUILD-STEMPEL GEHT NUR NOCH AN DEN ADMIN.
     _c230 = _TC198(_SV198.app, base_url='https://test')
     # Den Admin-Key NUR fuer diese Pruefung setzen und danach zurueckgeben -

@@ -2120,7 +2120,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230aj'
+DVE_VERSION = 'v230ak'
 
 
 def _build_datei():
@@ -4127,6 +4127,18 @@ def _notify_admin(key, subject, body, routine=False, mail=True):
         return False
 
 
+def _ist_speicher_tod(rc, log):
+    """War es der Speicher? Drei Wege, alle drei zaehlen: die Engine bricht
+    seit v230ak selbst mit 3 ab, das Betriebssystem schiesst mit -9 (bzw. 137)
+    ab, und Python selbst wirft im Notfall MemoryError."""
+    if rc == 3:
+        return True
+    if rc is not None and (rc < 0 and -rc == 9 or rc == 137):
+        return True
+    text = '\n'.join((log or [])[-40:])
+    return 'not enough memory' in text or 'MemoryError' in text
+
+
 def _render_fehler_text(rc, log):
     """v230aj: WARUM ist der Render gestorben? Bis hier stand in jedem Fall
     'Render failed.' - auch dann, wenn das Betriebssystem den Prozess wegen
@@ -4601,6 +4613,41 @@ def run_job(jid):
                       '(AI key missing). Please contact support.')
         _maybe_refund(jid)
         return
+    # v230ak NIE WIEDER EIN 4K-RENDER, DER EINFACH STIRBT. Reisst der Prozess
+    # den Speicherdeckel, bricht die Engine seit v230ak selbst sauber ab
+    # (Rueckgabe 3); wird er trotzdem abgeschossen, kommt -9 an. In BEIDEN
+    # Faellen ist das Ergebnis fuer den Kunden dasselbe: kein Video. Statt ihn
+    # damit stehen zu lassen, laeuft der Job EINMAL in 1080p nach - das
+    # schafft dieselbe Maschine sicher - und der 4K-Aufschlag wird erstattet.
+    # Kein stiller Tausch: die Meldung sagt, was passiert ist.
+    if (_ist_speicher_tod(rc, log) and j.get('uhd')
+            and not j.get('uhd_fallback')):
+        j['uhd_fallback'] = True
+        ov = dict(j.get('cfg_overrides') or {})
+        out_cfg = dict(ov.get('output') or {})
+        out_cfg['height'] = 1080
+        out_cfg.pop('quality', None)
+        ov['output'] = out_cfg
+        j['cfg_overrides'] = ov
+        # Der Aufschlag wird zurueckgegeben, BEVOR neu gerechnet wird - ein
+        # Absturz im zweiten Lauf darf das Geld nicht verschlucken.
+        uid = j.get('user_id')
+        alt_kosten = _job_cost(j)
+        neu_kosten = cost_seconds(j.get('dauer', 0), uhd=False)
+        if uid and alt_kosten > neu_kosten and _render_charged(uid, jid):
+            _refund_credits(uid, f'{jid} 4K-Aufschlag',
+                            alt_kosten - neu_kosten)
+        j['uhd'] = False
+        j['cost_sec'] = neu_kosten
+        set_state(jid, status='laeuft', progress=0.05,
+                  phase='4K did not fit in memory - rendering 1080p instead')
+        print(f'[{jid}] 4K gescheitert (Speicher) - zweiter Lauf in 1080p')
+        rc, log, out = _run_render(jid, extra_args=_extra)
+        if rc == 0 and os.path.exists(out):
+            set_state(jid, hinweis='Your 4K render did not fit into this '
+                                   'server\'s memory, so we delivered 1080p '
+                                   'and refunded the 4K surcharge.')
+
     for line in reversed(log):                 # letzte FEHLER-Zeile gewinnt
         if line.startswith('ERROR:') or line.startswith('FEHLER:'):
             # v80o: Kontext mitliefern - die Zeilen um den Fehler herum

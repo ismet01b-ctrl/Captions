@@ -1468,6 +1468,18 @@ eigentliche Prozess ist spurlos weg. Deshalb:
   ONNX- und MediaPipe-Modelle. Der Container-Deckel steht in
   `docker-compose.yml` (`DVE_MEM_LIMIT`, Standard 6g).
 
+## Nie wieder ein stiller Render-Tod (v230ak)
+Drei Stufen, in dieser Reihenfolge zu pruefen, wenn ein Job "einfach weg" ist:
+- **`mem_wache()` in `render.py`** liest den Verbrauch je Bild; ab 80 %
+  aufraeumen + warnen, ab 93 % `sys.exit(3)` mit Grund. Wer eine neue
+  speicherhungrige Stufe baut, faellt hier auf, nicht beim Kunden.
+- **`_ist_speicher_tod(rc, log)` im Server** kennt alle drei Formen: eigener
+  Abbruch (3), Abschuss (-9 / 137), MemoryError im Log.
+- **Rueckfall auf 1080p**: ein 4K-Job laeuft nach einem Speicher-Tod EINMAL
+  in 1080p nach; der Aufschlag wird VOR dem zweiten Lauf erstattet, und der
+  Kunde sieht den Hinweis im Ergebnis-Bildschirm. Ein stiller Downgrade
+  waere schlimmer als der Fehler.
+
 ## Renderzeit (v227) — messen ist Pflicht, raten ist verboten
 Jeder Render endet mit `Timing (total …)`: alle Phasen absteigend nach Kosten
 plus `other` für alles Ungemessene. Wer an der Geschwindigkeit dreht, liest
@@ -1529,7 +1541,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1969/1970 (Stand v230aj)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1976/1977 (Stand v230ak)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

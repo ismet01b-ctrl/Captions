@@ -2572,6 +2572,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           </div>
           <button class="btn" id="wmUpsellBtn" style="min-width:150px;">Remove watermark</button>
         </div>
+        <!-- v230ak: Hinweis zum Render selbst - z.B. wenn 4K nicht in den
+             Speicher passte und stattdessen 1080p geliefert wurde. Der Kunde
+             muss das ERFAHREN; ein stiller Tausch waere Betrug am Erwarteten. -->
+        <p id="jobHinweis" class="hidden" style="margin-top:12px; color:#e0a33e;
+           font-size:13px; font-weight:600;"></p>
         <!-- v124: Low-Balance-Hinweis im richtigen Moment (nach dem Render), dezent. -->
         <p id="lowBalHint" class="hidden" style="margin-top:12px; color:var(--mut);
            font-size:13px;">Your credit balance is nearly empty.
@@ -5547,6 +5552,7 @@ async function pollRender() {
     $('#progressEta').textContent = st.eta_sec != null ? fmtDur(st.eta_sec) : '–';
     if (st.status === 'fertig') {
       State.progTarget = 1;
+      State.hinweis = st.hinweis || '';       // v230ak: z.B. 4K -> 1080p
       State.silentScore = (typeof st.silent_score === 'number') ? st.silent_score : null;
       State.silentHints = st.silent_hints || [];
       if (State.progRAF) cancelAnimationFrame(State.progRAF);
@@ -5801,6 +5807,12 @@ function renderSuccess() {
   // Collage - er schaut das Video an; der Knopf war nur ein weiterer Knopf.
   // Das Bild wird beim Render weiter erzeugt und bleibt ueber seinen
   // Endpunkt erreichbar (Support/Fehlersuche, alte Links).
+  // v230ak: Hinweis zum Render (z.B. 4K passte nicht in den Speicher).
+  const jh = $('#jobHinweis');
+  if (jh) {
+    jh.classList.add('hidden');
+    if (State.hinweis) { jh.textContent = State.hinweis; jh.classList.remove('hidden'); }
+  }
   // v98: Wasserzeichen-Upsell nur fuer Nicht-Kaeufer einblenden.
   // v124: dazu der Low-Balance-Hinweis, wenn nach diesem Render weniger als
   // 1 Credit uebrig ist. Kaeufer sehen nur den Balance-Hinweis, nie den Upsell.

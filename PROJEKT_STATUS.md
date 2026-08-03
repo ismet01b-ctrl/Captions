@@ -3,6 +3,24 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ak NIE WIEDER EIN RENDER, DER EINFACH STIRBT.** Ismets Ansage nach
+  dem 4K-Absturz. Drei Stufen, jede fuer sich geprueft:
+  1. **Die Engine bricht selbst ab, bevor das System sie abschiesst.**
+     `mem_wache()` liest den Verbrauch bei JEDEM Bild: ab 80 % wird
+     aufgeraeumt und einmal gewarnt, ab 93 % sauber beendet - mit Grund im
+     Klartext. Ein sauberer Abbruch ist kein schoenes Ergebnis, aber ein
+     ehrliches: der Kunde erfaehrt, was los war, und behaelt sein Guthaben.
+  2. **Der Server erkennt BEIDE Tode** (eigener Abbruch = 3, Abschuss durch
+     das System = -9 bzw. 137, dazu MemoryError im Log).
+  3. **Statt "kein Video" gibt es 1080p.** Nach einem Speicher-Tod laeuft der
+     Job EINMAL in 1080p nach - das schafft dieselbe Maschine sicher -, der
+     4K-Aufschlag wird ERSTATTET (vor dem zweiten Lauf, damit ein weiterer
+     Absturz das Geld nicht verschluckt), und der Kunde sieht im
+     Ergebnis-Bildschirm, was passiert ist. Kein stiller Tausch.
+  - Was das NICHT ist: eine Erklaerung, warum 4K nicht passt. Die Zahl
+    liefert erst der naechste echte 4K-Lauf (v230aj misst mit). Passt es
+    dann immer noch nicht, ist die Antwort mehr Speicher fuer den Container
+    (`DVE_MEM_LIMIT`) - der steht jetzt im Panel unter System.
 - **v230aj EIN ABGESCHOSSENER RENDER SAGT JETZT, WARUM.** Ismets 4K-Job
   (3840x2160) starb bei Bild 100 von 293. Im Log stand nur ffmpegs
   "Broken pipe" - das ist die Meldung des ZULIEFERERS, der ins Leere

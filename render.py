@@ -86,6 +86,51 @@ def mem_zeile():
     return f"Memory: {peak:.2f} GB peak (no container limit)"
 
 
+_MEM_DECKEL = None            # GB, einmal beim Start ermittelt
+_MEM_GEWARNT = False
+
+
+def rss_gb():
+    """Aktueller Speicherverbrauch dieses Prozesses in GB - billig genug, um
+    ihn JEDES Bild zu lesen (/proc, kein Fremdpaket)."""
+    try:
+        with open('/proc/self/statm') as f:
+            seiten = int(f.read().split()[1])
+        return seiten * os.sysconf('SC_PAGE_SIZE') / (1024 ** 3)
+    except Exception:
+        return 0.0
+
+
+def mem_wache(fi, gesamt_frames):
+    """v230ak: NIE WIEDER STILL STERBEN. Reisst der Prozess den Speicherdeckel,
+    schiesst ihn das Betriebssystem ohne Vorwarnung ab - im Log steht dann nur
+    ffmpegs 'Broken pipe', der Kunde sieht 'Render failed', und niemand weiss
+    warum (Ismets 4K-Job, Bild 100 von 293).
+    Diese Wache liest den Verbrauch mit und greift VOR dem Kill ein:
+      ab 80 % - aufraeumen, was aufraeumbar ist, und einmal warnen
+      ab 93 % - sauber abbrechen MIT Grund; der Server erstattet automatisch
+    Ein sauberer Abbruch ist kein schoenes Ergebnis, aber ein ehrliches: der
+    Kunde erfaehrt, was los war, und behaelt sein Guthaben."""
+    global _MEM_GEWARNT
+    if not _MEM_DECKEL:
+        return
+    jetzt = rss_gb()
+    anteil = jetzt / _MEM_DECKEL
+    if anteil >= 0.93:
+        print(f"ERROR: not enough memory - stopping at frame {fi}/{gesamt_frames}. "
+              f"Used {jetzt:.2f} GB of the {_MEM_DECKEL:.1f} GB limit. "
+              f"A 4K render needs more headroom than this server currently "
+              f"allows; 1080p works, or raise DVE_MEM_LIMIT.", flush=True)
+        sys.exit(3)
+    if anteil >= 0.80 and not _MEM_GEWARNT:
+        _MEM_GEWARNT = True
+        import gc
+        gc.collect()
+        print(f"WARNING: memory at {anteil * 100:.0f}% "
+              f"({jetzt:.2f} of {_MEM_DECKEL:.1f} GB) - freeing caches.",
+              flush=True)
+
+
 def zeit_report(gesamt):
     """Eine Zeile, absteigend nach Kosten. 'rest' ist alles Ungemessene -
     ist der gross, ist die Messung selbst unvollstaendig und sagt das."""
@@ -13967,6 +14012,14 @@ def main():
     # Stueck). Ohne diese Pruefung liefe ein voller Render durch und der Kunde
     # bekaeme leere Kaesten - fuer sein Guthaben. Hier abbrechen heisst:
     # Meldung im Klartext, und der Server erstattet automatisch.
+    # v230ak: den Speicherdeckel EINMAL ermitteln - die Wache im Bildlauf
+    # braucht ihn, und im Log soll von Anfang an stehen, womit gerechnet wird.
+    global _MEM_DECKEL
+    _MEM_DECKEL = _mem_limit_gb()
+    print(f"Memory limit: "
+          + (f"{_MEM_DECKEL:.1f} GB (container)" if _MEM_DECKEL
+             else "none (host memory)"))
+
     _fehl = schrift_unsupported(' '.join(str(w.get('word', '')) for w in words))
     if _fehl:
         sys.exit(f'ERROR: {_fehl} captions are not supported yet. Your credits '
@@ -15432,6 +15485,7 @@ def main():
                 sys.exit(f"ERROR: video encoding aborted. {grund}")
         _zt_ende = zt('encode-write', _zt_frame)
         fi += 1
+        mem_wache(fi, max_frames or n_frames)   # v230ak: vor dem Kill eingreifen
         if fi % 100 == 0:
             el = _time.time() - t_start
             rate = fi / max(el, 0.01)
