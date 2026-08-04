@@ -709,7 +709,7 @@ body {
 .mo-phase::after { content: ''; animation: modots 1.4s steps(4) infinite; }
 @keyframes modots { 0%{content:'';} 25%{content:' .';} 50%{content:' ..';}
   75%{content:' ...';} }
-/* v119: dynamischer Ladescreen — kriechender Balken (nie eingefroren) + Shimmer im Frame. */
+/* v119: dynamischer Ladescreen, kriechender Balken (nie eingefroren) + Shimmer im Frame. */
 .mo-bar.live i { transition: width .34s linear; }
 .mo-frame.loading::after { content:''; position:absolute; inset:0; pointer-events:none;
   background: linear-gradient(115deg, transparent 32%, rgba(255,255,255,.06) 50%, transparent 68%);
@@ -1707,7 +1707,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <button class="tc-card" type="button" data-act="pickTool" data-arg="motion">
           <div class="tc-ic">🌀</div>
           <h3>Motion Graphics</h3>
-          <p>Describe a clip in one line. Get high-end 3D motion graphics — lit
+          <p>Describe a clip in one line. Get high-end 3D motion graphics, lit
             geometry, depth and camera moves. No motion designer needed.</p>
           <span class="tc-go">Start motion →</span>
         </button>
@@ -2021,8 +2021,8 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <summary>Reference styles</summary>
           <div style="margin-top:14px;">
             <p class="hint">Upload a short video with high-end captions. The AI
-              analyzes it in detail — hook, chunk length, which words get
-              emphasized, typography/placement, motion, retention rhythm — and
+              analyzes it in detail, hook, chunk length, which words get
+              emphasized, typography/placement, motion, retention rhythm, and
               also measures the audio track (SFX density, punch, loud/quiet
               dynamics). It uses that to steer its own editorial choices on future
               renders. It does not copy the look (fonts/animations stay ours), the
@@ -2420,7 +2420,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
           <span>Captions are grouped into short phrases, and each phrase shows
             one highlight. If you force several words that land very close
             together, they may be shortened or share a beat so they don't
-            overlap on screen — spacing your picks out gives each one its full
+            overlap on screen, spacing your picks out gives each one its full
             moment.</span>
         </div>
       </div>
@@ -2675,7 +2675,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
     <div class="body" id="momBody"></div>
     <div id="accSection" class="accx-section hidden">
       <div class="accx-head">
-        <span>Motion-graphic accents <span class="mo-hint">— subtle, on-topic</span></span>
+        <span>Motion-graphic accents <span class="mo-hint">- subtle, on-topic</span></span>
         <button class="btn secondary" id="accAdd" type="button">+ Add accent</button>
       </div>
       <div id="accBody"></div>
@@ -3407,8 +3407,7 @@ function updateCreditHeader(sec) {
 }
 
 /* v84: Client-Router - eine echte Seite pro Bereich statt Popups. */
-// v123: Motion Design ausgeblendet (Fokus auf Captions). Der Code bleibt komplett liegen —
-// zum Wiederanschalten einfach MOTION_ENABLED = true setzen (Nav, Tool-Auswahl, Routing,
+// v123: Motion Design ausgeblendet (Fokus auf Captions). Der Code bleibt komplett liegen, // zum Wiederanschalten einfach MOTION_ENABLED = true setzen (Nav, Tool-Auswahl, Routing,
 // Landing-Sektion kommen dann automatisch zurueck).
 const MOTION_ENABLED = false;
 const PAGES = MOTION_ENABLED
@@ -3524,7 +3523,7 @@ async function initMotion(){
   if(Motion.ready){ return; }
   Motion.ready=true;
   // v118: nur noch das Studio (Full-customizable Showcase). Der Renderer braucht Node +
-  // motion/node_modules auf dem Server (motion_brief-Flag) — sonst freundlich blocken.
+  // motion/node_modules auf dem Server (motion_brief-Flag), sonst freundlich blocken.
   Motion.briefOk = !!(State.user && State.user.motion_brief);
   const tstudio=$('#moTypeStudio');
   if(tstudio){ tstudio.onclick=()=>setMoEngine('studio'); if(!Motion.briefOk) tstudio.setAttribute('disabled',''); }
@@ -3540,7 +3539,7 @@ async function initMotion(){
 const MO_ENGINE_STEPS = { studio:['type','studio'] };
 const MO_STEP_LABELS = { type:'Type', studio:'Studio' };
 function setMoEngine(eng){
-  if(!Motion.briefOk){ toast('The motion engine is warming up — try again shortly.','err'); return; }
+  if(!Motion.briefOk){ toast('The motion engine is warming up, try again shortly.','err'); return; }
   Motion.engine=eng; Motion.stepKeys=MO_ENGINE_STEPS[eng]||MO_ENGINE_STEPS.studio;
   renderMoStepper(); goMoStep(1);
 }
@@ -3577,7 +3576,7 @@ function goMoStep(i){
   updateMoStepper();
   window.scrollTo({top:0, behavior:'smooth'});
 }
-/* v117: Studio — full-customizable Showcase (video OR script -> chosen composition + all settings). */
+/* v117: Studio, full-customizable Showcase (video OR script -> chosen composition + all settings). */
 const ST = { input:'text', comp:'showcase', style:'editorial', format:'9:16', font:'sans', inkTouched:false };
 const FONT_MAP = { sans:"'Inter', system-ui, -apple-system, sans-serif", mono:"ui-monospace, 'Menlo', monospace", serif:"Georgia, 'Times New Roman', serif" };
 function _seg(el, items, cur, cb){
@@ -4303,7 +4302,7 @@ async function renderLibrary() {
         </div>
         <div class="lib-actions">
           <a class="btn secondary" href="/api/video/${it.jid}?download=1">Download</a>
-          ${it.has_mov ? `<a class="btn secondary" href="/api/mov/${it.jid}" title="ProRes 4444 with alpha — drop straight into Premiere">MOV&nbsp;·&nbsp;Alpha</a>` : ''}
+          ${it.has_mov ? `<a class="btn secondary" href="/api/mov/${it.jid}" title="ProRes 4444 with alpha, drop straight into Premiere">MOV&nbsp;·&nbsp;Alpha</a>` : ''}
           ${it.has_srt ? `<a class="btn secondary" href="/api/subtitles/${it.jid}" title="Subtitle file for YouTube or your editing software">SRT</a>` : ''}
           ${it.has_alpha ? `<a class="btn secondary" href="/api/alpha_file/${it.jid}" title="Transparent caption layer (ProRes 4444) for Premiere or Resolve">Layer&nbsp;(MOV)</a>`
                          : (it.alpha_running ? `<button class="btn secondary" data-alphawait="${it.jid}" disabled>Layer&nbsp;…</button>`
@@ -4549,7 +4548,7 @@ async function loadTranscriptStep() {
   const jid = State.preJid;
   if (!jid) {
     box.className = 'tx-words loading';
-    box.textContent = 'Your transcript will be generated during render — '
+    box.textContent = 'Your transcript will be generated during render, '
       + 'you can still fine-tune wording afterwards in the moments editor.';
     $('#txCount').textContent = '';
     return;
@@ -4586,7 +4585,7 @@ async function loadTranscriptStep() {
       renderTxChips();
     } catch (e) {
       box.className = 'tx-words loading';
-      box.textContent = 'Connection error — you can still render.';
+      box.textContent = 'Connection error, you can still render.';
     }
   };
   box.className = 'tx-words loading';
@@ -5771,7 +5770,7 @@ async function fbInit() {
     if (d && d.note) {
       fbNote = d.note; fbMalen(d.note);
       $('#fbText').value = d.text || '';
-      $('#fbHint').textContent = 'Thanks — you can change it anytime.';
+      $('#fbHint').textContent = 'Thanks, you can change it anytime.';
     }
   } catch (e) {}
 }
@@ -6233,7 +6232,7 @@ function renderAccents() {
   body.innerHTML = '';
   const list = State.accents || [];
   if (!list.length) {
-    body.innerHTML = '<div class="acc-empty">No accents — the AI adds subtle ones '
+    body.innerHTML = '<div class="acc-empty">No accents, the AI adds subtle ones '
       + 'automatically, or tap “+ Add accent”.</div>';
     return;
   }

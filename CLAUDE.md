@@ -166,6 +166,15 @@ keine Ursachen-Erklaerung, keine Ehrlich-Grenzen-Absaetze - das steht
 alles im Commit und in PROJEKT_STATUS.md. Details NUR auf Nachfrage.
 Wer beim Schreiben denkt "das muss er noch wissen": nein, muss er nicht.
 
+**NIE DIESEN GEDANKENSTRICH, NIE NACH KI KLINGEN (Ismets Ansage,
+03.08.2026, "wie oft denn noch").** Der lange Gedankenstrich ist verboten,
+in Antworten UND in allem, was auf die Seite geht. Ebenso das ganze
+KI-Vokabular: kein "Ehrlich dazu:", kein "Wichtig:", keine Dreier-Rhythmen,
+keine Aufzaehlung, wo zwei Saetze reichen, keine Zusammenfassung am Ende.
+Schreiben wie ein Mensch, der es eilig hat: kurze Saetze, Punkt, fertig.
+Wer beim Schreiben ein Muster erkennt, das nach Textbaustein klingt, streicht
+es.
+
 **KURZ UND KNACKIG (Ismets Ansage, Juli 2026).** Antworten so kurz wie
 möglich. Keine langen Analysen, keine Aufzählung von Nebenbefunden, kein
 Wiederholen dessen, was er schon weiß. Ergebnis zuerst, Details nur auf
