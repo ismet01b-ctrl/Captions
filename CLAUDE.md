@@ -1558,7 +1558,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1989/1990 (Stand v230an)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **1996/1997 (Stand v230ao)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1769,6 +1769,11 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   nach jedem Sprung EINMAL nachmessen (`seeked`) statt dem Sprung zu
   glauben. Gemessen im Browser: Spitze 0.103 -> 0.055 s, Dauerversatz
   0.026 -> 0.008 s (rund ein Fuenftel Bild bei 24 fps).
+- **`/before-after` (v230ao) ist die BEWEIS-Seite**: derselbe Clip zweimal,
+  plus die Entscheidungen der Regie und ein ehrlicher Abschnitt "was es NICHT
+  kann". Wer eine neue Seite baut: Route in `server.py`, Datei in
+  `_CSP_HTML` (sonst blockiert die eigene CSP den Inline-Block), Eintrag in
+  der Sitemap, Link von der Landing - und jede Zahl aus dem Code.
 - **Landing:** Englisch, international, Modellnamen unsichtbar (kein "GPT-4o"
   im Hero), keine Konkurrenz-Namen, kein Datenschutz-Block (gehört in /privacy).
 

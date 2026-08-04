@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" type="image/png" href="/favicon.png">
+<title>The same clip, twice — what the AI director actually did | DouchkoVE</title>
+<meta name="description" content="One real clip, before and after. Drag the slider, then read what the AI director decided at each step: which word carries the sentence, where the caption sits, what the camera does.">
+<link rel="canonical" href="https://douchko.eu/before-after">
+<meta property="og:title" content="The same clip, twice — what the AI director actually did">
+<meta property="og:description" content="One real clip, before and after. Drag the slider, then read what the AI director decided and why.">
+<meta property="og:url" content="https://douchko.eu/before-after">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://douchko.eu/assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The same clip, twice — what the AI director actually did">
+<meta name="twitter:description" content="One real clip, before and after. Drag the slider, then read what the AI director decided and why.">
+<meta name="twitter:image" content="https://douchko.eu/assets/og-image.png">
+<link href="/assets/fonts/fonts.css" rel="stylesheet">
+<style>
+/* v230ao EINE SEITE, DIE ETWAS KANN, WAS DIE STARTSEITE NICHT KANN.
+   Statt fuenf duenner Keyword-Seiten (Vorschlag einer fremden KI, siehe
+   v230am) EINE Seite mit dem einzigen Argument, das wirklich ueberzeugt:
+   derselbe Clip zweimal, gross, und daneben die Entscheidungen, die die
+   Regie getroffen hat - jede davon aus dem Code belegbar.
+   Eigenes, knappes CSS statt der ganzen Landing-Datei: die Seite soll auf
+   dem Handy schnell sein, das war gerade der Befund (v230an). */
+:root {
+  --bg: #0a0a0b; --panel: #161417;
+  --ink: #f6f4ef; --ink2: #c3bdb3; --mut: #8b857b;
+  --line: rgba(246,244,239,.12); --acc: #ff7a1a;
+  --serif: 'Newsreader', Georgia, serif;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--ink);
+  line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+nav { border-bottom: 1px solid rgba(246,244,239,.06); position: sticky; top: 0;
+  background: rgba(10,10,11,.78); backdrop-filter: blur(14px); z-index: 10; }
+nav .inner { max-width: 1040px; margin: 0 auto; padding: 16px 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.logo { font-family: var(--serif); font-size: 21px; font-weight: 600;
+  text-decoration: none; }
+.cta { background: var(--acc); color: var(--bg); padding: 9px 18px;
+  border-radius: 999px; font-weight: 600; font-size: 14px; text-decoration: none;
+  white-space: nowrap; }
+.kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--mut); }
+h1 { font-family: var(--serif); font-weight: 500; letter-spacing: -.02em;
+  font-size: clamp(34px, 6vw, 60px); line-height: 1.04; margin: 14px 0 18px; }
+h1 em { font-style: italic; color: var(--acc); }
+h2 { font-family: var(--serif); font-weight: 500; letter-spacing: -.01em;
+  font-size: clamp(24px, 3.4vw, 34px); margin: 0 0 14px; }
+h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+p { color: var(--ink2); }
+.lead { font-size: clamp(16px, 1.6vw, 19px); max-width: 62ch; }
+section { padding: clamp(48px, 8vw, 84px) 0; }
+.top { padding-top: clamp(36px, 6vw, 64px); }
+.zwei { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: clamp(28px, 5vw, 56px); align-items: start; }
+@media (max-width: 860px) { .zwei { grid-template-columns: 1fr; } }
+.karten { display: grid; gap: 16px; }
+.karte { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px 20px; }
+.karte p { font-size: 14.5px; }
+.karte .nr { font-family: var(--mono); font-size: 11px; color: var(--acc);
+  letter-spacing: .18em; }
+.liste { display: grid; gap: 10px; margin-top: 18px; }
+.liste div { font-size: 14.5px; color: var(--ink2); padding-left: 20px;
+  position: relative; }
+.liste div::before { content: '·'; position: absolute; left: 6px; color: var(--acc); }
+.ehrlich { border-left: 2px solid var(--acc); padding-left: 18px; max-width: 62ch; }
+footer { border-top: 1px solid rgba(246,244,239,.06); padding: 30px 0 60px;
+  font-size: 13.5px; color: var(--mut); }
+footer a { text-decoration: none; margin-right: 18px; }
+
+/* --- Vergleich: gleiche Mechanik wie im Hero (v230t/v230u/v230ab/v230an) --- */
+.demo { position: relative; aspect-ratio: 9/16; max-height: 76vh; margin: 0 auto;
+  border-radius: 18px; overflow: hidden; background: #0c0b0c;
+  border: 1px solid var(--line); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8);
+  --split: 0%; touch-action: pan-y; }
+.demo video { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block; }
+.demo .after { clip-path: inset(0 0 0 var(--split)); z-index: 1; }
+.demo-side, .demo-line, .demo-grip { opacity: 0; transition: opacity .22s ease; }
+.demo.vergleich .demo-side, .demo.vergleich .demo-line,
+.demo.vergleich .demo-grip { opacity: 1; }
+.demo-line { position: absolute; top: 0; bottom: 0; left: var(--split); width: 2px;
+  margin-left: -1px; background: rgba(255,255,255,.85); z-index: 3;
+  pointer-events: none; box-shadow: 0 0 14px rgba(0,0,0,.6); }
+.demo-grip { position: absolute; top: 50%; left: var(--split); z-index: 4;
+  transform: translate(-50%, -50%); width: 38px; height: 38px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; color: #0c0b0c;
+  background: rgba(255,255,255,.92); pointer-events: none;
+  box-shadow: 0 6px 22px rgba(0,0,0,.55); }
+.demo-side { position: absolute; top: 12px; z-index: 3; pointer-events: none;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .15em;
+  text-transform: uppercase; color: rgba(255,255,255,.82);
+  background: rgba(10,10,11,.42); border-radius: 5px; padding: 4px 7px; }
+.demo-side.l { left: 12px; }
+.demo-side.r { right: 12px; color: var(--acc); }
+.demo-hint { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--mut); text-align: center;
+  margin-top: 12px; }
+</style>
+</head>
+<body>
+<nav><div class="inner">
+  <a class="logo" href="/">DouchkoVE</a>
+  <a class="cta" href="/app/create">Caption my video</a>
+</div></nav>
+
+<div class="wrap top">
+  <span class="kicker">One real clip</span>
+  <h1>The same seconds, <em>twice.</em></h1>
+  <p class="lead">Left is the raw upload. Right is what came back. Nothing was
+    re-shot, re-cut or re-lit — only captions were added. Drag the line and
+    decide for yourself whether that is "subtitles".</p>
+</div>
+
+<section>
+  <div class="wrap zwei">
+    <div>
+      <div class="demo" id="demoWrap">
+        <video id="demoBefore" src="/assets/demo_before.mp4"
+               poster="/assets/demo_before_poster.jpg"
+               muted loop playsinline preload="none"
+               aria-label="The same clip before captioning"></video>
+        <video id="demoVid" class="after" src="/assets/demo.mp4"
+               poster="/assets/demo_poster.jpg"
+               autoplay muted loop playsinline preload="auto"
+               aria-label="The clip after DouchkoVE"></video>
+        <span class="demo-side l">Your upload</span>
+        <span class="demo-side r">DouchkoVE</span>
+        <input type="range" class="demo-range" id="demoRange" min="0" max="100"
+               step="0.1" value="0" aria-label="Drag to compare before and after"
+               style="position:absolute; inset:0; z-index:5; width:100%; height:100%;
+                      margin:0; opacity:0; pointer-events:none; appearance:none;
+                      background:transparent;">
+        <div class="demo-line"></div>
+        <div class="demo-grip" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path
+               d="M9 6 4 12l5 6M15 6l5 6-5 6"/></svg>
+        </div>
+      </div>
+      <div class="demo-hint">Drag the line · sound is off on purpose</div>
+    </div>
+
+    <div>
+      <h2>What the director decided</h2>
+      <p>Every decision below is made per clip, not per template. Two uploads of
+        the same length can come back completely differently.</p>
+      <div class="karten" style="margin-top:22px">
+        <div class="karte"><div class="nr">01</div>
+          <h3>Which word carries the sentence</h3>
+          <p>The transcript is read before anything is drawn. One word per
+            statement gets the weight; the rest stays flowing text. Filler and
+            auxiliary verbs never become the big word.</p></div>
+        <div class="karte"><div class="nr">02</div>
+          <h3>Where the caption sits</h3>
+          <p>Not a fixed band. The frame is measured: face, movement, platform
+            UI. Text dodges the subject, stays inside the safe area, and holds
+            its place instead of jumping every second.</p></div>
+        <div class="karte"><div class="nr">03</div>
+          <h3>What the word does</h3>
+          <p>26 animations, picked by meaning. Say "behind me" and the text goes
+            behind you — the person is cut out per frame, so it really passes
+            behind the shoulder.</p></div>
+        <div class="karte"><div class="nr">04</div>
+          <h3>When the camera moves</h3>
+          <p>Push-ins and zooms sit on the strongest moment of the sentence, on
+            the beat when there is music. Sound design lands on the word onset,
+            not on a grid.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="background:#0d0c0e; border-top:1px solid rgba(246,244,239,.06);
+                border-bottom:1px solid rgba(246,244,239,.06);">
+  <div class="wrap">
+    <span class="kicker">Honest limits</span>
+    <h2 style="margin-top:14px">What it does not do</h2>
+    <div class="ehrlich">
+      <div class="liste">
+        <div>No stock footage, no AI B-roll, no avatars. It works with the clip
+          you upload.</div>
+        <div>No 4K. Short-form platforms deliver 1080p to viewers, so 1080p is
+          what you get — at the normal rate.</div>
+        <div>Captions are set in Latin, Cyrillic and Greek alphabets plus
+          Chinese, Japanese and Korean. Arabic, Hebrew, Hindi and Thai are not
+          supported yet.</div>
+        <div>Up to 3 minutes per clip. Files are deleted from the server after
+          7 days — download what you want to keep.</div>
+        <div>You get the finished MP4, an SRT subtitle file, and on request a
+          transparent caption layer for Premiere or Resolve.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="kicker">Your turn</span>
+    <h2 style="margin-top:14px">Try it on your own clip.</h2>
+    <p class="lead">3 free minutes every month. No card, no subscription. If the
+      result does not beat what you have now, you have lost four minutes.</p>
+    <p style="margin-top:26px">
+      <a class="cta" href="/app/create">Caption my video</a>
+      <a href="/" style="margin-left:20px; color:var(--ink2); font-size:15px;">
+        Back to the overview</a>
+    </p>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/">Product</a><a href="/#pricing">Pricing</a><a href="/imprint">Imprint</a>
+  <a href="/terms">Terms</a><a href="/privacy">Privacy</a>
+  <div style="margin-top:14px">© 2026 DouchkoVE · Early Access</div>
+</div></footer>
+
+<script>
+/* Vergleichs-Schieber - dieselbe Mechanik wie im Hero der Startseite:
+   Zeiger-Ereignisse statt Range-Regler (v230t), zweite Spur erst auf
+   Beruehrung (v230u), Nachziehen in Stufen (v230ab), und die ruhende Spur
+   wird erst geholt, wenn die sichtbare laeuft (v230an). */
+(() => {
+  const wrap = document.getElementById('demoWrap');
+  const v = document.getElementById('demoVid');
+  const vor = document.getElementById('demoBefore');
+  const rng = document.getElementById('demoRange');
+  if (!wrap || !v || !rng) return;
+  const AN = 1.5;
+  const setz = () => {
+    const p = parseFloat(rng.value) || 0;
+    wrap.style.setProperty('--split', p + '%');
+    wrap.classList.toggle('vergleich', p > AN);
+  };
+  setz();
+
+  let vorGeholt = false;
+  const vorHolen = () => {
+    if (vorGeholt || !vor) return;
+    vorGeholt = true;
+    try { vor.preload = 'auto'; vor.load(); } catch (e) {}
+  };
+  v.addEventListener('canplaythrough', vorHolen, { once: true });
+  setTimeout(vorHolen, 2500);
+
+  const sync = () => {
+    if (!vor) return;
+    try { vor.currentTime = v.currentTime; } catch (e) {}
+    vor.addEventListener('seeked', () => {
+      if (Math.abs(v.currentTime - vor.currentTime) > 0.03) {
+        try { vor.currentTime = v.currentTime; } catch (e) {}
+      }
+    }, { once: true });
+  };
+  let zieht = false;
+  const vorAn = () => { if (!vor || !vor.paused) return; vorHolen(); sync(); vor.play().catch(() => {}); };
+  const vorAus = () => {
+    if (!vor || vor.paused || zieht) return;
+    if ((parseFloat(rng.value) || 0) > AN) return;
+    vor.pause();
+  };
+  const nachziehen = () => {
+    if (!vor || vor.paused) return;
+    const d = v.currentTime - vor.currentTime, a = Math.abs(d);
+    if (a > 0.35) { try { vor.currentTime = v.currentTime; } catch (e) {} }
+    else if (a > 0.05) vor.playbackRate = d > 0 ? 1.25 : 0.8;
+    else if (a > 0.02) vor.playbackRate = d > 0 ? 1.05 : 0.95;
+    else if (a > 0.008) vor.playbackRate = d > 0 ? 1.02 : 0.98;
+    else vor.playbackRate = 1;
+  };
+  const takt = () => { nachziehen(); requestAnimationFrame(takt); };
+  requestAnimationFrame(takt);
+
+  const ausX = (x) => {
+    const r = wrap.getBoundingClientRect();
+    if (!r.width) return;
+    rng.value = Math.max(0, Math.min(100, ((x - r.left) / r.width) * 100));
+    setz();
+  };
+  // Ein Bedienelement im Bild darf das Ziehen nicht ausloesen (v230ac).
+  const bedienelement = (e) => !!(e.target && e.target.closest
+    && e.target.closest('button, a, input, select, textarea, [role="button"]'));
+  wrap.addEventListener('pointerdown', (e) => {
+    if (bedienelement(e)) return;
+    const r = wrap.getBoundingClientRect();
+    const auf = parseFloat(rng.value) || 0;
+    const linie = r.left + r.width * (auf / 100);
+    // Am Finger nur an der Linie greifen, sonst frisst der Schieber das
+    // Scrollen; bei geschlossenem Vergleich oeffnet ein Tipp ihn.
+    if (e.pointerType === 'touch' && auf > AN
+        && Math.abs(e.clientX - linie) > 44) return;
+    zieht = true;
+    try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
+    vorAn();
+    ausX(e.clientX);
+    e.preventDefault();
+  });
+  wrap.addEventListener('pointermove', (e) => { if (zieht) { ausX(e.clientX); e.preventDefault(); } });
+  const schluss = (e) => {
+    if (!zieht) return;
+    zieht = false;
+    try { wrap.releasePointerCapture(e.pointerId); } catch (err) {}
+    vorAus();
+  };
+  wrap.addEventListener('pointerup', schluss);
+  wrap.addEventListener('pointercancel', schluss);
+  rng.addEventListener('input', () => { setz(); if ((parseFloat(rng.value) || 0) > AN) vorAn(); else vorAus(); });
+  // Im Hintergrund laeuft nichts - das kostet Akku ohne Zuschauer.
+  document.addEventListener('visibilitychange', () => {
+    const alle = [v, vor].filter(Boolean);
+    if (document.hidden) alle.forEach(x => x.pause());
+    else { v.play().catch(() => {}); if ((parseFloat(rng.value) || 0) > AN) vorAn(); }
+  });
+})();
+</script>
+</body>
+</html>

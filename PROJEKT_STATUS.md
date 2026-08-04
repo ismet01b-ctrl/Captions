@@ -3,6 +3,26 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ao EINE BEWEIS-SEITE STATT FUENF KEYWORD-SEITEN** (`/before-after`).
+  Ismets Entscheidung nach dem SEO-Vorschlag einer fremden KI. Statt fuenf
+  duenner Textseiten, die dieselbe Botschaft wiederholen, EINE Seite mit dem
+  einzigen Argument, das wirklich ueberzeugt: derselbe Clip gross und
+  ziehbar, daneben die vier Entscheidungen der Regie (welches Wort traegt
+  den Satz, wo sitzt die Caption, was tut das Wort, wann bewegt sich die
+  Kamera).
+  - **Der Abschnitt "What it does not do" ist der Grund, warum die Seite
+    taugt.** Keine B-Roll, keine Avatare, kein 4K, keine arabischen/
+    hebraeischen/indischen/thailaendischen Schriften, 3 Minuten, 7 Tage
+    Aufbewahrung - jede Zahl aus dem Code. Wer Grenzen nennt, wird beim Rest
+    geglaubt.
+  - Eigenes knappes CSS statt der ganzen Landing-Datei (die Seite soll am
+    Handy schnell sein, v230an), dieselbe erprobte Schieber-Mechanik
+    (Zeiger-Ereignisse v230t, zweite Spur erst auf Beruehrung v230u,
+    Nachziehen in Stufen v230ab, Ladereihenfolge v230an).
+  - Der Inline-Block steht in `_CSP_HTML` - fehlt er dort, ist die Seite
+    unter der eigenen CSP tot.
+  - Beweis im Browser (Desktop + Handy): echtes Ziehen setzt den Schieber
+    auf 55 %, kein Querlauf, **0 CSP-Verstoesse, 0 JS-Fehler**.
 - **v230an DAS UNSICHTBARE VIDEO HAT DEM SICHTBAREN DIE LEITUNG WEGGENOMMEN.**
   Ismets Befund: "auf dem Handy bleibt das Video immer haengen". In der
   Handy-Ansicht bei gedrosselten 1.6 Mbit/s gemessen: die Seite startete

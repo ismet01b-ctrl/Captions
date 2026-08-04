@@ -2063,7 +2063,7 @@ app = FastAPI(title='DouchkoVE')
 # Style bleibt bei 'unsafe-inline': `style="..."` steht an hunderten Stellen im
 # Markup, und ein Fingerabdruck deckt Attribute gar nicht ab. Der Gewinn waere
 # klein, der Umbau riesig - bewusste Entscheidung, nicht Vergessen.
-_CSP_HTML = ('index.html', 'landing.html', 'admin.html',
+_CSP_HTML = ('index.html', 'landing.html', 'admin.html', 'example.html',
              'imprint.html', 'privacy.html', 'terms.html')
 _CSP_CACHE = {'stempel': None, 'wert': None}
 _CSP_LOCK = threading.Lock()
@@ -2133,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230an'
+DVE_VERSION = 'v230ao'
 
 
 def _build_datei():
@@ -6764,6 +6764,16 @@ def landing(request: Request):
     return _page('landing.html', request)
 
 
+@app.get('/before-after', response_class=HTMLResponse)
+def before_after(request: Request):
+    """v230ao: EINE Seite mit dem einzigen Argument, das wirklich ueberzeugt -
+    derselbe Clip zweimal, gross, plus die Entscheidungen der Regie. Statt der
+    fuenf duennen Keyword-Seiten aus einem fremden SEO-Vorschlag (v230am).
+    Zaehlt wie die Startseite als Besuch: sie ist ein zweiter Eingang."""
+    _trichter('besuch', request)
+    return _page('example.html', request)
+
+
 @app.get('/app', response_class=HTMLResponse)
 def index(request: Request):
     # v208: Wer die App oeffnet, hat mehr getan als nur die Landing zu sehen -
@@ -6877,8 +6887,8 @@ def sitemap_xml():
     """v230ah: die oeffentlichen Seiten, mehr gibt es nicht zu indexieren."""
     basis = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
     heute = time.strftime('%Y-%m-%d', time.gmtime())
-    seiten = [('/', '1.0'), ('/terms', '0.3'), ('/privacy', '0.3'),
-              ('/imprint', '0.3')]
+    seiten = [('/', '1.0'), ('/before-after', '0.8'), ('/terms', '0.3'),
+              ('/privacy', '0.3'), ('/imprint', '0.3')]
     eintraege = ''.join(
         f'<url><loc>{basis}{p}</loc><lastmod>{heute}</lastmod>'
         f'<priority>{prio}</priority></url>' for p, prio in seiten)

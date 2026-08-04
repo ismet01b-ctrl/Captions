@@ -3577,6 +3577,39 @@ def _scenario_logic(clip, transcript, tmp):
           all(os.path.exists(os.path.join(HERE, 'web', 'assets', 'fonts', f))
               for f in ('fonts.css', 'inter.woff2', 'newsreader.woff2',
                         'jetbrains-mono.woff2')))
+    # ===== v230ao EINE BEWEIS-SEITE STATT FUENF KEYWORD-SEITEN ==========
+    # Ismets Entscheidung nach dem SEO-Vorschlag: nicht fuenf duenne Seiten,
+    # sondern EINE, die etwas kann, was die Startseite nicht kann - derselbe
+    # Clip gross, plus die Entscheidungen der Regie. Geprueft wird, dass sie
+    # erreichbar, verlinkt, ehrlich und CSP-tauglich ist.
+    _ex230 = open(os.path.join(HERE, 'web', 'example.html'), encoding='utf-8').read()
+    _srv_ao = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230ao: die Seite hat eine Route und liegt in der Sitemap',
+          "'/before-after'" in _srv_ao and "('/before-after', '0.8')" in _srv_ao)
+    check('v230ao: die Startseite verlinkt sie',
+          'href="/before-after"' in _land)
+    check('v230ao: ihr Inline-Block kommt in die CSP (sonst tote Seite)',
+          "'example.html'" in _srv_ao[_srv_ao.find('_CSP_HTML'):][:220])
+    check('v230ao: kein Ereignis-Attribut, nichts von fremden Servern',
+          not re.search(r'\son(click|submit|error|change|input)\s*=\s*"', _ex230)
+          and not re.search(r'<(?:script|img|iframe|source)\b[^>]*\bsrc\s*=\s*"https?://'
+                            r'|<link\b(?![^>]*rel\s*=\s*"(?:canonical|alternate)")'
+                            r'[^>]*\bhref\s*=\s*"https?://',
+                            re.sub(r'<!--.*?-->', '', _ex230, flags=re.S)))
+    # Die Grenzen-Liste ist der Grund, warum die Seite ueberhaupt taugt: sie
+    # sagt, was das Produkt NICHT kann. Jede Zahl darin stammt aus dem Code.
+    _ex_txt = re.sub(r'<!--.*?-->', '', _ex230, flags=re.S)
+    check('v230ao: die Seite nennt die Grenzen mit den echten Zahlen',
+          'Up to 3 minutes' in _ex_txt and 'after' in _ex_txt
+          and '7 days' in _ex_txt and 'No 4K' in _ex_txt
+          and 'Arabic, Hebrew, Hindi and Thai are not' in _ex_txt)
+    check('v230ao: auch hier keine unhaltbare Datenschutz-Zusage',
+          'EU-hosted' not in _ex_txt and 'no data leaves' not in _ex_txt.lower())
+    # Und die ruhende Spur laedt auch hier nicht von selbst (v230an-Regel).
+    check('v230ao: die Ladereihenfolge stimmt auch auf dieser Seite',
+          'preload="none"' in _tag230(_ex230, 'id="demoBefore"')
+          and 'preload="auto"' in _tag230(_ex230, 'id="demoVid"'))
+
     # ===== v230an ERST DAS SICHTBARE VIDEO, DANN DAS ANDERE =============
     # Ismets Befund: "auf dem Handy bleibt das Video immer haengen". Gemessen
     # in der Handy-Ansicht bei 1.6 Mbit/s: beide Spuren starteten GLEICHZEITIG
