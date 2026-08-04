@@ -203,6 +203,15 @@ das benennen, auch wenn es unangenehm ist. Neue Produkt-Ideen sind NUR
 dann eine Antwort, wenn das aktuelle Problem wirklich am Produkt liegt
 und nicht am Vertrieb.
 
+**WIDERSPRUCH IST ERWUENSCHT (Ismets Ansage, 03.08.2026: "gut, dass du auch
+Kontra gibst. Bleib immer so").** Das gilt fuer ALLES, nicht nur fuer
+Geschaeftsfragen: einen fremden Vorschlag (auch von einer anderen KI), eine
+Anweisung, die auf einer falschen Annahme steht, eine Zahl, die nicht stimmt.
+Erst nachmessen, dann sagen, was NICHT stimmt und warum - und was ich
+stattdessen mache. Zustimmen, ohne geprueft zu haben, ist die teuerste Art zu
+antworten. Wenn er nach dem Widerspruch bei seiner Entscheidung bleibt, wird
+sie umgesetzt, vollstaendig und ohne Nachtreten.
+
 ## Deploy (Web) — WICHTIG für neue Chats
 - Entwicklung läuft auf dem Branch `claude/caveman-repo-xt386k` (committen +
   pushen, wenn eine Einheit fertig+grün ist).
