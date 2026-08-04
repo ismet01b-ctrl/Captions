@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230an DAS UNSICHTBARE VIDEO HAT DEM SICHTBAREN DIE LEITUNG WEGGENOMMEN.**
+  Ismets Befund: "auf dem Handy bleibt das Video immer haengen". In der
+  Handy-Ansicht bei gedrosselten 1.6 Mbit/s gemessen: die Seite startete
+  BEIDE Spuren gleichzeitig bei 0.31 s - das laufende Video (1.3 MB) musste
+  sich die Leitung mit 840 KB teilen, die im Ruhezustand gar nicht spielen
+  (seit v230u laeuft die Vorher-Spur erst auf Beruehrung).
+  - Jetzt: `preload="auto"` auf der laufenden Spur, `preload="none"` auf der
+    ruhenden; nachgeholt wird sie, sobald die erste fluessig laeuft
+    (`canplaythrough` ODER 2.5 s - das Ereignis kommt auf manchen Handys
+    nie). Beweis: 0.32 s allein statt 0.31 s zu zweit, die zweite Spur
+    startet erst bei 3.0 s.
+  - Der einmalige Blick (der den Vergleich ueberhaupt entdeckbar macht)
+    wartet auf das Nachladen und kommt dann trotzdem.
+  - **Ein alter Test hing wieder an der SCHREIBWEISE** (`preload="auto"`
+    statt "startet nicht von selbst") und meldete die Verbesserung als
+    Fehler. Dazu ein eigener Fehler beim Reparieren: ein Fenster nach
+    Zeichenzahl reichte ins naechste Tag hinein und pruefte das falsche
+    Element - jetzt wird genau EIN Tag ausgeschnitten.
+  - **Ehrlich: nicht bewiesen, dass das ALLES war.** Ein iPhone im
+    Stromsparmodus blockiert Autoplay komplett - dann steht das Bild still,
+    ohne dass die Leitung schuld ist. Ismet prueft am echten Geraet nach.
 - **v230am TEILEN-VORSCHAU + STRUKTURDATEN.** Aus einem fremden SEO-Vorschlag
   ist der Teil uebernommen, der wirklich etwas bringt: Canonical, Open Graph,
   Twitter Card, ein 1200x630-Vorschaubild und drei Schema-Bloecke

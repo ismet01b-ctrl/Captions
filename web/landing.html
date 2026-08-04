@@ -466,13 +466,23 @@ footer .links a:hover { color: var(--ink); }
     </div>
     <div data-reveal>
       <div class="demo" id="demoWrap">
+        <!-- v230an DAS UNSICHTBARE VIDEO HAT DEM SICHTBAREN DIE LEITUNG
+             WEGGENOMMEN. Gemessen in der Handy-Ansicht bei 1.6 Mbit/s: die
+             Seite lud BEIDE Spuren komplett - 1.3 MB fuer das laufende und
+             840 KB fuer das Vorher-Video, das im Ruhezustand gar nicht
+             spielt (v230u). Am Handy ruckelt oder haengt das laufende Bild
+             dadurch, obwohl die Datei selbst klein ist.
+             Jetzt: das laufende Video zuerst und vollstaendig ('auto'), das
+             Vorher-Video gar nicht ('none') - es wird per JS nachgeladen,
+             SOBALD das erste fluessig laeuft. Der Vergleich bleibt also da,
+             er draengelt sich nur nicht mehr vor. -->
         <video id="demoBefore" src="/assets/demo_before.mp4"
                poster="/assets/demo_before_poster.jpg"
-               muted loop playsinline preload="auto"
+               muted loop playsinline preload="none"
                aria-label="The same clip before captioning"></video>
         <video id="demoVid" class="after" src="/assets/demo.mp4"
                poster="/assets/demo_poster.jpg"
-               autoplay muted loop playsinline preload="metadata"
+               autoplay muted loop playsinline preload="auto"
                aria-label="Example output rendered by DouchkoVE"></video>
         <span class="demo-side l">Your upload</span>
         <span class="demo-side r">DouchkoVE</span>
@@ -892,8 +902,24 @@ footer .links a:hover { color: var(--ink); }
     const ruhig = window.matchMedia
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let blickGetan = ruhig;
+    // v230an: das Vorher-Video wird ERST geholt, wenn das sichtbare fluessig
+    // laeuft. Vorher hat es ihm die Leitung weggenommen (840 KB, die im
+    // Ruhezustand niemand sieht). Zwei Ausloeser, weil `canplaythrough` auf
+    // manchen Handys gar nicht kommt: das Ereignis ODER 2.5 Sekunden.
+    let vorGeholt = false;
+    const vorHolen = () => {
+      if (vorGeholt || !vor) return;
+      vorGeholt = true;
+      try { vor.preload = 'auto'; vor.load(); } catch (e) {}
+    };
+    v.addEventListener('canplaythrough', vorHolen, { once: true });
+    setTimeout(vorHolen, 2500);
     const zeigeKurz = () => {
       if (blickGetan || zieht || document.hidden) return;
+      // v230an: erst laden, dann zeigen - und danach WIRKLICH zeigen. Ein
+      // blosses `return` haette den einmaligen Blick verschluckt, und der
+      // ist das Einzige, was den Vergleich ueberhaupt entdeckbar macht.
+      if (!vorGeholt) { vorHolen(); setTimeout(zeigeKurz, 1200); return; }
       blickGetan = true;
       blick = true;
       vorAn();

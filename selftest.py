@@ -3486,9 +3486,19 @@ def _scenario_logic(clip, transcript, tmp):
     # Aufloesung aendert NICHTS - es kostet der zweite Decoder, nicht die
     # Pixelzahl. Deshalb startet die Vorher-Spur erst, wenn der Vergleich
     # gebraucht wird.
+    # v230an: der Test hing an der SCHREIBWEISE (preload="auto") statt an der
+    # Regel - und meldete deshalb die Verbesserung als Fehler, als das
+    # Vorher-Video auf preload="none" umgestellt wurde. Geprueft wird die
+    # ZUSAGE: die ruhende Spur startet nicht von selbst, die sichtbare schon.
+    def _tag230(html, kennung):
+        """Nur DIESES <video>-Tag, bis zum schliessenden '>'. Ein Fenster nach
+        Zeichenzahl reicht bis ins naechste Tag hinein - dann prueft der Test
+        das falsche Element (genau das ist hier passiert)."""
+        i = html.find(kennung)
+        return html[i:html.find('>', i) + 1] if i >= 0 else ''
     check('v230u: die Vorher-Spur startet nicht von selbst',
-          'muted loop playsinline preload="auto"' in _land
-          and 'autoplay muted loop playsinline preload="auto"' not in _land)
+          'autoplay' not in _tag230(_land, 'id="demoBefore"')
+          and 'autoplay' in _tag230(_land, 'id="demoVid"'))
     check('v230u: der Vergleich ist im Ruhezustand zu',
           'step="0.1" value="0"' in _land and 'AN_SCHWELLE' in _land)
     check('v230u: sie haelt wieder an, sobald der Vergleich zu ist',
@@ -3567,6 +3577,27 @@ def _scenario_logic(clip, transcript, tmp):
           all(os.path.exists(os.path.join(HERE, 'web', 'assets', 'fonts', f))
               for f in ('fonts.css', 'inter.woff2', 'newsreader.woff2',
                         'jetbrains-mono.woff2')))
+    # ===== v230an ERST DAS SICHTBARE VIDEO, DANN DAS ANDERE =============
+    # Ismets Befund: "auf dem Handy bleibt das Video immer haengen". Gemessen
+    # in der Handy-Ansicht bei 1.6 Mbit/s: beide Spuren starteten GLEICHZEITIG
+    # bei 0.31 s - das laufende Video musste sich die Leitung mit 840 KB
+    # teilen, die im Ruhezustand niemand sieht. Nach dem Fix: 0.32 s allein,
+    # das Vorher-Video erst ab 3.0 s.
+    _vor_blk = _tag230(_land, 'id="demoBefore"')
+    _nach_blk = _tag230(_land, 'id="demoVid"')
+    check('v230an: die ruhende Spur laedt nicht von selbst',
+          'preload="none"' in _vor_blk, _vor_blk.split('preload=')[1][:12]
+          if 'preload=' in _vor_blk else 'kein preload')
+    check('v230an: die laufende Spur laedt vollstaendig vor',
+          'preload="auto"' in _nach_blk and 'autoplay' in _nach_blk)
+    check('v230an: die zweite Spur wird nachgeholt, sobald die erste laeuft',
+          'const vorHolen' in _land and "'canplaythrough'" in _land
+          and 'setTimeout(vorHolen' in _land)
+    # Der einmalige Blick darf dabei NICHT verlorengehen - er ist das
+    # Einzige, was den Vergleich ueberhaupt entdeckbar macht.
+    check('v230an: der einmalige Blick kommt trotzdem',
+          'setTimeout(zeigeKurz, 1200)' in _land)
+
     # ===== v230am TEILEN-VORSCHAU + STRUKTURDATEN =======================
     # Nutzen ist die Vorschaukarte beim Posten (grauer Kasten vorher), nicht
     # Google. Geprueft wird, dass die Angaben WAHR sind - eine falsche Zahl
