@@ -10150,6 +10150,31 @@ def _scenario_betrieb(tmp):
     check('v205-sec: die Ansicht warnt sichtbar, wenn noch als root gelaufen wird',
           'd.laufzeit.root' in _adm205 and 'Generalschluessel' in _adm205)
 
+    # v230aw: Fuer eine Pruefsummen-Liste reichen die 16 wichtigen Bauteile
+    # NICHT - `--require-hashes` verlangt, dass JEDES Paket festgenagelt ist,
+    # auch die Mitgebrachten. Das Panel gibt den ganzen Bestand zum Kopieren
+    # heraus, sonst muesste Ismet ins Terminal (und dorthin geht er nicht).
+    _fr = _sys205.get('freeze') or ''
+    _frz = [z for z in _fr.split('\n') if z.strip()]
+    check('v230aw: das Panel gibt den GANZEN Bauteil-Bestand heraus',
+          len(_frz) > len(_sys205.get('pakete') or {}),
+          f'{len(_frz)} Zeilen gegen {len(_sys205.get("pakete") or {})} wichtige')
+    check('v230aw: jede Zeile ist eine feste Version (Name==Version)',
+          all(('==' in z and not z.strip().startswith('#')
+               and len(z.split('==')) == 2 and z.split('==')[0].strip()
+               and z.split('==')[1].strip()) for z in _frz),
+          next((z for z in _frz if '==' not in z), 'alle ok'))
+    check('v230aw: kein Bauteil steht doppelt drin',
+          len({z.split('==')[0].lower() for z in _frz}) == len(_frz))
+    check('v230aw: fastapi ist mit Version dabei',
+          any(z.lower().startswith('fastapi==') for z in _frz))
+    # Der Knopf muss den Text auch WIRKLICH bekommen: Variable gesetzt,
+    # Verteiler kennt die Aktion, Aktion steht in der ERLAUBT-Liste.
+    check('v230aw: der Kopier-Knopf steht im Panel und ist freigeschaltet',
+          'data-act="copyFreeze"' in _adm205 and 'copyFreeze:0' in _adm205
+          and "name === 'copyFreeze'" in _adm205
+          and 'FREEZE_TXT = d.freeze' in _adm205)
+
     # (6c) v205a-sec: Die Haertung darf sich nicht selbst blockieren, und die
     # Bauteile sind festgenagelt.
     _comp205 = open(os.path.join(HERE, 'docker-compose.yml'),

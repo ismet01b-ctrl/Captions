@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230aw DER BAUTEIL-BESTAND KOMMT AUS DEM PANEL.** Vorstufe zum letzten
+  offenen Sicherheits-Punkt (Pruefsummen fuer die Fremdbauteile). Der bisher
+  einzige ehrliche Weg an die echten Versionen war `docker compose exec app
+  pip freeze` im Terminal - und dorthin geht Ismet nicht (Ansage: alles ueber
+  das Panel). Das Panel zeigte bisher nur die 16 wichtigen Bauteile;
+  `--require-hashes` verlangt aber, dass JEDES Paket festgenagelt ist, auch
+  die Mitgebrachten.
+  - `_paket_freeze()` liest alle Distributionen aus dem laufenden Prozess
+    (`importlib.metadata.distributions`), sortiert, ohne Doppelte, im Format
+    `Name==Version`. Ansicht System, Knopf "Alle Bauteile kopieren (N)".
+  - Read-only, haengt am bestehenden Admin-Riegel von `/api/admin/system`,
+    keine Parameter, kein Pfad, kein Kommandoaufruf. Der Text ist zu lang
+    fuer ein `data-arg` und liegt deshalb wie `LOG_TXT` in einer Variablen;
+    `copyFreeze` steht in der ERLAUBT-Liste (v230ah-Regel).
+  - Tests: der Bestand ist echt groesser als die 16 wichtigen, jede Zeile ist
+    `Name==Version`, nichts doppelt, fastapi dabei, und der Knopf ist im
+    Panel verdrahtet (Variable gesetzt, Verteiler kennt ihn, freigeschaltet).
+  - NOCH NICHT erledigt: die Pruefsummen selbst. Dafuer muss der kopierte
+    Bestand hier ankommen - Versionen zu raten blockiert nur Deploys.
 - **v230av GESAMT-BREMSE FUER GRATIS-UPLOADS.** Aus dem Selbst-Angriff
   (Ismets Auftrag "versuche die Seite zu hacken"): der Code-Teil war komplett
   dicht - keine echte Luecke bei Admin-Auth, IDOR, Path-Traversal, SQLi,

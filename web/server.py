@@ -2133,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230au'
+DVE_VERSION = 'v230aw'
 
 
 def _build_datei():
@@ -9088,6 +9088,34 @@ def _paket_versionen():
     return aus
 
 
+def _paket_freeze():
+    """ALLE Bauteile mit Version, so wie `pip freeze` sie ausgibt - auch die,
+    die keiner direkt angefordert hat (Mitgebrachte). Genau die braucht es
+    fuer eine Pruefsummen-Liste: `--require-hashes` verlangt, dass JEDES
+    Paket festgenagelt ist, nicht nur die 16 wichtigen. Der Weg ueber das
+    Panel ist der einzige, den Ismet geht - ein `docker compose exec` waere
+    dieselbe Zeile im Terminal, und dorthin geht er nicht."""
+    try:
+        import importlib.metadata as _md
+    except Exception:
+        return ''
+    zeilen = {}
+    try:
+        for dist in _md.distributions():
+            try:
+                name = (dist.metadata['Name'] or '').strip()
+                ver = (dist.version or '').strip()
+            except Exception:
+                continue
+            if not name or not ver:
+                continue
+            # Doppelte (gleicher Name in zwei Pfaden) einmal zaehlen.
+            zeilen[name.lower()] = f'{name}=={ver}'
+    except Exception:
+        return ''
+    return '\n'.join(zeilen[k] for k in sorted(zeilen))
+
+
 def _laufzeit_info():
     """Laeuft der Dienst als root oder als Dienst-Nutzer? Das ist die einzige
     ehrliche Probe fuer die v204-Haertung - die Meldung des Entrypoints geht
@@ -9932,6 +9960,7 @@ def admin_system(request: Request):
         #     Liste laesst sich requirements.txt nicht ehrlich festnageln.
         'laufzeit': _laufzeit_info(),
         'pakete': _paket_versionen(),
+        'freeze': _paket_freeze(),
         'config': {
             'workers': WORKERS,
             'queue_warn': QUEUE_WARN,

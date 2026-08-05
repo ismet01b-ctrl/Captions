@@ -450,6 +450,9 @@ function copyText(txt, btn){
   }
 }
 let LOG_TXT='';
+// v230aw: Der ganze Bauteil-Bestand als Text - zu lang fuer ein data-arg,
+// deshalb wie LOG_TXT in einer Variablen (der Verteiler liest sie).
+let FREEZE_TXT='';
 async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');LOG_TXT=d.log||'';
   const tl=(LOG_TXT.split('\n').filter(l=>l.startsWith('Timing (total'))||[]).pop()||'';
   el('modal').innerHTML=`<h2>Log · ${esc(jid)}</h2>
@@ -655,6 +658,7 @@ async function loadAbuse(){
 /* ---------- SYSTEM ---------- */
 async function loadSystem(){
   let d;try{d=await api('/api/admin/system');}catch(e){el('view').innerHTML=err(e);return;}
+  FREEZE_TXT = d.freeze || '';
 /* v230j WAS GERADE PASSIERT, NICHT NUR WAS LAEUFT.
    Das Panel zeigte ausschliesslich den laufenden Stand - damit liess sich
    "dauert noch" nicht von "haengt" unterscheiden (Ismets Befund: er sah
@@ -736,8 +740,15 @@ function deployZeile(dp) {
       `<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`).join('')
       || '<tr><td class="subtle">nicht auslesbar</td></tr>'}</tbody></table>
     <div class="note">Diese Liste braucht es, um die Versionen in
-      requirements.txt festzunageln &mdash; sonst kann bei jedem Neubau eine
+      requirements.txt festzunageln. Sonst kann bei jedem Neubau eine
       andere Fassung hereinkommen.</div>
+    <div class="row-actions" style="margin-top:8px">
+      <button class="btn sm" data-act="copyFreeze">Alle Bauteile kopieren
+        (${(d.freeze||'').split('\n').filter(Boolean).length})</button>
+    </div>
+    <div class="note">Der ganze Bestand inklusive der Mitgebrachten, im
+      Format von <span class="mono">pip freeze</span>. Kopieren und in den
+      Chat einfuegen, daraus wird die Pruefsummen-Liste.</div>
     <h3>Betriebszustand</h3>
     <div id="betriebBox" class="subtle">loading …</div>
     <h3>Ops actions</h3>
@@ -1472,7 +1483,7 @@ const ERLAUBT = {
   saveKey:0, navTog:0, togglePause:0, logout:0, reapStuck:0, factoryReset:0,
   bkUpload:0, offSave:0, offTest:0, offRun:0, offPw:0, newCode:0, annSave:0,
   loadLogs:0,
-  go:1, jobLog:1, jobRefund:1, copyLog:1, copyArg:1, openUser:1, dl:1,
+  go:1, jobLog:1, jobRefund:1, copyLog:1, copyArg:1, copyFreeze:0, openUser:1, dl:1,
   uPage:1, refundSession:1, grantCredits:1, exportUser:1, offRestore:1,
   bkDl:1, bkCheck:1, ticketReply:1, alertRead:1, fbRead:1, fbSet:1,
   annTog:1, annDel:1, logPick:1, evSet:1, setBetrieb:1, triSetTage:1,
@@ -1501,6 +1512,7 @@ document.addEventListener('click', (e) => {
   const name = el.dataset.act;
   if (!(name in ERLAUBT)) return;
   const fn = (name === 'copyLog' ? (a) => copyText(LOG_TXT, a === 'still' ? null : el)
+              : name === 'copyFreeze' ? () => copyText(FREEZE_TXT, el)
               : name === 'copyArg' ? (a) => copyText(a, el)
               : window[name]);
   if (typeof fn !== 'function') return;
