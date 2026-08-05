@@ -1567,7 +1567,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **1999/2000 (Stand v230aq)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2001/2002 (Stand v230ar)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

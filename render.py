@@ -5327,9 +5327,9 @@ def _reference_entry(video_path, name, desc, params, mess, save, store_path):
         if not entry['beispiel']:
             entry['beispiel'] = klar
         print(f"Style measured: shot {mess.get('einstellung_s', '?')}s, "
-              f"Kamera {mess.get('kamera', '?')}, "
-              f"Musik {'ja' if mess.get('musik') else 'nein'}, "
-              f"Zone {mess.get('zone_y', '?')}")
+              f"camera {mess.get('kamera', '?')}, "
+              f"music {'yes' if mess.get('musik') else 'no'}, "
+              f"zone {mess.get('zone_y', '?')}")
     if params:
         entry['params'] = params
     if save:
@@ -14106,7 +14106,7 @@ def main():
                 gain = _mb_w * conf
                 aud_onset = np.maximum(aud_onset, beat_env * gain).astype(np.float32)
                 print(f"Music beat: ~{bpm} BPM (confidence {conf:.2f}, "
-                      f"Gewicht {gain:.2f})")
+                      f"weight {gain:.2f})")
             else:
                 print("Music beat: no clear tempo (confidence too low) - "
                       "nur Sprech-Onset")
@@ -14754,7 +14754,7 @@ def main():
                                                and p['end'] > args.window[0]))]
         if bl_targets and not bl_exe:
             print("Blender not found - standing scene text falls back to the 2D look."
-                  " (Blender installieren oder render.blender_path in config.yaml setzen)")
+                  " (install Blender or set render.blender_path in config.yaml setzen)")
         elif bl_targets:
             print(f"Blender water text: {len(bl_targets)} moment(s) ({bl_exe})")
             import tempfile as _tf
@@ -15100,7 +15100,7 @@ def main():
             else:
                 hand_tracker = None
                 print("Hand contact skipped (models/hand.task is missing "
-                      "oder mediapipe ohne HandLandmarker)")
+                      "or mediapipe without HandLandmarker)")
     if W >= H:
         d_w = 252; d_h = max(int(round(H / W * 252 / 14)) * 14, 56)
     else:

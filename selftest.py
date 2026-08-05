@@ -3577,6 +3577,32 @@ def _scenario_logic(clip, transcript, tmp):
           all(os.path.exists(os.path.join(HERE, 'web', 'assets', 'fonts', f))
               for f in ('fonts.css', 'inter.woff2', 'newsreader.woff2',
                         'jetbrains-mono.woff2')))
+    # v230ar: der JOB-LOG ist Kundentext (v148). Vier print-Zeilen waren noch
+    # halb deutsch ("Kamera", "Musik ja/nein", "Gewicht", "Blender
+    # installieren") - im Log eines Kunden sieht das aus wie ein Fehler.
+    _rsrc_ar = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _de_ar = []
+    for _m in re.finditer(r'\bprint\(', _rsrc_ar):
+        _i = _m.end(); _t = 1; _j = _i
+        while _j < len(_rsrc_ar) and _t:
+            if _rsrc_ar[_j] == '(':
+                _t += 1
+            elif _rsrc_ar[_j] == ')':
+                _t -= 1
+            _j += 1
+        _txt = ' '.join(re.findall(r'["\']([^"\']*)["\']', _rsrc_ar[_i:_j]))
+        if re.search(r'\b(Kamera|Musik|und|oder|nicht|keine?|wird|werden|sind|'
+                     r'Datei|Fehler|Sprache|Woerter|Schrift|Hoehe|Breite|'
+                     r'Gewicht|installieren|uebersprungen)\b', _txt):
+            _de_ar.append(_txt[:60])
+    check('v230ar: der Job-Log ist durchgehend englisch (der Kunde liest ihn)',
+          not _de_ar, '; '.join(_de_ar[:3]) if _de_ar else
+          'alle print-Zeilen geprueft')
+    # Die Stil-Messung im Konto ebenfalls: sie steht als Klartext beim Kunden.
+    check('v230ar: die Stil-Messung ist englisch',
+          "return 'Measured: '" in _rsrc_ar
+          and 'left aligned' in _rsrc_ar and 'calm camera' in _rsrc_ar)
+
     # ===== v230aq DIE OBERFLAECHE IST DURCHGEHEND ENGLISCH ==============
     # Ismets Befund: "teilweise sind noch Sachen auf Deutsch". Es waren genau
     # zwei Stellen im Momente-Editor - die Effekt-Namen und der Render-Knopf.

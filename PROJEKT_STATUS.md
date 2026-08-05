@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ar MAILS UND STIL-MESSUNG GEPRUEFT, VIER LOG-ZEILEN UEBERSETZT.**
+  Ismets Auftrag nach v230aq.
+  - **Die zehn Kunden-Mails sind alle englisch** (Ablauf-Erinnerung,
+    Bestaetigung, Willkommen, Kaufbeleg, Loeschhinweis, zwei Passwort-Mails,
+    Ticket-Eingang, Ticket-Antwort). Auch die Bausteine, die hineinlaufen
+    (Anrede, Gratis-Zeile, Betreff-Varianten). Nichts zu tun.
+  - **Die Stil-Messung im Konto ist englisch** ("Measured: key word 7.4% of
+    frame height, size contrast 2.3x, left aligned, calm camera ...").
+  - **Vier print-Zeilen in render.py waren halb deutsch** und landen im
+    JOB-LOG, den der Kunde liest (v148-Regel): "Kamera", "Musik ja/nein",
+    "Gewicht", "Blender installieren", "oder mediapipe ohne
+    HandLandmarker". Uebersetzt.
+  - Neuer Test prueft ALLE print-Aufrufe in render.py auf deutsche Woerter,
+    damit die naechste eilige Zeile nicht wieder im Kundenlog landet.
 - **v230aq DIE OBERFLAECHE IST DURCHGEHEND ENGLISCH.** Ismets Befund
   "teilweise sind noch Sachen auf Deutsch". Im gerenderten Browser gesucht
   (Startseite, Beweis-Seite, App, Impressum, AGB, Datenschutz): genau zwei
