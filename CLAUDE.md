@@ -1578,7 +1578,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2010/2011 (Stand v230aw)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2023/2024 (Stand v230ax)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1900,18 +1900,39 @@ eingerichtet, siehe unten.)
 - Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
   Heuristik/CPU/synthetisch getestet) — das geschieht ueber douchko.eu.
 
-### Sicherheits-Rückstand (Stand v230w, am Code nachgeprüft)
-**Nur noch EIN Punkt offen.** Nicht wieder als offen führen: Dienst-Nutzer
+### Sicherheits-Rückstand (Stand v230ax, am Code nachgeprüft)
+**Nichts mehr offen.** Nicht wieder als offen führen: Dienst-Nutzer
 statt root (v204/v205a), Sicherheits-Ereignisprotokoll, FPS-/Auflösungsgrenze,
 Allowlist für den Render-Subprozess, Notaus, `security.txt`, gepinnte Bauteile
-— und seit v230v/v230w die **Sicherung ausser Haus** (Cloudflare R2,
-verschlüsselt, 30 Stände, im Panel eingerichtet und mit der Probe bestätigt).
+— seit v230v/v230w die **Sicherung ausser Haus** (Cloudflare R2,
+verschlüsselt, 30 Stände, im Panel eingerichtet und mit der Probe bestätigt)
+— und seit v230ax die **Prüfsummen** (siehe unten).
 
-1. **Kein Lockfile mit Hashes.** Die Versionen sind exakt gepinnt (v205a), aber
-   ohne Hash-Prüfung; die KI-Modelle werden weiter ohne Prüfsumme über
-   `resolve/main` geladen. Wer das angeht, braucht ein `pip freeze` AUS DEM
-   CONTAINER — die Sandbox-Versionen widersprechen requirements.txt, geraten
-   zu pinnen blockiert nur Deploys.
+### Prüfsummen für Fremdbauteile (v230aw/v230ax)
+Exakte Versionen (v205a) verhindern nur den ZUFÄLLIGEN Wechsel. Wird ein
+Bauteil unter DERSELBEN Nummer neu veröffentlicht, lädt der nächste Bau die
+neue Fassung. `requirements.lock.txt` + `--require-hashes` rechnen nach.
+- **Die Versionen kommen aus dem laufenden Container, nie aus einer
+  Schätzung.** Panel → System → **Alle Bauteile kopieren** (`_paket_freeze`,
+  v230aw). Die 16 „wichtigen" reichen NICHT: `--require-hashes` verlangt
+  jedes Paket, auch die Mitgebrachten (jax, matplotlib, scipy … über
+  mediapipe). Geraten zu pinnen blockiert nur Deploys.
+- **Je Bauteil stehen ALLE Dateien der Version drin** (Rad je Python-Version
+  und Architektur, Quellpaket). pip nimmt, was zu einer davon passt — sonst
+  fällt der Bau, sobald ein anderes Rad gezogen wird.
+- **Zwei Listen für dieselbe Frage sind eine zu viel:** ein Test vergleicht
+  jeden Pin aus `requirements.txt` mit dem Lockfile.
+- **KI-Modelle: `MODEL_SHA256` in `render.py`.** Frisch geladen → falscher
+  Fingerabdruck bricht ab und die Datei fliegt weg. Schon liegend → nur
+  Meldung, ein zu alter Pin darf den Betrieb nicht anhalten. `depth.onnx`
+  bleibt bewusst ungepinnt (`resolve/main` = beweglicher Stand, Quelle vom
+  Container aus 403); jedes ungepinnte Modell braucht einen Eintrag in
+  `MODEL_UNPINNED` mit Begründung, sonst fällt der Selftest.
+- **Der Bau darf einen Netzhänger schlucken, einen falschen Fingerabdruck
+  NICHT** (`ensure_models_cli`, Ausgang 9). Das alte `|| echo` hätte genau
+  die Meldung verschluckt, wegen der es die Prüfung gibt.
+- Was es schützt: späteres Austauschen einer Datei, Manipulation unterwegs.
+  Was NICHT: ein Paket, das schon zum Zeitpunkt der Liste vergiftet war.
 
 **ERLEDIGT, nicht mehr als offen behandeln (v175, am Repo/Live geprüft):**
 - **Sound-Pack liegt vollständig im Repo**: `sfx/pack` 14/14 Slots belegt

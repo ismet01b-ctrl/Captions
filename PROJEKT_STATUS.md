@@ -3,6 +3,53 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ax PRUEFSUMMEN FUER ALLE FREMDBAUTEILE (letzter offener
+  Sicherheits-Punkt).** Exakte Versionen (v205a) verhindern nur den
+  ZUFAELLIGEN Wechsel. Wird ein Bauteil gekapert und unter DERSELBEN
+  Versionsnummer neu veroeffentlicht, installiert der naechste Neubau die
+  vergiftete Fassung, ohne dass etwas auffaellt.
+  - `requirements.lock.txt`: 50 Bauteile, je Version ALLE von PyPI
+    veroeffentlichten sha256 (Rad je Python-Version und Architektur,
+    Quellpaket). Der Dockerfile installiert daraus mit `--require-hashes`.
+  - **Die Versionen sind nicht geraten**, sie sind der Bestand des laufenden
+    Containers (Panel -> System -> Alle Bauteile kopieren, v230aw). Die 16
+    "wichtigen" haetten nicht gereicht: `--require-hashes` verlangt JEDES
+    Paket, auch die Mitgebrachten (jax, matplotlib, scipy ueber mediapipe).
+  - BEWIESEN, nicht behauptet: `pip install --dry-run --require-hashes` gegen
+    Python 3.12 / manylinux x86_64 loest alle 50 auf und prueft dabei jede
+    geladene Datei ("Would install ... 50 Pakete"). Gegenprobe mit einer
+    verfaelschten Pruefsumme bricht ab ("THESE PACKAGES DO NOT MATCH THE
+    HASHES"). Der erste Anlauf fiel bei contourpy - die neueren Raeder tragen
+    manylinux_2_28, nicht 2_17; das ist eine Plattformfrage, kein Lockfehler.
+  - KI-Modelle: `MODEL_SHA256` in `render.py`. rvm/face/hand sind gepinnt und
+    die Werte NACHGEMESSEN (frisch von der Quelle geladen, Hash identisch mit
+    der Datei im Repo). `depth.onnx` bleibt bewusst ungepinnt: die Adresse
+    zeigt auf `resolve/main` (beweglicher Stand), und die Quelle war vom
+    Container aus nicht erreichbar (403) - ein Wert liesse sich hier gar nicht
+    ehrlich messen. Jedes ungepinnte Modell braucht eine Begruendung in
+    `MODEL_UNPINNED`, sonst faellt der Selftest (v230f-Lehre: nichts still
+    weglassen).
+  - Frisch geladene Datei mit falschem Fingerabdruck: Abbruch + Datei weg.
+    Schon liegende Datei: nur Meldung - ein zu alter Pin darf den Betrieb
+    nicht anhalten, und wer auf die Platte des Containers schreiben kann, hat
+    ohnehin gewonnen.
+  - Der Image-Bau darf einen Netzhaenger schlucken (Modelle kommen dann zur
+    Laufzeit), einen falschen Fingerabdruck NICHT (`ensure_models_cli`,
+    Ausgang 9). Das alte `|| echo` haette genau die Meldung verschluckt,
+    wegen der es die Pruefung gibt.
+  - 13 Tests: Lockfile vollstaendig, jede Zeile mit sha256, requirements.txt
+    und Lockfile sagen dasselbe, Dockerfile benutzt das Lockfile mit Pruefung,
+    jedes Modell gepinnt oder begruendet, die drei Pins passen zu den echten
+    Dateien, und die Pruefung BEISST (falsche Datei -> Abbruch + geloescht,
+    liegende Datei -> Meldung ohne Loeschen).
+  - EHRLICH: was das NICHT schuetzt - ein Paket, das schon zum Zeitpunkt
+    dieser Liste vergiftet war. Eine Pruefsumme friert ein, was da ist, sie
+    prueft es nicht auf Inhalt.
+  - Der Docker-Bau selbst liess sich hier nicht fahren (kein Docker-Daemon in
+    der Testumgebung). Der Beweis oben ist die pip-Aufloesung mit denselben
+    Flags; der echte Bau ist der naechste Deploy, und ein Fehlschlag dort
+    kippt nichts live (Gate bricht ab, alte Fassung laeuft weiter, Meldung im
+    Panel).
 - **v230aw DER BAUTEIL-BESTAND KOMMT AUS DEM PANEL.** Vorstufe zum letzten
   offenen Sicherheits-Punkt (Pruefsummen fuer die Fremdbauteile). Der bisher
   einzige ehrliche Weg an die echten Versionen war `docker compose exec app

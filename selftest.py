@@ -10204,6 +10204,102 @@ def _scenario_betrieb(tmp):
           'pip install --no-cache-dir fastapi uvicorn' not in _dock205
           and _dock205.count('pip install') == 1)
 
+    # (6d) v230ax: Pruefsummen. Exakte Versionen (v205a) verhindern nur den
+    # ZUFAELLIGEN Wechsel - wird ein Bauteil unter DERSELBEN Nummer neu
+    # veroeffentlicht, laedt der naechste Bau die neue Fassung. Erst
+    # --require-hashes rechnet nach.
+    _lockp = os.path.join(HERE, 'requirements.lock.txt')
+    _lock = open(_lockp, encoding='utf-8').read()
+    # Zeilen zu (name, version, [hashes]) zerlegen - ohne pip, damit der Test
+    # nicht dieselbe Bibliothek fragt, die er absichern soll.
+    _lock_pkgs, _akt = {}, None
+    for _z in _lock.split('\n'):
+        _s = _z.strip()
+        if not _s or _s.startswith('#'):
+            continue
+        _s = _s.rstrip('\\').strip()
+        if _s.startswith('--hash='):
+            if _akt:
+                _lock_pkgs[_akt].append(_s[len('--hash='):])
+        elif '==' in _s:
+            _n, _v = _s.split('==', 1)
+            _akt = (_n.strip().lower(), _v.strip())
+            _lock_pkgs.setdefault(_akt, [])
+    check('v230ax: das Lockfile listet alle Bauteile des Containers',
+          len(_lock_pkgs) >= 45, f'{len(_lock_pkgs)} Eintraege')
+    _ohne = [f'{n}=={v}' for (n, v), h in _lock_pkgs.items() if not h]
+    check('v230ax: JEDER Eintrag hat mindestens eine Pruefsumme',
+          not _ohne, f'ohne: {_ohne[:5]}')
+    _krumm = [h for hs in _lock_pkgs.values() for h in hs
+              if not _re203.fullmatch(r'sha256:[0-9a-f]{64}', h)]
+    check('v230ax: jede Pruefsumme ist eine vollstaendige sha256',
+          not _krumm, f'krumm: {_krumm[:3]}')
+    # Zwei Listen fuer dieselbe Frage sind eine zu viel: was in
+    # requirements.txt gepinnt steht, MUSS im Lockfile identisch stehen.
+    _direkt = dict(_re203.findall(r'^([A-Za-z0-9._-]+)==([^\s#]+)\s*$',
+                                  _req205, _re203.M))
+    _fehlt = [f'{n}=={v}' for n, v in _direkt.items()
+              if _lock_pkgs.get((n.lower(), v)) is None]
+    check('v230ax: requirements.txt und Lockfile sagen dasselbe',
+          not _fehlt, f'nicht im Lockfile: {_fehlt}')
+    check('v230ax: der Bau installiert AUS dem Lockfile, mit Pruefung',
+          '--require-hashes' in _dock205
+          and 'requirements.lock.txt' in _dock205
+          and _re203.search(r'COPY[^\n]*requirements\.lock\.txt', _dock205),
+          'sonst liegt die Datei zwar da, wird aber nicht benutzt')
+
+    # (6e) v230ax: dasselbe fuer die KI-Modelle. Die Groessenpruefung faengt
+    # nur den abgebrochenen Download - sie sagt nicht, ob es DIESE Datei ist.
+    _rd230 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    import render as _R230
+    _unpinned = set(_R230.MODEL_URLS) - set(_R230.MODEL_SHA256)
+    check('v230ax: jedes Modell ist entweder gepinnt oder begruendet ungepinnt',
+          all(len((_R230.MODEL_UNPINNED.get(m) or '')) > 40 for m in _unpinned),
+          f'ohne Begruendung: {[m for m in _unpinned if not _R230.MODEL_UNPINNED.get(m)]}')
+    check('v230ax: die Pruefsummen sind vollstaendige sha256',
+          all(_re203.fullmatch(r'[0-9a-f]{64}', h)
+              for h in _R230.MODEL_SHA256.values()))
+    # Die gepinnten Werte muessen zu den Dateien passen, die hier liegen -
+    # sonst ist der Pin geraten. Fehlt eine Datei, wird nichts behauptet.
+    import hashlib as _hl230
+    for _rel, _soll in _R230.MODEL_SHA256.items():
+        _p = os.path.join(HERE, _rel)
+        if not os.path.exists(_p):
+            continue
+        _h = _hl230.sha256()
+        with open(_p, 'rb') as _fh:
+            for _st in iter(lambda: _fh.read(1 << 20), b''):
+                _h.update(_st)
+        check(f'v230ax: {_rel} passt zu seinem Fingerabdruck',
+              _h.hexdigest() == _soll, _h.hexdigest()[:16])
+    # WIRKSAMKEIT: die Pruefung muss auch wirklich zubeissen und die frisch
+    # geladene Datei wegraeumen (v219 - nicht der Quelltext zaehlt, der Lauf).
+    _tmp230 = os.path.join(tempfile.gettempdir(), 'dve_modell_falsch.bin')
+    open(_tmp230, 'wb').write(b'nicht das modell')
+    _R230.MODEL_SHA256['models/_test230.bin'] = '0' * 64
+    try:
+        _R230._modell_pruefen('models/_test230.bin', _tmp230)
+        _biss = False
+    except RuntimeError as _e230:
+        _biss = 'checksum mismatch' in str(_e230)
+    check('v230ax: eine falsche Datei bricht ab und wird geloescht',
+          _biss and not os.path.exists(_tmp230))
+    # ... und eine Datei, die schon lag, wird NICHT geloescht (ein zu alter
+    # Pin darf den Betrieb nicht anhalten).
+    open(_tmp230, 'wb').write(b'nicht das modell')
+    try:
+        _R230._modell_pruefen('models/_test230.bin', _tmp230, loeschen=False)
+        _biss2 = False
+    except RuntimeError:
+        _biss2 = True
+    check('v230ax: eine schon liegende Datei wird gemeldet, nicht geloescht',
+          _biss2 and os.path.exists(_tmp230))
+    del _R230.MODEL_SHA256['models/_test230.bin']
+    os.remove(_tmp230)
+    check('v230ax: der Bau haelt bei falschem Fingerabdruck an',
+          'ensure_models_cli' in _dock205 and '= "9" ]' in _dock205
+          and 'ensure_models_cli' in _rd230)
+
     # ======= v206: Zahlen, denen man trauen kann + Startseite ===========
     # Ismets Befund: das Panel ist "unuebersichtlich und kaum
     # benutzerfreundlich", mit Begriffen, bei denen er "keine Ahnung habe, was

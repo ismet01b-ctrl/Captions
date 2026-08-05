@@ -162,6 +162,61 @@ MODEL_MIN_BYTES = {'models/rvm.onnx': 10_000_000,
                    'models/depth.onnx': 80_000_000,
                    'models/hand.task': 5_000_000}
 
+# v230ax: Fingerabdruck jeder Modelldatei. Eine Groessenpruefung faengt nur
+# den abgebrochenen Download; sie sagt NICHTS darueber, ob die Datei noch
+# dieselbe ist. Die Werte sind nachgemessen: am 05.08.2026 frisch von der
+# Quelle geladen und mit der Datei im Repo verglichen, beide identisch.
+MODEL_SHA256 = {
+    'models/rvm.onnx':
+        '88d4531297118f595bf2fd60f6f566aec2e559393802d1f436c380f0cbbd2828',
+    'models/face.tflite':
+        'b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f',
+    'models/hand.task':
+        'fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1',
+}
+
+# Was NICHT geprueft wird, und warum - ein leerer Eintrag waere derselbe
+# stille Wegfall wie v230f. Wer ein Modell ergaenzt, traegt es entweder oben
+# mit Fingerabdruck ein oder hier mit Begruendung; der Selftest faellt sonst.
+MODEL_UNPINNED = {
+    'models/depth.onnx':
+        'Die Adresse zeigt auf resolve/main, also auf einen beweglichen '
+        'Stand - ein Fingerabdruck von heute wuerde beim naechsten Upload '
+        'der Gegenseite den Build blockieren. Ausserdem war die Quelle von '
+        'der Testumgebung aus nicht erreichbar (403 ueber den Proxy), der '
+        'Wert liesse sich hier gar nicht ehrlich messen.',
+}
+
+
+def _modell_pruefen(rel, path, loeschen=True):
+    """Stimmt der Fingerabdruck? Bei Abweichung fliegt die frisch geladene
+    Datei weg und der Lauf bricht ab - eine unbekannte Modelldatei
+    weiterzubenutzen waere das Gegenteil von dem, wofuer die Pruefung da ist.
+    `loeschen=False` fuer eine Datei, die schon lag: dort ist die Abweichung
+    eine Meldung, kein Grund, den Betrieb anzuhalten."""
+    soll = MODEL_SHA256.get(rel)
+    if not soll:
+        return
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, 'rb') as fh:
+        for stueck in iter(lambda: fh.read(1 << 20), b''):
+            h.update(stueck)
+    ist = h.hexdigest()
+    if ist != soll:
+        if loeschen:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        raise RuntimeError(
+            f'ERROR: checksum mismatch for {rel}.\n'
+            f'  expected {soll}\n'
+            f'  got      {ist}\n'
+            f'  The downloaded model file is not the one this build was '
+            f'tested with. It has been deleted. Do not re-run blindly: '
+            f'check MODEL_URLS and MODEL_SHA256 in render.py.')
+
 
 def ensure_models():
     """Laedt die KI-Modelle. Frueher wurde die ganze Datei in einem Rutsch in den
@@ -176,6 +231,16 @@ def ensure_models():
         # Halbe Datei von einem frueheren Abbruch? Die waere unbrauchbar und
         # wuerde spaeter mit einem kryptischen ONNX-Fehler knallen.
         if os.path.exists(path) and os.path.getsize(path) >= need:
+            # v230ax: Eine Datei, die schon da ist, wird geprueft aber nicht
+            # zum Abbruch gemacht. Der Angriff, gegen den der Fingerabdruck
+            # gebaut ist, passiert beim LADEN; wer schon auf die Platte des
+            # Containers schreiben kann, hat ohnehin gewonnen. Haerter zu
+            # sein hiesse: ein zu alter Pin legt den Betrieb still.
+            try:
+                _modell_pruefen(rel, path, loeschen=False)
+            except RuntimeError as e:
+                print(f'WARNING: {rel} does not match its pinned checksum - '
+                      f'keeping it, but this needs a look.\n{e}')
             continue
         if os.path.exists(path):
             print(f"  {rel} is incomplete - downloading again")
@@ -208,7 +273,14 @@ def ensure_models():
                 if os.path.getsize(part) < need:
                     raise IOError(f'Datei zu klein ({os.path.getsize(part)} Bytes)')
                 os.replace(part, path)
+                # v230ax: Die Groesse sagt nur, dass etwas ankam. Erst der
+                # Fingerabdruck sagt, dass es DIESE Datei ist. Ein Fehler
+                # hier ist KEIN Netzproblem und darf nicht in die
+                # Wiederholschleife - sonst laedt sie fuenfmal dasselbe.
+                _modell_pruefen(rel, path)
                 break
+            except RuntimeError:
+                raise
             except Exception as e:
                 print(f"\n  Aborted ({type(e).__name__}) - attempt {versuch}/5, "
                       f"mache bei {have / 1e6:.0f} MB ...")
@@ -218,6 +290,25 @@ def ensure_models():
                 f"Download von {rel} nach 5 Versuchen fehlgeschlagen.\n"
                 f"  Datei manuell laden: {url}\n"
                 f"  und ablegen unter:   {path}")
+
+def ensure_models_cli():
+    """Fuer den Image-Bau. Der Aufruf dort ist absichtlich fehlertolerant -
+    ein Netzhaenger beim Bauen soll den Deploy nicht kippen, die Modelle
+    kommen dann zur Laufzeit. Ein FALSCHER FINGERABDRUCK ist aber kein
+    Netzhaenger: der muss den Bau anhalten, sonst wird genau die Meldung
+    verschluckt, wegen der es die Pruefung gibt. Darum zwei Ausgaenge -
+    9 = Fingerabdruck stimmt nicht, 0 = alles andere."""
+    import sys as _s
+    try:
+        ensure_models()
+    except Exception as e:
+        if 'checksum mismatch' in str(e):
+            print(str(e))
+            _s.exit(9)
+        print(f'WARNING: models not fetched at build time ({e}) - '
+              f'they will be downloaded on first use.')
+    _s.exit(0)
+
 
 def ease_out(x): return 1 - (1 - min(max(x, 0), 1)) ** 3
 def ease_expo(x):

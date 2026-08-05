@@ -25,18 +25,28 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt /app/
+COPY requirements.txt requirements.lock.txt /app/
 # v205a-sec: fastapi/uvicorn/python-multipart wurden hier bis v205 SEPARAT
 # und voellig ungepinnt nachgeschoben - sie standen in requirements.txt gar
 # nicht drin. Zwei Quellen fuer dieselbe Frage sind eine zu viel; jetzt steht
 # alles in EINER Datei mit exakten Versionen.
-RUN pip install --no-cache-dir -r requirements.txt
+#
+# v230ax: Installiert wird aus dem LOCKFILE, mit --require-hashes. pip rechnet
+# damit die Pruefsumme jeder geladenen Datei nach; wird ein Bauteil unter
+# derselben Versionsnummer ausgetauscht, bricht der Bau ab statt die
+# vergiftete Fassung mitzunehmen. requirements.txt bleibt die lesbare Liste
+# der DIREKTEN Bauteile (mit den Begruendungen); der Selftest vergleicht
+# beide, damit sie nicht auseinanderlaufen.
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock.txt
 
 COPY . /app/
 
 # ONNX-Modelle beim Bauen ziehen (RVM ~30 MB, Depth ~80 MB), damit der
 # erste Nutzer nicht wartet.
-RUN python -c "import render; render.ensure_models()" || echo "Modelle werden zur Laufzeit geladen"
+# v230ax: Ein Netzhaenger darf den Bau nicht kippen (Modelle kommen dann zur
+# Laufzeit), ein falscher Fingerabdruck MUSS ihn kippen - sonst verschluckt
+# das alte `|| echo` genau die Meldung, wegen der es die Pruefung gibt.
+RUN python -c "import render; render.ensure_models_cli()"; rc=$?; if [ "$rc" = "9" ]; then echo "FATAL: model checksum mismatch - build stopped"; exit 1; fi; exit 0
 
 # v101p: Motion-Engine-Deps + Headless-Browser. KOMPLETT best-effort - der ganze
 # Block ist mit `|| echo` abgesichert, sodass ein npm-/Browser-/Netz-Fehler den
