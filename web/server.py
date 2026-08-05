@@ -2747,6 +2747,14 @@ _QSEQ = _it.count()
 # System-Endpunkt - zwei Wahrheiten fuer denselben Wert.
 WORKERS = max(1, int(os.environ.get('DVE_WORKERS', '1')))
 QUEUE_WARN = int(os.environ.get('DVE_QUEUE_WARN', '5'))
+# v230av GESAMT-BREMSE FUER GRATIS-UPLOADS. Die Pro-Konto-Deckel
+# (_inflight_count, _vorbereitet_count) schuetzen gegen EIN Konto, nicht gegen
+# VIELE. Die Priority-Queue laesst Kaeufer zwar vorbei, aber der eine Worker
+# und die Platte koennen von hunderten Gratis-Renders trotzdem zugestellt
+# werden. Ist die Caption-Schlange tiefer als dieser Wert, werden NUR NOCH
+# GRATIS-Uploads abgewiesen (freundlich, 503); wer gekauft hat, kommt IMMER
+# durch. Grosszuegig gesetzt, damit im Normalbetrieb niemand ihn je sieht.
+QUEUE_FREE_MAX = int(os.environ.get('DVE_QUEUE_FREE_MAX', '40'))
 
 
 def q_put(jid, q=None):
@@ -7360,6 +7368,16 @@ async def _finalize_upload(request, jid, d, src, filename, look, code, mode, ove
             raise HTTPException(
                 429, 'Too many prepared uploads waiting. Please render or '
                      'delete some of them before uploading more.')
+        # v230av: ist die Schlange geflutet, kommen nur noch KAEUFER durch.
+        # Ein Gratis-Konto wird freundlich vertroestet, statt dass viele davon
+        # zusammen den einen Worker und die Platte zustellen. Kaeufer (schon
+        # einmal gezahlt) sind davon nie betroffen.
+        if QUEUE.qsize() >= QUEUE_FREE_MAX and not _has_purchased(uid):
+            shutil.rmtree(d, ignore_errors=True)
+            raise HTTPException(
+                503, 'The render queue is unusually busy right now. Free '
+                     'renders are paused for a few minutes - please try '
+                     'again shortly.')
         # v149: 4K erst bezahlen, wenn es auch 4K WIRD. Die Pruefung sitzt
         # bewusst hier, vor der Reservierung - nicht im Render.
         _uhd = _will_uhd(overrides, src)

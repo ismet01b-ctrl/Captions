@@ -1092,6 +1092,17 @@ NUTZER-Ueberschreibung — obwohl niemand etwas geaendert hat.
   einen Kundenbefund nicht reproduziert, hat meistens den ERSTEN Lauf
   getestet.
 
+## Missbrauch: Gesamt-Bremse, nicht nur pro Konto (v230av)
+Die Pro-Konto-Deckel (`_inflight_count`, `_vorbereitet_count`) schuetzen gegen
+EIN Konto. Gegen VIELE Gratis-Konten, die zusammen den einen Worker und die
+Platte zustellen, half nichts - die Priority-Queue laesst Kaeufer zwar
+vorbei, aber die Schlange selbst war unbegrenzt. `QUEUE_FREE_MAX` (Standard
+40): ist die Caption-Schlange tiefer, werden NUR NOCH Gratis-Uploads mit 503
+vertroestet; wer je gekauft hat (`_has_purchased`), kommt IMMER durch. Der
+Riegel sitzt an derselben Stelle wie die Konto-Deckel (nach der
+Video-Pruefung). Wer eine neue Gratis-Aktion baut, fragt: was macht sie, wenn
+tausend Konten sie gleichzeitig ausloesen?
+
 ## Sicherheit: Header + CSP (v230ah)
 - **Keine Ereignis-Attribute im Markup.** `onclick=`/`onsubmit=` zwangen die
   CSP zu `script-src 'unsafe-inline'` - und das haette auch ein
@@ -1567,7 +1578,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2001/2002 (Stand v230ar)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2005/2006 (Stand v230av)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

@@ -6537,6 +6537,64 @@ def _scenario_security(tmp):
     check('v230c-sec: Summen-Deckel fuer vorbereitete Uploads',
           'def _vorbereitet_count' in _ssrc_sec
           and '_vorbereitet_count(uid) >= MAX_VORBEREITET' in _ssrc_sec)
+    # v230av: die Pro-Konto-Deckel schuetzen gegen EIN Konto, nicht gegen
+    # VIELE. Ist die Schlange geflutet, kommen nur noch Kaeufer durch - ein
+    # Gratis-Konto wird vertroestet, statt dass hunderte davon den einen
+    # Worker und die Platte zustellen. Geprueft am ECHTEN Upload-Endpunkt.
+    check('v230av: Gesamt-Bremse fuer Gratis-Uploads ist verdrahtet',
+          'QUEUE_FREE_MAX' in _ssrc_sec
+          and 'QUEUE.qsize() >= QUEUE_FREE_MAX and not _has_purchased(uid)'
+          in _ssrc_sec)
+    import subprocess as _sp230
+    from starlette.testclient import TestClient as _TC230
+    _mp4_230 = os.path.join(HERE, '_qtest.mp4')
+    if not os.path.exists(_mp4_230):
+        _sp230.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                    'testsrc=size=320x240:rate=10:duration=1', '-pix_fmt',
+                    'yuv420p', _mp4_230], check=True)
+    _vid230 = open(_mp4_230, 'rb').read()
+
+    def _mkuser230(mail, purchased=False):
+        _cx = _TC230(SV.app, base_url='https://test')
+        _cx.post('/api/register',
+                 data={'email': mail, 'password': 'passwort1234', 'name': 'Queue Tester'})
+        _cn = SV._db()
+        _cn.execute("UPDATE users SET verified=1 WHERE email=?", (mail,))
+        _cn.commit()
+        _row = _cn.execute("SELECT id FROM users WHERE email=?", (mail,)).fetchone()
+        _cn.close()
+        _uid = _row['id']
+        SV._adjust_balance(_uid, 600, 'test')
+        if purchased:
+            SV._credit_purchase(_uid, 600, f'sess_{mail}')
+        _cx.post('/api/login', data={'email': mail, 'password': 'passwort1234'})
+        return _cx
+
+    _q_alt = SV.QUEUE_FREE_MAX
+    SV.QUEUE_FREE_MAX = 2
+    for _i in range(4):
+        SV.QUEUE.put((5, f'flood{_i}'))
+    try:
+        _ts230 = int(time.time())
+        _cf = _mkuser230(f'qfree{_ts230}@gmail.com', purchased=False)
+        _cp = _mkuser230(f'qpaid{_ts230}@gmail.com', purchased=True)
+        _rf = _cf.post('/api/upload',
+                       files={'datei': ('a.mp4', _vid230, 'video/mp4')},
+                       data={'mode': 'pre'})
+        _rp = _cp.post('/api/upload',
+                       files={'datei': ('a.mp4', _vid230, 'video/mp4')},
+                       data={'mode': 'pre'})
+        check('v230av: Gratis-Upload bei voller Schlange wird vertroestet (503)',
+              _rf.status_code == 503, f'-> {_rf.status_code}')
+        check('v230av: Kaeufer kommt bei voller Schlange IMMER durch',
+              _rp.status_code != 503, f'-> {_rp.status_code}')
+    finally:
+        SV.QUEUE_FREE_MAX = _q_alt
+        while not SV.QUEUE.empty():
+            try:
+                SV.QUEUE.get_nowait()
+            except Exception:
+                break
     check('v230c-sec: kurze Kante + Seitenverhaeltnis werden geprueft',
           'MAX_ASPECT' in _ssrc_sec and '_kurz < 120' in _ssrc_sec)
     check('v230c-sec: .env kommt nicht ins Docker-Image',

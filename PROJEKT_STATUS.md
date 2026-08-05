@@ -3,6 +3,25 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230av GESAMT-BREMSE FUER GRATIS-UPLOADS.** Aus dem Selbst-Angriff
+  (Ismets Auftrag "versuche die Seite zu hacken"): der Code-Teil war komplett
+  dicht - keine echte Luecke bei Admin-Auth, IDOR, Path-Traversal, SQLi,
+  gespeichertem XSS, Webhook-Signatur, Config-Override, Session-Cookies. Die
+  EINE reale Restluecke war Verfuegbarkeit, nicht Diebstahl: viele
+  Gratis-Konten koennten zusammen die Render-Schlange und die Platte
+  volllaufen lassen. Die Pro-Konto-Deckel greifen nur gegen EIN Konto, die
+  Schlange selbst war unbegrenzt.
+  - `QUEUE_FREE_MAX` (Standard 40): ist die Schlange tiefer, kommen NUR NOCH
+    Kaeufer durch, ein Gratis-Konto wird freundlich vertroestet (503). Wer je
+    gekauft hat, ist nie betroffen.
+  - Am echten Upload-Endpunkt bewiesen: Gratis bei voller Schlange -> 503,
+    Kaeufer -> 200, leere Schlange -> Gratis geht wieder.
+  - Bewusst NICHT gemacht: Bauteile mit Pruefsumme pinnen. Das braucht die
+    echten Versionen aus dem Container (Backlog-Notiz); von hier geraten
+    wuerde nur Deploys blockieren.
+  - Multi-Account-Farming war schon dicht: Willkommens-Guthaben nicht per
+    Loeschen+Neu farmbar, Monats-Credit hart 1x/Monat, Gmail-Punkt/Plus als
+    dasselbe Postfach erkannt, Register nach 2 Versuchen/IP gebremst.
 - **v230ar MAILS UND STIL-MESSUNG GEPRUEFT, VIER LOG-ZEILEN UEBERSETZT.**
   Ismets Auftrag nach v230aq.
   - **Die zehn Kunden-Mails sind alle englisch** (Ablauf-Erinnerung,
