@@ -2133,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230ar'
+DVE_VERSION = 'v230as'
 
 
 def _build_datei():
@@ -6872,12 +6872,16 @@ def robots_txt():
     KEIN Schutz, sondern eine Bitte - der Riegel bleibt die Anmeldung."""
     basis = os.environ.get('DVE_PUBLIC_URL', 'https://douchko.eu').rstrip('/')
     return Response(
+        # v230as: `/assets/` ist wieder FREI. Dort liegen die Demo-Videos, das
+        # Vorschaubild und die Schriften; sperrt man sie, kann Google die
+        # Startseite nicht vollstaendig rendern und sieht eine Seite ohne
+        # Bild. Gesperrt bleibt nur, was privat ist oder nichts zu indexieren
+        # hat (App, API, Panel).
         content=("User-agent: *\n"
                  "Allow: /$\n"
                  "Disallow: /app\n"
                  "Disallow: /api/\n"
                  "Disallow: /admin\n"
-                 "Disallow: /assets/\n"
                  f"\nSitemap: {basis}/sitemap.xml\n"),
         media_type='text/plain; charset=utf-8')
 
