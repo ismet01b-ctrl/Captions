@@ -3692,9 +3692,13 @@ def _scenario_logic(clip, transcript, tmp):
     # v230at: der Search-Console-Nachweis muss auf der STARTSEITE stehen -
     # Google prueft genau dort. Faellt er raus, verliert die Property ihre
     # Bestaetigung und die Sitemap wird nicht mehr gelesen.
-    check('v230at: der Google-Nachweis steht in der Startseite',
-          'name="google-site-verification"' in _land
-          and '-ESYe6i5wAdHAMvh5syCaHkSL6olMqoQ8qaX8wLjHlM' in _land)
+    # Beide Nachweise bleiben stehen: Google liest alle, und welcher zu
+    # welcher Property gehoert, weiss man von aussen nicht mehr. Einen zu
+    # entfernen kostet im Zweifel die Bestaetigung.
+    check('v230at: die Google-Nachweise stehen in der Startseite',
+          _land.count('name="google-site-verification"') >= 2
+          and '-ESYe6i5wAdHAMvh5syCaHkSL6olMqoQ8qaX8wLjHlM' in _land
+          and 'hoqj4G_OoSRSOxGp8GlxNTN0tWU8u79aqlQN2TG_XcE' in _land)
     check('v230am: die Startseite hat Canonical, Vorschaubild und Beschreibung',
           '<link rel="canonical" href="https://douchko.eu/">' in _land
           and 'property="og:image" content="https://douchko.eu/assets/og-image.png"' in _land
