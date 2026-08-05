@@ -5907,9 +5907,11 @@ function _tile({icon, head, val, sub, bar, chips, wide}) {
     <div class="val">${val}</div>${subHtml}${barHtml}${chipsHtml}
   </div>`;
 }
+// v230aq: die Oberflaeche ist durchgehend englisch. Diese fuenf Namen waren
+// die letzten deutschen Woerter, die ein Kunde zu sehen bekam.
 const FX_NAMES = {
-  behind: 'Hinter dir', cascade: 'Aufbau', blurin: 'Unschärfe',
-  outline: 'Umriss', ground: 'In der Szene',
+  behind: 'Behind you', cascade: 'Build-up', blurin: 'Blur in',
+  outline: 'Outline', ground: 'In the scene',
 };
 const LOOK_LABELS = {
   viral: 'Viral · Big bold, karaoke',
@@ -6523,7 +6525,7 @@ $('#momSave').addEventListener('click', async () => {
     State.renderStart = Date.now();
     toast('Moments saved. Render starting.', 'ok');
     pollRender();
-  } finally { btn.disabled = false; btn.textContent = 'Speichern & Rendern'; }
+  } finally { btn.disabled = false; btn.textContent = 'Save & render'; }
 });
 </script>
 </body>

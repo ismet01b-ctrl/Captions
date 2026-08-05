@@ -3,6 +3,20 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230aq DIE OBERFLAECHE IST DURCHGEHEND ENGLISCH.** Ismets Befund
+  "teilweise sind noch Sachen auf Deutsch". Im gerenderten Browser gesucht
+  (Startseite, Beweis-Seite, App, Impressum, AGB, Datenschutz): genau zwei
+  Stellen, beide im Momente-Editor, also erst nach einem Render sichtbar -
+  die fuenf Effekt-Namen (Hinter dir, Aufbau, Unschaerfe, Umriss, In der
+  Szene) und der Knopf "Speichern & Rendern".
+  - Uebrig bleibt nur die Anschrift (Hinter den Gaerten 4), die ist ein
+    Eigenname und bleibt deutsch.
+  - Gesucht wurde im BROWSER am sichtbaren Text, nicht im Quelltext: dort
+    stehen deutsche Kommentare und interne Statuswerte ('fertig', 'wartet'),
+    die niemand sieht - eine Quelltext-Suche haette 40 Fehlalarme geliefert
+    und die zwei echten Stellen verdeckt.
+  - Der neue Test prueft die Regel weiter, damit die naechste eilige Zeile
+    nicht wieder deutsch in die App rutscht.
 - **v230ao EINE BEWEIS-SEITE STATT FUENF KEYWORD-SEITEN** (`/before-after`).
   Ismets Entscheidung nach dem SEO-Vorschlag einer fremden KI. Statt fuenf
   duenner Textseiten, die dieselbe Botschaft wiederholen, EINE Seite mit dem

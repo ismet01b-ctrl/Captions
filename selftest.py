@@ -3577,6 +3577,34 @@ def _scenario_logic(clip, transcript, tmp):
           all(os.path.exists(os.path.join(HERE, 'web', 'assets', 'fonts', f))
               for f in ('fonts.css', 'inter.woff2', 'newsreader.woff2',
                         'jetbrains-mono.woff2')))
+    # ===== v230aq DIE OBERFLAECHE IST DURCHGEHEND ENGLISCH ==============
+    # Ismets Befund: "teilweise sind noch Sachen auf Deutsch". Es waren genau
+    # zwei Stellen im Momente-Editor - die Effekt-Namen und der Render-Knopf.
+    # Geprueft wird die REGEL: kein deutsches Wort in Texten, die der Kunde
+    # zu sehen bekommt. Kommentare und interne Statuswerte ('fertig',
+    # 'wartet') zaehlen nicht, die sieht niemand.
+    _DE_WORT = re.compile(
+        r'\b(und|oder|nicht|kein|keine|wird|werden|sind|haben|kann|mehr|noch|'
+        r'schon|jetzt|hier|alle|alles|Datei|Fehler|Konto|Guthaben|Speichern|'
+        r'Rendern|Sprache|Vorschau|Abbrechen|Loeschen|Hinter|Unschaerfe|'
+        r'Umriss|Szene|Aufbau|fuer|von|mit|dein|deine|bitte)\b', re.I)
+    _ix_aq = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _ix_aq = re.sub(r'<!--.*?-->', '', _ix_aq, flags=re.S)
+    _ix_aq = re.sub(r'^\s*//.*$', '', _ix_aq, flags=re.M)
+    _ix_aq = re.sub(r'/\*.*?\*/', '', _ix_aq, flags=re.S)
+    _sicht_aq = re.findall(r'(?:textContent|innerHTML|innerText)\s*=\s*'
+                           r'[\'"`]([^\'"`]{3,120})', _ix_aq)
+    _sicht_aq += [m.group(1) for m in
+                  re.finditer(r'>([^<>{}]{3,90})<', _ix_aq)]
+    _de_aq = sorted({t.strip() for t in _sicht_aq if _DE_WORT.search(t)})
+    check('v230aq: die Kunden-App zeigt kein deutsches Wort mehr',
+          not _de_aq, '; '.join(_de_aq[:3]) if _de_aq else 'geprueft')
+    check('v230aq: die Effekt-Namen im Momente-Editor sind englisch',
+          "behind: 'Behind you'" in _ix_aq and "'In the scene'" in _ix_aq
+          and 'Hinter dir' not in _ix_aq)
+    check('v230aq: der Render-Knopf heisst englisch',
+          "'Save & render'" in _ix_aq and 'Speichern & Rendern' not in _ix_aq)
+
     # ===== v230ao EINE BEWEIS-SEITE STATT FUENF KEYWORD-SEITEN ==========
     # Ismets Entscheidung nach dem SEO-Vorschlag: nicht fuenf duenne Seiten,
     # sondern EINE, die etwas kann, was die Startseite nicht kann - derselbe
