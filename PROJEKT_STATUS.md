@@ -3,6 +3,39 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230ay AUS ISMETS ERSTEM ECHTEN JOB-LOG (4K-Quelle, 12 s, 245 s Render).**
+  Drei Befunde, alle am Log gemessen, keiner geraten.
+  - **Eine ganze KI-Runde war umsonst.** Im Log steht es woertlich: "empty
+    answer (finish_reason=length, budget=2500, used=2500, thereof
+    reasoning=2500)" - das Denken hat das komplette Budget aufgebraucht, die
+    Antwort war LEER, der Wiederholversuch mit 5000 lief durch. Betroffen war
+    der Text-Fluss, mit 85 s von 245 s der teuerste Posten im ganzen Render.
+    Untergrenze jetzt 6000 statt 2500. Das ist eine OBERGRENZE, keine
+    Bestellung: bezahlt werden die verbrauchten Tokens, das Anheben kostet
+    nichts, solange das Modell sie nicht braucht. Der v230p-Riegel hat
+    funktioniert (er hat gemerkt und wiederholt) - er war nur der zweite
+    Rettungsanker, nicht der erste.
+    Ehrlich: die Zeitersparnis ist hier NICHT gemessen (kein Schluessel in der
+    Testumgebung). Der naechste echte Render zeigt sie, die Zeile
+    "retrying with ... tokens" muss dann weg sein.
+  - **Der Job-Log war stellenweise deutsch** - und zwar an der Stelle, die
+    der bestehende Sprach-Test nicht sehen KONNTE: die Stil-Anker-Zeile wird
+    zusammengebaut und woanders ausgegeben, der Test sah nur print()-Literale.
+    Jetzt "Style anchor: chunks=..., punch=strong, density=continuous,
+    camera=moving, ..."; die Config-Schluessel bleiben deutsch (sie stehen in
+    config.yaml und in gespeicherten Setups), nur die Anzeige ist englisch.
+    Dazu `ANIM_EN` fuer die Animationsnamen ("Living typography: weight on
+    'ZIGARETTEN'" statt "gewicht"), "detail level", "space map per shot",
+    quality 'high', "music bed"/"cut sound".
+    Der Test erzeugt die Zeile jetzt ECHT und liest sie, statt Quelltext zu
+    durchsuchen (v219). Und die Wortliste kannte die vorkommenden Woerter
+    nicht - derselbe Fehlertyp wie v209.
+  - **Zehnmal dieselbe Veraltet-Warnung** von protobuf im Kunden-Log. Genau
+    diese eine Meldung wird gefiltert, keine Sammelabschaltung.
+  - **Was in Ordnung war:** Speicher 1.48 GB von 6 GB (25 %), der
+    Speicher-Waechter aus v230ak blieb still - genau wie gewollt. Kein
+    4K-Rueckfall, keine Fehlermeldung, alle 14 Bloecke im Bild, 7 SFX,
+    Silent-Score 62/100.
 - **v230ax PRUEFSUMMEN FUER ALLE FREMDBAUTEILE (letzter offener
   Sicherheits-Punkt).** Exakte Versionen (v205a) verhindern nur den
   ZUFAELLIGEN Wechsel. Wird ein Bauteil gekapert und unter DERSELBEN

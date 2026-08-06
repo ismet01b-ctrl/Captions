@@ -338,6 +338,14 @@ Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
 - **Ein Fallback, der jeden Fehler schluckt, macht aus einem
   Programmierfehler ein Feature, das niemand vermisst.** Vier Systeme waren
   monatelang aus, ohne dass ein Test oder ein Kunde es merkte.
+- **Und 6000 sind die Untergrenze, nicht 2500 (v230ay).** In Ismets erstem
+    echten Job-Log stand es woertlich: `budget=2500, used=2500, thereof
+    reasoning=2500` - Denken hat alles aufgebraucht, Antwort leer, der
+    Wiederholversuch mit 5000 lief durch. Eine ganze Runde umsonst, beim
+    teuersten Posten des Renders (Text-Fluss, 85 s von 245 s). Merksatz:
+    `max_completion_tokens` ist eine OBERGRENZE, keine Bestellung - bezahlt
+    werden verbrauchte Tokens. Sie zu klein zu lassen spart nichts und kostet
+    einen kompletten zweiten Aufruf.
 - **Und 2500 haben nicht gereicht (v230p).** Dieselben zwei Systeme fielen
   in Ismets v230l-Log wieder aus. Die Antwort war nicht kaputt, sie war
   NICHT DA: `finish_reason='length'`, Inhalt leer, das Denken hatte das
@@ -871,6 +879,15 @@ Engine gross und der Kunde zahlt den einfachen Satz. Der gezahlte Betrag steht a
 am Job; Erstattungen gehen ueber `_job_cost(j)`, nie ueber `cost_seconds(dauer)`.
 
 ## Sprache der Ausgaben (v148)
+**Ein Sprach-Test, der nur `print(...)`-Literale liest, sieht die Haelfte
+nicht (v230ay).** Die Stil-Anker-Zeile wird aus `parts.append(...)`
+zusammengebaut und woanders ausgegeben - sie stand deshalb noch komplett
+deutsch in Ismets Job-Log, waehrend der Test gruen war. Wer eine Log-Zeile
+zusammenbaut, prueft sie durch AUFRUFEN. Und die Wortliste muss die Woerter
+kennen, die wirklich vorkommen (v209-Falle). Config-Schluessel bleiben
+deutsch - sie stehen in config.yaml, im Cache und in gespeicherten Setups;
+uebersetzt wird nur die ANZEIGE (`_REF_EN`, `ANIM_EN`, `anim_en()`).
+
 `render.py` schreibt seine `print()`/`sys.exit()`-Meldungen **englisch** — der
 Job-Log landet im Web-Produkt beim Kunden. Kommentare und Docstrings bleiben
 deutsch. Wer eine Log-Zeile aendert, muss BEIDE Leser mitziehen:
@@ -1578,7 +1595,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2023/2024 (Stand v230ax)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2027/2028 (Stand v230ay)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

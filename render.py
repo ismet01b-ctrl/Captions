@@ -8,6 +8,16 @@ Nutzung:
     python render.py video.mp4 --transcript video_transcript.json   (API-Aufruf ueberspringen)
 """
 import argparse, copy, json, math, os, re, shutil, subprocess, sys, tempfile, time
+import warnings as _warnings
+# v230ay: Der Job-Log geht an den Kunden. protobuf meldet bei JEDEM
+# MediaPipe-Aufruf dieselbe Veraltet-Warnung - in Ismets Log stand sie zehnmal
+# und sieht aus wie ein Fehler. Sie kommt aus einer Fremdbibliothek, wir
+# koennen daran nichts aendern, und sie sagt weder ihm noch mir etwas.
+# BEWUSST eng gefasst: genau diese eine Meldung, keine Sammelabschaltung -
+# ein stiller Filter ueber alle Warnungen wuerde die naechste echte
+# verschlucken.
+_warnings.filterwarnings(
+    'ignore', message=r'SymbolDatabase\.GetPrototype\(\) is deprecated')
 import numpy as np
 import blender_engine
 import cv2
@@ -428,6 +438,28 @@ ANIM_LIST = ('glitch', 'puls', 'welle', 'zittern', 'neon', 'schub', 'bruch',
              # Puls, Fallen, Punch, Slide, Stempel.
              'kippen', 'explosion', 'magnet', 'wackel', 'regen', 'zoom_punch',
              'rutsche', 'stempel')
+
+# v230ay: Anzeigenamen fuer den Job-Log. Die Kennungen oben sind Code und
+# bleiben deutsch (sie stehen in Config, Cache und Sidecar-Dateien); der Log
+# landet beim Kunden und muss englisch sein (v148). Wer eine Animation
+# ergaenzt, traegt sie hier ein - der Selftest faellt sonst.
+ANIM_EN = {
+    'glitch': 'glitch', 'puls': 'pulse', 'welle': 'wave', 'zittern': 'jitter',
+    'neon': 'neon', 'schub': 'thrust', 'bruch': 'shatter', 'sturz': 'drop',
+    'anstieg': 'rise', 'wende': 'flip', 'druck': 'squash', 'schwund': 'fade',
+    'knall': 'bang', 'gewicht': 'weight', 'schweben': 'float',
+    'fokus': 'focus', 'enthuellen': 'reveal', 'spur': 'trail',
+    'kippen': 'tilt', 'explosion': 'explode', 'magnet': 'magnet',
+    'wackel': 'wobble', 'regen': 'rain', 'zoom_punch': 'zoom punch',
+    'rutsche': 'slide', 'stempel': 'stamp',
+}
+
+
+def anim_en(name):
+    """Anzeigename einer Animation. Unbekanntes wird durchgereicht, nicht
+    verschluckt - ein leeres Feld im Log waere schlimmer als ein deutsches
+    Wort (v230f)."""
+    return ANIM_EN.get(name, name)
 
 # v94: Animationen mit GROSSER, sichtbarer Bewegung. Hinter der Person
 # ("behind") gehen sie unter - solche Momente werden nach vorn geholt.
@@ -1907,9 +1939,18 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     # json.loads('') meldet einen JSONDecodeError. Genau so sind in Ismets
     # Job-Log die Bild-Regie, der Objekt-Anker und der Stille-Score
     # ausgefallen: nicht die API war kaputt, das Budget war zu klein.
-    # Untergrenze deshalb 2500; die alten Chat-Modelle bleiben unberuehrt.
+    # Untergrenze war 2500 - und die hat NICHT gereicht (v230ay). In Ismets
+    # 4K-Job vom 05.08.2026 steht es schwarz auf weiss: "empty answer
+    # (finish_reason=length, budget=2500, used=2500, thereof reasoning=2500)",
+    # der Wiederholversuch mit 5000 lief dann durch. Ein ganzer Aufruf war
+    # umsonst, und beim Text-Fluss ist das der teuerste Posten im ganzen
+    # Render (85 s von 245 s). Jetzt 6000.
+    # WICHTIG: das ist eine OBERGRENZE, keine Bestellung - bezahlt werden die
+    # tatsaechlich verbrauchten Tokens. Sie anzuheben kostet nichts, solange
+    # das Modell sie nicht braucht, und spart genau dann einen kompletten
+    # zweiten Aufruf, wenn es sie braucht.
     body['max_completion_tokens' if new else 'max_tokens'] = (
-        max(int(max_toks), 2500) if new else max_toks)
+        max(int(max_toks), 6000) if new else max_toks)
     if not new:
         body['temperature'] = temperature
     # v228d DENK-AUFWAND. An Ismets Job-Log gemessen sind 129 von 191 s reines
@@ -1919,7 +1960,7 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     # 2026); wer die alte Gruendlichkeit will, setzt `keywords.ai_denken` in
     # der config.yaml auf 'medium' oder 'high' - oder auf 'aus', dann wird der
     # Parameter gar nicht geschickt (Verhalten wie vor v228d).
-    # WICHTIG: das Denkbudget oben bleibt bei mindestens 2500. Weniger denken
+    # WICHTIG: das Denkbudget oben bleibt bei mindestens 6000. Weniger denken
     # heisst MEHR Platz fuer die Antwort, nie weniger - die v210-Falle
     # (leere Antwort) wird dadurch unwahrscheinlicher, nicht wahrscheinlicher.
     if new and AI_DENKEN in ('minimal', 'low', 'medium', 'high'):
@@ -5626,6 +5667,15 @@ def _reference_params():
     return out
 
 
+# v230ay: Anzeigenamen fuer die Stil-Anker-Zeile. Die Werte links sind
+# Config-Schluessel und bleiben deutsch (sie stehen in config.yaml und in den
+# gespeicherten Setups); der Job-Log geht an den Kunden und ist englisch
+# (v148). Unbekanntes wird durchgereicht statt verschluckt.
+_REF_EN = {'wuchtig': 'strong', 'ruhig': 'calm', 'bewegt': 'moving',
+           'wild': 'wild', 'sparsam': 'sparse', 'akzente': 'accents',
+           'durchgehend': 'continuous', 'links': 'left', 'mitte': 'centre'}
+
+
 def _apply_reference_params(cfg):
     """v96y: wendet die Referenz-Parameter DETERMINISTISCH auf die Config an -
     Chunk-Laenge, Highlight-Dichte, Hook-Aggressivitaet, Wucht. Der Effekt ist
@@ -5657,17 +5707,17 @@ def _apply_reference_params(cfg):
         elif w == 'ruhig':
             cfg['camera']['strength'] = max(float(cfg['camera'].get('strength', 0.7)) - 0.2, 0.2)
             cfg['effects']['sfx_volume'] = max(float(cfg['effects'].get('sfx_volume', 0.6)) - 0.15, 0.2)
-        parts.append(f"wucht={w}")
+        parts.append(f"punch={_REF_EN.get(w, w)}")
     # v96z: LOOK kopieren - Akzentfarbe der Referenz wird zur Caption-
     # Akzentfarbe (feste Farbe schlaegt adaptive Szenen-Toene), Dichte
     # (akzente vs durchgehend) wird uebernommen.
     if p.get('accent'):
         cfg.setdefault('colors', {})['accent'] = list(p['accent'])
         cfg['colors']['adaptive'] = False
-        parts.append('farbe=#%02x%02x%02x' % tuple(p['accent']))
+        parts.append('colour=#%02x%02x%02x' % tuple(p['accent']))
     if p.get('density'):
         cfg['effects']['density'] = p['density']
-        parts.append(f"dichte={p['density']}")
+        parts.append(f"density={_REF_EN.get(p['density'], p['density'])}")
 
     # ---------------- v144: GEMESSENE Merkmale anwenden ----------------
     # KAMERA. Vorher wurde die Kamerastaerke aus dem Prosa-Wort 'wucht'
@@ -5690,23 +5740,23 @@ def _apply_reference_params(cfg):
         elif _k == 'wild':
             cfg['camera']['strength'] = max(float(cfg['camera'].get('strength', 0.7)), 0.85)
             cfg['camera']['whip'] = True
-        parts.append(f"kamera={_k}")
+        parts.append(f"camera={_REF_EN.get(_k, _k)}")
     # SCHNITT-TEMPO steuert, wie lange ein Chunk stehen bleibt. Schnelle
     # Einstellungen vertragen keine langen Standzeiten.
     if p.get('einstellung_s'):
         _e = float(p['einstellung_s'])
         cfg['effects']['chunk_hold_min'] = round(max(0.55, min(1.30, _e * 0.55)), 2)
-        parts.append(f"schnitt={_e}s")
+        parts.append(f"cut={_e}s")
     # SOUND. Kein Musikbett + Toene auf den Schnitten = Sounddesign traegt das
     # Video. Dann darf unser SFX-Pegel hoch, sonst bleibt er zurueckhaltend.
     if 'musik' in p:
         if p.get('musik'):
             cfg['effects']['sfx_volume'] = min(float(cfg['effects'].get('sfx_volume', 0.6)), 0.45)
-            parts.append('musikbett')
+            parts.append('music bed')
         elif p.get('schnitt_ton'):
             cfg['effects']['sfx_volume'] = max(float(cfg['effects'].get('sfx_volume', 0.6)), 0.75)
             cfg['effects']['sfx'] = True
-            parts.append('schnitt-ton')
+            parts.append('cut sound')
     # TYPO-ZONE: oben, mittig oder unten - als Wunschzone der Platzierungsregie.
     _z = p.get('zone_y')
     if isinstance(_z, (list, tuple)) and len(_z) == 2:
@@ -5735,7 +5785,7 @@ def _apply_reference_params(cfg):
             # Spaltenbreite, ein langes Wort schrumpft also von selbst.
             _sk = round(max(0.70, min(2.60, _kh / 0.0686)), 3)
             cfg['effects']['caption_scale'] = _sk
-            parts.append(f"grad={_kh:.3f}H")
+            parts.append(f"size={_kh:.3f}H")
     # v154: der KLEINTEXT bekommt seinen eigenen gemessenen Wert. Vorher lief
     # er ueber key_hoehe mal Hierarchie mit - eine Referenz mit grosser
     # Punchline blies damit den ganzen Satz auf.
@@ -5749,7 +5799,7 @@ def _apply_reference_params(cfg):
         _vh = float(p['verhaeltnis'])
         if 1.1 <= _vh <= 8.0:
             cfg['effects']['caption_hierarchie'] = round(max(1.5, min(4.6, _vh)), 2)
-            parts.append(f"hierarchie={_vh:.1f}")
+            parts.append(f"hierarchy={_vh:.1f}")
     # v151: REVEAL-TEMPO aus dem Vorbild. Gemessen wird, in welchem Abstand
     # neue Textflaeche dazukommt: der Buchstaben-Takt ist die Zeit je
     # aufgedecktem Zeichen (Vorbild 0.087 s), der Wort-Takt der Abstand
@@ -5768,7 +5818,7 @@ def _apply_reference_params(cfg):
         if 0.05 <= _sv <= 0.60:
             cfg['effects']['caption_weight'] = int(
                 max(300, min(900, round(300 + (_sv - 0.10) * 2000, -1))))
-            parts.append(f"strich={_sv:.2f}")
+            parts.append(f"stroke={_sv:.2f}")
     # GLOW / KONTUR direkt aus dem Vorbild
     if 'glow' in p:
         cfg['effects']['caption_glow'] = bool(p['glow'])
@@ -5777,8 +5827,8 @@ def _apply_reference_params(cfg):
     # AUSRICHTUNG
     if p.get('ausrichtung') in ('links', 'mitte'):
         cfg['effects']['caption_align'] = p['ausrichtung']
-        parts.append(f"satz={p['ausrichtung']}")
-    return 'Stil-Anker: ' + ', '.join(parts) if parts else ''
+        parts.append(f"align={_REF_EN.get(p['ausrichtung'], p['ausrichtung'])}")
+    return 'Style anchor: ' + ', '.join(parts) if parts else ''
 
 
 def _ref_fingerprint():
@@ -10267,7 +10317,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                     if isinstance(fx_map.get(i), dict):
                         fx_map[i].setdefault('anim', _auto_anim)
                 if p.get('anim'):
-                    print(f"  Living typography: {p['anim']} on '{txt}'")
+                    print(f"  Living typography: {anim_en(p['anim'])} on '{txt}'")
             if _cnt:
                 p['count'] = {'fmt': _cnt[0], 'dur': _cnt[1]}
                 print(f"  Counter moment: {txt}")
@@ -14696,7 +14746,7 @@ def main():
         try:
             space_at = scene_space_sampler(args.input, cut_times)
             print("Placement director: captions dodge the subject and busy areas "
-                  "(Raum-Karte pro Shot)")
+                  "(space map per shot)")
         except Exception as _e:
             print(f"Placement director: space map skipped ({type(_e).__name__})")
     zt('raumkarte', _zt_rk)
@@ -14982,8 +15032,11 @@ def main():
             md_val = 0.25
     dsr = np.array([md_val], dtype=np.float32)
     refine_str = float(cfg['effects'].get('refine', 1.0)) * q_refine
-    print(f"Matting: {active_prov}, quality '{q_name}' "
-          f"(Detailstufe {md_val:.3g}, edge sharpness {refine_str:.2g})")
+    # v230ay: der Wert ist ein Config-Schluessel und bleibt deutsch; im Log
+    # steht der englische Name (der Kunde liest ihn).
+    _q_en = {'standard': 'standard', 'hoch': 'high', 'maximum': 'maximum'}
+    print(f"Matting: {active_prov}, quality '{_q_en.get(q_name, q_name)}' "
+          f"(detail level {md_val:.3g}, edge sharpness {refine_str:.2g})")
     _zt_x = zt('modelle-laden', _zt_x)
 
     # --- SFX-Spur. Es gibt NUR echte Sounds aus dem Sound-Pack (sfx/pack/).

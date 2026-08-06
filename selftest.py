@@ -947,7 +947,7 @@ def _scenario_logic(clip, transcript, tmp):
           f"Hierarchie 2.6 -> klein {_g_ref[1]:.4f} H, "
           f"1.8 -> klein {_g_flach[1]:.4f} H")
     check('v144: der Anker nennt die gemessenen Merkmale',
-          all(x in _anker for x in ('kamera=ruhig', 'schnitt=', 'zone=', 'satz=links')),
+          all(x in _anker for x in ('camera=calm', 'cut=', 'zone=', 'align=left')),
           _anker)
     # Die Wunschzone muss in der Platzierung wirklich ankommen
     _cfgz = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'), encoding='utf-8'))
@@ -1910,7 +1910,7 @@ def _scenario_logic(clip, transcript, tmp):
     # v228d DENK-AUFWAND. 129 von 191 s waren Warten auf die KI, und der
     # Loewenanteil davon ist internes Nachdenken. `reasoning_effort` steuert
     # genau das - Standard 'low' (Ismets Entscheidung). Das Denkbudget bleibt
-    # bei mindestens 2500: weniger denken heisst MEHR Platz fuer die Antwort,
+    # auf seiner Untergrenze: weniger denken heisst MEHR Platz fuer die Antwort,
     # die v210-Falle (leere Antwort -> JSONDecodeError) wird dadurch
     # unwahrscheinlicher, nicht wahrscheinlicher.
     _alt_dk = R.AI_DENKEN
@@ -1924,8 +1924,12 @@ def _scenario_logic(clip, transcript, tmp):
         R.AI_DENKEN = _alt_dk
     check('v228d: die neue Regie-KI denkt nur so lange wie eingestellt',
           _b1_dk.get('reasoning_effort') == 'low', str(_b1_dk)[:120])
-    check('v228d: das Denkbudget bleibt bei mindestens 2500 (v210-Falle)',
-          _b1_dk.get('max_completion_tokens') == 2500
+    # Die Zahl selbst ist NICHT die Zusage (v230o-Lehre: ein Test darf nicht
+    # an einer Schreibweise haengen). Die Zusage ist: ein kleines max_toks
+    # wird auf die Untergrenze angehoben, und weniger denken kuerzt sie nicht.
+    check('v228d: ein kleines Budget wird auf die Untergrenze angehoben',
+          _b1_dk.get('max_completion_tokens') == _b3_dk.get('max_completion_tokens')
+          and _b1_dk.get('max_completion_tokens', 0) > 800
           and 'max_tokens' not in _b1_dk, str(_b1_dk)[:120])
     check('v228d: alte Chat-Modelle bekommen den Parameter NICHT',
           'reasoning_effort' not in _b2_dk and _b2_dk.get('max_tokens') == 800,
@@ -3297,8 +3301,11 @@ def _scenario_logic(clip, transcript, tmp):
     #     Budget wird komplett vom Denken verbraucht, die Antwort kommt leer
     #     zurueck - im Log als JSONDecodeError. So sind Bild-Regie,
     #     Objekt-Anker und Stille-Score ausgefallen.
-    check('v210: neue Modelle bekommen ein Denkbudget (>= 2500)',
-          R._oai_json('gpt-5', [], 200, 0.0)['max_completion_tokens'] >= 2500,
+    # v230ay: 2500 haben in Ismets echtem Job NICHT gereicht - das Denken
+    # verbrauchte sie vollstaendig, der Wiederholversuch mit 5000 lief durch.
+    # Der Test haengt deshalb am GEMESSENEN Bedarf, nicht an der alten Zahl.
+    check('v210/v230ay: neue Modelle bekommen ein Denkbudget (>= 6000)',
+          R._oai_json('gpt-5', [], 200, 0.0)['max_completion_tokens'] >= 6000,
           str(R._oai_json('gpt-5', [], 200, 0.0)))
     check('v210: alte Chat-Modelle bleiben unveraendert',
           R._oai_json('gpt-4o', [], 200, 0.0)['max_tokens'] == 200)
@@ -3591,9 +3598,17 @@ def _scenario_logic(clip, transcript, tmp):
                 _t -= 1
             _j += 1
         _txt = ' '.join(re.findall(r'["\']([^"\']*)["\']', _rsrc_ar[_i:_j]))
+        # v230ay: die Liste kannte die Woerter nicht, die in Ismets echtem
+        # Job-Log standen ("Stil-Anker", "wucht=", "dichte=", "kamera=",
+        # "Detailstufe", "Raum-Karte") - derselbe Fehlertyp wie v209: ein
+        # Wortschatz, der die haeufigste Formulierung nicht kennt, ist gruen
+        # und trifft trotzdem nie. Jetzt auch klein geschrieben (re.I).
         if re.search(r'\b(Kamera|Musik|und|oder|nicht|keine?|wird|werden|sind|'
                      r'Datei|Fehler|Sprache|Woerter|Schrift|Hoehe|Breite|'
-                     r'Gewicht|installieren|uebersprungen)\b', _txt):
+                     r'Gewicht|installieren|uebersprungen|Stil|Detailstufe|'
+                     r'Raum|wucht|dichte|schnitt|hierarchie|strich|farbe|'
+                     r'wuchtig|bewegt|durchgehend|akzente|sparsam)\b',
+                     _txt, re.I):
             _de_ar.append(_txt[:60])
     check('v230ar: der Job-Log ist durchgehend englisch (der Kunde liest ihn)',
           not _de_ar, '; '.join(_de_ar[:3]) if _de_ar else
@@ -3602,6 +3617,49 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230ar: die Stil-Messung ist englisch',
           "return 'Measured: '" in _rsrc_ar
           and 'left aligned' in _rsrc_ar and 'calm camera' in _rsrc_ar)
+
+    # v230ay: Die Suche oben sieht nur print()-Literale - die Stil-Anker-Zeile
+    # wird aber ZUSAMMENGEBAUT und woanders ausgegeben. Genau deshalb stand
+    # sie in Ismets Job-Log noch komplett deutsch, obwohl der Test gruen war.
+    # Also die Zeile ECHT erzeugen und ansehen (v219: der Lauf zaehlt).
+    _alt_rp = R._reference_params
+    try:
+        R._reference_params = lambda: {
+            'words_per_group': 3, 'min_gap_seconds': 3.0, 'hook_strength': 0.9,
+            'wucht': 'wuchtig', 'accent': [255, 255, 255],
+            'density': 'durchgehend', 'kamera': 'bewegt', 'einstellung_s': 2.0,
+            'key_hoehe': 0.18, 'klein_hoehe': 0.04, 'band_mitte': 0.34,
+            'buchstaben_takt': 0.087, 'stamm_versal': 0.17,
+            'ausrichtung': 'links', 'glow': True, 'kontur': True}
+        _cfg_ay = R.load_cfg() if hasattr(R, 'load_cfg') else None
+        _cfg_ay = {'effects': {}, 'keywords': {}, 'camera': {}, 'colors': {}}
+        _zeile_ay = R._apply_reference_params(_cfg_ay)
+    finally:
+        R._reference_params = _alt_rp
+    _de_ay = re.findall(r'\b(Stil|Anker|wucht|dichte|kamera|schnitt|grad|'
+                        r'hierarchie|strich|farbe|satz|wuchtig|bewegt|'
+                        r'durchgehend|links|mitte)\b', _zeile_ay, re.I)
+    check('v230ay: die Stil-Anker-Zeile im Job-Log ist englisch',
+          _zeile_ay and not _de_ay, f'{_zeile_ay[:110]} | deutsch: {_de_ay[:4]}')
+
+    # Und die Animationsnamen: die Kennung bleibt deutsch (sie steht in
+    # Config und Cache), im Log steht der englische Name. Wer eine Animation
+    # ergaenzt, darf sie hier nicht vergessen - sonst stuende sie deutsch da.
+    # Und die zehnfache protobuf-Warnung aus Ismets Log: eng gefiltert, nicht
+    # pauschal. Ein Sammelfilter wuerde die naechste echte Warnung schlucken.
+    check('v230ay: die Veraltet-Warnung aus MediaPipe steht nicht im Job-Log',
+          "message=r'SymbolDatabase" in _rsrc_ar
+          and "filterwarnings('ignore')" not in _rsrc_ar
+          and not re.search(r"filterwarnings\(\s*['\"]ignore['\"]\s*\)",
+                            _rsrc_ar),
+          'genau diese eine Meldung, keine Sammelabschaltung')
+    _fehlt_ay = [a for a in R.ANIM_LIST if a not in R.ANIM_EN]
+    check('v230ay: jede Animation hat einen englischen Anzeigenamen',
+          not _fehlt_ay, f'ohne: {_fehlt_ay}')
+    check('v230ay: der Anzeigename ist wirklich anders als die Kennung',
+          R.anim_en('gewicht') == 'weight' and R.anim_en('schub') == 'thrust'
+          and R.anim_en('unbekannt') == 'unbekannt',
+          'Unbekanntes wird durchgereicht, nicht verschluckt')
 
     # ===== v230aq DIE OBERFLAECHE IST DURCHGEHEND ENGLISCH ==============
     # Ismets Befund: "teilweise sind noch Sachen auf Deutsch". Es waren genau
@@ -12307,7 +12365,7 @@ def _scenario_betrieb(tmp):
           f"reveal {_c151['effects'].get('reveal_letter_s')}, "
           f"weight {_c151['effects'].get('caption_weight')}")
     check('v151: der Anker nennt Grad, Hierarchie und Tempo',
-          all(x in _ank151 for x in ('grad=', 'hierarchie=', 'reveal=')), _ank151)
+          all(x in _ank151 for x in ('size=', 'hierarchy=', 'reveal=')), _ank151)
 
     def _szn(cfgx):
         _Sx = R.Sprites(cfgx, 1080, 1920)
@@ -13510,7 +13568,7 @@ def _scenario_lang(tmp):
           and _cfgy['keywords']['min_gap_seconds'] == 4.0
           and _cfgy['effects']['hook_strength'] == 0.9
           and _cfgy['camera']['strength'] < 0.7          # 'ruhig' senkt Kamera
-          and _line.startswith('Stil-Anker:'), _line)
+          and _line.startswith('Style anchor:'), _line)
     # (e) v96z: LOOK wird kopiert - Akzentfarbe + Dichte der Referenz
     _refl = _tfx.mkdtemp(prefix='dve_refl_')
     _old_dd3 = os.environ.get('DVE_DATA')
@@ -13534,7 +13592,7 @@ def _scenario_lang(tmp):
           _cfgl['colors']['accent'] == [255, 215, 0]
           and _cfgl['colors']['adaptive'] is False
           and _cfgl['effects']['density'] == 'durchgehend'
-          and 'farbe=#ffd700' in _linel, _linel)
+          and 'colour=#ffd700' in _linel, _linel)
     check('Stil-Anker: im Render-Main verdrahtet + Server zeigt Beweis im Job',
           '_apply_reference_params(cfg)' in _r
           and "startswith('Stil-Referenzen:')" in
@@ -13560,9 +13618,9 @@ def _scenario_lang(tmp):
           and 'max_completion_tokens' not in b4)
     # v210: Bei den neuen Modellen zaehlen die Denk-Tokens mit; ein zu
     # knappes Budget liefert eine LEERE Antwort (im Job-Log als
-    # JSONDecodeError). Untergrenze 2500, deshalb hier nicht mehr 800.
+    # JSONDecodeError). Angefragt sind 800, geliefert wird die Untergrenze.
     check('_oai_json gpt-5: max_completion_tokens, kein temperature',
-          b5.get('max_completion_tokens') == 2500 and 'temperature' not in b5
+          b5.get('max_completion_tokens', 0) >= 6000 and 'temperature' not in b5
           and 'max_tokens' not in b5)
     # v96t: Prosa-Modus (Stil-Lernen) darf KEIN response_format json_object haben
     bj = R._oai_json('gpt-4o', [{'role': 'user', 'content': 'x'}], 400, 0.3)
