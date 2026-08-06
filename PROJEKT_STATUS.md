@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230az EINE WORTLISTE FAENGT NUR, WAS SCHON PASSIERT IST.** Im zweiten
+  echten Job-Log standen wieder deutsche Woerter - "leise", "Haerte",
+  "Button-Spalte rechts", "N Moment(e) ragen ins UI", "Dauer unveraendert".
+  Alle waren print-Zeilen, alle liefen am Sprach-Test vorbei, weil er eine
+  LISTE bekannter Woerter abfragt und keines davon darauf stand. Dritte
+  Runde desselben Fehlertyps (v209, v230ay).
+  - Zweites Netz, unabhaengig vom Wortschatz: die Umschrift **ae/oe/ue**
+    kommt im Englischen fast nicht vor. Fuenf Ausnahmen sind aufgezaehlt
+    (does, silhouette, queue, value, continue ...) und muessen aufgezaehlt
+    bleiben, sonst wird das Netz zum Sieb.
+  - Das Merkmal hat sofort drei Stellen gefunden, die keine Wortliste
+    gehabt haette. Gegenprobe im Test: es erkennt "Haerte" und laesst
+    "the silhouette does continue in the queue" durch.
+  - Nebenbefund: in einer f-Zeichenkette steht in den Klammern CODE, kein
+    Kundentext. `{len(_bloecke)}` war ein Fehlalarm - die Platzhalter werden
+    vor der Pruefung entfernt.
+  - **Der Budget-Fix aus v230ay ist damit NICHT bewiesen.** Im zweiten Lauf
+    lief die Textfluss-KI gar nicht: `_flow3.json` lag schon da, also
+    Cache-Treffer, kein Aufruf, keine Wiederhol-Zeile. Auch die 245 s -> 146 s
+    sind kein Beleg - der Cache spart die 85 s, und Ismet hatte zwischendurch
+    Bloecke und Momente geaendert (5 Keywords -> 2). Der Beweis braucht ein
+    NEUES Video.
 - **v230ay AUS ISMETS ERSTEM ECHTEN JOB-LOG (4K-Quelle, 12 s, 245 s Render).**
   Drei Befunde, alle am Log gemessen, keiner geraten.
   - **Eine ganze KI-Runde war umsonst.** Im Log steht es woertlich: "empty

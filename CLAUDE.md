@@ -884,7 +884,14 @@ nicht (v230ay).** Die Stil-Anker-Zeile wird aus `parts.append(...)`
 zusammengebaut und woanders ausgegeben - sie stand deshalb noch komplett
 deutsch in Ismets Job-Log, waehrend der Test gruen war. Wer eine Log-Zeile
 zusammenbaut, prueft sie durch AUFRUFEN. Und die Wortliste muss die Woerter
-kennen, die wirklich vorkommen (v209-Falle). Config-Schluessel bleiben
+kennen, die wirklich vorkommen (v209-Falle).
+**Eine Wortliste allein reicht NIE (v230az).** Dritte Runde desselben
+Fehlers: "leise", "Haerte", "Button-Spalte rechts", "ragen ins UI" standen
+auf keiner Liste. Zweites Netz ist ein BAU-MERKMAL - die Umschrift
+ae/oe/ue kommt im Englischen fast nicht vor (Ausnahmen aufgezaehlt: does,
+silhouette, queue, value, continue). Es hat sofort drei Stellen gefunden.
+In einer f-Zeichenkette stehen in den Klammern Variablennamen, kein
+Kundentext - vor der Pruefung entfernen, sonst Fehlalarm. Config-Schluessel bleiben
 deutsch - sie stehen in config.yaml, im Cache und in gespeicherten Setups;
 uebersetzt wird nur die ANZEIGE (`_REF_EN`, `ANIM_EN`, `anim_en()`).
 
@@ -1595,7 +1602,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2027/2028 (Stand v230ay)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2028/2029 (Stand v230az)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

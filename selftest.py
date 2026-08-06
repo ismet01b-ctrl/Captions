@@ -3598,21 +3598,51 @@ def _scenario_logic(clip, transcript, tmp):
                 _t -= 1
             _j += 1
         _txt = ' '.join(re.findall(r'["\']([^"\']*)["\']', _rsrc_ar[_i:_j]))
-        # v230ay: die Liste kannte die Woerter nicht, die in Ismets echtem
-        # Job-Log standen ("Stil-Anker", "wucht=", "dichte=", "kamera=",
-        # "Detailstufe", "Raum-Karte") - derselbe Fehlertyp wie v209: ein
-        # Wortschatz, der die haeufigste Formulierung nicht kennt, ist gruen
-        # und trifft trotzdem nie. Jetzt auch klein geschrieben (re.I).
+        # In einer f-Zeichenkette steht in den geschweiften Klammern CODE,
+        # kein Kundentext - eine Variable darf deutsch heissen (_bloecke).
+        _txt = re.sub(r'\{[^{}]*\}', ' ', _txt)
+        # v230ay/v230az: EINE WORTLISTE FAENGT IMMER NUR DAS, WAS SCHON
+        # PASSIERT IST. Dreimal in Folge sind Woerter durchgerutscht, die
+        # niemand auf der Liste hatte ("leise", "Haerte", "Dauer
+        # unveraendert") - derselbe Fehlertyp wie v209. Deshalb jetzt ZWEI
+        # Netze: die Liste bekannter Woerter UND ein Bau-Merkmal, das
+        # deutsche Woerter unabhaengig vom Wortschatz erkennt (die
+        # Umschrift ae/oe/ue kommt im Englischen fast nicht vor - die
+        # Ausnahmen sind aufgezaehlt und muessen aufgezaehlt bleiben,
+        # sonst wird das Netz zum Sieb).
         if re.search(r'\b(Kamera|Musik|und|oder|nicht|keine?|wird|werden|sind|'
                      r'Datei|Fehler|Sprache|Woerter|Schrift|Hoehe|Breite|'
                      r'Gewicht|installieren|uebersprungen|Stil|Detailstufe|'
                      r'Raum|wucht|dichte|schnitt|hierarchie|strich|farbe|'
-                     r'wuchtig|bewegt|durchgehend|akzente|sparsam)\b',
+                     r'wuchtig|bewegt|durchgehend|akzente|sparsam|leise|'
+                     r'laut|Dauer|Zeile|Woerter|Ton|Bild|Seite|oben|unten|'
+                     r'links|rechts|stark|schwach|hell|dunkel|ruhig)\b',
                      _txt, re.I):
             _de_ar.append(_txt[:60])
+            continue
+        _EN_AE = {'does', 'silhouette', 'queue', 'queued', 'value', 'values',
+                  'true', 'blue', 'due', 'issue', 'unique', 'sue', 'cue',
+                  'continue', 'argue', 'aeon'}
+        for _w in re.findall(r'[A-Za-z]{3,}', _txt):
+            if re.search(r'(ae|oe|ue)', _w, re.I) and _w.lower() not in _EN_AE:
+                _de_ar.append(f'{_w} in: {_txt[:50]}')
+                break
     check('v230ar: der Job-Log ist durchgehend englisch (der Kunde liest ihn)',
           not _de_ar, '; '.join(_de_ar[:3]) if _de_ar else
           'alle print-Zeilen geprueft')
+    # Der Waechter muss selbst zubeissen (v219): das Bau-Merkmal erkennt ein
+    # deutsches Wort, das auf KEINER Wortliste steht, und laesst Englisch
+    # durch. Ohne diese Gegenprobe waere ein kaputter Filter gruen.
+    def _de_bau(_t):
+        for _w in re.findall(r'[A-Za-z]{3,}', _t):
+            if re.search(r'(ae|oe|ue)', _w, re.I) and _w.lower() not in _EN_AE:
+                return _w
+        return ''
+    check('v230ay: das Bau-Merkmal erkennt Deutsch ohne Wortliste',
+          _de_bau('Haerte 0.42 und Groesse') == 'Haerte'
+          and not _de_bau('the silhouette does continue in the queue'),
+          f"deutsch -> {_de_bau('Haerte 0.42')!r}, "
+          f"englisch -> {_de_bau('silhouette does queue')!r}")
     # Die Stil-Messung im Konto ebenfalls: sie steht als Klartext beim Kunden.
     check('v230ar: die Stil-Messung ist englisch',
           "return 'Measured: '" in _rsrc_ar

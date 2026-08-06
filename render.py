@@ -9249,11 +9249,11 @@ def safe_zone_report(plans, pz, W, H):
         _nm = p.get('kw_txt') or ('%s @%.1fs' % (p.get('tpl', '?'),
                                                  float(p.get('start', 0))))
         if cx + w / 2 > pz['right_rail'] + 2:
-            warn.append((_nm, 'Button-Spalte rechts'))
+            warn.append((_nm, 'right button column'))
         elif cy is not None and cy + h / 2 > pz['bottom'] + 2:
-            warn.append((_nm, 'Caption-Zeile unten'))
+            warn.append((_nm, 'bottom caption row'))
         elif cy is not None and cy - h / 2 < pz['top'] - 2:
-            warn.append((_nm, 'Reiter oben'))
+            warn.append((_nm, 'top tab bar'))
     return warn
 
 
@@ -9406,8 +9406,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     _plat = str(cfg.get('output', {}).get('platform', 'generic')).lower()
     _pz = platform_safe_zones(_plat, W, H) if safe_z else None
     if safe_z:
-        print(f"Safe zone 9:16 active ({_pz['label']}): Button-Spalte rechts "
-              f"and the caption row at the bottom stay clear")
+        print(f"Safe zone 9:16 active ({_pz['label']}): the right button "
+              f"column and the caption row at the bottom stay clear")
 
     # v86: Baseline-Grid. Aufeinanderfolgende Captions sollen auf EINER Linie
     # sitzen statt bei jedem Moment ein paar Prozent zu huepfen. Zwei Massnahmen:
@@ -11181,7 +11181,7 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
                             ziel=(_zl[:2] if _zl is not None else None),
                             sprecher=(_spx if _zl is None else None))
             if os.environ.get('DVE_DBG_SPOT'):
-                print('DBGSPOT t=%.2f g0=%s seite=%s wx=%s kalt=%s bl=%.3f br=%.3f -> sx=%.3f'
+                print('DBGSPOT t=%.2f g0=%s side=%s wx=%s cold=%s bl=%.3f br=%.3f -> sx=%.3f'
                       % (start, g[0] if g else -1, _seite, _wx, _kalt,
                          _bl / W, _br / W, _sx / W))
             _dx = _sx - _bl
@@ -11816,8 +11816,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
     _sz_warn = safe_zone_report(plans, _pz, W, H)
     if _sz_warn:
         _lst = ', '.join(f"'{t}' ({g})" for t, g in _sz_warn[:3])
-        print(f"  Safe zone warning ({_pz['label']}): {len(_sz_warn)} Moment(e) "
-              f"ragen ins UI - {_lst}")
+        print(f"  Safe zone warning ({_pz['label']}): {len(_sz_warn)} "
+              f"moment(s) reach into the platform UI - {_lst}")
 
     # v161 OBJEKT-ANKER: den Text an sein Objekt setzen. NEBEN das Objekt,
     # nicht darauf - eine Caption quer ueber dem Gegenstand, den sie meint,
@@ -14182,7 +14182,7 @@ def main():
     loud_map = _word_loudness(words, voice_wav) if voice_wav else {}
     if loud_map:
         _nl = sum(1 for v in loud_map.values() if v == '!')
-        print(f"Emphasis: {_nl} loud / {len(loud_map) - _nl} leise words "
+        print(f"Emphasis: {_nl} loud / {len(loud_map) - _nl} quiet words "
               f"set typographically")
 
     # --- Tracking + Plaene
@@ -14832,7 +14832,7 @@ def main():
                                     dtype=np.uint8).reshape(96, 96, 3)
                 _light = estimate_light_dir(_lf)
                 print(f"Light truth: light direction lx={_light[0]:+.2f} "
-                      f"Haerte={_light[1]:.2f} (the shadow falls with the light)")
+                      f"hardness={_light[1]:.2f} (the shadow falls with the light)")
         except Exception as _e:
             print(f"Light truth: estimate skipped ({type(_e).__name__})")
 
@@ -15348,7 +15348,7 @@ def main():
                 bt_depth = cv2.resize(_bd.astype(np.float32), (W, H))
                 if depth_quality_ok(bt_depth):
                     print(f"Bullet time: active {bt_win[0]:.2f}s-{bt_win[1]:.2f}s "
-                          f"(2.5D-Dolly, Dauer unveraendert)")
+                          f"(2.5D dolly, duration unchanged)")
                 else:
                     print("Bullet time skipped (depth map too flat - "
                           "no effect beats a cheap one)")
