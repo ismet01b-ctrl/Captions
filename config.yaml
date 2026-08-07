@@ -169,6 +169,12 @@ effects:
   # Die 1.6-s-Regel aus der Referenz galt nur direkt nach einem Schnitt - in
   # einem schnittarmen Talking-Head kam danach gar kein Ton mehr.
   sfx_dichte: normal
+  # v230b5 SCHREIBMASCHINE. Baut sich ein Block Wort fuer Wort auf, bekommt
+  # JEDES Wort einen leisen Anschlag (0.15 gegen 0.42 beim Anker-Tick). Die
+  # Lautstaerken-Trennung ist der ganze Punkt: laut waere es Klickerei, leise
+  # ist es eine Textur unter der Stimme. Bei einem Block MIT Animation steht
+  # der Text ab dem ersten Bild komplett da (v194a) - dort laeuft nichts.
+  sfx_typing: true
   broll_captions: false
   scene_lock: true
   text_style: 3d

@@ -1643,7 +1643,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2054/2055 (Stand v230b4)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2070/2071 (Stand v230b7)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
@@ -1770,6 +1770,16 @@ gerendert. Die Pflichtfragen, in dieser Reihenfolge:
   Wer hier prueft, misst die HERKUNFT der Signale (Etikett am Array), nicht
   den Quelltext - und ein Test darf an der REGEL haengen (Ton fuehrt Bild),
   nie am Slot-Namen, sonst meldet er die gewollte Abwechslung als Fehler.
+- **Die KI entscheidet NICHT ueber den Ton (v230b5).** `ai_direct` waehlt
+  Keywords, Effekte, Animation und Wucht; die Tonspur setzt danach
+  deterministischer Code (`sfx_engine`). Wer sich fragt, warum die KI eine
+  offensichtliche Sound-Idee nicht hat: sie wird nie gefragt. Neue
+  Ton-Ideen gehoeren deshalb in die Regeln von `sfx_engine`, nicht in den
+  Prompt.
+- **Schreibmaschine (v230b5):** baut sich ein Block Wort fuer Wort auf,
+  bekommt JEDES Wort einen Anschlag - aber bei 0.15 gegen 0.42 beim
+  Anker-Tick. Die Lautstaerken-Trennung ist der ganze Punkt. Ein Block MIT
+  Animation steht sofort ganz da (v194a) und tippt nicht.
 - **Sound:** nur echte CC0-Library-Sounds (Freesound), kein Synthetik-Fallback.
   Stille ist besser als billiger Ton. Ohne `sfx/pack` liefe alles STUMM —
   der Pack IST da (14/14 Slots, v175 geprüft), also klingt es.

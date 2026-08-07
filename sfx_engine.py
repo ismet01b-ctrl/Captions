@@ -151,7 +151,7 @@ TICK_ABSTAND = {'sparsam': 3.2, 'normal': 1.8, 'dicht': 1.1}
 
 
 def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
-                    powers=None, cut_times=None, dichte='normal'):
+                    powers=None, cut_times=None, dichte='normal', typing=True):
     """Setzt die Sounds intelligent: Onset-Snapping auf den echten Sprech-Einsatz,
     Lautstaerke adaptiv zur lokalen Stimm-Energie, Wucht nach KI-Regie-Bewertung."""
     # Es gibt NUR das Sound-Pack. Fehlt ein Sound, wird er nicht gesetzt -
@@ -383,6 +383,35 @@ def build_sfx_track(plans, words, duration, folder, out_path, voice_wav=None,
                       (0.42 if _im_fenster else 0.30) * local_gain(_t0))
                 n_placed += 1
                 _letzter_tick[0] = _t0
+            # v230b5 SCHREIBMASCHINE: EIN TON JE WORT.
+            # Ismets Ansage: "wenn ein Wort nach dem anderen kommt, soll das
+            # mit einem typing SFX hinterlegt sein". Bis hier gab es genau
+            # EINEN Tick je Block (auf dem Anker) - der Block baut sich aber
+            # Wort fuer Wort auf, und die anderen Woerter erschienen stumm.
+            # Bewusst LEISE (0.15 gegen 0.42 beim Anker): eine Schreibmaschine
+            # ist eine Textur unter der Stimme, kein Taktgeber. Ohne die
+            # Lautstaerken-Trennung waere es genau die "Klickerei", vor der
+            # der v143-Kommentar oben warnt.
+            # NICHT bei einem Block mit Animation: der steht ab seinem Beginn
+            # komplett im Bild (v194a), es kommt also gar kein Wort nach dem
+            # anderen - ein Ton je Wort waere dann eine Behauptung.
+            if typing and not p.get('anim'):
+                _vor = _t0
+                for _it in (p.get('front') or []):
+                    _wt = _it.get('t')
+                    if _wt is None or _it.get('i') == _fa:
+                        continue
+                    _tw, _ = snap(float(_wt))
+                    # Zwei Woerter dichter als 90 ms sind fuer das Ohr EIN
+                    # Anschlag; der zweite Ton wuerde nur matschen.
+                    if _tw - _vor < 0.090:
+                        continue
+                    _tk2 = V('tick')
+                    if _tk2 is None:
+                        break
+                    place(_tk2, _tw - 0.012, 0.15 * local_gain(_tw))
+                    n_placed += 1
+                    _vor = _tw
             continue
         if 'kw_i' not in p:
             continue

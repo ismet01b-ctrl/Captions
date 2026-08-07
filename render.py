@@ -8981,9 +8981,24 @@ def _skaliere_plan(p, s, W, H):
     for k in ('arr', 'o_arr', 'flat_arr'):
         if p.get(k) is not None:
             p[k] = _skaliere_sprite(p[k], s)
+    # v230b6 ZWEI FORMEN VON 'letters' - UND EINE DAVON HAT DEN RENDER
+    # GEKIPPT. `letter_slices()` liefert (Sprite, Versatz); `S.text(...,
+    # per_letter=True)` liefert (x_von, x_bis) als ZAHLEN, und genau das
+    # steht bei 'cascade' im Plan. Der Skalierer kannte nur die erste Form
+    # und rief `.shape` auf einer Zahl auf -> AttributeError, Render tot.
+    # Gefunden beim Durchmessen der Einstellungen (Ismets Auftrag): sobald
+    # ein cascade-Wort zu breit wurde und `fit_into_frame` es verkleinern
+    # wollte, starb der Job. Derselbe Fehlertyp wie bei `ink_box` (v230n):
+    # eine Funktion, die nur EINE Form kennt, ist blind fuer die andere.
     if p.get('letters'):
-        p['letters'] = [(_skaliere_sprite(sl, s), off * s)
-                        for sl, off in p['letters']]
+        _neu = []
+        for _e in p['letters']:
+            _a, _b = _e
+            if hasattr(_a, 'shape'):          # (Sprite, Versatz)
+                _neu.append((_skaliere_sprite(_a, s), _b * s))
+            else:                              # (x_von, x_bis) in Pixeln
+                _neu.append((float(_a) * s, float(_b) * s))
+        p['letters'] = _neu
     for t in (p.get('tokens') or []):
         if t.get('arr') is not None:
             t['arr'] = _skaliere_sprite(t['arr'], s)
@@ -15074,7 +15089,9 @@ def main():
                     plans, words, dur_total, folder, sfx_path,
                     voice_wav=voice_wav, powers=powers, cut_times=cut_times,
                     # v230: wieviel Ton das Video bekommt (sparsam/normal/dicht)
-                    dichte=str(cfg['effects'].get('sfx_dichte', 'normal')))
+                    dichte=str(cfg['effects'].get('sfx_dichte', 'normal')),
+                    # v230b5: Schreibmaschine unter dem wortweisen Aufbau.
+                    typing=bool(cfg['effects'].get('sfx_typing', True)))
                 zt('sfx-bauen', _zt_sfx)
                 print(f"SFX: {n_sfx} sound moments placed "
                       f"({n_sfx / max(dur_total, 1e-6) * 60:.0f} per minute, "

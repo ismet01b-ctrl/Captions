@@ -1195,9 +1195,57 @@ body {
 }
 .blk-more-box input[type=range] { accent-color: var(--acc); width: 100%; }
 .blk-grv { color: var(--fg); font-weight: 700; }
+/* v230b7 DER BLOCK-EDITOR AM HANDY.
+   Gemessen bei 390 px: von 844 px Hoehe gingen rund 260 px an die
+   Einleitung, jede Zeile brauchte DREI Zeilen (Haken+Zeit+Split+Merge,
+   dann Style, dann erst der Text), und die Fussleiste stapelte fuenf
+   Knoepfe uebereinander. Sichtbar waren zweieinhalb Bloecke. Der Text ist
+   das Wichtige - er gehoert nach oben und in voller Breite, die Knoepfe
+   darunter und klein. */
 @media (max-width: 620px) {
-  .blk-head { flex-wrap: wrap; }
-  .blk-txt { order: 5; flex-basis: 100%; }
+  .nur-gross { display: none; }
+  .modal .head { padding: 16px 18px 12px; }
+  .modal .head h3 { font-size: 19px; }
+  .modal .body { padding: 12px 14px; }
+  .blk { padding: 10px 10px 8px; margin-bottom: 8px; }
+  .blk-head { flex-wrap: wrap; gap: 6px 8px; }
+  /* Reihenfolge: Haken und Zeit oben, darunter der TEXT in voller Breite,
+     darunter die Knoepfe. Am Desktop bleibt alles wie es war. */
+  .blk-head input[type=checkbox] { order: 0; }
+  .blk-t { order: 1; min-width: 0; font-size: 11px; }
+  .blk-kw { order: 2; margin-left: auto; }
+  .blk-txt { order: 3; flex-basis: 100%; font-size: 15px; padding: 10px 12px; }
+  .blk-b { order: 4; padding: 7px 12px; font-size: 12px; }
+  /* Ein Grid-Kind kann per Voreinstellung nicht schmaler werden als sein
+     Inhalt - eine lange Auswahl ("auto (the AI decides)") schob die rechte
+     Spalte aus dem Bild. Dieselbe Falle wie v230ad bei den
+     Bibliotheks-Kacheln. */
+  .blk-more-box { grid-template-columns: 1fr 1fr; gap: 8px;
+    padding: 10px 0 2px; }
+  .blk-more-box label { min-width: 0; }
+  .blk-more-box select, .blk-more-box input[type=text],
+  .blk-more-box input[type=range] { max-width: 100%; min-width: 0; }
+  .blk-more-box label:only-child, .blk-more-box label.weit { grid-column: 1 / -1; }
+  /* Fussleiste: die Haupt-Aktion zuerst und ueber die volle Breite, der
+     Rest in EINER Zeile darunter. Vorher standen fuenf Knoepfe untereinander
+     und deckten den halben Editor zu. */
+  #momEditor .foot { padding: 12px 14px; gap: 8px; }
+  #momEditor .foot > div[style] { display: none; }
+  #momEditor .foot #momSave { order: 0; flex-basis: 100%; padding: 13px 18px;
+    font-size: 15px; }
+  #momEditor .foot #btnFixTranscript { order: 1; }
+  #momEditor .foot #momUndo { order: 2; }
+  #momEditor .foot #momRedo { order: 3; }
+  #momEditor .foot #momCancel { order: 4; }
+  /* Vier gleich breite Nebenknoepfe in EINER Zeile. Mit `margin-left:auto`
+     sprang Cancel in eine eigene Reihe und die Fussleiste war wieder
+     dreizeilig. */
+  #momEditor .foot .btn.secondary { flex: 1 1 auto; min-width: 0;
+    padding: 9px 8px; font-size: 12px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  /* Der laengste Knopf braucht mehr Anteil als "Undo" - sonst schneidet
+     die gleiche Verteilung genau ihn ab. */
+  #momEditor .foot #btnFixTranscript { flex: 1.9 1 auto; }
 }
 
 /* Vorschau-Kachel: kleines Video-Frame-Placeholder mit Text-Wortartrepraesentation */
@@ -2784,11 +2832,11 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <h3 id="momTitle">Edit captions <span id="hookScore" style="display:none;
         margin-left:10px; padding:4px 12px; border-radius:999px; font-size:13px;
         font-weight:800; vertical-align:middle;"></span></h3>
-      <p>One row = one block of text on screen. Edit the words, put the
-        cursor where it should break and hit <b>Split</b>, or <b>Merge</b>
-        two rows into one. <b>Style</b> opens effect, animation, size and
-        timing for that block. Unchecked rows are not shown at all.
-        Ctrl+Z / Ctrl+Y to undo.</p>
+      <p>One row = one block of text on screen.<span class="nur-gross"> Edit the
+        words, put the cursor where it should break and hit <b>Split</b>, or
+        <b>Merge</b> two rows into one. <b>Style</b> opens effect, animation,
+        size and timing for that block. Unchecked rows are not shown at all.
+        Ctrl+Z / Ctrl+Y to undo.</span></p>
     </div>
     <div id="momTimeline" class="mom-timeline" aria-hidden="true"></div>
     <div class="body" id="momBody"></div>

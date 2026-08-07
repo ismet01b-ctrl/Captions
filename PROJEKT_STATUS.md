@@ -3,6 +3,51 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b5/b6/b7 SCHREIBMASCHINE, EINSTELLUNGS-AUDIT, HANDY-EDITOR.**
+  - **v230b5 EIN TON JE WORT.** Ismets Ansage: "wenn ein Wort nach dem
+    anderen kommt, soll das mit einem typing SFX hinterlegt sein". Bis hier
+    gab es genau EINEN Tick je Block (auf dem Anker) - der Block baut sich
+    aber Wort fuer Wort auf, alle anderen Woerter erschienen stumm. Gemessen
+    an 13 Woertern in 4 Bloecken: 3 -> 10 Toene. Bewusst LEISE (0.15 gegen
+    0.42 beim Anker): eine Schreibmaschine ist eine Textur unter der Stimme,
+    kein Taktgeber - ohne die Lautstaerken-Trennung waere es genau die
+    "Klickerei", vor der der v143-Kommentar in der Engine warnt. Bei einem
+    Block MIT Animation steht der Text ab dem ersten Bild komplett da
+    (v194a); dort tippt nichts, sonst behauptet der Ton etwas, das im Bild
+    nicht passiert. Schalter `effects.sfx_typing` (Standard an).
+    ZUR FRAGE "warum kommt die KI nicht selbst darauf": sie wird nie
+    gefragt. Die KI-Regie waehlt Keywords, Effekte, Animation und Wucht -
+    der Ton wird danach von deterministischem Code gesetzt (`sfx_engine`),
+    und in dessen Regeln stand "ein Tick je Block". Kein Modell hat je
+    ueber diese Entscheidung nachgedacht.
+  - **v230b6 GREIFEN DIE EINSTELLUNGEN?** Ismets Auftrag, nachgemessen statt
+    behauptet: fuer jedes der 14 Bedienelemente zwei Extremwerte durchrechnen
+    und die Bildbeschreibung vergleichen. Ergebnis: alle 14 werden von der
+    Engine gelesen, alle wirken. Drei sahen zuerst wirkungslos aus und waren
+    es NICHT - mein Testaufbau war schuld (Farbwelt wird in `main()` ueber
+    `set_base_colors` gesetzt, nicht im Konstruktor; der Randabfall braucht
+    ein Schlusswort mit hoechstens 5 Zeichen; die Sound-Dichte haengt am Ton,
+    nicht am Bild). Genau die CLAUDE.md-Regel 7: der eigene Testaufbau ist
+    auch Code und hat Fehler.
+    **Dabei ist ein echter Absturz aufgefallen:** `letters` hat ZWEI Formen -
+    `letter_slices()` liefert (Sprite, Versatz), `S.text(per_letter=True)`
+    liefert (x_von, x_bis) als ZAHLEN, und genau das steht bei 'cascade' im
+    Plan. `_skaliere_plan` kannte nur die erste Form und rief `.shape` auf
+    einer Zahl auf: AttributeError, Job tot. Ausgeloest wurde es, sobald ein
+    cascade-Wort zu breit wurde und `fit_into_frame` es verkleinern wollte.
+    Derselbe Fehlertyp wie bei `ink_box` (v230n). Behoben plus Regressionstest
+    fuer BEIDE Formen.
+  - **v230b7 EDIT MOMENTS AM HANDY.** Bei 390 px gemessen: rund 260 px gingen
+    an die Einleitung, jede Zeile brauchte DREI Zeilen (Haken+Zeit+Split+
+    Merge, dann Style, dann erst der Text), die Fussleiste stapelte fuenf
+    Knoepfe uebereinander. Sichtbar waren zweieinhalb Bloecke. Jetzt: Text
+    zuerst und in voller Breite, Knoepfe klein darunter, Einleitung auf einen
+    Satz gekuerzt, Haupt-Aktion voll breit und der Rest in EINER Zeile.
+    3.5 Bloecke sichtbar, im Browser nachgemessen nichts abgeschnitten und
+    kein Querscrollen. Die Stil-Spalten liefen aus dem Bild, weil ein
+    Grid-Kind ohne `min-width: 0` nicht schmaler werden kann als sein Inhalt
+    (dieselbe Falle wie v230ad). Alle Regeln stehen in der Handy-Abfrage,
+    der Desktop-Editor ist unveraendert.
 - **v230b4 DER LADEBILDSCHIRM IST JETZT HIGH END.** Ismets Befund zu v230b3:
   "das sieht so billig aus. Mach es so, dass es wirklich high class aussieht.
   Es soll immer so high end aussehen." Drei handwerkliche Ursachen, alle

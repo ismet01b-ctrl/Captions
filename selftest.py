@@ -4039,6 +4039,213 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230: Schnitte bekommen weiter die volle Dramaturgie',
           _n30('sparsam', (4.0, 9.0)) > _sp30 + 5,
           f'ohne Schnitt {_sp30} -> mit 2 Schnitten {_n30("sparsam", (4.0, 9.0))}')
+    # ===== v230b7 DER BLOCK-EDITOR AM HANDY ============================
+    # Ismets Auftrag: "optimiere edit Moments auf dem Handy". Bei 390 px
+    # gemessen: rund 260 px gingen an die Einleitung, jede Zeile brauchte
+    # DREI Zeilen (Haken+Zeit+Split+Merge, dann Style, dann erst der Text),
+    # und die Fussleiste stapelte fuenf Knoepfe uebereinander - sichtbar
+    # waren zweieinhalb Bloecke. Danach: 3.5 Bloecke, nichts abgeschnitten.
+    _ui_b7 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _mob_b7 = _ui_b7[_ui_b7.index('@media (max-width: 620px) {'):]
+    _mob_b7 = _mob_b7[:_mob_b7.index('\n}')]
+    check('v230b7: am Handy steht der TEXT vor den Knoepfen',
+          'order: 3' in _mob_b7 and 'flex-basis: 100%' in _mob_b7
+          and '.blk-b { order: 4' in _mob_b7,
+          'der Text ist das Wichtige und gehoert nach oben')
+    check('v230b7: die lange Einleitung faellt am Handy weg',
+          '.nur-gross { display: none; }' in _mob_b7
+          and 'class="nur-gross"' in _ui_b7,
+          'sie hat rund ein Drittel des Schirms gekostet')
+    # Die Stil-Spalten duerfen nicht aus dem Bild laufen: ein Grid-Kind kann
+    # per Voreinstellung nicht schmaler werden als sein Inhalt (v230ad).
+    check('v230b7: die Stil-Spalten koennen schmaler werden als ihr Inhalt',
+          '.blk-more-box label { min-width: 0; }' in _mob_b7
+          and 'max-width: 100%; min-width: 0;' in _mob_b7)
+    # Fussleiste: Haupt-Aktion voll breit zuerst, der Rest in EINER Zeile.
+    check('v230b7: die Haupt-Aktion steht voll breit oben',
+          '#momSave { order: 0; flex-basis: 100%' in _mob_b7
+          and '#momCancel { order: 4; }' in _mob_b7
+          and 'margin-left: auto' not in _mob_b7.split('#momEditor .foot')[1],
+          'mit margin-left:auto sprang Cancel in eine dritte Reihe')
+    check('v230b7: der laengste Knopf bekommt mehr Anteil und wird nicht abgehackt',
+          '#btnFixTranscript { flex: 1.9' in _mob_b7
+          and 'text-overflow: ellipsis' in _mob_b7)
+    # Und am Desktop darf sich NICHTS aendern - die Regeln stehen alle in der
+    # Handy-Abfrage, keine davon global.
+    check('v230b7: die Aenderungen gelten nur am Handy',
+          '#momEditor .foot #momSave' not in
+          _ui_b7[:_ui_b7.index('@media (max-width: 620px) {')],
+          'sonst waere der Desktop-Editor mit umgebaut')
+
+    # ===== v230b6 GREIFEN DIE EINSTELLUNGEN WIRKLICH? ==================
+    # Ismets Auftrag: "checke, ob Einstellungen die man taetigt auch wirklich
+    # greifen". Der Test misst das ERGEBNIS, nicht den Quelltext (v193: ein
+    # Wert stand im Plan, im Bild passierte nichts). Fuer jedes Bedienelement
+    # der App zwei Extremwerte durchrechnen und die Bildbeschreibung
+    # vergleichen - Positionen, Groessen, Zeiten, Kamera.
+    import hashlib as _hl_b6, copy as _cp_b6, re as _re_b6, yaml as _y_b6
+    import contextlib as _cl_b6, io as _io_b6
+    _ui_b6 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    _keys_b6 = set(_re_b6.findall(r'data-cfg(?:-switch)?="([a-zA-Z0-9_.]+)"', _ui_b6))
+    _basis_b6 = _y_b6.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                     encoding='utf-8'))
+    _txt_b6 = ('so das sind die grossen momente deines videos und genau das '
+               'bleibt haengen. schau genau hin denn hier passiert etwas.').split()
+    _w_b6 = [{'word': w, 'start': round(0.38 * i, 2), 'end': round(0.38 * i + 0.32, 2)}
+             for i, w in enumerate(_txt_b6)]
+
+    def _setz_b6(cfg, pfad, wert):
+        d = cfg
+        for t in pfad.split('.')[:-1]:
+            d = d.setdefault(t, {})
+        d[pfad.split('.')[-1]] = wert
+
+    def _bild_b6(cfg):
+        c = _cp_b6.deepcopy(cfg)
+        S = R.Sprites(c, 1080, 1920)
+        with _cl_b6.redirect_stdout(_io_b6.StringIO()):
+            pl = R.build_plans(_w_b6, {4, 12}, c, S, 1080, 1920,
+                               lambda a, b: True, {},
+                               face_pos=lambda a, b: (540, 768, 173))
+        teile = []
+        for p in pl:
+            bb = R.ink_box(p, 1080, 1920)
+            teile.append((p.get('tpl'), round(p.get('start', 0), 2),
+                          round(p.get('end', 0), 2),
+                          tuple(round(x) for x in bb) if bb else None,
+                          p.get('anim'), p.get('side')))
+            for it in (p.get('front') or []):
+                teile.append(('w', it.get('i'), int(it.get('cx', 0)),
+                              int(it.get('cy', 0)), it.get('sz'), it.get('role')))
+        return _hl_b6.sha256(repr(teile).encode()).hexdigest()[:16]
+
+    # Fuer jeden Regler zwei Werte, die im Bild etwas aendern MUESSEN.
+    _faelle_b6 = [
+        ('effects.words_per_group', 2, 4),
+        ('effects.density', 'sparsam', 'durchgehend'),
+        ('effects.hook_seconds', 0, 30),
+        ('effects.caption_layout', 'rows', 'collage'),
+        ('effects.caption_seite', 'links', 'rechts'),
+        ('effects.caption_scale', 0.7, 1.8),
+        ('effects.caption_hierarchie', 1.5, 5.0),
+        ('camera.strength', 0.0, 1.0),
+    ]
+    _tot_b6 = []
+    for _pfad, _va, _vb in _faelle_b6:
+        _ca = _cp_b6.deepcopy(_basis_b6); _setz_b6(_ca, _pfad, _va)
+        _cb = _cp_b6.deepcopy(_basis_b6); _setz_b6(_cb, _pfad, _vb)
+        if _bild_b6(_ca) == _bild_b6(_cb):
+            _tot_b6.append(_pfad)
+    check('v230b6: jede Einstellung aendert das Bild wirklich',
+          not _tot_b6, f'ohne Wirkung: {_tot_b6}' if _tot_b6
+          else f'{len(_faelle_b6)} Regler gemessen')
+    # Die drei, die man NICHT am Plan sieht, einzeln an ihrer Wirkstelle:
+    # Farbwelt (wird in main() ueber set_base_colors gesetzt, nicht im
+    # Konstruktor - genau daran ist meine erste Messung vorbeigelaufen),
+    # Randabfall (braucht ein Schlusswort mit hoechstens 5 Zeichen) und
+    # Sound-Dichte (die haengt am Ton, nicht am Bild - siehe v230 oben).
+    _S_farb = R.Sprites(_cp_b6.deepcopy(_basis_b6), 1080, 1920)
+    _hell = tuple(int(x) for x in _S_farb.white)
+    _S_farb.set_base_colors((20, 20, 22), (58, 58, 64))
+    check('v230b6: die Farbwelt schlaegt wirklich durch',
+          tuple(int(x) for x in _S_farb.white) != _hell,
+          f'{_hell} -> {tuple(int(x) for x in _S_farb.white)}')
+    _wb6 = [{'word': w, 'start': round(0.4 * i, 2), 'end': round(0.4 * i + 0.34, 2)}
+            for i, w in enumerate('und dann kam der KNALL'.split())]
+    _bl_res = []
+    for _bl in (True, False):
+        _cbl = _cp_b6.deepcopy(_basis_b6); _cbl['effects']['caption_bleed'] = _bl
+        _itbl = R.compose_flow(list(range(5)), _wb6, R.Sprites(_cbl, 1080, 1920),
+                               1080, 1920, portrait=True, punch=True,
+                               flow_sel={'kw': 4})[0]
+        _bl_res.append([(round(x['w'] / 1080.0, 3), bool(x.get('bleed')))
+                        for x in _itbl if x.get('role') in ('key', 'punch')])
+    check('v230b6: der Randabfall greift beim kurzen Schlusswort',
+          _bl_res[0] and _bl_res[1] and _bl_res[0][0][1] and not _bl_res[1][0][1]
+          and _bl_res[0][0][0] > _bl_res[1][0][0] * 1.2,
+          f'an {_bl_res[0]} / aus {_bl_res[1]}')
+    # Und: kein Bedienelement ohne Leser in der Engine. Ein Regler, den
+    # niemand liest, ist eine Attrappe (v210-Fehlertyp).
+    _rd_b6 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _ohne_b6 = []
+    for _k in sorted(_keys_b6):
+        _leaf = _k.split('.')[-1]
+        if not _re_b6.search(r"""get\(\s*['"]""" + _re_b6.escape(_leaf)
+                             + r"""['"]|\[\s*['"]""" + _re_b6.escape(_leaf)
+                             + r"""['"]\s*\]""", _rd_b6):
+            _ohne_b6.append(_k)
+    check('v230b6: jedes Bedienelement wird von der Engine auch gelesen',
+          not _ohne_b6, f'ohne Leser: {_ohne_b6}' if _ohne_b6
+          else f'{len(_keys_b6)} Bedienelemente')
+
+    # v230b6 REGRESSION: 'letters' hat ZWEI Formen, und eine davon hat den
+    # Render gekippt. `letter_slices()` liefert (Sprite, Versatz), aber
+    # `S.text(..., per_letter=True)` liefert (x_von, x_bis) als ZAHLEN - genau
+    # das steht bei 'cascade' im Plan. `_skaliere_plan` kannte nur die erste
+    # Form und rief `.shape` auf einer Zahl auf: AttributeError, Job tot.
+    # Aufgefallen ist es erst beim Durchmessen der Einstellungen.
+    _arr_b6 = np.zeros((40, 90, 4), dtype=np.uint8); _arr_b6[..., 3] = 255
+    _p_num = {'arr': _arr_b6.copy(), 'letters': [(0.0, 30.0), (30.0, 60.0)]}
+    R._skaliere_plan(_p_num, 0.5, 1080, 1920)
+    check('v230b6: Buchstaben-BEREICHE kippen den Render nicht mehr',
+          _p_num['letters'] == [(0.0, 15.0), (15.0, 30.0)],
+          str(_p_num['letters']))
+    _p_spr = {'arr': _arr_b6.copy(),
+              'letters': [(_arr_b6.copy(), 10.0), (_arr_b6.copy(), -10.0)]}
+    R._skaliere_plan(_p_spr, 0.5, 1080, 1920)
+    check('v230b6: Buchstaben-SPRITES werden weiter mitskaliert',
+          _p_spr['letters'][0][0].shape[1] == 45
+          and abs(_p_spr['letters'][0][1] - 5.0) < 1e-6,
+          f"{_p_spr['letters'][0][0].shape}, {_p_spr['letters'][0][1]}")
+
+    # ===== v230b5 SCHREIBMASCHINE: EIN TON JE WORT =====================
+    # Ismets Ansage: "wenn ein Wort nach dem anderen kommt, soll das mit
+    # einem typing SFX hinterlegt sein". Bis hier gab es genau EINEN Tick je
+    # Block (auf dem Anker) - der Block baut sich aber Wort fuer Wort auf,
+    # und alle anderen Woerter erschienen stumm.
+    _wb5 = [{'word': 'wort%d' % i, 'start': round(0.36 * i, 2),
+             'end': round(0.36 * i + 0.30, 2)} for i in range(13)]
+
+    def _blk_b5(g, anim=None):
+        d = {'tpl': 'flow', 'flow': True, 'flow_anchor': g[0],
+             'flow_t': _wb5[g[0]]['start'], 'start': _wb5[g[0]]['start'],
+             'end': _wb5[g[-1]]['end'],
+             'front': [{'i': i, 't': _wb5[i]['start']} for i in g]}
+        if anim:
+            d['anim'] = anim
+        return d
+    _pb5 = [_blk_b5([0, 1, 2, 3]), _blk_b5([4, 5, 6]),
+            _blk_b5([7, 8, 9]), _blk_b5([10, 11, 12])]
+    _ob5 = os.path.join(tmp, 'sfx_b5.wav')
+
+    def _n_b5(pl, typ):
+        return _SE30.build_sfx_track(pl, _wb5, 5.5, _f30, _ob5,
+                                     dichte='normal', typing=typ)
+    _aus_b5, _an_b5 = _n_b5(_pb5, False), _n_b5(_pb5, True)
+    check('v230b5: jedes Wort im Aufbau bekommt einen Anschlag',
+          _an_b5 > _aus_b5 * 2 and _an_b5 >= 9,
+          f'aus {_aus_b5} -> an {_an_b5} Toene bei 13 Woertern')
+    # Ein Block MIT Animation steht ab dem ersten Bild komplett da (v194a) -
+    # dort kommt kein Wort nach dem anderen, also darf auch nichts tippen.
+    # Sonst behauptet der Ton etwas, das im Bild nicht passiert.
+    _anim_b5 = _n_b5([_blk_b5([0, 1, 2, 3], 'puls'), _blk_b5([4, 5, 6], 'puls'),
+                      _blk_b5([7, 8, 9], 'puls'), _blk_b5([10, 11, 12], 'puls')],
+                     True)
+    check('v230b5: ein animierter Block tippt NICHT (er steht sofort ganz da)',
+          _anim_b5 == _aus_b5, f'mit Animation {_anim_b5}, ohne Typing {_aus_b5}')
+    # Die Lautstaerken-Trennung ist der ganze Punkt: der Anker fuehrt, die
+    # Schreibmaschine liegt darunter. Gleich laut waere es die "Klickerei",
+    # vor der der v143-Kommentar in der Engine warnt.
+    _sfx_b5 = open(os.path.join(HERE, 'sfx_engine.py'), encoding='utf-8').read()
+    check('v230b5: der Wort-Anschlag ist deutlich leiser als der Anker-Tick',
+          '0.15 * local_gain(_tw)' in _sfx_b5
+          and '(0.42 if _im_fenster else 0.30)' in _sfx_b5)
+    check('v230b5: der Schalter steht in der Config und wird durchgereicht',
+          'sfx_typing: true' in open(os.path.join(HERE, 'config.yaml'),
+                                     encoding='utf-8').read()
+          and "cfg['effects'].get('sfx_typing', True)" in
+          open(os.path.join(HERE, 'render.py'), encoding='utf-8').read())
+
     _sv30 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
     check('v230: der Wert ist ein geschlossener Satz (Server prueft ihn)',
           "not in ('sparsam', 'normal', 'dicht')" in _sv30
