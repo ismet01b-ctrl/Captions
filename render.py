@@ -14235,6 +14235,57 @@ def main():
     face_stable = np.stack([np.convolve(np.pad(face[:, j], k2 // 2, mode='edge'),
                                         kern2, 'valid')[:len(face)] for j in range(2)], axis=1)
     fps_i = fps
+    # v230c1 DIE SCHLUESSELWORT-FRAGE DAUERT AM LAENGSTEN - ALSO WIRD AUCH
+    # IHRE WARTEZEIT GENUTZT.
+    # v230c0 hat die TEXTFLUSS-Frage vorgezogen; die Schluesselwort-Frage
+    # (ai_direct, in Ismets Log 55 s) liegt aber davor, und waehrend sie
+    # laeuft passiert weiterhin nichts. Zwei Analysen brauchen von ihr GAR
+    # NICHTS - sie brauchen nur das Video und die Schnittzeiten, und beides
+    # steht hier schon fest:
+    #   * die Farbwelt-Abtastung (welche Toene hat die Szene je Shot)
+    #   * die Raum-Karte (wo ist das Bild besetzt)
+    # Sie laufen deshalb ab hier im Hintergrund und werden unten abgeholt.
+    # Die Frage selbst wird dadurch NICHT schneller und auch nicht anders
+    # gestellt - es wartet nur niemand mehr untaetig. (Schneller antworten
+    # wuerde weniger Nachdenken heissen, und das war v228d: Ismets Urteil
+    # danach war "Qualitaet ist sehr schlecht geworden".)
+    cut_times = [c / float(fps_i) for c in cut_frames] if fps_i else []
+    _bild_erg = {}
+    _bild_thread = None
+    _c_style_frueh = str(cfg.get('colors', {}).get('style', 'auto')).lower()
+    _will_palette = (_c_style_frueh not in ('schwarz', 'weiss')
+                     and bool(cfg.get('colors', {}).get('adaptive', True)))
+    _will_raum = bool(cfg['effects'].get('adaptive_place', True))
+    if _will_palette or _will_raum:
+        try:
+            import threading as _th_b
+
+            def _bild_lauf():
+                if _will_palette:
+                    try:
+                        _bild_erg['palette'] = scene_palette_sampler(
+                            args.input, cut_times,
+                            min_contrast=float(cfg['effects'].get(
+                                'caption_contrast', 4.5)),
+                            kontur=float(cfg['effects'].get(
+                                'caption_kontur', 1.0) or 0) > 0.01)
+                    except Exception as _e3:
+                        _bild_erg['palette_fehler'] = _e3
+                if _will_raum:
+                    try:
+                        _bild_erg['raum'] = scene_space_sampler(args.input,
+                                                                cut_times)
+                    except Exception as _e4:
+                        _bild_erg['raum_fehler'] = _e4
+            # Daemon, aus demselben Grund wie v230c0: ein Absturz darf nicht
+            # warten muessen, bis ffmpeg fertig ist.
+            _bild_thread = _th_b.Thread(target=_bild_lauf, daemon=True)
+            _bild_thread.start()
+        except Exception as _e:
+            print(f"Picture analysis: could not start early "
+                  f"({type(_e).__name__}), running it in order.")
+            _bild_thread = None
+
     def face_ok(start, end):
         a, b = int(start * fps_i), min(int(end * fps_i) + 1, len(has_face))
         if b <= a: return True
@@ -14794,8 +14845,15 @@ def main():
     # Farbwelt: 'auto' = adaptiv aus der Szene. 'schwarz'/'weiss' = feste
     # High-End-Palette; die Szenen-Toene werden dann bewusst NICHT aufgegriffen,
     # sonst waere die Farbwahl wirkungslos.
-    cut_times = [c / float(fps_i) for c in cut_frames] if fps_i else []
-    c_style = str(cfg.get('colors', {}).get('style', 'auto')).lower()
+    # v230c1: hier wird nur noch ABGEHOLT, was oben gestartet wurde. Die
+    # Meldungen bleiben an dieser Stelle stehen - der Server liest sie als
+    # Fortschritts-Marken (Adaptive colours = 43 %), und eine Meldung, die
+    # ploetzlich zwei Minuten frueher kommt, waere ein falscher Fortschritt.
+    _zt_warte = time.time()
+    if _bild_thread is not None:
+        _bild_thread.join()
+    _warte_bild = time.time() - _zt_warte
+    c_style = _c_style_frueh
     if c_style == 'schwarz':
         S.set_base_colors((20, 20, 22), (58, 58, 64))
         print("Colour world: elegant black (deep black + graphite accent)")
@@ -14803,25 +14861,30 @@ def main():
         S.set_base_colors((250, 249, 246), (208, 204, 196))
         print("Colour world: elegant white (soft white + warm grey accent)")
     elif cfg.get('colors', {}).get('adaptive', True):
-        palette_at = scene_palette_sampler(
-            args.input, cut_times,
-            min_contrast=float(cfg['effects'].get('caption_contrast', 4.5)),
-            kontur=float(cfg['effects'].get('caption_kontur', 1.0) or 0) > 0.01)
-        print("Adaptive colours: captions pick up the scene tones (per shot)")
+        if _bild_erg.get('palette_fehler') is not None:
+            print(f"Adaptive colours: skipped "
+                  f"({type(_bild_erg['palette_fehler']).__name__})")
+        else:
+            palette_at = _bild_erg.get('palette')
+            print("Adaptive colours: captions pick up the scene tones (per shot)")
     # v143: Raum-Karte fuer die Platzierungs-Regie. Ein Abtastframe je Shot,
     # daraus ein Kostenraster 'wie besetzt ist diese Bildregion'. Abschaltbar
     # ueber effects.adaptive_place - dann faellt spot() auf Gesicht + Wunschzone
     # zurueck und verhaelt sich wie eine reine Motiv-Ausweichung.
     space_at = None
     _zt_rk = time.time()
-    if cfg['effects'].get('adaptive_place', True):
-        try:
-            space_at = scene_space_sampler(args.input, cut_times)
+    if _will_raum:
+        if _bild_erg.get('raum_fehler') is not None:
+            print(f"Placement director: space map skipped "
+                  f"({type(_bild_erg['raum_fehler']).__name__})")
+        else:
+            space_at = _bild_erg.get('raum')
             print("Placement director: captions dodge the subject and busy areas "
                   "(space map per shot)")
-        except Exception as _e:
-            print(f"Placement director: space map skipped ({type(_e).__name__})")
     zt('raumkarte', _zt_rk)
+    if _bild_thread is not None:
+        print(f"Picture analysis: waited {_warte_bild:.1f}s "
+              f"(ran in parallel with the AI questions)")
     # v160 ZEIGE-REGIE. Wohin zeigt oder schaut der Sprecher an den gewaehlten
     # Momenten? Die Messung laeuft NUR auf diesen Zeitpunkten (drei kleine
     # Frames je Moment), nicht ueber das ganze Video. Ohne models/hand.task

@@ -3620,11 +3620,18 @@ def _scenario_logic(clip, transcript, tmp):
                      _txt, re.I):
             _de_ar.append(_txt[:60])
             continue
+        # 'queue' braucht den Eintrag trotzdem: das ZWEITE 'ue' steht dort
+        # hinter einem 'e', nicht hinter dem 'q'.
         _EN_AE = {'does', 'silhouette', 'queue', 'queued', 'value', 'values',
                   'true', 'blue', 'due', 'issue', 'unique', 'sue', 'cue',
                   'continue', 'argue', 'aeon'}
+        # v230c1: 'qu' ist im Englischen ein Digraph (question, request,
+        # queue, frequent) - dort ist das "ue" kein Umlaut-Ersatz. Diese
+        # Ausnahme deckt eine ganze Wortfamilie ab, statt sie einzeln in die
+        # Liste zu schreiben; im Deutschen kommt 'que' als ue-Umschrift nicht
+        # vor ("Quelle" ist q+u+e, kein ü).
         for _w in re.findall(r'[A-Za-z]{3,}', _txt):
-            if re.search(r'(ae|oe|ue)', _w, re.I) and _w.lower() not in _EN_AE:
+            if re.search(r'ae|oe|(?<!q)ue', _w, re.I) and _w.lower() not in _EN_AE:
                 _de_ar.append(f'{_w} in: {_txt[:50]}')
                 break
     check('v230ar: der Job-Log ist durchgehend englisch (der Kunde liest ihn)',
@@ -3635,12 +3642,13 @@ def _scenario_logic(clip, transcript, tmp):
     # durch. Ohne diese Gegenprobe waere ein kaputter Filter gruen.
     def _de_bau(_t):
         for _w in re.findall(r'[A-Za-z]{3,}', _t):
-            if re.search(r'(ae|oe|ue)', _w, re.I) and _w.lower() not in _EN_AE:
+            if re.search(r'ae|oe|(?<!q)ue', _w, re.I) and _w.lower() not in _EN_AE:
                 return _w
         return ''
     check('v230ay: das Bau-Merkmal erkennt Deutsch ohne Wortliste',
           _de_bau('Haerte 0.42 und Groesse') == 'Haerte'
-          and not _de_bau('the silhouette does continue in the queue'),
+          and not _de_bau('the silhouette does continue in the queue')
+          and not _de_bau('ran in parallel with the AI questions'),
           f"deutsch -> {_de_bau('Haerte 0.42')!r}, "
           f"englisch -> {_de_bau('silhouette does queue')!r}")
     # Die Stil-Messung im Konto ebenfalls: sie steht als Klartext beim Kunden.
@@ -4049,12 +4057,15 @@ def _scenario_logic(clip, transcript, tmp):
     _rc0 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('v230c0: der Textfluss wird VOR der Bildanalyse losgeschickt',
           '_flow_future = _th.Thread(target=_flow_lauf, daemon=True)' in _rc0
+          # v230c1: die Raum-Karte laeuft inzwischen selbst im Hintergrund;
+          # der Vergleichspunkt ist deshalb die Stelle, an der sie ABGEHOLT
+          # wird - der Textfluss muss davor unterwegs sein.
           and _rc0.index('_flow_future.start()')
-          < _rc0.index("space_at = scene_space_sampler(args.input, cut_times)"),
+          < _rc0.index("zt('raumkarte', _zt_rk)"),
           'sonst wartet die Maschine erst und arbeitet danach')
     check('v230c0: abgeholt wird erst dort, wo das Ergebnis gebraucht wird',
           '_flow_future.join()' in _rc0
-          and _rc0.index('_flow_future.join()') > _rc0.index('zt(\'zeige-regie\'')
+          and _rc0.index('_flow_future.join()') > _rc0.index("zt('zeige-regie'")
           )
     # Die Aufteilung darf NICHT zweimal gerechnet werden - sonst koennten die
     # Anker-Schluessel auseinanderlaufen (v161/v193-Fehlertyp).
@@ -4082,6 +4093,41 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230c0: der Job-Log nennt den gewonnenen Vorsprung',
           'AI flow: waited' in _rc0 and 'in parallel with the picture analysis'
           in _rc0)
+
+    # ===== v230c1 AUCH DIE SCHLUESSELWORT-FRAGE WARTET NICHT ALLEIN ====
+    # Ismet: "kann man die Schluesselwort-Frage auch schneller machen?" Die
+    # Frage selbst nicht - schneller antworten hiesse weniger nachdenken, und
+    # das war v228d ("Qualitaet ist sehr schlecht geworden"). Ihre WARTEZEIT
+    # laesst sich aber genauso nutzen: Farbwelt-Abtastung und Raum-Karte
+    # brauchen von ihr gar nichts, nur das Video und die Schnittzeiten.
+    check('v230c1: die Bildanalyse startet VOR der Schluesselwort-Frage',
+          '_bild_thread = _th_b.Thread(target=_bild_lauf, daemon=True)' in _rc0
+          and _rc0.index('_bild_thread.start()') < _rc0.index("zt('ki-textregie'"),
+          'sonst wartet die Maschine 55 s und faengt danach erst an')
+    check('v230c1: abgeholt wird erst, wo die Ergebnisse gebraucht werden',
+          '_bild_thread.join()' in _rc0
+          and _rc0.index('_bild_thread.join()') > _rc0.index("zt('ki-textregie'"))
+    # Die Meldungen muessen an ihrer Stelle BLEIBEN: der Server liest sie als
+    # Fortschritts-Marken (Adaptive colours = 43 %). Kaemen sie zwei Minuten
+    # frueher, zeigte der Balken einen Fortschritt, den es nicht gibt.
+    check('v230c1: die Fortschritts-Meldungen bleiben an ihrer Stelle',
+          _rc0.index('Adaptive colours: captions pick up') > _rc0.index('_bild_thread.join()')
+          and _rc0.index('Placement director: captions dodge')
+          > _rc0.index('_bild_thread.join()'))
+    # Ein Fehler in der Abtastung darf den Render nicht kippen - vorher fing
+    # ein try/except an Ort und Stelle, jetzt muss der Fehler mitwandern.
+    check('v230c1: ein Fehler in der Abtastung wird mitgetragen, nicht verschluckt',
+          "_bild_erg['palette_fehler']" in _rc0 and "_bild_erg['raum_fehler']" in _rc0
+          and 'Placement director: space map skipped' in _rc0)
+    check('v230c1: auch dieser Thread ist ein Daemon',
+          '_th_b.Thread(target=_bild_lauf, daemon=True)' in _rc0)
+    check('v230c1: der Job-Log nennt, wie lange noch gewartet wurde',
+          'Picture analysis: waited' in _rc0
+          and 'ran in parallel with the AI questions' in _rc0)
+    # Und die Schnittzeiten duerfen nur EINMAL gerechnet werden - zwei
+    # Fassungen davon waeren zwei Wahrheiten ueber dieselben Schnitte.
+    check('v230c1: die Schnittzeiten werden nur einmal gerechnet',
+          _rc0.count('cut_times = [c / float(fps_i) for c in cut_frames]') == 1)
 
     # ===== v230b8 BIBLIOTHEK: VOLLBILD UND BEARBEITEN ==================
     # Ismets Befund: "kann die Videos nicht auf Vollbild machen, dann laeuft

@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c1 AUCH DIE SCHLUESSELWORT-FRAGE WARTET NICHT MEHR ALLEIN.** Ismets
+  Nachfrage: "kann man die Schluesselwort-Frage auch schneller machen?"
+  - **Die Frage selbst: nein.** Schneller antworten hiesse weniger
+    nachdenken, und genau das war v228d - Ismets Urteil danach war
+    "Qualitaet ist sehr schlecht geworden". Die Frage aufzuteilen wuerde
+    heissen, dass die KI nicht mehr das ganze Transkript sieht; dann kann
+    sie die staerksten Momente nicht mehr gegeneinander abwaegen.
+  - **Ihre Wartezeit: ja.** `ai_direct` dauerte in Ismets Log 55 s, und in
+    dieser Zeit passierte nichts. Zwei Analysen brauchen von ihr GAR nichts,
+    nur das Video und die Schnittzeiten: die Farbwelt-Abtastung und die
+    Raum-Karte. Beide laufen jetzt ab dem Gesichts-Durchgang im Hintergrund
+    und werden erst dort abgeholt, wo ihre Ergebnisse gebraucht werden -
+    also quer durch BEIDE KI-Fragen.
+  - Die Fortschritts-Meldungen bleiben an ihrer alten Stelle: der Server
+    liest sie als Marken (Adaptive colours = 43 %). Kaemen sie zwei Minuten
+    frueher, zeigte der Balken einen Fortschritt, den es nicht gibt.
+  - Die Schnittzeiten werden dafuer einmal frueher gerechnet und nur noch
+    dort benutzt - zwei Fassungen davon waeren zwei Wahrheiten ueber
+    dieselben Schnitte.
+  - Wieder ein Daemon-Thread (v230c0-Begruendung), und ein Fehler in der
+    Abtastung wandert als Wert mit, statt verschluckt zu werden.
+  - **EHRLICH: nicht gemessen**, aus denselben Gruenden wie v230c0. Der
+    Beweis steht im naechsten Job-Log: "Picture analysis: waited X s (ran in
+    parallel with the AI questions)". Ist X nahe null, war die ganze
+    Bildarbeit umsonst gewartete Zeit - genau das war das Ziel.
+  - Nebenbefund: der Sprach-Test schlug bei "AI questions" an. 'qu' ist im
+    Englischen ein Digraph (question, request, frequent), dort ist das "ue"
+    kein Umlaut-Ersatz. Die Ausnahme deckt jetzt die ganze Wortfamilie ab,
+    statt sie einzeln zu pflegen.
 - **v230c0 DIE KI DENKT, DER SERVER LIEGT BRACH.** Ismet: "das Rendern
   dauert auch zu lang". An seinem Job-Log gemessen waren von 245 s ganze
   140 s reines Warten auf OpenAI (Textregie 55 s, Textfluss 85 s). Ismets
