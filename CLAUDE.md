@@ -1636,6 +1636,24 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Produkts, Renderzeit dagegen zu tauschen war das falsche Geschaeft. Der
   Schalter bleibt, der Standard denkt voll nach. Das Denkbudget bleibt bei >= 2500: weniger
   denken heisst MEHR Platz fuer die Antwort (v210-Falle).
+- **v230c2: der Fehler von v228d war nicht der Regler, sondern seine
+  Grobheit.** EIN Schalter fuer ALLE KI-Fragen - dabei ist eine
+  ENTSCHEIDUNG (welche Woerter tragen den Clip, wo sitzt der Text im Raum)
+  etwas anderes als eine PRUEFUNG nach Checkliste. In Ismets Log vom
+  07.08.2026 stecken in den 100.7 s "Schluesselwort-Frage" ZWEI Aufrufe,
+  und der zweite (`_regie_validate`) urteilte mit voller Denkstufe ueber
+  ganze 2 Vorschlaege. Jetzt `keywords.ai_denken_frage` je Frage
+  (`_DENK_STD`): Schluesselwort-Wahl und Bild-Regie unveraendert, Pruefer +
+  Textfluss + Objekt-Anker 'low'. Wer eine neue KI-Frage baut, beantwortet
+  zuerst: Entscheidung oder Pruefung? Und die Zeile `AI thinking: ...` im
+  Job-Log sagt, was wirklich galt - eine Zeitmessung ohne sie ist nicht
+  lesbar (daran ist v228d/v228e zweimal vorbeigelaufen).
+- **Die Kette ist echt seriell und damit ausgereizt** (v230c2, am Log
+  gemessen): Schluesselwoerter -> pruefen -> Bild-Regie -> Textfluss, jede
+  Stufe braucht die vorige. 83 % des Renders sind Warten auf OpenAI, die
+  eigentliche Videoarbeit ~34 s und die laeuft laengst parallel (v230c0/c1).
+  Wer hier weiter will, aendert MODELL oder Denkstufe - beides eine
+  Qualitaetsfrage fuer Ismet, keine technische.
 - **Verschachtelte Zeit-Bloecke duerfen nicht doppelt zaehlen** (`_ZEIT_KIND`):
   `regie+plaene` umschliesst die KI-Aufrufe, die Prozente summierten sich auf
   190 %.

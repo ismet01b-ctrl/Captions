@@ -4129,6 +4129,118 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230c1: die Schnittzeiten werden nur einmal gerechnet',
           _rc0.count('cut_times = [c / float(fps_i) for c in cut_frames]') == 1)
 
+    # ===== v230c2 DENK-AUFWAND JE FRAGE ================================
+    # Ismet: "was koennen wir machen, damit die KI schneller denkt. So viel ist
+    # das doch nicht." An seinem Log gemessen sind 170 von 204 s reines Warten
+    # auf OpenAI, und in den 100.7 s der Schluesselwort-Frage stecken ZWEI
+    # Aufrufe - der zweite ist ein Pruefer mit Checkliste ueber 2 Vorschlaege,
+    # mit derselben Denkstufe wie die kreative Regie. v228d hat genau hier den
+    # Fehler gemacht, EINEN Regler fuer alles zu nehmen.
+    import render as _R2
+    _alt_denk, _alt_frage = _R2.AI_DENKEN, _R2.AI_DENKEN_FRAGE
+
+    def _denk(frage, glob='aus', je=None):
+        _R2.AI_DENKEN, _R2.AI_DENKEN_FRAGE = glob, (je or {})
+        return _R2._denk_fuer(frage)
+
+    def _dbody(frage, glob='aus', je=None, model='gpt-5'):
+        _R2.AI_DENKEN, _R2.AI_DENKEN_FRAGE = glob, (je or {})
+        return _R2._oai_json(model, [{'role': 'user', 'content': 'x'}],
+                             800, 0.0, frage=frage)
+    try:
+        # (1) Die Entscheidung selbst: kreativ bleibt kreativ, mechanisch wird
+        #     schnell. Der Test haengt an der REGEL (welche Fragen sind
+        #     mechanisch), nicht an einer Zeile - traegt jemand spaeter die
+        #     Schluesselwort-Frage ein, faellt er.
+        check('v230c2: nur die mechanischen Fragen denken weniger',
+              set(_R2._DENK_STD) == {'pruefer', 'fluss', 'anker'}
+              and all(v == 'low' for v in _R2._DENK_STD.values()))
+        check('v230c2: die Schluesselwort- und die Bild-Regie bleiben unangetastet',
+              _denk('regie') == '' and _denk('bild') == ''
+              and 'reasoning_effort' not in _dbody('regie')
+              and 'reasoning_effort' not in _dbody('bild'),
+              'das ist die Qualitaet, die Ismet abgenommen hat')
+        # (2) Kommt es im BODY an? Eine Tabelle, die niemand liest, waere
+        #     genau der v193-Fehler (Plan traegt den Wert, im Bild nichts).
+        check('v230c2: der Denk-Aufwand steht wirklich im Anfrage-Body',
+              all(_dbody(f).get('reasoning_effort') == 'low'
+                  for f in ('pruefer', 'fluss', 'anker')))
+        check('v230c2: alte Modelle bekommen den Parameter nie',
+              'reasoning_effort' not in _dbody('pruefer', model='gpt-4o'))
+        # (3) Rangfolge. Der bestehende Schalter darf nicht wirkungslos werden.
+        check('v230c2: eine ausdrueckliche Ansage fuer alles gewinnt gegen die Tabelle',
+              _denk('pruefer', glob='high') == 'high'
+              and _denk('regie', glob='high') == 'high')
+        check('v230c2: der Einzelfall gewinnt gegen die Ansage fuer alles',
+              _denk('pruefer', glob='high', je={'pruefer': 'minimal'}) == 'minimal')
+        check("v230c2: 'aus' je Frage schickt den Parameter gar nicht",
+              _denk('pruefer', je={'pruefer': 'aus'}) == ''
+              and 'reasoning_effort' not in _dbody('pruefer',
+                                                   je={'pruefer': 'aus'}))
+        # (4) Ein Tippfehler in der Config darf nicht die Regie abschiessen:
+        #     die API lehnt einen unbekannten Wert mit 400 ab. Also klemmen,
+        #     nicht durchreichen (v230f).
+        _tipp = _dbody('pruefer', je={'pruefer': 'schnell'})
+        check('v230c2: ein Tippfehler wird geklemmt, nicht an die API gereicht',
+              _tipp.get('reasoning_effort') == 'low',
+              'unbekannte Stufe faellt auf den Standard zurueck')
+        # (5) DER ECHTE PFAD. Quelltext-Suche zaehlt nicht (v219): die drei
+        #     Funktionen werden AUFGERUFEN und der Body mitgeschnitten.
+        _bodies = []
+        _echt_text = _R2._oai_text
+        _R2._oai_text = lambda key, body, timeout=120: (
+            _bodies.append(body) or '{"entfernen": [], "chunks": [], "momente": []}')
+        _R2.AI_DENKEN, _R2.AI_DENKEN_FRAGE = 'aus', {}
+        _alt_key = os.environ.get('OPENAI_API_KEY', '')
+        os.environ['OPENAI_API_KEY'] = 'sk-selftest'
+        _wd = [{'word': w, 'start': 0.2 * i, 'end': 0.2 * i + 0.18}
+               for i, w in enumerate(['Zigaretten', 'sind', 'fuer', 'mich',
+                                      'kein', 'Thema', 'mehr'])]
+        try:
+            _R2._regie_validate({0: {'fx': 'pop', 'power': 3, 'n': 1}},
+                                _wd, 'gpt-5', 'sk-selftest')
+            check('v230c2: der Pruefer denkt weniger (echter Aufruf)',
+                  bool(_bodies) and _bodies[-1].get('reasoning_effort') == 'low')
+            _vor = len(_bodies)
+            _R2.ai_flow_direct(_wd, [[0, 1, 2], [3, 4, 5]], 'de', 'gpt-5')
+            check('v230c2: die Fluss-Frage denkt weniger (echter Aufruf)',
+                  len(_bodies) > _vor
+                  and _bodies[-1].get('reasoning_effort') == 'low')
+            _vor = len(_bodies)
+            _R2.ai_objekt_anker(_wd, {1: {'fx': 'pop', 'power': 3, 'n': 1}},
+                                clip, 'gpt-5')
+            check('v230c2: der Objekt-Anker denkt weniger (echter Aufruf)',
+                  len(_bodies) > _vor
+                  and _bodies[-1].get('reasoning_effort') == 'low',
+                  'kein Standbild aus dem Testclip lesbar'
+                  if len(_bodies) == _vor else '')
+        finally:
+            _R2._oai_text = _echt_text
+            os.environ['OPENAI_API_KEY'] = _alt_key
+    finally:
+        _R2.AI_DENKEN, _R2.AI_DENKEN_FRAGE = _alt_denk, _alt_frage
+    # (6) Die Einstellung muss auch in der ausgelieferten Config stehen - und
+    #     im Job-Log, sonst ist die naechste Zeitmessung nicht lesbar (genau
+    #     daran ist v228d/v228e zweimal vorbeigelaufen).
+    import yaml as _y230
+    _cfg230 = _y230.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                   encoding='utf-8'))
+    check('v230c2: die drei Fragen stehen so in der config.yaml',
+          _cfg230['keywords'].get('ai_denken_frage')
+          == {'pruefer': 'low', 'fluss': 'low', 'anker': 'low'})
+    # Die Log-Zeile wird AUFGERUFEN, nicht gelesen: eine zusammengebaute Zeile
+    # hat schon einmal falsch im Job-Log gestanden, waehrend der Quelltext-Test
+    # gruen war (v230ay).
+    _zeile230 = _R2._denk_log_zeile()
+    check('v230c2: der Job-Log nennt den Aufwand je Frage (echter Aufruf)',
+          _zeile230 == 'AI thinking: keywords=full, checker=low, '
+                       'picture=full, anchor=low, flow=low',
+          _zeile230)
+    check('v230c2: die Log-Zeile steht wirklich im Render-Ablauf',
+          '_denk_log_zeile()' in _rc0
+          and _rc0.index('print(_denk_log_zeile())')
+          < _rc0.index("zt('ki-textregie'"))
+
     # ===== v230b8 BIBLIOTHEK: VOLLBILD UND BEARBEITEN ==================
     # Ismets Befund: "kann die Videos nicht auf Vollbild machen, dann laeuft
     # das Video nicht" und "man soll die Videos auch da bearbeiten koennen".

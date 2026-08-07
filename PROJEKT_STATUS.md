@@ -3,6 +3,46 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c2 DIE KI DENKT NICHT MEHR UEBER JEDE FRAGE GLEICH LANG NACH.**
+  Ismets Frage: "was koennen wir machen, damit die KI schneller denkt. So
+  viel ist das doch nicht."
+  - **Der Befund aus seinem Log vom 07.08.2026** (204 s gesamt, davon
+    170 s = 83 % reines Warten auf OpenAI, die eigentliche Videoarbeit
+    ~34 s): in den 100.7 s der "Schluesselwort-Frage" stecken ZWEI
+    Aufrufe. Der zweite ist `_regie_validate`, ein Pruefer mit Checkliste
+    ("Hilfsverb? Konjunktion? Pronomen? Fuellwort?") - in diesem Job ueber
+    ganze 2 Vorschlaege. Der lief mit derselben Denkstufe wie die kreative
+    Regie. Nicht die 39 Woerter kosten die Zeit, sondern die Regelmenge,
+    gegen die geprueft wird.
+  - **Der Fehler von v228d war nicht der Regler, sondern seine Grobheit.**
+    EIN Schalter (`ai_denken`) fuer ALLE KI-Fragen, auf 'low' - Ismets
+    Urteil: "Qualitaet ist sehr schlecht geworden". Die Fragen sind aber
+    nicht gleich schwer: eine ENTSCHEIDUNG (welche Woerter tragen den
+    Clip, wo sitzt der Text im Raum) ist etwas anderes als eine PRUEFUNG
+    oder eine AUSWAHL nach festen Regeln.
+  - **Jetzt je Frage** (`keywords.ai_denken_frage`, `_DENK_STD`):
+    Schluesselwort-Wahl und Bild-Regie unveraendert (volle Gruendlichkeit,
+    das ist die Qualitaet, die Ismet abgenommen hat), Pruefer +
+    Textfluss-Ankerwort + Objekt-Anker auf 'low'. Ismets Wahl,
+    07.08.2026.
+  - Rangfolge bewusst so: Einzelfall schlaegt `ai_denken` schlaegt
+    Tabelle. Sonst waere der bestehende Schalter fuer die Haelfte der
+    Fragen still wirkungslos geworden. Eine unbekannte Stufe wird
+    GEKLEMMT, nicht durchgereicht - die API lehnt sie mit 400 ab, und ein
+    Tippfehler in der Config darf nicht die Regie abschiessen (v230f).
+  - Weniger denken heisst wie gehabt MEHR Platz fuer die Antwort, nie
+    weniger: die v210-Falle (leere Antwort, weil das Denken das ganze
+    Budget frisst) wird dadurch unwahrscheinlicher.
+  - **Beweis:** 13 Tests, davon drei ECHTE Aufrufe mit mitgeschnittenem
+    Anfrage-Body (`_regie_validate`, `ai_flow_direct`, `ai_objekt_anker`)
+    - eine Quelltext-Suche haette nicht gezeigt, ob der Wert ankommt
+    (v219). Die Log-Zeile `AI thinking: keywords=full, checker=low,
+    picture=full, anchor=low, flow=low` wird ebenfalls durch AUFRUFEN
+    geprueft (`_denk_log_zeile`), nicht durch Lesen (v230ay).
+  - **NICHT bewiesen:** wie viel Zeit es spart. Das steht erst im
+    naechsten echten Job-Log (`Timing (total ...)`, Posten `ki-textregie`
+    und `ki-textfluss`). Geschaetzt 60 bis 80 s von 204 - eine Schaetzung,
+    keine Messung.
 - **v230c1 AUCH DIE SCHLUESSELWORT-FRAGE WARTET NICHT MEHR ALLEIN.** Ismets
   Nachfrage: "kann man die Schluesselwort-Frage auch schneller machen?"
   - **Die Frage selbst: nein.** Schneller antworten hiesse weniger

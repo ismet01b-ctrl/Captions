@@ -1954,8 +1954,70 @@ Antworte NUR mit JSON: {"momente": [{"i": <Index>, "szene": "...", "lage": "..."
 # v228d Wieviel darf die KI nachdenken? Wird in main() aus der config gesetzt.
 AI_DENKEN = 'aus'   # v228e: zurueckgestellt, siehe config.yaml
 
+# v230c2 DENK-AUFWAND PRO FRAGE.
+# v228d war ein EINZIGER Schalter fuer alle KI-Fragen, auf 'low' - und Ismets
+# Urteil war "Qualitaet ist sehr schlecht geworden". Der Fehler war nicht der
+# Regler, sondern seine Grobheit: die Fragen sind nicht gleich schwer.
+# An Ismets Job-Log vom 07.08.2026 gemessen (204 s gesamt, davon 170 s reines
+# Warten auf OpenAI): allein die Schluesselwort-Frage stand mit 100.7 s da -
+# und das sind ZWEI Aufrufe. Der zweite ist `_regie_validate`, ein Pruefer mit
+# Checkliste ("ist das ein Hilfsverb, eine Konjunktion, ein Pronomen?"), der in
+# diesem Job ueber ganze 2 Highlights zu urteilen hatte. Der lief mit derselben
+# Denkstufe wie die kreative Regie.
+# Also: die WAHL der Schluesselwoerter und die BILD-Regie bleiben unangetastet
+# (das ist die Qualitaet, die Ismet abgenommen hat), die drei mechanischen
+# Fragen denken weniger.
+# Rangfolge, bewusst so herum:
+#   1. `keywords.ai_denken_frage: {<frage>: <stufe>}` - Einzelfall gewinnt.
+#   2. `keywords.ai_denken` auf einer STUFE - eine ausdrueckliche Ansage fuer
+#      alles gewinnt gegen die Standards hier (sonst waere der bestehende
+#      Schalter fuer die Haelfte der Fragen wirkungslos geworden).
+#   3. `keywords.ai_denken: aus` (Standard) - die Tabelle unten.
+# Unbekannte Stufen werden IGNORIERT, nicht durchgereicht: die API lehnt einen
+# falschen Wert mit 400 ab, und ein Tippfehler in der Config darf nicht die
+# ganze Regie abschiessen (v230f: klemmen statt kaputtmachen).
+AI_DENKEN_FRAGE = {}
+_DENK_STUFEN = ('minimal', 'low', 'medium', 'high')
+# Frage -> Stufe, wenn nichts anderes gesetzt ist. Wer hier eine Frage
+# ergaenzt, beantwortet zuerst: ist das eine ENTSCHEIDUNG (dann volle
+# Gruendlichkeit) oder eine PRUEFUNG/AUSWAHL nach festen Regeln?
+_DENK_STD = {
+    'pruefer': 'low',   # Checkliste ueber die eigenen Vorschlaege
+    'fluss':   'low',   # je Textblock das Ankerwort auswaehlen
+    'anker':   'low',   # den genannten Gegenstand im Standbild benennen
+}
 
-def _oai_json(model, messages, max_toks, temperature, json_mode=True):
+
+def _denk_fuer(frage=None):
+    """v230c2: welcher Denk-Aufwand gilt fuer diese Frage? '' = Parameter gar
+    nicht schicken (Verhalten wie vor v228d)."""
+    einzeln = str((AI_DENKEN_FRAGE or {}).get(frage, '')).strip().lower()
+    if einzeln in _DENK_STUFEN:
+        return einzeln
+    if AI_DENKEN in _DENK_STUFEN:
+        return AI_DENKEN
+    if einzeln == 'aus':
+        return ''
+    std = _DENK_STD.get(frage, '')
+    return std if std in _DENK_STUFEN else ''
+
+
+# Frage -> Name im Job-Log. Der Kunde liest das Log, also englisch (v148).
+_DENK_NAMEN = (('regie', 'keywords'), ('pruefer', 'checker'),
+               ('bild', 'picture'), ('anker', 'anchor'), ('fluss', 'flow'))
+
+
+def _denk_log_zeile():
+    """v230c2: eine eigene Funktion, damit der Selftest die Zeile durch
+    AUFRUFEN pruefen kann. Eine zusammengebaute Log-Zeile, die nur als
+    Quelltext geprueft wird, stand in Ismets Job-Log schon einmal falsch da
+    (v230ay, die Stil-Anker-Zeile war noch komplett deutsch)."""
+    return 'AI thinking: ' + ', '.join(
+        f"{name}={_denk_fuer(frage) or 'full'}" for frage, name in _DENK_NAMEN)
+
+
+def _oai_json(model, messages, max_toks, temperature, json_mode=True,
+              frage=None):
     """v94: chat/completions-Body, modell-kompatibel. Neuere Modelle (gpt-5,
     o-Serie) verlangen max_completion_tokens und lehnen ein abweichendes
     temperature ab; aeltere Chat-Modelle akzeptieren beides. Ohne das faellt
@@ -1997,8 +2059,13 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True):
     # WICHTIG: das Denkbudget oben bleibt bei mindestens 6000. Weniger denken
     # heisst MEHR Platz fuer die Antwort, nie weniger - die v210-Falle
     # (leere Antwort) wird dadurch unwahrscheinlicher, nicht wahrscheinlicher.
-    if new and AI_DENKEN in ('minimal', 'low', 'medium', 'high'):
-        body['reasoning_effort'] = AI_DENKEN
+    # v230c2: der Aufwand haengt jetzt an der FRAGE, nicht mehr am ganzen
+    # Render. Weniger denken heisst wie gehabt MEHR Platz fuer die Antwort,
+    # nie weniger - die v210-Falle (leere Antwort) wird dadurch
+    # unwahrscheinlicher.
+    _denk = _denk_fuer(frage)
+    if new and _denk:
+        body['reasoning_effort'] = _denk
     return body
 
 
@@ -3244,7 +3311,8 @@ def ai_objekt_anker(words, fx_map, video_path, model='gpt-5', min_power=2):
         _txt = _oai_text(key, _oai_json(
             model, [{'role': 'system', 'content': OBJEKT_PROMPT},
                     {'role': 'user', 'content': content}],
-            max_toks=900 + 200 * len(sent), temperature=0.1), timeout=180)
+            max_toks=900 + 200 * len(sent), temperature=0.1,
+            frage='anker'), timeout=180)
         data = json.loads(_txt)
     except Exception as e:
         print(f"Object anchor: vision skipped ({type(e).__name__})")
@@ -6033,7 +6101,7 @@ def _regie_validate(fx_map, words, model, key):
             model, [{'role': 'system', 'content': prompt},
                     {'role': 'user', 'content': json.dumps(
                         entries, ensure_ascii=False)}],
-            max_toks=800, temperature=0.0), timeout=90)
+            max_toks=800, temperature=0.0, frage='pruefer'), timeout=90)
         data = json.loads(_txt)
         drop = {int(i) for i in data.get('entfernen', []) if i in fx_map}
         if drop:
@@ -8468,7 +8536,7 @@ def ai_flow_direct(words, groups, language='de', model='gpt-5'):
             model, [{'role': 'system', 'content': sysm},
                     {'role': 'user', 'content': '\n'.join(lines)}],
             max_toks=min(600 + 90 * len(groups), 12000),
-            temperature=0.0), timeout=180)
+            temperature=0.0, frage='fluss'), timeout=180)
         data = json.loads(_txt)
     except Exception as e:
         print(f"AI flow unavailable ({type(e).__name__}), falling back to the heuristic.")
@@ -14140,8 +14208,15 @@ def main():
         if os.path.exists(auto_t):
             args.transcript = auto_t
     # v228d: Denk-Aufwand der KI aus der Config uebernehmen (Standard 'low').
-    global AI_DENKEN
+    global AI_DENKEN, AI_DENKEN_FRAGE
     AI_DENKEN = str(cfg['keywords'].get('ai_denken', 'aus')).strip().lower()
+    # v230c2: dazu die Feineinstellung je Frage. Sie steht im LOG, damit die
+    # naechste Zeitmessung beantwortbar ist, ohne die Config zu kennen - genau
+    # daran ist v228d/v228e zweimal vorbeigelaufen.
+    _df = cfg['keywords'].get('ai_denken_frage') or {}
+    AI_DENKEN_FRAGE = {str(k).strip().lower(): str(v).strip().lower()
+                       for k, v in _df.items()} if isinstance(_df, dict) else {}
+    print(_denk_log_zeile())
     _zt_tr = time.time()
     if args.transcript and os.path.exists(args.transcript):
         words = json.load(open(args.transcript, encoding='utf-8'))

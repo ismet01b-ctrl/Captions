@@ -48,6 +48,22 @@ keywords:
   # Geschaeft, und das entscheidet der, der das Ergebnis sieht. Der Schalter
   # bleibt: wer die Zeit braucht, kann ihn selbst stellen.
   ai_denken: aus
+  # v230c2 DENK-AUFWAND JE FRAGE. Der Schalter darueber gilt fuer ALLE
+  # KI-Fragen - und das war der Fehler von v228d: die Fragen sind nicht gleich
+  # schwer. Am Job-Log vom 07.08.2026 gemessen (204 s gesamt, 170 s davon
+  # Warten auf die KI): in den 100.7 s der Schluesselwort-Frage stecken ZWEI
+  # Aufrufe, und der zweite ist nur ein Pruefer mit Checkliste ("Hilfsverb?
+  # Konjunktion? Pronomen?") ueber ganze 2 Vorschlaege.
+  # Kreativ bleibt kreativ (keywords, picture = volle Gruendlichkeit),
+  # mechanisch wird schnell (checker, anchor, flow = 'low').
+  # Frage-Namen: regie | pruefer | bild | anker | fluss.
+  # Ein Eintrag hier gewinnt gegen 'ai_denken'; 'aus' je Frage heisst
+  # "Parameter gar nicht schicken". Was hier steht, steht auch im Job-Log
+  # ("AI thinking: ..."), damit die naechste Zeitmessung lesbar ist.
+  ai_denken_frage:
+    pruefer: low
+    fluss: low
+    anker: low
   auto: true
   emphasize_last: true
   min_gap_seconds: 6
