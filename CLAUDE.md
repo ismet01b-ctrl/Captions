@@ -980,7 +980,9 @@ am Bildschirm nachgemessen) - dieselben vier Punkte gelten ueberall:
 3. **Duenn und praezise schlaegt dick.** Eine 3-px-Linie mit Verlauf wirkt
    teurer als ein 6-px-Donut; grosse Zahlen im LEICHTEN Schnitt mit
    Tabellenziffern, kleine Beschriftungen in Versalien und gedaempft.
-4. **Nichts springt.** Platzhalter in Endgroesse (kein Layout-Sprung),
+4. **Nichts springt** - aber ein Platzhalter muss auch etwas SAGEN (v230b9:
+   die Buehne reservierte ihren Platz und war leer; auf dem Handy ein
+   schwarzes Loch mitten im Bild). Platzhalter in Endgroesse (kein Layout-Sprung),
    Bildwechsel als Ueberblendung ueber zwei Ebenen, Textwechsel als Blende.
 Und: **kein schwarzer Balken.** Wer ein Medium einbettet, nimmt das
 Seitenverhaeltnis aus dem MEDIUM. Feste Breite plus `max-height` ergibt
@@ -1643,7 +1645,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2077/2078 (Stand v230b8)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2079/2080 (Stand v230b9)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

@@ -3,6 +3,22 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b9 DER WARTEZUSTAND WAR EIN SCHWARZES LOCH.** Ismets Screenshot vom
+  Handy (7 %, 5:56 vergangen): ein grosser schwarzer Kasten mitten auf dem
+  Schirm. Genau mein Fehler aus v230b4 - die Buehne bekommt ihre Groesse
+  SOFORT (damit nichts springt, wenn das erste Bild kommt), aber bis dahin
+  war nichts drin ausser einem kaum sichtbaren Lichtstreifen. Auf einem
+  hellen Handybildschirm ist das ein toter Player.
+  - Der Wartezustand sagt jetzt, worauf man wartet: Symbol, "Preview starts
+    soon" und ein Satz dazu ("die ersten Bilder kommen, sobald wir dein
+    Video malen; davor wird zugehoert, Regie gefuehrt und freigestellt").
+    Dazu ein weicher Verlauf statt Schwarz und ein deutlicherer
+    Lichtstreifen.
+  - Und die Restzeit stand nach fast sechs Minuten immer noch als blosser
+    Strich da. "Ich weiss es noch nicht" ist eine Information, ein Strich
+    ist keine - jetzt steht dort "estimating …".
+  - Lehre fuer den naechsten Platzhalter: eine Flaeche, die Platz reserviert,
+    muss auch etwas SAGEN. Reservieren allein sieht aus wie ein Fehler.
 - **v230b8 BIBLIOTHEK: VOLLBILD UND BEARBEITEN.** Zwei Befunde von Ismet.
   - **Vollbild.** "Kann die Videos nicht auf Vollbild machen, dann laeuft das
     Video nicht." Am Desktop liess es sich NICHT nachstellen: in Chromium

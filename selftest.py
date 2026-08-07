@@ -9921,6 +9921,17 @@ def _scenario_betrieb(tmp):
     #     Bild da ist, und wartet mit einer ruhigen Flaeche statt mit nichts.
     check('v230b4: die Buehne steht schon vor dem ersten Bild',
           'stage-skel' in _uib4 and '@keyframes stageShim' in _uib4)
+    # v230b9: ... und sie ist nicht LEER. In Ismets Screenshot (7 %, 5:56)
+    # stand ein grosser schwarzer Kasten mitten auf dem Schirm - das liest
+    # sich als kaputter Player, nicht als "warte noch". Der Wartezustand
+    # sagt jetzt, worauf man wartet.
+    check('v230b9: der Wartezustand sagt, worauf man wartet',
+          'Preview starts soon' in _uib4
+          and '.stage-skel b {' in _uib4 and '.stage-skel span {' in _uib4,
+          'ein leerer schwarzer Kasten sieht kaputt aus')
+    check('v230b9: eine unbekannte Restzeit steht als Wort da, nicht als Strich',
+          "'estimating …'" in _uib4 and "eta_sec != null ? fmtDur" in _uib4,
+          'ein blosser Strich nach sechs Minuten liest sich als Fehler')
     # (5) Nichts springt: Bildwechsel als Ueberblendung, Satzwechsel als
     #     Blende. Ein harter Tausch im Sekundentakt liest sich als Fehler.
     check('v230b4: Bild und Satz wechseln weich',
