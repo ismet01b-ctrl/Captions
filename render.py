@@ -14745,6 +14745,51 @@ def main():
         if _b_moment:
             print(f"Block editor: {_b_moment} block(s) promoted to a moment")
         print(f"Block editor: {len(_bloecke)} user block(s) applied")
+    # v230c0 DIE KI DENKT, DER SERVER LIEGT BRACH.
+    # An Ismets Job-Log gemessen: von 245 s waren 140 s reines Warten auf
+    # OpenAI (Textregie 55 s, Textfluss 85 s). In dieser Zeit stand die
+    # Maschine still, obwohl gleich danach mehrere Minuten CPU- und
+    # ffmpeg-Arbeit anstehen, die mit dem Textfluss NICHTS zu tun haben:
+    # Farbwelt-Abtastung, Raum-Karte und Zeige-Regie brauchen nur das Video
+    # und die Schnittzeiten.
+    # Also wird der Textfluss JETZT losgeschickt und erst dort abgeholt, wo
+    # sein Ergebnis wirklich gebraucht wird. Die Anfrage ist Byte fuer Byte
+    # dieselbe - es aendert sich nur, wann gewartet wird. Kein Tausch gegen
+    # Qualitaet (Regel 1), nur Leerarbeit weg.
+    # Die Eingaben stehen hier alle fest: `fx_map` ist fertig (Bild-Regie und
+    # Block-Editor sind durch), und nichts zwischen hier und der Abholstelle
+    # fasst sie noch an.
+    _flow_future = None
+    _flow_groups = None
+    _flow_path = os.path.splitext(args.input)[0] + '_flow3.json'
+    if (cfg['effects'].get('caption_flow', True)
+            and cfg['keywords'].get('ai', True)
+            and not os.path.exists(_flow_path)):
+        try:
+            _flow_groups = groups_for(words, cfg, fx_map, bloecke=_bloecke)
+            import threading as _th
+            # BEWUSST ein Daemon-Thread und KEIN ThreadPoolExecutor: dessen
+            # Threads sind nicht-Daemon, und Python wartet beim Beenden auf
+            # sie. Stirbt der Render vorher an einem Fehler, haenge der
+            # Prozess sonst bis zum API-Timeout (180 s) - ein Absturz, der
+            # drei Minuten braucht, ist schlimmer als der Absturz.
+            _flow_erg = {}
+
+            def _flow_lauf():
+                try:
+                    _flow_erg['sel'] = ai_flow_direct(
+                        words, _flow_groups, cfg.get('language', 'de'),
+                        cfg['keywords'].get('ai_model', 'gpt-5'))
+                except Exception as _e2:
+                    _flow_erg['fehler'] = _e2
+            _zt_flow_start = time.time()
+            _flow_future = _th.Thread(target=_flow_lauf, daemon=True)
+            _flow_future.start()
+        except Exception as _e:
+            print(f"AI flow: could not start early ({type(_e).__name__}), "
+                  f"running it in order.")
+            _flow_future = None
+
     palette_at = None
     # Farbwelt: 'auto' = adaptiv aus der Szene. 'schwarz'/'weiss' = feste
     # High-End-Palette; die Szenen-Toene werden dann bewusst NICHT aufgegriffen,
@@ -14816,8 +14861,12 @@ def main():
         # v193: der Flow-Cache MUSS denselben Blockplan sehen wie
         # build_plans - sonst sind die Anker-Schluessel (g[0]) einer
         # anderen Aufteilung und verfallen still (v161-Fehlertyp).
-        _fgroups = groups_for(words, cfg, fx_map, bloecke=_bloecke)
-        flow_path = os.path.splitext(args.input)[0] + '_flow3.json'
+        # v230c0: dieselbe Aufteilung wie oben beim Vorabstart - nicht neu
+        # rechnen, sonst koennten die Anker-Schluessel auseinanderlaufen
+        # (v161/v193-Fehlertyp).
+        _fgroups = _flow_groups if _flow_groups is not None \
+            else groups_for(words, cfg, fx_map, bloecke=_bloecke)
+        flow_path = _flow_path
         if os.path.exists(flow_path):
             try:
                 _raw = json.load(open(flow_path, encoding='utf-8'))
@@ -14826,8 +14875,25 @@ def main():
                 flow_map = None
         if flow_map is None:
             _zt_ki = time.time()
-            _sel = ai_flow_direct(words, _fgroups, cfg.get('language', 'de'),
-                                  cfg['keywords'].get('ai_model', 'gpt-5'))
+            if _flow_future is not None:
+                # Schon unterwegs: hier wird nur noch der REST gewartet. Die
+                # Zeile im Timing zeigt genau das - lief die Analyse lange
+                # genug, steht hier fast null.
+                _flow_future.join()
+                if _flow_erg.get('fehler') is not None:
+                    print(f"AI flow unavailable "
+                          f"({type(_flow_erg['fehler']).__name__}), "
+                          f"falling back to the heuristic.")
+                    _sel = None
+                else:
+                    _sel = _flow_erg.get('sel')
+                _flow_future = None
+                print(f"AI flow: waited {time.time() - _zt_ki:.1f}s "
+                      f"(started {time.time() - _zt_flow_start:.1f}s earlier, "
+                      f"in parallel with the picture analysis)")
+            else:
+                _sel = ai_flow_direct(words, _fgroups, cfg.get('language', 'de'),
+                                      cfg['keywords'].get('ai_model', 'gpt-5'))
             zt('ki-textfluss', _zt_ki)
             if _sel:
                 flow_map = _sel

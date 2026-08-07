@@ -3,6 +3,34 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c0 DIE KI DENKT, DER SERVER LIEGT BRACH.** Ismet: "das Rendern
+  dauert auch zu lang". An seinem Job-Log gemessen waren von 245 s ganze
+  140 s reines Warten auf OpenAI (Textregie 55 s, Textfluss 85 s). Ismets
+  Wahl: NUR echte Leerarbeit, kein Tausch gegen Qualitaet (Regel 1).
+  - Die Textfluss-Anfrage geht jetzt LOS, bevor die Bildanalyse laeuft, und
+    wird erst dort abgeholt, wo ihr Ergebnis gebraucht wird. Dazwischen
+    liegen Farbwelt-Abtastung, Raum-Karte und Zeige-Regie - alles Arbeit,
+    die nur das Video und die Schnittzeiten braucht und mit dem Textfluss
+    nichts zu tun hat. Die Anfrage selbst ist Byte fuer Byte dieselbe; es
+    aendert sich nur, WANN gewartet wird.
+  - Die Blockaufteilung wird dabei EINMAL gerechnet und an beiden Stellen
+    benutzt. Zweimal rechnen waere der v161/v193-Fehlertyp: die Anker-
+    Schluessel koennten auseinanderlaufen und still verfallen. Ein Test
+    prueft ausserdem, dass zwischen Start und Abholung niemand mehr `fx_map`
+    anfasst - sonst denkt die KI ueber einen ueberholten Stand nach.
+  - BEWUSST ein Daemon-Thread und kein ThreadPoolExecutor: dessen Threads
+    sind nicht-Daemon, und Python wartet beim Beenden auf sie. Stirbt der
+    Render vorher an einem Fehler, haenge der Prozess sonst bis zum
+    API-Timeout (180 s) - ein Absturz, der drei Minuten braucht, ist
+    schlimmer als der Absturz.
+  - **EHRLICH: die Ersparnis ist hier NICHT gemessen.** Ein voller Render
+    laeuft in dieser Umgebung nicht (Tiefen-Modell nicht ladbar, kein
+    OpenAI-Schluessel). Der Beweis steht im naechsten echten Job-Log als
+    eigene Zeile: "AI flow: waited X s (started Y s earlier, in parallel
+    with the picture analysis)". Ist X klein und Y gross, hat es gewirkt;
+    ausserdem muss `Timing (total …)` bei `ki-textfluss` deutlich sinken.
+  - Nicht angefasst: das Denkbudget und `reasoning_effort`. Das war v228d,
+    und Ismets Antwort darauf war "Qualitaet ist sehr schlecht geworden".
 - **v230b9 DER WARTEZUSTAND WAR EIN SCHWARZES LOCH.** Ismets Screenshot vom
   Handy (7 %, 5:56 vergangen): ein grosser schwarzer Kasten mitten auf dem
   Schirm. Genau mein Fehler aus v230b4 - die Buehne bekommt ihre Groesse

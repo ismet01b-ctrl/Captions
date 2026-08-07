@@ -4039,6 +4039,50 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230: Schnitte bekommen weiter die volle Dramaturgie',
           _n30('sparsam', (4.0, 9.0)) > _sp30 + 5,
           f'ohne Schnitt {_sp30} -> mit 2 Schnitten {_n30("sparsam", (4.0, 9.0))}')
+    # ===== v230c0 DIE KI DENKT, DER SERVER LIEGT BRACH =================
+    # Ismet: "das Rendern dauert auch zu lang". An seinem Job-Log gemessen
+    # waren von 245 s ganze 140 s reines Warten auf OpenAI. Gewaehlt hat er
+    # ausdruecklich NUR die Leerarbeit - kein Tausch gegen Qualitaet. Also
+    # laeuft die Textfluss-Anfrage jetzt waehrend der Bildanalyse (Farbwelt,
+    # Raum-Karte, Zeige-Regie), die mit ihr nichts zu tun hat.
+    import re as _re_c0
+    _rc0 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230c0: der Textfluss wird VOR der Bildanalyse losgeschickt',
+          '_flow_future = _th.Thread(target=_flow_lauf, daemon=True)' in _rc0
+          and _rc0.index('_flow_future.start()')
+          < _rc0.index("space_at = scene_space_sampler(args.input, cut_times)"),
+          'sonst wartet die Maschine erst und arbeitet danach')
+    check('v230c0: abgeholt wird erst dort, wo das Ergebnis gebraucht wird',
+          '_flow_future.join()' in _rc0
+          and _rc0.index('_flow_future.join()') > _rc0.index('zt(\'zeige-regie\'')
+          )
+    # Die Aufteilung darf NICHT zweimal gerechnet werden - sonst koennten die
+    # Anker-Schluessel auseinanderlaufen (v161/v193-Fehlertyp).
+    check('v230c0: beide Stellen benutzen dieselbe Blockaufteilung',
+          '_fgroups = _flow_groups if _flow_groups is not None' in _rc0)
+    # Und zwischen Start und Abholung darf fx_map nicht mehr angefasst
+    # werden - sonst denkt die KI ueber einen anderen Stand nach als der,
+    # der spaeter gebaut wird.
+    _von = _rc0.index('_flow_future.start()')
+    _bis = _rc0.index('_flow_future.join()')
+    check('v230c0: zwischen Start und Abholung aendert sich fx_map nicht',
+          not _re_c0.search(r'fx_map\s*(\[[^\]]*\]\s*=|=[^=])', _rc0[_von:_bis]),
+          'sonst rechnet die KI ueber einen ueberholten Stand')
+    # Ein DAEMON-Thread, kein ThreadPoolExecutor: dessen Threads sind
+    # nicht-Daemon, und Python wartet beim Beenden auf sie. Stirbt der Render
+    # vorher, haenge der Prozess sonst bis zum API-Timeout (180 s).
+    # Der FLOW-Thread muss ein Daemon sein. (Anderswo sind
+    # ThreadPoolExecutor voellig in Ordnung - dort wird im selben Block
+    # gewartet, hier laeuft der Thread ueber mehrere Arbeitsschritte weiter.)
+    check('v230c0: ein Absturz kann den Prozess nicht mehr haengen lassen',
+          '_th.Thread(target=_flow_lauf, daemon=True)' in _rc0,
+          'ein Absturz, der drei Minuten braucht, ist schlimmer als der Absturz')
+    # Der Beweis im Betrieb ist eine eigene Log-Zeile: sie nennt, wie lange
+    # noch gewartet wurde und wie viel Vorsprung die Anfrage hatte.
+    check('v230c0: der Job-Log nennt den gewonnenen Vorsprung',
+          'AI flow: waited' in _rc0 and 'in parallel with the picture analysis'
+          in _rc0)
+
     # ===== v230b8 BIBLIOTHEK: VOLLBILD UND BEARBEITEN ==================
     # Ismets Befund: "kann die Videos nicht auf Vollbild machen, dann laeuft
     # das Video nicht" und "man soll die Videos auch da bearbeiten koennen".
@@ -11745,8 +11789,11 @@ def _scenario_betrieb(tmp):
           < _r193.index('if args.plan_only:'))
     check('v193: der Export benutzt dieselbe groups_for-Konfiguration',
           '_b_groups = groups_for(words, cfg, fx_map, bloecke=_bloecke)' in _r193)
+    # v230c0: seit dem Vorabstart wird die Aufteilung EINMAL gerechnet und
+    # an beiden Stellen benutzt - das ist dieselbe Zusage, nur schaerfer.
     check('v193: der Flow-Cache sieht denselben Blockplan wie build_plans',
-          '_fgroups = groups_for(words, cfg, fx_map, bloecke=_bloecke)' in _r193)
+          '_fgroups = _flow_groups if _flow_groups is not None' in _r193
+          and 'groups_for(words, cfg, fx_map, bloecke=_bloecke)' in _r193)
 
     # --- (11) Alt-Fehler, die dieser Umbau mitnimmt: der Momente-Roundtrip
     # baute fx_map[i] neu und verlor dabei 'anker' (Objekt-Anker, v161) und
@@ -14516,9 +14563,14 @@ def _scenario_premium(tmp):
     # denselben Nutzer-Blockplan sehen. Sonst zeigt der Editor eine andere
     # Aufteilung als das Video, und die Flow-Anker (ueber den ersten
     # Wortindex verschluesselt) verfallen still.
+    # v230c0: die Zusage ist EINE Quelle fuer die Chunk-Bildung, nicht eine
+    # bestimmte Anzahl Aufrufe - der Vorabstart des Textflusses hat einen
+    # vierten dazugebracht und den Test sonst ueber die Schreibweise
+    # gekippt (CLAUDE.md-Regel 3).
     check('v140 Tempo: build_plans und Flow-Cache teilen EINE Chunk-Quelle',
-          _rsrc140.count('groups_for(words, cfg, fx_map, bloecke=') == 3
-          and 'def groups_for' in _rsrc140)
+          'def groups_for' in _rsrc140
+          and _rsrc140.count('def groups_for') == 1
+          and _rsrc140.count('groups_for(words, cfg, fx_map, bloecke=') >= 3)
 
     # (2) KONTRAST-GARANTIE. Auf hellem Grund darf der Text nicht fast weiss
     # bleiben; auf dunklem Grund bleibt der Standard-Look erhalten.
