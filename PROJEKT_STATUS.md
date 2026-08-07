@@ -3,6 +3,42 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b0 DAS ADMIN-PANEL IST AUFGERAEUMT.** Ismets Befund: "Das Admin Menue
+  sieht unuebersichtlich aus". Drei Ursachen, alle am Bildschirm nachgemessen
+  (Chromium 1440x1000 und 390x844), keine geraten.
+  - **Siebzehn Menuepunkte untereinander.** Jetzt zwoelf, mit Unterreitern:
+    Umsatz traegt Einnahmen/Guthaben/Gutscheine, Anfragen traegt
+    Tickets/Bewertungen, Technik traegt System/Sicherung, Protokolle traegt
+    Logs/Chronik, Recht traegt Recht & Steuern/Compliance. Die Ansichten
+    selbst sind UNVERAENDERT - es aendert sich nur, wie man sie erreicht.
+    Ein Sprung direkt auf einen Reiter (die Startseite tut das) markiert
+    ueber `PARENT` den richtigen Menuepunkt.
+  - **Halb deutsch, halb englisch.** Jetzt durchgehend deutsch (Ismets Wahl):
+    das Panel sieht nur er, und ein halb uebersetztes Menue liest sich
+    langsamer als ein ganzes. Betrifft Navigation, Kopfzeile, alle Karten,
+    Tabellen, Knoepfe, Rueckfragen, Leerzustaende und die vom Server
+    gelieferten Rechts-Texte (`/api/admin/compliance/tax`).
+  - **Die Startseite hatte seit v206 KEINEN Kartenhintergrund.** `--card` und
+    `--dim` waren nie definiert; `background: var(--card)` faellt still aus.
+    Genau das sah "unaufgeraeumt" aus. Dazu umbrach "letzte 30 Tage" mitten
+    im Satz und stand in Ueberschriftsgroesse im Fliesstext. Jetzt dieselben
+    Farben wie jede andere Karte, Einheit als eigene Zeile, Knopfzeile unten
+    buendig, vier gleich hohe Karten in einer Reihe.
+  - Kopfzeile: Brotkrume raus (sie sagte dasselbe wie Ueberschrift und
+    Seitenleiste), Build-Stempel zu den Statusanzeigen, am Handy ausgeblendet.
+  - **Bewiesen im echten Browser, nicht behauptet:** echter Klick auf
+    Menuepunkt und Unterreiter (Titel wechselt, Menuepunkt bleibt markiert,
+    Sprung von der Startseite landet richtig), 0 CSP-Verstoesse auf allen drei
+    Seiten, kein Querscrollen bei 1440 und bei 390 px.
+  - Neue Riegel im Selftest: jeder Menuepunkt und jeder Reiter hat eine
+    Ansicht (und umgekehrt ist keine Ansicht unerreichbar), jede benutzte
+    CSS-Variable ist definiert, der sichtbare Text ist deutsch, kein
+    Gedankenstrich. Dazu drei Nachweise in `web/_dom_probe.mjs`, die die
+    echten NAV-Ausdruecke AUSFUEHREN statt sie zu lesen.
+  - Eigener Fehler dabei: die neue Sprachpruefung benutzte `_t` als
+    Schleifenvariable und ueberschrieb damit `import time as _t` - der Fehler
+    fiel 2000 Zeilen spaeter. Und mit einem 80-Zeichen-Fenster rutschten die
+    langen Erklaersaetze durch; jetzt 300.
 - **v230az EINE WORTLISTE FAENGT NUR, WAS SCHON PASSIERT IST.** Im zweiten
   echten Job-Log standen wieder deutsche Woerter - "leise", "Haerte",
   "Button-Spalte rechts", "N Moment(e) ragen ins UI", "Dauer unveraendert".

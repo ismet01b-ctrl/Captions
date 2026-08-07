@@ -2133,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230az'
+DVE_VERSION = 'v230b0'
 
 
 def _build_datei():
@@ -9597,19 +9597,20 @@ def _admin_start_calc():
     # den Betrieb WIRKLICH bedroht; alles andere ist gelb.
     probleme = []
     if betrieb_stufe() != 'normal':
-        probleme.append(('rot', f'Betrieb steht auf "{betrieb_stufe()}"'))
+        probleme.append(('rot', f'Betrieb steht auf „{betrieb_stufe()}"'))
     if (disk.get('free_gb') or 99) < 2:
         probleme.append(('rot', f"Nur noch {disk.get('free_gb')} GB Platz frei"))
     elif (disk.get('free_gb') or 99) < 10:
         probleme.append(('gelb', f"Noch {disk.get('free_gb')} GB Platz frei"))
-    for name, key in (('Aufraeumer', 'cleanup'), ('Wachhund', 'watchdog')):
+    for name, key in (('Aufräumer', 'cleanup'), ('Wachhund', 'watchdog')):
         ts = hb.get(key)
         if not ts or now - ts > 3 * 3600:
             probleme.append(('rot', f'{name} meldet sich nicht'))
     if QUEUE.qsize() >= QUEUE_WARN:
         probleme.append(('gelb', f'{QUEUE.qsize()} Videos warten in der Schlange'))
     if stoerungen:
-        probleme.append(('gelb', f'{stoerungen} ungelesene Stoerungsmeldungen'))
+        probleme.append(('gelb', f'{stoerungen} ungelesene '
+                                f'{"Störung" if stoerungen == 1 else "Störungen"}'))
     ampel = 'rot' if any(p[0] == 'rot' for p in probleme) else (
         'gelb' if probleme else 'gruen')
     return {
@@ -10372,26 +10373,27 @@ def _admin_tax_calc():
             'anschrift': (os.environ.get('DVE_SELLER_ADDR')
                           or 'Hinter den Gärten 4, 52388 Nörvenich, '
                              'Germany').strip(),
-            'hinweis': 'Never show a VAT amount or rate on invoices (that is what '
-                       '"state VAT" means). The VAT ID itself DOES go on the '
-                       'invoice as an identifier, together with the §19 note - '
-                       'both are already in the Stripe footer.',
+            'hinweis': 'Auf einer Rechnung darf NIE ein Umsatzsteuer-Betrag oder '
+                       'ein Steuersatz stehen. Die USt-IdNr selbst gehoert '
+                       'sehr wohl darauf, als Kennzeichen, zusammen mit dem '
+                       '§19-Hinweis. Beides steht bereits im Stripe-Fuss.',
             'rechnungspflicht': [
-                'Full name and address of the issuer (§14 (4) 1 UStG) - '
-                'carried by the invoice footer and the "Aussteller" field, '
-                'independently of the Stripe business profile.',
-                'Issue date (§14 (4) 3) - set by Stripe.',
-                'Quantity and description of the service (§14 (4) 5) - the '
-                'line item carries pack name and minutes of video credit.',
-                'Total amount (§14 (4) 7) - set by Stripe, gross, no VAT line.',
-                '§19 note - in the footer, on every invoice, no threshold.',
-                'VAT ID as identifier (§27a UStG) - in the footer and in the '
-                'invoice header field.',
+                'Vollstaendiger Name und Anschrift des Ausstellers (§14 Abs. 4 '
+                'Nr. 1 UStG). Steht im Rechnungsfuss und im Feld '
+                '"Aussteller", unabhaengig vom Stripe-Profil.',
+                'Ausstellungsdatum (§14 Abs. 4 Nr. 3). Setzt Stripe.',
+                'Menge und Art der Leistung (§14 Abs. 4 Nr. 5). Die Position '
+                'nennt Paketname und Minuten Video-Guthaben.',
+                'Gesamtbetrag (§14 Abs. 4 Nr. 7). Setzt Stripe, brutto, ohne '
+                'Umsatzsteuer-Zeile.',
+                '§19-Hinweis. Im Fuss, auf jeder Rechnung, ohne Schwelle.',
+                'USt-IdNr als Kennzeichen (§27a UStG). Im Fuss und im '
+                'Kopffeld der Rechnung.',
             ],
-            'dashboard': 'The invoice HEADER ("From: ...") comes from the '
-                         'Stripe business profile, not from this code. Set the '
-                         'legal name and full address there as well, otherwise '
-                         'the header shows the brand only.',
+            'dashboard': 'Der Rechnungs-KOPF ("From: ...") kommt aus dem '
+                         'Stripe-Geschaeftsprofil, nicht aus diesem Code. '
+                         'Dort denselben Namen und die volle Anschrift '
+                         'eintragen, sonst steht im Kopf nur die Marke.',
         },
         'jahr': jahr, 'jahre': jahre, 'monate': monate,
         'kleinunternehmer': kleinunternehmer,
@@ -10409,34 +10411,34 @@ def _admin_tax_calc():
         # wenn eine neue Tabelle dazukommt und hier nicht auftaucht.
         'verarbeitung': [
             {'daten': 'users (email, name, credit balance, Google ID)',
-             'zweck': 'Account and contract performance', 'grundlage': 'Art. 6(1)(b)',
-             'frist': 'until the account is deleted'},
+             'zweck': 'Konto fuehren und Vertrag erfuellen', 'grundlage': 'Art. 6(1)(b)',
+             'frist': 'bis das Konto geloescht wird'},
             {'daten': 'sessions / verify_tokens / resets',
-             'zweck': 'Login, email confirmation, password reset',
-             'grundlage': 'Art. 6(1)(b)', 'frist': 'until the token expires'},
+             'zweck': 'Anmeldung, E-Mail-Bestaetigung, Passwort zuruecksetzen',
+             'grundlage': 'Art. 6(1)(b)', 'frist': 'bis der Schluessel ablaeuft'},
             {'daten': 'ledger (credit bookings)',
-             'zweck': 'Credit accounting', 'grundlage': 'Art. 6(1)(b)',
-             'frist': 'until the account is deleted'},
+             'zweck': 'Guthaben verbuchen', 'grundlage': 'Art. 6(1)(b)',
+             'frist': 'bis das Konto geloescht wird'},
             {'daten': 'purchases / ledger_archive (purchase records)',
-             'zweck': 'Bookkeeping', 'grundlage': 'Art. 6(1)(c) + §147 AO',
-             'frist': '10 years, survives account deletion'},
+             'zweck': 'Buchfuehrung', 'grundlage': 'Art. 6(1)(c) + §147 AO',
+             'frist': '10 Jahre, ueberlebt die Konto-Loeschung'},
             {'daten': 'consents (withdrawal consent)',
-             'zweck': 'Proof under §356(4) BGB', 'grundlage': 'Art. 6(1)(c)',
-             'frist': '3 years (limitation period)'},
+             'zweck': 'Nachweis nach §356 Abs. 4 BGB', 'grundlage': 'Art. 6(1)(c)',
+             'frist': '3 Jahre (Verjaehrung)'},
             {'daten': 'referral_claims / credit_claims (salted hashes)',
-             'zweck': 'Fraud prevention on free credit',
-             'grundlage': 'Art. 6(1)(f)', 'frist': 'permanent, pseudonymous'},
+             'zweck': 'Missbrauch beim Gratis-Guthaben verhindern',
+             'grundlage': 'Art. 6(1)(f)', 'frist': 'dauerhaft, pseudonym'},
             {'daten': 'tickets (support messages)',
-             'zweck': 'Customer support', 'grundlage': 'Art. 6(1)(b)',
-             'frist': 'until resolved, correspondence kept'},
+             'zweck': 'Kundenbetreuung', 'grundlage': 'Art. 6(1)(b)',
+             'frist': 'bis erledigt, Schriftwechsel bleibt'},
             {'daten': 'video files (upload + render)',
-             'zweck': 'Delivering the service', 'grundlage': 'Art. 6(1)(b)',
-             'frist': f'{RETENTION_DAYS:.0f} days, then deleted automatically'},
+             'zweck': 'Die Leistung erbringen', 'grundlage': 'Art. 6(1)(b)',
+             'frist': f'{RETENTION_DAYS:.0f} Tage, danach automatisch geloescht'},
         ],
         'seiten': [
-            {'titel': 'Imprint (§5 DDG)', 'url': '/imprint'},
-            {'titel': 'Privacy policy', 'url': '/privacy'},
-            {'titel': 'Terms / right of withdrawal', 'url': '/terms'},
+            {'titel': 'Impressum (§5 DDG)', 'url': '/imprint'},
+            {'titel': 'Datenschutz', 'url': '/privacy'},
+            {'titel': 'AGB / Widerrufsrecht', 'url': '/terms'},
         ],
     }
 

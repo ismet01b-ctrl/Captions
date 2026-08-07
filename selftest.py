@@ -5147,7 +5147,8 @@ def _scenario_logic(clip, transcript, tmp):
           and "if stt not in ('wartet', 'laeuft')" in _srv_m
           and '_maybe_refund(jid)' in _srv_m
           and "@app.post('/api/admin/jobs/reap_stuck')" in _srv_m
-          and 'Stop all stuck' in _adm)
+          and "api('/api/admin/jobs/reap_stuck'" in _adm
+          and 'data-act="reapStuck"' in _adm)
     # v130: dynamisches Admin-Vollpanel (Auto-Refresh + alle Domaenen) verdrahtet.
     check('v130 Admin: Endpoints (revenue/credits/abuse/system/compliance/codes/refund) verdrahtet',
           "@app.get('/api/admin/revenue')" in _srv_m and "@app.get('/api/admin/credits')" in _srv_m
@@ -5180,7 +5181,7 @@ def _scenario_logic(clip, transcript, tmp):
           "const AUTO={start:30000, live:15000, jobs:5000, alerts:20000}" in _adm
           and 'visibilitychange' in _adm and 'togglePause' in _adm
           and 'X-Admin-Key' in _adm
-          and "['alerts','Alerts']" in _adm
+          and "['alerts','" in _adm
           and all(t in _adm for t in ("'revenue'", "'credits'", "'abuse'",
                                       "'system'", "'compliance'", "'codes'")))
     # v130x: Pfad-Routing (/app/<name>) statt reinem Hash -> Adressleiste laedt
@@ -7143,10 +7144,13 @@ def _scenario_security(tmp):
     # nicht die Nummer verbieten - und die Nummer steht nachweislich im Footer
     # (der Beleg dafuer liegt im v135-Test oben).
     check('v142a: Panel unterscheidet USt-Betrag (nein) von USt-IdNr (ja)',
-          'VAT amount' in _tax['identitaet']['hinweis']
-          and 'VAT ID itself DOES go on the invoice' in _tax['identitaet']['hinweis']
-          and 'VAT ID on invoice' in _adm142
-          and 'Show a VAT amount' in _adm142)
+          # v230b0: der Text ist deutsch. Die Zusage ist inhaltlich: KEIN
+          # Betrag/Satz auf die Rechnung, die USt-IdNr aber schon.
+          'Umsatzsteuer-Betrag' in _tax['identitaet']['hinweis']
+          and 'USt-IdNr' in _tax['identitaet']['hinweis']
+          and _tax['identitaet']['ust_ausweis'] is False
+          and 'USt-IdNr auf der Rechnung' in _adm142
+          and 'Umsatzsteuer ausweisen' in _adm142)
     check('v142: §19-Ampel schlaegt ab 80 Prozent und ueber der Grenze an',
           _tax['kleinunternehmer']['laufend_lage'] == 'ok'
           and SV.KU_VORJAHR_CENT == 25_000_00 and SV.KU_LAUFEND_CENT == 100_000_00)
@@ -7157,11 +7161,11 @@ def _scenario_security(tmp):
           and all(v.get('grundlage') and v.get('frist') for v in _tax['verarbeitung'])
           and {s['url'] for s in _tax['seiten']} == {'/imprint', '/privacy', '/terms'})
     check('v142: Admin-Panel hat den Tab und ruft den Endpunkt',
-          "['legal','Recht & Steuern']" in _adm142
+          "['legal','Recht'" in _adm142
           and 'legal:loadLegal' in _adm142
           and "api('/api/admin/compliance/tax')" in _adm142
-          and 'Record of processing activities' in _adm142
-          and 'not tax advice' in _adm142)
+          and 'Verarbeitungsverzeichnis' in _adm142
+          and 'keine Steuerberatung' in _adm142)
     # v126-sec: doppeltes Verify darf Referral NICHT doppelt buchen (Race-Fix).
     con = SV._db()
     con.execute("INSERT INTO users (email, pw_hash, name, balance_sec, created_at, verified) "
@@ -9074,14 +9078,21 @@ def _scenario_betrieb(tmp):
 
     # Admin-Oberflaeche
     check('v196: die Admin-Navigation hat die Gruppe Produkt',
-          "['Produkt', [['feedback','Feedback'],['ann','Announcements']]]" in _adm196)
+          # v230b0: Bewertungen liegen als Unterreiter bei den Anfragen, die
+          # Ankuendigungen unter Produkt. Die Zusage ist, dass BEIDE Ansichten
+          # ueber die Navigation erreichbar sind - nicht, wie sie heissen.
+          "['Produkt', [['ann'," in _adm196
+          and "['feedback','Bewertungen']" in _adm196)
     check('v196: beide Ansichten sind verdrahtet',
           'feedback:loadFeedback' in _adm196 and 'ann:loadAnn' in _adm196)
     check('v196: offenes Feedback steht als Zaehler in der Navigation',
-          "setBadge('feedback', d.feedback_offen||0)" in _adm196
+          # Der Zaehler sitzt seit v230b0 am gemeinsamen Menuepunkt und muss
+          # BEIDE Zahlen enthalten - ein Zaehler, der nur die Haelfte zaehlt,
+          # ist schlimmer als keiner.
+          'd.feedback_offen' in _adm196 and "setBadge('support'" in _adm196
           and "'feedback_offen': feedback_offen" in _sv196)
     check('v196: der Admin sieht Verteilung und Schnitt je Look, nicht nur eine Liste',
-          'Average per look' in _adm196 and 'Distribution' in _adm196)
+          'Durchschnitt je Look' in _adm196 and 'Verteilung' in _adm196)
 
     # Kunden-Oberflaeche
     check('v196: das Banner steht in der App und ist wegklickbar',
@@ -9664,9 +9675,10 @@ def _scenario_betrieb(tmp):
           _c198.post('/api/support/tickets/999999/reply',
                      data={'message': 'fremd'}).status_code == 404)
     check('v198: das Panel hat ein Antwortfeld je Ticket',
-          'function ticketReply(' in _adm198 and 'Send reply' in _adm198)
+          'function ticketReply(' in _adm198
+          and 'data-act="ticketReply"' in _adm198)
     check('v198: eine nicht verschickte Mail wird im Panel gemeldet',
-          'could not be sent' in _adm198 and "'gemailt': gemailt" in _sv198)
+          'die Mail ging nicht raus' in _adm198 and "'gemailt': gemailt" in _sv198)
     check('v198: die App zeigt den Verlauf und kann antworten',
           'id="supThreads"' in _ui198 and 'function loadThreads(' in _ui198
           and 'function threadReply(' in _ui198)
@@ -9678,7 +9690,7 @@ def _scenario_betrieb(tmp):
     check('v202: der Verlauf wird beim Oeffnen der Support-Seite geladen',
           "if (name === 'support') loadThreads();" in _ui198)
     check('v198: wartende Tickets stehen als Zaehler in der Seitenleiste',
-          "setBadge('support', d.tickets_open" in _adm198)
+          "setBadge('support'" in _adm198 and 'd.tickets_open' in _adm198)
 
     # ======= v202: Support ist eine eigene Seite + Zaehler ===============
     # Ismets Ansage: "soll nicht alles unter Account verstaut werden", und
@@ -10236,7 +10248,7 @@ def _scenario_betrieb(tmp):
           and 'fastapi' in _sys205['pakete'])
     _adm205 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v205-sec: die Ansicht warnt sichtbar, wenn noch als root gelaufen wird',
-          'd.laufzeit.root' in _adm205 and 'Generalschluessel' in _adm205)
+          'd.laufzeit.root' in _adm205 and 'Generalschlüssel' in _adm205)
 
     # v230aw: Fuer eine Pruefsummen-Liste reichen die 16 wichtigen Bauteile
     # NICHT - `--require-hashes` verlangt, dass JEDES Paket festgenagelt ist,
@@ -10458,7 +10470,7 @@ def _scenario_betrieb(tmp):
           and 'start:loadStart' in _adm206)
     check('v206: jede Zahl bekommt einen Satz Klartext daneben',
           _adm206.count('class="satz"') >= 8
-          and 'VERDIENE ICH GELD?' in _adm206 and 'LAEUFT ALLES?' in _adm206)
+          and 'Verdiene ich Geld?' in _adm206 and 'Läuft alles?' in _adm206)
     del os.environ['DVE_ADMIN']
 
     # ======= v207-sec: kein Testlauf gegen echte Dienste =================
@@ -10678,7 +10690,7 @@ def _scenario_betrieb(tmp):
 
     _adm208 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v208: der Trichter steht als eigene Ansicht im Panel',
-          "['trichter','Trichter']" in _adm208
+          "['trichter','" in _adm208
           and 'trichter:loadTrichter' in _adm208
           and 'trichter:' in _adm208.split('const NAV')[0])
     _pri208 = open(os.path.join(HERE, 'web', 'privacy.html'), encoding='utf-8').read()
@@ -10879,7 +10891,7 @@ def _scenario_betrieb(tmp):
     _adm195 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v195: die Navigation ist in Abschnitte gruppiert',
           'const NAV=[' in _adm195
-          and "['Umsatz'," in _adm195 and "['Kunden'," in _adm195
+          and "['Geld'," in _adm195 and "['Kunden'," in _adm195
           and "['Betrieb'," in _adm195)
     # KEINE Ansicht darf beim Umbau verloren gegangen sein.
     import re as _re195
@@ -10897,14 +10909,94 @@ def _scenario_betrieb(tmp):
     # Erweiterung als Fehler (Checkliste Punkt 3).
     check('v195: alle Ansichten sind weiter erreichbar',
           not (_soll195 - _ids195), f"fehlt: {_soll195 - _ids195}")
+    # ===== v230b0 DAS PANEL IST AUFGERAEUMT ============================
+    # Ismets Befund: "Das Admin Menue sieht unuebersichtlich aus". Drei
+    # Ursachen, alle am Bildschirm nachgemessen: siebzehn Punkte
+    # untereinander, halb deutsch/halb englisch, und die Startseite ohne
+    # Kartenhintergrund (--card/--dim gab es NIE). Die Tests haengen an den
+    # ZUSAGEN, nicht an Beschriftungen.
+    #
+    # (1) Beim Zusammenlegen darf keine Ansicht verloren gehen. Jede
+    #     Kennung aus NAV und jeder Unterreiter braucht eine Ansichts-
+    #     Funktion in RENDER - sonst zeigt ein Klick ins Leere.
+    _navblock = _re195.search(r'const NAV=\[(.*?)\n\];', _adm195, _re195.S)
+    _navsrc = _navblock.group(1) if _navblock else ''
+    _alle_ids = _re195.findall(r"\['([a-z0-9_]+)','", _navsrc)
+    _render230 = _re195.search(r'const RENDER=\{(.*?)\};', _adm195, _re195.S)
+    _rkeys = set(_re195.findall(r'([a-z0-9_]+):', _render230.group(1) if _render230 else ''))
+    _ohne_ansicht = [i for i in _alle_ids if i not in _rkeys]
+    check('v230b0: jeder Menuepunkt und jeder Reiter hat eine Ansicht',
+          not _ohne_ansicht, f'ohne Ansicht: {_ohne_ansicht}')
+    # Und umgekehrt: keine Ansicht darf aus der Navigation gefallen sein.
+    _unerreichbar = [k for k in _rkeys if k not in _alle_ids]
+    check('v230b0: keine Ansicht ist unerreichbar geworden',
+          not _unerreichbar, f'nicht in der Navigation: {_unerreichbar}')
+    # (2) Ein Sprung direkt auf einen Reiter (die Startseite tut das, z.B.
+    #     go('system')) muss den ELTERN-Punkt markieren, nicht ins Leere
+    #     zeigen. Der Riegel dafuer ist PARENT.
+    check('v230b0: ein Sprung auf einen Reiter markiert den Menuepunkt',
+          'const PARENT={};' in _adm195
+          and 'const par=PARENT[name]||name;' in _adm195
+          and "b.classList.toggle('on',b.dataset.t===par)" in _adm195)
+    # (3) Jede benutzte CSS-Variable muss definiert sein. Genau daran ist die
+    #     Startseite gescheitert: `background: var(--card)` mit einem --card,
+    #     das es nirgends gab, faellt STILL aus - kein Fehler, keine Meldung,
+    #     nur eine Karte ohne Hintergrund. Ein Rueckfallwert (var(--x,#fff))
+    #     ist ausdruecklich erlaubt.
+    _css230 = _re195.search(r'<style>(.*?)</style>', _adm195, _re195.S).group(1)
+    _def230 = set(_re195.findall(r'(--[a-z0-9-]+)\s*:', _css230))
+    _use230 = set(_re195.findall(r'var\(\s*(--[a-z0-9-]+)\s*\)', _css230))
+    _fehlt230 = sorted(_use230 - _def230)
+    check('v230b0: jede benutzte CSS-Variable ist auch definiert',
+          not _fehlt230, f'nie definiert: {_fehlt230}')
+    # (4) Das Panel ist durchgehend DEUTSCH (Ismets Wahl, 07.08.2026). Ein
+    #     halb uebersetztes Menue liest sich langsamer als ein ganzes.
+    #     Geprueft wird der sichtbare Text, nicht der Code.
+    _sicht230 = _re195.sub(r'<!--.*?-->', '', _adm195, flags=_re195.S)
+    _sicht230 = _re195.sub(r'<style>.*?</style>', '', _sicht230, flags=_re195.S)
+    # Die SVG-Pfade der Symbole enthalten spitze Klammern und sehen fuer die
+    # Suche wie Text aus ("', jobs:'"). Sie sind Code, kein Kundentext.
+    _sicht230 = _re195.sub(r'const ICON=\{.*?\n\};', '', _sicht230, flags=_re195.S)
+    _worte230 = []
+    # ACHTUNG beim Benennen: `_t` ist in dieser Funktion das time-Modul
+    # (`import time as _t`). Eine Schleifenvariable `_t` ueberschreibt es
+    # still, und der Fehler faellt erst 2000 Zeilen spaeter auf.
+    # Das Fenster muss LANG genug sein: ein ganzer Erklaersatz hat leicht
+    # 150 Zeichen, und mit 80 rutschte er unbemerkt durch (genau so blieb
+    # "All figures in minutes ..." stehen).
+    for _m in _re195.finditer(r'>([^<>{}`$]{2,300})<', _sicht230):
+        _txt230 = _m.group(1).strip()
+        if "'" in _txt230 or '"' in _txt230:   # Reste aus dem Quelltext
+            continue
+        if _re195.fullmatch(r'[\w.-]+\.[a-z]{2,4}', _txt230):   # Dateiname
+            continue
+        if _re195.search(r'\b(the|and|of|for|with|from|this|that|are|not|your|'
+                         r'never|none|yet|paid|free|read|unread|revenue|users|'
+                         r'jobs|credits|total|today|week|month|search|next|'
+                         r'prev|delete|save|show|hide|error|failed|refund)\b',
+                         _txt230):
+            _worte230.append(_txt230[:50])
+    check('v230b0: das Panel ist durchgehend deutsch',
+          not _worte230, '; '.join(_worte230[:3]) if _worte230 else
+          'sichtbarer Text geprueft')
+    # (5) Kein Gedankenstrich - Ismets Regel gilt auch fuer das Panel.
+    check('v230b0: kein Gedankenstrich im Panel',
+          '&mdash;' not in _adm195 and ' — ' not in _adm195,
+          f"mdash: {_adm195.count('&mdash;')}, lang: {_adm195.count(' — ')}")
+
     check('v195: TABS wird aus NAV abgeleitet (eine Quelle, nicht zwei Listen)',
-          'const TABS=NAV.flatMap(' in _adm195)
+          'const NAVITEMS=NAV.flatMap(' in _adm195
+          and 'const TABS=NAVITEMS.flatMap(' in _adm195)
     check('v195: die aktive Zeile wird in der Seitenleiste markiert',
           "document.querySelectorAll('.side a').forEach" in _adm195
           and ".tabs button" not in _adm195)
-    check('v195: Breadcrumb und Titel folgen der Auswahl',
-          "el('crumbNow').textContent=t" in _adm195
-          and "el('viewTitle').textContent=t" in _adm195)
+    # v230b0: die Brotkrume ist raus - sie sagte dasselbe wie die Ueberschrift
+    # und die Seitenleiste. Die Zusage bleibt: Titel und Seitentitel folgen der
+    # Auswahl, und der Menuepunkt wird markiert (auch bei einem Unterreiter).
+    check('v195/v230b0: Titel und Seitenleiste folgen der Auswahl',
+          "el('viewTitle').textContent=t" in _adm195
+          and "document.title=t+' · Admin" in _adm195
+          and 'const par=PARENT[name]||name;' in _adm195)
     check('v195: offene Alerts stehen als Zaehler in der Navigation',
           'function setBadge(' in _adm195 and "setBadge('alerts'" in _adm195)
     # Mobil: die Leiste klappt zu, und die Seite darf NIE quer scrollen.
@@ -12663,8 +12755,9 @@ def _scenario_betrieb(tmp):
           and 'ix_alerts_offen' in _srv147
           and "mail=False)" in _srv147)
     check('v147: Admin-Panel hat den Alerts-Tab',
-          "['alerts','Alerts']" in _adm147 and 'alerts:loadAlerts' in _adm147
-          and 'Mark all read' in _adm147 and 'Unread alerts' in _adm147)
+          "['alerts','" in _adm147 and 'alerts:loadAlerts' in _adm147
+          and 'data-act="alertRead" data-arg="0"' in _adm147
+          and 'Ungelesene Störungen' in _adm147)
 
     # ------------------------------------------------------------------
     # v226a WER MELDET, SAGT AUCH, WELCHER STAND ER IST - UND EIN
@@ -12855,12 +12948,12 @@ def _scenario_betrieb(tmp):
     _tax145 = SV._admin_tax_calc()
     check('v145: Admin-Panel listet die Pflichtangaben und den Dashboard-Rest',
           len(_tax145['identitaet'].get('rechnungspflicht') or []) >= 6
-          and 'Stripe business profile' in (_tax145['identitaet'].get('dashboard') or '')
+          and 'Stripe-Geschaeftsprofil' in (_tax145['identitaet'].get('dashboard') or '')
           and _tax145['identitaet'].get('anschrift'),
           str(_tax145['identitaet'].get('anschrift')))
     _adm145 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
     check('v145: Pflichtangaben sind im Admin-Panel sichtbar',
-          'Mandatory invoice fields' in _adm145
+          'Pflichtangaben auf der Rechnung' in _adm145
           and 'd.identitaet.rechnungspflicht' in _adm145
           and 'd.identitaet.anschrift' in _adm145)
 
@@ -13155,7 +13248,7 @@ def _scenario_betrieb(tmp):
           _oh == {'set': False, 'valid': None}
           and "_openai_health()" in _srvOH
           and _srvOH.count("'openai': _openai_health(),") == 2
-          and 'KEY INVALID' in _admOH)
+          and 'SCHLÜSSEL UNGÜLTIG' in _admOH)
     # v139: Captions pur + formatgerechte Platzierung.
     # (a) Auto-Akzente per Default AUS - kein Motion-Badge mehr ohne Zutun.
     # (b) Akzent-RENDERING haengt an der Datei (Editor-gesetzt), nicht am auto-Flag.
@@ -13180,9 +13273,9 @@ def _scenario_betrieb(tmp):
     check('v136: Admin-Grafen verdrahtet (SVG-barChart + hbars in Live/Revenue/Credits/Jobs)',
           'function barChart' in _admA and 'function hbars' in _admA
           and "tseries(30)" in _admA and "tseries(90)" in _admA
-          and 'Revenue per day' in _admA and 'Signups per day' in _admA
-          and 'Credits spent per day' in _admA
-          and 'Status distribution (live)' in _admA
+          and 'Umsatz je Tag' in _admA and 'Neue Konten je Tag' in _admA
+          and 'Verbrauchtes Guthaben je Tag' in _admA
+          and 'Verteilung der Zustände (live)' in _admA
           and "api('/api/admin/timeseries?days='+days)" in _admA)
     # 3) Nur FEHLER-Jobs alarmieren, fertige nicht. v147: der Alarm geht ins
     # Admin-Panel, NICHT mehr als Mail (Ismets Wunsch) - gemessen wird deshalb

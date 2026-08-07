@@ -259,11 +259,17 @@ Web-Produkt (`web/`):
 - `web/landing.html` — Marketing-Landing (**Englisch**, international, an
   Branchen-Konventionen ausgerichtet; KEINE Konkurrenz-Namen, kein Datenschutz-
   Block auf der Seite).
-- `web/admin.html` — Ops-Konsole. **Navigation ist EINE Quelle** (`NAV`,
+- `web/admin.html` — Ops-Konsole, durchgehend **deutsch** (Ismets Wahl,
+  07.08.2026; die Kundenseite bleibt englisch). **Navigation ist EINE Quelle** (`NAV`,
   gruppiert; `TABS` wird daraus abgeleitet). Wer eine Ansicht ergaenzt, traegt
   sie in `NAV` ein und legt ein SVG in `ICON` — keine Emoji als Symbole.
   Grid-Kinder brauchen `min-width:0`, sonst schiebt eine breite Tabelle die
-  ganze Seite quer.
+  ganze Seite quer. Ein Eintrag kann **Unterreiter** tragen
+  (`['id','Titel',[['reiterId','Titel'],…]]`); `PARENT` fuehrt jeden Reiter auf
+  seinen Menuepunkt zurueck, sonst markiert ein Direktsprung nichts.
+  **Eine CSS-Variable, die es nicht gibt, faellt STILL aus** — `--card` und
+  `--dim` haben die Startseite seit v206 ohne Kartenhintergrund gelassen, ohne
+  Fehler und ohne Meldung. Der Selftest prueft jetzt jede benutzte Variable.
 - `web/imprint/privacy/terms.html`, `web/codes.py`.
 - `Dockerfile`, `docker-compose.yml` (app + caddy), `autodeploy.sh`, `update.sh`,
   `deploy_gate.sh` (Selftest im neuen Image vor dem Umschalten), `restore.sh`
@@ -1602,7 +1608,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2028/2029 (Stand v230az)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2034/2035 (Stand v230b0)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

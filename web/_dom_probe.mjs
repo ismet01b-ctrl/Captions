@@ -437,5 +437,39 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
         !globalThis.ALPHA_WATCH.has('j2'));
 }
 
+// ---- v230b0: die Navigation des Panels wird AUSGEFUEHRT, nicht gelesen ----
+// Beim Zusammenlegen der siebzehn Punkte auf zwoelf darf keine Ansicht
+// verschwinden und kein Reiter ins Leere zeigen. Der Selftest prueft das am
+// Quelltext; hier laufen die echten Ausdruecke aus admin.html.
+{
+  const adm = readFileSync(join(HIER, 'admin.html'), 'utf8');
+  const stueck = (von, bis) => {
+    const i = adm.indexOf(von);
+    if (i < 0) throw new Error('nicht gefunden: ' + von);
+    const j = adm.indexOf(bis, i);
+    return adm.slice(i, j + bis.length);
+  };
+  const src = stueck('const NAV=[', '\n];')
+    + '\n' + stueck('const NAVITEMS=', 'PARENT[k]=id;}')
+    + '\n' + stueck('const TABS=NAVITEMS', 'TITEL[id]=t;')
+    + '\nreturn {NAV,NAVITEMS,TABSOF,PARENT,TABS,TITEL};';
+  const N = new Function(src)();
+  const renderBlock = stueck('const RENDER={', '};');
+  const rkeys = new Set([...renderBlock.matchAll(/([a-z0-9_]+):/g)].map(m => m[1]));
+  const alle = Object.keys(N.TITEL);
+  pruef('v230b0: jeder Reiter der Navigation hat eine Ansichts-Funktion',
+        alle.every(k => rkeys.has(k)),
+        alle.filter(k => !rkeys.has(k)).join(', ') || alle.length + ' Reiter');
+  // Ein Sprung direkt auf einen Reiter muss den ELTERN-Punkt liefern.
+  pruef('v230b0: ein Reiter zeigt auf seinen Menuepunkt zurueck',
+        N.PARENT['credits'] === 'revenue' && N.PARENT['offsite'] === 'system'
+        && N.PARENT['events'] === 'logs' && N.PARENT['start'] === 'start',
+        JSON.stringify({credits: N.PARENT['credits'], offsite: N.PARENT['offsite']}));
+  // Jeder Menuepunkt braucht eine Ueberschrift, sonst steht die Kopfzeile leer.
+  pruef('v230b0: jeder Menuepunkt hat einen Titel',
+        N.NAVITEMS.every(([id]) => !!N.TITEL[id]),
+        N.NAVITEMS.filter(([id]) => !N.TITEL[id]).map(x => x[0]).join(', ') || 'alle');
+}
+
 console.log(fails ? `\n${fails} FEHLER` : '\nalle Nachweise gruen');
 process.exit(fails ? 1 : 0);

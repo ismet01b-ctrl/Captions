@@ -60,10 +60,25 @@ body{overflow-x:hidden}
   stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--mut2)}
 .side a .badge{margin-left:auto;font-size:10.5px;font-weight:800;color:var(--bad);
   background:rgba(255,82,51,.14);border-radius:999px;padding:1px 7px}
-.crumb{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mut2);
-  margin:0 0 14px;flex-wrap:wrap}
-.crumb b{color:var(--fg);font-weight:700}
-.crumb span{opacity:.5}
+/* v230b0: Die Kopfzeile sagte dreimal dasselbe (Brotkrume, Ueberschrift,
+   Build-Zeile untereinander). Jetzt EINE Zeile: links wo man ist, rechts wie
+   es dem Server geht. Der Stand steht bei den Statusanzeigen, nicht unter
+   der Ueberschrift - er gehoert zum Server, nicht zur Ansicht. */
+.top{padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:18px;
+  align-items:center}
+.top h1{font-size:24px}
+.live .sep{width:1px;height:14px;background:var(--line)}
+/* Am Handy hat die Kopfzeile keinen Platz fuer den Build-Stempel - er steht
+   ausserdem in der Ansicht Technik. Weglassen ist besser als vierzeilig. */
+@media(max-width:760px){.live .sep,#buildLine{display:none}}
+/* Unterreiter: die zusammengelegten Ansichten. Sieht aus wie eine Reiterzeile,
+   ist aber nur ein Sprung in dieselbe Ansichts-Funktion wie vorher. */
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 18px}
+.subtabs .sub{background:transparent;border:1px solid var(--line);color:var(--mut);
+  font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:999px;cursor:pointer;
+  transition:background .12s,color .12s,border-color .12s}
+.subtabs .sub:hover{color:var(--fg);background:var(--surf)}
+.subtabs .sub.on{background:var(--surf2);color:var(--fg);border-color:var(--acc)}
 .navtog{display:none}
 @media(max-width:900px){
   .shell{grid-template-columns:1fr;gap:14px}
@@ -134,18 +149,33 @@ select.search{cursor:pointer}
 
 /* v206 Startseite: eine Zahl je Frage, gross, mit einem Satz daneben. Alles
    Technische bleibt in den anderen Ansichten - es steht nur nicht mehr vorn. */
-.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
-.hero .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
-.hero .frage{font-size:12.5px;color:var(--dim);letter-spacing:.02em;margin-bottom:6px}
-.hero .zahl{font-size:34px;font-weight:800;line-height:1.05;letter-spacing:-.02em}
-.hero .zahl small{font-size:15px;font-weight:600;color:var(--dim);margin-left:4px}
-.hero .satz{margin-top:8px;font-size:13px;color:var(--dim);line-height:1.5}
+/* v230b0: --card und --dim gab es NIE. Die Startseite stand deshalb seit
+   v206 ohne Kartenhintergrund da, und die Fragezeile war so hell wie der
+   Fliesstext - genau das sah "unaufgeraeumt" aus. Jetzt dieselben Farben
+   wie jede andere Karte im Panel. Eine Variable, die es nicht gibt, faellt
+   still aus; deshalb prueft der Selftest jetzt jede benutzte Variable. */
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.hero .box{background:var(--surf);border:1px solid var(--line);border-radius:14px;
+  padding:17px 18px 16px;display:flex;flex-direction:column}
+.hero .frage{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--mut2);font-weight:700;margin-bottom:9px}
+/* Die Masszahl steht auf EINER Zeile, die Einheit als eigene darunter. Vorher
+   umbrach "letzte 30 Tage" mitten im Satz und die zweite Haelfte stand in
+   Ueberschriftsgroesse im Text - das las sich wie ein Fehler. */
+.hero .zahl{font-size:31px;font-weight:800;line-height:1.1;letter-spacing:-.6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero .zahl small{display:block;font-size:12px;font-weight:600;color:var(--mut);
+  letter-spacing:0;margin-top:3px;white-space:normal}
+.hero .satz{margin-top:9px;font-size:12.5px;color:var(--mut);line-height:1.55}
+.hero .satz+.satz{margin-top:5px}
 .hero .box.gruen{border-color:rgba(60,200,120,.45)}
 .hero .box.gelb{border-color:rgba(255,180,40,.5)}
 .hero .box.rot{border-color:rgba(255,90,90,.55)}
 .ampel{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:8px;vertical-align:1px}
 .ampel.gruen{background:#3cc878}.ampel.gelb{background:#ffb428}.ampel.rot{background:#ff5a5a}
-.tuwas{margin-top:14px;display:flex;gap:9px;flex-wrap:wrap}
+/* Die Knopfzeile sitzt unten buendig, damit vier verschieden lange Karten
+   nicht vier verschieden hohe Knopfreihen haben. */
+.tuwas{margin-top:auto;padding-top:14px;display:flex;gap:8px;flex-wrap:wrap}
 /* v208 Trichter: eine Zeile je Stufe, Balkenbreite = Anteil an ganz oben. */
 .tri{display:flex;flex-direction:column;gap:10px;margin-top:4px}
 .trow{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
@@ -163,9 +193,9 @@ select.search{cursor:pointer}
 <div class="wrap">
   <div id="gate" class="gate">
     <h1>DouchkoVE <span class="dot">Admin</span></h1>
-    <p class="subtle" style="margin-top:6px">Enter the admin key (server env DVE_ADMIN).</p>
-    <input type="password" id="keyIn" placeholder="Admin key" autocomplete="off" data-enter="saveKey">
-    <button class="btn" data-act="saveKey">Unlock</button>
+    <p class="subtle" style="margin-top:6px">Admin-Schlüssel eingeben (Server-Variable DVE_ADMIN).</p>
+    <input type="password" id="keyIn" placeholder="Admin-Schlüssel" autocomplete="off" data-enter="saveKey">
+    <button class="btn" data-act="saveKey">Öffnen</button>
     <p class="msg" id="gateMsg"></p>
   </div>
 
@@ -174,24 +204,23 @@ select.search{cursor:pointer}
       <aside class="side zu" id="side">
         <div class="brand">
           <b>DouchkoVE <span class="dot">Admin</span></b>
-          <button class="navtog" data-act="navTog" id="navBtn">Menu</button>
+          <button class="navtog" data-act="navTog" id="navBtn">Menü</button>
         </div>
         <nav id="nav"></nav>
       </aside>
       <main>
         <div class="top">
-          <div>
-            <div class="crumb"><b>Admin</b><span>&rsaquo;</span><b id="crumbNow">Live</b></div>
-            <h1 id="viewTitle">Live</h1>
-            <span class="subtle" id="buildLine">live ops console</span>
-          </div>
+          <h1 id="viewTitle">Live</h1>
           <div class="live">
             <span class="pulse" id="pulse"></span><span id="liveTxt">live</span>
+            <span class="sep"></span>
+            <span class="subtle" id="buildLine">Stand unbekannt</span>
             <button class="btn ghost sm" data-act="togglePause" id="pauseBtn">Pause</button>
-            <button class="btn ghost sm" data-act="logout">Lock</button>
+            <button class="btn ghost sm" data-act="logout">Sperren</button>
           </div>
         </div>
-        <div id="view" style="margin-top:16px"><div class="spin">Loading…</div></div>
+        <div id="subtabs" class="subtabs hidden"></div>
+        <div id="view"><div class="spin">Lade …</div></div>
       </main>
     </div>
   </div>
@@ -228,21 +257,49 @@ const ICON={
   events:'<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>',
   trichter:'<path d="M3 4h18l-7 8v7l-4 2v-9z"/>',
 };
+/* v230b0: EINE Quelle fuer die Navigation, jetzt mit UNTERREITERN.
+   Siebzehn Punkte untereinander waren zu viel, und die Haelfte davon gehoert
+   inhaltlich zusammen (Logs und Chronik sind beides Protokolle, Recht und
+   Compliance beides Pflichten). Ein Eintrag kann deshalb Reiter tragen:
+   ['id','Beschriftung',[['reiterId','Beschriftung'], ...]]. Die Ansichten
+   selbst sind UNVERAENDERT - es aendert sich nur, wie man sie erreicht.
+   Sprache durchgehend deutsch: das Panel sieht nur Ismet (Ansage 07.08.2026),
+   und ein halb uebersetztes Menue liest sich langsamer als ein ganzes. */
 const NAV=[
-  ['', [['start','Start'],['live','Live'],['alerts','Alerts'],['jobs','Jobs']]],
-  ['Umsatz', [['revenue','Revenue'],['trichter','Trichter'],['credits','Credits'],['codes','Codes']]],
-  ['Kunden', [['users','Users'],['support','Support'],['abuse','Abuse']]],
-  ['Produkt', [['feedback','Feedback'],['ann','Announcements']]],
-  ['Betrieb', [['system','System'],['offsite','Sicherung'],['events','Chronik'],['logs','Logs'],['compliance','Compliance'],['legal','Recht & Steuern']]],
+  ['', [['start','Start'],['live','Live'],
+        ['alerts','Störungen'],['jobs','Renders']]],
+  ['Geld', [['revenue','Umsatz',[['revenue','Einnahmen'],
+                                 ['credits','Guthaben'],
+                                 ['codes','Gutscheine']]],
+            ['trichter','Reichweite']]],
+  ['Kunden', [['users','Konten'],
+              ['support','Anfragen',[['support','Tickets'],
+                                     ['feedback','Bewertungen']]],
+              ['abuse','Missbrauch']]],
+  ['Produkt', [['ann','Ankündigungen']]],
+  ['Betrieb', [['system','Technik',[['system','System'],
+                                    ['offsite','Sicherung']]],
+               ['logs','Protokolle',[['logs','Logs'],
+                                     ['events','Chronik']]],
+               ['legal','Recht',[['legal','Recht & Steuern'],
+                                 ['compliance','Compliance']]]]],
 ];
-const TABS=NAV.flatMap(([,items])=>items);
+// Jeder Reiter zeigt auf seinen Menuepunkt zurueck - ein Sprung aus der
+// Startseite (go('system')) muss den richtigen Punkt markieren.
+const NAVITEMS=NAV.flatMap(([,items])=>items);
+const TABSOF=Object.fromEntries(NAVITEMS.map(([id,,tabs])=>[id,tabs||null]));
+const PARENT={};
+for(const [id,,tabs] of NAVITEMS){PARENT[id]=id;
+  for(const [k] of (tabs||[]))PARENT[k]=id;}
+const TABS=NAVITEMS.flatMap(([id,t,tabs])=>tabs?tabs:[[id,t]]);
 const TITEL=Object.fromEntries(TABS);
+for(const [id,t,tabs] of NAVITEMS) if(!tabs) TITEL[id]=t;
 const $=s=>document.querySelector(s), el=id=>document.getElementById(id);
 function hdr(){return {'X-Admin-Key':KEY};}
 async function api(path,opts={}){
   opts.headers=Object.assign(hdr(),opts.headers||{});
   const r=await fetch(path,opts);
-  if(r.status===403){logout('Wrong or missing key.');throw new Error('403');}
+  if(r.status===403){logout('Schlüssel fehlt oder stimmt nicht.');throw new Error('403');}
   if(!r.ok){let d={};try{d=await r.json();}catch(e){}throw new Error(d.detail||('HTTP '+r.status));}
   const ct=r.headers.get('content-type')||''; return ct.includes('json')?r.json():r.text();
 }
@@ -258,8 +315,8 @@ function barChart(title,labels,values,fmt,height){
   fmt=fmt||(v=>String(v)); height=height||96;
   const n=values.length;
   if(!n||values.every(v=>!v))
-    return `<div class="chart"><div class="ct"><b>${title}</b><span>no data yet</span></div>
-      <div class="subtle" style="padding:16px 0 12px">Nothing in this period.</div></div>`;
+    return `<div class="chart"><div class="ct"><b>${title}</b><span>noch keine Daten</span></div>
+      <div class="subtle" style="padding:16px 0 12px">In diesem Zeitraum nichts.</div></div>`;
   const mx=Math.max(...values,1e-9);
   const W=1000,H=height,gap=Math.min(6,Math.max(1.2,W/n*0.18)),bw=(W-gap*(n-1))/n;
   let bars='';
@@ -277,7 +334,7 @@ function barChart(title,labels,values,fmt,height){
 }
 function hbars(items,fmt){
   fmt=fmt||(v=>String(v));
-  if(!items.length||items.every(i=>!i.v))return '<div class="subtle">none yet</div>';
+  if(!items.length||items.every(i=>!i.v))return '<div class="subtle">noch keine</div>';
   const mx=Math.max(...items.map(i=>i.v),1e-9);
   return `<div class="hbars">${items.map(i=>`<div class="hb"><span class="hl" title="${esc(i.l)}">${esc(i.l)}</span><span class="ht"><i style="width:${Math.max(2,Math.round(i.v/mx*100))}%${i.c?';background:'+i.c:''}"></i></span><span class="hv">${fmt(i.v)}</span></div>`).join('')}</div>`;
 }
@@ -289,7 +346,7 @@ async function tseries(days){
   TS_CACHE[k]={t:now,d};return d;
 }
 function fdate(ts){return ts?new Date(ts*1000).toLocaleDateString():'–';}
-function ago(ts){if(!ts)return 'never';const s=Math.max(0,Math.floor((serverNow||Date.now()/1000)-ts));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+function ago(ts){if(!ts)return 'nie';const s=Math.max(0,Math.floor((serverNow||Date.now()/1000)-ts));if(s<60)return 'vor '+s+' s';if(s<3600)return 'vor '+Math.floor(s/60)+' min';if(s<86400)return 'vor '+Math.floor(s/3600)+' h';return 'vor '+Math.floor(s/86400)+' Tagen';}
 function dur(s){if(s==null)return '–';s=Math.round(s);if(s<60)return s+'s';const m=Math.floor(s/60);return m+'m '+(s%60)+'s';}
 function eur(n){return '€'+Number(n||0).toFixed(2);}
 
@@ -306,7 +363,7 @@ function boot(){
       window._bdgT=setInterval(()=>{if(!document.hidden)refreshBadges();},30000);})
     .catch(e=>{if(e.message!=='403')el('gateMsg').textContent=e.message;});
   if(TICK)clearInterval(TICK);
-  TICK=setInterval(()=>{const t=lastLoad[active];if(t)el('liveTxt').textContent=(AUTO[active]?'live · ':'')+'updated '+ago(t);},1000);
+  TICK=setInterval(()=>{const t=lastLoad[active];if(t)el('liveTxt').textContent=(AUTO[active]?'live · ':'')+'aktualisiert '+ago(t);},1000);
 }
 function stopPoll(){if(POLL){clearInterval(POLL);POLL=null;}}
 function setPulse(){const on=AUTO[active]&&!paused&&!document.hidden;el('pulse').classList.toggle('off',!on);}
@@ -322,31 +379,44 @@ async function refreshBadges(){
   try{
     const d=await api('/api/admin/overview');
     setBadge('alerts', d.alerts_offen||0);
-    setBadge('feedback', d.feedback_offen||0);
-    setBadge('support', d.tickets_open||0);       // v198: wartende Tickets
+    // v230b0: Bewertungen und Tickets liegen jetzt unter EINEM Menuepunkt -
+    // der Zaehler dort muss beide zeigen, sonst faellt eine der beiden
+    // Zahlen unter den Tisch (ein Zaehler, der nur die Haelfte zaehlt, ist
+    // schlimmer als keiner).
+    setBadge('support', (d.tickets_open||0) + (d.feedback_offen||0));
+    if(d.build) el('buildLine').textContent='Stand '+d.build;
   }catch(e){}
 }
 function navTog(){
   const s=el('side'); s.classList.toggle('zu');
-  el('navBtn').textContent = s.classList.contains('zu') ? 'Menu' : 'Close';
+  el('navBtn').textContent = s.classList.contains('zu') ? 'Menü' : 'Schließen';
 }
 function go(name){
   active=name;stopPoll();
-  document.querySelectorAll('.side a').forEach(b=>b.classList.toggle('on',b.dataset.t===name));
+  // v230b0: der markierte Menuepunkt ist der ELTERN-Eintrag. Sonst steht die
+  // Leiste auf nichts, sobald jemand direkt auf einen Reiter springt
+  // (die Startseite tut genau das, z.B. go('system')).
+  const par=PARENT[name]||name;
+  document.querySelectorAll('.side a').forEach(b=>b.classList.toggle('on',b.dataset.t===par));
   const t=TITEL[name]||name;
-  el('crumbNow').textContent=t; el('viewTitle').textContent=t;
+  el('viewTitle').textContent=t;
+  const _tabs=TABSOF[par];
+  el('subtabs').innerHTML = _tabs ? _tabs.map(([k,lab])=>
+      `<button class="sub${k===name?' on':''}" data-act="go" data-arg="${k}">${lab}</button>`
+    ).join('') : '';
+  el('subtabs').classList.toggle('hidden', !_tabs);
   document.title=t+' · Admin · DouchkoVE';
   // Auf schmalen Schirmen klappt die Leiste nach der Wahl wieder zu -
   // sonst muesste man an zwoelf Punkten vorbeiscrollen, um etwas zu sehen.
   if(window.matchMedia('(max-width:900px)').matches){
-    el('side').classList.add('zu'); el('navBtn').textContent='Menu';
+    el('side').classList.add('zu'); el('navBtn').textContent='Menü';
   }
   el('view').innerHTML='<div class="spin">Loading…</div>';
   RENDER[name]();
   if(AUTO[name]&&!paused){POLL=setInterval(()=>{if(!document.hidden)RENDER[name](true);},AUTO[name]);}
   setPulse();
 }
-function togglePause(){paused=!paused;el('pauseBtn').textContent=paused?'Resume':'Pause';go(active);}
+function togglePause(){paused=!paused;el('pauseBtn').textContent=paused?'Weiter':'Pause';go(active);}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPoll();else if(AUTO[active]&&!paused){go(active);}setPulse();});
 function danger(msg){return confirm('⚠ '+msg);}
 
@@ -354,46 +424,46 @@ function danger(msg){return confirm('⚠ '+msg);}
 async function loadLive(silent){
   let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/overview'),tseries(30).catch(()=>null)]);}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
   lastLoad.live=Date.now()/1000; serverNow=d.now;
-  el('buildLine').textContent='build '+d.build;
+  el('buildLine').textContent='Stand '+d.build;
   const r=d.revenue,s=d.system,st=s.stripe;
   const led=(c,w)=>`<span class="led ${c?'ok':(w?'warn':'bad')}"></span>`;
   const rc=(t,o)=>`<div class="card"><div class="k">${t}</div><div class="v">${eur(o.eur)} <small>${o.count}×</small></div></div>`;
   const diskBad=s.disk&&s.disk.used_pct>90,diskWarn=s.disk&&s.disk.used_pct>78;
   el('view').innerHTML=`
-    <div class="grid g4">${rc('Revenue today',r.today)}${rc('7 days',r.week)}${rc('30 days',r.month)}${rc('Total',r.total)}</div>
+    <div class="grid g4">${rc('Umsatz heute',r.today)}${rc('7 Tage',r.week)}${rc('30 Tage',r.month)}${rc('Insgesamt',r.total)}</div>
     <div class="grid g4" style="margin-top:11px">
-      <div class="card"><div class="k">Signups today / 7d / 30d</div><div class="v">${d.signups.today} <small>/ ${d.signups.week} / ${d.signups.month}</small></div></div>
-      <div class="card"><div class="k">Users (verified · paid)</div><div class="v">${d.users.total} <small>${d.users.verified}v · ${d.users.purchasers}p</small></div></div>
-      <div class="card"><div class="k">Active sessions</div><div class="v">${d.sessions_active}</div></div>
-      <div class="card acc"><div class="k">Open liability</div><div class="v">${d.credits.liability_min} <small>min owed</small></div></div>
+      <div class="card"><div class="k">Neu heute / 7 T / 30 T</div><div class="v">${d.signups.today} <small>/ ${d.signups.week} / ${d.signups.month}</small></div></div>
+      <div class="card"><div class="k">Konten (bestätigt · zahlend)</div><div class="v">${d.users.total} <small>${d.users.verified} bestätigt · ${d.users.purchasers} zahlend</small></div></div>
+      <div class="card"><div class="k">Aktive Sitzungen</div><div class="v">${d.sessions_active}</div></div>
+      <div class="card acc"><div class="k">Offene Verpflichtung</div><div class="v">${d.credits.liability_min} <small>Min offen</small></div></div>
     </div>
     <div class="grid g4" style="margin-top:11px">
-      <div class="card"><div class="k">Caption queue</div><div class="v">${d.jobs.queue} <small>wait ${d.jobs.waiting} · run ${d.jobs.running} · fail ${d.jobs.failed}</small></div></div>
-      <div class="card"><div class="k">Motion queue</div><div class="v">${d.jobs.motion_queue}</div></div>
-      <div class="card"><div class="k">Renders total</div><div class="v">${d.renders.count} <small>${d.renders.minutes} min</small></div></div>
-      <div class="card"><div class="k">Unread alerts</div><div class="v">${d.alerts_offen||0} <small>throttled ${d.alerts_active}</small></div></div>
+      <div class="card"><div class="k">Schlange Captions</div><div class="v">${d.jobs.queue} <small>wartet ${d.jobs.waiting} · läuft ${d.jobs.running} · gescheitert ${d.jobs.failed}</small></div></div>
+      <div class="card"><div class="k">Schlange Motion</div><div class="v">${d.jobs.motion_queue}</div></div>
+      <div class="card"><div class="k">Renders insgesamt</div><div class="v">${d.renders.count} <small>${d.renders.minutes} Min</small></div></div>
+      <div class="card"><div class="k">Ungelesene Störungen</div><div class="v">${d.alerts_offen||0} <small>gedrosselt ${d.alerts_active}</small></div></div>
     </div>
-    <h3>System health</h3>
+    <h3>Systemzustand</h3>
     <div class="health">
-      ${led(s.openai.set&&s.openai.valid!==false,s.openai.set&&s.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!s.openai.set?'MISSING':(s.openai.valid===false?'KEY INVALID':'ok')}</span>
-      ${led(st.ready&&st.mode==='live',st.mode==='test')}<span class="pill"><b>Stripe</b> ${st.mode}${st.ready?'':' (off)'}</span>
-      ${led(st.webhook_secret)}<span class="pill"><b>Webhook</b> ${st.webhook_secret?'set':'MISSING'}</span>
-      ${led(s.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${s.mail.transport}</span>
-      ${led(!diskBad&&!diskWarn,diskWarn)}<span class="pill"><b>Disk</b> ${s.disk?s.disk.free_gb+'G free ('+s.disk.used_pct+'%)':'?'}</span>
-      <span class="pill"><span class="led ok"></span><b>DB</b> ${s.db_mb??'?'} MB</span>
-      ${led(s.last_backup)}<span class="pill"><b>Backup</b> ${s.last_backup?fdate(s.last_backup):'none'}</span>
-      ${led(s.heartbeats.watchdog)}<span class="pill"><b>Watchdog</b> ${s.heartbeats.watchdog?ago(s.heartbeats.watchdog):'—'}</span>
-      ${led(s.heartbeats.cleanup)}<span class="pill"><b>Cleanup</b> ${s.heartbeats.cleanup?ago(s.heartbeats.cleanup):'—'}</span>
-      ${led(s.motion,true)}<span class="pill"><b>Motion</b> ${s.motion?'available':'off'}</span>
+      ${led(s.openai.set&&s.openai.valid!==false,s.openai.set&&s.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!s.openai.set?'FEHLT':(s.openai.valid===false?'SCHLÜSSEL UNGÜLTIG':'ok')}</span>
+      ${led(st.ready&&st.mode==='live',st.mode==='test')}<span class="pill"><b>Stripe</b> ${st.mode}${st.ready?'':' (aus)'}</span>
+      ${led(st.webhook_secret)}<span class="pill"><b>Webhook</b> ${st.webhook_secret?'gesetzt':'FEHLT'}</span>
+      ${led(s.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${s.mail.transport==='none'?'keiner':s.mail.transport}</span>
+      ${led(!diskBad&&!diskWarn,diskWarn)}<span class="pill"><b>Platte</b> ${s.disk?s.disk.free_gb+' GB frei ('+s.disk.used_pct+'% belegt)':'?'}</span>
+      <span class="pill"><span class="led ok"></span><b>Datenbank</b> ${s.db_mb??'?'} MB</span>
+      ${led(s.last_backup)}<span class="pill"><b>Sicherung</b> ${s.last_backup?fdate(s.last_backup):'keine'}</span>
+      ${led(s.heartbeats.watchdog)}<span class="pill"><b>Wachhund</b> ${s.heartbeats.watchdog?ago(s.heartbeats.watchdog):'—'}</span>
+      ${led(s.heartbeats.cleanup)}<span class="pill"><b>Aufräumer</b> ${s.heartbeats.cleanup?ago(s.heartbeats.cleanup):'—'}</span>
+      ${led(s.motion,true)}<span class="pill"><b>Motion</b> ${s.motion?'da':'aus'}</span>
     </div>
-    ${ts?`<h3>Last 30 days</h3>
+    ${ts?`<h3>Letzte 30 Tage</h3>
     <div class="grid g2">
-      ${barChart('Revenue per day',ts.labels,ts.revenue_eur,v=>eur(v))}
-      ${barChart('Signups per day',ts.labels,ts.signups)}
+      ${barChart('Umsatz je Tag',ts.labels,ts.revenue_eur,v=>eur(v))}
+      ${barChart('Neue Konten je Tag',ts.labels,ts.signups)}
     </div>
     <div class="grid g2" style="margin-top:11px">
-      ${barChart('Renders per day',ts.labels,ts.renders)}
-      ${barChart('Credits spent per day (min)',ts.labels,ts.credits_spent_min)}
+      ${barChart('Renders je Tag',ts.labels,ts.renders)}
+      ${barChart('Verbrauchtes Guthaben je Tag (Min)',ts.labels,ts.credits_spent_min)}
     </div>`:''}`;
 }
 
@@ -413,25 +483,25 @@ async function loadJobs(silent){
     <td class="subtle">${j.updated_at?ago(j.updated_at):'–'}</td>
     <td><div class="row-actions">
       <button class="btn ghost sm" data-act="jobLog" data-arg="${j.jid}">Log</button>
-      ${j.status==='fehler'?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="retry" data-arg3="Retry job?">Retry</button>`:''}
-      ${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="kill" data-arg3="Kill & refund this job?">Kill</button>`:''}
-      <button class="btn warn sm" data-act="jobRefund" data-arg="${j.jid}">Refund</button>
-      ${j.wm?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="unlock" data-arg3="Force-unlock watermark? This PERMANENTLY replaces the file with the clean master.">Unlock</button>`:''}
-      <button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="delete" data-arg3="Delete this job dir? Removes its files.">Del</button>
-    </div></td></tr>`).join(''):`<tr><td colspan="7" class="subtle">No jobs.</td></tr>`;
+      ${j.status==='fehler'?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="retry" data-arg3="Render nochmal versuchen?">Nochmal</button>`:''}
+      ${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="kill" data-arg3="Diesen Render abbrechen und erstatten?">Abbrechen</button>`:''}
+      <button class="btn warn sm" data-act="jobRefund" data-arg="${j.jid}">Erstatten</button>
+      ${j.wm?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="unlock" data-arg3="Wasserzeichen freischalten? Die Datei wird DAUERHAFT durch die saubere Fassung ersetzt.">Freischalten</button>`:''}
+      <button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="delete" data-arg3="Diesen Render-Ordner löschen? Die Dateien sind dann weg.">Löschen</button>
+    </div></td></tr>`).join(''):`<tr><td colspan="7" class="subtle">Keine Renders.</td></tr>`;
   el('view').innerHTML=`
     <div class="grid g4">
-      <div class="card" style="grid-column:span 2"><div class="k">Status distribution (live)</div>${distBars}</div>
-      <div class="card"><div class="k">Caption / Motion queue</div><div class="v">${q.caption} <small>/ ${q.motion}</small></div>
+      <div class="card" style="grid-column:span 2"><div class="k">Verteilung der Zustände (live)</div>${distBars}</div>
+      <div class="card"><div class="k">Schlange Captions / Motion</div><div class="v">${q.caption} <small>/ ${q.motion}</small></div>
         <div class="subtle" style="margin-top:4px">waiting paid ${q.paid_waiting} · free ${q.free_waiting}</div></div>
-      <div class="card"><div class="k">Avg render time</div><div class="v">${dur(d.avg_render_sec)}</div></div>
+      <div class="card"><div class="k">Ø Renderzeit</div><div class="v">${dur(d.avg_render_sec)}</div></div>
     </div>
-    <div style="display:flex;justify-content:flex-end;margin:14px 0 4px"><button class="btn bad sm" data-act="reapStuck">Stop all stuck</button></div>
-    <table><thead><tr><th>Job</th><th>User</th><th>Status</th><th>Phase</th><th>Kind</th><th>Updated</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    <div style="display:flex;justify-content:flex-end;margin:14px 0 4px"><button class="btn bad sm" data-act="reapStuck">Alle Hänger stoppen</button></div>
+    <table><thead><tr><th>Render</th><th>Konto</th><th>Status</th><th>Phase</th><th>Art</th><th>Aktualisiert</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function jobAct(jid,act,msg){if(msg&&!danger(msg))return;try{await api('/api/admin/jobs/'+jid+'/'+act,{method:'POST'});loadJobs();}catch(e){alert(e.message);}}
-async function jobRefund(jid){const m=prompt('Refund how many minutes to this user? (blank = full job cost)','');if(m===null)return;const fd=new FormData();if(m.trim())fd.append('minutes',parseInt(m,10)||0);fd.append('reason','admin');try{const d=await api('/api/admin/jobs/'+jid+'/refund',{method:'POST',body:fd});alert('Refunded '+d.refunded_min+' min.');loadJobs();}catch(e){alert(e.message);}}
-async function reapStuck(){if(!danger('Stop ALL waiting/running jobs and refund them?'))return;try{const d=await api('/api/admin/jobs/reap_stuck',{method:'POST'});alert('Stopped '+d.reaped+' job(s).');loadJobs();}catch(e){alert(e.message);}}
+async function jobRefund(jid){const m=prompt('Wie viele Minuten erstatten? (leer = die vollen Kosten des Renders)','');if(m===null)return;const fd=new FormData();if(m.trim())fd.append('minutes',parseInt(m,10)||0);fd.append('reason','admin');try{const d=await api('/api/admin/jobs/'+jid+'/refund',{method:'POST',body:fd});alert('Refunded '+d.refunded_min+' min.');loadJobs();}catch(e){alert(e.message);}}
+async function reapStuck(){if(!danger('ALLE wartenden und laufenden Renders stoppen und erstatten?'))return;try{const d=await api('/api/admin/jobs/reap_stuck',{method:'POST'});alert(d.reaped+' Render gestoppt.');loadJobs();}catch(e){alert(e.message);}}
 /* v228c Ein Log ist zum WEITERGEBEN da. Bis hier musste man ihn im Handy
    muehsam markieren; jetzt ein Klick fuer alles, plus ein eigener Knopf fuer
    die Timing-Zeile - die ist die eine, die man beim Thema Renderzeit
@@ -467,32 +537,32 @@ async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');
 async function loadRevenue(){
   let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/revenue'),tseries(90).catch(()=>null)]);}catch(e){el('view').innerHTML=err(e);return;}
   const w=d.windows;
-  const chart=ts?barChart('Revenue per day (90d)',ts.labels,ts.revenue_eur,v=>eur(v),120):'<div class="subtle">No sales yet.</div>';
+  const chart=ts?barChart('Umsatz je Tag (90 Tage)',ts.labels,ts.revenue_eur,v=>eur(v),120):'<div class="subtle">Noch keine Verkäufe.</div>';
   const packShare=hbars(d.per_pack.map(p=>({l:p.pack,v:p.eur})),v=>eur(v));
   const packs=d.per_pack.map(p=>`<tr><td>${esc(p.pack)}</td><td>${p.count}</td><td>${eur(p.eur)}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
   const tops=d.top_spenders.map(t=>`<tr class="click" data-act="openUser" data-arg="${t.uid}"><td>${esc(t.email)}</td><td>${eur(t.eur)}</td><td>${t.orders}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
   const cat=d.catalog.map(c=>`<tr><td>${esc(c.id)}</td><td>${eur(c.eur)}</td><td>${c.credits}</td><td>${eur(c.per_credit)}</td></tr>`).join('');
   el('view').innerHTML=`
     <div class="grid g4">
-      <div class="card acc"><div class="k">Today</div><div class="v">${eur(w.today.eur)} <small>${w.today.count}×</small></div></div>
-      <div class="card"><div class="k">7 days</div><div class="v">${eur(w.week.eur)}</div></div>
-      <div class="card"><div class="k">30 days</div><div class="v">${eur(w.month.eur)}</div></div>
-      <div class="card"><div class="k">Total</div><div class="v">${eur(w.total.eur)} <small>${w.total.count}×</small></div></div>
+      <div class="card acc"><div class="k">Heute</div><div class="v">${eur(w.today.eur)} <small>${w.today.count}×</small></div></div>
+      <div class="card"><div class="k">7 Tage</div><div class="v">${eur(w.week.eur)}</div></div>
+      <div class="card"><div class="k">30 Tage</div><div class="v">${eur(w.month.eur)}</div></div>
+      <div class="card"><div class="k">Insgesamt</div><div class="v">${eur(w.total.eur)} <small>${w.total.count}×</small></div></div>
     </div>
     <div class="grid g4" style="margin-top:11px">
-      <div class="card"><div class="k">AOV</div><div class="v">${eur(d.aov)}</div></div>
-      <div class="card"><div class="k">ARPPU</div><div class="v">${eur(d.arppu)}</div></div>
-      <div class="card"><div class="k">Buyers once / repeat</div><div class="v">${d.buyers.once} <small>/ ${d.buyers.repeat}</small></div></div>
-      <div class="card"><div class="k">Pre-v128 est.</div><div class="v">${eur(d.pre_v128_estimate.eur_est)} <small>${d.pre_v128_estimate.count}×</small></div></div>
+      <div class="card"><div class="k">Ø Kaufwert</div><div class="v">${eur(d.aov)}</div></div>
+      <div class="card"><div class="k">Ø Umsatz je Käufer</div><div class="v">${eur(d.arppu)}</div></div>
+      <div class="card"><div class="k">Käufer einmal / mehrfach</div><div class="v">${d.buyers.once} <small>/ ${d.buyers.repeat}</small></div></div>
+      <div class="card"><div class="k">Vor v128 (geschätzt)</div><div class="v">${eur(d.pre_v128_estimate.eur_est)} <small>${d.pre_v128_estimate.count}×</small></div></div>
     </div>
-    <h3>Revenue trend</h3>${chart}
+    <h3>Umsatzverlauf</h3>${chart}
     <div class="grid g3" style="margin-top:16px">
-      <div><h3>By pack</h3>${packShare}<table><thead><tr><th>Pack</th><th>Sold</th><th>EUR</th></tr></thead><tbody>${packs}</tbody></table></div>
-      <div><h3>Top spenders</h3><table><thead><tr><th>Email</th><th>LTV</th><th>Orders</th></tr></thead><tbody>${tops}</tbody></table></div>
-      <div><h3>Pricing catalog</h3><table><thead><tr><th>Pack</th><th>Price</th><th>Cr.</th><th>/cr</th></tr></thead><tbody>${cat}</tbody></table></div>
+      <div><h3>Nach Paket</h3>${packShare}<table><thead><tr><th>Paket</th><th>Verkauft</th><th>EUR</th></tr></thead><tbody>${packs}</tbody></table></div>
+      <div><h3>Beste Kunden</h3><table><thead><tr><th>E-Mail</th><th>Umsatz gesamt</th><th>Käufe</th></tr></thead><tbody>${tops}</tbody></table></div>
+      <div><h3>Preisliste</h3><table><thead><tr><th>Paket</th><th>Preis</th><th>Cr.</th><th>/cr</th></tr></thead><tbody>${cat}</tbody></table></div>
     </div>
     <h3>Export</h3><div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button></div>
-    <div class="note">Revenue = real paid amounts from Stripe (purchases table, v128+). Pre-v128 is an estimate mapped from ledger seconds.</div>`;
+    <div class="note">Umsatz = tatsächlich gezahlte Beträge aus Stripe (Tabelle purchases, ab v128). Alles vor v128 ist aus den Buchungs-Sekunden geschätzt.</div>`;
 }
 function dl(t){const u='/api/admin/export/'+t+'.csv';fetch(u,{headers:hdr()}).then(r=>r.blob()).then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=t+'.csv';a.click();}).catch(e=>alert(e.message));}
 
@@ -514,42 +584,42 @@ async function loadCredits(){
     {l:'90–180d',v:a.d90_180,c:'var(--ok)'}],v=>v+' min');
   el('view').innerHTML=`
     ${ts?`<div class="grid g2" style="margin-bottom:14px">
-      ${barChart('Credits bought per day (min)',ts.labels,ts.credits_bought_min,v=>v+' min')}
-      ${barChart('Credits spent per day (min)',ts.labels,ts.credits_spent_min,v=>v+' min')}
+      ${barChart('Gekauftes Guthaben je Tag (Min)',ts.labels,ts.credits_bought_min,v=>v+' min')}
+      ${barChart('Verbrauchtes Guthaben je Tag (Min)',ts.labels,ts.credits_spent_min,v=>v+' min')}
     </div>`:''}
     <div class="grid g3">
-      <div class="card"><div class="k">Granted mix (minutes)</div>${mix}</div>
-      <div class="card"><div class="k">Consumption (minutes)</div>${use}</div>
-      <div class="card"><div class="k">Liability aging · ${d.liability_min} min open</div>${aging}</div>
+      <div class="card"><div class="k">Herkunft des Guthabens (Minuten)</div>${mix}</div>
+      <div class="card"><div class="k">Verbrauch (Minuten)</div>${use}</div>
+      <div class="card"><div class="k">Alter der offenen Verpflichtung · ${d.liability_min} Min offen</div>${aging}</div>
     </div>
-    <h3>Granted (minutes)</h3>
+    <h3>Gutgeschrieben (Minuten)</h3>
     <div class="grid g4">
-      <div class="card acc"><div class="k">Paid (Kauf)</div><div class="v">${g.paid}</div></div>
-      <div class="card"><div class="k">Free total</div><div class="v">${g.free_total}</div></div>
-      <div class="card"><div class="k">Admin granted</div><div class="v">${g.admin}</div></div>
-      <div class="card"><div class="k">Refunds</div><div class="v">${g.refund}</div></div>
+      <div class="card acc"><div class="k">Gekauft</div><div class="v">${g.paid}</div></div>
+      <div class="card"><div class="k">Gratis insgesamt</div><div class="v">${g.free_total}</div></div>
+      <div class="card"><div class="k">Vom Admin gutgeschrieben</div><div class="v">${g.admin}</div></div>
+      <div class="card"><div class="k">Erstattungen</div><div class="v">${g.refund}</div></div>
     </div>
     <div class="grid g4" style="margin-top:11px">
-      <div class="card"><div class="k">Welcome</div><div class="v">${g.welcome}</div></div>
-      <div class="card"><div class="k">Monthly free</div><div class="v">${g.monthly}</div></div>
-      <div class="card"><div class="k">Referral</div><div class="v">${g.referral}</div></div>
-      <div class="card"><div class="k">Reload bonus</div><div class="v">${g.reload_bonus}</div></div>
+      <div class="card"><div class="k">Willkommensbonus</div><div class="v">${g.welcome}</div></div>
+      <div class="card"><div class="k">Monatliches Gratis</div><div class="v">${g.monthly}</div></div>
+      <div class="card"><div class="k">Empfehlung</div><div class="v">${g.referral}</div></div>
+      <div class="card"><div class="k">Nachkauf-Bonus</div><div class="v">${g.reload_bonus}</div></div>
     </div>
-    <h3>Consumed (minutes)</h3>
+    <h3>Verbraucht (Minuten)</h3>
     <div class="grid g4">
       <div class="card"><div class="k">Render</div><div class="v">${c.render}</div></div>
-      <div class="card"><div class="k">Alpha export</div><div class="v">${c.alpha}</div></div>
-      <div class="card"><div class="k">Style learn</div><div class="v">${c.style_learn}</div></div>
-      <div class="card"><div class="k">Expired (breakage)</div><div class="v">${c.expired_breakage}</div></div>
+      <div class="card"><div class="k">Ebenen-Export</div><div class="v">${c.alpha}</div></div>
+      <div class="card"><div class="k">Stil gelernt</div><div class="v">${c.style_learn}</div></div>
+      <div class="card"><div class="k">Verfallen</div><div class="v">${c.expired_breakage}</div></div>
     </div>
-    <h3>Liability &amp; aging</h3>
+    <h3>Offene Verpflichtung &amp; Alter</h3>
     <div class="grid g4">
-      <div class="card acc"><div class="k">Open liability</div><div class="v">${d.liability_min} <small>min</small></div></div>
-      <div class="card"><div class="k">Expires ≤30d</div><div class="v">${a.d0_30}</div></div>
+      <div class="card acc"><div class="k">Offene Verpflichtung</div><div class="v">${d.liability_min} <small>Min</small></div></div>
+      <div class="card"><div class="k">Läuft ab in ≤30 T</div><div class="v">${a.d0_30}</div></div>
       <div class="card"><div class="k">30–90d</div><div class="v">${a.d30_90}</div></div>
       <div class="card"><div class="k">90–180d</div><div class="v">${a.d90_180}</div></div>
     </div>
-    <div class="note">All figures in minutes (1 credit = 1 min). Consumption/grants derived from the ledger grund taxonomy.</div>`;
+    <div class="note">Alle Zahlen in Minuten (1 Guthaben = 1 Minute). Verbrauch und Gutschriften kommen aus der Buchungsart im Ledger.</div>`;
 }
 
 /* ---------- USERS ---------- */
@@ -557,17 +627,17 @@ let uState={q:'',flt:'',sort:'created_at',offset:0};
 async function loadUsers(){
   el('view').innerHTML=`
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <input class="search" id="uq" placeholder="Search email…" value="${esc(uState.q)}" data-input="uSearch">
+      <input class="search" id="uq" placeholder="E-Mail suchen …" value="${esc(uState.q)}" data-input="uSearch">
       <select class="search" id="uflt" data-change="flt">
-        <option value="">all</option><option value="verified">verified</option><option value="unverified">unverified</option><option value="disabled">disabled</option></select>
+        <option value="">alle</option><option value="verified">bestätigt</option><option value="unverified">unbestätigt</option><option value="disabled">gesperrt</option></select>
       <select class="search" id="usort" data-change="sort">
-        <option value="created_at">newest</option><option value="balance">most credits</option><option value="email">email</option></select>
+        <option value="created_at">neueste</option><option value="balance">meistes Guthaben</option><option value="email">E-Mail</option></select>
       <span class="subtle" id="uCount"></span>
     </div>
-    <table><thead><tr><th>Email</th><th>Status</th><th>Credits</th><th>Type</th><th>Joined</th></tr></thead><tbody id="uRows"></tbody></table>
+    <table><thead><tr><th>E-Mail</th><th>Status</th><th>Guthaben</th><th>Art</th><th>Dabei seit</th></tr></thead><tbody id="uRows"></tbody></table>
     <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-      <button class="btn ghost sm" data-act="uPage" data-arg="-1">◀ Prev</button>
-      <button class="btn ghost sm" data-act="uPage" data-arg="1">Next ▶</button>
+      <button class="btn ghost sm" data-act="uPage" data-arg="-1">◀ Zurück</button>
+      <button class="btn ghost sm" data-act="uPage" data-arg="1">Weiter ▶</button>
       <span class="subtle" id="uPageInfo"></span></div>`;
   el('uflt').value=uState.flt; el('usort').value=uState.sort; fetchUsers();
 }
@@ -577,80 +647,80 @@ function uPage(dir){uState.offset=Math.max(0,uState.offset+dir*50);fetchUsers();
 async function fetchUsers(){
   const p=new URLSearchParams({q:uState.q,flt:uState.flt,sort:uState.sort,limit:50,offset:uState.offset});
   let d;try{d=await api('/api/admin/users?'+p);}catch(e){el('uRows').innerHTML='<tr><td colspan=5>'+esc(e.message)+'</td></tr>';return;}
-  el('uCount').textContent=d.total+' users';
+  el('uCount').textContent=d.total+' Konten';
   el('uPageInfo').textContent=`${d.offset+1}–${d.offset+d.users.length} of ${d.total}`;
   el('uRows').innerHTML=d.users.length?d.users.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}">
     <td>${esc(u.email)}${u.disabled?' <span class="tag no">suspended</span>':''}</td>
     <td>${u.verified?'<span class="tag ok">verified</span>':'<span class="tag no">unverified</span>'}</td>
     <td>${u.credits}</td>
-    <td>${u.purchased?'<span class="tag buy">paid</span>':'<span class="tag">free</span>'}</td>
-    <td class="subtle">${fdate(u.created_at)}</td></tr>`).join(''):'<tr><td colspan=5 class="subtle">No users.</td></tr>';
+    <td>${u.purchased?'<span class="tag buy">zahlend</span>':'<span class="tag">gratis</span>'}</td>
+    <td class="subtle">${fdate(u.created_at)}</td></tr>`).join(''):'<tr><td colspan=5 class="subtle">Keine Konten.</td></tr>';
 }
 async function openUser(uid){
   let d;try{d=await api('/api/admin/users/'+uid);}catch(e){alert(e.message);return;}
   const u=d.user;
   const led=d.ledger.map(l=>`<tr><td class="${l.delta_sec>=0?'pos':'neg'}">${l.delta_sec>=0?'+':''}${Math.round(l.delta_sec/60)}m</td><td>${esc(l.grund)}</td><td class="subtle">${fdate(l.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">–</td></tr>';
-  const pur=d.purchases.map(p=>`<tr><td>${esc(p.pack)}</td><td>${eur(p.eur)}</td><td class="mono subtle">${esc((p.session_id||'').slice(0,14))}</td><td><button class="btn warn sm" data-act="refundSession" data-arg="${esc(p.session_id)}">Refund</button></td></tr>`).join('')||'<tr><td colspan=4 class="subtle">no purchases</td></tr>';
+  const pur=d.purchases.map(p=>`<tr><td>${esc(p.pack)}</td><td>${eur(p.eur)}</td><td class="mono subtle">${esc((p.session_id||'').slice(0,14))}</td><td><button class="btn warn sm" data-act="refundSession" data-arg="${esc(p.session_id)}">Erstatten</button></td></tr>`).join('')||'<tr><td colspan=4 class="subtle">no purchases</td></tr>';
   const cons=d.consents.map(c=>`${esc(c.kind)} (${fdate(c.created_at)})`).join(', ')||'none';
   el('modal').innerHTML=`
     <h2>${esc(u.email)} ${u.is_owner?'<span class="tag buy">owner</span>':''}${u.disabled?'<span class="tag no">suspended</span>':''}</h2>
     <div class="kv" style="margin-top:8px">
-      <span class="kk">ID / name</span><span>#${u.id} · ${esc(u.name||'—')}</span>
+      <span class="kk">ID / Name</span><span>#${u.id} · ${esc(u.name||'—')}</span>
       <span class="kk">Status</span><span>${u.verified?'verified':'<b style="color:var(--bad)">unverified</b>'} · ${u.disposable?'<b style="color:var(--warn)">disposable email</b>':'normal email'}</span>
-      <span class="kk">Credits / LTV</span><span><b>${u.credits} cr</b> · ${eur(u.ltv_eur)} lifetime · ${u.orders} orders · ${u.render_count} renders</span>
-      <span class="kk">Sessions / joined</span><span>${u.active_sessions} active · joined ${fdate(u.created_at)}</span>
-      <span class="kk">Referral</span><span>code ${esc(u.ref_code||'—')} · invited by ${esc(u.referred_by_email||'—')}</span>
-      <span class="kk">Expiring</span><span>${u.expiring_credits} cr in ${u.expiring_days==null?'—':u.expiring_days+'d'}</span>
+      <span class="kk">Guthaben / Umsatz gesamt</span><span><b>${u.credits} cr</b> · ${eur(u.ltv_eur)} lifetime · ${u.orders} orders · ${u.render_count} renders</span>
+      <span class="kk">Sitzungen / dabei seit</span><span>${u.active_sessions} active · joined ${fdate(u.created_at)}</span>
+      <span class="kk">Empfehlung</span><span>Code ${esc(u.ref_code||'—')} · geworben von ${esc(u.referred_by_email||'—')}</span>
+      <span class="kk">Läuft ab</span><span>${u.expiring_credits} Cr in ${u.expiring_days==null?'—':u.expiring_days+' T'}</span>
       <span class="kk">Consents</span><span>${cons}</span>
     </div>
     <div class="acts">
-      <input type="number" id="mDelta" placeholder="±min"><input type="text" class="reason" id="mReason" placeholder="reason">
-      <button class="btn sm" data-act="grantCredits" data-arg="${uid}">Adjust credits</button>
-      ${u.verified?'':`<button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="verify">Verify</button><button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="resend_verify">Resend</button>`}
-      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="reset">Reset pw</button>
-      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="revoke_sessions">Revoke sessions</button>
+      <input type="number" id="mDelta" placeholder="±min"><input type="text" class="reason" id="mReason" placeholder="Grund">
+      <button class="btn sm" data-act="grantCredits" data-arg="${uid}">Guthaben ändern</button>
+      ${u.verified?'':`<button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="verify">Bestätigen</button><button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="resend_verify">Erneut senden</button>`}
+      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="reset">Passwort zurücksetzen</button>
+      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="revoke_sessions">Sitzungen beenden</button>
       <button class="btn ${u.disabled?'':'warn'} sm" data-act="disableUser" data-arg="${uid}" data-arg2="${u.disabled?0:1}">${u.disabled?'Unsuspend':'Suspend'}</button>
       <button class="btn ghost sm" data-act="exportUser" data-arg="${uid}">Export</button>
-      <button class="btn bad sm" data-act="delUser" data-arg="${uid}" data-arg2="${esc(u.email)}">Delete</button>
+      <button class="btn bad sm" data-act="delUser" data-arg="${uid}" data-arg2="${esc(u.email)}">Löschen</button>
     </div>
     <p class="msg" id="mMsg"></p>
     <div class="grid g2">
-      <div><h3 style="margin-top:0">Ledger (100)</h3><div class="scroll"><table><tbody>${led}</tbody></table></div></div>
-      <div><h3 style="margin-top:0">Purchases</h3><div class="scroll"><table><tbody>${pur}</tbody></table></div></div>
+      <div><h3 style="margin-top:0">Buchungen (100)</h3><div class="scroll"><table><tbody>${led}</tbody></table></div></div>
+      <div><h3 style="margin-top:0">Käufe</h3><div class="scroll"><table><tbody>${pur}</tbody></table></div></div>
     </div>`;
   el('overlay').classList.add('on');
 }
 function closeModal(){el('overlay').classList.remove('on');if(active==='users')fetchUsers();}
-async function grantCredits(uid){const v=parseInt(el('mDelta').value,10);if(!v){el('mMsg').textContent='Enter ± minutes.';return;}if(v<0&&!danger('Deduct '+(-v)+' minutes from this user?'))return;const fd=new FormData();fd.append('delta_min',v);fd.append('reason',el('mReason').value||'manual');try{const d=await api('/api/admin/users/'+uid+'/credits',{method:'POST',body:fd});el('mMsg').textContent='New balance: '+d.credits+' credits.';}catch(e){el('mMsg').textContent=e.message;}}
+async function grantCredits(uid){const v=parseInt(el('mDelta').value,10);if(!v){el('mMsg').textContent='Enter ± minutes.';return;}if(v<0&&!danger('Deduct '+(-v)+' Minuten von diesem Konto?'))return;const fd=new FormData();fd.append('delta_min',v);fd.append('reason',el('mReason').value||'manual');try{const d=await api('/api/admin/users/'+uid+'/credits',{method:'POST',body:fd});el('mMsg').textContent='Neuer Stand: '+d.credits+' Guthaben.';}catch(e){el('mMsg').textContent=e.message;}}
 async function uAct(uid,act){try{const d=await api('/api/admin/users/'+uid+'/'+act,{method:'POST'});openUser(uid);}catch(e){el('mMsg').textContent=e.message;}}
-async function disableUser(uid,on){if(on&&!danger('Suspend this account? They will be logged out and cannot log in.'))return;const fd=new FormData();fd.append('on',on);try{await api('/api/admin/users/'+uid+'/disable',{method:'POST',body:fd});openUser(uid);}catch(e){el('mMsg').textContent=e.message;}}
+async function disableUser(uid,on){if(on&&!danger('Dieses Konto sperren? Der Kunde wird abgemeldet und kommt nicht mehr rein.'))return;const fd=new FormData();fd.append('on',on);try{await api('/api/admin/users/'+uid+'/disable',{method:'POST',body:fd});openUser(uid);}catch(e){el('mMsg').textContent=e.message;}}
 function exportUser(uid){fetch('/api/admin/users/'+uid+'/export',{headers:hdr()}).then(r=>r.json()).then(d=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download='user_'+uid+'.json';a.click();}).catch(e=>alert(e.message));}
-async function delUser(uid,email){if(!danger('DELETE account '+email+'? Purchases go to the 10y archive, everything else is erased.'))return;try{await api('/api/admin/users/'+uid+'/delete',{method:'POST'});closeModal();}catch(e){alert(e.message);}}
-async function refundSession(sid){if(!danger('Refund Stripe session '+sid+' AND claw back the credited minutes? This moves real money.'))return;const fd=new FormData();fd.append('session_id',sid);fd.append('clawback','1');try{const d=await api('/api/admin/refund',{method:'POST',body:fd});alert('Stripe: '+d.stripe+'\\nClawed back: '+d.clawed_back_min+' min');}catch(e){alert(e.message);}}
+async function delUser(uid,email){if(!danger('Konto LÖSCHEN: '+email+'? Die Käufe wandern ins 10-Jahres-Archiv, alles andere wird gelöscht.'))return;try{await api('/api/admin/users/'+uid+'/delete',{method:'POST'});closeModal();}catch(e){alert(e.message);}}
+async function refundSession(sid){if(!danger('Stripe-Vorgang erstatten: '+sid+' UND die gutgeschriebenen Minuten zurückholen? Hier fließt echtes Geld.'))return;const fd=new FormData();fd.append('session_id',sid);fd.append('clawback','1');try{const d=await api('/api/admin/refund',{method:'POST',body:fd});alert('Stripe: '+d.stripe+'\\nClawed back: '+d.clawed_back_min+' min');}catch(e){alert(e.message);}}
 
 /* ---------- ABUSE ---------- */
 async function loadAbuse(){
   let d;try{d=await api('/api/admin/abuse');}catch(e){el('view').innerHTML=err(e);return;}
-  const disp=d.disposable_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td></tr>`).join('')||'<tr><td class="subtle">none</td></tr>';
-  const unv=d.unverified_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
-  const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
-  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(l.key)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
-  const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>none</td></tr>';
+  const disp=d.disposable_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td></tr>`).join('')||'<tr><td class="subtle">keine</td></tr>';
+  const unv=d.unverified_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
+  const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
+  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(l.key)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
+  const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
   el('view').innerHTML=`
     <div class="grid g4">
-      <div class="card ${d.orphan_claims.credit?'':''}"><div class="k">Orphan bonus claims</div><div class="v">${d.orphan_claims.credit} <small>+ ${d.orphan_claims.referral} ref</small></div></div>
-      <div class="card"><div class="k">Disposable accounts</div><div class="v">${d.disposable_accounts.length}</div></div>
-      <div class="card"><div class="k">Unverified accounts</div><div class="v">${d.unverified_accounts.length}</div></div>
-      <div class="card"><div class="k">Pending resets</div><div class="v">${d.pending_resets}</div></div>
+      <div class="card ${d.orphan_claims.credit?'':''}"><div class="k">Verwaiste Boni</div><div class="v">${d.orphan_claims.credit} <small>+ ${d.orphan_claims.referral} ref</small></div></div>
+      <div class="card"><div class="k">Wegwerf-Konten</div><div class="v">${d.disposable_accounts.length}</div></div>
+      <div class="card"><div class="k">Unbestätigte Konten</div><div class="v">${d.unverified_accounts.length}</div></div>
+      <div class="card"><div class="k">Offene Passwort-Resets</div><div class="v">${d.pending_resets}</div></div>
     </div>
     <div class="grid g2" style="margin-top:16px">
-      <div><h3>Disposable-email accounts</h3><div class="scroll"><table><tbody>${disp}</tbody></table></div></div>
-      <div><h3>Unverified / stale</h3><div class="scroll"><table><tbody>${unv}</tbody></table></div></div>
+      <div><h3>Wegwerf-Adressen</h3><div class="scroll"><table><tbody>${disp}</tbody></table></div></div>
+      <div><h3>Unbestätigt / eingeschlafen</h3><div class="scroll"><table><tbody>${unv}</tbody></table></div></div>
     </div>
     <div class="grid g3" style="margin-top:16px">
-      <div><h3>Top referrers</h3><table><thead><tr><th>Referrer</th><th>Invited</th></tr></thead><tbody>${refs}</tbody></table></div>
-      <div><h3>Rate-limit lockouts</h3><table><thead><tr><th>bucket:ip</th><th>hits</th></tr></thead><tbody>${locks}</tbody></table></div>
-      <div><h3>Demo-IP abuse</h3><table><thead><tr><th>IP</th><th>24h</th></tr></thead><tbody>${demo}</tbody></table></div>
+      <div><h3>Häufigste Herkunft</h3><table><thead><tr><th>Herkunft</th><th>Eingeladen</th></tr></thead><tbody>${refs}</tbody></table></div>
+      <div><h3>Gesperrt wegen zu vieler Versuche</h3><table><thead><tr><th>bucket:ip</th><th>Treffer</th></tr></thead><tbody>${locks}</tbody></table></div>
+      <div><h3>Demo-Missbrauch je IP</h3><table><thead><tr><th>IP</th><th>24h</th></tr></thead><tbody>${demo}</tbody></table></div>
     </div>
     <div class="note">${esc(d.note)} Orphan claims = anti-farming hashes with no matching current account (delete+re-register attempts, correctly blocked).</div>`;
 }
@@ -691,17 +761,17 @@ function deployZeile(dp) {
   const k=d.keys,c=d.config,led=(x,w)=>`<span class="led ${x?'ok':(w?'warn':'bad')}"></span>`;
   const cfg=Object.entries(c).map(([kk,v])=>`<tr><td class="subtle">${esc(kk)}</td><td class="mono">${esc(v)}</td></tr>`).join('');
   el('view').innerHTML=`
-    <h3>Keys &amp; transport (presence only, never values)</h3>
+    <h3>Schlüssel &amp; Versand (nur vorhanden/fehlt, nie der Wert)</h3>
     <div class="health">
-      ${led(k.openai.set&&k.openai.valid!==false,k.openai.set&&k.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!k.openai.set?'MISSING':(k.openai.valid===false?'KEY INVALID':'ok')}</span>
+      ${led(k.openai.set&&k.openai.valid!==false,k.openai.set&&k.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!k.openai.set?'FEHLT':(k.openai.valid===false?'SCHLÜSSEL UNGÜLTIG':'ok')}</span>
       ${led(k.stripe.ready&&k.stripe.mode==='live',k.stripe.mode==='test')}<span class="pill"><b>Stripe</b> ${k.stripe.mode}</span>
-      ${led(k.stripe.webhook_secret)}<span class="pill"><b>Webhook</b> ${k.stripe.webhook_secret?'set':'MISSING'}</span>
+      ${led(k.stripe.webhook_secret)}<span class="pill"><b>Webhook</b> ${k.stripe.webhook_secret?'set':'FEHLT'}</span>
       ${led(k.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${k.mail.transport} → ${esc(k.mail.admin_to)}</span>
-      ${led(k.admin_key)}<span class="pill"><b>Admin key</b> set</span>
-      ${led(k.ref_salt)}<span class="pill"><b>Ref salt</b> set</span>
+      ${led(k.admin_key)}<span class="pill"><b>Admin-Schlüssel</b> set</span>
+      ${led(k.ref_salt)}<span class="pill"><b>Ref-Salz</b> set</span>
     </div>
     <div class="grid g4" style="margin-top:12px">
-      <div class="card"><div class="k">Build</div><div class="v" style="font-size:16px">${esc(d.build)}</div>
+      <div class="card"><div class="k">Stand</div><div class="v" style="font-size:16px">${esc(d.build)}</div>
         ${d.deploy ? `<div class="k" style="margin-top:6px">${d.deploy.branch
             ? esc(d.deploy.branch) + ' · seit ' + (d.deploy.alter_tage ?? '?') + ' Tagen'
             : 'Stand unbekannt'}</div>` : ''}
@@ -709,28 +779,28 @@ function deployZeile(dp) {
             ? `<div style="margin-top:6px;color:var(--warn,#e0a33e);font-size:12px">${esc(d.deploy.warnung)}</div>`
             : ''}
         ${deployZeile(d.deploy && d.deploy.deploy)}</div>
-      <div class="card"><div class="k">Disk free</div><div class="v">${d.disk?d.disk.free_gb+'G':'?'} <small>${d.disk?d.disk.used_pct+'%':''}</small></div></div>
+      <div class="card"><div class="k">Platte frei</div><div class="v">${d.disk?d.disk.free_gb+'G':'?'} <small>${d.disk?d.disk.used_pct+'%':''}</small></div></div>
       <div class="card"><div class="k">Speicher (RAM)</div><div class="v">${
         d.mem ? (d.mem.limit_gb ? d.mem.limit_gb+'G Limit' : (d.mem.host_gb??'?')+'G Maschine') : '?'
       } <small>${d.mem ? (d.mem.limit_gb
           ? (d.mem.used_gb??'?')+'G belegt'
           : (d.mem.frei_gb??'?')+'G frei') : ''}</small></div>
         <div class="subtle" style="font-size:11px;margin-top:4px">4K-Renders brauchen mehrere GB</div></div>
-      <div class="card"><div class="k">DB size</div><div class="v">${d.db_mb??'?'} <small>MB</small></div></div>
-      <div class="card"><div class="k">Last backup</div><div class="v" style="font-size:16px">${d.last_backup?fdate(d.last_backup):'none'}</div></div>
+      <div class="card"><div class="k">Datenbank</div><div class="v">${d.db_mb??'?'} <small>MB</small></div></div>
+      <div class="card"><div class="k">Letzte Sicherung</div><div class="v" style="font-size:16px">${d.last_backup?fdate(d.last_backup):'none'}</div></div>
     </div>
     <div class="health" style="margin-top:12px">
-      ${led(d.heartbeats.watchdog)}<span class="pill"><b>Watchdog</b> ${d.heartbeats.watchdog?ago(d.heartbeats.watchdog):'—'}</span>
-      ${led(d.heartbeats.cleanup)}<span class="pill"><b>Cleanup</b> ${d.heartbeats.cleanup?ago(d.heartbeats.cleanup):'—'}</span>
-      <span class="pill"><b>Active alerts</b> ${d.alerts_active}</span>
+      ${led(d.heartbeats.watchdog)}<span class="pill"><b>Wachhund</b> ${d.heartbeats.watchdog?ago(d.heartbeats.watchdog):'—'}</span>
+      ${led(d.heartbeats.cleanup)}<span class="pill"><b>Aufräumer</b> ${d.heartbeats.cleanup?ago(d.heartbeats.cleanup):'—'}</span>
+      <span class="pill"><b>Aktive Störungen</b> ${d.alerts_active}</span>
     </div>
-    <h3>Config (env/boot-time — display only)</h3>
+    <h3>Einstellungen (nur Anzeige)</h3>
     <table><tbody>${cfg}</tbody></table>
-    <h3>Laeuft hier</h3>
+    <h3>Läuft hier</h3>
     <div class="health" style="margin-bottom:10px">
       ${d.laufzeit ? (d.laufzeit.root
-        ? '<span class="tag no">root</span><span class="subtle">Der Dienst hat noch den Generalschluessel &mdash; die Haertung ist auf den alten Weg zurueckgefallen.</span>'
-        : '<span class="tag ok">'+esc(d.laufzeit.user||('uid '+d.laufzeit.uid))+'</span><span class="subtle">Kein Generalschluessel &mdash; Haertung aktiv.</span>')
+        ? '<span class="tag no">root</span><span class="subtle">Der Dienst hat noch den Generalschlüssel. Die Härtung ist auf den alten Weg zurückgefallen.</span>'
+        : '<span class="tag ok">'+esc(d.laufzeit.user||('uid '+d.laufzeit.uid))+'</span><span class="subtle">Kein Generalschlüssel, Härtung aktiv.</span>')
         : '<span class="subtle">unbekannt</span>'}
     </div>
     ${d.laufzeit ? `<div class="subtle" style="margin-bottom:10px">
@@ -751,32 +821,32 @@ function deployZeile(dp) {
       Chat einfuegen, daraus wird die Pruefsummen-Liste.</div>
     <h3>Betriebszustand</h3>
     <div id="betriebBox" class="subtle">loading …</div>
-    <h3>Ops actions</h3>
+    <h3>Aktionen</h3>
     <div class="row-actions">
-      <button class="btn ghost sm" data-act="sysAct" data-arg="backup/run" data-arg2="Run a DB backup now?">Backup now</button>
-      <button class="btn ghost sm" data-act="sysAct" data-arg="mail/test" data-arg2="Send a test mail to the admin address?">Send test mail</button>
-      <button class="btn bad sm" data-act="factoryReset">Factory reset (wipe ALL data)</button>
-      <button class="btn warn sm" data-act="sysAct" data-arg="cleanup/run" data-arg2="Run the retention cleanup sweep now? Deletes job dirs older than retention.">Run cleanup</button>
-      <button class="btn warn sm" data-act="sysAct" data-arg="expiry/run" data-arg2="Run the credit-expiry sweep now?">Run expiry sweep</button>
+      <button class="btn ghost sm" data-act="sysAct" data-arg="backup/run" data-arg2="Jetzt eine Sicherung der Datenbank anlegen?">Jetzt sichern</button>
+      <button class="btn ghost sm" data-act="sysAct" data-arg="mail/test" data-arg2="Eine Testmail an die Admin-Adresse schicken?">Testmail senden</button>
+      <button class="btn bad sm" data-act="factoryReset">Alles zurücksetzen (ALLE Daten weg)</button>
+      <button class="btn warn sm" data-act="sysAct" data-arg="cleanup/run" data-arg2="Jetzt aufräumen? Löscht Render-Ordner, die älter sind als die Aufbewahrungsfrist.">Aufräumen</button>
+      <button class="btn warn sm" data-act="sysAct" data-arg="expiry/run" data-arg2="Jetzt prüfen, welches Guthaben abgelaufen ist?">Ablauf prüfen</button>
     </div>
-    <div class="note">Config values are set via env at boot — change them in .env + docker restart. The panel cannot live-toggle them.</div>
-    <h3>Backups</h3>
+    <div class="note">Diese Werte kommen beim Start aus der Umgebung. Ändern heißt: .env anpassen und den Container neu starten. Das Panel kann sie nicht umschalten.</div>
+    <h3>Sicherungen</h3>
     <div id="bkList" class="subtle">loading …</div>
     <div class="card" style="margin-top:12px">
-      <div class="k">Restore from an emailed backup</div>
-      <p class="subtle" style="margin:6px 0 10px">For the real emergency: if this
-        machine's disk is gone, the copy in your inbox is the only one left.
-        Accepts <code>.db</code> or <code>.db.gz</code>.</p>
+      <div class="k">Aus einer gemailten Sicherung zurückspielen</div>
+      <p class="subtle" style="margin:6px 0 10px">Für den echten Notfall: ist die
+        Platte dieses Servers weg, ist die Kopie in deinem Postfach die letzte,
+        die es noch gibt. Nimmt <code>.db</code> oder <code>.db.gz</code>.</p>
       <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
         <input type="file" id="bkFile" accept=".db,.gz">
-        <button class="btn bad sm" data-act="bkUpload">Upload and restore</button>
+        <button class="btn bad sm" data-act="bkUpload">Hochladen und zurückspielen</button>
       </div>
     </div>
-    <div class="note">Every backup is verified here (integrity check, required tables,
-      account count) — a backup you cannot read is worth nothing. Restoring writes the
-      snapshot into the running database (SQLite online backup), so nothing has to be
-      stopped, and the state before the restore is kept as
-      <code>vor_restore_*.db</code> — you can go back the same way.</div>`;
+    <div class="note">Jede Sicherung wird hier geprüft (Integrität, Pflichttabellen,
+      Kontenzahl). Eine Sicherung, die sich nicht lesen lässt, ist wertlos. Beim
+      Zurückspielen wandert der Stand in die LAUFENDE Datenbank, es muss nichts
+      angehalten werden, und der Stand von vorher bleibt als
+      <code>vor_restore_*.db</code> liegen. So kommst du denselben Weg zurück.</div>`;
   loadBackups();
   loadBetrieb();
 }
@@ -792,15 +862,15 @@ async function loadOffsite(){
   const ja=x=>x?'<span class="tag ok">gesetzt</span>':'<span class="tag no">fehlt</span>';
   v.innerHTML=`<h2>Sicherung ausser Haus</h2>
     <div class="note" style="margin-bottom:14px">Taeglich wandert eine
-      <b>verschluesselte</b> Kopie der Datenbank zu Cloudflare R2. Verschluesselt
-      wird auf DIESEM Server &mdash; wer den Speicher aufmacht, sieht Rauschen.
+      <b>verschlüsselte</b> Kopie der Datenbank zu Cloudflare R2. Verschluesselt
+      wird auf DIESEM Server. Wer den Speicher aufmacht, sieht Rauschen.
       Es bleiben ${d.staende} Staende liegen.</div>
     <div class="grid3">
       <div class="card"><div class="k">Zustand</div><div class="v" style="font-size:16px">
         ${d.bereit?'<span class="tag ok">eingerichtet</span>':'<span class="tag no">noch nicht eingerichtet</span>'}</div></div>
       <div class="card"><div class="k">Letzte Kopie</div><div class="v" style="font-size:16px">
         ${d.letzte_ts?fdt(d.letzte_ts):'&ndash;'}</div></div>
-      <div class="card"><div class="k">Staende im Speicher</div><div class="v" style="font-size:16px">
+      <div class="card"><div class="k">Stände im Speicher</div><div class="v" style="font-size:16px">
         ${d.dateien.length}</div></div>
     </div>
     ${d.fehler?`<div class="note bad" style="margin-top:12px">Speicher nicht erreichbar: ${esc(d.fehler)}</div>`:''}
@@ -820,25 +890,25 @@ async function loadOffsite(){
       </div>
       <div class="row-actions" style="margin-top:12px">
         <button class="btn sm" data-act="offSave">Speichern</button>
-        <button class="btn ghost sm" data-act="offTest">Verbindung pruefen</button>
+        <button class="btn ghost sm" data-act="offTest">Verbindung prüfen</button>
         <button class="btn ghost sm" data-act="offRun">Jetzt sichern</button>
         <button class="btn ghost sm" data-act="offPw">Passwort anzeigen</button>
       </div>
-      <div class="note" style="margin-top:10px"><b>Das Passwort ausser Haus aufheben.</b>
-        Ohne es laesst sich die Kopie NICHT lesen &mdash; und liegt es nur auf
+      <div class="note" style="margin-top:10px"><b>Das Passwort außer Haus aufheben.</b>
+        Ohne es lässt sich die Kopie NICHT lesen, und liegt es nur auf
         diesem Server, ist es zusammen mit der Platte weg. &bdquo;Passwort
         anzeigen&ldquo; holt es hervor, solange der Server laeuft; kopier es in
         deinen Passwort-Speicher.</div>
     </div>
-    <h3>Vorhandene Staende</h3>
+    <h3>Vorhandene Stände</h3>
     <div id="offList" class="subtle">&ndash;</div>`;
   const box=el('offList');
   if(!d.dateien.length){box.innerHTML='<div class="subtle">Noch nichts hochgeladen.</div>';}
-  else{box.innerHTML=`<table><thead><tr><th>Datei</th><th>Groesse</th><th>Wann</th><th></th></tr></thead>
+  else{box.innerHTML=`<table><thead><tr><th>Datei</th><th>Größe</th><th>Wann</th><th></th></tr></thead>
     <tbody>${d.dateien.map(f=>`<tr><td>${esc(f.name)}</td>
       <td class="subtle">${(f.bytes/1024).toFixed(0)} KB</td>
       <td class="subtle" style="white-space:nowrap">${esc((f.ts||'').replace('T',' ').slice(0,16))}</td>
-      <td><button class="btn bad sm" data-act="offRestore" data-arg="${esc(f.name)}">Zurueckspielen</button></td>
+      <td><button class="btn bad sm" data-act="offRestore" data-arg="${esc(f.name)}">Zurückspielen</button></td>
     </tr>`).join('')}</tbody></table>`;}
 }
 async function offSave(){
@@ -875,7 +945,7 @@ async function offRun(){
 async function offRestore(name){
   const t=prompt('Das ueberschreibt die laufende Datenbank mit "'+name+'".\n'
     +'Der jetzige Stand bleibt als vor_restore_*.db liegen.\n'
-    +'Tippe RESTORE zum Bestaetigen.');
+    +'Tippe RESTORE zum Bestätigen.');
   if(!t)return;
   const pw=prompt('Passwort der Kopie. Leer lassen, wenn es dasselbe ist wie '
     +'oben gespeichert.')||'';
@@ -891,9 +961,9 @@ async function offRestore(name){
 async function loadBackups(){
   const box=el('bkList'); if(!box)return;
   let d;try{d=await api('/api/admin/backups');}catch(e){box.innerHTML=err(e);return;}
-  if(!d.items.length){box.innerHTML='<div class="subtle">No backups yet.</div>';return;}
-  box.innerHTML=`<table><thead><tr><th>File</th><th>Kind</th><th>Accounts</th>
-    <th>Size</th><th>When</th><th></th></tr></thead><tbody>${d.items.map(b=>`
+  if(!d.items.length){box.innerHTML='<div class="subtle">Noch keine Sicherungen.</div>';return;}
+  box.innerHTML=`<table><thead><tr><th>Datei</th><th>Art</th><th>Konten</th>
+    <th>Größe</th><th>Wann</th><th></th></tr></thead><tbody>${d.items.map(b=>`
     <tr><td>${b.ok?'':'<span class="tag no">unreadable</span> '}${esc(b.datei)}</td>
       <td><span class="tag${b.art==='snapshot'?' ok':''}">${b.art}</span></td>
       <td>${b.konten==null?'–':b.konten}</td>
@@ -901,8 +971,8 @@ async function loadBackups(){
       <td class="subtle" style="white-space:nowrap">${fdt(b.zeit)}</td>
       <td style="white-space:nowrap">
         <button class="btn ghost sm" data-act="bkDl" data-arg="${esc(b.datei)}">Download</button>
-        <button class="btn ghost sm" data-act="bkCheck" data-arg="${esc(b.datei)}">Verify</button>
-        <button class="btn bad sm" data-act="bkRestore" data-arg="${esc(b.datei)}" data-arg2="${b.konten==null?-1:b.konten}">Restore</button></td>
+        <button class="btn ghost sm" data-act="bkCheck" data-arg="${esc(b.datei)}">Bestätigen</button>
+        <button class="btn bad sm" data-act="bkRestore" data-arg="${esc(b.datei)}" data-arg2="${b.konten==null?-1:b.konten}">Zurückspielen</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 async function bkCheck(datei){
@@ -955,7 +1025,7 @@ async function sysAct(path,msg){if(!danger(msg))return;try{const d=await api('/a
 async function factoryReset(){
   const t=prompt('This wipes ALL users, credits, purchases, tickets, jobs and caches. Stripe records stay in Stripe. Type RESET to confirm.');
   if(t===null)return;
-  if(t.trim()!=='RESET'){alert('Not confirmed. Nothing was deleted.');return;}
+  if(t.trim()!=='RESET'){alert('Nicht bestätigt. Es wurde nichts gelöscht.');return;}
   try{const fd=new FormData();fd.append('confirm','RESET');
     const d=await api('/api/admin/factory_reset',{method:'POST',body:fd});
     alert('Fresh start. Wiped: '+JSON.stringify(d.wiped));go('live');
@@ -966,14 +1036,14 @@ async function factoryReset(){
 async function loadCompliance(){
   let cons,arch;
   try{cons=await api('/api/admin/compliance/consents');arch=await api('/api/admin/compliance/archive');}catch(e){el('view').innerHTML=err(e);return;}
-  const cr=cons.consents.map(c=>`<tr><td>${esc(c.email)}</td><td>${esc(c.kind)}</td><td class="subtle">${fdt(c.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">none</td></tr>';
-  const ar=arch.archive.map(a=>`<tr><td>${esc(a.user_email)}</td><td>${Math.round(a.delta_sec/60)}m</td><td>${esc(a.grund)}</td><td class="subtle">${fdate(a.archived_at)}</td></tr>`).join('')||'<tr><td colspan=4 class="subtle">none</td></tr>';
+  const cr=cons.consents.map(c=>`<tr><td>${esc(c.email)}</td><td>${esc(c.kind)}</td><td class="subtle">${fdt(c.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">keine</td></tr>';
+  const ar=arch.archive.map(a=>`<tr><td>${esc(a.user_email)}</td><td>${Math.round(a.delta_sec/60)}m</td><td>${esc(a.grund)}</td><td class="subtle">${fdate(a.archived_at)}</td></tr>`).join('')||'<tr><td colspan=4 class="subtle">keine</td></tr>';
   el('view').innerHTML=`
-    <h3>Withdrawal consent log (§356(4) BGB proof)</h3>
-    <div class="scroll" style="max-height:320px"><table><thead><tr><th>User</th><th>Kind</th><th>When</th></tr></thead><tbody>${cr}</tbody></table></div>
-    <h3>GoBD purchase archive (deleted accounts, 10y retention)</h3>
-    <div class="scroll" style="max-height:260px"><table><thead><tr><th>Email</th><th>Min</th><th>Grund</th><th>Archived</th></tr></thead><tbody>${ar}</tbody></table></div>
-    <h3>Accounting export</h3>
+    <h3>Widerrufs-Zustimmungen (Nachweis §356 Abs. 4 BGB)</h3>
+    <div class="scroll" style="max-height:320px"><table><thead><tr><th>Konto</th><th>Art</th><th>Wann</th></tr></thead><tbody>${cr}</tbody></table></div>
+    <h3>GoBD-Archiv der Käufe (gelöschte Konten, 10 Jahre)</h3>
+    <div class="scroll" style="max-height:260px"><table><thead><tr><th>E-Mail</th><th>Min</th><th>Grund</th><th>Archiviert</th></tr></thead><tbody>${ar}</tbody></table></div>
+    <h3>Export für die Buchhaltung</h3>
     <div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button><button class="btn ghost sm" data-act="dl" data-arg="users">users.csv</button></div>`;
 }
 
@@ -985,7 +1055,7 @@ async function loadCompliance(){
    nicht als Steuerberatung. */
 function eur(c){return (c/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' \u20ac';}
 function lamp(state){
-  const m={ok:['ok','within limit'],warn:['no','80%+ of the limit'],ueber:['no','LIMIT EXCEEDED']};
+  const m={ok:['ok','im Rahmen'],warn:['no','80 % oder mehr der Grenze'],ueber:['no','GRENZE ÜBERSCHRITTEN']};
   const s=m[state]||m.ok;return `<span class="tag ${s[0]}">${s[1]}</span>`;
 }
 function meter(ist,grenze,state){
@@ -997,78 +1067,78 @@ async function loadLegal(){
   let d;try{d=await api('/api/admin/compliance/tax');}catch(e){el('view').innerHTML=err(e);return;}
   const k=d.kleinunternehmer;
   const jr=d.jahre.slice().reverse().map(j=>`<tr><td>${j.jahr}</td><td>${j.anzahl}</td><td><b>${eur(j.brutto_cent)}</b></td></tr>`).join('');
-  const mr=d.monate.length?d.monate.slice().reverse().map(m=>`<tr><td class="mono">${esc(m.monat)}</td><td>${m.anzahl}</td><td>${eur(m.brutto_cent)}</td></tr>`).join(''):'<tr><td colspan=3 class="subtle">no sales this year yet</td></tr>';
-  const br=d.belege.length?d.belege.map(b=>`<tr><td class="mono">${esc(b.session_id)}</td><td>${esc(b.email||'deleted account')}</td><td>${esc(b.pack||'')}</td><td>${eur(b.cents)}</td><td class="subtle">${fdt(b.created_at)}</td></tr>`).join(''):'<tr><td colspan=5 class="subtle">no purchases yet</td></tr>';
+  const mr=d.monate.length?d.monate.slice().reverse().map(m=>`<tr><td class="mono">${esc(m.monat)}</td><td>${m.anzahl}</td><td>${eur(m.brutto_cent)}</td></tr>`).join(''):'<tr><td colspan=3 class="subtle">in diesem Jahr noch keine Verkäufe</td></tr>';
+  const br=d.belege.length?d.belege.map(b=>`<tr><td class="mono">${esc(b.session_id)}</td><td>${esc(b.email||'gelöschtes Konto')}</td><td>${esc(b.pack||'')}</td><td>${eur(b.cents)}</td><td class="subtle">${fdt(b.created_at)}</td></tr>`).join(''):'<tr><td colspan=5 class="subtle">noch keine Käufe</td></tr>';
   const vr=d.verarbeitung.map(v=>`<tr><td>${esc(v.daten)}</td><td>${esc(v.zweck)}</td><td class="mono">${esc(v.grundlage)}</td><td class="subtle">${esc(v.frist)}</td></tr>`).join('');
   const a=d.aufbewahrung;
   const mchart=barChart('Revenue per month ('+d.jahr+')',d.monate.map(m=>m.monat),d.monate.map(m=>m.brutto_cent/100),v=>v.toFixed(2)+' \u20ac',88);
   el('view').innerHTML=`
-    <h3>Tax identity</h3>
+    <h3>Steuer-Identität</h3>
     <table><tbody>
-      <tr><td>Scheme</td><td><b>${esc(d.identitaet.regelung)}</b></td></tr>
+      <tr><td>Regelung</td><td><b>${esc(d.identitaet.regelung)}</b></td></tr>
       <tr><td>VAT ID</td><td class="mono"><b>${esc(d.identitaet.ust_id)}</b></td></tr>
-      <tr><td>Show a VAT amount / rate</td><td><span class="tag no">never</span> <span class="subtle">${esc(d.identitaet.hinweis)}</span></td></tr>
-      <tr><td>VAT ID on invoice</td><td><span class="tag ok">yes</span> <span class="subtle">Printed as an identifier in the footer, next to the §19 note. It is not a VAT charge.</span></td></tr>
-      <tr><td>Issuer</td><td><b>${esc(d.identitaet.name||'')}</b><br><span class="subtle">${esc(d.identitaet.anschrift||'')}</span></td></tr>
+      <tr><td>Umsatzsteuer ausweisen</td><td><span class="tag no">nie</span> <span class="subtle">${esc(d.identitaet.hinweis)}</span></td></tr>
+      <tr><td>USt-IdNr auf der Rechnung</td><td><span class="tag ok">yes</span> <span class="subtle">Steht als Kennzeichen im Rechnungsfuß, neben dem §19-Hinweis. Es wird keine Umsatzsteuer erhoben.</span></td></tr>
+      <tr><td>Aussteller</td><td><b>${esc(d.identitaet.name||'')}</b><br><span class="subtle">${esc(d.identitaet.anschrift||'')}</span></td></tr>
     </tbody></table>
 
-    <h3>Mandatory invoice fields</h3>
+    <h3>Pflichtangaben auf der Rechnung</h3>
     <table><tbody>
       ${(d.identitaet.rechnungspflicht||[]).map(x=>`<tr><td><span class="tag ok">on</span></td><td>${esc(x)}</td></tr>`).join('')}
       <tr><td><span class="tag no">manual</span></td><td>${esc(d.identitaet.dashboard||'')}</td></tr>
     </tbody></table>
 
-    <h3>&sect;19 UStG thresholds</h3>
-    <table><thead><tr><th>Check</th><th>Actual</th><th>Limit</th><th>Usage</th><th>State</th></tr></thead><tbody>
-      <tr><td>Previous year (${d.jahr-1})</td><td><b>${eur(k.vorjahr_cent)}</b></td><td>${eur(k.vorjahr_grenze_cent)}</td><td>${meter(k.vorjahr_cent,k.vorjahr_grenze_cent,k.vorjahr_lage)}</td><td>${lamp(k.vorjahr_lage)}</td></tr>
-      <tr><td>Current year (${d.jahr})</td><td><b>${eur(k.laufend_cent)}</b></td><td>${eur(k.laufend_grenze_cent)}</td><td>${meter(k.laufend_cent,k.laufend_grenze_cent,k.laufend_lage)}</td><td>${lamp(k.laufend_lage)}</td></tr>
+    <h3>&sect;19 UStG: Schwellen</h3>
+    <table><thead><tr><th>Prüfung</th><th>Tatsächlich</th><th>Grenze</th><th>Nutzung</th><th>Zustand</th></tr></thead><tbody>
+      <tr><td>Vorjahr (${d.jahr-1})</td><td><b>${eur(k.vorjahr_cent)}</b></td><td>${eur(k.vorjahr_grenze_cent)}</td><td>${meter(k.vorjahr_cent,k.vorjahr_grenze_cent,k.vorjahr_lage)}</td><td>${lamp(k.vorjahr_lage)}</td></tr>
+      <tr><td>Laufendes Jahr (${d.jahr})</td><td><b>${eur(k.laufend_cent)}</b></td><td>${eur(k.laufend_grenze_cent)}</td><td>${meter(k.laufend_cent,k.laufend_grenze_cent,k.laufend_lage)}</td><td>${lamp(k.laufend_lage)}</td></tr>
     </tbody></table>
-    <div class="note">Cross the previous-year limit and the scheme ends next year. Cross the current-year limit and it ends immediately, from that sale on. This panel warns from 80% onward. Figures come from your own purchase records, not from Stripe. If they disagree with Stripe, trust Stripe and find out why.</div>
+    <div class="note">Wird die Vorjahresgrenze gerissen, endet die Kleinunternehmer-Regelung im nächsten Jahr. Wird die laufende Grenze gerissen, endet sie sofort, ab genau diesem Verkauf. Dieses Panel warnt ab 80 %. Die Zahlen kommen aus deinen eigenen Kaufbelegen, nicht aus Stripe. Weichen sie von Stripe ab, gilt Stripe, und dann nachsehen warum.</div>
 
-    <h3>Revenue</h3>
+    <h3>Umsatz</h3>
     ${mchart}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div><h4 class="subtle">Per calendar year</h4><table><thead><tr><th>Year</th><th>Sales</th><th>Gross</th></tr></thead><tbody>${jr}</tbody></table></div>
-      <div><h4 class="subtle">Per month (${d.jahr})</h4><div class="scroll" style="max-height:240px"><table><thead><tr><th>Month</th><th>Sales</th><th>Gross</th></tr></thead><tbody>${mr}</tbody></table></div></div>
+      <div><h4 class="subtle">Je Kalenderjahr</h4><table><thead><tr><th>Jahr</th><th>Verkäufe</th><th>Brutto</th></tr></thead><tbody>${jr}</tbody></table></div>
+      <div><h4 class="subtle">Je Monat (${d.jahr})</h4><div class="scroll" style="max-height:240px"><table><thead><tr><th>Monat</th><th>Verkäufe</th><th>Brutto</th></tr></thead><tbody>${mr}</tbody></table></div></div>
     </div>
 
-    <h3>Records to keep</h3>
+    <h3>Aufbewahrungsfristen</h3>
     <table><tbody>
-      <tr><td>Purchase records</td><td><b>${a.belege_jahre} years</b> <span class="subtle">(${esc(a.rechtsgrundlage)})</span></td></tr>
-      <tr><td>Archived rows from deleted accounts</td><td>${a.archiv_zeilen} <span class="subtle">${a.archiv_von?fdate(a.archiv_von)+' \u2013 '+fdate(a.archiv_bis):''}</span></td></tr>
-      <tr><td>Credit ledger rows</td><td>${a.ledger_zeilen}</td></tr>
-      <tr><td>Withdrawal consents on file</td><td>${a.consent_zeilen}</td></tr>
-      <tr><td>Customer videos deleted after</td><td>${a.video_tage} days</td></tr>
-      <tr><td>Credits expire after</td><td>${a.credit_tage} days</td></tr>
+      <tr><td>Kaufbelege</td><td><b>${a.belege_jahre} Jahre</b> <span class="subtle">(${esc(a.rechtsgrundlage)})</span></td></tr>
+      <tr><td>Archivierte Zeilen gelöschter Konten</td><td>${a.archiv_zeilen} <span class="subtle">${a.archiv_von?fdate(a.archiv_von)+' \u2013 '+fdate(a.archiv_bis):''}</span></td></tr>
+      <tr><td>Buchungszeilen</td><td>${a.ledger_zeilen}</td></tr>
+      <tr><td>Gespeicherte Widerrufs-Zustimmungen</td><td>${a.consent_zeilen}</td></tr>
+      <tr><td>Kundenvideos werden gelöscht nach</td><td>${a.video_tage} Tage</td></tr>
+      <tr><td>Guthaben verfällt nach</td><td>${a.credit_tage} Tage</td></tr>
     </tbody></table>
     <div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button><button class="btn ghost sm" data-act="dl" data-arg="users">users.csv</button></div>
 
-    <h3>Purchase records (newest first)</h3>
-    <div class="scroll" style="max-height:320px"><table><thead><tr><th>Stripe session</th><th>Customer</th><th>Pack</th><th>Gross</th><th>When</th></tr></thead><tbody>${br}</tbody></table></div>
+    <h3>Kaufbelege (neueste zuerst)</h3>
+    <div class="scroll" style="max-height:320px"><table><thead><tr><th>Stripe-Vorgang</th><th>Kunde</th><th>Paket</th><th>Brutto</th><th>Wann</th></tr></thead><tbody>${br}</tbody></table></div>
 
-    <h3>Record of processing activities (Art. 30 GDPR)</h3>
-    <table><thead><tr><th>Data</th><th>Purpose</th><th>Legal basis</th><th>Retention</th></tr></thead><tbody>${vr}</tbody></table>
+    <h3>Verarbeitungsverzeichnis (Art. 30 DSGVO)</h3>
+    <table><thead><tr><th>Daten</th><th>Zweck</th><th>Rechtsgrundlage</th><th>Aufbewahrung</th></tr></thead><tbody>${vr}</tbody></table>
 
-    <h3>Public legal pages</h3>
+    <h3>Öffentliche Rechtsseiten</h3>
     <div class="row-actions">${d.seiten.map(s=>`<a class="btn ghost sm" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titel)}</a>`).join('')}</div>
-    <div class="note">This page is an overview of your own data. It is not tax advice and does not replace your bookkeeping.</div>`;
+    <div class="note">Diese Seite ist eine Übersicht über deine eigenen Zahlen. Sie ist keine Steuerberatung und ersetzt keine Buchhaltung.</div>`;
 }
 
 /* ---------- CODES ---------- */
 async function loadCodes(){
   let d;try{d=await api('/api/admin/codes');}catch(e){el('view').innerHTML=err(e);return;}
   const rows=d.codes.map(c=>`<tr><td class="mono">${esc(c.code)}</td><td>${esc(c.name||'')}</td><td>${c.genutzt||0}/${c.limit||'-'}</td><td>${c.aktiv?'<span class="tag ok">active</span>':'<span class="tag no">blocked</span>'}</td>
-    <td><button class="btn ghost sm" data-act="codeAct" data-arg="${c.aktiv?'block':'unblock'}" data-arg2="${esc(c.code)}">${c.aktiv?'Block':'Unblock'}</button></td></tr>`).join('')||'<tr><td colspan=5 class="subtle">no codes</td></tr>';
+    <td><button class="btn ghost sm" data-act="codeAct" data-arg="${c.aktiv?'block':'unblock'}" data-arg2="${esc(c.code)}">${c.aktiv?'Block':'Unblock'}</button></td></tr>`).join('')||'<tr><td colspan=5 class="subtle">keine Codes</td></tr>';
   el('view').innerHTML=`
-    <h3>Tester access codes</h3>
+    <h3>Test-Zugangscodes</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      <input class="search" id="cName" placeholder="Tester name">
-      <input class="search" id="cLimit" type="number" placeholder="video limit" value="5" style="width:120px">
-      <button class="btn sm" data-act="newCode">Create code</button></div>
-    <table><thead><tr><th>Code</th><th>Name</th><th>Used</th><th>State</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="note">Access codes let testers use the app without an account or your OpenAI key exposure.</div>`;
+      <input class="search" id="cName" placeholder="Name des Testers">
+      <input class="search" id="cLimit" type="number" placeholder="Video-Grenze" value="5" style="width:120px">
+      <button class="btn sm" data-act="newCode">Code anlegen</button></div>
+    <table><thead><tr><th>Code</th><th>Name</th><th>Benutzt</th><th>Zustand</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="note">Mit einem Zugangscode können Tester die App ohne Konto benutzen, ohne dass dein OpenAI-Schlüssel sichtbar wird.</div>`;
 }
-async function newCode(){const fd=new FormData();fd.append('action','new');fd.append('name',el('cName').value||'Tester');fd.append('limit',parseInt(el('cLimit').value,10)||5);try{const d=await api('/api/admin/codes',{method:'POST',body:fd});alert('New code: '+d.code);loadCodes();}catch(e){alert(e.message);}}
+async function newCode(){const fd=new FormData();fd.append('action','new');fd.append('name',el('cName').value||'Tester');fd.append('limit',parseInt(el('cLimit').value,10)||5);try{const d=await api('/api/admin/codes',{method:'POST',body:fd});alert('Neuer Code: '+d.code);loadCodes();}catch(e){alert(e.message);}}
 async function codeAct(action,code){const fd=new FormData();fd.append('action',action);fd.append('code',code);try{await api('/api/admin/codes',{method:'POST',body:fd});loadCodes();}catch(e){alert(e.message);}}
 
 /* ---------- SUPPORT ---------- */
@@ -1095,23 +1165,23 @@ async function loadSupport(silent){
       </div>
       ${verlauf}
       ${t.status==='closed'
-        ? `<div class="note" style="margin-top:8px">Ticket wurde geschlossen &mdash;
+        ? `<div class="note" style="margin-top:8px">Ticket wurde geschlossen.
              es kann nicht mehr geantwortet werden. Der Kunde sieht es noch 24 h,
              dann verschwindet es aus seiner Liste. Zum Weiterschreiben erst
              wieder oeffnen.</div>`
-        : `<textarea class="search" id="rp${t.id}" rows="3" placeholder="Write your reply …"
+        : `<textarea class="search" id="rp${t.id}" rows="3" placeholder="Antwort schreiben …"
         style="width:100%;margin-top:8px"></textarea>`}
       <div style="display:flex;gap:9px;margin-top:8px;flex-wrap:wrap">
-        ${t.status==='closed' ? '' : `<button class="btn sm" data-act="ticketReply" data-arg="${t.id}">Send reply</button>`}
+        ${t.status==='closed' ? '' : `<button class="btn sm" data-act="ticketReply" data-arg="${t.id}">Antwort senden</button>`}
         <button class="btn ghost sm" data-act="ticketAct" data-arg="${t.id}" data-arg2="${t.status==='closed'?'open':'closed'}">
           ${t.status==='closed'?'Reopen':'Close'}</button>
       </div>
     </div>`;}).join('')||'<div class="subtle">no tickets</div>';
   el('view').innerHTML=`
     <h3>Support <span class="subtle">(${d.open_count} waiting)</span></h3>
-    <div class="note">Replies are sent from here: they land in the customer's thread
-      inside the app <b>and</b> go out as an email. A follow-up question stays in the
-      same ticket instead of opening a new one.</div>
+    <div class="note">Antworten gehen von hier raus: sie landen im Verlauf des
+      Kunden in der App <b>und</b> zusätzlich als Mail. Eine Rückfrage bleibt im
+      selben Ticket, statt ein neues aufzumachen.</div>
     ${karten}`;
 }
 async function ticketReply(id){
@@ -1119,7 +1189,7 @@ async function ticketReply(id){
   if(t.length<2){alert('Write something first.');return;}
   const fd=new FormData(); fd.append('text',t);
   try{const d=await api('/api/admin/tickets/'+id+'/reply',{method:'POST',body:fd});
-    if(!d.gemailt)alert('Saved in the thread, but the email could not be sent. Check SMTP.');
+    if(!d.gemailt)alert('Im Verlauf gespeichert, aber die Mail ging nicht raus. SMTP prüfen.');
     loadSupport();refreshBadges();}
   catch(e){alert(e.message);}
 }
@@ -1131,23 +1201,23 @@ async function loadAlerts(silent){
   let d;try{d=await api('/api/admin/alerts');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
   lastLoad.alerts=Date.now()/1000;
   const rows=d.alerts.length?d.alerts.map(a=>`<tr${a.gelesen?'':' style="background:rgba(255,122,26,.06)"'}>
-    <td>${a.gelesen?'<span class="tag ok">read</span>':'<span class="tag no">new</span>'}</td>
+    <td>${a.gelesen?'<span class="tag ok">gelesen</span>':'<span class="tag no">neu</span>'}</td>
     <td><b>${esc(a.betreff)}</b><div class="subtle mono" style="font-size:11px">${esc(a.schluessel)}</div></td>
     <td><pre class="mono" style="white-space:pre-wrap;font-size:11.5px;margin:0">${esc(a.text)}</pre></td>
     <td class="subtle">${a.gemailt?'mailed':'panel only'}</td>
     <td class="subtle">${new Date(a.created_at*1000).toLocaleString()}</td>
-    <td>${a.gelesen?'':`<button class="btn" data-act="alertRead" data-arg="${a.id}">Mark read</button>`}</td>
-  </tr>`).join(''):'<tr><td colspan="6" class="subtle">No alerts.</td></tr>';
+    <td>${a.gelesen?'':`<button class="btn" data-act="alertRead" data-arg="${a.id}">Als gelesen</button>`}</td>
+  </tr>`).join(''):'<tr><td colspan="6" class="subtle">Keine Störungen.</td></tr>';
   el('view').innerHTML=`
     <h3>Alerts <span class="subtle">${d.offen} unread</span>
-      <button class="btn" style="float:right" data-act="alertRead" data-arg="0">Mark all read</button></h3>
-    <p class="subtle">Render failures and job timeouts are logged here only, no email.
-      Credits are refunded automatically.</p>
-    <table><thead><tr><th></th><th>What</th><th>Detail</th><th>Mail</th><th>When</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+      <button class="btn" style="float:right" data-act="alertRead" data-arg="0">Alle als gelesen</button></h3>
+    <p class="subtle">Gescheiterte Renders und Zeitüberschreitungen stehen nur hier, es geht keine
+      Mail raus. Das Guthaben wird automatisch erstattet.</p>
+    <table><thead><tr><th></th><th>Was</th><th>Detail</th><th>Mail</th><th>Wann</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function alertRead(id){const fd=new FormData();fd.append('id',id);try{await api('/api/admin/alerts/read',{method:'POST',body:fd});loadAlerts();}catch(e){alert(e.message);}}
 
-function err(e){return '<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Error</b> '+esc(e.message)+'</div>';}
+function err(e){return '<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Fehler</b> '+esc(e.message)+'</div>';}
 /* ---------- v196 FEEDBACK ----------
    Bewusst nicht dasselbe wie Support: ein Ticket ist eine Frage mit
    Antworterwartung, Feedback ist eine Bewertung ohne. Der Wert steckt in
@@ -1170,32 +1240,32 @@ async function loadFeedback(silent){
   const looks=d.looks.length?d.looks.map(l=>
     `<tr><td>${esc(l.look)}</td><td>${l.c}</td>
      <td style="color:${l.avg>=4?'var(--ok)':l.avg>=3?'var(--warn)':'var(--bad)'}">${Number(l.avg).toFixed(2)}</td></tr>`
-    ).join(''):'<tr><td colspan="3" class="subtle">No ratings with a look yet.</td></tr>';
+    ).join(''):'<tr><td colspan="3" class="subtle">Noch keine Bewertung mit Look.</td></tr>';
   const rows=d.items.length?d.items.map(f=>`<tr${f.gelesen?'':' style="background:rgba(255,122,26,.06)"'}>
       <td style="white-space:nowrap;color:${f.note>=4?'var(--ok)':f.note>=3?'var(--warn)':'var(--bad)'}">${sterne(f.note)}</td>
-      <td>${esc(f.name||'')}<div class="subtle">${esc(f.email||'deleted account')}</div></td>
+      <td>${esc(f.name||'')}<div class="subtle">${esc(f.email||'gelöschtes Konto')}</div></td>
       <td>${esc(f.look||'–')}</td>
-      <td style="max-width:420px;white-space:pre-wrap">${esc(f.text)||'<span class="subtle">no comment</span>'}</td>
+      <td style="max-width:420px;white-space:pre-wrap">${esc(f.text)||'<span class="subtle">kein Kommentar</span>'}</td>
       <td class="subtle" style="white-space:nowrap">${fdt(f.created_at)}</td>
-      <td>${f.gelesen?'':`<button class="btn ghost sm" data-act="fbRead" data-arg="${f.id}">Mark read</button>`}</td>
-    </tr>`).join(''):'<tr><td colspan="6" class="subtle">Nothing here yet.</td></tr>';
+      <td>${f.gelesen?'':`<button class="btn ghost sm" data-act="fbRead" data-arg="${f.id}">Als gelesen</button>`}</td>
+    </tr>`).join(''):'<tr><td colspan="6" class="subtle">Noch nichts da.</td></tr>';
   el('view').innerHTML=`
     <div class="grid g4">
-      <div class="card"><div class="k">Ratings</div><div class="v">${d.gesamt}</div></div>
-      <div class="card acc"><div class="k">Average</div><div class="v">${d.schnitt||'–'} <small>of 5</small></div></div>
-      <div class="card"><div class="k">Unread</div><div class="v">${d.offen}</div></div>
-      <div class="card"><div class="k">1-2 stars</div><div class="v">${(d.verteilung[1]||0)+(d.verteilung[2]||0)}</div></div>
+      <div class="card"><div class="k">Bewertungen</div><div class="v">${d.gesamt}</div></div>
+      <div class="card acc"><div class="k">Durchschnitt</div><div class="v">${d.schnitt||'–'} <small>von 5</small></div></div>
+      <div class="card"><div class="k">Ungelesen</div><div class="v">${d.offen}</div></div>
+      <div class="card"><div class="k">1-2 Sterne</div><div class="v">${(d.verteilung[1]||0)+(d.verteilung[2]||0)}</div></div>
     </div>
     <div class="grid g2" style="margin-top:12px">
-      <div class="card"><h3 style="margin-top:0">Distribution</h3>${bars}</div>
-      <div class="card"><h3 style="margin-top:0">Average per look</h3>
-        <table><tr><th>Look</th><th>Ratings</th><th>Ø</th></tr>${looks}</table></div>
+      <div class="card"><h3 style="margin-top:0">Verteilung</h3>${bars}</div>
+      <div class="card"><h3 style="margin-top:0">Durchschnitt je Look</h3>
+        <table><tr><th>Look</th><th>Bewertungen</th><th>Ø</th></tr>${looks}</table></div>
     </div>
     <h3>Comments
       <span style="float:right;font-weight:600;text-transform:none;letter-spacing:0">
       ${['all','neu','schlecht'].map(f=>`<button class="btn ${fbFilt===f?'':'ghost'} sm" data-act="fbSet" data-arg="${f}">${f==='all'?'All':f==='neu'?'Unread':'1-2 stars'}</button>`).join(' ')}
       </span></h3>
-    <table><tr><th>Rating</th><th>Customer</th><th>Look</th><th>Comment</th><th>When</th><th></th></tr>${rows}</table>`;
+    <table><tr><th>Note</th><th>Kunde</th><th>Look</th><th>Kommentar</th><th>Wann</th><th></th></tr>${rows}</table>`;
 }
 function fbSet(f){fbFilt=f;loadFeedback();}
 async function fbRead(id){await api('/api/admin/feedback/'+id+'/read',{method:'POST'});loadFeedback();refreshBadges();}
@@ -1216,39 +1286,39 @@ async function loadAnn(silent){
       <td><b>${esc(a.titel)}</b><div class="subtle" style="white-space:pre-wrap;max-width:460px">${esc(a.text)}</div></td>
       <td class="subtle" style="white-space:nowrap">${fdt(a.created_at)}</td>
       <td class="subtle" style="white-space:nowrap">${ab}${weg?' <span class="tag no">expired</span>':''}</td>
-      <td>${a.aktiv?'<span class="tag ok">live</span>':'<span class="tag">off</span>'}</td>
+      <td>${a.aktiv?'<span class="tag ok">live</span>':'<span class="tag">aus</span>'}</td>
       <td style="white-space:nowrap">
         <button class="btn ghost sm" data-act="annTog" data-arg="${a.id}">${a.aktiv?'Turn off':'Turn on'}</button>
-        <button class="btn ghost sm" data-act="annDel" data-arg="${a.id}">Delete</button></td>
-    </tr>`;}).join(''):'<tr><td colspan="6" class="subtle">No announcements yet.</td></tr>';
+        <button class="btn ghost sm" data-act="annDel" data-arg="${a.id}">Löschen</button></td>
+    </tr>`;}).join(''):'<tr><td colspan="6" class="subtle">Noch keine Ankündigungen.</td></tr>';
   el('view').innerHTML=`
     <div class="card">
-      <h3 style="margin-top:0">New announcement</h3>
-      <p class="subtle" style="margin-bottom:10px">Shows as a banner inside the app
-        for every customer. Leave the expiry at 0 for “until I turn it off”.</p>
+      <h3 style="margin-top:0">Neue Ankündigung</h3>
+      <p class="subtle" style="margin-bottom:10px">Erscheint als Banner in der App, bei jedem Kunden. Ablauf auf 0 lassen heißt
+        „bis ich es abschalte".</p>
       <div style="display:flex;flex-direction:column;gap:9px;max-width:620px">
-        <input class="search" id="annT" placeholder="Title" maxlength="120">
+        <input class="search" id="annT" placeholder="Titel" maxlength="120">
         <textarea class="search" id="annB" rows="3" placeholder="Text" maxlength="2000"></textarea>
         <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
           <select class="search" id="annS">
             <option value="info">Info</option>
-            <option value="warn">Warning</option>
-            <option value="wartung">Maintenance</option>
+            <option value="warn">Warnung</option>
+            <option value="wartung">Wartung</option>
           </select>
           <input class="search" id="annD" type="number" min="0" max="365" step="0.5" value="0"
-                 style="width:120px" title="Auto-expire after N days (0 = never)">
-          <span class="subtle">days until it expires (0 = never)</span>
-          <button class="btn" data-act="annSave">Publish</button>
+                 style="width:120px" title="Läuft nach N Tagen automatisch ab (0 = nie)">
+          <span class="subtle">Tage bis zum Ablauf (0 = nie)</span>
+          <button class="btn" data-act="annSave">Veröffentlichen</button>
         </div>
         <p class="msg subtle" id="annMsg"></p>
       </div>
     </div>
-    <h3>All announcements</h3>
-    <table><tr><th>Level</th><th>Message</th><th>Created</th><th>Expires</th><th>State</th><th></th></tr>${rows}</table>`;
+    <h3>Alle Ankündigungen</h3>
+    <table><tr><th>Stufe</th><th>Nachricht</th><th>Angelegt</th><th>Läuft ab</th><th>Zustand</th><th></th></tr>${rows}</table>`;
 }
 async function annSave(){
   const t=el('annT').value.trim(), b=el('annB').value.trim();
-  if(!t||!b){el('annMsg').textContent='Title and text are required.';return;}
+  if(!t||!b){el('annMsg').textContent='Titel und Text sind Pflicht.';return;}
   const fd=new FormData();
   fd.append('titel',t);fd.append('text',b);
   fd.append('stufe',el('annS').value);fd.append('tage',el('annD').value||'0');
@@ -1256,7 +1326,7 @@ async function annSave(){
   catch(e){el('annMsg').textContent=e.message;}
 }
 async function annTog(id){await api('/api/admin/announcements/'+id+'/toggle',{method:'POST'});loadAnn();}
-async function annDel(id){if(!danger('Delete this announcement?'))return;
+async function annDel(id){if(!danger('Diese Ankündigung löschen?'))return;
   await api('/api/admin/announcements/'+id+'/delete',{method:'POST'});loadAnn();}
 
 /* v197 Logs. Der Betriebs-Log lag bisher nur in `docker logs` und war nach
@@ -1276,7 +1346,7 @@ async function loadLogs(silent){
       <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
         ${wahl}
         <span class="subtle" style="margin-left:auto">${(d.bytes/1024).toFixed(0)} KB</span>
-        <button class="btn ghost sm" data-act="loadLogs">Refresh</button>
+        <button class="btn ghost sm" data-act="loadLogs">Neu laden</button>
       </div>
       <pre style="max-height:64vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
         font-size:12px;line-height:1.5;margin:0">${esc(d.text)}</pre>
@@ -1305,7 +1375,7 @@ async function loadEvents(silent){
     '<tr><td colspan="6" class="subtle">Noch nichts protokolliert.</td></tr>';
   el('view').innerHTML=`
     <div class="row-actions" style="margin-bottom:10px;flex-wrap:wrap">${filter}</div>
-    <div class="note">Aufbewahrung ${d.aufbewahrung_tage} Tage. Hier steht WER WANN WAS —
+    <div class="note">Aufbewahrung ${d.aufbewahrung_tage} Tage. Hier steht, WER WANN WAS getan hat:
       bewusst keine Inhalte (keine Nachrichten, keine Passwoerter).</div>
     <table><thead><tr><th>Wann</th><th>Was</th><th>Wer</th><th>IP</th><th>Wo</th><th>Detail</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
@@ -1318,8 +1388,8 @@ async function loadBetrieb(){
   const box=el('betriebBox'); if(!box)return;
   let d;try{d=await api('/api/admin/betrieb');}catch(e){box.innerHTML=err(e);return;}
   const txt={normal:'Alles laeuft normal.',
-             pausiert:'PAUSIERT — keine neuen Uploads, Renders, Kaeufe oder Registrierungen. Fertige Videos bleiben abrufbar.',
-             notaus:'NOTAUS — alle Kunden sind abgemeldet, es geht nichts mehr rein.'};
+             pausiert:'PAUSIERT. Keine neuen Uploads, Renders, Käufe oder Registrierungen. Fertige Videos bleiben abrufbar.',
+             notaus:'NOTAUS. Alle Kunden sind abgemeldet, es geht nichts mehr rein.'};
   box.innerHTML=`
     <div class="health" style="margin-bottom:10px">
       ${d.stufe==='normal'?'<span class="tag ok">normal</span>':'<span class="tag no">'+esc(d.stufe)+'</span>'}
@@ -1355,11 +1425,11 @@ async function loadStart(silent){
   const g=d.geld, b=d.betrieb, p=d.post, w=d.wachstum;
 
   const trend = g.trend_prozent===null||g.trend_prozent===undefined ? ''
-    : `<div class="satz">${g.trend_prozent>=0?'+':''}${g.trend_prozent}&nbsp;% gegenueber den 30 Tagen davor.</div>`;
+    : `<div class="satz">${g.trend_prozent>=0?'+':''}${g.trend_prozent}&nbsp;% gegenüber den 30 Tagen davor.</div>`;
   const erstattet = g.gesamt.erstattet_eur>0
     ? `<div class="satz">Insgesamt eingenommen ${eur(g.gesamt.eur+g.gesamt.erstattet_eur)},
        davon ${eur(g.gesamt.erstattet_eur)} wieder erstattet.</div>`
-    : '<div class="satz">Bisher nichts erstattet &mdash; eingenommen ist gleich geblieben.</div>';
+    : '<div class="satz">Bisher nichts erstattet. Eingenommen ist gleich geblieben.</div>';
 
   const probleme = b.probleme.length
     ? b.probleme.map(x=>`<div class="satz"><span class="ampel ${x.stufe}"></span>${esc(x.text)}</div>`).join('')
@@ -1372,8 +1442,8 @@ async function loadStart(silent){
   el('view').innerHTML=`
     <div class="hero">
       <div class="box">
-        <div class="frage">VERDIENE ICH GELD?</div>
-        <div class="zahl">${eur(g.monat.eur)}<small>letzte 30 Tage</small></div>
+        <div class="frage">Verdiene ich Geld?</div>
+        <div class="zahl">${eur(g.monat.eur)}<small>in den letzten 30 Tagen</small></div>
         ${trend}
         <div class="satz">Heute ${eur(g.heute.eur)} &middot; Woche ${eur(g.woche.eur)} &middot;
           insgesamt ${eur(g.gesamt.eur)}. Das ist, was nach Erstattungen geblieben ist.</div>
@@ -1382,42 +1452,42 @@ async function loadStart(silent){
       </div>
 
       <div class="box ${b.ampel}">
-        <div class="frage">LAEUFT ALLES?</div>
+        <div class="frage">Läuft alles?</div>
         <div class="zahl"><span class="ampel ${b.ampel}"></span>${
-          b.ampel==='gruen'?'Alles gut':b.ampel==='gelb'?'Kleinigkeiten':'Kuemmern'}</div>
+          b.ampel==='gruen'?'Alles gut':b.ampel==='gelb'?'Kleinigkeiten':'Kümmern'}</div>
         ${probleme}
         <div class="satz">${b.laeuft_gerade} Video(s) werden gerade gerendert,
           ${b.wartet} warten.</div>
         <div class="tuwas">
-          <button class="btn ghost sm" data-act="go" data-arg="alerts">Stoerungen</button>
+          <button class="btn ghost sm" data-act="go" data-arg="alerts">Störungen</button>
           <button class="btn ghost sm" data-act="go" data-arg="system">System</button>
         </div>
       </div>
 
       <div class="box${(p.tickets||p.feedback)?' gelb':''}">
-        <div class="frage">WILL JEMAND ETWAS VON MIR?</div>
+        <div class="frage">Will jemand etwas von mir?</div>
         <div class="zahl">${p.tickets}<small>offene Anfragen</small></div>
         ${postSatz}
         ${p.note?`<div class="satz">Durchschnittliche Bewertung ${p.note} von 5
           (${p.bewertungen} Stimmen).</div>`:''}
         <div class="tuwas">
-          <button class="btn ghost sm" data-act="go" data-arg="support">Support</button>
+          <button class="btn ghost sm" data-act="go" data-arg="support">Tickets</button>
           <button class="btn ghost sm" data-act="go" data-arg="feedback">Bewertungen</button>
         </div>
       </div>
 
       <div class="box">
-        <div class="frage">WAECHST ES?</div>
-        <div class="zahl">${w.kunden}<small>Konten</small></div>
+        <div class="frage">Wächst es?</div>
+        <div class="zahl">${w.kunden}<small>Konten insgesamt</small></div>
         <div class="satz">${w.neu_7t} neu in den letzten 7 Tagen.
           ${w.zahler} davon haben schon einmal gekauft.</div>
         <div class="satz">${w.renders_7t} Videos in den letzten 7 Tagen gerendert.</div>
-        <div class="tuwas"><button class="btn ghost sm" data-act="go" data-arg="users">Kunden</button></div>
+        <div class="tuwas"><button class="btn ghost sm" data-act="go" data-arg="users">Konten</button></div>
       </div>
     </div>
-    <div class="note" style="margin-top:14px">Diese Seite beantwortet die vier Fragen,
-      die im Alltag zaehlen. Alles andere &mdash; einzelne Jobs, Codes, Recht &amp; Steuern,
-      Technik &mdash; steht unveraendert in den Ansichten links.</div>`;
+    <div class="note" style="margin-top:16px">Diese Seite beantwortet die vier Fragen,
+      die im Alltag zählen. Alles andere steht unverändert in den Ansichten links:
+      einzelne Renders, Gutscheine, Recht &amp; Steuern, Technik.</div>`;
 }
 
 /* v208 TRICHTER. "Wer kam auf die Webseite, und wo verliere ich die Leute?"
@@ -1439,7 +1509,7 @@ async function loadTrichter(silent){
       const p=s.von_vorher_prozent;
       const kl=p<20?'bad':p<50?'warn':'';
       verlust=`<span class="tdrop ${kl}">${p}&nbsp;% von der Stufe darueber</span>
-        &mdash; ${100-p}&nbsp;% springen hier ab.`;
+        · ${100-p}&nbsp;% springen hier ab.`;
     }else if(i===0){verlust='Das ist die Ausgangsmenge.';}
     return `<div class="trow">
       <div class="tt"><b>${esc(s.titel)}</b><span class="tn">${s.anzahl}</span></div>
@@ -1461,7 +1531,7 @@ async function loadTrichter(silent){
     <div class="chart" style="margin-top:14px">
       <div class="ct"><b>Woher kamen sie</b><span>letzte ${d.tage} Tage</span></div>
       ${qr?`<table><thead><tr><th>Quelle</th><th>Besucher</th><th>Konten</th>
-        <th>Kaeufer</th><th>Konto-Quote</th></tr></thead><tbody>${qr}</tbody></table>`
+        <th>Käufer</th><th>Konto-Quote</th></tr></thead><tbody>${qr}</tbody></table>`
         :'<div class="spin">Noch keine Daten. Die Zaehlung laeuft ab dem Deploy.</div>'}
       <div class="note">"direkt" heisst: getippt, Lesezeichen, oder die App hat
         die Herkunft nicht mitgeschickt (bei Instagram/TikTok normal).
