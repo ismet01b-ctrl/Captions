@@ -301,6 +301,40 @@ def ensure_models():
                 f"  Datei manuell laden: {url}\n"
                 f"  und ablegen unter:   {path}")
 
+def vorschau_schreiben(comp, pfad, breite=360):
+    """v230b3: legt das GERADE FERTIGE Bild klein neben das Ergebnis, damit
+    der Kunde beim Rendern sieht, was entsteht - eine Prozentzahl ist bei
+    einem Vorgang von Minuten wenig.
+
+    Zwei Dinge, die man hier falsch machen kann:
+      * Direkt auf die Zieldatei schreiben. Die App liest sie im Sekundentakt
+        und bekaeme irgendwann ein halbes JPEG. Also Zwischendatei plus
+        `os.replace` - und der Name traegt die Prozessnummer, sonst
+        loeschen sich zwei Laeufe gegenseitig die halbfertige Datei
+        (derselbe Wettlauf wie v230w bei der Sicherung).
+      * Den Render kippen lassen. Ein Vorschaubild ist Beiwerk; scheitert
+        es, laeuft der Render weiter und der Kunde sieht eben kein Bild.
+    Rueckgabe: True, wenn ein Bild liegt."""
+    try:
+        b = np.clip(comp, 0, 255).astype(np.uint8)
+        h, w = b.shape[:2]
+        s = float(breite) / max(w, 1)
+        if s < 1.0:
+            b = cv2.resize(b, (int(breite), max(1, int(h * s))),
+                           interpolation=cv2.INTER_AREA)
+        # Die Endung MUSS .jpg bleiben: cv2.imwrite waehlt den Codec ueber
+        # die Dateiendung und bricht bei '.tmp' mit "could not find a writer"
+        # ab (beim ersten echten Aufruf sofort aufgefallen - der Grund, warum
+        # diese Zeilen jetzt eine eigene, testbare Funktion sind).
+        tmp = f'{pfad}.{os.getpid()}.tmp.jpg'
+        if cv2.imwrite(tmp, b, [int(cv2.IMWRITE_JPEG_QUALITY), 72]):
+            os.replace(tmp, pfad)
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def ensure_models_cli():
     """Fuer den Image-Bau. Der Aufruf dort ist absichtlich fehlertolerant -
     ein Netzhaenger beim Bauen soll den Deploy nicht kippen, die Modelle
@@ -14022,6 +14056,18 @@ def main():
     BEAT_SYNC = float(cfg.get('effects', {}).get('beat_sync', 0.7))
     PERSON_SHADOW = float(cfg.get('effects', {}).get('person_shadow', 0.5))
     out_path = args.out or os.path.splitext(args.input)[0] + '_captions.mp4'
+    # v230b3: Das Live-Bild liegt NEBEN dem Ergebnis, im selben Job-Ordner.
+    # Kein eigener Schalter und kein Pfad-Parameter: was der Server ausliefert,
+    # soll nicht davon abhaengen, dass jemand ein Flag setzt.
+    _vorschau_pfad = os.path.join(os.path.dirname(os.path.abspath(out_path))
+                                  or '.', 'vorschau.jpg')
+    # Ein Bild vom VORIGEN Lauf desselben Jobs (Re-Render, Momente-Editor)
+    # waere schlimmer als keines: der Kunde saehe minutenlang ein Standbild,
+    # das nichts mit dem laufenden Render zu tun hat.
+    try:
+        os.remove(_vorschau_pfad)
+    except OSError:
+        pass
     if not args.transcribe_only:
         ensure_models()          # Transkript-Kontrolle braucht keine KI-Modelle
 
@@ -15596,6 +15642,17 @@ def main():
         _zt_ende = zt('encode-write', _zt_frame)
         fi += 1
         mem_wache(fi, max_frames or n_frames)   # v230ak: vor dem Kill eingreifen
+        # v230b3 LIVE-BILD FUER DEN KUNDEN. Bis hierher sah er beim Rendern
+        # nur eine Prozentzahl - bei einem Vorgang, der Minuten dauert, ist
+        # das wenig. Alle 25 Bilder (rund eine Sekunde Video) wird das GERADE
+        # FERTIGE Bild klein daneben gelegt; die App zeigt es an. Kosten:
+        # ein Resize auf 360 px plus ein JPEG, gemessen unter 10 ms - gegen
+        # ~250 ms je Bild im Compositing faellt das nicht ins Gewicht.
+        # Geschrieben wird ueber eine Zwischendatei mit os.replace, sonst
+        # liest die App irgendwann ein halbes JPEG (v230w-Lehre).
+        # Beim Alpha-Export gibt es kein sinnvolles Vorschaubild.
+        if (not args.alpha_export) and fi % 25 == 0 and _vorschau_pfad:
+            vorschau_schreiben(comp, _vorschau_pfad)
         if fi % 100 == 0:
             el = _time.time() - t_start
             rate = fi / max(el, 0.01)

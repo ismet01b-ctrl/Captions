@@ -36,6 +36,10 @@ const $ = s => (el[s] = el[s] || {
   classList: { add: c => el[s]._cls.add(c), remove: c => el[s]._cls.delete(c),
                contains: c => el[s]._cls.has(c) },
   scrollIntoView() {},
+  // v230b3: ein echtes Element kann Attribute wieder loswerden. Ohne das
+  // fiel prShotWeg() mit "removeAttribute is not a function" - der Test
+  // waere am Werkzeug gescheitert, nicht am Code.
+  removeAttribute(n) { if (n === 'src') this.src = ''; },
 });
 const store = {};
 const localStorage = {
@@ -240,6 +244,12 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
   globalThis.showError = (msg, d, o) => { globalThis._karte = msg; };
   globalThis.localStorage = localStorage;
   globalThis.whenVisible = eval('(' + schneide('whenVisible') + ')');
+  // v230b3: pollRender holt jetzt zusaetzlich das Live-Bild. Ohne diese
+  // beiden Stummel wirft der Aufruf hier einen ReferenceError - der landet
+  // in demselben catch wie ein Netzfehler und zaehlt als Ausfall. Genau so
+  // ist der v230e-Test gefallen, obwohl an ihm nichts kaputt war.
+  globalThis.prShotLaden = async () => { globalThis._shot = (globalThis._shot || 0) + 1; };
+  globalThis.prShotWeg = () => { globalThis._shotWeg = true; };
   const pollRender = eval('(' + schneide('pollRender') + ')');
   globalThis.pollRender = pollRender;
   // Ein frueherer Abschnitt hat globalThis.setTimeout durch eine Warteschlange
@@ -435,6 +445,60 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
   await lauf2;
   pruef('v230ae: eine neu gezeichnete Kachel beendet ihren Poller',
         !globalThis.ALPHA_WATCH.has('j2'));
+}
+
+// ---- v230b3: das Live-Bild waehrend des Renders ----
+// Ismets Wunsch "den Fortschritt visuell zeigen". Die Funktion holt das Bild
+// als Blob und tauscht es, damit nichts weiss blitzt - und sie MUSS die alte
+// Objekt-URL freigeben, sonst waechst der Speicher bei einem langen Render
+// mit jedem Bild. Beides laesst sich nur durch AUSFUEHREN pruefen.
+{
+  const gemacht = [], frei = [];
+  globalThis.URL = { createObjectURL: (b) => { const u = 'blob:' + gemacht.length;
+                                               gemacht.push(u); return u; },
+                     revokeObjectURL: (u) => frei.push(u) };
+  // Das Mini-DOM des Moduls benutzen, NICHT ein eigenes: die Funktion
+  // schliesst ueber das `$` des Moduls, ein globalThis.$ waere wirkungslos.
+  const box = $('#prShotBox'), img = $('#prShot');
+  box.classList.add('hidden'); img.src = '';
+  globalThis.State = { jid: 'abc123' };
+  globalThis.document = { hidden: false };
+  // Beide Funktionen teilen sich die Variable PRSHOT_URL. Sie muessen
+  // deshalb in DEMSELBEN eval leben - einzeln geschnitten kennt die zweite
+  // die Variable der ersten nicht (und der Test faellt am Aufbau, nicht am
+  // Code).
+  const [laden, weg] = eval('(function(){let PRSHOT_URL=null;'
+    + schneide('prShotLaden') + schneide('prShotWeg')
+    + 'return [prShotLaden, prShotWeg];})()');
+  // (1) Noch kein Bild da (404): der Rahmen bleibt versteckt.
+  globalThis.fetch = async () => ({ ok: false, status: 404 });
+  await laden();
+  pruef('v230b3: ohne Bild bleibt der Rahmen versteckt',
+        box.classList.contains('hidden') && !img.src);
+  // (2) Erstes Bild: Rahmen auf, Bild gesetzt, nichts freigegeben.
+  globalThis.fetch = async () => ({ ok: true, status: 200,
+                                    blob: async () => ({ size: 1234 }) });
+  await laden();
+  pruef('v230b3: das erste Bild macht den Rahmen auf',
+        !box.classList.contains('hidden') && img.src === 'blob:0' && frei.length === 0,
+        `${img.src}, ${frei.length} freigegeben`);
+  // (3) Zweites Bild: getauscht UND das alte freigegeben.
+  await laden();
+  pruef('v230b3: beim Nachladen wird die alte Objekt-URL freigegeben',
+        img.src === 'blob:1' && frei.length === 1 && frei[0] === 'blob:0',
+        `${img.src}, freigegeben ${JSON.stringify(frei)}`);
+  // (4) Im Hintergrund gar nicht erst fragen (v230e).
+  let gefragt = 0;
+  globalThis.fetch = async () => { gefragt++; return { ok: false, status: 404 }; };
+  globalThis.document = { hidden: true };
+  await laden();
+  pruef('v230b3: im Hintergrund wird nicht nachgeladen', gefragt === 0);
+  globalThis.document = { hidden: false };
+  // (5) Aufraeumen am Ende: Rahmen zu, Bild weg, letzte URL freigegeben.
+  weg();
+  pruef('v230b3: am Ende wird aufgeraeumt',
+        box.classList.contains('hidden') && !img.src && frei.length === 2,
+        `freigegeben ${JSON.stringify(frei)}`);
 }
 
 // ---- v230b0: die Navigation des Panels wird AUSGEFUEHRT, nicht gelesen ----

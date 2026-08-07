@@ -9642,6 +9642,79 @@ def _scenario_betrieb(tmp):
           _c198.post('/api/support/tickets/999999/reply',
                      data={'message': 'fremd'}).status_code == 404)
 
+    # ===== v230b3 LIVE-BILD WAEHREND DES RENDERS ========================
+    # Ismets Frage: "kann man beim Rendern den Fortschritt visuell zeigen?"
+    # Geprueft ueber ECHTE Aufrufe, nicht am Quelltext (v219).
+    _jid_b3 = 'a1b2c3d4e5f60001'
+    _dir_b3 = _SV198.job_dir(_jid_b3)
+    os.makedirs(_dir_b3, exist_ok=True)
+    open(os.path.join(_dir_b3, 'vorschau.jpg'), 'wb').write(b'\xff\xd8\xff' + b'x' * 200)
+    # Die Konto-Nummer direkt aus der Datenbank: /api/me liefert sie nicht
+    # zwingend, und ein user_id=None machte den Job fuer JEDEN sichtbar
+    # (`_job_owner_ok` gibt ohne Eigentuemer True zurueck) - der Test haette
+    # dann eine Luecke bewiesen statt eines Riegels.
+    _con_b3 = _SV198._db()
+    _uid_b3 = _con_b3.execute("SELECT id FROM users WHERE email = ?",
+                              (_mail198,)).fetchone()['id']
+    _con_b3.close()
+    _SV198.JOBS[_jid_b3] = {'status': 'laeuft', 'user_id': _uid_b3}
+    _pv = _c198.get('/api/preview/' + _jid_b3)
+    check('v230b3: der Eigentuemer bekommt das Live-Bild',
+          _pv.status_code == 200 and _pv.headers.get('content-type') == 'image/jpeg',
+          f'{_pv.status_code} {_pv.headers.get("content-type")}')
+    check('v230b3: das Bild wird NICHT zwischengespeichert',
+          'no-store' in (_pv.headers.get('cache-control') or ''),
+          _pv.headers.get('cache-control'))
+    # Ein Fremder darf es nicht sehen - und eine UNBEKANNTE jid ist 404, nicht
+    # 200: `_job_owner_ok` gibt ohne Job `True` zurueck (v230c-sec), der Job
+    # muss also existieren.
+    _c_fremd = _TC198(_SV198.app, base_url='https://test')
+    _mail_f = f'fremd{int(_tm197.time())}@test.invalid'
+    _c_fremd.post('/api/register', data={'email': _mail_f, 'password': 'passwort123',
+                                         'name': 'Fremder'})
+    _c_fremd.post('/api/login', data={'email': _mail_f, 'password': 'passwort123'})
+    check('v230b3: ein fremdes Konto bekommt das Bild nicht',
+          _c_fremd.get('/api/preview/' + _jid_b3).status_code == 403)
+    check('v230b3: eine unbekannte jid ist 404, nicht 200',
+          _c198.get('/api/preview/ffffffffffffffff').status_code == 404)
+    os.remove(os.path.join(_dir_b3, 'vorschau.jpg'))
+    check('v230b3: ohne Bild kommt 404 (kein leerer Rahmen)',
+          _c198.get('/api/preview/' + _jid_b3).status_code == 404)
+    _SV198.JOBS.pop(_jid_b3, None)
+    # Die Engine muss es auch WIRKLICH schreiben - und zwar in der Bild-
+    # schleife, atomar, und ohne den Render zu kippen, wenn es schiefgeht.
+    _rb3 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230b3: die Bildschleife ruft den Schreiber wirklich auf',
+          'fi % 25 == 0 and _vorschau_pfad' in _rb3
+          and 'vorschau_schreiben(comp, _vorschau_pfad)' in _rb3
+          and 'os.remove(_vorschau_pfad)' in _rb3,
+          'sonst liegt ein Bild vom vorigen Lauf da')
+    # WIRKSAMKEIT (v219): die Funktion wird AUFGERUFEN, nicht gelesen. Genau
+    # das hat hier sofort einen Fehler gefangen - die Zwischendatei hiess
+    # '.tmp', und cv2 waehlt den Codec ueber die Endung: "could not find a
+    # writer". Am Quelltext haette das plausibel ausgesehen.
+    import numpy as _np_b3, cv2 as _cv_b3
+    _p_b3 = os.path.join(tempfile.gettempdir(), 'dve_vorschau_test.jpg')
+    if os.path.exists(_p_b3):
+        os.remove(_p_b3)
+    _comp_b3 = _np_b3.zeros((1920, 1080, 3), dtype=_np_b3.float32)
+    _comp_b3[400:600, 200:800] = 240.0
+    check('v230b3: der Schreiber legt wirklich ein lesbares Bild ab',
+          R.vorschau_schreiben(_comp_b3, _p_b3) and os.path.exists(_p_b3),
+          _p_b3)
+    _img_b3 = _cv_b3.imread(_p_b3)
+    check('v230b3: das Bild ist klein und richtig herum',
+          _img_b3 is not None and _img_b3.shape[1] == 360
+          and _img_b3.shape[0] == 640,
+          None if _img_b3 is None else str(_img_b3.shape))
+    check('v230b3: es bleibt keine Zwischendatei liegen',
+          not [f for f in os.listdir(os.path.dirname(_p_b3))
+               if f.startswith('dve_vorschau_test.jpg.')])
+    # Und ein Fehler darf den Render NICHT kippen (unbeschreibbarer Pfad).
+    check('v230b3: ein Fehler dabei kippt den Render nicht',
+          R.vorschau_schreiben(_comp_b3, '/kein/pfad/x.jpg') is False)
+    os.remove(_p_b3)
+
     # ===== v230b1 EIN OFFENES ANLIEGEN JE KONTO ========================
     # Ismets Ansage gegen Spam. Der Zeitfenster-Riegel (10 je Stunde) begrenzt
     # das TEMPO, nicht die MENGE - zehn Tickets sind zehn Verlaeufe, die

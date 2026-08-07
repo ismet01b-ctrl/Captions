@@ -932,6 +932,19 @@ body {
 }
 .prog-ring .pr-num .pct { color: var(--acc2); }
 .prog-phase { font-size: 15px; color: var(--mut); margin-top: 8px; }
+/* v230b3 LIVE-BILD. Der Rahmen kennt das Seitenverhaeltnis vorher nicht
+   (hoch, quer, quadratisch), deshalb waechst er mit dem Bild statt es zu
+   beschneiden - ein zugeschnittenes Vorschaubild wuerde genau die Captions
+   am Rand abschneiden, um die es geht (v228-Lehre). */
+.prog-shot { margin: 4px auto 14px; }
+/* Der Deckel sitzt auf der HOEHE, nicht auf der Breite: ein 9:16-Bild waere
+   bei 260 px Breite ueber 460 px hoch und schoebe Phase und Restzeit aus dem
+   Blick. Quer bleibt es dadurch automatisch breiter. */
+.prog-shot img { display: block; max-height: 230px; width: auto;
+  max-width: min(100%, 320px); margin: 0 auto; border-radius: 12px;
+  border: 1px solid var(--line); background: #000; }
+.prog-shot .ps-cap { margin-top: 7px; font-size: 11.5px; color: var(--mut2);
+  letter-spacing: .06em; text-transform: uppercase; }
 
 /* Success-Card */
 .success-hero {
@@ -2483,6 +2496,13 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
                       stroke-dasharray="264" stroke-dashoffset="264" id="prFg"/>
             </svg>
             <div class="pr-num"><span class="pct" id="prPct">0</span>%</div>
+          </div>
+          <!-- v230b3: Live-Bild aus dem laufenden Render. Bleibt versteckt,
+               bis das erste Bild da ist - ein leerer Rahmen waere schlechter
+               als keiner. -->
+          <div class="prog-shot hidden" id="prShotBox">
+            <img id="prShot" alt="">
+            <div class="ps-cap">Live from your render</div>
           </div>
           <div class="prog-phase" id="progressPhase">Ready …</div>
           <div style="display:flex; justify-content:center; gap:24px; margin-top:12px;
@@ -5296,6 +5316,7 @@ async function startUpload(mode) {
         }
       }
       $('#progressCard').classList.remove('hidden');
+      prShotWeg();          // v230b3: kein Standbild vom vorigen Render
       $('#doneCard').classList.add('hidden');
       $('#errCard').classList.add('hidden');
       $('#btnRender').disabled = true;
@@ -5563,6 +5584,44 @@ function progAnim() {
   State.progRAF = requestAnimationFrame(progAnim);
 }
 
+/* v230b3 LIVE-BILD AUS DEM LAUFENDEN RENDER.
+   Ismets Frage: "kann man beim Rendern den Fortschritt visuell zeigen?" Eine
+   Prozentzahl ist bei einem Vorgang von Minuten wenig - hier sieht er seine
+   Captions entstehen. Die Engine legt alle 25 Bilder ein kleines JPEG in den
+   Job-Ordner, der Server liefert es unter /api/preview/<jid> aus.
+   Drei Dinge, die man dabei falsch machen kann:
+     * Direkt `img.src` setzen laesst das Bild beim Nachladen kurz weiss
+       blitzen. Deshalb erst als Blob holen, dann tauschen.
+     * Die alte Objekt-URL muss freigegeben werden, sonst waechst der
+       Speicher bei einem langen Render um jedes Bild.
+     * Im Hintergrund gar nicht erst fragen (v230e) - und ein 404 ist hier
+       KEIN Fehler, sondern "das erste Bild ist noch nicht da". */
+let PRSHOT_URL = null;
+async function prShotLaden() {
+  if (!State.jid || document.hidden) return;
+  try {
+    const r = await fetch('/api/preview/' + State.jid + '?t=' + Date.now(),
+                          { cache: 'no-store' });
+    if (!r.ok) return;                       // 404 = noch kein Bild
+    const b = await r.blob();
+    if (!b.size) return;
+    const u = URL.createObjectURL(b);
+    const img = $('#prShot');
+    if (!img) { URL.revokeObjectURL(u); return; }
+    img.src = u;
+    if (PRSHOT_URL) URL.revokeObjectURL(PRSHOT_URL);
+    PRSHOT_URL = u;
+    $('#prShotBox').classList.remove('hidden');
+  } catch (e) { /* Netz weg: beim naechsten Poll wieder */ }
+}
+function prShotWeg() {
+  const box = $('#prShotBox');
+  if (box) box.classList.add('hidden');
+  const img = $('#prShot');
+  if (img) img.removeAttribute('src');
+  if (PRSHOT_URL) { URL.revokeObjectURL(PRSHOT_URL); PRSHOT_URL = null; }
+}
+
 async function pollRender() {
   // v230e: im Hintergrund gar nicht erst fragen, und beim Zurueckkommen
   // faengt der Fehlerzaehler bei null an.
@@ -5573,6 +5632,9 @@ async function pollRender() {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     State.progTarget = st.progress || 0;
     $('#progressPhase').textContent = st.phase || 'Bereit …';
+    // Erst ab dem Bilder-Malen gibt es ueberhaupt ein Vorschaubild; vorher
+    // wuerde jede Anfrage nur ein 404 einsammeln.
+    if (st.status === 'laeuft' && (st.progress || 0) >= 0.5) prShotLaden();
     $('#progressEta').textContent = st.eta_sec != null ? fmtDur(st.eta_sec) : '–';
     if (st.status === 'fertig') {
       State.progTarget = 1;
@@ -5582,6 +5644,7 @@ async function pollRender() {
       if (State.progRAF) cancelAnimationFrame(State.progRAF);
       State.progRAF = null; State.progShown = 0;
       $('#progressCard').classList.add('hidden');
+      prShotWeg();
       renderSuccess();
       refreshBalanceInHeader();
       try { localStorage.removeItem('dve_active_job'); } catch (e) {}
@@ -5590,6 +5653,7 @@ async function pollRender() {
     if (st.status === 'fehler') {
       if (State.progRAF) cancelAnimationFrame(State.progRAF);
       State.progRAF = null; State.progShown = 0;
+      prShotWeg();
       showError(st.msg || 'Render failed', st.detail || '');
       return;
     }

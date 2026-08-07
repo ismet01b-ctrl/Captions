@@ -3,6 +3,38 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b3 LIVE-BILD WAEHREND DES RENDERS.** Ismets Frage: "kann man beim
+  Rendern den Fortschritt visuell zeigen?" Bis hierher gab es Prozentring,
+  Phase und Restzeit - bei einem Vorgang von mehreren Minuten ist das wenig.
+  Jetzt sieht der Kunde seine Captions entstehen.
+  - `vorschau_schreiben()` legt alle 25 Bilder (rund eine Sekunde Video) das
+    GERADE FERTIGE Bild als 360-px-JPEG neben das Ergebnis. Der Server
+    liefert es unter `/api/preview/<jid>`, die App tauscht es im Poll-Takt.
+  - Sicherheit beim Bauen beantwortet: nur der Eigentuemer, und der Job muss
+    EXISTIEREN (`_job_owner_ok` gibt bei unbekannter jid `True` zurueck,
+    v230c-sec). Kein Parameter faellt in einen Pfad, `Cache-Control:
+    no-store`, im Hintergrund wird gar nicht gefragt.
+  - Atomar geschrieben (Zwischendatei mit Prozessnummer plus `os.replace`) -
+    sonst liest die App irgendwann ein halbes JPEG. Ein Bild vom vorigen Lauf
+    desselben Jobs wird beim Start geloescht.
+  - Ein Fehler dabei kippt den Render NIE; es gibt dann eben kein Bild.
+  - **Der Beweis hat sofort einen Fehler gefangen:** die Zwischendatei hiess
+    `.tmp`, und OpenCV waehlt den Codec ueber die Dateiendung - `imwrite`
+    scheiterte mit "could not find a writer". Am Quelltext haette das
+    plausibel ausgesehen. Genau deshalb sind die zwoelf Zeilen jetzt eine
+    eigene Funktion, die der Selftest AUFRUFT (v219): 360x640 JPEG liegt
+    lesbar da, keine Zwischendatei bleibt liegen, ein unbeschreibbarer Pfad
+    gibt False statt einer Ausnahme.
+  - In der App per Sonde bewiesen (`web/_dom_probe.mjs`): ohne Bild bleibt
+    der Rahmen versteckt, das erste Bild macht ihn auf, beim Nachladen wird
+    die alte Objekt-URL freigegeben (sonst waechst der Speicher ueber einen
+    langen Render mit jedem Bild), im Hintergrund wird nicht geladen, am Ende
+    wird aufgeraeumt. Dabei ist der v230e-Test gefallen, weil die Sonde die
+    neue Funktion nicht kannte - der ReferenceError landete im selben catch
+    wie ein Netzfehler und zaehlte als Ausfall.
+  - Der Deckel sitzt auf der HOEHE des Bildes (230 px), nicht auf der Breite:
+    ein 9:16-Bild waere sonst ueber 460 px hoch und schoebe Phase und
+    Restzeit aus dem Blick.
 - **v230b2 DIE MISSBRAUCHS-ANSICHT ERKLAERT SICH.** Ismets Befund: "Beim
   Reiter abuse verstehe ich garnichts". Zu Recht - dort standen sieben nackte
   Zahlen (u.a. "Verwaiste Boni 0 + 0 ref", "bucket:ip") und darunter ein

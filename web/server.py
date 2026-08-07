@@ -2133,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230b2'
+DVE_VERSION = 'v230b3'
 
 
 def _build_datei():
@@ -7793,6 +7793,37 @@ def contact_sheet_file(jid: str, request: Request):
         raise HTTPException(404, 'No contact sheet for this job.')
     return FileResponse(p, media_type='image/jpeg',
                         filename='DouchkoVE_Moments.jpg')
+
+
+@app.get('/api/preview/{jid}')
+def render_preview(jid: str, request: Request):
+    """v230b3 LIVE-BILD WAEHREND DES RENDERS. Ismets Frage: "kann man beim
+    Rendern den Fortschritt visuell zeigen?" - eine Prozentzahl ist bei einem
+    Vorgang von mehreren Minuten wenig. Die Engine legt alle 25 Bilder das
+    gerade fertige Bild klein daneben (vorschau.jpg); hier wird es
+    ausgeliefert.
+
+    Sicherheit (bewusst beim Bauen beantwortet, nicht nachtraeglich):
+      * Wer darf? NUR der Eigentuemer. `_job_owner_ok` allein reicht NICHT -
+        es gibt bei einer UNBEKANNTEN jid `True` zurueck (kein Job, kein
+        Eigentuemer, v230c-sec). Der Job muss also EXISTIEREN.
+      * Pfad? `job_dir` sanitisiert die jid hart auf Hex, der Dateiname ist
+        fest. Kein Parameter faellt in den Pfad.
+      * Kosten? Eine kleine Datei (rund 20 KB) ausliefern. Die App fragt nur,
+        solange ihr Tab sichtbar ist und der Job laeuft.
+      * Cache? Ausdruecklich no-store: das Bild aendert sich jede Sekunde,
+        ein zwischengespeichertes waere schlimmer als keines.
+    """
+    j = JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, 'Unknown job.')
+    if not _job_owner_ok(jid, request):
+        raise HTTPException(403, 'This video belongs to another account.')
+    p = os.path.join(job_dir(jid), 'vorschau.jpg')
+    if not os.path.exists(p):
+        raise HTTPException(404, 'No preview yet.')
+    return FileResponse(p, media_type='image/jpeg',
+                        headers={'Cache-Control': 'no-store'})
 
 
 @app.get('/api/poster/{jid}')
