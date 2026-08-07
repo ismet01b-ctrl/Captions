@@ -7896,11 +7896,6 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         raw_last = clean(words[last]['word'])
         if last != anchor and raw_last[:1].islower() and len(raw_last) >= 3:
             accent = last
-    # v183: der Viral-Look kennt KEINE Schreibschrift-Akzente. Die Akzentfarbe
-    # gehoert dort dem GESPROCHENEN Wort (Karaoke, siehe Draw-Schleife) - ein
-    # zweites, stehendes Akzent-System daneben wuerde beide entwerten.
-    if bool((S.cfg.get('effects', {}) or {}).get('caption_viral')):
-        accent = None
     # v143 GROESSENHIERARCHIE + QUERFORMAT.
     # (a) pf war im Querformat 0.62, also eine VERKLEINERUNG. Im 16:9 ist H
     #     ohnehin die kurze Kante, die H-Bruchteile schrumpfen dadurch schon
@@ -7958,7 +7953,6 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
     # Fliesstext-Minimum. Der Viral-Modus ist ein MULTIPLIKATOR auf die
     # Hausgroesse, kein Ersatz: eine gelernte Referenz (caption_scale)
     # skaliert weiter relativ dazu, die v151-Kaskade bleibt intakt.
-    _viral = bool(_ef.get('caption_viral'))
     # v189: Umriss am Schluesselwort/Knall. Standard aus - grosse Woerter
     # brauchen ihn nicht und wirken damit plakativ. Ueber
     # effects.caption_kontur_key wieder zuschaltbar.
@@ -7991,11 +7985,6 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         sz_n = int(sz_k * 0.70 / (0.52 * _hier))
     else:
         sz_n = int(H * 0.043 * pf * _skn)
-    if _viral:
-        # Ziel unveraendert (Schluesselwort 0.163 em, Fliesstext 0.099 em) -
-        # nur die Faktoren sind auf die neue v184-Basis umgerechnet.
-        sz_k = int(sz_k * 1.55)
-        sz_n = int(sz_n * 2.00)
     # v193 GROESSE PRO BLOCK. Bis v192 gab es nur die globalen Regler
     # caption_scale / caption_scale_klein - ein einzelner Block liess sich
     # gar nicht groesser machen. Der Faktor sitzt bewusst NACH allen anderen
@@ -8089,11 +8078,7 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
             # (0.088 -> 0.076 em); mit 1.95 rutschte der Knall auf 1.01 W und
             # der Abstand zum normalen Schluesselwort schrumpfte auf 1.14x -
             # der Effekt waere kaum noch zu sehen gewesen.
-            # v183: im Viral-Look setzt die Grundschrift schon auf Marktmass
-            # an (2.15x Haus) - der volle Knall-Faktor 2.25 obendrauf ergaebe
-            # 0.26 H und spraengte jede Zeile. 1.30 haelt den Satzende-Akzent
-            # sichtbar, ohne den Block zu sprengen.
-            _kf = (1.30 if _viral else 2.25) if punch else 1.0
+            _kf = 2.25 if punch else 1.0
             # Beim Knall darf die Zeile ueber den normalen Satzspiegel
             # hinaus - im Vorbild laeuft das Schlusswort ueber die volle
             # Breite. 0.89 W und nicht mehr: der Block SETZT bei x0 = 0.07 W
@@ -8217,16 +8202,7 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
                     _sz = int(_sz * (1.75 + 0.35 * _mix01(i)))
                 else:
                     _sz = int(_sz * (0.92 + 0.16 * _mix01(i * 7)))
-            if _viral:
-                # v183: versal + durchgehend schwer. Die Betonung (loud)
-                # bleibt als Nuance erhalten, faellt aber nie unter Bold -
-                # ein leichtes Wort in einem Versal-Block liest sich als
-                # Fehler, nicht als Dynamik. Tracking eng wie beim Anker.
-                raw = raw.upper()
-                _wg = 880 if _m == '!' else (720 if _m == '~' else 800)
-                _trk_v = 2
-            else:
-                _trk_v = _trk_n
+            _trk_v = _trk_n
             # v185 EIN WORT DARF NIE BREITER ALS DIE SPALTE SEIN. Bis v184
             # bekam nur das Schluesselwort ein S.fit; normale Woerter wurden
             # in der Sollgroesse gesetzt und ragten bei langen Woertern aus
@@ -10192,9 +10168,8 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             _sk5 = max(0.60, min(2.80, _sk5))
             _skn5 = float(cfg['effects'].get('caption_scale_klein') or 0) or None
             _skn5 = max(0.60, min(1.30, _skn5)) if _skn5 else _sk5
-            _viral5 = bool(cfg['effects'].get('caption_viral'))
-            _sz5 = int(H * 0.050 * _pf5 * _skn5 * (2.00 if _viral5 else 1.0))
-            _trk5 = 2 if _viral5 else (6 if portrait else max(2, int(_sz5 * 0.0625)))
+            _sz5 = int(H * 0.050 * _pf5 * _skn5)
+            _trk5 = 6 if portrait else max(2, int(_sz5 * 0.0625))
             small = []
             for i2 in ([] if (cfg['effects'].get('density', 'akzente') == 'akzente'
                               and not in_intro)
@@ -10900,12 +10875,6 @@ def build_plans(words, kw, cfg, S, W, H, face_ok, fx_map=None, face_pos=None,
             # die Regie wechseln (Standard), 'rows'/'collage' erzwingen eine.
             _lm = str(cfg['effects'].get('caption_layout') or 'auto').lower()
             # v183 RIEGEL an der immer laufenden Stelle (v159-Lehre): der
-            # Viral-Look kennt nur den Zeilensatz. Die Collage staffelt in
-            # Einzelgroessen ueber die Flaeche - das Gegenteil des engen
-            # Versal-Blocks. Nur am Preset zu haengen reichte nicht: ein
-            # User-Override (caption_layout collage) saehe sonst zerrissen aus.
-            if cfg['effects'].get('caption_viral'):
-                _lm = 'rows'
             _lay = 'flow'
             # v187: die Spalte wird am Plattform-Korridor gedeckelt, nicht
             # mehr nur bei einer Nahaufnahme verengt. Ohne das erreichte die
@@ -13393,9 +13362,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
             # ausserdem auf Fuellwoertern (AND, THAT, TO, IS), wo er nichts
             # betont. Die Emphase traegt jetzt in ALLEN Looks das Paar
             # Groessen-Pop (aktiv) und Dimmen auf 70 % (vergangen), ohne
-            # Farbwechsel. Der Pop bleibt im Viral-Look kraeftiger, weil er
-            # auf 0.07-0.115 H Versalhoehe sonst untergeht.
-            _viral = bool(cfg['effects'].get('caption_viral'))
+            # Farbwechsel.
             _ruhig = bool(cfg['effects'].get('caption_ruhig', True))
             # v193 ANIMATION AUF DEM FLIESS-BLOCK. Bis v192 lief anim_apply
             # ausschliesslich auf Keyword-Karten (p['arr'] / p['f_arr']) - ein
@@ -13442,8 +13409,7 @@ def composite_frame(frame, alpha, t, plans, words, face_xy, cfg, S, W, H, cam_st
                 _pop = 1.0
                 if _akt_i is not None:
                     if _ist_akt:
-                        _pop = 1.0 + ((0.10 if _viral else 0.055)
-                                      * (0.45 if _ruhig else 1.0)) \
+                        _pop = 1.0 + (0.055 * (0.45 if _ruhig else 1.0)) \
                             * (1 - smoothstep(min(dt / 0.22, 1.0)))
                     elif it.get('role') not in ('key', 'punch'):
                         # v190: das Abdimmen laeuft ueber 0.25 s statt als

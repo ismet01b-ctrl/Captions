@@ -698,7 +698,13 @@ johnbacog_), NICHT geschaetzt. Gemeinsame Grammatik der Vorbilder:
 - Viral-Faktoren sind auf die neue Basis umgerechnet (1.55/2.00), das
   absolute Viral-Ziel (0.163/0.099 em) ist unveraendert.
 
-### Viral-Look (v183/v183a) — Option, NICHT das Gesicht des Produkts
+### Viral-Look — RAUS seit v230b1
+Ismets Ansage (07.08.2026): "Mach das preset viral komplett raus." Preset,
+Katalogeintrag, UI-Karte, Vorschau-Zweig und alle acht `caption_viral`-Zweige
+in der Engine sind entfernt. Nicht wieder einbauen. Der Abschnitt darunter
+beschreibt, was es war und warum es weg ist.
+
+### Viral-Look (v183/v183a, HISTORISCH) — Option, NICHT das Gesicht des Produkts
 Look 'viral' (Server-Preset + Engine-Schalter `effects.caption_viral`):
 alles versal + extrabold (Montserrat XB), Schluesselwort 2.15x / Fliesstext
 2.90x Hausmass, enge 2-4-Wort-Bloecke mittig-unten (caption_zone 0.58),
@@ -907,6 +913,15 @@ deutsch. Wer eine Log-Zeile aendert, muss BEIDE Leser mitziehen:
 `web/server.py` (Fortschritts-Phasen, `_parse_refs_line`, `ERROR:`-Erkennung)
 und `gui.py` (Desktop-Statuszeile). Die alten deutschen Marker stehen als
 Fallback daneben — gecachte Logs von vor v148 sollen weiter lesbar bleiben.
+
+## Support: ein offenes Anliegen je Konto (v230b1)
+Ismets Ansage gegen Spam. **Ein Tempo-Limit ist kein Mengen-Limit** — die
+bestehende Bremse (10 Nachrichten je Stunde) haette zehn eigene Verlaeufe
+zugelassen. `/api/support` weist mit 409 ab, solange ein Ticket offen oder
+beantwortet ist. Zwei Dinge duerfen dabei NIE zugehen: im bestehenden Ticket
+weiterschreiben, und nach dem Schliessen ein neues Anliegen aufmachen — sonst
+sperrt der Schutz den Kunden aus statt den Spam (v230f-Fehlertyp). Die App
+blendet das Formular aus, statt erst tippen zu lassen und dann abzuweisen.
 
 ## Kunden-Mails (v194b) — ein Deckel je NUTZER, nicht je Job
 Die Ablauf-Erinnerung ging bis v194a pro JOB raus. Der Deckel (`expiry_mail`
@@ -1608,7 +1623,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2034/2035 (Stand v230b0)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2034/2035 (Stand v230b1)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

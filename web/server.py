@@ -2133,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230b0'
+DVE_VERSION = 'v230b1'
 
 
 def _build_datei():
@@ -2827,7 +2827,6 @@ LOCK = threading.Lock()
 # Presets als Startpunkt. Der Nutzer kann alles individuell nachjustieren.
 LOOKS = {
     'tiktok':    {'name': 'TikTok', 'desc': 'Word by word, bold, loud.'},
-    'viral':     {'name': 'Viral', 'desc': 'Big bold caps, karaoke accent.'},
     'creator':   {'name': 'Creator', 'desc': 'Talking-head & business.'},
     'editorial': {'name': 'Editorial', 'desc': 'Magazine serif, calm, high-end.'},
     'poster':    {'name': 'Poster', 'desc': 'Big condensed caps, hard statements.'},
@@ -3065,7 +3064,7 @@ def _erlaubte_fonts():
             if f.get('script'):
                 ok.add(f['script'])
         try:
-            for name in ('creator', 'clean', 'editorial', 'viral'):
+            for name in ('creator', 'clean', 'editorial', 'tiktok'):
                 for v in (build_config(name).get('fonts') or {}).values():
                     if isinstance(v, str):
                         ok.add(v)
@@ -3277,68 +3276,6 @@ def build_config(look, overrides=None):
 
     # --- 2026er High-End-Presets (voll ausgereizt, produktionsreif)
     PRESETS = {
-        'viral': {
-            'effects': {
-                # v183: Der Markt-Standard 2026 (Submagic/Hormozi-Schule).
-                # ALLE Woerter versal + extrabold auf ~0.07-0.115 H, enge
-                # 2-4-Wort-Bloecke unten mittig, die Akzentfarbe wandert mit
-                # dem gesprochenen Wort (Karaoke). Kern-Schalter ist
-                # caption_viral - er steuert Groesse, Versalsatz und die
-                # Karaoke-Faerbung in der Engine. Default fuer 9:16-Uploads.
-                'density': 'durchgehend', 'text_style': '3d',
-                'hook_seconds': 10, 'hook_strength': 0.70, 'instant_hook': True,
-                'pattern_interrupt': 7, 'retention_gap': 9,
-                'words_per_group': 2, 'words_per_group_max': 4,
-                'chunk_hold_min': 0.55,
-                'dim_behind': 0.40, 'dim_blurin': 0.32,
-                'beat_sync': 0.85, 'music_beat': 0.70, 'person_shadow': 0.55,
-                'zahl_gap': 10,
-                'bg_blur': 0.50, 'freeze_frame': 0.40, 'trail': 0.0,
-                'counter_ring': 0.45, 'split_screen': 0.0, 'env_shadow': 0.20,
-                'emerge': 'auto', 'anim': True,
-                'keyword_rotation': ['behind', 'outline', 'ground'],
-                'sfx_volume': 0.55, 'sfx': True,
-                'reflection': True, 'occlusion': True, 'track3d': True,
-                'safe_zone': True,
-                'caption_viral': True,
-                'caption_aktivwort': True,
-                'caption_collage': False,
-                'caption_satz_collage': False,
-                'caption_layout': 'rows',
-                'caption_seite': 'mitte',
-                # v199: auch hier aus. Im Viral-Template ist der Saum
-                # eigentlich konstitutiv (gelbes Karaoke-Wort auf hellem
-                # Material), aber Ismets Ansage galt den Schriften, nicht
-                # einem Look. Eine Zahl zurueck, wenn das Template darunter
-                # leidet.
-                'caption_kontur': 0,
-                'caption_flow': True,
-                # Markt-Zone: mittig-unten (0.58 H). Die Haus-Zone 0.25 H
-                # ("ueber dem Kopf") liest sich im Viral-Kontext wie ein
-                # Titel, nicht wie Sprechtext. spot() weicht weiter aus.
-                'caption_zone': 0.58,
-            },
-            'camera': {
-                'strength': 0.80, 'crash': 0.80, 'whip': False, 'side_every': 3,
-                'keyword_rotation': ['punch', 'push', 'caption'],
-                'side_rotation': ['capzoom', 'drift'],
-            },
-            # v185: KEIN fester Gelb-Akzent mehr (Ismets Urteil am Ergebnis:
-            # "ausgelutscht"). Gelb auf dem gesprochenen Wort ist der Marker
-            # jedes CapCut/Opus-Templates. Die Emphase traegt jetzt Groesse
-            # und Deckkraft; die Farbwelt kommt wieder aus der Szene, damit
-            # der Look zum Material gehoert statt zur Vorlage.
-            'colors': {'style': 'auto', 'adaptive': True,
-                       'text': [255, 255, 255]},
-            'fonts': {
-                'display': 'fonts/montserrat_xb.ttf',
-                'italic': 'fonts/montserrat_xb.ttf',
-                'script': 'fonts/montserrat_xb.ttf',
-                'support': 'fonts/montserrat_xb.ttf',    # eine Familie, v143
-            },
-            'output': {'platform': 'tiktok'},
-            'matting_quality': 'hoch',
-        },
         'tiktok': {
             'effects': {
                 # Wortweise, dicht, energisch - Reels/Shorts-Kern-Modus 2026
@@ -3359,6 +3296,21 @@ def build_config(look, overrides=None):
                 'sfx_volume': 0.65, 'sfx': True,
                 'reflection': True, 'occlusion': True, 'track3d': True,
                 'safe_zone': True,
+                # v230b1 EINE SPALTE STATT DES GANZEN BILDSCHIRMS.
+                # Ismets Befund: "bei TikTok sind da Captions ueberall
+                # verteilt auf dem Bildschirm". Nachgemessen ueber 13 Bloecke
+                # sprang die Textmitte zwischen 0.272 W und 0.726 W - fast die
+                # halbe Bildbreite, und bei Dichte 'durchgehend' mit 2-Wort-
+                # Bloecken alle 0.7 s ein neuer Sprung. Zum Vergleich: 'clean'
+                # steht bei 0.002 W Streuung.
+                # Auf TikTok ist die mittige Spalte ausserdem die Konvention -
+                # das Ausweichen der Platzierungs-Regie ist unsere Handschrift,
+                # aber in genau diesem Look kaempft sie gegen die Erwartung.
+                # 'mitte' ist ein WUNSCH, keine Fessel (v180): steht die
+                # Person dort, weicht der Block weiterhin aus, und eine
+                # Ansage, eine Zeigegeste oder ein Sprecherwechsel
+                # ueberstimmen ihn nach wie vor.
+                'caption_seite': 'mitte',
             },
             'camera': {
                 'strength': 0.90, 'crash': 1.00, 'whip': True, 'side_every': 2,
@@ -6447,6 +6399,20 @@ def api_support(request: Request, subject: str = Form(''),
         raise HTTPException(400, 'Please write a short message.')
     now = int(time.time())
     con = _db()
+    # v230b1 EIN OFFENES TICKET JE KONTO. Ismets Ansage gegen Spam. Der
+    # Zeitfenster-Riegel darueber (10 je Stunde) begrenzt das TEMPO, nicht die
+    # MENGE - zehn Tickets in einer Stunde sind trotzdem zehn Verlaeufe, die
+    # jemand einzeln lesen und beantworten muss. Aktiv heisst offen ODER
+    # beantwortet; ein geschlossenes Ticket blockiert nichts (sonst kaeme ein
+    # Kunde mit einem neuen Anliegen nie wieder durch).
+    _offen = con.execute(
+        "SELECT id FROM tickets WHERE user_id = ? AND status != 'closed' "
+        "ORDER BY id DESC LIMIT 1", (u['id'],)).fetchone()
+    if _offen:
+        con.close()
+        raise HTTPException(409, 'You already have an open request. Please '
+                                 'reply in that thread. We answer every '
+                                 'message there.')
     cur = con.execute(
         "INSERT INTO tickets (user_id, email, subject, body, status, "
         "created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?)",

@@ -3,6 +3,42 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b1 EIN TICKET, KEIN VIRAL-LOOK, TIKTOK IN EINER SPALTE.** Drei
+  Ansagen von Ismet, alle umgesetzt; die dritte vorher nachgemessen.
+  - **Ein offenes Anliegen je Konto.** Der bisherige Riegel (10 Nachrichten
+    je Stunde) begrenzt das TEMPO, nicht die MENGE - zehn Tickets sind zehn
+    Verlaeufe, die jemand einzeln lesen und beantworten muss. Jetzt weist
+    `/api/support` mit 409 ab, solange ein Ticket offen ODER beantwortet ist,
+    und die App blendet das Formular gar nicht erst ein. Im bestehenden
+    Ticket weiterschreiben geht unveraendert, und nach dem Schliessen darf ein
+    neues Anliegen aufgemacht werden - ein Konto, das nie wieder schreiben
+    kann, waere schlimmer als Spam.
+  - **Der Viral-Look ist komplett raus.** Nicht nur aus dem Katalog: Preset,
+    UI-Karte, Vorschau-Zweig und ALLE acht Engine-Zweige (`caption_viral`)
+    sind weg. Er war seit v183a schon nicht mehr vorgewaehlt, weil er das
+    CapCut/Opus-Standard-Template ist. Ein Schalter, den niemand mehr setzen
+    kann, ist toter Code, und toter Code sieht beim naechsten Umbau aus wie
+    ein Feature.
+  - **TikTok: eine Spalte statt des halben Bildschirms.** Ismets Befund
+    "unnoetig grosse Captions ueberall verteilt". Nachgemessen ueber 13
+    Bloecke sprang die Textmitte zwischen 0.272 W und 0.726 W, also fast die
+    halbe Bildbreite - und bei Dichte 'durchgehend' mit 2-Wort-Bloecken alle
+    0.7 s ein neuer Sprung. Zum Vergleich 'clean': 0.002 W. Das Preset setzt
+    jetzt `caption_seite: 'mitte'`; gemessen 0.454 -> 0.123 W. Das ist ein
+    WUNSCH, keine Fessel (v180): steht die Person dort, weicht der Block
+    weiter aus, und Ansage, Zeigegeste und Sprecherwechsel ueberstimmen ihn
+    wie bisher. Gegenprobe im Test: 'poster' streut weiterhin 0.320 W, die
+    Platzierungs-Regie ist also nicht global abgeschaltet.
+  - **EHRLICH zur Groesse:** "unnoetig gross" liess sich fuer TikTok NICHT
+    bestaetigen. Gemessen ist der Look der kleinste der geprueften
+    (hoechster Textmoment 0.203 H gegen 0.396 bei 'creator' und 0.402 bei
+    'editorial'). Ein erster Versuch, die Lesbarkeits-Vergroesserung (v191)
+    in der Hoehe zu deckeln, aenderte in zwei nachgebauten Faellen exakt
+    nichts (0.131 H mit und ohne Deckel) - also wieder ausgebaut statt
+    ungeprueft mitgeliefert. Und der erste Messwert 0.403 H war ein
+    MESSFEHLER von mir: `ink_box` misst Karte UND Stuetzzeile zusammen, die
+    Karte allein war 0.114 H. Wenn die Captions weiter zu gross wirken,
+    braucht es einen Regler, keinen stillen Eingriff.
 - **v230b0 DAS ADMIN-PANEL IST AUFGERAEUMT.** Ismets Befund: "Das Admin Menue
   sieht unuebersichtlich aus". Drei Ursachen, alle am Bildschirm nachgemessen
   (Chromium 1440x1000 und 390x844), keine geraten.

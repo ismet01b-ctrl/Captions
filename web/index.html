@@ -430,8 +430,6 @@ body {
   color: white; font-weight: 900; letter-spacing: -.5px;
   font-size: 22px; padding: 4px 10px; border-radius: 4px;
 }
-.look-card[data-look=viral] .lp-preview span { background: #ffd60a; color: #000;
-  font-weight: 900; letter-spacing: .02em; }
 .look-card[data-look=tiktok] .lp-preview span { background: white; color: black; }
 .look-card[data-look=creator] .lp-preview span { color: white; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
 .look-card[data-look=elegant] .lp-preview span { color: white; font-family: 'f-inter', sans-serif;
@@ -1913,7 +1911,7 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
       <h1>Support</h1>
       <p class="sub">Ask us anything. Replies land right here and in your inbox.</p>
     </div>
-    <div class="panel">
+    <div class="panel" id="supNewPanel">
       <h3>New message</h3>
       <form id="supportForm" data-nosubmit="1" style="display:flex; flex-direction:column; gap:10px; max-width:520px;">
         <input type="text" id="supSubject" placeholder="Subject (optional)" maxlength="200" style="text-transform:none;">
@@ -1922,6 +1920,15 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <button class="btn" type="submit" id="btnSupport" style="align-self:flex-start; padding:9px 18px;">Send message</button>
       </form>
       <p class="hint" id="supDone" style="display:none; color:var(--acc2); margin-top:8px;"></p>
+    </div>
+    <!-- v230b1: Ein offenes Anliegen je Konto. Steht eines offen, wird das
+         Formular ausgeblendet und dieser Hinweis gezeigt - ein Knopf, der
+         danach 409 liefert, waere schlechter als kein Knopf. -->
+    <div class="panel" id="supOpenHint" style="display:none;">
+      <h3>One request at a time</h3>
+      <p class="hint" style="text-transform:none;">You have an open request below.
+        Reply in that thread and we will pick it up there. Once it is closed you
+        can start a new one.</p>
     </div>
     <div id="supThreads"></div>
   </section>
@@ -3176,12 +3183,11 @@ function renderLookPreview() {
   if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
   const e = State.cfg.effects || {}, f = State.cfg.fonts || {};
   const H = box.querySelector('.lp-frame').clientHeight || 313;
-  const viral = !!e.caption_viral;
   const skal = Math.max(0.6, Math.min(2.8, parseFloat(e.caption_scale) || 1));
   const skn = Math.max(0.6, Math.min(1.3, parseFloat(e.caption_scale_klein) || skal));
   // v184-Hausmasse, dieselben Zahlen wie in compose_flow
-  const szKey = H * 0.105 * skal * (viral ? 1.55 : 1);
-  const szNorm = H * 0.050 * skn * (viral ? 2.00 : 1);
+  const szKey = H * 0.105 * skal;
+  const szNorm = H * 0.050 * skn;
   // parseFloat(undefined) ist NaN, und NaN ?? 1 bleibt NaN - der alte
   // Rueckfall griff nie. || 1 waere genauso falsch, es machte aus einer
   // bewusst abgeschalteten Kontur (0) wieder eine.
@@ -3225,7 +3231,7 @@ function renderLookPreview() {
         const isKey = flow && w === w.toUpperCase() && w.length > 2;
         const s = document.createElement('span');
         s.className = 'lp-w';
-        s.textContent = viral ? w.toUpperCase() : w;
+        s.textContent = w;
         s.style.fontFamily = _lpFont(isKey ? (f.strong || f.display) : f.support);
         s.style.fontSize = (isKey ? szKey : szNorm).toFixed(1) + 'px';
         s.style.color = '#fff';
@@ -3266,7 +3272,6 @@ function renderLookPreview() {
     `${hold.toFixed(2)}s hold`,
     kontur ? 'outline on' : 'no outline',
     aktiv ? 'active word emphasis' : 'no word emphasis',
-    viral ? 'all caps' : 'mixed case',
   ];
   box.querySelector('.lp-facts').innerHTML =
     facts.map(t => `<li>${escHtml(t)}</li>`).join('');
@@ -4804,7 +4809,11 @@ if ($('#supportForm')) $('#supportForm').addEventListener('submit', async () => 
     const fd = new FormData(); fd.append('subject', subject); fd.append('message', message);
     const r = await fetch('/api/support', { method: 'POST', body: fd });
     const d = await r.json();
-    if (!r.ok) { toast(d.detail || 'Could not send your message.', 'err'); return; }
+    if (!r.ok) {
+      toast(d.detail || 'Could not send your message.', 'err');
+      if (r.status === 409) loadThreads();     // offenes Ticket -> Formular weg
+      return;
+    }
     $('#supSubject').value = ''; $('#supMessage').value = '';
     const done = $('#supDone');
     done.textContent = 'Thanks! Your message (#' + d.ticket + ') was sent. We will reply to your account email.';
@@ -4829,6 +4838,16 @@ function supBadge(n) {
   b.textContent = n > 9 ? '9+' : String(n || 0);
   b.classList.toggle('on', !!n);
 }
+/* v230b1: Ein offenes Anliegen je Konto (Ismets Ansage gegen Spam). Der
+   Riegel steht im Server; hier wird nur das Formular weggenommen, damit
+   niemand erst tippt und dann eine Fehlermeldung bekommt. Offen heisst
+   'waiting' oder 'answered' - ein geschlossenes Ticket blockiert nichts. */
+function supFormZeigen(items) {
+  const offen = (items || []).some(t => t.status !== 'closed');
+  const form = $('#supNewPanel'), hint = $('#supOpenHint');
+  if (form) form.style.display = offen ? 'none' : '';
+  if (hint) hint.style.display = offen ? '' : 'none';
+}
 async function loadThreads() {
   const box = $('#supThreads');
   if (!box) return;
@@ -4836,6 +4855,7 @@ async function loadThreads() {
     const r = await fetch('/api/support/tickets');
     if (!r.ok) { box.innerHTML = ''; return; }
     const d = await r.json();
+    supFormZeigen(d.items);
     if (!d.items.length) { box.innerHTML = ''; return; }
     box.innerHTML = '<h4 style="margin:0 0 8px;">Your messages</h4>' + d.items.map(t => {
       const msgs = t.messages.map(m => `
@@ -5914,7 +5934,6 @@ const FX_NAMES = {
   outline: 'Outline', ground: 'In the scene',
 };
 const LOOK_LABELS = {
-  viral: 'Viral · Big bold, karaoke',
   tiktok: 'TikTok · Word by word, loud',
   creator: 'Creator · Talking-head',
   elegant: 'Elegant · Dense + classy',

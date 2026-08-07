@@ -8590,9 +8590,6 @@ def _scenario_betrieb(tmp):
     check('v199: die Tinte wird ohne Kontur schmaler und niedriger',
           _inkbox199(_a_ohne) < _inkbox199(_a_mit),
           f"{_inkbox199(_a_ohne)} < {_inkbox199(_a_mit)}")
-    check('v199: auch der Viral-Look traegt keinen Saum mehr',
-          "'caption_kontur': 0," in open(os.path.join(HERE, 'web', 'server.py'),
-                                         encoding='utf-8').read())
     check('v199: die Vorschau faellt nicht auf 1 zurueck, wenn 0 gemeint ist',
           'Number.isFinite(_kRoh) ? _kRoh : 0' in open(
               os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read())
@@ -8612,7 +8609,7 @@ def _scenario_betrieb(tmp):
           "elif it.get('role') not in ('key', 'punch'):" in _r182
           and ('_dim = 0.70' in _r182 or '1.0 - 0.30 * smoothstep' in _r182))
     check('v182: das aktive Wort bekommt einen abklingenden Groessen-Pop',
-          '_pop = 1.0 + ((0.10 if _viral else 0.055)' in _r182
+          '_pop = 1.0 + (0.055 *' in _r182
           and '(1 - smoothstep(min(dt / 0.22, 1.0)))' in _r182)
     check('v182: Deckkraft und Skalierung wirken auf BEIDE Zeichenwege',
           _r182.count('* _pop') >= 2 and _r182.count('* _dim') >= 2)
@@ -8624,46 +8621,31 @@ def _scenario_betrieb(tmp):
     # in engen Bloecken, die Akzentfarbe wandert mit dem gesprochenen Wort.
     # Der Viral-Look liefert genau das als Preset; Editorial bleibt waehlbar.
     _sv183 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
-    check('v183: der Look "viral" existiert im Katalog',
-          "'viral':     {'name': 'Viral'" in _sv183)
-    check('v183: das Preset setzt den Engine-Schalter caption_viral',
-          "'caption_viral': True" in _sv183)
-    check('v183: das Preset erzwingt Zeilensatz, Mitte und Markt-Zone',
-          "'caption_layout': 'rows'" in _sv183
-          and "'caption_seite': 'mitte'" in _sv183
-          and "'caption_zone': 0.58" in _sv183)
-    # v185 TESTKORREKTUR: der feste Gelb-Akzent ist raus (Ismet: "aus-
-    # gelutscht"). Geprueft bleibt, dass der Look eine definierte Textfarbe
-    # setzt - die Akzentfarbe kommt wieder aus der Szene.
-    check('v185: das Viral-Preset setzt Weiss und ueberlaesst den Rest der Szene',
-          "'text': [255, 255, 255]" in _sv183
-          and "'accent': [255, 214, 10]" not in _sv183)
+    # v230b1 DER VIRAL-LOOK IST KOMPLETT RAUS (Ismets Ansage, 07.08.2026).
+    # Er war das CapCut/Opus-Standard-Template (Versal-Montserrat plus
+    # gelbes Karaoke-Wort) und stand seit v183a schon nicht mehr vorn.
+    # Jetzt sind Preset, Katalogeintrag, UI-Karte und ALLE Engine-Zweige
+    # weg - ein Schalter, den niemand mehr setzen kann, ist toter Code, und
+    # toter Code sieht beim naechsten Umbau aus wie ein Feature.
     _ui183 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
-    check('v183: die UI kennt den Viral-Look (Label + Karte)',
-          "viral: 'Viral" in _ui183 and 'data-look=viral' in _ui183)
-    # v183a: Ismets Befund am Ergebnis - "das ist das Standard-Template von
-    # CapCut und Opus". Der Look bleibt als OPTION, aber er ist NICHT mehr
-    # der Auto-Default fuer 9:16 und steht nicht mehr an erster Stelle.
-    check('v183a: KEIN Auto-Default mehr auf den Viral-Look',
-          "State.look = 'viral'" not in _ui183)
-    check('v183a: der Katalog fuehrt nicht mit dem Standard-Template',
-          _sv183.find("'tiktok':") < _sv183.find("'viral':"))
-    check('v183: der Zeilensatz-Riegel sitzt an der immer laufenden Stelle',
-          "if cfg['effects'].get('caption_viral'):" in _r182
-          and "_lm = 'rows'" in _r182)
+    check('v230b1: der Viral-Look steht in keinem Katalog mehr',
+          "'viral'" not in _sv183 and 'caption_viral' not in _sv183)
+    check('v230b1: die App kennt ihn auch nicht mehr',
+          'data-look=viral' not in _ui183 and 'caption_viral' not in _ui183
+          and "viral: 'Viral" not in _ui183)
+    check('v230b1: die Engine hat keinen Viral-Zweig mehr',
+          'caption_viral' not in _r182 and '_viral' not in _r182)
     check('v183: der Punch-Deckel kennt den Crash-Zoom',
           '0.89 - 0.11 * max(0.0, min(1.0, _crash))' in _r182)
     check('v185: keine Farb-Karaoke mehr im Viral-Look',
           "acc_rgb" not in _r182 and 'tint_glyph' not in _r182)
 
     # VERHALTEN direkt an compose_flow gemessen - nicht nur Quelltext.
-    _cfgV = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
+    _cfgN = _y160.safe_load(open(os.path.join(HERE, 'config.yaml'),
                                  encoding='utf-8'))
-    _cfgV['fonts'] = {k: 'fonts/montserrat_xb.ttf'
-                     for k in ('display', 'italic', 'script', 'support')}
+    _cfgN['fonts'] = {k: 'fonts/montserrat_xb.ttf'
+                      for k in ('display', 'italic', 'script', 'support')}
     import copy as _cp183
-    _cfgN = _cp183.deepcopy(_cfgV)
-    _cfgV['effects']['caption_viral'] = True
 
     class _SRec183(R.Sprites):
         def __init__(self, *a, **k):
@@ -8676,25 +8658,12 @@ def _scenario_betrieb(tmp):
 
     _wv = [{'word': w, 'start': i * 0.4, 'end': i * 0.4 + 0.3}
            for i, w in enumerate(['und', 'dann', 'kommt', 'alles', 'zusammen'])]
-    _SV = _SRec183(_cfgV, 1080, 1920)
     _SN = _SRec183(_cfgN, 1080, 1920)
-    _itV = R.compose_flow(list(range(5)), _wv, _SV, 1080, 1920, True,
-                          flow_sel={'kw': 2})[0]
     _itN = R.compose_flow(list(range(5)), _wv, _SN, 1080, 1920, True,
                           flow_sel={'kw': 2})[0]
-    check('v183: im Viral-Look laufen ALLE Woerter versal',
-          all(t == t.upper() for t in _SV.calls),
-          f"{_SV.calls}")
-    check('v183: ohne Viral bleibt die gemischte Schreibung',
-          any(t != t.upper() for t in _SN.calls))
-    _nV = [i['sz'] for i in _itV if i.get('role') == 'norm']
+    check('v230b1: die Schreibung bleibt gemischt (kein Versalsatz mehr)',
+          any(t != t.upper() for t in _SN.calls), f'{_SN.calls}')
     _nN = [i['sz'] for i in _itN if i.get('role') == 'norm']
-    # v184: die Hausbasis wurde auf die Referenz-Messung angehoben (0.034 ->
-    # 0.050 em) - das Viral-ZIEL (0.099 em) ist unveraendert, der Faktor
-    # darauf ist jetzt 2.00 statt 2.90.
-    check('v183: der Fliesstext-Faktor des Viral-Looks stimmt (Ziel 0.099 em)',
-          _nV and _nN and 1.7 <= (_nV[0] / max(_nN[0], 1)) <= 2.3,
-          f"{_nV[0]} vs {_nN[0]}")
     # v184 REFERENZ-GROESSEN der Hausbasis (an Ismets Vorbildern gemessen:
     # Fliesstext-Band 0.040 H, Schluesselwort-Band 0.074 H).
     # v192: eine Stufe kleiner auf Ismets Ansage (Faktor 0.85 auf die
@@ -8705,21 +8674,19 @@ def _scenario_betrieb(tmp):
     _kN = [i['sz'] for i in _itN if i.get('role') in ('key', 'punch')]
     check('v184/v192: Schluesselwort-Basis 0.089 em der Bildhoehe',
           _kN and abs(_kN[0] - int(1920 * 0.089)) <= 6, f"{_kN[0]}")
-    check('v183: kein Schreibschrift-Akzent im Viral-Look',
-          not any(i.get('role') == 'accent' for i in _itV)
-          and any(i.get('role') == 'accent' for i in _itN))
-    # Punch-Faktor: viral 1.30 statt 2.25 - die Grundgroesse traegt schon.
+    check('v183: der Schreibschrift-Akzent steht im Satz',
+          any(i.get('role') == 'accent' for i in _itN))
+    # Der Knall ist wieder EIN Faktor fuer alle Looks (2.25, v184-Referenz).
     _wp = [{'word': 'na', 'start': 0.0, 'end': 0.3},
            {'word': 'wow.', 'start': 0.4, 'end': 0.7}]
-    _pV = R.compose_flow([0, 1], _wp, _SRec183(_cfgV, 1080, 1920), 1080, 1920,
+    _pN = R.compose_flow([0, 1], _wp, _SRec183(_cfgN, 1080, 1920), 1080, 1920,
                          True, flow_sel={'kw': 1}, punch=True)[0]
-    _kV = R.compose_flow([0, 1], _wp, _SRec183(_cfgV, 1080, 1920), 1080, 1920,
-                         True, flow_sel={'kw': 1}, punch=False)[0]
-    _szP = next(i['sz'] for i in _pV if i['role'] in ('key', 'punch'))
-    _szK = next(i['sz'] for i in _kV if i['role'] in ('key', 'punch'))
-    check('v183: der Punch-Faktor im Viral-Look ist 1.30, nicht 2.25',
-          _szP < _szK * 1.6,
-          f"punch {_szP} vs key {_szK}")
+    _kN2 = R.compose_flow([0, 1], _wp, _SRec183(_cfgN, 1080, 1920), 1080, 1920,
+                          True, flow_sel={'kw': 1}, punch=False)[0]
+    _szP = next(i['sz'] for i in _pN if i['role'] in ('key', 'punch'))
+    _szK = next(i['sz'] for i in _kN2 if i['role'] in ('key', 'punch'))
+    check('v230b1: der Knall waechst deutlich (ein Faktor fuer alle Looks)',
+          _szP > _szK * 1.6, f'punch {_szP} vs key {_szK}')
     # Zoom-sicherer Deckel: mit vollem Crash-Zoom bleibt die Punch-Zeile
     # schmaler als mit ruhender Kamera (0.78 W statt 0.89 W).
     # v187: das Wort muss so lang sein, dass die BREITE bindet - seit dem
@@ -9674,6 +9641,40 @@ def _scenario_betrieb(tmp):
     check('v198: ein fremdes Ticket ist nicht erreichbar',
           _c198.post('/api/support/tickets/999999/reply',
                      data={'message': 'fremd'}).status_code == 404)
+
+    # ===== v230b1 EIN OFFENES ANLIEGEN JE KONTO ========================
+    # Ismets Ansage gegen Spam. Der Zeitfenster-Riegel (10 je Stunde) begrenzt
+    # das TEMPO, nicht die MENGE - zehn Tickets sind zehn Verlaeufe, die
+    # jemand einzeln lesen muss. Geprueft ueber echte Aufrufe, nicht am
+    # Quelltext: das Ticket von oben ist offen.
+    _z1 = _c198.post('/api/support', data={'subject': 'noch was',
+                                           'message': 'zweite Frage dazu.'})
+    check('v230b1: ein zweites Ticket wird abgewiesen, solange eines offen ist',
+          _z1.status_code == 409, f'{_z1.status_code} {_z1.text[:80]}')
+    check('v230b1: die Abweisung sagt, was zu tun ist',
+          'open request' in _z1.text and 'reply' in _z1.text.lower(),
+          _z1.text[:110])
+    # Im BESTEHENDEN Ticket weiterschreiben muss weiter gehen - sonst waere
+    # der Riegel eine Sperre gegen den Kunden statt gegen Spam.
+    check('v230b1: im offenen Ticket weiterschreiben geht weiterhin',
+          _c198.post(f'/api/support/tickets/{_tid198}/reply',
+                     data={'message': 'Hier noch der Rest.'}).status_code == 200)
+    # Und nach dem SCHLIESSEN darf ein neues Anliegen wieder aufgemacht
+    # werden - ein Konto, das nie wieder schreiben kann, waere schlimmer als
+    # Spam (der v230f-Fehlertyp: ein Schutz, der wegwirft statt zu begrenzen).
+    os.environ['DVE_ADMIN'] = 'testkey_v198'
+    _c198.post(f'/api/admin/tickets/{_tid198}/status',
+               data={'status': 'closed'}, headers={'X-Admin-Key': 'testkey_v198'})
+    del os.environ['DVE_ADMIN']
+    _z2 = _c198.post('/api/support', data={'subject': 'neues Thema',
+                                           'message': 'Ganz andere Frage.'})
+    check('v230b1: nach dem Schliessen geht ein neues Anliegen wieder',
+          _z2.status_code == 200, f'{_z2.status_code} {_z2.text[:80]}')
+    # Und die App nimmt das Formular weg, statt erst tippen zu lassen.
+    _uiT = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    check('v230b1: die App blendet das Formular aus, solange etwas offen ist',
+          'function supFormZeigen(' in _uiT and 'supFormZeigen(d.items)' in _uiT
+          and 'id="supOpenHint"' in _uiT)
     check('v198: das Panel hat ein Antwortfeld je Ticket',
           'function ticketReply(' in _adm198
           and 'data-act="ticketReply"' in _adm198)
@@ -11541,6 +11542,42 @@ def _scenario_betrieb(tmp):
           not _rail187, f"{_rail187[:5]}")
     check('v187: kein Look schreibt aus dem Bild heraus',
           not _raus187, f"{_raus187[:5]}")
+
+    # ===== v230b1 DER TIKTOK-LOOK SITZT IN EINER SPALTE =================
+    # Ismets Befund: "bei TikTok sind da Captions ueberall verteilt auf dem
+    # Bildschirm". Nachgemessen ueber 13 Bloecke sprang die Textmitte
+    # zwischen 0.272 W und 0.726 W - fast die halbe Bildbreite, und bei
+    # Dichte 'durchgehend' mit 2-Wort-Bloecken alle 0.7 s ein neuer Sprung.
+    # Geprueft wird die STREUUNG, nicht ein bestimmter Wert: die Zusage ist
+    # "eine ruhige Spalte", nicht "genau 0.5 W".
+    def _streuung(look):
+        _c = _SV187.build_config(look)
+        _S = R.Sprites(_c, 1080, 1920)
+        with _cl159.redirect_stdout(_io159.StringIO()):
+            _pl = R.build_plans(_w187, {4}, _c, _S, 1080, 1920,
+                                lambda a, b: True, {})
+        _cx = []
+        for _p in _pl:
+            _b = R.ink_box(_p, 1080, 1920)
+            if _b:
+                _cx.append((_b[0] + _b[1]) / 2.0 / 1080)
+        return (max(_cx) - min(_cx)) if len(_cx) > 1 else 0.0, len(_cx)
+    _str_tt, _n_tt = _streuung('tiktok')
+    check('v230b1: der TikTok-Look bleibt in einer Spalte',
+          _str_tt <= 0.20,
+          f'Streuung {_str_tt:.3f} W ueber {_n_tt} Bloecke (vorher 0.454)')
+    # Und die Mitte ist ein WUNSCH, keine Fessel (v180): das Preset setzt
+    # ihn ueber caption_seite, nicht ueber eine harte Position.
+    check('v230b1: die Mitte kommt aus dem Preset, nicht aus einer Konstanten',
+          "'caption_seite': 'mitte'" in _sv183
+          and _sv183.split("'tiktok': {")[1].split("'camera'")[0]
+              .count("'caption_seite': 'mitte'") == 1)
+    # Gegenprobe: ein Look OHNE diese Wahl weicht weiterhin aus. Sonst haette
+    # ich die Platzierungs-Regie global abgeschaltet statt sie fuer EINEN
+    # Look zu ueberstimmen.
+    _str_po, _ = _streuung('poster')
+    check('v230b1: die Platzierungs-Regie wirkt in den anderen Looks weiter',
+          _str_po > _str_tt + 0.10, f'poster {_str_po:.3f} W gegen tiktok {_str_tt:.3f} W')
     _r187 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
     check('v187: der Satzspiegel kennt den Korridor (nicht nur die Nahaufnahme)',
           'def _korridor():' in _r187 and 'maxw=_kbw' in _r187
@@ -11667,10 +11704,9 @@ def _scenario_betrieb(tmp):
     check('v186: sie liest Schrift, Kontur, Tempo und Emphase aus der Config',
           'e.caption_kontur' in _ui186 and 'e.chunk_hold_min' in _ui186
           and 'e.words_per_group' in _ui186 and 'e.caption_aktivwort' in _ui186
-          and 'e.caption_viral' in _ui186 and 'f.support' in _ui186)
-    check('v186: sie benutzt die v184-Hausmasse und die Viral-Faktoren',
-          'H * 0.105 * skal' in _ui186 and 'H * 0.050 * skn' in _ui186
-          and '1.55' in _ui186 and '2.00' in _ui186)
+          and 'f.support' in _ui186)
+    check('v186: sie benutzt die v184-Hausmasse',
+          'H * 0.105 * skal' in _ui186 and 'H * 0.050 * skn' in _ui186)
     check('v186: die Vorschau sagt ehrlich, was sie NICHT zeigt',
           'camera moves and effects are not shown' in _ui186)
     check('v186: jede Look-Schriftdatei hat eine CSS-Entsprechung',
