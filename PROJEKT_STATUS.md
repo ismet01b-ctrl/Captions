@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b2 DIE MISSBRAUCHS-ANSICHT ERKLAERT SICH.** Ismets Befund: "Beim
+  Reiter abuse verstehe ich garnichts". Zu Recht - dort standen sieben nackte
+  Zahlen (u.a. "Verwaiste Boni 0 + 0 ref", "bucket:ip") und darunter ein
+  englischer Satz ueber "orphan claims". Ismet ist kein Entwickler; eine Zahl
+  ohne Erklaerung ist fuer ihn keine Information, sondern Rauschen.
+  - Dieselbe Sprache wie die Startseite (v206): ganz oben EINE Aussage mit
+    Ampel ("Nichts Auffaelliges" / "Ein paar Sachen zum Ansehen") und der
+    Begruendung daneben; darunter jede Zahl mit einem Satz, was sie heisst und
+    ob etwas zu tun ist. Die Daten sind unveraendert, nur erklaert.
+  - Beispiel: aus "Verwaiste Boni" wurde "Abgewehrte Gratis-Tricks - so oft
+    hat jemand sein Konto geloescht und sich neu angemeldet, um das
+    Gratis-Guthaben ein zweites Mal zu bekommen. Das wurde jedes Mal
+    geblockt." Aus der Spalte "bucket:ip" wurde "Woher".
+  - Schwellen bewusst grosszuegig (5 Wegwerf-Konten, 10 Passwort-Links,
+    5 Demo-Laeufe je Adresse). Eine Ampel, die grundlos gelb ist, schaut nach
+    einer Woche niemand mehr an.
+  - Tests: jede Kachel hat einen Satz, jede Tabelle eine Erklaerung darueber,
+    die Ampel ist da, und der englische Rest-Satz ist weg. Beim letzten Test
+    dieselbe Falle wie v230ah - meine eigene BEGRUENDUNG enthielt das Wort,
+    das die Regel verbietet; jetzt werden Kommentare entfernt und nach dem
+    SATZ gesucht, nicht nach dem Wort.
 - **v230b1 EIN TICKET, KEIN VIRAL-LOOK, TIKTOK IN EINER SPALTE.** Drei
   Ansagen von Ismet, alle umgesetzt; die dritte vorher nachgemessen.
   - **Ein offenes Anliegen je Konto.** Der bisherige Riegel (10 Nachrichten

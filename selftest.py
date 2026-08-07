@@ -10980,6 +10980,44 @@ def _scenario_betrieb(tmp):
     check('v230b0: das Panel ist durchgehend deutsch',
           not _worte230, '; '.join(_worte230[:3]) if _worte230 else
           'sichtbarer Text geprueft')
+    # (4b) v230b2: Ismets Befund "beim Reiter abuse verstehe ich garnichts".
+    # Die Ansicht zeigte sieben nackte Zahlen. Die Zusage ist jetzt dieselbe
+    # wie auf der Startseite (v206): jede Zahl hat einen Satz Klartext, und
+    # es gibt eine Ampel, die sagt, ob ueberhaupt etwas zu tun ist.
+    _ab230 = _adm195[_adm195.index('async function loadAbuse('):
+                     _adm195.index("/* ---------- SYSTEM ---------- */")]
+    # In einer f-Zeichenkette darf kein Backslash stehen - die Suchmuster
+    # deshalb als eigene Namen (sonst SyntaxError, und der faellt erst beim
+    # Lauf auf).
+    _SATZ230 = 'class="satz"'
+    _NOTE230 = 'class="note"'
+    check('v230b2: in der Missbrauchs-Ansicht hat jede Zahl einen Satz',
+          _ab230.count('class="k"') <= _ab230.count(_SATZ230) + 1
+          and _ab230.count(_SATZ230) >= 1
+          and 'kachel(' in _ab230,
+          f"{_ab230.count('kachel(')} Kacheln, "
+          f"{_ab230.count(_SATZ230)} Saetze")
+    check('v230b2: sie sagt zuerst, ob ueberhaupt etwas zu tun ist',
+          'box-ampel' in _ab230 and 'Nichts Auff' in _ab230
+          and 'const auf=[]' in _ab230)
+    # Jede Tabelle braucht ihre Erklaerung - eine Spalte "bucket:ip" sagt
+    # niemandem etwas, der nicht im Code war.
+    check('v230b2: jede Tabelle hat eine Erklaerung darueber',
+          _ab230.count('<h3>') <= _ab230.count(_NOTE230)
+          and 'bucket:ip' not in _ab230,
+          f"{_ab230.count('<h3>')} Ueberschriften, "
+          f"{_ab230.count(_NOTE230)} Erklaerungen")
+    # Dritter Fall derselben Falle (v230ah): die BEGRUENDUNG einer Regel
+    # enthaelt genau das Wort, das die Regel verbietet - und ein Datenschluessel
+    # (`d.orphan_claims`) ist Code, kein Kundentext. Also Kommentare raus und
+    # nach dem englischen SATZ suchen, nicht nach dem Wort.
+    _ab_txt = _re195.sub(r'/\*.*?\*/', '', _ab230, flags=_re195.S)
+    _ab_txt = _re195.sub(r'^\s*//.*$', '', _ab_txt, flags=_re195.M)
+    check('v230b2: der englische Rest-Satz ist weg',
+          'no matching current account' not in _ab_txt
+          and 'anti-farming' not in _ab_txt
+          and 'Gratis-Guthaben ein zweites Mal' in _ab_txt)
+
     # (5) Kein Gedankenstrich - Ismets Regel gilt auch fuer das Panel.
     check('v230b0: kein Gedankenstrich im Panel',
           '&mdash;' not in _adm195 and ' — ' not in _adm195,

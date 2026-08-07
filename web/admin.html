@@ -176,6 +176,16 @@ select.search{cursor:pointer}
 /* Die Knopfzeile sitzt unten buendig, damit vier verschieden lange Karten
    nicht vier verschieden hohe Knopfreihen haben. */
 .tuwas{margin-top:auto;padding-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+/* v230b2: Erklaerkasten mit Ampel (Ansicht Missbrauch). Gleiche Sprache wie
+   die Startseite: EINE Aussage gross, ein Satz Klartext darunter. */
+.box-ampel{background:var(--surf);border:1px solid var(--line);border-radius:14px;
+  padding:16px 18px}
+.box-ampel.gruen{border-color:rgba(60,200,120,.45)}
+.box-ampel.gelb{border-color:rgba(255,180,40,.5)}
+.zahl2{font-size:22px;font-weight:800;letter-spacing:-.4px;line-height:1.2}
+.card .satz{margin-top:7px;font-size:12px;color:var(--mut);line-height:1.5}
+.box-ampel .satz{margin-top:7px;font-size:12.5px;color:var(--mut);line-height:1.55}
+.card.warnrand{border-color:rgba(255,180,40,.5)}
 /* v208 Trichter: eine Zeile je Stufe, Balkenbreite = Anteil an ganz oben. */
 .tri{display:flex;flex-direction:column;gap:10px;margin-top:4px}
 .trow{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
@@ -701,28 +711,97 @@ async function refundSession(sid){if(!danger('Stripe-Vorgang erstatten: '+sid+' 
 /* ---------- ABUSE ---------- */
 async function loadAbuse(){
   let d;try{d=await api('/api/admin/abuse');}catch(e){el('view').innerHTML=err(e);return;}
-  const disp=d.disposable_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td></tr>`).join('')||'<tr><td class="subtle">keine</td></tr>';
-  const unv=d.unverified_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
-  const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
-  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(l.key)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
-  const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('')||'<tr><td class="subtle" colspan=2>keine</td></tr>';
+  /* v230b2 DIESE ANSICHT HAT NUR ROHE SIGNALE GEZEIGT.
+     Ismets Befund: "Beim Reiter abuse verstehe ich garnichts". Stimmt - da
+     standen sieben Zahlen ohne ein Wort dazu, dazu ein englischer Satz über
+     "orphan claims". Ismet ist kein Entwickler; eine Zahl ohne Erklärung ist
+     fuer ihn keine Information, sondern Rauschen. Jetzt gilt dieselbe Regel
+     wie auf der Startseite (v206): EINE Zahl, EIN Satz was sie heißt, und
+     falls nötig ein Satz was zu tun ist. Die Daten sind unverändert. */
+  const zeile=(rows,leer)=>rows||`<tr><td class="subtle" colspan=9>${leer}</td></tr>`;
+  const disp=d.disposable_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td></tr>`).join('');
+  const unv=d.unverified_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('');
+  const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('');
+  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(l.key)}</td><td>${l.hits}</td></tr>`).join('');
+  const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('');
+  // Was ist auffällig? Bewusst großzügige Schwellen: eine Ampel, die
+  // grundlos rot ist, schaut nach einer Woche niemand mehr an (v206).
+  const auf=[];
+  if(d.disposable_accounts.length>=5) auf.push(`${d.disposable_accounts.length} Konten mit Wegwerf-Adresse`);
+  if(d.rate_limit_lockouts.length) auf.push(`${d.rate_limit_lockouts.length} Adresse(n) automatisch ausgebremst`);
+  if(d.demo_ip_abuse.some(x=>x.hits>=5)) auf.push('eine Internet-Adresse nutzt die Demo auffällig oft');
+  if((d.top_referrers[0]||{}).invited>=10) auf.push('ein Konto hat auffällig viele Leute geworben');
+  if(d.pending_resets>=10) auf.push(`${d.pending_resets} Passwort-Links gleichzeitig gültig`);
+  const kachel=(titel,zahl,satz,warn)=>`
+    <div class="card${warn?' warnrand':''}"><div class="k">${titel}</div>
+      <div class="v">${zahl}</div>
+      <div class="satz">${satz}</div></div>`;
   el('view').innerHTML=`
-    <div class="grid g4">
-      <div class="card ${d.orphan_claims.credit?'':''}"><div class="k">Verwaiste Boni</div><div class="v">${d.orphan_claims.credit} <small>+ ${d.orphan_claims.referral} ref</small></div></div>
-      <div class="card"><div class="k">Wegwerf-Konten</div><div class="v">${d.disposable_accounts.length}</div></div>
-      <div class="card"><div class="k">Unbestätigte Konten</div><div class="v">${d.unverified_accounts.length}</div></div>
-      <div class="card"><div class="k">Offene Passwort-Resets</div><div class="v">${d.pending_resets}</div></div>
+    <div class="box-ampel ${auf.length?'gelb':'gruen'}">
+      <div class="zahl2"><span class="ampel ${auf.length?'gelb':'gruen'}"></span>${
+        auf.length?'Ein paar Sachen zum Ansehen':'Nichts Auffälliges'}</div>
+      <div class="satz">${auf.length
+        ? esc(auf.join(' \u00b7 '))+'. Keine davon ist ein Notfall, aber ein Blick lohnt.'
+        : 'Niemand versucht gerade, das Gratis-Guthaben oder die Demo auszunutzen.'}</div>
     </div>
-    <div class="grid g2" style="margin-top:16px">
-      <div><h3>Wegwerf-Adressen</h3><div class="scroll"><table><tbody>${disp}</tbody></table></div></div>
-      <div><h3>Unbestätigt / eingeschlafen</h3><div class="scroll"><table><tbody>${unv}</tbody></table></div></div>
+    <div class="grid g4" style="margin-top:14px">
+      ${kachel('Abgewehrte Gratis-Tricks', d.orphan_claims.credit+' + '+d.orphan_claims.referral,
+        'So oft hat jemand sein Konto gelöscht und sich neu angemeldet, um das '
+        +'Gratis-Guthaben ein zweites Mal zu bekommen. Das wurde jedes Mal '
+        +'geblockt. Die zweite Zahl ist dasselbe für den Empfehlungs-Bonus. '
+        +'Eine hohe Zahl heißt: der Schutz arbeitet, nicht dass etwas kaputt ist.', false)}
+      ${kachel('Wegwerf-Adressen', d.disposable_accounts.length,
+        'Konten mit einer Zehn-Minuten-Mailadresse. Meistens Leute, die nur das '
+        +'Gratis-Guthaben wollen und nie kaufen. Unten stehen sie einzeln; ein '
+        +'Klick öffnet das Konto.', d.disposable_accounts.length>=5)}
+      ${kachel('Nie bestätigt', d.unverified_accounts.length,
+        'Angemeldet, aber nie auf den Link in der Mail geklickt. Diese Konten '
+        +'bekommen kein Guthaben und können nichts rendern. Meistens einfach '
+        +'Leute, die es sich anders überlegt haben.', false)}
+      ${kachel('Passwort-Links offen', d.pending_resets,
+        'So viele "Passwort vergessen"-Links sind gerade gültig. Ein oder zwei '
+        +'sind normal. Viele auf einmal wären ein Zeichen, dass jemand fremde '
+        +'Konten übernehmen will.', d.pending_resets>=10)}
     </div>
-    <div class="grid g3" style="margin-top:16px">
-      <div><h3>Häufigste Herkunft</h3><table><thead><tr><th>Herkunft</th><th>Eingeladen</th></tr></thead><tbody>${refs}</tbody></table></div>
-      <div><h3>Gesperrt wegen zu vieler Versuche</h3><table><thead><tr><th>bucket:ip</th><th>Treffer</th></tr></thead><tbody>${locks}</tbody></table></div>
-      <div><h3>Demo-Missbrauch je IP</h3><table><thead><tr><th>IP</th><th>24h</th></tr></thead><tbody>${demo}</tbody></table></div>
+    <div class="grid g2" style="margin-top:18px">
+      <div>
+        <h3>Wegwerf-Adressen</h3>
+        <div class="note" style="margin:-4px 0 8px">Klick öffnet das Konto. Wenn dir eines
+          davon Ärger macht, kannst du es dort sperren.</div>
+        <div class="scroll"><table><tbody>${zeile(disp,'keine')}</tbody></table></div>
+      </div>
+      <div>
+        <h3>Nie bestätigt</h3>
+        <div class="note" style="margin:-4px 0 8px">Adresse und Anmeldetag. Diese Konten
+          kosten nichts und können nichts - sie stehen hier nur der Vollständigkeit halber.</div>
+        <div class="scroll"><table><tbody>${zeile(unv,'keine')}</tbody></table></div>
+      </div>
     </div>
-    <div class="note">${esc(d.note)} Orphan claims = anti-farming hashes with no matching current account (delete+re-register attempts, correctly blocked).</div>`;
+    <div class="grid g3" style="margin-top:18px">
+      <div>
+        <h3>Wer hat geworben</h3>
+        <div class="note" style="margin:-4px 0 8px">Wie viele Leute ein Konto geworben hat.
+          Eine auffällig hohe Zahl kann heißen, dass sich jemand selbst einlädt,
+          um Gratis-Guthaben zu sammeln.</div>
+        <table><thead><tr><th>Konto</th><th>geworben</th></tr></thead><tbody>${zeile(refs,'noch niemand')}</tbody></table>
+      </div>
+      <div>
+        <h3>Automatisch ausgebremst</h3>
+        <div class="note" style="margin:-4px 0 8px">Adressen, die in einer Viertelstunde mehr
+          als 15 Mal etwas versucht haben (anmelden, registrieren). Die sind schon
+          gesperrt, du musst nichts tun.</div>
+        <table><thead><tr><th>Woher</th><th>Versuche</th></tr></thead><tbody>${zeile(locks,'niemand')}</tbody></table>
+      </div>
+      <div>
+        <h3>Demo mehrfach benutzt</h3>
+        <div class="note" style="margin:-4px 0 8px">Wie oft von derselben Internet-Adresse in
+          24 Stunden die Gratis-Demo lief. Zwei bis drei sind normal (Familie, Büro).</div>
+        <table><thead><tr><th>Internet-Adresse</th><th>in 24 h</th></tr></thead><tbody>${zeile(demo,'niemand')}</tbody></table>
+      </div>
+    </div>
+    <div class="note" style="margin-top:16px">Die letzten beiden Listen leben nur im
+      Arbeitsspeicher: nach einem Neustart des Servers fangen sie wieder bei null an.
+      Sie sagen also etwas über JETZT, nicht über die ganze Zeit.</div>`;
 }
 
 /* ---------- SYSTEM ---------- */
