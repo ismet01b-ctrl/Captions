@@ -251,6 +251,25 @@ body {
 .lib-thumb.playing { aspect-ratio: auto; }
 .lib-thumb.playing video { width: auto; max-width: 100%; height: auto;
   max-height: 78vh; object-fit: contain; margin: 0 auto; }
+/* v230b8: Im Vollbild sind unsere Deckel falsch - dort SOLL das Video den
+   ganzen Schirm fuellen. Die meisten Browser setzen das schon selbst; hier
+   steht es ausdruecklich, damit es auf keinem haengt. */
+.lib-thumb.playing video:fullscreen,
+.lib-thumb.playing video:-webkit-full-screen {
+  max-height: none; max-width: none; width: 100%; height: 100%;
+  object-fit: contain; }
+/* Eigener Vollbild-Knopf. Die eingebaute Leiste ist am Handy je nach
+   Browser gar nicht sichtbar - dann gibt es ohne diesen Knopf keinen Weg
+   ins Vollbild. */
+.lib-fs { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px;
+  border-radius: 10px; border: 1px solid rgba(255,255,255,.16);
+  background: rgba(8,8,12,.55); backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  padding: 0; z-index: 3; transition: background var(--t-fast); }
+.lib-fs:hover { background: rgba(8,8,12,.8); }
+.lib-fs svg { width: 17px; height: 17px; fill: none; stroke: #fff;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .lib-thumb .play { position: absolute; width: 54px; height: 54px; border-radius: 50%;
   background: rgba(0,0,0,.55); backdrop-filter: blur(4px); display: flex;
   align-items: center; justify-content: center; pointer-events: none; }
@@ -3589,6 +3608,32 @@ const PAGES = MOTION_ENABLED
    Videos gleichzeitig im Speicher. Ein verstecktes Element gibt NICHTS frei;
    dafuer muss die Quelle weg und `load()` laufen.
    Ein Player nach dem anderen, und beim Seitenwechsel alle zu. */
+/* v230b8 VOLLBILD, auf jedem Geraet.
+   Drei Wege, weil es drei Browser-Familien gibt:
+     * Standard: video.requestFullscreen()
+     * iOS Safari: webkitEnterFullscreen() - dort gibt es KEIN
+       Element-Vollbild ueber die Standard-API, das Video uebernimmt selbst.
+     * Rest (aeltere WebKit/Blink): webkitRequestFullscreen()
+   Und danach: falls der Wechsel die Wiedergabe angehalten hat, wieder
+   anwerfen. Ein Vollbild, in dem das Bild steht, ist kein Vollbild. */
+function vollbild(v) {
+  if (!v) return;
+  const lief = !v.paused;
+  const weiter = () => { if (lief && v.paused) v.play().catch(() => {}); };
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      return;
+    }
+    const p = v.requestFullscreen ? v.requestFullscreen()
+      : (v.webkitEnterFullscreen ? v.webkitEnterFullscreen()
+        : (v.webkitRequestFullscreen ? v.webkitRequestFullscreen() : null));
+    if (p && p.then) p.then(weiter).catch(() => { weiter(); });
+    else setTimeout(weiter, 220);
+  } catch (e) { weiter(); }
+  setTimeout(weiter, 600);
+}
+
 function videoFreigeben(root, ausser) {
   if (!root) return;
   root.querySelectorAll('video').forEach(v => {
@@ -4472,6 +4517,7 @@ async function renderLibrary() {
           ${it.has_alpha ? `<a class="btn secondary" href="/api/alpha_file/${it.jid}" title="Transparent caption layer (ProRes 4444) for Premiere or Resolve">Layer&nbsp;(MOV)</a>`
                          : (it.alpha_running ? `<button class="btn secondary" data-alphawait="${it.jid}" disabled>Layer&nbsp;…</button>`
                          : (it.can_alpha ? `<button class="btn secondary" data-alpha="${it.jid}" title="Render a transparent caption layer (ProRes 4444) to drop over your original in Premiere or Resolve. Billed like a further render: 1 credit per started minute.">Editor&nbsp;layer&nbsp;(1&nbsp;cr/min)</button>` : ''))}
+          ${it.can_edit ? `<button class="btn secondary" data-edit="${it.jid}" title="Open the caption editor for this video: change the words, the split, effects and timing, then render it again. A re-render is free.">Edit&nbsp;captions</button>` : ''}
           ${it.wm ? `<button class="btn" data-unlock="${it.jid}" title="Your first purchase removes the watermark from this exact video - no re-render">Unlock&nbsp;HD</button>` : ''}
         </div>
       </div>`;
@@ -4487,18 +4533,63 @@ async function renderLibrary() {
       v.src = '/api/video/' + it.jid;
       v.preload = 'metadata';
       v.controls = true; v.autoplay = true; v.playsInline = true;
+      // v230b8 VOLLBILD MUSS OHNE DIE BROWSERLEISTE GEHEN.
+      // Ismets Befund: "kann die Videos nicht auf Vollbild machen, dann
+      // laeuft das Video nicht". Am Desktop liess es sich hier NICHT
+      // nachstellen (Chromium: Vollbild greift, das Video laeuft weiter) -
+      // am Handy ist der Weg aber ein anderer: iOS Safari kennt
+      // `requestFullscreen` auf einem <video> gar nicht und braucht
+      // `webkitEnterFullscreen`, und die eingebaute Leiste ist dort je nach
+      // Einbettung gar nicht sichtbar. Deshalb ein EIGENER Knopf, der beide
+      // Wege kennt - und der die Wiedergabe danach wieder anwirft, falls
+      // der Wechsel sie angehalten hat.
+      v.addEventListener('dblclick', () => vollbild(v));
       this.innerHTML = '';
       this.style.cursor = 'default';
       // v228: ab jetzt ist der Rahmen ein Player, kein Vorschaubild mehr -
       // er nimmt das Seitenverhaeltnis des Videos an, statt es zu beschneiden.
       this.classList.add('playing');
       this.appendChild(v);
+      const fs = document.createElement('button');
+      fs.type = 'button';
+      fs.className = 'lib-fs';
+      fs.title = 'Fullscreen';
+      fs.setAttribute('aria-label', 'Fullscreen');
+      fs.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5'
+        + 'M4 15v5h5M20 15v5h-5"/></svg>';
+      fs.addEventListener('click', (e) => { e.stopPropagation(); vollbild(v); });
+      this.appendChild(fs);
     });
     grid.appendChild(card);
   });
   // v230ae: laufende Ebenen-Renders bekommen sofort ihre Anzeige zurueck -
   // auch nach einem Neuladen.
   grid.querySelectorAll('[data-alphawait]').forEach(b => alphaWatch(b.dataset.alphawait, b));
+  // v230b8 AUS DER BIBLIOTHEK HERAUS BEARBEITEN. Ismets Wunsch: "man soll
+  // die Videos auch da bearbeiten koennen". Bis hier fuehrte der einzige
+  // Weg in den Editor ueber einen frischen Upload - ein fertiges Video war
+  // damit endgueltig. Der Editor selbst ist derselbe; er haengt nur an
+  // State.jid, also reicht es, den Job zu setzen und ihn zu oeffnen.
+  // Ein Re-Render ist ausdruecklich GRATIS (v127-sec), das sagt der Knopf
+  // auch - sonst klickt niemand darauf.
+  grid.querySelectorAll('[data-edit]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const jid = b.dataset.edit;
+      b.disabled = true;
+      const alt = b.textContent;
+      b.textContent = 'Loading …';
+      try {
+        State.jid = jid;
+        // Der Fortschritt nach dem Speichern laeuft auf der Create-Seite.
+        // Ohne diesen Wechsel liefe der Render unsichtbar im Hintergrund.
+        showSection('create');
+        goStep(5);
+        await openMomentsEditor();
+      } catch (e) {
+        toast('Could not open the editor for this video.', 'err');
+      } finally { b.disabled = false; b.textContent = alt; }
+    });
+  });
 }
 
 /* v230ae DER EBENEN-RENDER ZEIGT, WIE WEIT ER IST. Der Knopf sprang auf
@@ -6763,7 +6854,7 @@ if ($('#tplLoadTop')) $('#tplLoadTop').addEventListener('change', (e) => {
 $('#momSave').addEventListener('click', async () => {
   syncFromDom();
   const btn = $('#momSave');
-  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Speichere …';
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Saving …';
   try {
     syncAccentsFromDom();
     const fd = new FormData();

@@ -514,6 +514,42 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
         `freigegeben ${JSON.stringify(frei)}`);
 }
 
+// ---- v230b8: Vollbild in der Bibliothek ----
+// Ismets Befund: "kann die Videos nicht auf Vollbild machen, dann laeuft das
+// Video nicht". Am Desktop war es nicht nachstellbar - am Handy kennt iOS
+// Safari `requestFullscreen` auf einem <video> gar nicht und braucht
+// `webkitEnterFullscreen`. Beide Wege werden hier AUSGEFUEHRT.
+{
+  const vollbild = eval('(' + schneide('vollbild') + ')');
+  globalThis.document = { fullscreenElement: null, webkitFullscreenElement: null };
+  const bau = (welche) => {
+    const v = { paused: false, _gespielt: 0,
+                play() { this.paused = false; this._gespielt++; return Promise.resolve(); } };
+    if (welche === 'standard') v.requestFullscreen = () => { v._voll = true; return Promise.resolve(); };
+    if (welche === 'ios') v.webkitEnterFullscreen = () => { v._voll = true; };
+    if (welche === 'alt') v.webkitRequestFullscreen = () => { v._voll = true; };
+    return v;
+  };
+  for (const welche of ['standard', 'ios', 'alt']) {
+    const v = bau(welche);
+    vollbild(v);
+    pruef('v230b8: Vollbild geht ueber den Weg "' + welche + '"', !!v._voll);
+  }
+  // Haelt der Wechsel die Wiedergabe an, wird sie wieder angeworfen - ein
+  // Vollbild mit stehendem Bild ist kein Vollbild.
+  const v2 = bau('ios');
+  vollbild(v2);
+  v2.paused = true;                       // der Wechsel hat pausiert
+  await new Promise(r => ECHTER_TIMEOUT(r, 800));
+  pruef('v230b8: nach dem Wechsel laeuft das Video weiter',
+        !v2.paused && v2._gespielt >= 1, `gespielt ${v2._gespielt}`);
+  // Ein zweiter Klick geht wieder RAUS, statt nichts zu tun.
+  let raus = 0;
+  globalThis.document = { fullscreenElement: {}, exitFullscreen: () => { raus++; } };
+  vollbild(bau('standard'));
+  pruef('v230b8: der zweite Klick beendet das Vollbild', raus === 1);
+}
+
 // ---- v230b0: die Navigation des Panels wird AUSGEFUEHRT, nicht gelesen ----
 // Beim Zusammenlegen der siebzehn Punkte auf zwoelf darf keine Ansicht
 // verschwinden und kein Reiter ins Leere zeigen. Der Selftest prueft das am

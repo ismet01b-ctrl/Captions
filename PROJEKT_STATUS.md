@@ -3,6 +3,32 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b8 BIBLIOTHEK: VOLLBILD UND BEARBEITEN.** Zwei Befunde von Ismet.
+  - **Vollbild.** "Kann die Videos nicht auf Vollbild machen, dann laeuft das
+    Video nicht." Am Desktop liess es sich NICHT nachstellen: in Chromium
+    greift das Vollbild und das Video laeuft weiter (gemessen: Vollbild an,
+    1200x900, laeuft, t 4.48). Am Handy ist der Weg aber ein anderer - iOS
+    Safari kennt `requestFullscreen` auf einem `<video>` gar nicht und
+    braucht `webkitEnterFullscreen`, und die eingebaute Leiste ist je nach
+    Einbettung nicht sichtbar. Deshalb ein EIGENER Knopf oben rechts im
+    Player, der alle drei Wege kennt (Standard, iOS, altes WebKit), die
+    Wiedergabe danach wieder anwirft, falls der Wechsel sie angehalten hat,
+    und beim zweiten Klick wieder herausgeht. Dazu `:fullscreen`-Regeln,
+    damit unsere 78vh-Deckel dort nicht mehr gelten. EHRLICH: der
+    urspruengliche Fehler ist damit nicht bewiesen behoben - er war hier
+    nicht reproduzierbar. Was jetzt anders ist: es gibt einen Weg, der auf
+    keiner Browser-Eigenheit haengt.
+  - **Bearbeiten.** "Man soll die Videos auch da bearbeiten koennen." Bis
+    hier fuehrte der einzige Weg in den Editor ueber einen frischen Upload -
+    ein fertiges Video war endgueltig. Jetzt hat jede Kachel "Edit captions":
+    Job setzen, auf die Create-Seite wechseln (dort laeuft der Fortschritt),
+    Editor oeffnen. Der Re-Render ist ausdruecklich gratis (v127-sec), das
+    sagt der Knopf auch. Er erscheint nur, wenn es auch geht (`can_edit`:
+    Quelle noch da, kein Demo, fertig) - und der Endpunkt weist dieselben
+    Faelle selbst ab, der Riegel steht nicht nur in der Anzeige.
+  - Im Browser bewiesen: Knopf da, Editor oeffnet mit den geladenen
+    Bloecken, Seite wechselt auf create. Fuenf Nachweise in der Sonde fahren
+    alle drei Vollbild-Wege echt durch.
 - **v230b5/b6/b7 SCHREIBMASCHINE, EINSTELLUNGS-AUDIT, HANDY-EDITOR.**
   - **v230b5 EIN TON JE WORT.** Ismets Ansage: "wenn ein Wort nach dem
     anderen kommt, soll das mit einem typing SFX hinterlegt sein". Bis hier

@@ -4039,6 +4039,48 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230: Schnitte bekommen weiter die volle Dramaturgie',
           _n30('sparsam', (4.0, 9.0)) > _sp30 + 5,
           f'ohne Schnitt {_sp30} -> mit 2 Schnitten {_n30("sparsam", (4.0, 9.0))}')
+    # ===== v230b8 BIBLIOTHEK: VOLLBILD UND BEARBEITEN ==================
+    # Ismets Befund: "kann die Videos nicht auf Vollbild machen, dann laeuft
+    # das Video nicht" und "man soll die Videos auch da bearbeiten koennen".
+    _ui_b8 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    # (1) Vollbild: eigener Knopf, weil die eingebaute Leiste am Handy je nach
+    #     Browser gar nicht sichtbar ist - und ALLE drei Wege, weil iOS Safari
+    #     `requestFullscreen` auf einem <video> nicht kennt.
+    check('v230b8: die Bibliothek hat einen eigenen Vollbild-Knopf',
+          "className = 'lib-fs'" in _ui_b8 and '.lib-fs {' in _ui_b8)
+    check('v230b8: alle drei Vollbild-Wege sind verdrahtet',
+          'requestFullscreen ? v.requestFullscreen()' in _ui_b8
+          and 'webkitEnterFullscreen' in _ui_b8
+          and 'webkitRequestFullscreen' in _ui_b8)
+    check('v230b8: im Vollbild gelten unsere Groessen-Deckel nicht mehr',
+          'video:fullscreen' in _ui_b8 and 'max-height: none; max-width: none;' in _ui_b8,
+          'sonst laeuft das Video in einem 78vh-Kaesten mit Balken')
+    # (2) Bearbeiten aus der Bibliothek. Der Editor haengt an State.jid - es
+    #     reicht, den Job zu setzen und ihn zu oeffnen. Der Re-Render ist
+    #     gratis (v127-sec), das muss der Knopf auch sagen.
+    check('v230b8: die Bibliothek hat einen Knopf zum Bearbeiten',
+          'data-edit="${it.jid}"' in _ui_b8
+          and 'grid.querySelectorAll(\'[data-edit]\')' in _ui_b8
+          and 'await openMomentsEditor();' in _ui_b8)
+    check('v230b8: er wechselt auf die Seite, auf der der Fortschritt laeuft',
+          "showSection('create');" in _ui_b8.split("data-edit]')")[1][:900]
+          and 'goStep(5);' in _ui_b8.split("data-edit]')")[1][:900],
+          'sonst laeuft der Render danach unsichtbar im Hintergrund')
+    # (3) Der Knopf darf nur da sein, wenn es auch geht: Quelle noch da, kein
+    #     Demo, fertig. Ein Knopf, der danach 403 liefert, ist schlimmer als
+    #     keiner.
+    _sv_b8 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230b8: der Server sagt, ob ein Video ueberhaupt bearbeitbar ist',
+          "'can_edit': (bool(j.get('input'))" in _sv_b8
+          and "not j.get('demo')" in _sv_b8.split("'can_edit'")[1][:400]
+          and "j.get('status') == 'fertig'" in _sv_b8.split("'can_edit'")[1][:400])
+    # Und der Endpunkt dahinter weist dieselben Faelle ab - der Riegel darf
+    # nicht nur in der Anzeige stehen (v230d-sec: ein Riegel gehoert in die
+    # Funktion, nicht an EIN Gate).
+    check('v230b8: der Endpunkt weist Demo und laufende Jobs selbst ab',
+          "if j.get('demo'):" in _sv_b8.split('async def save_and_render')[1][:1400]
+          and "in ('wartet', 'laeuft')" in _sv_b8.split('async def save_and_render')[1][:1600])
+
     # ===== v230b7 DER BLOCK-EDITOR AM HANDY ============================
     # Ismets Auftrag: "optimiere edit Moments auf dem Handy". Bei 390 px
     # gemessen: rund 260 px gingen an die Einleitung, jede Zeile brauchte

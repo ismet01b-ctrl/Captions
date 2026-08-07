@@ -2133,7 +2133,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230b7'
+DVE_VERSION = 'v230b8'
 
 
 def _build_datei():
@@ -7894,6 +7894,15 @@ def api_library(request: Request):
             # (sonst kann keine Ebene mehr gebaut werden)?
             'has_alpha': os.path.exists(os.path.join(d, 'fertig_captions.mov')),
             'can_alpha': bool(j.get('input')) and os.path.exists(j.get('input', '')),
+            # v230b8: Kann dieses Video noch bearbeitet werden? Der Editor
+            # schickt am Ende einen neuen Render los - dafuer muss die
+            # QUELLE noch da sein (nach der Aufbewahrungsfrist ist sie weg),
+            # es darf kein Demo sein und gerade nichts laufen. Ein Knopf, der
+            # danach 403 oder 409 liefert, ist schlimmer als keiner.
+            'can_edit': (bool(j.get('input'))
+                         and os.path.exists(j.get('input', ''))
+                         and not j.get('demo')
+                         and j.get('status') == 'fertig'),
             # v230ae: laeuft gerade ein Ebenen-Render? Sonst steht der Knopf
             # nach einem Neuladen wieder auf "Editor layer", obwohl der Job
             # laeuft - und ein zweiter Klick bekommt nur einen 409er.
