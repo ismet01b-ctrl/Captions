@@ -966,6 +966,26 @@ fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
   Klartext-Tabelle in `_trichter_calc` ein - eine Stufe ohne Erklaerung ist
   im Panel wertlos, und die Datenschutzseite muss den Zweck nennen.
 
+## Optik: HIGH END, immer (Ismets Ansage, 07.08.2026)
+"Das sieht so billig aus. Mach es so, dass es wirklich high class aussieht.
+Es soll immer so high end aussehen." Das gilt fuer JEDE Oberflaeche, nicht
+nur fuer die eine Stelle, an der es auffiel. Woran es konkret lag (v230b4,
+am Bildschirm nachgemessen) - dieselben vier Punkte gelten ueberall:
+1. **Ein Motiv fuehrt.** Drei Elemente auf derselben Lautstaerke (dicker
+   Ring, Bild, oranger Kasten) sind der haeufigste Grund, warum eine Seite
+   billig wirkt. Hierarchie heisst: EINE Sache gross, der Rest leise.
+2. **Tiefe statt Rahmen.** Ein 1px-Rand auf flacher Flaeche sieht aus wie ein
+   Screenshot. Radius, echter Schlagschatten, Haarlinie nach INNEN
+   (`outline-offset: -1px`) und ein unscharfer Schein aus demselben Bild.
+3. **Duenn und praezise schlaegt dick.** Eine 3-px-Linie mit Verlauf wirkt
+   teurer als ein 6-px-Donut; grosse Zahlen im LEICHTEN Schnitt mit
+   Tabellenziffern, kleine Beschriftungen in Versalien und gedaempft.
+4. **Nichts springt.** Platzhalter in Endgroesse (kein Layout-Sprung),
+   Bildwechsel als Ueberblendung ueber zwei Ebenen, Textwechsel als Blende.
+Und: **kein schwarzer Balken.** Wer ein Medium einbettet, nimmt das
+Seitenverhaeltnis aus dem MEDIUM. Feste Breite plus `max-height` ergibt
+Balken - die Hoehe gewinnt und das Verhaeltnis wird ignoriert.
+
 ## Kunden-App: Layout-Fallen (v226b)
 - **Ein Aufklapp-Bereich darf keinen festen `max-height` haben.** Der offene
   Zustand stand auf `max-height: 2000px; overflow: hidden` - nur damit die
@@ -1623,7 +1643,7 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt **2048/2049 (Stand v230b3)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+Gesamt **2054/2055 (Stand v230b4)** + Renders 7/1/5/2 + GUI. Der eine rote Test
 ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
 (Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
 synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.

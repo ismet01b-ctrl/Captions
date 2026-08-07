@@ -250,6 +250,7 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
   // ist der v230e-Test gefallen, obwohl an ihm nichts kaputt war.
   globalThis.prShotLaden = async () => { globalThis._shot = (globalThis._shot || 0) + 1; };
   globalThis.prShotWeg = () => { globalThis._shotWeg = true; };
+  globalThis.setPhase = (t) => { $('#progressPhase').textContent = t; };
   const pollRender = eval('(' + schneide('pollRender') + ')');
   globalThis.pollRender = pollRender;
   // Ein frueherer Abschnitt hat globalThis.setTimeout durch eine Warteschlange
@@ -447,46 +448,58 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
         !globalThis.ALPHA_WATCH.has('j2'));
 }
 
-// ---- v230b3: das Live-Bild waehrend des Renders ----
-// Ismets Wunsch "den Fortschritt visuell zeigen". Die Funktion holt das Bild
-// als Blob und tauscht es, damit nichts weiss blitzt - und sie MUSS die alte
-// Objekt-URL freigeben, sonst waechst der Speicher bei einem langen Render
-// mit jedem Bild. Beides laesst sich nur durch AUSFUEHREN pruefen.
+// ---- v230b3/v230b4: das Live-Bild waehrend des Renders ----
+// Ismets Wunsch "den Fortschritt visuell zeigen", danach "das sieht billig
+// aus". Die Buehne blendet ueber ZWEI Ebenen um, damit beim Nachladen nichts
+// weiss blitzt - und sie MUSS die alte Objekt-URL freigeben, sonst waechst
+// der Speicher bei einem langen Render mit jedem Bild. Beides laesst sich
+// nur durch AUSFUEHREN pruefen.
 {
   const gemacht = [], frei = [];
   globalThis.URL = { createObjectURL: (b) => { const u = 'blob:' + gemacht.length;
                                                gemacht.push(u); return u; },
                      revokeObjectURL: (u) => frei.push(u) };
-  // Das Mini-DOM des Moduls benutzen, NICHT ein eigenes: die Funktion
-  // schliesst ueber das `$` des Moduls, ein globalThis.$ waere wirkungslos.
-  const box = $('#prShotBox'), img = $('#prShot');
-  box.classList.add('hidden'); img.src = '';
+  const box = $('#prShotBox'), a = $('#prShot'), c = $('#prShot2'), glow = $('#prGlow');
+  // Das Bild meldet sich per onload - im Mini-DOM feuert nichts von selbst,
+  // also loest das Setzen von .src den Rueckruf aus.
+  for (const el of [a, c]) {
+    el.naturalWidth = 1080; el.naturalHeight = 1920;
+    Object.defineProperty(el, 'src', {
+      configurable: true,
+      get() { return this._src || ''; },
+      set(v) { this._src = v; if (this.onload) ECHTER_TIMEOUT(this.onload, 0); },
+    });
+  }
+  box.querySelector = () => ({ style: { setProperty() {}, removeProperty() {} } });
   globalThis.State = { jid: 'abc123' };
   globalThis.document = { hidden: false };
-  // Beide Funktionen teilen sich die Variable PRSHOT_URL. Sie muessen
-  // deshalb in DEMSELBEN eval leben - einzeln geschnitten kennt die zweite
-  // die Variable der ersten nicht (und der Test faellt am Aufbau, nicht am
-  // Code).
-  const [laden, weg] = eval('(function(){let PRSHOT_URL=null;'
+  const [laden, weg] = eval('(function(){let PRSHOT_URL=null,PRSHOT_LAYER=0;'
     + schneide('prShotLaden') + schneide('prShotWeg')
     + 'return [prShotLaden, prShotWeg];})()');
-  // (1) Noch kein Bild da (404): der Rahmen bleibt versteckt.
+  // (1) Noch kein Bild da (404): die Buehne bleibt im Wartezustand.
   globalThis.fetch = async () => ({ ok: false, status: 404 });
   await laden();
-  pruef('v230b3: ohne Bild bleibt der Rahmen versteckt',
-        box.classList.contains('hidden') && !img.src);
-  // (2) Erstes Bild: Rahmen auf, Bild gesetzt, nichts freigegeben.
+  pruef('v230b3: ohne Bild bleibt die Buehne im Wartezustand',
+        !box.classList.contains('on') && !a.src);
+  // (2) Erstes Bild: Buehne an, eine Ebene sichtbar, nichts freigegeben.
   globalThis.fetch = async () => ({ ok: true, status: 200,
                                     blob: async () => ({ size: 1234 }) });
   await laden();
-  pruef('v230b3: das erste Bild macht den Rahmen auf',
-        !box.classList.contains('hidden') && img.src === 'blob:0' && frei.length === 0,
-        `${img.src}, ${frei.length} freigegeben`);
-  // (3) Zweites Bild: getauscht UND das alte freigegeben.
+  pruef('v230b4: das erste Bild macht die Buehne auf',
+        box.classList.contains('on') && a.src === 'blob:0'
+        && a.classList.contains('on') && frei.length === 0,
+        `${a.src}, ${frei.length} freigegeben`);
+  pruef('v230b4: der Schein hinter dem Bild bekommt dasselbe Motiv',
+        glow.src === 'blob:0', glow.src);
+  // (3) Zweites Bild: die ANDERE Ebene traegt es, die alte URL ist frei.
   await laden();
+  pruef('v230b4: das zweite Bild blendet auf der anderen Ebene ein',
+        c.src === 'blob:1' && c.classList.contains('on')
+        && !a.classList.contains('on'),
+        `a=${a.src}/${a.classList.contains('on')}, c=${c.src}/${c.classList.contains('on')}`);
   pruef('v230b3: beim Nachladen wird die alte Objekt-URL freigegeben',
-        img.src === 'blob:1' && frei.length === 1 && frei[0] === 'blob:0',
-        `${img.src}, freigegeben ${JSON.stringify(frei)}`);
+        frei.length === 1 && frei[0] === 'blob:0',
+        `freigegeben ${JSON.stringify(frei)}`);
   // (4) Im Hintergrund gar nicht erst fragen (v230e).
   let gefragt = 0;
   globalThis.fetch = async () => { gefragt++; return { ok: false, status: 404 }; };
@@ -494,10 +507,10 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
   await laden();
   pruef('v230b3: im Hintergrund wird nicht nachgeladen', gefragt === 0);
   globalThis.document = { hidden: false };
-  // (5) Aufraeumen am Ende: Rahmen zu, Bild weg, letzte URL freigegeben.
+  // (5) Aufraeumen am Ende: Buehne aus, beide Ebenen leer, letzte URL frei.
   weg();
   pruef('v230b3: am Ende wird aufgeraeumt',
-        box.classList.contains('hidden') && !img.src && frei.length === 2,
+        !box.classList.contains('on') && !a.src && !c.src && frei.length === 2,
         `freigegeben ${JSON.stringify(frei)}`);
 }
 

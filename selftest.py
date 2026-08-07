@@ -9642,6 +9642,42 @@ def _scenario_betrieb(tmp):
           _c198.post('/api/support/tickets/999999/reply',
                      data={'message': 'fremd'}).status_code == 404)
 
+    # ===== v230b4 DER LADEBILDSCHIRM SIEHT NICHT MEHR BILLIG AUS ========
+    # Ismets Befund: "das sieht so billig aus. Mach es so, dass es wirklich
+    # high class aussieht." Die Zusagen, die das tragen - jede einzeln
+    # nachpruefbar, damit der naechste Umbau sie nicht still zuruecknimmt:
+    _uib4 = open(os.path.join(HERE, 'web', 'index.html'), encoding='utf-8').read()
+    # (1) EIN Motiv fuehrt. Der dicke Ring und der laute orange Kasten sind
+    #     weg - drei Elemente auf derselben Lautstaerke waren die Ursache.
+    check('v230b4: der Donut-Ring und der laute Hinweiskasten sind raus',
+          '.prog-ring' not in _uib4 and 'prog-box' not in _uib4
+          and 'Hang tight, this takes a few minutes' not in _uib4)
+    check('v230b4: der Fortschritt ist eine Linie, keine Scheibe',
+          '.sm-track' in _uib4 and '.sm-fill' in _uib4
+          and "$('#prFg').style.width" in _uib4)
+    # (2) Das Bild bekommt Tiefe: Schein, echte Schlagschatten, Haarlinie
+    #     nach innen. Ohne das sieht ein Standbild wie ein Screenshot aus.
+    check('v230b4: das Bild hat Schein, Schatten und eine Haarlinie',
+          'stage-glow' in _uib4 and 'box-shadow: 0 30px 70px' in _uib4
+          and 'outline-offset: -1px' in _uib4)
+    # (3) KEINE schwarzen Balken. Das Seitenverhaeltnis kommt vom echten
+    #     Bild; die Groesse wird ueber die HOEHE gesteuert (mit fester Breite
+    #     PLUS max-height gewinnt die Hoehe und ein Hochformat bekommt Balken
+    #     - im Browser gemessen 0.0 % Abweichung, Rahmen 236x420 bei 9:16).
+    check('v230b4: der Rahmen nimmt das Verhaeltnis des echten Bildes',
+          'aspect-ratio: var(--stage-ar' in _uib4
+          and "'--stage-ar', neu.naturalWidth" in _uib4
+          and 'height: min(420px, 54vh); width: auto;' in _uib4)
+    # (4) Kein Sprung im Layout: die Buehne hat ihre Groesse, bevor das erste
+    #     Bild da ist, und wartet mit einer ruhigen Flaeche statt mit nichts.
+    check('v230b4: die Buehne steht schon vor dem ersten Bild',
+          'stage-skel' in _uib4 and '@keyframes stageShim' in _uib4)
+    # (5) Nichts springt: Bildwechsel als Ueberblendung, Satzwechsel als
+    #     Blende. Ein harter Tausch im Sekundentakt liest sich als Fehler.
+    check('v230b4: Bild und Satz wechseln weich',
+          'function setPhase(' in _uib4 and '.sm-phase.aus' in _uib4
+          and _uib4.count('class="stage-img"') == 2)
+
     # ===== v230b3 LIVE-BILD WAEHREND DES RENDERS ========================
     # Ismets Frage: "kann man beim Rendern den Fortschritt visuell zeigen?"
     # Geprueft ueber ECHTE Aufrufe, nicht am Quelltext (v219).

@@ -3,6 +3,38 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230b4 DER LADEBILDSCHIRM IST JETZT HIGH END.** Ismets Befund zu v230b3:
+  "das sieht so billig aus. Mach es so, dass es wirklich high class aussieht.
+  Es soll immer so high end aussehen." Drei handwerkliche Ursachen, alle
+  behoben:
+  - **Nichts fuehrte das Auge.** Ein dicker Donut-Ring oben, das Bild klein
+    darunter, ein lauter oranger Hinweiskasten am Ende - drei Elemente auf
+    derselben Lautstaerke. Jetzt EIN Motiv: das laufende Bild als Buehne,
+    darunter eine haarfeine Fortschrittslinie, darunter zwei Zeilen Text.
+  - **Das Bild sass in einem 1px-Rahmen auf flacher Flaeche.** Genau so sieht
+    ein Screenshot aus. Jetzt: 20 px Radius, echter Schlagschatten
+    (30/70 px), Haarlinie NACH INNEN (`outline-offset: -1px`, damit sie auf
+    jedem Motiv gleich fein bleibt) und ein Schein aus demselben Bild,
+    gross und unscharf dahinter - der Grund, warum ein Fernseher teuer
+    aussieht und ein Bilderrahmen billig.
+  - **Der Ring war die Anzeige.** Jetzt eine 3-px-Linie mit Verlauf und
+    Lichtpunkt an der Spitze, daneben die Zahl gross und LEICHT (300er
+    Schnitt, Tabellenziffern). Eine stehende Linie liest sich sonst als
+    Haenger.
+  - **Kein Sprung, kein Blitzen:** die Buehne hat ihre Groesse schon vor dem
+    ersten Bild (ruhige Flaeche mit wanderndem Lichtstreifen), Bildwechsel
+    laufen ueber ZWEI Ebenen als Ueberblendung, der Regie-Satz wechselt mit
+    einer 260-ms-Blende statt hart.
+  - **Keine schwarzen Balken:** das Seitenverhaeltnis kommt vom echten Bild
+    (`--stage-ar` aus `naturalWidth/Height`), und die Groesse wird ueber die
+    HOEHE gesteuert. Mit fester Breite PLUS `max-height` gewinnt die Hoehe,
+    das Verhaeltnis wird ignoriert und ein Hochformat bekommt Balken - genau
+    das war im ersten Entwurf zu sehen. Im Browser gemessen: Rahmen 236x420
+    bei einem 9:16-Bild, Abweichung 0.0 %, am Handy 191x340, ebenfalls 0.0 %.
+  - Sechs Tests halten die Zusagen fest (kein Ring, kein lauter Kasten,
+    Schein/Schatten/Haarlinie da, Verhaeltnis vom echten Bild, Buehne vor dem
+    ersten Bild, weiche Wechsel) plus vier neue Nachweise in der Sonde fuer
+    den Zwei-Ebenen-Wechsel. 0 CSP-Verstoesse.
 - **v230b3 LIVE-BILD WAEHREND DES RENDERS.** Ismets Frage: "kann man beim
   Rendern den Fortschritt visuell zeigen?" Bis hierher gab es Prozentring,
   Phase und Restzeit - bei einem Vorgang von mehreren Minuten ist das wenig.

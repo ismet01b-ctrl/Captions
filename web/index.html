@@ -916,35 +916,124 @@ body {
   .acc-row .acc-lane { display: none; } }
 
 /* Progress-Screen */
-.prog-box {
-  background: var(--surf); border-radius: var(--r-lg);
-  padding: 32px; text-align: center;
+/* ============================================================
+   v230b4 RENDER-BUEHNE. Ismets Befund zum alten Ladebildschirm: "das sieht
+   so billig aus". Drei Ursachen, alle handwerklich:
+     * Ein dicker Donut-Ring oben, das Bild klein darunter, ein lauter
+       oranger Kasten am Ende. Drei Elemente auf derselben Lautstaerke -
+       nichts fuehrt das Auge.
+     * Das Bild sass in einem 1px-Rahmen auf flachem Grund. Genau so sieht
+       ein Screenshot aus, nicht ein Produkt.
+     * Alles zentriert untereinander, ohne Raster und ohne Ruhe.
+   Jetzt: EIN Motiv (das laufende Bild) mit Schein und Tiefe, darunter eine
+   haarfeine Linie und zwei Zeilen Text in klarer Hierarchie.
+   ============================================================ */
+.stage { position: relative; }
+.stage-frame { position: relative; display: flex; justify-content: center;
+  padding: 26px 0 22px; }
+/* Der Schein: dasselbe Bild, gross, unscharf, gesaettigt. Er faerbt die
+   Umgebung in den Farben des Videos - dieselbe Idee wie hinter einem
+   Fernseher. Ohne ihn steht das Bild wie ausgeschnitten auf der Flaeche. */
+.stage-glow { position: absolute; top: 50%; left: 50%; width: 78%;
+  height: 78%; transform: translate(-50%, -50%) scale(1.35);
+  filter: blur(46px) saturate(1.7); opacity: 0; object-fit: cover;
+  border-radius: 50%; pointer-events: none;
+  transition: opacity 900ms var(--ease-out-quart); }
+.stage-frame.on .stage-glow { opacity: .42; }
+/* Das Seitenverhaeltnis kommt vom ECHTEN Bild (JS setzt --stage-ar, sobald
+   das erste da ist). Fest 9:16 waere fuer ein Querformat-Video ein hoher
+   Kasten mit schwarzen Balken - genau der billige Eindruck, um den es
+   hier geht. Bis dahin steht die haeufigste Form als Platzhalter. */
+/* Gesteuert wird ueber die HOEHE, nicht die Breite: mit einer festen Breite
+   PLUS max-height gewinnt die Hoehe, das Seitenverhaeltnis wird ignoriert und
+   ein Hochformat-Video bekommt schwarze Balken links und rechts - genau der
+   Fehler, den v228 schon einmal hatte. Aus Hoehe mal Verhaeltnis folgt die
+   Breite von allein, quer wie hoch. */
+.stage-inner { position: relative; border-radius: 20px; overflow: hidden;
+  background: #07070b;
+  aspect-ratio: var(--stage-ar, 9 / 16);
+  height: min(420px, 54vh); width: auto; max-width: 82%;
+  box-shadow: 0 30px 70px -24px rgba(0,0,0,.85),
+              0 8px 24px -10px rgba(0,0,0,.6);
+  /* Die Haarlinie liegt INNEN (inset), damit sie auf jedem Bildinhalt
+     gleich fein bleibt. Ein 1px-Rand aussen wirkt bei dunklem Motiv wie ein
+     Kasten. */
+  outline: 1px solid rgba(255,255,255,.09); outline-offset: -1px; }
+.stage-img { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; opacity: 0;
+  transition: opacity 420ms var(--ease-out-quart); }
+.stage-img.on { opacity: 1; }
+/* Solange kein Bild da ist, steht hier eine ruhige Flaeche mit einem
+   wandernden Lichtstreifen - kein Zappeln, kein Spinner. Wichtig ist vor
+   allem, dass die Buehne SOFORT ihre Groesse hat: sonst springt das Layout,
+   wenn das erste Bild kommt. */
+.stage-skel { position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 38%,
+    rgba(255,255,255,.055) 50%, transparent 62%);
+  background-size: 260% 100%; animation: stageShim 2.6s linear infinite; }
+.stage-frame.on .stage-skel { opacity: 0; transition: opacity 400ms; }
+@keyframes stageShim { from { background-position: 130% 0 } to { background-position: -130% 0 } }
+.stage-badge { position: absolute; top: 12px; left: 12px; display: flex;
+  align-items: center; gap: 6px; padding: 5px 10px 5px 8px;
+  border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+  color: #fff; background: rgba(8,8,12,.55);
+  border: 1px solid rgba(255,255,255,.14);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  opacity: 0; transition: opacity 400ms; }
+.stage-frame.on .stage-badge { opacity: 1; }
+.stage-badge .dot { width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red); box-shadow: 0 0 0 0 rgba(255,85,102,.7);
+  animation: stagePuls 2s ease-out infinite; }
+@keyframes stagePuls {
+  0% { box-shadow: 0 0 0 0 rgba(255,85,102,.6) }
+  70% { box-shadow: 0 0 0 7px rgba(255,85,102,0) }
+  100% { box-shadow: 0 0 0 0 rgba(255,85,102,0) }
 }
-.prog-ring { width: 140px; height: 140px; margin: 0 auto 20px; position: relative; }
-.prog-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
-.prog-ring .pr-bg { stroke: var(--surf2); }
-.prog-ring .pr-fg { stroke: url(#pg); stroke-linecap: round;
-  transition: stroke-dashoffset var(--t-slow) var(--ease-out-quart); }
-.prog-ring .pr-num {
-  position: absolute; inset: 0; display: flex; align-items: center;
-  justify-content: center; font-size: 32px; font-weight: 800;
-  font-variant-numeric: tabular-nums;
+/* --- Fortschritt: eine Linie, keine Scheibe --------------------------- */
+.stage-meter { max-width: 420px; margin: 0 auto; }
+.sm-head { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; }
+.sm-pct { font-size: 40px; font-weight: 300; letter-spacing: -1.5px;
+  font-variant-numeric: tabular-nums; line-height: 1; color: var(--fg); }
+.sm-pct i { font-style: normal; font-size: 19px; font-weight: 400;
+  color: var(--mut2); margin-left: 3px; }
+.sm-eta { font-size: 13px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.sm-eta .lbl, .sm-time .lbl { color: var(--mut2); font-size: 11.5px;
+  letter-spacing: .05em; text-transform: uppercase; margin-right: 6px; }
+.sm-track { height: 3px; border-radius: 999px; margin: 14px 0 11px;
+  background: rgba(255,255,255,.07); overflow: hidden; }
+.sm-fill { height: 100%; width: 0; border-radius: 999px; position: relative;
+  background: linear-gradient(90deg, var(--acc), var(--acc2));
+  box-shadow: 0 0 14px -2px var(--acc-glow); }
+/* Ein Lichtpunkt an der Spitze: er sagt "es laeuft", auch wenn die Linie
+   gerade kaum waechst. Billiger Trick, aber der richtige - eine stehende
+   Linie liest sich als Haenger. */
+.sm-fill::after { content: ''; position: absolute; right: 0; top: 50%;
+  width: 26px; height: 3px; transform: translateY(-50%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.85));
+  border-radius: 999px; animation: smGlint 1.9s ease-in-out infinite; }
+@keyframes smGlint { 0%,100% { opacity: .25 } 50% { opacity: .9 } }
+.sm-foot { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 20px; }
+/* Der Regie-Satz ist mal kurz, mal lang. Er darf zwei Zeilen brauchen, aber
+   nie die Zeit rechts wegdruecken - deshalb eigene Spalte mit min-width 0
+   und ein Deckel bei zwei Zeilen. */
+.sm-phase { font-size: 13px; color: var(--mut); line-height: 1.45;
+  flex: 1 1 auto; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden;
+  transition: opacity 260ms var(--ease-out-quart); }
+.sm-phase.aus { opacity: 0; }
+.sm-time { font-size: 13px; color: var(--fg); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+/* Der Hinweis war ein oranger Kasten mit vier Zeilen. Er sagte dasselbe wie
+   jetzt zwei ruhige Zeilen - nur lauter als die eigentliche Information. */
+.stage-note { margin: 20px auto 0; max-width: 420px; text-align: center;
+  font-size: 12.5px; line-height: 1.6; color: var(--mut2); }
+@media (max-width: 560px) {
+  .stage-inner { height: min(340px, 46vh); max-width: 78%; }
+  .sm-pct { font-size: 34px; }
+  .stage-frame { padding: 18px 0 18px; }
 }
-.prog-ring .pr-num .pct { color: var(--acc2); }
-.prog-phase { font-size: 15px; color: var(--mut); margin-top: 8px; }
-/* v230b3 LIVE-BILD. Der Rahmen kennt das Seitenverhaeltnis vorher nicht
-   (hoch, quer, quadratisch), deshalb waechst er mit dem Bild statt es zu
-   beschneiden - ein zugeschnittenes Vorschaubild wuerde genau die Captions
-   am Rand abschneiden, um die es geht (v228-Lehre). */
-.prog-shot { margin: 4px auto 14px; }
-/* Der Deckel sitzt auf der HOEHE, nicht auf der Breite: ein 9:16-Bild waere
-   bei 260 px Breite ueber 460 px hoch und schoebe Phase und Restzeit aus dem
-   Blick. Quer bleibt es dadurch automatisch breiter. */
-.prog-shot img { display: block; max-height: 230px; width: auto;
-  max-width: min(100%, 320px); margin: 0 auto; border-radius: 12px;
-  border: 1px solid var(--line); background: #000; }
-.prog-shot .ps-cap { margin-top: 7px; font-size: 11.5px; color: var(--mut2);
-  letter-spacing: .06em; text-transform: uppercase; }
 
 /* Success-Card */
 .success-hero {
@@ -2481,44 +2570,47 @@ footer { text-align: center; color: var(--mut2); font-size: 12px;
         <div class="grow"></div>
       </div>
 
-      <!-- Fortschritt -->
+      <!-- Fortschritt.
+           v230b4: Das Bild ist die Hauptsache, alles andere ist ruhige
+           Umgebung. Vorher stand ein dicker Ring oben, das Bild klein
+           darunter und ein lauter oranger Kasten am Ende - drei Elemente,
+           die um Aufmerksamkeit kaempfen (Ismet: "sieht so billig aus").
+           Jetzt: eine Buehne mit dem laufenden Bild, darunter eine
+           haarfeine Fortschrittslinie und zwei Zeilen Text. -->
       <div class="card hidden" id="progressCard" style="margin-top:20px;">
-        <div class="prog-box">
-          <svg width="0" height="0" style="position:absolute;">
-            <defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#ff7a1a"/><stop offset="1" stop-color="#ff9d52"/>
-            </linearGradient></defs>
-          </svg>
-          <div class="prog-ring">
-            <svg viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="42" fill="none" stroke-width="6" class="pr-bg"/>
-              <circle cx="50" cy="50" r="42" fill="none" stroke-width="6" class="pr-fg"
-                      stroke-dasharray="264" stroke-dashoffset="264" id="prFg"/>
-            </svg>
-            <div class="pr-num"><span class="pct" id="prPct">0</span>%</div>
+        <div class="stage">
+          <div class="stage-frame" id="prShotBox">
+            <!-- Der Schein hinter dem Bild ist dasselbe Bild, gross und
+                 unscharf. Das ist der Grund, warum ein Fernseher teuer
+                 aussieht und ein Rahmen mit 1px-Rand billig. -->
+            <img class="stage-glow" id="prGlow" alt="" aria-hidden="true">
+            <div class="stage-inner">
+              <!-- Zwei Ebenen, damit ein neues Bild ueberblendet statt zu
+                   springen. -->
+              <img class="stage-img" id="prShot" alt="">
+              <img class="stage-img" id="prShot2" alt="" aria-hidden="true">
+              <div class="stage-skel" id="prSkel"></div>
+              <div class="stage-badge"><span class="dot"></span>Live</div>
+            </div>
           </div>
-          <!-- v230b3: Live-Bild aus dem laufenden Render. Bleibt versteckt,
-               bis das erste Bild da ist - ein leerer Rahmen waere schlechter
-               als keiner. -->
-          <div class="prog-shot hidden" id="prShotBox">
-            <img id="prShot" alt="">
-            <div class="ps-cap">Live from your render</div>
-          </div>
-          <div class="prog-phase" id="progressPhase">Ready …</div>
-          <div style="display:flex; justify-content:center; gap:24px; margin-top:12px;
-               font-size:12px; color:var(--mut2); flex-wrap:wrap;">
-            <span>Elapsed: <b id="progressElapsed" style="color:var(--fg);">0:00</b></span>
-            <span>Remaining: <b id="progressEta" style="color:var(--acc2);">–</b></span>
+
+          <div class="stage-meter">
+            <div class="sm-head">
+              <div class="sm-pct"><span id="prPct">0</span><i>%</i></div>
+              <div class="sm-eta"><span class="lbl">Remaining</span>
+                <b id="progressEta">&ndash;</b></div>
+            </div>
+            <div class="sm-track"><div class="sm-fill" id="prFg"></div></div>
+            <div class="sm-foot">
+              <span class="sm-phase" id="progressPhase">Preparing &hellip;</span>
+              <span class="sm-time"><span class="lbl">Elapsed</span>
+                <b id="progressElapsed">0:00</b></span>
+            </div>
           </div>
         </div>
-        <div style="margin-top:16px; padding:14px 16px; background:var(--acc-soft);
-             border-radius:12px; font-size:13px; color:var(--mut); line-height:1.6;">
-          <b style="color:var(--acc2);">Hang tight, this takes a few minutes.</b><br>
-          We're in beta and every video is rendered frame by frame on the server,
-          so it's slower for now. Once we leave beta this will be down to a few
-          seconds. You can leave this page open, close the tab, or come back later,
-          your video keeps rendering and lands in your Library when it's ready.
-        </div>
+        <p class="stage-note">Rendered frame by frame on our servers, so it takes
+          a few minutes. You can close this tab, it keeps going and lands in your
+          Library.</p>
       </div>
 
       <!-- Success -->
@@ -5576,7 +5668,10 @@ function progAnim() {
   tgt = Math.max(tgt, Math.min(creepCap, cur + 0.0006));
   const next = cur + (tgt - cur) * 0.12;   // Ease-Out
   State.progShown = next;
-  $('#prFg').setAttribute('stroke-dashoffset', String(264 * (1 - next)));
+  // v230b4: Die Fortschrittslinie statt der Ringscheibe. Der Wert wandert
+  // ueber die BREITE - das laesst sich mit einer Hardware-Ebene animieren
+  // und flimmert auf dem Handy nicht.
+  $('#prFg').style.width = (next * 100).toFixed(2) + '%';
   $('#prPct').textContent = String(Math.round(next * 100));
   if (State.renderStart) {
     $('#progressElapsed').textContent = fmtDur((Date.now() - State.renderStart) / 1000);
@@ -5596,7 +5691,13 @@ function progAnim() {
        Speicher bei einem langen Render um jedes Bild.
      * Im Hintergrund gar nicht erst fragen (v230e) - und ein 404 ist hier
        KEIN Fehler, sondern "das erste Bild ist noch nicht da". */
-let PRSHOT_URL = null;
+function setPhase(txt) {
+  const el = $('#progressPhase');
+  if (!el || el.textContent === txt) return;
+  el.classList.add('aus');
+  setTimeout(() => { el.textContent = txt; el.classList.remove('aus'); }, 260);
+}
+let PRSHOT_URL = null, PRSHOT_LAYER = 0;
 async function prShotLaden() {
   if (!State.jid || document.hidden) return;
   try {
@@ -5606,20 +5707,47 @@ async function prShotLaden() {
     const b = await r.blob();
     if (!b.size) return;
     const u = URL.createObjectURL(b);
-    const img = $('#prShot');
-    if (!img) { URL.revokeObjectURL(u); return; }
-    img.src = u;
+    // v230b4: ZWEI Ebenen im Wechsel. Ein einzelnes <img>, dessen src man
+    // tauscht, blitzt beim Nachladen kurz leer - bei einem Bild pro Sekunde
+    // sieht das aus wie ein Fehler. Hier bekommt die verdeckte Ebene das
+    // neue Bild und wird erst eingeblendet, wenn es DA ist.
+    const a = $('#prShot'), c = $('#prShot2');
+    if (!a || !c) { URL.revokeObjectURL(u); return; }
+    // Ebene 0 ist die vordere: das ERSTE Bild landet dort, damit sich der
+    // Ablauf beim Lesen (und im Test) mit dem Markup deckt.
+    const neu = PRSHOT_LAYER ? c : a, alt = PRSHOT_LAYER ? a : c;
+    await new Promise((fertig) => {
+      neu.onload = fertig;
+      neu.onerror = fertig;
+      neu.src = u;
+    });
+    // Das Seitenverhaeltnis kommt vom echten Bild - einmal, beim ersten.
+    const box = $('#prShotBox');
+    if (neu.naturalWidth && neu.naturalHeight && box) {
+      box.querySelector('.stage-inner').style.setProperty(
+        '--stage-ar', neu.naturalWidth + ' / ' + neu.naturalHeight);
+    }
+    const glow = $('#prGlow');
+    if (glow) glow.src = u;
+    neu.classList.add('on');
+    alt.classList.remove('on');
+    PRSHOT_LAYER = PRSHOT_LAYER ? 0 : 1;
     if (PRSHOT_URL) URL.revokeObjectURL(PRSHOT_URL);
     PRSHOT_URL = u;
-    $('#prShotBox').classList.remove('hidden');
+    if (box) box.classList.add('on');
   } catch (e) { /* Netz weg: beim naechsten Poll wieder */ }
 }
 function prShotWeg() {
   const box = $('#prShotBox');
-  if (box) box.classList.add('hidden');
-  const img = $('#prShot');
-  if (img) img.removeAttribute('src');
+  if (box) box.classList.remove('on');
+  ['#prShot', '#prShot2', '#prGlow'].forEach((id) => {
+    const el = $(id);
+    if (el) { el.classList.remove('on'); el.removeAttribute('src'); }
+  });
+  const inner = box && box.querySelector('.stage-inner');
+  if (inner) inner.style.removeProperty('--stage-ar');
   if (PRSHOT_URL) { URL.revokeObjectURL(PRSHOT_URL); PRSHOT_URL = null; }
+  PRSHOT_LAYER = 0;
 }
 
 async function pollRender() {
@@ -5631,7 +5759,11 @@ async function pollRender() {
   try {
     const st = await (await fetch('/api/status/' + State.jid)).json();
     State.progTarget = st.progress || 0;
-    $('#progressPhase').textContent = st.phase || 'Bereit …';
+    // v230b4: Der Satz wechselt oft. Ein harter Texttausch mitten im Lesen
+    // wirkt hektisch; 260 ms Ausblenden, tauschen, einblenden liest sich
+    // ruhig. (Und der alte Rueckfalltext war deutsch, in einer englischen
+    // App.)
+    setPhase(st.phase || 'Working …');
     // Erst ab dem Bilder-Malen gibt es ueberhaupt ein Vorschaubild; vorher
     // wuerde jede Anfrage nur ein 404 einsammeln.
     if (st.status === 'laeuft' && (st.progress || 0) >= 0.5) prShotLaden();
