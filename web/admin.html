@@ -722,13 +722,27 @@ async function loadAbuse(){
   const disp=d.disposable_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td></tr>`).join('');
   const unv=d.unverified_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('');
   const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('');
-  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(l.key)}</td><td>${l.hits}</td></tr>`).join('');
+  /* v230c3: der Schlüssel der Bremse ist technisch (login_konto:12,
+     login:1.2.3.4). So wie er ist, sagt er Ismet nichts - also übersetzen.
+     Eine gehashte Mailadresse wird bewusst NICHT aufgelöst: sie ist absichtlich
+     nicht rückrechenbar, und "gibt es nicht" ist hier die ganze Information. */
+  const bremsName=k=>{
+    const s=String(k||''), p=s.indexOf(':');
+    if(p<0) return s;
+    const art=s.slice(0,p), rest=s.slice(p+1);
+    if(art==='login_konto') return rest.charAt(0)==='e'
+      ? 'Anmelden · Adresse gibt es gar nicht' : 'Anmelden · Konto #'+rest;
+    const was={login:'Anmelden',reg:'Registrieren',reset:'Passwort vergessen',
+               support:'Support'}[art]||art;
+    return was+' · '+rest;
+  };
+  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(bremsName(l.key))}</td><td>${l.hits}</td></tr>`).join('');
   const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('');
   // Was ist auffällig? Bewusst großzügige Schwellen: eine Ampel, die
   // grundlos rot ist, schaut nach einer Woche niemand mehr an (v206).
   const auf=[];
   if(d.disposable_accounts.length>=5) auf.push(`${d.disposable_accounts.length} Konten mit Wegwerf-Adresse`);
-  if(d.rate_limit_lockouts.length) auf.push(`${d.rate_limit_lockouts.length} Adresse(n) automatisch ausgebremst`);
+  if(d.rate_limit_lockouts.length) auf.push(`${d.rate_limit_lockouts.length} Mal automatisch ausgebremst (Anschluss oder Konto)`);
   if(d.demo_ip_abuse.some(x=>x.hits>=5)) auf.push('eine Internet-Adresse nutzt die Demo auffällig oft');
   if((d.top_referrers[0]||{}).invited>=10) auf.push('ein Konto hat auffällig viele Leute geworben');
   if(d.pending_resets>=10) auf.push(`${d.pending_resets} Passwort-Links gleichzeitig gültig`);
@@ -787,10 +801,11 @@ async function loadAbuse(){
       </div>
       <div>
         <h3>Automatisch ausgebremst</h3>
-        <div class="note" style="margin:-4px 0 8px">Adressen, die in einer Viertelstunde mehr
-          als 15 Mal etwas versucht haben (anmelden, registrieren). Die sind schon
-          gesperrt, du musst nichts tun.</div>
-        <table><thead><tr><th>Woher</th><th>Versuche</th></tr></thead><tbody>${zeile(locks,'niemand')}</tbody></table>
+        <div class="note" style="margin:-4px 0 8px">Wer in der letzten Stunde auffällig oft
+          etwas versucht hat. Zwei Bremsen laufen: eine pro Internet-Anschluss, eine
+          pro Konto (ab 10 falschen Passwörtern in 15 Minuten wird gar kein Passwort
+          mehr geprüft). Beide lösen sich von allein wieder, du musst nichts tun.</div>
+        <table><thead><tr><th>Wer</th><th>Versuche</th></tr></thead><tbody>${zeile(locks,'niemand')}</tbody></table>
       </div>
       <div>
         <h3>Demo mehrfach benutzt</h3>

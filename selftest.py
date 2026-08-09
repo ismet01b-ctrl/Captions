@@ -10023,6 +10023,157 @@ def _scenario_betrieb(tmp):
     check('v197b: der Restore verlangt auch im Panel die Tippbestaetigung',
           "Type RESTORE to confirm" in _adm197)
 
+    # ======= v230c3: Brute-Force-Bremse pro KONTO und neustartfest =======
+    # Ismets Frage: "ist das Login auch sicher?" Das Meiste sass (bcrypt,
+    # gleiche Fehlermeldung UND gleiche Antwortzeit, httponly+secure-Cookie,
+    # Passwortwechsel wirft alle Geraete raus). Zwei Loecher waren echt:
+    #  (1) die Bremse zaehlte nur je INTERNET-ANSCHLUSS. 20 Versuche pro
+    #      Anschluss klingt streng, aber ein gemietetes Botnetz hat tausend -
+    #      macht 20.000 Versuche auf EINE Adresse, ohne dass etwas anschlaegt.
+    #  (2) sie lag im Arbeitsspeicher. Nach jedem Deploy stand jeder Zaehler
+    #      wieder auf null, und hier wird mehrmals taeglich deployt.
+    # Getestet wird per ECHTEM ANGRIFF ueber die HTTP-Schnittstelle, nicht per
+    # Quelltext-Suche - in v230d-sec war genau so ein Fix gruen und wirkungslos.
+    import server as _SV3
+    from fastapi.testclient import TestClient as _TC3
+    _c3 = _TC3(_SV3.app, base_url='https://test')     # secure-Cookie -> https
+    _ipk = lambda ip: {'X-Forwarded-For': ip}
+    _m3 = f'bremse{int(_tm197.time())}@test.invalid'
+    _rg3 = _c3.post('/api/register',
+                    data={'email': _m3, 'password': 'passwort123',
+                          'name': 'Bremsentest'}, headers=_ipk('203.0.113.1'))
+    check('v230c3: Testkonto angelegt', _rg3.status_code == 200, _rg3.text[:120])
+    # (a) DER VERTEILTE ANGRIFF. Jeder Versuch von einem ANDEREN Anschluss -
+    #     die IP-Bremse kann hier also gar nicht greifen. Trotzdem ist nach
+    #     zehn Fehlversuchen Schluss.
+    _codes3 = [_c3.post('/api/login',
+                        data={'email': _m3, 'password': 'falschfalsch'},
+                        headers=_ipk(f'198.51.100.{i}')).status_code
+               for i in range(_SV3.LOGIN_KONTO_MAX)]
+    check('v230c3: zehn Fehlversuche von zehn Anschluessen laufen als 401',
+          _codes3 == [401] * _SV3.LOGIN_KONTO_MAX, str(_codes3))
+    _r11 = _c3.post('/api/login', data={'email': _m3, 'password': 'falschfalsch'},
+                    headers=_ipk('198.51.100.240'))
+    check('v230c3: der elfte Versuch wird gebremst, auch von einem FRISCHEN '
+          'Anschluss', _r11.status_code == 429, _r11.text[:120])
+    # Bewusste Kehrseite: waehrend der Sperre kommt auch der echte Kunde nicht
+    # rein. Das ist der Preis dafuer, dass gar kein Passwort mehr geprueft
+    # wird - alles andere waere keine Bremse. Der Notausgang steht in der
+    # Fehlermeldung und wird gleich getestet.
+    _rok3 = _c3.post('/api/login', data={'email': _m3, 'password': 'passwort123'},
+                     headers=_ipk('198.51.100.241'))
+    check('v230c3: waehrend der Sperre wird gar kein Passwort mehr geprueft',
+          _rok3.status_code == 429)
+    check('v230c3: die Meldung nennt den Notausgang',
+          'reset your password' in _rok3.text.lower(), _rok3.text[:160])
+    # (b) KEIN VERRAT. Eine unbekannte Adresse muss sich GENAUSO verhalten -
+    #     sonst waere die Bremse selbst der Oracle: 429 hiesse "Konto gibt es".
+    _unb3 = f'gibtsnicht{int(_tm197.time())}@test.invalid'
+    _cu3 = [_c3.post('/api/login', data={'email': _unb3, 'password': 'falschfalsch'},
+                     headers=_ipk(f'192.0.2.{i}')).status_code
+            for i in range(_SV3.LOGIN_KONTO_MAX)]
+    _ru3 = _c3.post('/api/login', data={'email': _unb3, 'password': 'falschfalsch'},
+                    headers=_ipk('192.0.2.240')).status_code
+    check('v230c3: eine unbekannte Adresse verhaelt sich exakt gleich',
+          _cu3 == _codes3 and _ru3 == _r11.status_code,
+          f'{_cu3[:3]}... -> {_ru3}')
+    # (c) DER NOTAUSGANG. Wer sein Passwort zuruecksetzt, kommt wieder rein -
+    #     sonst koennte ein Angreifer den Kunden dauerhaft aussperren.
+    _con3 = _SV3._db()
+    _uid3 = _con3.execute("SELECT id FROM users WHERE email = ?",
+                          (_m3,)).fetchone()['id']
+    _con3.close()
+    _rt3 = _SV3._create_reset(_uid3)
+    _rr3 = _c3.post('/api/reset_password',
+                    data={'token': _rt3, 'password': 'neuespasswort9'})
+    check('v230c3: Passwort zuruecksetzen geht trotz Sperre',
+          _rr3.status_code == 200, _rr3.text[:120])
+    _rn3 = _c3.post('/api/login', data={'email': _m3, 'password': 'neuespasswort9'},
+                    headers=_ipk('198.51.100.242'))
+    check('v230c3: und danach kommt der Kunde wieder rein',
+          _rn3.status_code == 200, _rn3.text[:120])
+    # (d) Ein richtiges Passwort raeumt den Zaehler - sonst sammelt ein Konto
+    #     ueber Wochen Tippfehler und sperrt sich irgendwann selbst aus.
+    for i in range(3):
+        _c3.post('/api/login', data={'email': _m3, 'password': 'falschfalsch'},
+                 headers=_ipk(f'198.51.100.{20 + i}'))
+    check('v230c3: Fehlversuche stehen am Konto',
+          _SV3._bremse_stand(f'login_konto:{_uid3}', _SV3.LOGIN_KONTO_FENSTER) == 3)
+    _c3.post('/api/login', data={'email': _m3, 'password': 'neuespasswort9'},
+             headers=_ipk('198.51.100.30'))
+    check('v230c3: die erfolgreiche Anmeldung raeumt den Zaehler',
+          _SV3._bremse_stand(f'login_konto:{_uid3}', _SV3.LOGIN_KONTO_FENSTER) == 0)
+    # (e) NEUSTARTFEST. Genau das war Loch (2): das alte dict im
+    #     Arbeitsspeicher war nach jedem Deploy leer.
+    _SV3._bremse_frei('test:neustart')
+    _SV3._bremse_plus('test:neustart', 900)
+    _con3 = _SV3._db()
+    _row3 = _con3.execute("SELECT n FROM bremse WHERE schluessel = 'test:neustart'"
+                          ).fetchone()
+    _con3.close()
+    check('v230c3: der Zaehler steht in der Datenbank, nicht im Arbeitsspeicher',
+          _row3 is not None and int(_row3['n']) == 1)
+    check('v230c3: das alte Speicher-dict ist ersatzlos weg',
+          not hasattr(_SV3, '_REG_ATTEMPTS'),
+          'wer es wieder einbaut, baut den Zaehler, den jeder Deploy loescht')
+    check('v230c3: ein abgelaufenes Fenster faengt bei null an',
+          _SV3._bremse_stand('test:neustart', 0) == 0
+          and _SV3._bremse_stand('test:neustart', 900) == 1)
+    # (f) MENGENDECKEL. Die Tabelle kann ein Fremder fuellen - was ein Fremder
+    #     fuellen kann, braucht eine Obergrenze und einen Aufraeumer
+    #     (v230d-sec: 452 KB Traceback je 100 anonyme Aufrufe).
+    _con3 = _SV3._db()
+    _con3.execute("INSERT OR REPLACE INTO bremse (schluessel, n, start) "
+                  "VALUES ('test:uralt', 9, ?)", (int(_tm197.time()) - 200000,))
+    _con3.commit()
+    _con3.close()
+    _SV3._bremse_purge()
+    _con3 = _SV3._db()
+    _weg3 = _con3.execute("SELECT COUNT(*) c FROM bremse WHERE schluessel = "
+                          "'test:uralt'").fetchone()['c']
+    _con3.close()
+    check('v230c3: abgelaufene Zaehler werden aufgeraeumt', _weg3 == 0)
+    _cap3 = _SV3.BREMSE_MAX_ZEILEN
+    try:
+        _SV3.BREMSE_MAX_ZEILEN = 5
+        _con3 = _SV3._db()
+        for i in range(40):
+            _con3.execute("INSERT OR REPLACE INTO bremse (schluessel, n, start) "
+                          "VALUES (?, 1, ?)",
+                          (f'test:flut{i}', int(_tm197.time()) - 60 + i))
+        _con3.commit()
+        _con3.close()
+        _SV3._bremse_purge()
+        _con3 = _SV3._db()
+        _n3 = _con3.execute("SELECT COUNT(*) c FROM bremse").fetchone()['c']
+        _con3.close()
+        check('v230c3: bei Ueberlauf bleibt die Tabelle gedeckelt',
+              _n3 <= 5, f'{_n3} Zeilen')
+    finally:
+        _SV3.BREMSE_MAX_ZEILEN = _cap3
+    _svc3 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230c3: der Aufraeumer haengt im stuendlichen Lauf',
+          _svc3.index('_bremse_purge()                  #')
+          > _svc3.index('def _cleanup_worker'))
+    # (g) Das Panel muss die NEUE Quelle lesen. Wer weiter das tote dict
+    #     abgefragt haette, saehe dauerhaft eine leere Liste - die Sorte
+    #     Feature, die still ausgeht und die niemand vermisst (v210).
+    _SV3._bremse_plus('login:203.0.113.250', 900)
+    for _i in range(6):
+        _SV3._bremse_plus('login:203.0.113.250', 900)
+    os.environ['DVE_ADMIN'] = 'testkey_c3'
+    _ab3 = _c3.get('/api/admin/abuse', headers={'X-Admin-Key': 'testkey_c3'})
+    check('v230c3: das Panel zeigt die Bremsen aus der Datenbank',
+          _ab3.status_code == 200
+          and any(l['key'] == 'login:203.0.113.250'
+                  for l in _ab3.json().get('rate_limit_lockouts', [])),
+          _ab3.text[:200])
+    # Und der technische Schluessel wird uebersetzt, nicht roh angezeigt -
+    # 'login_konto:12' sagt Ismet nichts (v206-Regel: EINE Zahl, EIN Satz).
+    _adm3 = open(os.path.join(HERE, 'web', 'admin.html'), encoding='utf-8').read()
+    check('v230c3: das Panel uebersetzt den Bremsen-Schluessel',
+          'const bremsName=' in _adm3 and 'esc(bremsName(l.key))' in _adm3)
+
     # ======= v198: Support-Verlauf statt Einbahnstrasse ==================
     # Ein Ticket war bis v197 EINE Nachricht. Die Antwort lief per Mail aus
     # Ismets Postfach: sie stand nirgends, das Panel zeigte ewig die Frage,
@@ -10351,8 +10502,11 @@ def _scenario_betrieb(tmp):
     # Fehlversuche von derselben IP). Fuer die naechsten Einzelpruefungen
     # zuruecksetzen, sonst antwortet der Server 429 statt 403 - das waere
     # richtig, aber es pruefte die falsche Zusage.
-    for _k in [k for k in _SV198._REG_ATTEMPTS if k.startswith('admin:')]:
-        _SV198._REG_ATTEMPTS.pop(_k, None)
+    # v230c3: die Bremse steht jetzt in der Datenbank, nicht mehr im dict.
+    _cbr = _SV198._db()
+    _cbr.execute("DELETE FROM bremse WHERE schluessel LIKE 'admin:%'")
+    _cbr.commit()
+    _cbr.close()
     # Die CSP selbst: keine Inline-Erlaubnis fuer Skripte mehr, dafuer der
     # Fingerabdruck JEDES Inline-Blocks - und object-src zu.
     import base64 as _b64230, hashlib as _hl230
@@ -10545,8 +10699,11 @@ def _scenario_betrieb(tmp):
           _c203.get('/api/admin/alerts', headers=_H203).status_code == 200)
     check('v203-sec: der schreibende Alerts-Endpunkt ist ebenfalls dicht',
           _c203.post('/api/admin/alerts/read', data={'id': 0}).status_code == 403)
-    for _k in [k for k in _SV198._REG_ATTEMPTS if k.startswith('admin:')]:
-        _SV198._REG_ATTEMPTS.pop(_k, None)
+    # v230c3: die Bremse steht jetzt in der Datenbank, nicht mehr im dict.
+    _cbr = _SV198._db()
+    _cbr.execute("DELETE FROM bremse WHERE schluessel LIKE 'admin:%'")
+    _cbr.commit()
+    _cbr.close()
     import re as _re203      # eigener Import: _re195 steht in einem SPAETEREN
                              # Block (v196-Lehre - nie auf Variablen aus einem
                              # anderen Abschnitt stuetzen)

@@ -1201,6 +1201,35 @@ tausend Konten sie gleichzeitig ausloesen?
   an CSP, Handlern oder Seiten etwas aendert, laesst sie einmal laufen.
 - Build-Stempel (`X-DVE-Version`) geht nur noch an Aufrufer mit Admin-Key.
 
+## Login-Bremse (v230c3) — je Anschluss ist keine Bremse
+- **Ein Deckel je IP haelt einen VERTEILTEN Angriff nicht auf.** 20 Versuche
+  je Anschluss klingt streng; ein gemietetes Botnetz hat tausend Anschluesse
+  und damit 20.000 Versuche auf dieselbe Adresse, ohne dass ein Zaehler
+  anschlaegt. Wer eine Bremse baut, fragt zuerst: gegen WEN zaehlt sie, und
+  was kostet es den Angreifer, diese Groesse zu wechseln? Eine IP ist billig,
+  ein fremdes Konto nicht.
+- **Ein Zaehler im Arbeitsspeicher ist bei taeglichem Deploy keiner.**
+  `_REG_ATTEMPTS` war nach jedem Neustart leer, und autodeploy prueft alle
+  2 Minuten. Alles, was einen Angriff ueber Minuten hinweg messen soll, gehoert
+  in die Datenbank (Tabelle `bremse`, Aggregat je Schluessel).
+- **Eine Bremse darf nicht zum Verrats-Orakel werden.** Wuerde nur ein
+  EXISTIERENDES Konto ab dem elften Versuch 429 liefern, waere genau das
+  Enumerieren wieder offen, das die identische Fehlermeldung verhindert.
+  Unbekannte Adressen zaehlen mit, unter `_email_hash`, und verhalten sich
+  identisch.
+- **Wer sperrt, baut den Notausgang mit.** Waehrend der Sperre kommt auch der
+  echte Kunde nicht rein (das ist der Punkt). Also loest der Passwort-Reset
+  die Sperre, und eine erfolgreiche Anmeldung raeumt den Zaehler - sonst
+  sperrt ein Angreifer mit 10 Fehlversuchen einen zahlenden Kunden aus.
+- **Was ein Fremder fuellen kann, braucht Mengendeckel und Aufraeumer**
+  (`BREMSE_MAX_ZEILEN`, `_bremse_purge`) - dieselbe Regel wie bei `alerts`.
+  Und: faellt die Datenbank aus, gilt der Versuch als ERLAUBT. Eine Bremse,
+  die bei eigener Stoerung alle aussperrt, ist ein Ausfall, kein Schutz.
+- **Wer die Quelle einer Zahl umbaut, sucht ihre LESER.** Die Panel-Ansicht
+  Abuse las noch das tote dict und haette dauerhaft eine leere Liste gezeigt,
+  ohne Fehler und ohne Meldung (v210). Getestet wird per echtem Angriff ueber
+  HTTP, nicht per Quelltext-Suche (v230d-sec).
+
 ## Sicherheit: Lehren aus Audit-Runde 2 (v230d-sec)
 - **Ein mehrstufiger Vorgang wird an JEDER Stufe geprüft, und die
   Berechtigung gehört an den VORGANG, nicht an den einzelnen Request.** Der

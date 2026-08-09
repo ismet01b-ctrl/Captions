@@ -595,6 +595,22 @@ def _init_users_db():
     con.execute("CREATE INDEX IF NOT EXISTS ix_secev_ts ON security_events(ts)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_secev_akt "
                 "ON security_events(aktion, ts)")
+    # v230c3 BREMSE. Bis v230c2 lagen die Fehlversuche NUR im Arbeitsspeicher
+    # eines Prozesses - nach jedem Deploy (alle 2 Minuten geprueft) stand jeder
+    # Zaehler wieder auf null. Ein Angreifer musste dafuer nicht einmal etwas
+    # tun, das passiert von allein. Jetzt in der Datenbank, also
+    # neustartfest.
+    # Bewusst ein AGGREGAT je Schluessel (n + Fensterstart), keine Zeile je
+    # Versuch: die Tabelle kann ein Fremder fuellen, und ein Protokoll, das ein
+    # Fremder fuellen kann und niemand aufraeumt, ist selbst der Angriff
+    # (v230d-sec). So waechst sie hoechstens um eine Zeile je Anschluss/Konto.
+    # Preis dafuer: festes statt gleitendes Fenster, an der Fenstergrenze also
+    # bis zu 2x max_attempts. Fuer eine Brute-Force-Bremse ist das egal.
+    con.execute("CREATE TABLE IF NOT EXISTS bremse ("
+                "schluessel TEXT PRIMARY KEY, "
+                "n INTEGER NOT NULL DEFAULT 0, "
+                "start INTEGER NOT NULL)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_bremse_start ON bremse(start)")
     # v208 TRICHTER. Bis v207 wusste das Panel nur, wie viele Konten es gibt -
     # nicht, wie viele Leute die Seite gesehen und NICHT gekauft haben. Genau
     # das ist die interessante Zahl: sie sagt, WO man Leute verliert.
@@ -2133,7 +2149,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230c2'
+DVE_VERSION = 'v230c3'
 
 
 def _build_datei():
@@ -3963,6 +3979,99 @@ def _sec_event_purge():
         print(f'Sicherheits-Protokoll nicht aufgeraeumt: {e}')
 
 
+# v230c3 Bremse pro KONTO: so viele Fehlversuche darf ein Konto in einem
+# Fenster sammeln, bevor gar kein Passwort mehr geprueft wird. Grosszuegig
+# genug, dass ein echter Mensch mit Tippfehlern nie hier landet.
+LOGIN_KONTO_MAX = int(os.environ.get('DVE_LOGIN_KONTO_MAX', '10'))
+LOGIN_KONTO_FENSTER = int(os.environ.get('DVE_LOGIN_KONTO_FENSTER', '900'))
+# Notbremse gegen das Vollschreiben: mehr Schluessel als das speichert die
+# Bremse nicht. Bei Ueberlauf fliegen die AELTESTEN raus - die sind ohnehin
+# abgelaufen. Ein Angreifer mit vielen Anschluessen kann damit die Tabelle
+# nicht aufblasen (v230d-sec: was ein Fremder fuellen kann, braucht einen
+# Mengendeckel).
+BREMSE_MAX_ZEILEN = int(os.environ.get('DVE_BREMSE_MAX', '20000'))
+
+
+def _bremse_stand(key, window_sec):
+    """Wie viele Versuche stehen im laufenden Fenster? Zaehlt NICHT mit.
+    Abgelaufenes Fenster = 0."""
+    try:
+        con = _db()
+        r = con.execute("SELECT n, start FROM bremse WHERE schluessel = ?",
+                        (key,)).fetchone()
+        con.close()
+    except Exception:
+        return 0
+    if not r or (int(time.time()) - int(r['start'])) >= window_sec:
+        return 0
+    return int(r['n'])
+
+
+def _bremse_plus(key, window_sec):
+    """Einen Versuch notieren, neuen Stand zurueckgeben. Ist das Fenster
+    abgelaufen, faengt es bei 1 neu an.
+
+    Scheitert die Datenbank, gilt der Versuch als ERLAUBT (Rueckgabe 1) - eine
+    Bremse, die bei eigener Stoerung alle aussperrt, ist ein Ausfall, kein
+    Schutz. Der Angriff bleibt dabei durch die zweite Bremse (IP bzw. Konto)
+    gedeckelt, weil beide unabhaengig voneinander zaehlen."""
+    now = int(time.time())
+    con = None
+    try:
+        con = _db()
+        r = con.execute("SELECT n, start FROM bremse WHERE schluessel = ?",
+                        (key,)).fetchone()
+        if r and (now - int(r['start'])) < window_sec:
+            n = int(r['n']) + 1
+            con.execute("UPDATE bremse SET n = ? WHERE schluessel = ?", (n, key))
+        else:
+            n = 1
+            con.execute("INSERT INTO bremse (schluessel, n, start) "
+                        "VALUES (?, 1, ?) ON CONFLICT(schluessel) DO UPDATE "
+                        "SET n = 1, start = excluded.start", (key, now))
+        con.commit()
+        return n
+    except Exception:
+        return 1
+    finally:
+        try:
+            if con is not None:
+                con.close()
+        except Exception:
+            pass
+
+
+def _bremse_frei(key):
+    """Zaehler loeschen. Eine erfolgreiche Anmeldung raeumt ihr Konto frei -
+    sonst haette ein Angreifer den echten Kunden ausgesperrt, obwohl der sein
+    Passwort weiss."""
+    try:
+        con = _db()
+        con.execute("DELETE FROM bremse WHERE schluessel = ?", (key,))
+        con.commit()
+        con.close()
+    except Exception:
+        pass
+
+
+def _bremse_purge(max_alter=86400):
+    """Abgelaufene Zaehler weg, und notfalls die aeltesten. Laeuft im
+    Cleanup-Arbeiter."""
+    try:
+        con = _db()
+        con.execute("DELETE FROM bremse WHERE start < ?",
+                    (int(time.time()) - max_alter,))
+        n = con.execute("SELECT COUNT(*) AS c FROM bremse").fetchone()['c']
+        if n > BREMSE_MAX_ZEILEN:
+            con.execute("DELETE FROM bremse WHERE schluessel IN ("
+                        "SELECT schluessel FROM bremse ORDER BY start ASC "
+                        "LIMIT ?)", (n - BREMSE_MAX_ZEILEN,))
+        con.commit()
+        con.close()
+    except Exception as e:
+        print(f'Bremse nicht aufgeraeumt: {type(e).__name__}: {e}')
+
+
 # v212: Wie lange ein GESCHLOSSENES Ticket noch beim Kunden steht.
 TICKET_CLOSED_TTL = int(os.environ.get('DVE_TICKET_CLOSED_TTL', '86400'))
 TRICHTER_TAGE = int(os.environ.get('DVE_FUNNEL_DAYS', '400'))
@@ -5325,6 +5434,7 @@ def _cleanup_worker():
         try:
             _sec_event_purge()               # v204-sec: Chronik begrenzen
             _trichter_purge()                # v208: Trichter begrenzen
+            _bremse_purge()                  # v230c3: Bremsen-Zaehler begrenzen
             _missbrauch_pruefen()            # v204-sec: auffaellige Muster melden
         except Exception as e:
             print(f'Missbrauchs-Pruefung uebersprungen: {type(e).__name__}: {e}')
@@ -5767,8 +5877,10 @@ def _page(name, request=None):
     return HTMLResponse(text, headers={'Cache-Control': _cc, 'ETag': etag})
 
 
-# v80m: Rate-Limit gegen Spam-Registrierungen (in-memory, pro IP)
-_REG_ATTEMPTS = {}       # ip -> [timestamps]
+# v80m: Rate-Limit gegen Spam-Registrierungen (pro IP).
+# v230c3: liegt nicht mehr hier im Arbeitsspeicher, sondern in der Tabelle
+# `bremse` - siehe _bremse_plus. Das dict ist ersatzlos weg; wer es wieder
+# einfuehrt, baut den Zaehler, den jeder Deploy loescht.
 
 
 def _client_ip(request):
@@ -5791,13 +5903,12 @@ def _client_ip(request):
 def _rate_limit_ok(ip, window_sec=3600, max_attempts=5, bucket='reg'):
     """Rate-Limit pro IP und Aktion (getrennte Buckets: reg/login/reset).
     Reicht fuer echte Nutzer, stoppt automatisierten Spam + Passwort-
-    Brute-Force. In-Memory (ein Web-Prozess)."""
-    key = f'{bucket}:{ip}'
-    now = time.time()
-    xs = [t for t in _REG_ATTEMPTS.get(key, []) if now - t < window_sec]
-    xs.append(now)
-    _REG_ATTEMPTS[key] = xs[-max_attempts:]
-    return len(xs) <= max_attempts
+    Brute-Force.
+
+    v230c3: liegt jetzt in der DATENBANK statt im Arbeitsspeicher. Vorher war
+    jeder Zaehler nach dem naechsten Deploy wieder auf null - und deployt wird
+    hier mehrmals am Tag. Eine Bremse, die sich von allein loest, ist keine."""
+    return _bremse_plus(f'{bucket}:{ip}', window_sec) <= max_attempts
 
 
 @app.post('/api/register')
@@ -5870,21 +5981,45 @@ def api_login(request: Request, response: Response, email: str = Form(...),
         raise HTTPException(429, 'Too many login attempts. Please wait a few minutes.')
     email = (email or '').strip().lower()
     row = _find_user_by_email(email)
+    # v230c3 ZWEITE BREMSE, PRO KONTO. Die IP-Bremse allein haelt einen
+    # VERTEILTEN Angriff nicht auf: 20 Versuche je Anschluss, aber ein
+    # gemietetes Botnetz hat tausend Anschluesse - macht 20.000 Versuche auf
+    # dieselbe Adresse, ohne dass irgendein Zaehler anschlaegt. Deshalb zaehlt
+    # ein zweiter Zaehler die FEHLVERSUCHE je Konto, egal woher sie kommen.
+    #
+    # Der Schluessel haengt auch fuer eine UNBEKANNTE Adresse - sonst waere
+    # die Bremse selbst der Verrat: 429 hiesse "Konto existiert",
+    # 401 hiesse "gibt es nicht". Gehasht, damit keine Klartext-Adressen
+    # herumliegen.
+    _kb = (f"login_konto:{row['id']}" if row
+           else f"login_konto:e{_email_hash(email)[:32]}")
+    if _bremse_stand(_kb, LOGIN_KONTO_FENSTER) >= LOGIN_KONTO_MAX:
+        _sec_event('login_konto_gebremst', request,
+                   wer=f"user:{row['id']}" if row else 'anon')
+        raise HTTPException(
+            429, 'Too many failed attempts for this account. Please wait '
+                 '15 minutes, or reset your password to get back in.')
     if not row:
         # v92-sec: Auch ohne Treffer eine bcrypt-Pruefung fahren, damit die
         # Antwortzeit gleich lang ist - sonst verraet das Timing, welche
         # E-Mails existieren (Login-Text ist bewusst schon identisch).
         _verify_pw(password, _DUMMY_HASH)
+        _bremse_plus(_kb, LOGIN_KONTO_FENSTER)
         raise HTTPException(401, 'Email or password is wrong.')
     if not _verify_pw(password, row['pw_hash']):
         # v204-sec: Fehlversuche gehoeren in die Chronik. Nur die Konto-ID,
         # nicht das eingegebene Passwort - ein Protokoll, das Geheimnisse
         # mitschreibt, ist selbst das Leck.
+        _bremse_plus(_kb, LOGIN_KONTO_FENSTER)
         _sec_event('login_fehl', request, wer=f"user:{row['id']}")
         raise HTTPException(401, 'Email or password is wrong.')
     if _row_get(row, 'disabled'):                    # v130: gesperrtes Konto
         _sec_event('login_gesperrt', request, wer=f"user:{row['id']}")
         raise HTTPException(403, 'This account is suspended. Contact support.')
+    # v230c3: richtiges Passwort raeumt den Konto-Zaehler. Sonst haette ein
+    # Angreifer mit 10 Fehlversuchen den echten Kunden fuer 15 Minuten
+    # ausgesperrt, obwohl der sein Passwort weiss.
+    _bremse_frei(_kb)
     _sec_event('login_ok', request, wer=f"user:{row['id']}")
     tok, exp = _create_session(row['id'])
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
@@ -6238,6 +6373,10 @@ def api_reset_password(response: Response, token: str = Form(...),
     con.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))  # alle raus
     con.commit()
     con.close()
+    # v230c3: der Reset ist der Notausgang, wenn ein Angreifer das Konto
+    # gebremst hat. Also muss er die Bremse auch loesen - sonst kaeme der
+    # Kunde mit dem NEUEN Passwort trotzdem nicht rein.
+    _bremse_frei(f'login_konto:{uid}')
     tok, _ = _create_session(uid)
     response.set_cookie('dve_session', tok, httponly=True, samesite='lax',
                         secure=True, max_age=SESSION_DAYS * 86400, path='/')
@@ -9922,11 +10061,22 @@ def admin_abuse(request: Request):
                   for u in users if not u['verified']][:100]
     top_ref = [{'uid': r['rb'], 'email': _admin_email(r['rb']), 'invited': r['c']}
                for r in refs]
+    # v230c3: die Bremse steht jetzt in der Datenbank, nicht mehr im
+    # Arbeitsspeicher. Wer hier weiter das alte dict gelesen haette, saehe
+    # dauerhaft eine leere Liste - genau die Sorte Feature, die still ausgeht
+    # und die niemand vermisst (v210).
     locks = []
-    for key, ts in list(_REG_ATTEMPTS.items()):
-        recent = [t for t in ts if now - t < 900]
-        if len(recent) >= 15:
-            locks.append({'key': key, 'hits': len(recent)})
+    try:
+        _cb = _db()
+        for _r in _cb.execute(
+                "SELECT schluessel, n, start FROM bremse "
+                "WHERE n >= 5 AND start > ? ORDER BY n DESC LIMIT 100",
+                (now - 3600,)).fetchall():
+            locks.append({'key': _r['schluessel'], 'hits': int(_r['n']),
+                          'seit': int(_r['start'])})
+        _cb.close()
+    except Exception as _e:
+        print(f'Bremsen-Liste nicht gelesen: {type(_e).__name__}: {_e}')
     demo = []
     for ip, v in list(_DEMO_IPS.items()):
         hits = len([t for t in v if now - t < 86400])
@@ -9936,7 +10086,9 @@ def admin_abuse(request: Request):
             'disposable_accounts': disposable, 'unverified_accounts': unverified,
             'pending_resets': pending_resets, 'top_referrers': top_ref,
             'rate_limit_lockouts': locks, 'demo_ip_abuse': demo,
-            'note': 'Lockouts/demo/alerts are in-memory and reset on restart.'}
+            'note': 'Bremsen stehen in der Datenbank und ueberleben einen '
+                    'Neustart (v230c3). Demo-Zaehler und Alarme liegen weiter '
+                    'im Arbeitsspeicher und fangen nach einem Deploy neu an.'}
 
 
 @app.get('/api/admin/system')
@@ -10434,6 +10586,9 @@ def _admin_tax_calc():
             {'daten': 'referral_claims / credit_claims (salted hashes)',
              'zweck': 'Missbrauch beim Gratis-Guthaben verhindern',
              'grundlage': 'Art. 6(1)(f)', 'frist': 'dauerhaft, pseudonym'},
+            {'daten': 'bremse (Zaehler je IP bzw. Konto, keine Inhalte)',
+             'zweck': 'Passwort-Raten stoppen', 'grundlage': 'Art. 6(1)(f)',
+             'frist': 'hoechstens 24 Stunden'},
             {'daten': 'tickets (support messages)',
              'zweck': 'Kundenbetreuung', 'grundlage': 'Art. 6(1)(b)',
              'frist': 'bis erledigt, Schriftwechsel bleibt'},

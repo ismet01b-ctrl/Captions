@@ -52,6 +52,12 @@ a:hover { text-decoration: underline; }
     <li><strong>Server logs:</strong> IP address and timestamps for operations
       (kept no longer than 14 days). Legal basis: our legitimate interest in the
       security and stable operation of the service (Art. 6(1)(f) GDPR).</li>
+    <li><strong>Abuse protection:</strong> to stop password guessing we count
+      failed attempts, per internet connection (IP address) and per account.
+      Only a counter and a timestamp are stored, never a password or what was
+      typed; for an email address that does not exist we keep a one-way hash
+      instead of the address. Deleted after at most 24 hours. Legal basis: our
+      legitimate interest in protecting accounts (Art. 6(1)(f) GDPR).</li>
     <li><strong>Anonymous reach statistics:</strong> we count how many people
       reach the site, open the app, register, upload, and buy, plus the referring
       site (e.g. "instagram", "google", "direct"). To avoid counting the same
@@ -130,6 +136,7 @@ a:hover { text-decoration: underline; }
   <ul>
     <li>Videos, transcripts, intermediate files: <strong>7 days after upload</strong>, then automatic deletion</li>
     <li>Server logs: 14 days</li>
+    <li>Abuse-protection counters: 24 hours</li>
     <li>Anonymous reach statistics: 400 days (the daily hash is already
       unlinkable after 24 hours)</li>
     <li>Account and purchase history: until you delete your account</li>

@@ -3,6 +3,53 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c3 LOGIN: BREMSE PRO KONTO, UND SIE UEBERLEBT DEN DEPLOY.**
+  Ismets Frage: "ist das Login fuer die Webseite auch sicher?"
+  - **Was schon sass** (am Code nachgeprueft, nicht aus dem Gedaechtnis):
+    bcrypt-Hash, identische Fehlermeldung UND identische Antwortzeit fuer
+    "Konto gibt es nicht" und "Passwort falsch" (Dummy-Hash), Cookie
+    httponly + secure + SameSite=Lax, Sitzungs-Token 32 Byte Zufall,
+    Passwortwechsel und Reset werfen alle anderen Geraete raus,
+    Reset-Link 30 Minuten und einmalig, gesperrtes Konto gilt sofort als
+    ausgeloggt, Fehlversuche stehen in der Sicherheits-Chronik.
+  - **Loch 1: die Bremse zaehlte nur je INTERNET-ANSCHLUSS.** 20 Versuche
+    je Anschluss und 15 Minuten klingt streng - ein gemietetes Botnetz hat
+    aber tausend Anschluesse, macht 20.000 Versuche auf EINE Adresse, ohne
+    dass irgendein Zaehler anschlaegt. Neu: ein zweiter Zaehler auf die
+    FEHLVERSUCHE je Konto (`LOGIN_KONTO_MAX`, 10 in 15 Minuten), egal
+    woher sie kommen. Danach wird gar kein Passwort mehr geprueft.
+  - **Loch 2: sie lag im Arbeitsspeicher.** Nach jedem Deploy stand jeder
+    Zaehler wieder auf null, und hier wird mehrmals taeglich deployt - die
+    Bremse loeste sich also von allein. Jetzt Tabelle `bremse` in der
+    Datenbank. Bewusst ein AGGREGAT je Schluessel (n + Fensterstart), nicht
+    eine Zeile je Versuch: die Tabelle kann ein Fremder fuellen, und was
+    ein Fremder fuellen kann, braucht einen Mengendeckel (v230d-sec). Dazu
+    `_bremse_purge` im stuendlichen Lauf und eine harte Obergrenze.
+  - **Die Bremse darf nicht selbst der Verrat sein.** Ein 429 nur fuer
+    existierende Konten haette genau das Enumerieren wieder aufgemacht, das
+    die identische Fehlermeldung verhindert. Deshalb zaehlt auch eine
+    UNBEKANNTE Adresse mit, unter einem Hash statt im Klartext, und
+    verhaelt sich exakt gleich.
+  - **Kehrseite, bewusst in Kauf genommen:** waehrend der Sperre kommt auch
+    der echte Kunde nicht rein. Alles andere waere keine Bremse. Der
+    Notausgang ist das Zuruecksetzen des Passworts - das loest die Sperre
+    mit, sonst haette ein Angreifer einen Kunden dauerhaft aussperren
+    koennen. Ein richtiges Passwort raeumt den Zaehler ebenfalls.
+  - **Das Panel liest die neue Quelle** und uebersetzt den technischen
+    Schluessel ("Anmelden - Konto #42" statt `login_konto:42`). Wer weiter
+    das tote dict abgefragt haette, saehe dauerhaft eine leere Liste, ohne
+    Fehler und ohne Meldung (v210).
+  - Datenschutz nachgezogen: eigener Punkt auf /privacy (nur Zaehler und
+    Zeitstempel, nie ein Passwort, hoechstens 24 Stunden, Art. 6(1)(f))
+    und eine Zeile im Verarbeitungsverzeichnis.
+  - **Beweis:** 18 Tests, der Kern per ECHTEM ANGRIFF ueber die
+    HTTP-Schnittstelle - zehn Fehlversuche von zehn verschiedenen
+    Anschluessen, der elfte wird gebremst; die unbekannte Adresse verhaelt
+    sich Zeichen fuer Zeichen gleich; Reset als Notausgang; Zaehler
+    ueberlebt in der DB; Mengendeckel greift. Quelltext-Suche zaehlt hier
+    nicht (v230d-sec: genau so war ein Fix gruen und wirkungslos). Panel im
+    echten Chromium gegen einen laufenden Server geprueft: drei uebersetzte
+    Zeilen, kein roher Schluessel, 0 CSP-Verstoesse.
 - **v230c2 DIE KI DENKT NICHT MEHR UEBER JEDE FRAGE GLEICH LANG NACH.**
   Ismets Frage: "was koennen wir machen, damit die KI schneller denkt. So
   viel ist das doch nicht."
