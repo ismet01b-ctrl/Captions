@@ -10141,6 +10141,86 @@ def _scenario_betrieb(tmp):
     check('v197b: der Restore verlangt auch im Panel die Tippbestaetigung',
           "Type RESTORE to confirm" in _adm197)
 
+    # ======= v230c6: eine gelernte Referenz ist KEIN Preset ==============
+    # Ismet: "wofuer habe ich denn die ganzen Einstellungen, wenn die nicht
+    # wirklich greifen?" Nachgezaehlt: _apply_reference_params setzt 21 Werte
+    # und lief NACH der ganzen Config-Kaskade - die Referenz hat die Regler
+    # des Kunden ueberstimmt, ohne ein Wort zu sagen.
+    import server as _SVc6
+    import render as _Rc6
+    import yaml as _yc6
+    _srcc6 = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    _refkeys = set(re.findall(r"cfg\['(\w+)'\]\['(\w+)'\]\s*=",
+                              _srcc6[_srcc6.index('def _apply_reference_params_roh'):
+                                     _srcc6.index('def _apply_reference_params_roh') + 9000]))
+    check('v230c6: die Referenz greift wirklich breit ins Setup ein',
+          len(_refkeys) >= 15,
+          f'{len(_refkeys)} Werte, u.a. '
+          + ', '.join(sorted(f'{a}.{b}' for a, b in _refkeys)[:4]))
+    # (a) Was vom Look-Preset ABWEICHT, ist eine eigene Wahl. Was gleich ist,
+    #     nicht - sonst waere nach einem gespeicherten Setup ALLES geschuetzt
+    #     und die Referenz taete gar nichts mehr (v230f-Falle: applyTemplate
+    #     schickt das ganze Preset mit).
+    _bas6 = _SVc6.build_config('tiktok', None)
+    _c6a = _SVc6.build_config('tiktok', {'effects': {'caption_scale': 1.2}})
+    _c6b = _SVc6.build_config('tiktok', {'effects': {
+        'words_per_group': _bas6['effects']['words_per_group']}})
+    check('v230c6: eine abweichende Einstellung gilt als eigene Wahl',
+          _c6a.get('ref_schutz') == ['effects.caption_scale'],
+          str(_c6a.get('ref_schutz')))
+    check('v230c6: ein Wert wie im Preset ist KEINE eigene Wahl',
+          not _c6b.get('ref_schutz'), str(_c6b.get('ref_schutz')))
+    check('v230c6: die Schutzliste kann der Client nicht selbst mitschicken',
+          'ref_schutz' not in _SVc6._sanitize_overrides(
+              {'ref_schutz': ['effects.caption_scale'],
+               'effects': {'caption_scale': 1.2}}))
+    # (b) DER ECHTE PFAD. Eine Referenz, die alles gross und schnell will,
+    #     gegen zwei eigene Einstellungen - gemessen an der fertigen Config,
+    #     nicht am Quelltext (v219).
+    _p6 = {'key_hoehe': 0.1836, 'verhaeltnis': 4.59, 'kamera': 'bewegt',
+           'words_per_group': 2, 'chunk_hold_min': 3.0}
+    _rf6 = os.path.join(tmp, 'refs_c6.json')
+    json.dump([{'name': 'v6', 'beispiel': 'x', 'params': _p6}],
+              open(_rf6, 'w', encoding='utf-8'))
+    _alt6 = os.environ.get('DVE_REFS_FILE')
+    try:
+        os.environ['DVE_REFS_FILE'] = _rf6
+        _cfg6 = _SVc6.build_config('creator', {'effects': {
+            'caption_scale': 1.15, 'words_per_group': 4}})
+        _zeile6 = _Rc6._apply_reference_params(_cfg6)
+        check('v230c6: die eigene Schriftgroesse ueberlebt die Referenz',
+              abs(float(_cfg6['effects']['caption_scale']) - 1.15) < 1e-6,
+              f"caption_scale {_cfg6['effects']['caption_scale']} "
+              f"(Referenz wollte 2.6)")
+        check('v230c6: die eigene Blockgroesse ueberlebt die Referenz',
+              int(_cfg6['effects']['words_per_group']) == 4,
+              f"words_per_group {_cfg6['effects']['words_per_group']} "
+              f"(Referenz wollte 2)")
+        # ... und die Referenz bleibt trotzdem voll wirksam, wo der Kunde
+        # nichts gesagt hat. Sonst waere das der v151-Rueckfall.
+        check('v230c6: unangetastete Werte kommen weiter von der Referenz',
+              abs(float(_cfg6['effects'].get('caption_hierarchie', 0)) - 4.59) < 0.01
+              and _cfg6['camera'].get('whip') is True,
+              f"hierarchie {_cfg6['effects'].get('caption_hierarchie')}, "
+              f"whip {_cfg6['camera'].get('whip')}")
+        check('v230c6: das Job-Log sagt, welche Regler die Referenz nicht durfte',
+              'your own settings kept' in _zeile6
+              and 'caption_scale' in _zeile6.split('your own settings kept')[1],
+              _zeile6)
+        # (c) Ohne Schutzliste (Desktop, Handbetrieb) aendert sich NICHTS.
+        _cfg6b = _yc6.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                     encoding='utf-8'))
+        _cfg6b['effects']['caption_scale'] = 1.15
+        _Rc6._apply_reference_params(_cfg6b)
+        check('v230c6: ohne Schutzliste bleibt es beim alten Verhalten',
+              float(_cfg6b['effects']['caption_scale']) > 2.0,
+              f"caption_scale {_cfg6b['effects']['caption_scale']}")
+    finally:
+        if _alt6 is None:
+            os.environ.pop('DVE_REFS_FILE', None)
+        else:
+            os.environ['DVE_REFS_FILE'] = _alt6
+
     # ======= v230c3: Brute-Force-Bremse pro KONTO und neustartfest =======
     # Ismets Frage: "ist das Login auch sicher?" Das Meiste sass (bcrypt,
     # gleiche Fehlermeldung UND gleiche Antwortzeit, httponly+secure-Cookie,

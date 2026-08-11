@@ -5825,7 +5825,68 @@ _REF_EN = {'wuchtig': 'strong', 'ruhig': 'calm', 'bewegt': 'moving',
            'durchgehend': 'continuous', 'links': 'left', 'mitte': 'centre'}
 
 
+_REF_FEHLT = object()
+
+
+def _ref_pfad(cfg, pfad, default=None):
+    cur = cfg
+    for teil in str(pfad).split('.'):
+        if not isinstance(cur, dict) or teil not in cur:
+            return default
+        cur = cur[teil]
+    return cur
+
+
+def _ref_setzen(cfg, pfad, wert):
+    teile = str(pfad).split('.')
+    cur = cfg
+    for teil in teile[:-1]:
+        if not isinstance(cur.get(teil), dict):
+            cur[teil] = {}
+        cur = cur[teil]
+    if wert is _REF_FEHLT:
+        cur.pop(teile[-1], None)
+    else:
+        cur[teile[-1]] = wert
+
+
 def _apply_reference_params(cfg):
+    """v230c6: eine gelernte Referenz ist KEIN Preset.
+
+    Sie setzt 21 Werte quer durch Typografie, Dichte, Kamera und Ton - und lief
+    bis v230c5 NACH der ganzen Config-Kaskade. Damit hat sie die Regler des
+    Kunden ueberstimmt, ohne ein Wort zu sagen (Ismet: "wofuer habe ich denn
+    die ganzen Einstellungen, wenn die nicht wirklich greifen?").
+
+    Reihenfolge jetzt: config.yaml -> Look-Preset -> REFERENZ -> eigene
+    Einstellung. Umgesetzt, indem die Referenz wie bisher alles setzen darf und
+    die ausdruecklich gewaehlten Werte danach zurueckgeschrieben werden. Das ist
+    bewusst so herum: ein Riegel an 21 einzelnen Zuweisungen wuerde beim naechsten
+    neuen Messwert vergessen (v159/v230f), das Zurueckschreiben kann nichts
+    uebersehen.
+
+    `cfg['ref_schutz']` ist die Liste der eigenen Pfade; sie kommt vom Server
+    (build_config). Fehlt sie - Desktop-App, Handbetrieb -, aendert sich nichts
+    gegenueber vorher."""
+    schutz = [str(k) for k in (cfg.get('ref_schutz') or [])
+              if isinstance(k, str) or isinstance(k, (int, float))]
+    vorher = {k: _ref_pfad(cfg, k, _REF_FEHLT) for k in schutz}
+    zeile = _apply_reference_params_roh(cfg)
+    behalten = []
+    for k, v in vorher.items():
+        if _ref_pfad(cfg, k, _REF_FEHLT) is not v and _ref_pfad(cfg, k, _REF_FEHLT) != v:
+            behalten.append(k.split('.')[-1])
+        _ref_setzen(cfg, k, v)
+    if zeile and behalten:
+        # Sichtbar machen, WAS die Referenz nicht durfte - sonst sucht beim
+        # naechsten Befund wieder jemand im Code statt im Log.
+        zeile += (' | your own settings kept: '
+                  + ', '.join(sorted(set(behalten))[:8])
+                  + (' ...' if len(set(behalten)) > 8 else ''))
+    return zeile
+
+
+def _apply_reference_params_roh(cfg):
     """v96y: wendet die Referenz-Parameter DETERMINISTISCH auf die Config an -
     Chunk-Laenge, Highlight-Dichte, Hook-Aggressivitaet, Wucht. Der Effekt ist
     damit sichtbar/messbar, unabhaengig davon wie stark GPT den Prompt-Hinweis

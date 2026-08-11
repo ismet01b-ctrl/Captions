@@ -825,6 +825,23 @@ Vorbilds. Dieser eine Wert wurde zur Grundgroesse fuer JEDES grosse Wort.
   bleibt im Konto, bis der Kunde sie neu lernt. Wer eine Messung aendert,
   sagt dazu, dass Bestandskunden sie erneut lernen muessen.
 
+### Referenz ist kein Preset (v230c6) — die eigene Wahl gewinnt
+Die Kaskade heisst jetzt: `config.yaml` → Look-Preset → **Referenz** → was
+der Kunde selbst eingestellt hat. Bis v230c5 lief `_apply_reference_params`
+in `render.py` NACH allem und hat 21 Regler des Kunden still ueberstimmt
+(Ismet: "wofuer habe ich denn die ganzen Einstellungen").
+- **Der Riegel steht NICHT an den 21 Zuweisungen.** Die Referenz darf weiter
+  alles setzen, danach werden die eigenen Werte zurueckgeschrieben
+  (`cfg['ref_schutz']`). Ein Riegel je Zuweisung waere beim naechsten neuen
+  Messwert vergessen (v159/v230f); Zurueckschreiben kann nichts uebersehen.
+- **"Selbst eingestellt" = weicht vom Look-Preset AB**, nicht "steht im
+  Override-Paket". `applyTemplate` schickt bei einem gespeicherten Setup ALLE
+  Preset-Werte mit (v230f) — waere das der Massstab, waere nach einem Setup
+  alles geschuetzt und die Referenz wirkungslos, also v151 zurueck.
+- Die `Style anchor:`-Zeile nennt am Ende, welche Regler die Referenz nicht
+  durfte. Wer hier etwas aendert, laesst diese Zeile stehen.
+- Ohne `ref_schutz` (Desktop, Handbetrieb) gilt das alte Verhalten.
+
 ### Referenz anwenden (v151) — klemmen, nicht verwerfen
 Ein gemessener Wert ausserhalb des Plausibilitaetsfensters wird **geklemmt**,
 nie verworfen. Verwerfen heisst: der Kunde laedt eine Referenz hoch und sieht

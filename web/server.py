@@ -2149,7 +2149,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230c5'
+DVE_VERSION = 'v230c6'
 
 
 def _build_datei():
@@ -2968,6 +2968,32 @@ def count_use(code):
 
 
 # ---------------------------------------------------------------- Config-Merge
+_FEHLT = object()      # v230c6: "Pfad gibt es gar nicht" - nicht None, das ist ein Wert
+
+
+def _flache_pfade(d, prefix=''):
+    """v230c6: verschachteltes dict -> [('effects.caption_scale', 1.2), ...].
+    Nur BLAETTER, damit ein ganzer Abschnitt nicht als ein Wert gilt."""
+    out = []
+    for k, v in (d or {}).items():
+        p = f'{prefix}{k}'
+        if isinstance(v, dict):
+            out.extend(_flache_pfade(v, p + '.'))
+        else:
+            out.append((p, v))
+    return out
+
+
+def _pfad_wert(d, pfad, default=None):
+    """v230c6: Wert an einem Punkt-Pfad, sonst default."""
+    cur = d
+    for teil in str(pfad).split('.'):
+        if not isinstance(cur, dict) or teil not in cur:
+            return default
+        cur = cur[teil]
+    return cur
+
+
 def deep_merge(base, override):
     """Rekursives Merge: override ueberschreibt base an Blaettern.
     Nur Dicts werden merged, alles andere ersetzt."""
@@ -3589,8 +3615,28 @@ def build_config(look, overrides=None):
     }
     preset = PRESETS.get(look, PRESETS['creator'])
     cfg = deep_merge(cfg, preset)
+    # v230c6 EINE GELERNTE REFERENZ IST KEIN PRESET.
+    # Ismets Frage: "wofuer habe ich denn die ganzen Einstellungen, wenn die
+    # nicht wirklich greifen?" Nachgezaehlt: `_apply_reference_params` setzt 21
+    # Werte (Dichte, Woerter je Block, Blockdauer, Caption-Zone, Schriftgroesse,
+    # Hierarchie, Kamera, Crash-Zoom, Schwenk, SFX-Pegel ...) - und sie lief in
+    # render.py NACH dieser Kaskade. Die Referenz hat die Regler des Kunden
+    # also ueberstimmt, ohne ein Wort zu sagen.
+    # Richtige Reihenfolge: config.yaml -> Look-Preset -> REFERENZ -> was der
+    # Kunde selbst eingestellt hat. Die Referenz bleibt damit voll wirksam
+    # (v151), sie gewinnt nur nicht mehr gegen eine ausdrueckliche Wahl.
+    # WIE erkennt man "selbst eingestellt"? NICHT am blossen Vorhandensein im
+    # Override-Paket: `applyTemplate` schickt bei einem gespeicherten Setup ALLE
+    # Preset-Werte mit, auch die, die der Kunde nie angefasst hat (v230f). Also
+    # gilt als eigene Wahl nur, was vom Look-Preset ABWEICHT. Das ist rein
+    # serverseitig rechenbar und braucht keine Mitarbeit der Oberflaeche.
+    _basis = copy.deepcopy(cfg)
     if overrides:
         cfg = deep_merge(cfg, overrides)
+        _schutz = [p for p, w in _flache_pfade(overrides)
+                   if _pfad_wert(_basis, p, _FEHLT) != w]
+        if _schutz:
+            cfg['ref_schutz'] = sorted(_schutz)
     # Serverseitige Zwaenge - unabhaengig vom User-Wunsch
     cfg['effects']['blender_water'] = False
     # v80f: Neue Features als sichtbare Defaults verankern

@@ -3,6 +3,39 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c6 EINE GELERNTE REFERENZ IST KEIN PRESET.**
+  Ismets Frage: "wofuer habe ich denn die ganzen Einstellungen, wenn die
+  nicht wirklich greifen?" Er hatte recht.
+  - **Nachgezaehlt: 21 Werte.** `_apply_reference_params` setzt Dichte,
+    Woerter je Block, Blockdauer, Caption-Zone, Buendigkeit, Glow, Umriss,
+    Schriftgroesse (gross UND klein), Hierarchie, Schriftstaerke,
+    Aufdeck-Tempo, Hook-Staerke, Keyword-Abstand, Akzentfarbe, SFX an/aus
+    und -Pegel, Kamera-Staerke, Crash-Zoom, Schwenk. Und sie lief in
+    `render.py` NACH der ganzen Server-Kaskade
+    (config.yaml -> Look-Preset -> Kunden-Einstellungen). Die Referenz hat
+    die Regler des Kunden also ueberstimmt, ohne ein Wort zu sagen.
+  - **Neue Reihenfolge:** config.yaml -> Look-Preset -> REFERENZ -> eigene
+    Einstellung. Die Referenz bleibt voll wirksam (v151 unangetastet), sie
+    gewinnt nur nicht mehr gegen eine ausdrueckliche Wahl.
+  - **Umgesetzt ueber ZURUECKSCHREIBEN, nicht ueber 21 Riegel.** Die
+    Referenz darf weiter alles setzen; danach werden die eigenen Werte
+    wieder eingesetzt. Ein Riegel an jeder einzelnen Zuweisung waere beim
+    naechsten neuen Messwert vergessen worden (v159/v230f) - das
+    Zurueckschreiben kann nichts uebersehen.
+  - **"Selbst eingestellt" heisst: weicht vom Look-Preset AB.** Nicht
+    "steht im Override-Paket": `applyTemplate` schickt bei einem
+    gespeicherten Setup ALLE Preset-Werte mit, auch die, die der Kunde nie
+    angefasst hat (v230f). Waere das der Massstab, waere nach einem Setup
+    alles geschuetzt und die Referenz taete gar nichts mehr - also genau
+    Ismets Befund von v151 zurueck. Rein serverseitig gerechnet, die
+    Oberflaeche muss nichts liefern.
+  - **Das Job-Log sagt es jetzt.** Die `Style anchor:`-Zeile endet mit
+    `| your own settings kept: caption_scale, words_per_group`. Beim
+    naechsten Befund muss niemand mehr im Code suchen.
+  - Ohne Schutzliste (Desktop-App, Handbetrieb) aendert sich nichts.
+  - **Beweis:** 9 Tests am echten Pfad - Referenz will 2.6x und 2 Woerter
+    je Block, die eigenen 1.15x und 4 Woerter ueberleben, waehrend
+    Hierarchie und Kamera weiter von der Referenz kommen.
 - **v230c5 DIE GELERNTE GROESSE IST NICHT MEHR DIE PUNCHLINE.**
   Ismets Standbild: 'STECKT' bildfuellend, dazu "das ist nicht mal ein
   Keyword. Es ist viel zu gross."
