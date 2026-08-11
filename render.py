@@ -4796,6 +4796,40 @@ Lieber kein Effekt als ein falscher Sound auf einem harmlosen Wort.
 Antworte NUR mit JSON: {"keywords": [{"i": <Startindex>, "n": <1-4>, "fx": "<Effekt>", "power": <1-3>, "anim": "<optional>", "emoji": "<optional>"}]}"""
 
 
+def _gross_klasse(werte):
+    """v230c5: Median der GROSSEN Textteile einer Referenz-Messung.
+
+    Rueckgabe: die TYPISCHE Schluesselwort-Groesse, oder None wenn sich keine
+    grosse Gruppe abhebt (dann gilt der alte Weg).
+
+    Warum nicht das 96. Perzentil: das ist die PUNCHLINE, die eine groesste
+    Stelle im ganzen Vorbild. Als Grundmass angewandt blaest es JEDES grosse
+    Wort auf Punchline-Groesse auf - genau das war Ismets 'STECKT'.
+
+    Warum nicht Otsu (die Schwelle mit der groessten Trennung): nachgerechnet
+    an einer realistischen Verteilung (70 Teile Fliesstext 0.020 H, 25
+    Schluesselwoerter 0.060 H, 3 Punchlines 0.185 H) faellt die beste
+    Zwei-Klassen-Trennung zwischen Schluesselwort und PUNCHLINE (Varianz 6.80
+    gegen 5.59) - Otsu haette also genau den Wert geliefert, den wir loswerden
+    wollen. Die Verteilung hat drei Moden, nicht zwei.
+
+    Deshalb von UNTEN her: der Fliesstext ist die dichteste Gruppe, alles
+    deutlich darueber ist 'gross'. Die Schwelle 1.8x sitzt sicher zwischen
+    beiden - in den gemessenen Vorbildern ist das Verhaeltnis Schluesselwort
+    zu Fliesstext 2.2 bis 4.6 (v143/v184). Der MEDIAN der grossen Gruppe ist
+    dann gegen einzelne Riesen unempfindlich, und genau darum geht es."""
+    x = np.asarray(werte, dtype=np.float64).ravel()
+    if x.size < 10:
+        return None
+    klein = float(np.percentile(x, 35))
+    if klein <= 0:
+        return None
+    oben = x[x >= klein * 1.8]
+    if oben.size < 3:
+        return None
+    return float(np.median(oben))
+
+
 def measure_reference_video(video_path, max_frames=160):
     """v144: MISST den Stil eines Referenzvideos aus den Pixeln - deterministisch,
     ohne KI, ohne API-Key.
@@ -5036,7 +5070,20 @@ def measure_reference_video(video_path, max_frames=160):
     # kleinen Teile der Fliesstext. Perzentile statt max/min: ein einzelner
     # Ausreisser (Glanzpunkt, Logo-Rest) soll die Skala nicht bestimmen.
     hh = np.array(hoehen, dtype=np.float32)
-    res['key_hoehe'] = round(float(np.percentile(hh, 96)), 4)
+    # v230c5: das 96. Perzentil ist NICHT die typische Schluesselwort-Groesse,
+    # es ist die PUNCHLINE - die eine groesste Stelle im ganzen Vorbild. Genau
+    # dieser Wert wurde zur Grundgroesse fuer JEDES grosse Wort. In Ismets Job
+    # ergab das size=0.184H -> caption_scale 2.60, im Querformat nochmal x1.35,
+    # und dann stand ein Fuellwort ('STECKT') so gross im Bild wie eine
+    # Punchline. Derselbe Fehler wie v154, nur eine Zeile hoeher: dort traf es
+    # den Fliesstext, hier das Schluesselwort.
+    # Jetzt: die Hoehen in zwei Gruppen trennen (klein/gross) und den MEDIAN
+    # der grossen Gruppe nehmen - das ist die typische Schluesselwort-Groesse.
+    # Faellt die Trennung aus (zu wenige Werte, keine echte Struktur), gilt
+    # der alte Weg. Ein Messwert, der nicht bestimmbar ist, wird geklemmt oder
+    # faellt zurueck, nie verworfen (v151).
+    _gr = _gross_klasse(hh)
+    res['key_hoehe'] = round(float(_gr if _gr else np.percentile(hh, 96)), 4)
     res['klein_hoehe'] = round(float(np.percentile(hh, 35)), 4)
     if res['klein_hoehe'] > 0.002:
         res['verhaeltnis'] = round(res['key_hoehe'] / res['klein_hoehe'], 2)
@@ -8099,6 +8146,16 @@ def compose_flow(g, words, S, W, H, portrait=False, flow_sel=None, loud=None,
         _gf = max(0.5, min(2.0, float(groesse)))
         sz_k = max(8, int(sz_k * _gf))
         sz_n = max(6, int(sz_n * _gf))
+    # v230c5 HIER KEIN ZWEITER DECKEL. Naheliegend waere gewesen, die Hoehe
+    # des Ankerworts hier zu begrenzen - Ismets Befund war ja "viel zu gross".
+    # Genau das verbietet v151: der Deckel gehoert an EINE Stelle
+    # (_apply_reference_params), sonst kommt eine gelernte Referenz nur noch
+    # zur Haelfte an ("Referenz hochgeladen, es aendert sich kaum was").
+    # Ausprobiert und am Test belegt: mit einem Deckel von 0.105 H schrumpfte
+    # die Wirkung der Referenz von 1.4x auf 1.02x, der v151-Test fiel sofort.
+    # Die Groesse wird deshalb dort korrigiert, wo sie ENTSTEHT: die Messung
+    # nimmt seit v230c5 die typische Schluesselwort-Groesse des Vorbilds
+    # statt seiner groessten Stelle (_gross_klasse).
     sz_a = int(sz_n * 1.244)
     # Satzspiegel: hoch wie bisher die fast volle Breite, quer eine Spalte -
     # eine Zeile ueber 1920 px waere kein Satz mehr, sondern eine Laufschrift.

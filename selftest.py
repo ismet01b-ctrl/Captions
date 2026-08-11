@@ -832,6 +832,47 @@ def _scenario_logic(clip, transcript, tmp):
           2.1 <= (_mess.get('verhaeltnis') or 0) <= 3.6,
           f"key {_mess.get('key_hoehe')} / klein {_mess.get('klein_hoehe')}"
           f" = {_mess.get('verhaeltnis')}")
+    # ===== v230c5 DIE GELERNTE GROESSE IST NICHT DIE PUNCHLINE ==========
+    # Ismets Standbild: 'STECKT' bildfuellend, obwohl das Wort gar kein
+    # Keyword ist. Im Job-Log stand size=0.184H - das 96. Perzentil seiner
+    # eigenen Stil-Referenz, also die EINE groesste Stelle im Vorbild. Dieser
+    # Wert wurde zur Grundgroesse fuer jedes grosse Wort (caption_scale 2.60,
+    # im Querformat nochmal x1.35). Derselbe Fehler wie v154, nur eine Zeile
+    # hoeher: dort traf es den Fliesstext, hier das Schluesselwort.
+    _rng5 = np.random.default_rng(7)
+    # Realistisch: die GROSSE Klasse streut selbst stark, weil S.fit lange
+    # Woerter in die Spalte schrumpft - kurzes Wort bleibt gross.
+    _v5 = np.concatenate([_rng5.normal(0.020, 0.003, 60),
+                          _rng5.uniform(0.070, 0.200, 40)])
+    _p96 = float(np.percentile(_v5, 96))
+    _typ5 = R._gross_klasse(_v5)
+    check('v230c5: die gelernte Groesse ist die TYPISCHE, nicht die groesste',
+          _typ5 is not None and _typ5 < _p96 * 0.80,
+          f'96. Perzentil {_p96:.3f} H -> neu {(_typ5 or 0):.3f} H')
+    check('v230c5: getroffen wird der Median der grossen Woerter',
+          abs(_typ5 - float(np.median(_v5[_v5 >= 0.05]))) < 0.005,
+          f'{_typ5:.4f} gegen {float(np.median(_v5[_v5 >= 0.05])):.4f}')
+    # Otsu waere hier die naheliegende Wahl und ist NACHWEISLICH falsch: bei
+    # drei Moden (Fliesstext / Schluesselwort / Punchline) trennt die groesste
+    # Varianz zwischen Schluesselwort und Punchline - also genau den Wert, den
+    # wir loswerden wollen. Der Test haelt diese Begruendung fest.
+    _v5b = np.array([0.020] * 70 + [0.060] * 25 + [0.185] * 5)
+    _x5 = np.sort(_v5b)
+    _cs5 = np.cumsum(_x5)
+    _bestk = max(range(3, _x5.size - 2),
+                 key=lambda k: k * (_x5.size - k) * (
+                     _cs5[k - 1] / k - (_cs5[-1] - _cs5[k - 1]) / (_x5.size - k)) ** 2)
+    check('v230c5: Otsu haette die Punchline gewaehlt, unser Weg nicht',
+          float(np.median(_x5[_bestk:])) > 0.15
+          and abs(R._gross_klasse(_v5b) - 0.060) < 0.006,
+          f'Otsu {float(np.median(_x5[_bestk:])):.3f} H gegen '
+          f'unser {R._gross_klasse(_v5b):.3f} H')
+    check('v230c5: ohne erkennbare grosse Gruppe gilt der alte Weg',
+          R._gross_klasse(np.array([0.05] * 40)) is None
+          and R._gross_klasse(np.array([0.02, 0.09])) is None)
+    check('v230c5: die Messung benutzt den neuen Weg wirklich',
+          _mess.get('key_hoehe') and 0.015 <= _mess['key_hoehe'] <= 0.40,
+          f"key_hoehe {_mess.get('key_hoehe')}")
     check('v144: linksbuendiger Satz wird als links erkannt',
           _mess.get('ausrichtung') == 'links', str(_mess.get('ausrichtung')))
     # Gesetzt ist #f9bb26. Toleranz, weil Videokompression die Farbe verzieht.
@@ -1067,6 +1108,57 @@ def _scenario_logic(clip, transcript, tmp):
            for j, w in enumerate(['the', 'of', 'a', 'to'])]
     _, _, anch2 = R.compose_flow(list(range(4)), wf2, S, W_, H_, portrait=True)
     check('Flow: reine Verbinder ohne Keyword', anch2 is None)
+
+    # ===== v230c5 WARUM HIER KEIN ZWEITER DECKEL STEHT ==================
+    # Ismets Standbild: 'STECKT' bildfuellend, obwohl das Wort kein Keyword
+    # ist. Der naheliegende Griff waere ein Hoehen-Deckel auf das Ankerwort
+    # gewesen. Ausprobiert - und der v151-Test hat ihn sofort gefangen: eine
+    # gelernte Referenz kam damit nur noch mit Faktor 1.02 statt 1.4 an,
+    # also genau Ismets FRUEHERER Befund ("Referenz hochgeladen, es aendert
+    # sich kaum was"). Zwei Deckel hintereinander halbieren die Wirkung.
+    # Korrigiert wird deshalb an der Quelle: die Messung nimmt die typische
+    # Schluesselwort-Groesse statt der groessten Stelle des Vorbilds.
+    _r5src = open(os.path.join(HERE, 'render.py'), encoding='utf-8').read()
+    check('v230c5: compose_flow deckelt die Groesse NICHT ein zweites Mal',
+          'HIER KEIN ZWEITER DECKEL' in _r5src
+          and 'caption_anker_max' not in _r5src,
+          'der Deckel gehoert an EINE Stelle (v151)')
+    # Und der Grund, warum eine reine Groessen-Stufe am Ankerwort ohnehin
+    # verpufft waere: bei hoher Referenz-Skala deckelt S.fit den Anker
+    # laengst auf die SPALTENBREITE - unter dem Deckel aendert ein Faktor
+    # nichts mehr. Am Bild gemessen, nicht behauptet (v219).
+    def _koerper5(a):
+        _rgb = a[..., :3].astype(np.float32)
+        _al = (a[..., 3].astype(np.float32) / 255.0) if a.shape[2] == 4 else 1.0
+        _lum = _rgb.max(axis=2) * _al
+        _ys = np.where(_lum.max(axis=1) > 120)[0]
+        return int(_ys[-1] - _ys[0] + 1) if _ys.size else 0
+
+    _w5 = [{'word': w, 'start': j * 0.32, 'end': j * 0.32 + 0.28}
+           for j, w in enumerate(['Themen', 'steckt', 'und'])]
+
+    def _flow5(scale, quer=True):
+        _c5 = copy.deepcopy(cfg)
+        _c5['effects'] = dict(cfg['effects'])
+        _c5['effects']['caption_scale'] = scale
+        _W5, _H5 = (1920, 1080) if quer else (1080, 1920)
+        _S5 = R.Sprites(_c5, _W5, _H5)
+        _it5, _, _ = R.compose_flow(list(range(len(_w5))), _w5, _S5, _W5, _H5,
+                                    portrait=not quer, flow_sel={'kw': 1})
+        _k5 = [x for x in _it5 if x['role'] == 'key'][0]
+        return _koerper5(_k5['arr']), _k5['sz'], _H5
+    _s26 = _flow5(2.60)
+    _s19 = _flow5(1.88)
+    _s10 = _flow5(1.00)
+    check('v230c5: ab einer gewissen Skala deckelt die SPALTE, nicht die Skala',
+          abs(_s26[0] - _s19[0]) <= 3 and _s10[0] < _s19[0] * 0.75,
+          f'scale 2.60 -> {_s26[0]}px, 1.88 -> {_s19[0]}px, 1.00 -> {_s10[0]}px '
+          f'({_s10[0]/_s10[2]*100:.1f}% H)')
+    # Deshalb ist die Messung der einzige Hebel, der hier wirklich zieht:
+    # sie entscheidet, mit welcher Skala ueberhaupt angesetzt wird.
+    check('v230c5: die Skala kommt aus der Messung, und die ist jetzt typisch',
+          _typ5 < _p96 * 0.80 and _s10[0] < _s26[0],
+          f'Messung {_p96:.3f} H -> {_typ5:.3f} H')
     # build_plans: Flag an -> tpl 'flow', Flag aus -> tpl 'stack'
     cfg_fl = dict(cfg); cfg_fl['effects'] = dict(cfg['effects'], caption_flow=True)
     cfg_st = dict(cfg); cfg_st['effects'] = dict(cfg['effects'], caption_flow=False)

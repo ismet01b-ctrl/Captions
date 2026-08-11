@@ -797,6 +797,34 @@ Die satzweise Collage schluckt Folgegruppen über `used`; die **Chunk-Bildung
 bleibt unangetastet**. Keyword-Momente werden nie geschluckt. Passt es nicht
 in 0.40 H, wird erst die Erweiterung zurückgedreht, nicht das Layout.
 
+### Referenz MESSEN (v230c5) — die groesste Stelle ist nicht das Mass
+Ismets Befund am Standbild: ein Fuellwort ('STECKT') bildfuellend. Die
+Groesse kam aus seiner eigenen gelernten Referenz, `size=0.184H` im Job-Log
+— das **96. Perzentil** der gemessenen Textteile, also die PUNCHLINE des
+Vorbilds. Dieser eine Wert wurde zur Grundgroesse fuer JEDES grosse Wort.
+- **Derselbe Fehler wie v154, eine Zeile hoeher.** Dort traf es den
+  Fliesstext (eigener Messwert `klein_hoehe` war die Loesung), hier das
+  Schluesselwort. Wer einen neuen Messwert aus einer Referenz zieht, fragt
+  zuerst: beschreibt er den TYPISCHEN Fall oder den lautesten?
+- `_gross_klasse()` liefert die typische Schluesselwort-Groesse: die
+  Fliesstext-Klasse ueber das 35. Perzentil bestimmen, alles ab dem
+  1.8-fachen ist 'gross', davon der MEDIAN.
+- **Otsu ist hier nachweislich falsch.** Bei drei Moden (Fliesstext,
+  Schluesselwort, Punchline) trennt die groesste Varianz zwischen
+  Schluesselwort und Punchline — genau der Wert, den man loswerden will.
+  Deshalb von UNTEN her trennen, nicht nach maximaler Varianz.
+- **Kein zweiter Deckel im Composer, auch wenn es hier verlockend ist.**
+  Ein Hoehen-Deckel auf das Ankerwort wurde gebaut und wieder ausgebaut:
+  die Wirkung einer Referenz fiel von 1.4x auf 1.02x, der v151-Test fiel
+  sofort. Groesse wird dort korrigiert, wo sie ENTSTEHT.
+- **Ab `caption_scale` ~1.9 deckelt die SPALTE, nicht die Skala.** Am Bild
+  gemessen: 2.60 und 1.88 ergeben beide 166 px Versalhoehe, erst 1.00
+  faellt auf 92 px. Wer am Ankerwort einen Faktor ansetzt, aendert dort
+  nichts — der einzige Hebel ist die Messung.
+- **Eine gespeicherte Referenz wird NICHT nachgemessen.** Der alte Wert
+  bleibt im Konto, bis der Kunde sie neu lernt. Wer eine Messung aendert,
+  sagt dazu, dass Bestandskunden sie erneut lernen muessen.
+
 ### Referenz anwenden (v151) — klemmen, nicht verwerfen
 Ein gemessener Wert ausserhalb des Plausibilitaetsfensters wird **geklemmt**,
 nie verworfen. Verwerfen heisst: der Kunde laedt eine Referenz hoch und sieht

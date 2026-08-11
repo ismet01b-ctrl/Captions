@@ -3,6 +3,42 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c5 DIE GELERNTE GROESSE IST NICHT MEHR DIE PUNCHLINE.**
+  Ismets Standbild: 'STECKT' bildfuellend, dazu "das ist nicht mal ein
+  Keyword. Es ist viel zu gross."
+  - **Beides stimmt.** 'steckt' ist das ANKERWORT seines Fliesstext-Blocks
+    (jeder Block bekommt genau ein grosses Wort), kein Keyword. Und die
+    Groesse kam aus seiner eigenen gelernten Stil-Referenz: im Job-Log
+    steht `size=0.184H`. Das ist das **96. Perzentil** der gemessenen
+    Textteile, also die EINE groesste Stelle im Vorbild - die Punchline.
+    Daraus wurde `caption_scale 2.60`, im Querformat mal `pf 1.35`.
+  - **Derselbe Fehler wie v154, eine Zeile hoeher.** Dort blies die
+    gemessene Punchline den FLIESSTEXT auf, das wurde mit einem eigenen
+    Messwert behoben; das Schluesselwort blieb an der Punchline haengen.
+    Jetzt liefert `_gross_klasse()` die TYPISCHE Schluesselwort-Groesse:
+    Fliesstext-Klasse ueber das 35. Perzentil bestimmen, alles ab dem
+    1.8-fachen gilt als 'gross', davon der MEDIAN.
+  - **Otsu waere die naheliegende Wahl und ist nachweislich falsch.** An
+    einer Verteilung mit drei Moden (Fliesstext 0.020 H, Schluesselwoerter
+    0.060 H, Punchlines 0.185 H) trennt die groesste Varianz zwischen
+    Schluesselwort und PUNCHLINE (6.80 gegen 5.59) - Otsu haette also genau
+    den Wert geliefert, den wir loswerden wollen. Steht als Test drin.
+  - **KEIN zweiter Deckel in compose_flow.** Der naheliegende Griff (Hoehe
+    des Ankerworts begrenzen) wurde gebaut, gemessen und wieder
+    ausgebaut: die Wirkung einer gelernten Referenz fiel damit von 1.4x
+    auf 1.02x, und der v151-Test fiel sofort. Das ist Ismets FRUEHERER
+    Befund ("Referenz hochgeladen, es aendert sich kaum was"). Ein Deckel
+    gehoert an EINE Stelle.
+  - **Am Bild gemessen, warum eine reine Groessen-Stufe nichts gebracht
+    haette:** ab etwa `caption_scale 1.9` deckelt `S.fit` das Ankerwort
+    ohnehin auf die SPALTENBREITE (scale 2.60 und 1.88 ergeben beide
+    166 px Versalhoehe, erst 1.00 faellt auf 92 px). Unter dem Deckel
+    aendert ein Faktor nichts. Der einzige Hebel, der hier wirklich zieht,
+    ist die Messung selbst.
+  - **NICHT bewiesen:** was Ismets Referenz nach der neuen Messung ergibt.
+    Sein gespeicherter Eintrag traegt weiter 0.184 H - die Messung laeuft
+    erst beim erneuten Lernen. Er muss die Referenz also neu lernen oder
+    entfernen, sonst aendert sich fuer ihn gar nichts.
 - **v230c4 EINE VERALTETE NOTIZ RAUS, DAFUER EIN TEST HIN.**
   Ismets Frage "was ist noch offen?" hat einen Punkt zutage gefoerdert, der
   seit Ewigkeiten als offen gefuehrt wurde und laengst erledigt war:
