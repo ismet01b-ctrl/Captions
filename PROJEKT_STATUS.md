@@ -3,6 +3,21 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c4 EINE VERALTETE NOTIZ RAUS, DAFUER EIN TEST HIN.**
+  Ismets Frage "was ist noch offen?" hat einen Punkt zutage gefoerdert, der
+  seit Ewigkeiten als offen gefuehrt wurde und laengst erledigt war:
+  "Kontaktadresse vereinheitlichen". Nachgezaehlt: alle fuenf Kundenseiten
+  (Landing, Impressum, Datenschutz, AGB, App) zeigen dieselbe Adresse, und
+  `SUPPORT_EMAIL` speist auch security.txt. Die Gmail-Adresse in `ADMIN_MAIL`
+  ist Ismets Betriebs-Postfach und steht bewusst auf keiner Kundenseite.
+  - **Die Lehre ist nicht die Adresse, sondern die Notiz.** Eine offene Liste,
+    die niemand nachrechnet, veraltet still - und kostet bei jeder Frage
+    "was ist offen" eine falsche Antwort. Deshalb ersetzt ein TEST die Notiz:
+    er sammelt alle Mailadressen aus den Kundenseiten und vergleicht sie mit
+    `SUPPORT_EMAIL` aus server.py, nicht mit einem Literal im Test.
+    Absenderadressen (`noreply@`) zaehlen nicht als Kontaktadresse.
+  - Wer eine neue Seite baut, nimmt `SUPPORT_EMAIL` - ein hart geschriebenes
+    Literal faellt jetzt im Selftest auf.
 - **v230c3 LOGIN: BREMSE PRO KONTO, UND SIE UEBERLEBT DEN DEPLOY.**
   Ismets Frage: "ist das Login fuer die Webseite auch sicher?"
   - **Was schon sass** (am Code nachgeprueft, nicht aus dem Gedaechtnis):

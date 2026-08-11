@@ -5549,6 +5549,32 @@ def _scenario_logic(clip, transcript, tmp):
     _priv = open(os.path.join(HERE, 'web', 'privacy.html'), encoding='utf-8').read()
     _impr = open(os.path.join(HERE, 'web', 'imprint.html'), encoding='utf-8').read()
     _term = open(os.path.join(HERE, 'web', 'terms.html'), encoding='utf-8').read()
+    # v230c4: EINE Kontaktadresse auf allen Kundenseiten. Der Punkt stand
+    # jahrelang als "offen" in der Doku, obwohl er laengst erledigt war - und
+    # eine Notiz, die niemand nachrechnet, veraltet still. Der Test rechnet
+    # nach: keine Seite darf eine andere Adresse zeigen als SUPPORT_EMAIL.
+    # Absenderadressen (noreply@) sind keine Kontaktadresse.
+    # Die Erwartung kommt aus der EINEN Quelle in server.py, nicht als
+    # Literal in den Test - sonst prueft er sich selbst (v230o).
+    _srcc4 = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    _mailc4 = dict(re.findall(
+        r"^(SUPPORT_EMAIL|ADMIN_MAIL) = \(os\.environ\.get\([^)]*\) or "
+        r"'([^']+)'\)", _srcc4, re.M))
+    check('v230c4: Kontakt- und Betriebsadresse stehen als eigene Konstanten',
+          set(_mailc4) == {'SUPPORT_EMAIL', 'ADMIN_MAIL'}, str(_mailc4))
+    _adrc4 = set()
+    for _fc4 in ('index.html', 'landing.html', 'imprint.html', 'privacy.html',
+                 'terms.html'):
+        _adrc4 |= set(re.findall(
+            r'[\w.+-]+@[\w.-]+\.[a-z]{2,}',
+            open(os.path.join(HERE, 'web', _fc4), encoding='utf-8').read()))
+    _adrc4 = {a for a in _adrc4 if not a.lower().startswith('noreply@')}
+    check('v230c4: auf allen Kundenseiten steht genau EINE Kontaktadresse',
+          _adrc4 == {_mailc4.get('SUPPORT_EMAIL')},
+          f"gefunden: {sorted(_adrc4)} | erwartet: {_mailc4.get('SUPPORT_EMAIL')}")
+    check('v230c4: die Betriebs-Mailadresse steht auf keiner Kundenseite',
+          _mailc4.get('ADMIN_MAIL') not in _adrc4,
+          'Admin-Postfach ist bewusst getrennt')
     check('v127-sec: Credit-Fixes verdrahtet (Refund loescht Reservierung, Indizes, Caps)',
           "resv_like or f'Render {jid} %'" in _srv_m
           and 'DELETE FROM ledger WHERE user_id = ? AND grund LIKE ?' in _srv_m

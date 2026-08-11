@@ -1555,7 +1555,12 @@ Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
 - **UptimeRobot LAEUFT** (01.08.2026): HTTP-Monitor auf
   `https://douchko.eu/api/health`, alle 5 Minuten, Mail an Ismet. Nicht mehr
   als offen fuehren.
-- OFFEN (Ismet): Kontaktadresse vereinheitlichen. **Stripe läuft LIVE.**
+- **Stripe läuft LIVE.** Die Kontaktadresse ist einheitlich `Ismet@douchkove.com`
+  (Impressum, Datenschutz, AGB, Landing, `SUPPORT_EMAIL`, security.txt) und
+  steht seit v230c4 nicht mehr als offener Punkt (ein Selftest rechnet es nach) — sie war es schon länger
+  nicht mehr. Die Gmail-Adresse in `ADMIN_MAIL` ist Ismets Postfach für
+  Betriebsmeldungen und bleibt bewusst getrennt; sie steht nirgends auf einer
+  Kundenseite. Wer eine neue Seite baut, nimmt `SUPPORT_EMAIL`, kein Literal.
 
 ## Matte-Bleed (v230b) — ein Weichzeichner darf die Person nicht ansaugen
 Ismets "das Auge glitcht" war ein **heller, flimmernder Saum an Haar und
