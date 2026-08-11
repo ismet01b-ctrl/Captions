@@ -3,6 +3,38 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c8 DIE SCHRIFT WIRD NACHGESTELLT, UND ZWAR ZWEIMAL.**
+  Ismet: "gibt es keine Moeglichkeit die Schrift nachzukreieren?" und
+  "bei dynamischen Caption-Videos sind auch verschiedene Schriften drin,
+  die muessen ja auch nachgemacht werden."
+  - **Exakt nachbauen geht nicht, und das ist keine Bequemlichkeit.** Ein
+    Vorbild-Video zeigt rund 20 Buchstaben, keine Umlaute, keine Zahlen,
+    keine Satzzeichen, dazu durch Kompression und Leuchten verwaschen.
+    Daraus eine Schriftdatei zu bauen ergaebe eine mit Loechern. Dazu
+    kommt: fremde Schriften sind in Deutschland geschuetzt - eine
+    automatisch nachgebaute Schrift in Kundenvideos waere ein Risiko.
+  - **Was geht: unsere EIGENEN Schnitte auf die Messung stellen.** Drei
+    Schriften sind variabel (Archivo 100-900 Gewicht und 62-125 % Breite,
+    Inter und Montserrat beim Gewicht). Aus der Messung wird die passende
+    Achsen-Einstellung gesucht und daraus eine echte Schriftdatei erzeugt
+    (`_font_instanz`, fontTools). Das passiert beim RENDERN und wird ueber
+    den Dateinamen gecacht - die Referenz speichert nur Name und Achsen,
+    also haengt nichts an einer Datei, die spaeter fehlen koennte.
+  - **Die fehlende Zahl war die BREITE.** Sie ueber Teilbreite geteilt
+    durch Zeichenzahl zu bestimmen scheitert (die Zeichenzahl kennt
+    niemand, Leerzeichen zaehlen mit): an vier Testsaetzen schwankte das
+    um ueber 30 %. Der Weg ueber die Zusammenhangskomponenten - mediane
+    Breite eines Zeichens - liefert bei Anton viermal exakt 0.463 und
+    trennt schmal (0.46) von breit (0.98) klar.
+  - **Zwei Rollen statt einer.** Grosser Text und Fliesstext werden
+    getrennt gemessen (Grenze wie bei den Groessen: ab dem 1.8-fachen des
+    Fliesstext-Masses gilt 'gross') und bekommen je eine eigene Schrift:
+    `display`/`strong`/`italic` aus der grossen, `support` aus der kleinen.
+  - **Beweis am BILD, nicht am Plan:** dasselbe Wort 'STECKT' bei gleicher
+    Versalhoehe 479 px breit mit der nachgestellten Schrift gegen 729 px
+    mit der Hausschrift. Dazu 21 Tests: Raster der variablen Schnitte,
+    Wortlaut-Unabhaengigkeit der Breite, Leitplanke der Shortlist,
+    Cache, Pfad-Ausbruch, erfundene Achsen.
 - **v230c7 DIE REFERENZ BRINGT JETZT AUCH DIE SCHRIFT MIT.**
   Ismets Frage: "waere es nicht besser, wenn die KI auch die Schriftart
   erkennen wuerde?" Ja. Bis v230c6 konnte eine Referenz alles ausser dem

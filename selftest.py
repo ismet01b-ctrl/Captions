@@ -873,36 +873,166 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230c5: die Messung benutzt den neuen Weg wirklich',
           _mess.get('key_hoehe') and 0.015 <= _mess['key_hoehe'] <= 0.40,
           f"key_hoehe {_mess.get('key_hoehe')}")
-    # ===== v230c7 DIE REFERENZ BRINGT JETZT AUCH DIE SCHRIFT MIT =========
-    # Ismet: "waere es nicht besser, wenn die KI auch die Schriftart
-    # erkennen wuerde?" Ja. Der erste Bauversuch (drei gemessene Kennzahlen)
-    # ist an der echten Messkette gescheitert und die Sackgasse steht als
-    # Test fest, damit sie niemand nochmal laeuft.
-    _st7 = R._font_striche()
-    check('v230c7: jede Hausschrift hat einen Steckbrief',
-          len(_st7) >= 15 and all(0.005 <= v <= 0.60 for v in _st7.values()),
-          f'{len(_st7)} Schriften, {min(_st7.values())} bis {max(_st7.values())}')
-    # Der Steckbrief muss mit DEMSELBEN Rezept gemessen sein wie das Vorbild -
-    # zwei verschieden gemessene Zahlen zu vergleichen waere wertlos. Geprueft
-    # wird die REGEL: duenn < fett < schwarz.
-    check('v230c7: die Steckbriefe bilden das Gewicht richtig ab',
-          _st7['sans_l'] < _st7['poppins_b'] < _st7['inter_black'],
-          f"sans_l {_st7['sans_l']} < poppins_b {_st7['poppins_b']} "
-          f"< inter_black {_st7['inter_black']}")
-    # Die Messung ist die LEITPLANKE: zu einer duennen Schrift darf keine
-    # schwarze in die Auswahl, und umgekehrt.
-    _sl_duenn, _sl_fett = R._font_shortlist(0.06), R._font_shortlist(0.31)
-    check('v230c7: die Shortlist bleibt im gemessenen Gewicht',
-          'sans_l' in _sl_duenn and 'inter_black' not in _sl_duenn
-          and 'inter_black' in _sl_fett and 'sans_l' not in _sl_fett,
-          f'duenn {_sl_duenn} | fett {_sl_fett}')
-    check('v230c7: ohne Messwert gibt es keine Auswahl',
-          R._font_shortlist(0) == [] and R._font_shortlist(None) == [])
-    # Ohne Schluessel wird NICHTS geraten - dann bleibt die Schrift des Looks.
-    check('v230c7: ohne Schluessel bleibt die Schrift des Looks',
+    # ===== v230c7/c8 DIE REFERENZ BRINGT DIE SCHRIFT MIT ================
+    # Ismet: "waere es nicht besser, wenn die KI auch die Schriftart erkennen
+    # wuerde?" und "gibt es keine Moeglichkeit die Schrift nachzukreieren?"
+    # Exakt nachbauen geht nicht (ein Video zeigt ~20 Buchstaben, ohne
+    # Umlaute/Zahlen/Satzzeichen, dazu Kompression; und fremde Schriften sind
+    # in Deutschland geschuetzt). Was geht: UNSERE verstellbaren Schnitte auf
+    # die gemessenen Werte stellen.
+    _st8 = R._font_steckbriefe()
+    check('v230c8: jede Schrift-Familie hat einen Steckbrief',
+          len(_st8) >= 18, f'{len(_st8)} Familien')
+    check('v230c8: verstellbare Schnitte decken einen BEREICH ab, keinen Punkt',
+          len(_st8.get('archivo_var', [])) >= 20
+          and len(_st8.get('inter_var', [])) >= 5,
+          f"archivo_var {len(_st8.get('archivo_var', []))} Rasterpunkte, "
+          f"inter_var {len(_st8.get('inter_var', []))}")
+    # (a) DIE ZEICHENBREITE MUSS VOM WORTLAUT UNABHAENGIG SEIN. Der
+    #     naheliegende Weg (Teilbreite / Zeichenzahl) schwankte an vier
+    #     Testsaetzen um ueber 30 %, weil er Leerzeichen mitzaehlt und die
+    #     Zeichenzahl gar nicht bekannt ist. Der Weg ueber die
+    #     Zusammenhangskomponenten ist stabil - das ist der ganze Trick.
+    from PIL import Image as _I8, ImageDraw as _D8, ImageFont as _F8
+
+    def _mass8(fontname, txt):
+        _b = _I8.fromarray(np.full((900, 4200, 3), 40, np.uint8))
+        _D8.Draw(_b).text((60, 300), txt, (245, 245, 240),
+                          font=_F8.truetype(f'fonts/{fontname}.ttf', 190))
+        _g = cv2.GaussianBlur(cv2.cvtColor(np.array(_b), cv2.COLOR_RGB2BGR),
+                              (0, 0), 1.0)
+        _h = cv2.cvtColor(_g, cv2.COLOR_BGR2HSV)
+        return R._font_masse(((_h[..., 2] >= 244) & (_h[..., 1] <= 26)
+                              ).astype(np.uint8))
+    _SAETZE8 = ('HAMBURG', 'THIS ONE STICKS', 'WAS DAHINTER STECKT', 'MOMENTE')
+    for _f8 in ('anton', 'archivo', 'montserrat_xb'):
+        _br = [_mass8(_f8, t)[1] for t in _SAETZE8]
+        _spanne = (max(_br) - min(_br)) / max(_br)
+        check(f'v230c8: die Zeichenbreite haengt nicht am Wortlaut ({_f8})',
+              _spanne < 0.12, f'{_br} -> Spanne {_spanne*100:.1f} %')
+    check('v230c8: schmal und breit werden klar getrennt',
+          _mass8('anton', 'HAMBURG')[1] < 0.60 < _mass8('archivo', 'HAMBURG')[1],
+          f"anton {_mass8('anton', 'HAMBURG')[1]} gegen "
+          f"archivo {_mass8('archivo', 'HAMBURG')[1]}")
+    # (b) Die Messung ist die Leitplanke: zu duenn/schmal darf keine fette
+    #     breite Schrift in die Auswahl und umgekehrt.
+    _sl_d, _sl_f = R._font_shortlist((0.06, 0.70)), R._font_shortlist((0.31, 0.86))
+    check('v230c8: die Shortlist bleibt im gemessenen Gewicht',
+          'sans_l' in _sl_d and 'inter_black' not in _sl_d
+          and 'inter_black' in _sl_f and 'sans_l' not in _sl_f,
+          f'duenn {_sl_d} | fett {_sl_f}')
+    check('v230c8: ohne Messwert gibt es keine Auswahl',
+          R._font_shortlist(None) == [] and R._font_shortlist((None, None)) == [])
+    # (c) NACHSTELLEN: die gewaehlten Achsen muessen naeher an der Messung
+    #     liegen als der Ausgangsschnitt. Sonst waere es nur ein huebscher
+    #     Name (v193: der Plan trug den Wert, im Bild passierte nichts).
+    _ziel8 = (0.17, 0.60)          # halbfett und eher schmal
+    _ach8, _d8 = R.font_nachstellen('archivo_var', _ziel8)
+    _dstd = min(R._font_abstand(_ziel8, _p) for _p in _st8['archivo_var']
+                if _p[2] and abs(_p[2].get('wght', 0) - 600) < 1
+                and abs(_p[2].get('wdth', 0) - 100) < 1) \
+        if any(_p[2] and abs(_p[2].get('wght', 0) - 600) < 1
+               and abs(_p[2].get('wdth', 0) - 100) < 1
+               for _p in _st8['archivo_var']) else None
+    check('v230c8: die Achsen werden auf die Messung eingestellt',
+          isinstance(_ach8, dict) and 'wght' in _ach8 and 'wdth' in _ach8
+          and (_dstd is None or _d8 < _dstd),
+          f'{_ach8}, Abstand {_d8:.2f}'
+          + (f' gegen Ausgangsschnitt {_dstd:.2f}' if _dstd else ''))
+    check('v230c8: ein statischer Schnitt hat nichts zu stellen',
+          R.font_nachstellen('anton', _ziel8)[0] is None)
+    # (d) Die Instanz wird wirklich erzeugt, gecacht - und sie ist ANDERS.
+    _cache8 = os.path.join(tmp, 'fontcache')
+    _altc8 = os.environ.get('DVE_FONT_CACHE')
+    os.environ['DVE_FONT_CACHE'] = _cache8
+    try:
+        _p8 = R._font_instanz('archivo_var', {'wght': 800.0, 'wdth': 65.0})
+        check('v230c8: aus dem verstellbaren Schnitt wird eine echte Datei',
+              bool(_p8) and os.path.exists(_p8) and os.path.getsize(_p8) > 5000,
+              str(_p8))
+        check('v230c8: die zweite Anfrage kommt aus dem Cache',
+              R._font_instanz('archivo_var', {'wght': 800.0, 'wdth': 65.0}) == _p8)
+        _mi = R._font_probe(_F8.truetype(_p8, 190))
+        _mq = R._font_probe(_F8.truetype('fonts/archivo_var.ttf', 190))
+        check('v230c8: die Instanz ist messbar anders als der Ausgangsschnitt',
+              _mi[1] < _mq[1] * 0.92 and _mi[0] > _mq[0],
+              f'Instanz {_mi} gegen Ausgangsschnitt {_mq}')
+        # (e) DER ECHTE PFAD: kommt die Instanz im gezeichneten Wort an?
+        _alt8 = os.environ.get('DVE_REFS_FILE')
+        _rf8 = os.path.join(tmp, 'refs_c8.json')
+        try:
+            json.dump([{'name': 'f8', 'beispiel': 'x', 'params': {
+                'font': 'archivo_var',
+                'font_achsen': {'wght': 800.0, 'wdth': 65.0},
+                'font_klein': 'sans_l'}}], open(_rf8, 'w', encoding='utf-8'))
+            os.environ['DVE_REFS_FILE'] = _rf8
+            _c8 = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                      encoding='utf-8'))
+            _z8 = R._apply_reference_params(_c8)
+            _S8 = R.Sprites(_c8, 1080, 1920)
+            _S8h = R.Sprites(yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                                 encoding='utf-8')), 1080, 1920)
+
+            def _kern8(a):
+                _al = a[..., 3] > 200
+                _he = _al & (a[..., :3].max(axis=2) > 150)
+                _ys, _xs = np.where(_he if _he.any() else _al)
+                return (_ys.max() - _ys.min() + 1, _xs.max() - _xs.min() + 1)
+            _h1, _w1 = _kern8(_S8.text('STECKT', 160, _S8.white)[0])
+            _h2, _w2 = _kern8(_S8h.text('STECKT', 160, _S8h.white)[0])
+            check('v230c8: die nachgestellte Schrift kommt im BILD an',
+                  _w1 / _h1 < _w2 / _h2 * 0.90,
+                  f'{_w1}x{_h1} px gegen Hausschrift {_w2}x{_h2} px')
+            check('v230c8: zwei Rollen - grosses Wort und Fliesstext getrennt',
+                  _c8['fonts']['display'] == _p8
+                  and _c8['fonts']['support'] == 'fonts/sans_l.ttf',
+                  f"display {_c8['fonts']['display']}, "
+                  f"support {_c8['fonts']['support']}")
+            check('v230c8: das Job-Log nennt Schrift und Achsen',
+                  'font=archivo_var/' in _z8 and 'wght800' in _z8
+                  and 'body font=sans_l' in _z8, _z8)
+            # Ein unbekannter Name oder eine erfundene Achse darf nichts tun.
+            for _bad in ('../../etc/passwd', 'gibtsnicht', '', 'a b'):
+                json.dump([{'name': 'f8', 'beispiel': 'x',
+                            'params': {'font': _bad}}],
+                          open(_rf8, 'w', encoding='utf-8'))
+                _cb = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                          encoding='utf-8'))
+                _vor = _cb['fonts']['display']
+                R._apply_reference_params(_cb)
+                if _cb['fonts']['display'] != _vor:
+                    check('v230c8: ein unbekannter Schriftname wird ignoriert',
+                          False, f'{_bad!r} -> {_cb["fonts"]["display"]}')
+                    break
+            else:
+                check('v230c8: ein unbekannter Schriftname wird ignoriert', True,
+                      '4 Faelle, auch ein Pfad-Ausbruch')
+            json.dump([{'name': 'f8', 'beispiel': 'x', 'params': {
+                'font': 'archivo_var',
+                'font_achsen': {'boese': 9.0, 'wght': 700.0}}}],
+                      open(_rf8, 'w', encoding='utf-8'))
+            _cc = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                      encoding='utf-8'))
+            R._apply_reference_params(_cc)
+            check('v230c8: eine erfundene Achse wird weggefiltert',
+                  'boese' not in str(_cc['fonts']['display'])
+                  and 'wght700' in str(_cc['fonts']['display']),
+                  str(_cc['fonts']['display']))
+        finally:
+            if _alt8 is None:
+                os.environ.pop('DVE_REFS_FILE', None)
+            else:
+                os.environ['DVE_REFS_FILE'] = _alt8
+    finally:
+        if _altc8 is None:
+            os.environ.pop('DVE_FONT_CACHE', None)
+        else:
+            os.environ['DVE_FONT_CACHE'] = _altc8
+    # (f) Ohne Schluessel wird NICHTS geraten, und eine Antwort ausserhalb der
+    #     Auswahl wird verworfen (Halluzination).
+    check('v230c7: ohne Schluessel fragt niemand',
           R._ai_font_pick('', 'gpt-5', ['bild'], ['anton']) is None
           and R._ai_font_pick('k', 'gpt-5', [], ['anton']) is None)
-    # Und eine Antwort ausserhalb der Shortlist wird verworfen (Halluzination).
     _echt7 = R._oai_text
     try:
         R._oai_text = lambda *a, **k: '{"font": "comic_sans"}'
@@ -913,49 +1043,6 @@ def _scenario_logic(clip, transcript, tmp):
               R._ai_font_pick('k', 'gpt-5', ['bild'], ['anton', 'bebas']) == 'bebas')
     finally:
         R._oai_text = _echt7
-    # Anwendung: die Schrift landet bei den GROSSEN Woertern; Stuetzschrift
-    # und Schreibschrift bleiben beim Look (dort wurde nicht gemessen).
-    _alt7 = os.environ.get('DVE_REFS_FILE')
-    _rf7 = os.path.join(tmp, 'refs_c7.json')
-    try:
-        json.dump([{'name': 'f7', 'beispiel': 'x',
-                    'params': {'font': 'anton', 'stamm_versal': 0.17}}],
-                  open(_rf7, 'w', encoding='utf-8'))
-        os.environ['DVE_REFS_FILE'] = _rf7
-        _c7 = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
-                                  encoding='utf-8'))
-        _sup7, _scr7 = _c7['fonts']['support'], _c7['fonts']['script']
-        _z7 = R._apply_reference_params(_c7)
-        check('v230c7: die Referenz setzt die Schrift der grossen Woerter',
-              _c7['fonts']['display'] == 'fonts/anton.ttf'
-              and _c7['fonts']['strong'] == 'fonts/anton.ttf',
-              str(_c7['fonts']))
-        check('v230c7: Stuetzschrift und Schreibschrift bleiben beim Look',
-              _c7['fonts']['support'] == _sup7 and _c7['fonts']['script'] == _scr7)
-        check('v230c7: das Job-Log nennt die gewaehlte Schrift',
-              'font=anton' in _z7, _z7)
-        # Ein unbekannter oder gefaehrlicher Name wird ignoriert, nicht
-        # in einen Pfad gebaut.
-        for _bad in ('../../etc/passwd', 'gibtsnicht', '', 'a b'):
-            json.dump([{'name': 'f7', 'beispiel': 'x',
-                        'params': {'font': _bad, 'stamm_versal': 0.17}}],
-                      open(_rf7, 'w', encoding='utf-8'))
-            _c7b = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
-                                       encoding='utf-8'))
-            _vor = _c7b['fonts']['display']
-            R._apply_reference_params(_c7b)
-            if _c7b['fonts']['display'] != _vor:
-                check('v230c7: ein unbekannter Schriftname wird ignoriert',
-                      False, f'{_bad!r} -> {_c7b["fonts"]["display"]}')
-                break
-        else:
-            check('v230c7: ein unbekannter Schriftname wird ignoriert', True,
-                  '4 Faelle, auch ein Pfad-Ausbruch')
-    finally:
-        if _alt7 is None:
-            os.environ.pop('DVE_REFS_FILE', None)
-        else:
-            os.environ['DVE_REFS_FILE'] = _alt7
     check('v144: linksbuendiger Satz wird als links erkannt',
           _mess.get('ausrichtung') == 'links', str(_mess.get('ausrichtung')))
     # Gesetzt ist #f9bb26. Toleranz, weil Videokompression die Farbe verzieht.

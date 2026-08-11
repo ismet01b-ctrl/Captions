@@ -5144,6 +5144,17 @@ def measure_reference_video(video_path, max_frames=160):
     st = _ref_strichstaerke(frames, maske, H, teile)
     if st:
         res['stamm_versal'] = st
+    # v230c8: Schrift-Kennzahlen GETRENNT nach grossem und kleinem Text.
+    # Ismets Befund: "bei dynamischen Caption-Videos sind auch verschiedene
+    # Schriften drin, die muessen ja auch nachgemacht werden." Stimmt - das
+    # Schluesselwort ist fast immer ein anderer Schnitt als der Fliesstext.
+    # Die Grenze ist dieselbe wie bei der Groessenmessung (v230c5): alles ab
+    # dem 1.8-fachen des Fliesstext-Masses gilt als gross.
+    _fk = _ref_font_klassen(frames, maske, H, teile,
+                            grenze=res.get('klein_hoehe'))
+    for _rolle in ('gross', 'klein'):
+        if _fk.get(_rolle):
+            res[f'font_mass_{_rolle}'] = list(_fk[_rolle])
     # --- SCHNITT + KAMERA (fehlte der Stil-Analyse bis v143 komplett)
     kam = _ref_kamera(frames, fps)
     res.update(kam)
@@ -5441,6 +5452,9 @@ _FONT_KANDIDATEN = (
     'anton', 'bebas', 'staatliches', 'montserrat_xb', 'poppins_b', 'archivo',
     'inter_black', 'righteous', 'tiktok_bold', 'sans_l', 'serif', 'serif_i',
     'playfair_i', 'abril', 'yeseva', 'alfaslab', 'lobster', 'marker',
+    # v230c8: die verstellbaren Schnitte. Sie decken einen ganzen BEREICH ab
+    # und sind deshalb der eigentliche Weg zum "Nachstellen".
+    'archivo_var', 'inter_var', 'montserrat_var',
 )
 # Kurzbeschreibung je Hausschrift - nur fuer die Vision-Rueckfrage. Sie muss
 # das BILD einer Schrift treffen, nicht ihren Markennamen.
@@ -5463,71 +5477,231 @@ _FONT_BESCHREIBUNG = {
     'alfaslab': 'heavy slab serif, thick rectangular serifs',
     'lobster': 'connected script, brush-like, casual',
     'marker': 'handwritten marker pen, uneven strokes',
+    'archivo_var': 'grotesque sans, adjustable from thin to black and from '
+                   'condensed to wide, slightly squarish',
+    'inter_var': 'neutral UI grotesque, adjustable from thin to black',
+    'montserrat_var': 'geometric sans with round shapes, adjustable from '
+                      'thin to black',
 }
-_FONT_STRICH = {}
+# Variable Schnitte: sie decken einen BEREICH ab statt eines Punktes. Damit
+# laesst sich eine gemessene Schrift wirklich nachstellen, statt nur die
+# aehnlichste aus einer festen Liste zu nehmen (Ismets Frage: "gibt es keine
+# Moeglichkeit die Schrift nachzukreieren?"). Exakt nachbauen geht nicht - ein
+# Video zeigt rund 20 Buchstaben, ohne Umlaute, Zahlen und Satzzeichen, dazu
+# durch Kompression verwaschen; und fremde Schriften sind in Deutschland
+# geschuetzt. Was geht: unsere EIGENEN Schriften auf die gemessenen Werte
+# stellen.
+_FONT_ACHSEN = {
+    'archivo_var': {'wght': (100, 900), 'wdth': (62, 125)},
+    'inter_var': {'wght': (100, 900)},
+    'montserrat_var': {'wght': (100, 900)},
+}
+_FONT_STECK = {}       # name -> [(strich, breite, achsen|None), ...]
 
 
-def _font_strich(name):
-    """Strichstaerke einer Hausschrift, gemessen mit GENAU DEM REZEPT, mit dem
-    `_ref_strichstaerke` das Vorbild misst: heller Text auf dunklem Grund,
-    leicht weichgezeichnet (Antialiasing/Kompression), dieselbe
-    Helligkeitsschwelle, mediane Lauflaenge auf 20 % der Zeichenhoehe.
-    Ein Vergleich zwischen zwei verschieden gemessenen Zahlen waere wertlos
-    (CLAUDE.md: Vergleiche muessen ausgerichtet sein)."""
-    from PIL import Image, ImageDraw, ImageFont
-    pfad = os.path.join(HERE, 'fonts', f'{name}.ttf')
-    if not os.path.exists(pfad):
-        return None
-    try:
-        bild = Image.fromarray(np.full((900, 2600, 3), 40, np.uint8))
-        ImageDraw.Draw(bild).text((60, 300), 'HAMBURG', (245, 245, 240),
-                                  font=ImageFont.truetype(pfad, 190))
-        bgr = cv2.GaussianBlur(cv2.cvtColor(np.array(bild), cv2.COLOR_RGB2BGR),
-                               (0, 0), 1.0)
-        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        m = ((hsv[..., 2] >= 244) & (hsv[..., 1] <= 26)).astype(np.uint8)
-        ys, xs = np.where(m > 0)
-        if not ys.size:
-            return None
-        bh = int(ys.max() - ys.min() + 1)
-        zeile = m[ys.min() + int(bh * 0.20), xs.min():xs.max() + 1]
-        laeufe, run = [], 0
-        for v in zeile:
-            if v:
-                run += 1
-            elif run:
-                laeufe.append(run)
-                run = 0
-        if run:
+def _font_probe(fontobj):
+    """Strichstaerke UND Zeichenbreite einer Schriftinstanz, gemessen mit
+    GENAU DEM REZEPT, mit dem das Vorbild gemessen wird."""
+    from PIL import Image, ImageDraw
+    bild = Image.fromarray(np.full((900, 2600, 3), 40, np.uint8))
+    ImageDraw.Draw(bild).text((60, 300), 'HAMBURG', (245, 245, 240), font=fontobj)
+    bgr = cv2.GaussianBlur(cv2.cvtColor(np.array(bild), cv2.COLOR_RGB2BGR),
+                           (0, 0), 1.0)
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    m = ((hsv[..., 2] >= 244) & (hsv[..., 1] <= 26)).astype(np.uint8)
+    return _font_masse(m)
+
+
+def _font_masse(m, cap=None):
+    """(strich, breite) aus einer Textmaske, beides als Anteil der
+    Zeichenhoehe.
+
+    strich  mediane Lauflaenge auf 20 % Hoehe - dasselbe Rezept wie
+            `_ref_strichstaerke` seit v144.
+    breite  MEDIANE BREITE EINES ZEICHENS, ueber die Zusammenhangs-
+            komponenten. Der naheliegende Weg (Teilbreite geteilt durch die
+            Zeichenzahl) scheitert daran, dass wir die Zeichenzahl nicht
+            kennen und Leerzeichen mitzaehlen wuerden - an vier Testsaetzen
+            schwankte er um ueber 30 %, dieser hier bei Anton 0.463 / 0.463 /
+            0.463 / 0.463."""
+    ys, xs = np.where(m > 0)
+    if ys.size < 50:
+        return (None, None)
+    cap = float(cap or (ys.max() - ys.min() + 1))
+    if cap < 8:
+        return (None, None)
+    zeile = m[ys.min() + int(cap * 0.20), xs.min():xs.max() + 1]
+    laeufe, run = [], 0
+    for v in zeile:
+        if v:
+            run += 1
+        elif run:
             laeufe.append(run)
-        return round(float(np.median(laeufe)) / bh, 3) if laeufe else None
-    except Exception:
+            run = 0
+    if run:
+        laeufe.append(run)
+    strich = round(float(np.median(laeufe)) / cap, 4) if laeufe else None
+    n, _lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
+    # Nur Teile, die wie ein einzelnes Zeichen aussehen: fast volle Hoehe und
+    # nicht breiter als hoch mal 1.2 (sonst sind zwei Buchstaben verschmolzen).
+    br = [st[i, cv2.CC_STAT_WIDTH] / cap for i in range(1, n)
+          if st[i, cv2.CC_STAT_HEIGHT] > cap * 0.55
+          and st[i, cv2.CC_STAT_WIDTH] < cap * 1.2]
+    breite = round(float(np.median(br)), 4) if len(br) >= 3 else None
+    return (strich, breite)
+
+
+def _font_steckbriefe():
+    """Kennzahlen unserer Schriften. Statische Schnitte ergeben EINEN Punkt,
+    variable ein Raster ueber ihre Achsen - das ist der Vorrat, aus dem
+    nachgestellt wird. Einmal je Prozesslauf; haengt nur an den Dateien."""
+    if _FONT_STECK:
+        return _FONT_STECK
+    from PIL import ImageFont
+    for name in _FONT_KANDIDATEN:
+        pfad = os.path.join(HERE, 'fonts', f'{name}.ttf')
+        if not os.path.exists(pfad):
+            continue
+        try:
+            achsen = _FONT_ACHSEN.get(name)
+            punkte = []
+            if achsen:
+                wg = achsen['wght']
+                wd = achsen.get('wdth')
+                for w in range(int(wg[0]), int(wg[1]) + 1, 100):
+                    for d in ([wd[0], (wd[0] + wd[1]) / 2, wd[1],
+                               wd[0] + (wd[1] - wd[0]) * 0.25,
+                               wd[0] + (wd[1] - wd[0]) * 0.75]
+                              if wd else [None]):
+                        f = ImageFont.truetype(pfad, 190)
+                        f.set_variation_by_axes(
+                            [float(w)] + ([float(d)] if d is not None else []))
+                        s, b = _font_probe(f)
+                        if s and b:
+                            ax = {'wght': float(w)}
+                            if d is not None:
+                                ax['wdth'] = round(float(d), 1)
+                            punkte.append((s, b, ax))
+            else:
+                s, b = _font_probe(ImageFont.truetype(pfad, 190))
+                if s and b:
+                    punkte.append((s, b, None))
+            if punkte:
+                _FONT_STECK[name] = punkte
+        except Exception:
+            continue
+    return _FONT_STECK
+
+
+# Spannen grob nach der Streuung unserer eigenen Schriften; die Breite traegt
+# schwerer, weil sie schmal von breit trennt und das im Bild am meisten
+# ausmacht.
+_FONT_SPANNE = {'strich': 0.10, 'breite': 0.20}
+_FONT_GEWICHT = {'strich': 1.0, 'breite': 1.3}
+
+
+def _font_abstand(mess, punkt):
+    return math.sqrt(
+        _FONT_GEWICHT['strich'] * ((mess[0] - punkt[0]) / _FONT_SPANNE['strich']) ** 2
+        + _FONT_GEWICHT['breite'] * ((mess[1] - punkt[1]) / _FONT_SPANNE['breite']) ** 2)
+
+
+def _font_shortlist(mess, n=6):
+    """v230c7/c8: die plausibelsten Schrift-FAMILIEN zu einer Messung
+    (Strichstaerke, Zeichenbreite). Bei variablen Schnitten zaehlt der beste
+    Punkt ihres Rasters - sie kommen also fast immer in Frage, und genau das
+    ist gewollt: sie lassen sich nachstellen."""
+    steck = _font_steckbriefe()
+    if not mess or mess[0] is None or mess[1] is None or not steck:
+        return []
+    rang = sorted((min(_font_abstand(mess, p) for p in punkte), k)
+                  for k, punkte in steck.items())
+    return [k for _, k in rang[:n]]
+
+
+def font_nachstellen(name, mess):
+    """v230c8: welche Achsen-Einstellung dieser Familie trifft die Messung am
+    besten? Rueckgabe (achsen|None, abstand). Bei statischen Schnitten gibt es
+    nichts zu stellen - dann ist der Abstand die Wahrheit ueber den Rest."""
+    punkte = _font_steckbriefe().get(name) or []
+    if not punkte or not mess or mess[0] is None or mess[1] is None:
+        return (None, 1e9)
+    d, p = min((_font_abstand(mess, p), p) for p in punkte)
+    return (p[2], d)
+
+
+def _font_instanz(name, achsen):
+    """v230c8: erzeugt aus einem variablen Schnitt eine feste Schriftdatei mit
+    den gewaehlten Achsen und gibt ihren Pfad zurueck.
+
+    Erzeugt wird beim RENDERN, nicht beim Lernen: so haengt nichts an einer
+    Datei, die spaeter fehlen koennte, und die Referenz speichert nur Name und
+    Achsen. Das Ergebnis wird ueber den Dateinamen gecacht, ein zweiter Render
+    kostet nichts."""
+    if not achsen:
+        return None
+    quelle = os.path.join(HERE, 'fonts', f'{name}.ttf')
+    if not os.path.exists(quelle):
+        return None
+    kurz = '_'.join(f'{k}{int(round(v))}' for k, v in sorted(achsen.items()))
+    import tempfile as _tf
+    ziel_dir = os.environ.get('DVE_FONT_CACHE') or os.path.join(
+        os.environ.get('DVE_DATA') or _tf.gettempdir(), 'dve_fonts')
+    ziel = os.path.join(ziel_dir, f'{name}_{kurz}.ttf')
+    if os.path.exists(ziel):
+        return ziel
+    try:
+        from fontTools.ttLib import TTFont
+        from fontTools.varLib import instancer
+        os.makedirs(ziel_dir, exist_ok=True)
+        f = TTFont(quelle)
+        instancer.instantiateVariableFont(f, dict(achsen), inplace=True)
+        tmp = f'{ziel}.{os.getpid()}.tmp'     # v230w: kein gemeinsamer .tmp
+        f.save(tmp)
+        os.replace(tmp, ziel)
+        return ziel
+    except Exception as e:
+        print(f"Font instance skipped ({type(e).__name__}: {e})")
         return None
 
 
-def _font_striche():
-    """Einmal je Prozesslauf; haengt nur an den Schriftdateien."""
-    if not _FONT_STRICH:
-        for n in _FONT_KANDIDATEN:
-            s = _font_strich(n)
-            if s:
-                _FONT_STRICH[n] = s
-    return _FONT_STRICH
+def _ref_font_klassen(frames, maske, H, teile=None, grenze=None):
+    """v230c8: Strichstaerke und Zeichenbreite GETRENNT fuer grossen und
+    kleinen Text. Ein Caption-Video hat fast immer zwei Schnitte - das
+    Schluesselwort und den Fliesstext daneben.
+
+    `grenze` ist die gemessene Fliesstext-Hoehe; alles ab dem 1.8-fachen gilt
+    als gross (dieselbe Trennung wie bei den Groessen, v230c5)."""
+    aus = {'gross': [], 'klein': []}
+    if teile is None:
+        return {}
+    schwelle = float(grenze) * 1.8 * H if grenze else None
+    for f in frames[::max(1, len(frames) // 24)]:
+        m, _ = maske(f)
+        parts = [p for p in teile(m) if p[3] >= H * 0.012 and p[4] >= 120]
+        if not parts:
+            continue
+        if schwelle is None:
+            # Ohne Referenzhoehe: der groesste Teil ist 'gross', der Rest klein.
+            hh = max(p[3] for p in parts)
+            schwelle_f = hh * 0.55
+        else:
+            schwelle_f = schwelle
+        for (x, y, bw, bh, _a) in parts:
+            s, b = _font_masse(m[y:y + bh, x:x + bw], bh)
+            if s is None or b is None:
+                continue
+            aus['gross' if bh >= schwelle_f else 'klein'].append((s, b))
+    erg = {}
+    for k, v in aus.items():
+        if len(v) >= 3:
+            a = np.array(v, dtype=np.float64)
+            erg[k] = (round(float(np.median(a[:, 0])), 4),
+                      round(float(np.median(a[:, 1])), 4))
+    return erg
 
 
-def _font_shortlist(stamm_versal, n=6):
-    """v230c7: die plausibelsten Hausschriften zu einer gemessenen
-    Strichstaerke. Das ist die Leitplanke gegen einen Griff ins Leere - eine
-    hauchduenne Serifenschrift kommt nicht in Frage, wo eine fette Grotesk
-    steht."""
-    st = _font_striche()
-    if not stamm_versal or not st:
-        return []
-    return [k for _, k in sorted((abs(v - float(stamm_versal)), k)
-                                 for k, v in st.items())][:n]
-
-
-def _ai_font_pick(key, model, frames, kandidaten):
+def _ai_font_pick(key, model, frames, kandidaten, rolle='gross'):
     """v230c7: Vision waehlt AUS DER SHORTLIST die passendste Schrift.
 
     Warum ueberhaupt Vision: aus dem Videobild ueberlebt zuverlaessig nur die
@@ -5540,10 +5714,12 @@ def _ai_font_pick(key, model, frames, kandidaten):
         return None
     import requests            # v210: in dieser Datei lokal, sonst NameError
     liste = '\n'.join(f'- {k}: {_FONT_BESCHREIBUNG.get(k, k)}' for k in kandidaten)
+    was = ('the BIG highlighted words' if rolle == 'gross'
+           else 'the SMALLER running text')
     prompt = ('You see frames from a video with burned-in captions. Look ONLY '
-              'at the SHAPE of the caption lettering (weight, width, serifs, '
-              'roundness) - ignore colour, size and the words. Which of these '
-              'typefaces is the closest match?\n' + liste +
+              f'at the SHAPE of the lettering used for {was} (weight, width, '
+              'serifs, roundness) - ignore colour, size and the words. Which '
+              'of these typefaces is the closest match?\n' + liste +
               '\nIf none is close, answer null. Answer only with JSON: '
               '{"font": "<name from the list>"|null}')
     content = [{'type': 'text', 'text': prompt}]
@@ -5694,12 +5870,30 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
     # und - nur bei klarem Abstand - selbst entschieden. Mit Schluessel darf
     # Vision INNERHALB dieser Shortlist genauer hinsehen; ohne Schluessel
     # bleibt es bei der Messung. Ein Aufruf beim LERNEN, nie beim Rendern.
-    if mess.get('stamm_versal'):
-        _pick = _ai_font_pick(key, model, frames,
-                              _font_shortlist(mess['stamm_versal']))
+    # v230c8: fuer BEIDE Rollen eine Schrift - grosses Wort und Fliesstext
+    # sind in einem Caption-Video fast nie derselbe Schnitt.
+    for _rolle, _ziel in (('gross', 'font'), ('klein', 'font_klein')):
+        _mass = mess.get(f'font_mass_{_rolle}')
+        if not _mass:
+            continue
+        _mass = tuple(_mass)
+        _kand = _font_shortlist(_mass)
+        _pick = _ai_font_pick(key, model, frames, _kand, rolle=_rolle)
+        if not _pick and _kand:
+            # Ohne Schluessel oder ohne Antwort: die Messung entscheidet, aber
+            # nur bei klarem Abstand zum zweiten Platz. Falsch raten ist
+            # schlimmer als beim Look zu bleiben.
+            _r = sorted((font_nachstellen(k, _mass)[1], k) for k in _kand)
+            if len(_r) > 1 and (_r[1][0] - _r[0][0]) >= 0.25:
+                _pick = _r[0][1]
         if _pick:
-            mess['font'] = _pick
-            print(f"Style reference: closest house typeface is {_pick}")
+            _ach, _d = font_nachstellen(_pick, _mass)
+            mess[_ziel] = _pick
+            if _ach:
+                mess[f'{_ziel}_achsen'] = _ach
+            print(f"Style reference: {_rolle} text -> {_pick}"
+                  + (f" ({', '.join(f'{k} {v:.0f}' for k, v in _ach.items())})"
+                     if _ach else ''))
     # v96v: Audio/SFX separat aus der Tonspur analysieren (Vision hoert nichts)
     aud = _ref_audio_summary(video_path)
     if aud:
@@ -5738,7 +5932,12 @@ def _messung_klartext(mess):
     # Kunde an einem Vorbild sieht. Ehrlich formuliert: es ist die AEHNLICHSTE
     # aus unserem Haus, nicht dieselbe.
     if mess.get('font'):
-        t.append(f"closest house typeface {mess['font']}")
+        _ax = mess.get('font_achsen') or {}
+        t.append('typeface matched to ' + str(mess['font']).replace('_var', '')
+                 + (' (' + ', '.join(f'{k} {v:.0f}' for k, v in sorted(_ax.items()))
+                    + ')' if _ax else ''))
+    if mess.get('font_klein') and mess.get('font_klein') != mess.get('font'):
+        t.append('body text ' + str(mess['font_klein']).replace('_var', ''))
     if mess.get('kamera'):
         t.append({'ruhig': 'calm camera', 'bewegt': 'moving camera',
                   'wild': 'restless camera'}.get(mess['kamera'], 'camera'))
@@ -5954,10 +6153,16 @@ def _reference_params():
         vals = [p[k] for p in ps if isinstance(p.get(k), (int, float))]
         if vals:
             out[k] = sum(vals) / len(vals)
-    for k in ('kamera', 'ausrichtung', 'font'):
+    for k in ('kamera', 'ausrichtung', 'font', 'font_klein'):
         vs = [p.get(k) for p in ps if p.get(k)]
         if vs:
             out[k] = max(set(vs), key=vs.count)
+    # v230c8: die Achsen-Einstellungen sind dicts - sie gehoeren zur zuletzt
+    # gewaehlten Schrift und werden nicht gemittelt.
+    for k in ('font_achsen', 'font_klein_achsen'):
+        vs = [p.get(k) for p in ps if isinstance(p.get(k), dict)]
+        if vs:
+            out[k] = vs[-1]
     for k in ('musik', 'schnitt_ton', 'glow', 'kontur'):
         vs = [p[k] for p in ps if isinstance(p.get(k), bool)]
         if vs:
@@ -6210,15 +6415,38 @@ def _apply_reference_params_roh(cfg):
     # Kunden, die den ganzen Satz meint - eine Referenz ist ein Vorbild,
     # kein Befehl, und sie verliert seit v230c6 ohnehin gegen eine eigene
     # Wahl.
-    _fn = str(p.get('font') or '').strip()
-    if _fn and re.fullmatch(r'[a-z0-9_]{2,32}', _fn) \
-            and os.path.exists(os.path.join(HERE, 'fonts', f'{_fn}.ttf')):
-        _fp = f'fonts/{_fn}.ttf'
-        cfg.setdefault('fonts', {})
-        cfg['fonts']['display'] = _fp
-        cfg['fonts']['strong'] = _fp
-        cfg['fonts']['italic'] = _fp
-        parts.append(f"font={_fn}")
+    # v230c8: zwei Rollen. Das grosse Wort und der Fliesstext sind in einem
+    # Caption-Video fast nie derselbe Schnitt - beide werden nachgestellt.
+    # Ist die gewaehlte Familie ein VERSTELLBARER Schnitt, wird daraus eine
+    # feste Schriftdatei mit den gemessenen Achsen erzeugt: das ist so nah am
+    # "Nachbauen", wie es sauber geht.
+    def _schrift(feld):
+        _n = str(p.get(feld) or '').strip()
+        if not _n or not re.fullmatch(r'[a-z0-9_]{2,32}', _n):
+            return None
+        if not os.path.exists(os.path.join(HERE, 'fonts', f'{_n}.ttf')):
+            return None
+        _ax = p.get(f'{feld}_achsen')
+        if isinstance(_ax, dict) and _ax:
+            _ax = {str(k)[:4]: float(v) for k, v in _ax.items()
+                   if str(k)[:4] in ('wght', 'wdth', 'opsz', 'slnt')
+                   and isinstance(v, (int, float))}
+            _inst = _font_instanz(_n, _ax) if _ax else None
+            if _inst:
+                return (_inst, _n + '/' + ','.join(
+                    f'{k}{v:.0f}' for k, v in sorted(_ax.items())))
+        return (f'fonts/{_n}.ttf', _n)
+    cfg.setdefault('fonts', {})
+    _gr = _schrift('font')
+    if _gr:
+        cfg['fonts']['display'] = _gr[0]
+        cfg['fonts']['strong'] = _gr[0]
+        cfg['fonts']['italic'] = _gr[0]
+        parts.append(f"font={_gr[1]}")
+    _kl = _schrift('font_klein')
+    if _kl:
+        cfg['fonts']['support'] = _kl[0]
+        parts.append(f"body font={_kl[1]}")
     return 'Style anchor: ' + ', '.join(parts) if parts else ''
 
 

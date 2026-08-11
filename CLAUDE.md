@@ -825,6 +825,24 @@ Vorbilds. Dieser eine Wert wurde zur Grundgroesse fuer JEDES grosse Wort.
   bleibt im Konto, bis der Kunde sie neu lernt. Wer eine Messung aendert,
   sagt dazu, dass Bestandskunden sie erneut lernen muessen.
 
+### Schrift NACHSTELLEN (v230c8) — nicht nachbauen
+- **Exakt nachbauen ist keine Option.** Ein Vorbild zeigt ~20 Buchstaben,
+  ohne Umlaute/Zahlen/Satzzeichen, komprimiert. Und fremde Schriften sind in
+  Deutschland geschuetzt. Wer das nochmal vorschlaegt: beides steht hier.
+- **Variable Schnitte sind der Weg.** `_FONT_ACHSEN` (archivo_var
+  wght 100-900 + wdth 62-125, inter_var, montserrat_var). `_font_steckbriefe`
+  legt fuer sie ein RASTER an, `font_nachstellen` sucht den nahesten Punkt,
+  `_font_instanz` erzeugt daraus per fontTools eine echte Datei (Cache ueber
+  den Dateinamen, erzeugt beim RENDERN - die Referenz speichert nur Name und
+  Achsen).
+- **Die BREITE misst man ueber Zusammenhangskomponenten**, nie ueber
+  Teilbreite/Zeichenzahl: die Zeichenzahl ist unbekannt und Leerzeichen
+  zaehlen mit (gemessen >30 % Schwankung gegen 0 % bei Anton).
+- **Zwei Rollen.** Grosser Text -> `display`/`strong`/`italic`, kleiner Text
+  -> `support`. Ein Caption-Video hat fast nie nur einen Schnitt.
+- Der Beweis ist das gezeichnete Wort (479 px gegen 729 px bei gleicher
+  Versalhoehe), nicht der Config-Eintrag.
+
 ### Schriftwahl aus dem Vorbild (v230c7) — messen grenzt ein, sehen entscheidet
 Eine gelernte Referenz bringt seit v230c7 die aehnlichste HAUSSCHRIFT mit
 (`display`/`strong`/`italic`; Stuetz- und Schreibschrift bleiben beim Look).
