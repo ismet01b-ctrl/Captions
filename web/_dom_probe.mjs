@@ -584,5 +584,76 @@ pruef('der Hinweis nennt die Aufloesung der Quelle',
         N.NAVITEMS.filter(([id]) => !N.TITEL[id]).map(x => x[0]).join(', ') || 'alle');
 }
 
+// ===== v230c9: die Zusammenfassung sagt, ob ein gelernter Stil mitwirkt ====
+// Ismets Ansage. Ein gelernter Stil greift in Groesse, Dichte, Kamera, Ton und
+// seit v230c8 auch in die Schrift ein - wer das nicht sieht, sucht den Grund
+// fuer sein Ergebnis an der falschen Stelle. Geprueft wird durch AUSFUEHREN
+// von buildSummary(), nicht durch Lesen (v219).
+{
+  const kacheln = [];
+  const _tile = o => { kacheln.push(o); return ''; };
+  const getDeep = (o, pfad, dflt) => {
+    let c = o;
+    for (const t of String(pfad).split('.')) {
+      if (!c || typeof c !== 'object' || !(t in c)) return dflt;
+      c = c[t];
+    }
+    return c;
+  };
+  const escHtml = t => String(t).replace(/[&<>"]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const diffCfg = () => ({}), countChanged = () => 0;
+  const LOOK_LABELS = { creator: 'Creator · editorial' }, FX_NAMES = {};
+  let geholt = 0;
+  const stileFuerSummary = () => { geholt++; };
+  const summaryEl = { innerHTML: '' };
+  const $ = () => summaryEl;
+  const State = { file: null, look: 'creator', cfg: {}, cfgBase: {},
+                  currentStep: 5, styles: null };
+  const updateTplSaveBtn = () => {};
+  const fn = new Function(
+    '_tile', 'getDeep', 'escHtml', 'diffCfg', 'countChanged', 'LOOK_LABELS',
+    'FX_NAMES', 'stileFuerSummary', '$', 'State', 'updateTplSaveBtn',
+    schneide('buildSummary') + '; return buildSummary;')(
+      _tile, getDeep, escHtml, diffCfg, countChanged, LOOK_LABELS, FX_NAMES,
+      stileFuerSummary, $, State, updateTplSaveBtn);
+  const kachel = () => kacheln.find(k => k.head === 'Style reference');
+  // (1) Noch nicht geholt: die Kachel sagt das, und sie STOESST das Holen an.
+  kacheln.length = 0; State.styles = null; fn();
+  pruef('v230c9: unbekannter Stand steht als solcher da und laedt nach',
+        !!kachel() && /check/i.test(kachel().val) && geholt === 1,
+        JSON.stringify(kachel()));
+  // (2) Kein Stil -> klar "None", und keine Behauptung ueber einen Stil.
+  kacheln.length = 0; State.styles = []; fn();
+  pruef('v230c9: ohne gelernten Stil steht "None"',
+        kachel().val === 'None' && !/shapes/.test(kachel().sub || ''),
+        JSON.stringify(kachel()));
+  // (3) Mit Stil: Name UND was er anfasst - eine Kachel, die nur "ja" sagt,
+  //     erklaert nichts.
+  kacheln.length = 0;
+  State.styles = [{ name: 'Mein Vorbild' }, { name: 'Zweiter' }];
+  fn();
+  pruef('v230c9: mit gelerntem Stil steht Name und Wirkung da',
+        kachel().val === 'Active'
+        && /Mein Vorbild/.test(kachel().sub) && /Zweiter/.test(kachel().sub)
+        && /typeface/.test(kachel().sub),
+        JSON.stringify(kachel()));
+  // (4) Ein fremder Name landet ESCAPED in der Kachel (er kommt vom Server,
+  //     aber der Kunde hat ihn selbst getippt).
+  kacheln.length = 0;
+  State.styles = [{ name: '<img src=x onerror=alert(1)>' }];
+  fn();
+  pruef('v230c9: der Name des Stils wird escaped',
+        !/<img/.test(kachel().sub) && /&lt;img/.test(kachel().sub),
+        kachel().sub);
+  // (5) Die Kundenseite ist englisch - kein deutscher Rest in der
+  //     Zusammenfassung (v148).
+  kacheln.length = 0; State.styles = []; fn();
+  const deutsch = kacheln.filter(k => /Animationen|inkl\.|aktiv\b/.test(
+    String(k.sub || '') + String(k.val || '')));
+  pruef('v230c9: die Zusammenfassung ist durchgehend englisch',
+        deutsch.length === 0, JSON.stringify(deutsch));
+}
+
 console.log(fails ? `\n${fails} FEHLER` : '\nalle Nachweise gruen');
 process.exit(fails ? 1 : 0);

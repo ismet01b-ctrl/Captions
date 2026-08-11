@@ -3,6 +3,29 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c9 DIE ZUSAMMENFASSUNG SAGT, OB EIN GELERNTER STIL MITWIRKT.**
+  Ismets Ansage. Bis hierher stand in der Zusammenfassung vor dem Rendern
+  Look, Schrift, Dichte, Kamera und Ton - aber nirgends, dass ein
+  hochgeladenes Vorbild an all diesen Werten mitdreht. Wer das nicht
+  sieht, sucht den Grund fuer sein Ergebnis an der falschen Stelle
+  (genau der Weg, den Ismet diese Runde gegangen ist).
+  - Neue Kachel **Style reference**: 'Active' mit Namen und einer Zeile,
+    WAS der Stil anfasst (Groesse, Dichte, Kamera, Ton, Schrift), oder
+    'None' mit 'only your look and your settings'.
+  - **Ein unbekannter Stand wird als solcher gezeigt**, nicht als 'None'.
+    Die Liste wird nachgeholt, wenn der Kunde nie auf der Konto-Seite war;
+    scheitert das, bleibt 'checking' stehen. Eine Kachel, die 'kein Stil'
+    behauptet, weil eine Anfrage schiefging, waere schlimmer als keine.
+  - `renderStyleList` fuehrt den Zustand mit: nach Lernen oder Loeschen
+    stimmt die Kachel sofort, statt den Stand von vorhin zu zeigen.
+  - Nebenbei zwei deutsche Reste auf der englischen Kundenseite raus
+    ('26 Animationen aktiv', 'inkl. Whip-Pan') - der Sprach-Test der
+    SPA-Sonde haelt das jetzt fest.
+  - **Beweis:** 5 Nachweise in `web/_dom_probe.mjs` (echtes `buildSummary()`
+    ausgefuehrt, inkl. Escaping eines Stil-Namens mit `<img onerror=>`)
+    plus ein Lauf im echten Chromium gegen den laufenden Server:
+    ohne Stil 'None', nach dem Lernen 'Active Mein Vorbild', 0
+    CSP-Verstoesse, keine Konsolen-Fehler.
 - **v230c8 DIE SCHRIFT WIRD NACHGESTELLT, UND ZWAR ZWEIMAL.**
   Ismet: "gibt es keine Moeglichkeit die Schrift nachzukreieren?" und
   "bei dynamischen Caption-Videos sind auch verschiedene Schriften drin,

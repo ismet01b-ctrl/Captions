@@ -2911,6 +2911,9 @@ const State = {
   // einmal geladenen Beschriftungen (Effekte/Animationen).
   blocks: [], blkOpen: null, fxLabels: null, animLabels: null,
   currentStep: 1, renderStart: 0,
+  // v230c9: die gelernten Stile. null = noch nicht geholt (die Zusammenfassung
+  // holt sie dann selbst nach), [] = es gibt keine.
+  styles: null,
 };
 
 class EditorHistory {
@@ -4756,6 +4759,11 @@ function stlSetStatus(msg, kind) {
   st.style.color = kind === 'err' ? '#ff8a7a' : kind === 'ok' ? '#6dd48a' : 'var(--mut)';
 }
 function renderStyleList(refs) {
+  // v230c9: dieselbe Liste speist die Zusammenfassung. Wer sie hier neu
+  // zeichnet (nach Lernen oder Loeschen), muss den Zustand mitziehen -
+  // sonst zeigt die Kachel den Stand von vorhin.
+  State.styles = refs || [];
+  if (State.currentStep === 5 && typeof buildSummary === 'function') buildSummary();
   const box = $('#stlList'); if (!box) return;
   box.innerHTML = '';
   (refs || []).forEach((r, i) => {
@@ -4786,6 +4794,21 @@ async function loadStyleList() {
     const d = await r.json();
     renderStyleList(d.refs || []);
   } catch (e) {}
+}
+// v230c9: die Zusammenfassung braucht die Liste auch, wenn der Kunde nie auf
+// der Konto-Seite war. Genau EINMAL holen; scheitert es, bleibt die Kachel
+// bei "not checked" statt zu behaupten, es gaebe keinen Stil.
+let _stilGeholt = false;
+async function stileFuerSummary() {
+  if (_stilGeholt || State.styles !== null) return;
+  _stilGeholt = true;
+  try {
+    const r = await fetch('/api/style/list');
+    if (!r.ok) { _stilGeholt = false; return; }
+    const d = await r.json();
+    State.styles = d.refs || [];
+  } catch (e) { _stilGeholt = false; return; }
+  if (State.currentStep === 5 && typeof buildSummary === 'function') buildSummary();
 }
 if ($('#btnStyleLearn')) $('#btnStyleLearn').addEventListener('click', async () => {
   const f = $('#stlFile') && $('#stlFile').files[0];
@@ -6338,10 +6361,28 @@ function buildSummary() {
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7v10l8 4 8-4V7L12 3 4 7z"/></svg>`,
     head: 'Font', val: fontName,
   }));
+  // v230c9 GELERNTER STIL. Ismets Ansage: das gehoert in die Zusammenfassung.
+  // Vorher stand nirgends, dass ein hochgeladenes Vorbild mitwirkt - und ein
+  // gelernter Stil greift in Groesse, Dichte, Kamera, Ton und seit v230c8
+  // auch in die Schrift ein. Wer das nicht sieht, sucht den Grund fuer sein
+  // Ergebnis an der falschen Stelle.
+  const stl = State.styles;
+  if (stl === null && typeof stileFuerSummary === 'function') stileFuerSummary();
+  tiles.push(_tile({
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.9L21 9.6l-5 4.6 1.3 6.8L12 17.6 6.7 21l1.3-6.8-5-4.6 6.6-.7L12 2z"/><circle cx="12" cy="12" r="10" opacity=".25"/></svg>`,
+    head: 'Style reference',
+    val: stl === null ? 'checking …' : (stl.length ? 'Active' : 'None'),
+    sub: stl === null ? ''
+      : (stl.length
+         ? escHtml(stl.map(r => r.name || 'Style').join(', ')).slice(0, 90)
+           + ' · shapes size, density, camera, sound and typeface'
+         : 'only your look and your settings'),
+    wide: !!(stl && stl.length),
+  }));
   tiles.push(_tile({
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M3 12h18"/></svg>`,
     head: 'Dynamics', val: densName,
-    sub: anim ? '26 Animationen aktiv' : 'Animations off',
+    sub: anim ? '26 animations active' : 'Animations off',
   }));
   tiles.push(_tile({
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
@@ -6357,7 +6398,7 @@ function buildSummary() {
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`,
     head: 'Camera', val: Math.round(camS*100)+' %',
     bar: camS,
-    sub: getDeep(State.cfg,'camera.whip',false) ? 'inkl. Whip-Pan' : '',
+    sub: getDeep(State.cfg,'camera.whip',false) ? 'incl. whip pan' : '',
   }));
   tiles.push(_tile({
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`,
