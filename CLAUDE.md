@@ -825,6 +825,27 @@ Vorbilds. Dieser eine Wert wurde zur Grundgroesse fuer JEDES grosse Wort.
   bleibt im Konto, bis der Kunde sie neu lernt. Wer eine Messung aendert,
   sagt dazu, dass Bestandskunden sie erneut lernen muessen.
 
+### Schriftwahl aus dem Vorbild (v230c7) — messen grenzt ein, sehen entscheidet
+Eine gelernte Referenz bringt seit v230c7 die aehnlichste HAUSSCHRIFT mit
+(`display`/`strong`/`italic`; Stuetz- und Schreibschrift bleiben beim Look).
+- **Aus dem Videobild ueberlebt nur die STRICHSTAERKE.** Nachgemessen:
+  Innenraum-Breite bei Anton 0.086 auf sauberem Text gegen 0.006 durch die
+  echte Messkette, und ein Wort wie 'STECKT' hat gar keine geschlossenen
+  Innenraeume. Serifen-Kontrast schwankte 1.93 bis 2.82 fuer dieselbe
+  Schrift. Wer ein neues Schrift-Merkmal baut, misst es DURCH die Messkette,
+  nicht am gerenderten Glyphen.
+- **Die Steckbriefe unserer Schriften werden mit demselben Rezept gemessen**
+  wie das Vorbild (`_font_strich`). Zwei verschieden gemessene Zahlen zu
+  vergleichen ist wertlos (CLAUDE.md-Regel "Vergleiche muessen ausgerichtet
+  sein").
+- **Messung als Leitplanke, Vision als Entscheider.** Die reine Messung traf
+  bei lockerer Schwelle 12 mal sicher richtig und 3 mal sicher FALSCH - ein
+  sicher falscher Griff ist schlimmer als keiner. Jetzt waehlt die
+  Strichstaerke sechs Kandidaten, Vision nimmt daraus die Form. Antwort
+  ausserhalb der Liste = verworfen.
+- **Einmal beim LERNEN, nie beim Rendern.** Sonst waere die Ausgabe nicht
+  mehr reproduzierbar und jeder Render teurer.
+
 ### Referenz ist kein Preset (v230c6) — die eigene Wahl gewinnt
 Die Kaskade heisst jetzt: `config.yaml` → Look-Preset → **Referenz** → was
 der Kunde selbst eingestellt hat. Bis v230c5 lief `_apply_reference_params`

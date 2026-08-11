@@ -3,6 +3,49 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230c7 DIE REFERENZ BRINGT JETZT AUCH DIE SCHRIFT MIT.**
+  Ismets Frage: "waere es nicht besser, wenn die KI auch die Schriftart
+  erkennen wuerde?" Ja. Bis v230c6 konnte eine Referenz alles ausser dem
+  Auffaelligsten uebertragen - die Schrift kam weiter vom Look.
+  - **Der erste Bauversuch ist gescheitert, und das gehoert protokolliert.**
+    Geplant waren drei gemessene Kennzahlen (Strichstaerke,
+    Serifen-Kontrast, Breite der Innenraeume) und die aehnlichste
+    Hausschrift dazu. Auf sauber gezeichnetem Text trennt das gut (21 von
+    36 exakt). Durch die ECHTE Messkette (Videobild -> Schwelle v>=244 ->
+    groesster Textteil) ueberlebt davon genau EINE Zahl:
+    * Innenraum bei Anton **0.086 sauber gegen 0.006 aus dem Video** - und
+      das Wort 'STECKT' hat ueberhaupt keine geschlossenen Innenraeume. Ein
+      Merkmal, das am Wortlaut haengt, ist keins.
+    * Serifen-Kontrast schwankte je nach Weichzeichnung zwischen 1.93 und
+      2.82 fuer dieselbe Schrift.
+    * Strichstaerke kam sauber durch (Montserrat 0.105 gegen 0.105,
+      Playfair 0.039 gegen 0.039).
+    Dazu kam: mit der lockeren Schwelle traf die reine Messung 12 mal
+    sicher richtig, aber **3 mal sicher FALSCH**. Ein sicher falscher Griff
+    ist schlimmer als keiner.
+  - **Jetzt: die Messung grenzt ein, das Bildmodell entscheidet.** Die
+    gemessene Strichstaerke (seit v144 im Einsatz) waehlt die sechs
+    plausiblen Hausschriften aus; Vision sieht sich die Standbilder an und
+    nimmt daraus die passendste Form. Eine Antwort ausserhalb der Auswahl
+    wird verworfen.
+  - **Der Aufruf passiert EINMAL beim Lernen, nie beim Rendern.** Die
+    Ausgabe bleibt damit reproduzierbar, und der Render kostet keine
+    Sekunde mehr. Ohne API-Schluessel bleibt die Schrift des Looks stehen.
+  - **Die Steckbriefe unserer Schriften sind mit DEMSELBEN Rezept
+    gemessen** wie das Vorbild (heller Text auf dunkel, leicht
+    weichgezeichnet, gleiche Helligkeitsschwelle, mediane Lauflaenge auf
+    20 % Zeichenhoehe). Zwei verschieden gemessene Zahlen zu vergleichen
+    waere wertlos.
+  - Gesetzt werden `display`, `strong` und `italic` - die GROSSEN Woerter,
+    dort wurde gemessen. Stuetzschrift und Schreibschrift bleiben beim
+    Look. Ein unbekannter Name wird ignoriert, nicht in einen Pfad gebaut.
+  - Der Kunde sieht es im Konto (`closest house typeface anton`) und im
+    Job-Log (`font=anton`). Ehrlich formuliert: es ist die AEHNLICHSTE aus
+    unserem Haus, nicht dieselbe.
+  - **NICHT bewiesen:** wie gut Vision trifft. Hier laeuft alles ohne
+    Schluessel, gepruefte Wege sind Leitplanke, Verwerfen einer
+    Falschantwort und Anwendung. Wie oft die Wahl gefaellt, sieht Ismet
+    erst an echten Vorbildern.
 - **v230c6 EINE GELERNTE REFERENZ IST KEIN PRESET.**
   Ismets Frage: "wofuer habe ich denn die ganzen Einstellungen, wenn die
   nicht wirklich greifen?" Er hatte recht.

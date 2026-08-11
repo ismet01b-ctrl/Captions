@@ -5417,6 +5417,151 @@ def _ref_strichstaerke(frames, maske, H, teile=None):
     return round(float(np.median(q)), 3) if len(q) >= 3 else None
 
 
+# ---------------------------------------------------------- v230c7 SCHRIFTWAHL
+# Ismets Frage: "waere es nicht besser, wenn die KI auch die Schriftart
+# erkennen wuerde?" Ja. Der Weg dorthin war aber nicht der, den ich zuerst
+# gebaut habe, und die Sackgasse gehoert hierhin, damit sie niemand nochmal
+# laeuft:
+#   Erster Versuch: drei gemessene Kennzahlen (Strichstaerke, Serifen-
+#   Kontrast, Breite der Innenraeume) und die aehnlichste Hausschrift dazu.
+#   Auf sauber gezeichnetem Text trennt das gut. Durch die ECHTE Messkette
+#   (Videobild -> Schwelle v>=244 -> groesster Textteil) ueberlebt davon
+#   genau EINE Zahl. Nachgemessen an vier Testvideos: Innenraum bei Anton
+#   0.086 sauber gegen 0.006 aus dem Video, und das Wort 'STECKT' hat gar
+#   keine geschlossenen Innenraeume - ein Merkmal, das am Wortlaut haengt,
+#   ist keins. Der Kontrast schwankte je nach Weichzeichnung zwischen 1.93
+#   und 2.82 fuer dieselbe Schrift.
+#   Die Strichstaerke dagegen kam sauber durch (Montserrat 0.105 gegen
+#   0.105, Playfair 0.039 gegen 0.039).
+# Also: die MESSUNG grenzt ein (Gewicht), das BILDMODELL entscheidet die
+# Form. Beides einmal beim Lernen, nie beim Rendern - die Ausgabe bleibt
+# reproduzierbar. Ohne Schluessel bleibt die Schrift des Looks stehen; eine
+# falsch geratene Schrift ist schlimmer als keine.
+_FONT_KANDIDATEN = (
+    'anton', 'bebas', 'staatliches', 'montserrat_xb', 'poppins_b', 'archivo',
+    'inter_black', 'righteous', 'tiktok_bold', 'sans_l', 'serif', 'serif_i',
+    'playfair_i', 'abril', 'yeseva', 'alfaslab', 'lobster', 'marker',
+)
+# Kurzbeschreibung je Hausschrift - nur fuer die Vision-Rueckfrage. Sie muss
+# das BILD einer Schrift treffen, nicht ihren Markennamen.
+_FONT_BESCHREIBUNG = {
+    'anton': 'very condensed heavy poster sans, tall narrow caps',
+    'bebas': 'condensed all-caps sans, medium weight, tall and narrow',
+    'staatliches': 'condensed display sans, slightly rounded, poster style',
+    'montserrat_xb': 'geometric sans, extra bold, wide round shapes',
+    'poppins_b': 'geometric sans, bold, perfectly circular O',
+    'archivo': 'grotesque sans, bold, slightly squarish, wide',
+    'inter_black': 'neutral UI grotesque, very heavy',
+    'righteous': 'retro geometric display sans, rounded, slightly quirky',
+    'tiktok_bold': 'modern rounded sans, bold, friendly',
+    'sans_l': 'light neutral sans, thin even strokes',
+    'serif': 'classic book serif, moderate contrast',
+    'serif_i': 'classic serif italic',
+    'playfair_i': 'high contrast display serif italic, elegant, thin hairlines',
+    'abril': 'high contrast display serif, editorial magazine look',
+    'yeseva': 'decorative display serif, flared strokes',
+    'alfaslab': 'heavy slab serif, thick rectangular serifs',
+    'lobster': 'connected script, brush-like, casual',
+    'marker': 'handwritten marker pen, uneven strokes',
+}
+_FONT_STRICH = {}
+
+
+def _font_strich(name):
+    """Strichstaerke einer Hausschrift, gemessen mit GENAU DEM REZEPT, mit dem
+    `_ref_strichstaerke` das Vorbild misst: heller Text auf dunklem Grund,
+    leicht weichgezeichnet (Antialiasing/Kompression), dieselbe
+    Helligkeitsschwelle, mediane Lauflaenge auf 20 % der Zeichenhoehe.
+    Ein Vergleich zwischen zwei verschieden gemessenen Zahlen waere wertlos
+    (CLAUDE.md: Vergleiche muessen ausgerichtet sein)."""
+    from PIL import Image, ImageDraw, ImageFont
+    pfad = os.path.join(HERE, 'fonts', f'{name}.ttf')
+    if not os.path.exists(pfad):
+        return None
+    try:
+        bild = Image.fromarray(np.full((900, 2600, 3), 40, np.uint8))
+        ImageDraw.Draw(bild).text((60, 300), 'HAMBURG', (245, 245, 240),
+                                  font=ImageFont.truetype(pfad, 190))
+        bgr = cv2.GaussianBlur(cv2.cvtColor(np.array(bild), cv2.COLOR_RGB2BGR),
+                               (0, 0), 1.0)
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        m = ((hsv[..., 2] >= 244) & (hsv[..., 1] <= 26)).astype(np.uint8)
+        ys, xs = np.where(m > 0)
+        if not ys.size:
+            return None
+        bh = int(ys.max() - ys.min() + 1)
+        zeile = m[ys.min() + int(bh * 0.20), xs.min():xs.max() + 1]
+        laeufe, run = [], 0
+        for v in zeile:
+            if v:
+                run += 1
+            elif run:
+                laeufe.append(run)
+                run = 0
+        if run:
+            laeufe.append(run)
+        return round(float(np.median(laeufe)) / bh, 3) if laeufe else None
+    except Exception:
+        return None
+
+
+def _font_striche():
+    """Einmal je Prozesslauf; haengt nur an den Schriftdateien."""
+    if not _FONT_STRICH:
+        for n in _FONT_KANDIDATEN:
+            s = _font_strich(n)
+            if s:
+                _FONT_STRICH[n] = s
+    return _FONT_STRICH
+
+
+def _font_shortlist(stamm_versal, n=6):
+    """v230c7: die plausibelsten Hausschriften zu einer gemessenen
+    Strichstaerke. Das ist die Leitplanke gegen einen Griff ins Leere - eine
+    hauchduenne Serifenschrift kommt nicht in Frage, wo eine fette Grotesk
+    steht."""
+    st = _font_striche()
+    if not stamm_versal or not st:
+        return []
+    return [k for _, k in sorted((abs(v - float(stamm_versal)), k)
+                                 for k, v in st.items())][:n]
+
+
+def _ai_font_pick(key, model, frames, kandidaten):
+    """v230c7: Vision waehlt AUS DER SHORTLIST die passendste Schrift.
+
+    Warum ueberhaupt Vision: aus dem Videobild ueberlebt zuverlaessig nur die
+    Strichstaerke, und die trennt Gewicht, nicht Form. Ob eine fette Grotesk
+    rund (Poppins), eckig (Archivo) oder schmal (Anton) ist, sieht ein
+    Bildmodell besser als eine Zahl.
+    Warum trotzdem die Messung davor: sie haelt die Auswahl im richtigen
+    Gewicht. Und der Aufruf passiert EINMAL beim Lernen, nie beim Rendern."""
+    if not key or not frames or not kandidaten:
+        return None
+    import requests            # v210: in dieser Datei lokal, sonst NameError
+    liste = '\n'.join(f'- {k}: {_FONT_BESCHREIBUNG.get(k, k)}' for k in kandidaten)
+    prompt = ('You see frames from a video with burned-in captions. Look ONLY '
+              'at the SHAPE of the caption lettering (weight, width, serifs, '
+              'roundness) - ignore colour, size and the words. Which of these '
+              'typefaces is the closest match?\n' + liste +
+              '\nIf none is close, answer null. Answer only with JSON: '
+              '{"font": "<name from the list>"|null}')
+    content = [{'type': 'text', 'text': prompt}]
+    for b in frames[:4]:
+        content.append({'type': 'image_url',
+                        'image_url': {'url': f'data:image/jpeg;base64,{b}',
+                                      'detail': 'high'}})
+    try:
+        txt = _oai_text(key, _oai_json(
+            model, [{'role': 'user', 'content': content}],
+            max_toks=300, temperature=0.0, frage='schrift'), timeout=120)
+        wahl = str((json.loads(txt) or {}).get('font') or '').strip().lower()
+        return wahl if wahl in kandidaten else None
+    except Exception as e:
+        print(f"Font match: vision skipped ({type(e).__name__})")
+        return None
+
+
 STYLE_LEARN_PROMPT = (
     "Du siehst mehrere Frames aus EINEM kurzen Video mit hochwertigen Captions. "
     "Analysiere DETAILLIERT den Caption- und Schnitt-STIL als Vorbild fuer eine "
@@ -5545,6 +5690,16 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
             return None
         return _reference_entry(video_path, name, '', None, mess, save,
                                 store_path)
+    # v230c7: die Schrift. Die Messung hat oben schon eine Shortlist erzeugt
+    # und - nur bei klarem Abstand - selbst entschieden. Mit Schluessel darf
+    # Vision INNERHALB dieser Shortlist genauer hinsehen; ohne Schluessel
+    # bleibt es bei der Messung. Ein Aufruf beim LERNEN, nie beim Rendern.
+    if mess.get('stamm_versal'):
+        _pick = _ai_font_pick(key, model, frames,
+                              _font_shortlist(mess['stamm_versal']))
+        if _pick:
+            mess['font'] = _pick
+            print(f"Style reference: closest house typeface is {_pick}")
     # v96v: Audio/SFX separat aus der Tonspur analysieren (Vision hoert nichts)
     aud = _ref_audio_summary(video_path)
     if aud:
@@ -5579,6 +5734,11 @@ def _messung_klartext(mess):
         t.append('left aligned' if mess['ausrichtung'] == 'links' else 'centred')
     if mess.get('akzent_hex'):
         t.append(f"accent {mess['akzent_hex']}")
+    # v230c7: die Schrift gehoert in diese Zeile - sie ist das Erste, was ein
+    # Kunde an einem Vorbild sieht. Ehrlich formuliert: es ist die AEHNLICHSTE
+    # aus unserem Haus, nicht dieselbe.
+    if mess.get('font'):
+        t.append(f"closest house typeface {mess['font']}")
     if mess.get('kamera'):
         t.append({'ruhig': 'calm camera', 'bewegt': 'moving camera',
                   'wild': 'restless camera'}.get(mess['kamera'], 'camera'))
@@ -5794,7 +5954,7 @@ def _reference_params():
         vals = [p[k] for p in ps if isinstance(p.get(k), (int, float))]
         if vals:
             out[k] = sum(vals) / len(vals)
-    for k in ('kamera', 'ausrichtung'):
+    for k in ('kamera', 'ausrichtung', 'font'):
         vs = [p.get(k) for p in ps if p.get(k)]
         if vs:
             out[k] = max(set(vs), key=vs.count)
@@ -6038,6 +6198,27 @@ def _apply_reference_params_roh(cfg):
     if p.get('ausrichtung') in ('links', 'mitte'):
         cfg['effects']['caption_align'] = p['ausrichtung']
         parts.append(f"align={_REF_EN.get(p['ausrichtung'], p['ausrichtung'])}")
+    # v230c7 SCHRIFT. Bis hierher konnte eine Referenz alles ausser dem
+    # Auffaelligsten uebertragen: die Schrift kam weiter vom Look. Jetzt
+    # bringt sie die aehnlichste Hausschrift mit.
+    # Gesetzt werden display/strong/italic, also die GROSSEN Woerter - dort
+    # wurde gemessen (groesster Textteil je Frame). Die Stuetzschrift
+    # (support) und die Schreibschrift bleiben beim Look: was der Fliesstext
+    # im Vorbild fuer eine Schrift hat, wissen wir nicht, und zwei Familien
+    # in einem Block sind der Normalfall (jedes Preset macht das so).
+    # v189 gilt hier NICHT: dort ging es um die ausdrueckliche Wahl des
+    # Kunden, die den ganzen Satz meint - eine Referenz ist ein Vorbild,
+    # kein Befehl, und sie verliert seit v230c6 ohnehin gegen eine eigene
+    # Wahl.
+    _fn = str(p.get('font') or '').strip()
+    if _fn and re.fullmatch(r'[a-z0-9_]{2,32}', _fn) \
+            and os.path.exists(os.path.join(HERE, 'fonts', f'{_fn}.ttf')):
+        _fp = f'fonts/{_fn}.ttf'
+        cfg.setdefault('fonts', {})
+        cfg['fonts']['display'] = _fp
+        cfg['fonts']['strong'] = _fp
+        cfg['fonts']['italic'] = _fp
+        parts.append(f"font={_fn}")
     return 'Style anchor: ' + ', '.join(parts) if parts else ''
 
 

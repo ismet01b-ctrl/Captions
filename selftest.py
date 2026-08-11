@@ -873,6 +873,89 @@ def _scenario_logic(clip, transcript, tmp):
     check('v230c5: die Messung benutzt den neuen Weg wirklich',
           _mess.get('key_hoehe') and 0.015 <= _mess['key_hoehe'] <= 0.40,
           f"key_hoehe {_mess.get('key_hoehe')}")
+    # ===== v230c7 DIE REFERENZ BRINGT JETZT AUCH DIE SCHRIFT MIT =========
+    # Ismet: "waere es nicht besser, wenn die KI auch die Schriftart
+    # erkennen wuerde?" Ja. Der erste Bauversuch (drei gemessene Kennzahlen)
+    # ist an der echten Messkette gescheitert und die Sackgasse steht als
+    # Test fest, damit sie niemand nochmal laeuft.
+    _st7 = R._font_striche()
+    check('v230c7: jede Hausschrift hat einen Steckbrief',
+          len(_st7) >= 15 and all(0.005 <= v <= 0.60 for v in _st7.values()),
+          f'{len(_st7)} Schriften, {min(_st7.values())} bis {max(_st7.values())}')
+    # Der Steckbrief muss mit DEMSELBEN Rezept gemessen sein wie das Vorbild -
+    # zwei verschieden gemessene Zahlen zu vergleichen waere wertlos. Geprueft
+    # wird die REGEL: duenn < fett < schwarz.
+    check('v230c7: die Steckbriefe bilden das Gewicht richtig ab',
+          _st7['sans_l'] < _st7['poppins_b'] < _st7['inter_black'],
+          f"sans_l {_st7['sans_l']} < poppins_b {_st7['poppins_b']} "
+          f"< inter_black {_st7['inter_black']}")
+    # Die Messung ist die LEITPLANKE: zu einer duennen Schrift darf keine
+    # schwarze in die Auswahl, und umgekehrt.
+    _sl_duenn, _sl_fett = R._font_shortlist(0.06), R._font_shortlist(0.31)
+    check('v230c7: die Shortlist bleibt im gemessenen Gewicht',
+          'sans_l' in _sl_duenn and 'inter_black' not in _sl_duenn
+          and 'inter_black' in _sl_fett and 'sans_l' not in _sl_fett,
+          f'duenn {_sl_duenn} | fett {_sl_fett}')
+    check('v230c7: ohne Messwert gibt es keine Auswahl',
+          R._font_shortlist(0) == [] and R._font_shortlist(None) == [])
+    # Ohne Schluessel wird NICHTS geraten - dann bleibt die Schrift des Looks.
+    check('v230c7: ohne Schluessel bleibt die Schrift des Looks',
+          R._ai_font_pick('', 'gpt-5', ['bild'], ['anton']) is None
+          and R._ai_font_pick('k', 'gpt-5', [], ['anton']) is None)
+    # Und eine Antwort ausserhalb der Shortlist wird verworfen (Halluzination).
+    _echt7 = R._oai_text
+    try:
+        R._oai_text = lambda *a, **k: '{"font": "comic_sans"}'
+        check('v230c7: eine Schrift ausserhalb der Auswahl wird verworfen',
+              R._ai_font_pick('k', 'gpt-5', ['bild'], ['anton', 'bebas']) is None)
+        R._oai_text = lambda *a, **k: '{"font": "bebas"}'
+        check('v230c7: eine Schrift AUS der Auswahl wird uebernommen',
+              R._ai_font_pick('k', 'gpt-5', ['bild'], ['anton', 'bebas']) == 'bebas')
+    finally:
+        R._oai_text = _echt7
+    # Anwendung: die Schrift landet bei den GROSSEN Woertern; Stuetzschrift
+    # und Schreibschrift bleiben beim Look (dort wurde nicht gemessen).
+    _alt7 = os.environ.get('DVE_REFS_FILE')
+    _rf7 = os.path.join(tmp, 'refs_c7.json')
+    try:
+        json.dump([{'name': 'f7', 'beispiel': 'x',
+                    'params': {'font': 'anton', 'stamm_versal': 0.17}}],
+                  open(_rf7, 'w', encoding='utf-8'))
+        os.environ['DVE_REFS_FILE'] = _rf7
+        _c7 = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                  encoding='utf-8'))
+        _sup7, _scr7 = _c7['fonts']['support'], _c7['fonts']['script']
+        _z7 = R._apply_reference_params(_c7)
+        check('v230c7: die Referenz setzt die Schrift der grossen Woerter',
+              _c7['fonts']['display'] == 'fonts/anton.ttf'
+              and _c7['fonts']['strong'] == 'fonts/anton.ttf',
+              str(_c7['fonts']))
+        check('v230c7: Stuetzschrift und Schreibschrift bleiben beim Look',
+              _c7['fonts']['support'] == _sup7 and _c7['fonts']['script'] == _scr7)
+        check('v230c7: das Job-Log nennt die gewaehlte Schrift',
+              'font=anton' in _z7, _z7)
+        # Ein unbekannter oder gefaehrlicher Name wird ignoriert, nicht
+        # in einen Pfad gebaut.
+        for _bad in ('../../etc/passwd', 'gibtsnicht', '', 'a b'):
+            json.dump([{'name': 'f7', 'beispiel': 'x',
+                        'params': {'font': _bad, 'stamm_versal': 0.17}}],
+                      open(_rf7, 'w', encoding='utf-8'))
+            _c7b = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                       encoding='utf-8'))
+            _vor = _c7b['fonts']['display']
+            R._apply_reference_params(_c7b)
+            if _c7b['fonts']['display'] != _vor:
+                check('v230c7: ein unbekannter Schriftname wird ignoriert',
+                      False, f'{_bad!r} -> {_c7b["fonts"]["display"]}')
+                break
+        else:
+            check('v230c7: ein unbekannter Schriftname wird ignoriert', True,
+                  '4 Faelle, auch ein Pfad-Ausbruch')
+    finally:
+        if _alt7 is None:
+            os.environ.pop('DVE_REFS_FILE', None)
+        else:
+            os.environ['DVE_REFS_FILE'] = _alt7
     check('v144: linksbuendiger Satz wird als links erkannt',
           _mess.get('ausrichtung') == 'links', str(_mess.get('ausrichtung')))
     # Gesetzt ist #f9bb26. Toleranz, weil Videokompression die Farbe verzieht.
