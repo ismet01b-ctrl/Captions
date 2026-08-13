@@ -10372,20 +10372,37 @@ def _scenario_betrieb(tmp):
         check('v230d: die Zeile ist englisch (sie landet beim Kunden)',
               _zeiled.startswith('AI usage:')
               and not re.search(r'Aufruf|Token\b|Minuten', _zeiled), _zeiled)
-        # (c) OHNE Preise gibt es KEINE Euro-Zahl. Eine 0 waere eine Luege,
-        #     eine geschaetzte Zahl saehe aus wie eine Messung.
+        # (c) Ein unbekanntes Modell hat KEINEN Preis - dann gibt es auch
+        #     keine Euro-Zahl. Eine 0 waere eine Luege, eine geschaetzte Zahl
+        #     saehe aus wie eine Messung.
         _pin, _pout = _SVd.AI_PREIS_IN, _SVd.AI_PREIS_OUT
         try:
             _SVd.AI_PREIS_IN = _SVd.AI_PREIS_OUT = 0.0
-            check('v230d: ohne Preise steht "unbekannt", nicht 0',
-                  _SVd.ai_kosten_usd(_vd) is None)
-            _SVd.AI_PREIS_IN, _SVd.AI_PREIS_OUT = 1.25, 10.0
-            _usd = _SVd.ai_kosten_usd(_vd)
-            _soll = (1000 / 1e6) * 1.25 + (2540 / 1e6) * 10.0 \
+            check('v230d: ein Modell ohne Preis bleibt "unbekannt", nicht 0',
+                  _SVd.ai_kosten_usd(dict(_vd, modelle='gibts-nicht')) is None)
+            # v230d1: der Preis haengt am MODELL, nicht an einem globalen Wert.
+            # Ein Durchschnitt ueber verschiedene Modelle waere eine Zahl, die
+            # es nirgends gibt.
+            _v_sol = dict(_vd, modelle='gpt-5.6-sol')
+            _v_luna = dict(_vd, modelle='gpt-5.6-luna')
+            _k_sol, _k_luna = _SVd.ai_kosten_usd(_v_sol), _SVd.ai_kosten_usd(_v_luna)
+            _soll = (1000 / 1e6) * 5.00 + (2540 / 1e6) * 30.00 \
                 + 0.92 * _SVd.AI_PREIS_AUDIO
-            check('v230d: mit Preisen stimmt die Rechnung',
-                  _usd is not None and abs(_usd - _soll) < 1e-6,
-                  f'{_usd} gegen {_soll}')
+            check('v230d1: gerechnet wird mit dem Preis des gelaufenen Modells',
+                  _k_sol is not None and abs(_k_sol - _soll) < 1e-6
+                  and _k_luna is not None and _k_luna < _k_sol,
+                  f'sol {_k_sol} gegen luna {_k_luna}')
+            check('v230d1: die Preisliste kommt aus dem Screenshot der Preisseite',
+                  _SVd.AI_PREISE.get('gpt-5.6-sol') == (5.00, 30.00)
+                  and _SVd.AI_PREISE.get('gpt-5.6-terra') == (2.00, 12.00)
+                  and _SVd.AI_PREISE.get('gpt-5.6-luna') == (0.20, 1.20)
+                  and _SVd.AI_PREISE.get('gpt-5.6-cyber') == (12.50, 75.00),
+                  str(sorted(_SVd.AI_PREISE)))
+            # Ein globaler Rueckfall greift nur, wenn das Modell fehlt.
+            _SVd.AI_PREIS_IN, _SVd.AI_PREIS_OUT = 1.25, 10.0
+            check('v230d1: ohne Tabelleneintrag greift der globale Rueckfall',
+                  _SVd.ai_preis_fuer('gibts-nicht') == (1.25, 10.0)
+                  and _SVd.ai_preis_fuer('gpt-5.6-sol') == (5.00, 30.00))
         finally:
             _SVd.AI_PREIS_IN, _SVd.AI_PREIS_OUT = _pin, _pout
         # (d) Die Uebersicht zaehlt nur Jobs im Fenster - und nennt ihre
@@ -10404,6 +10421,19 @@ def _scenario_betrieb(tmp):
             check('v230d: nur Jobs im Fenster zaehlen, und die Zahl steht dabei',
                   _u['renders'] == 1 and _u['in'] == 1000 and _u['calls'] == 2,
                   str(_u))
+            # v230d1: ein Modell ohne Preis wird BENANNT. Eine Euro-Zahl, die
+            # die Haelfte der Renders verschweigt, waere schlimmer als ein
+            # Strich - und niemand wuesste, welchen Preis er nachtragen soll.
+            _SVd.JOBS['a']['ai_usage']['modelle'] = 'gibts-nicht'
+            _u2 = _SVd._ai_kosten_uebersicht(30)
+            check('v230d1: ein Modell ohne Preis wird beim Namen genannt',
+                  _u2['ohne_preis'] == ['gibts-nicht'] and _u2['eur'] is None
+                  and _u2['mit_preis'] == 0, str(_u2))
+            _SVd.JOBS['a']['ai_usage']['modelle'] = 'gpt-5.6-terra'
+            _u3 = _SVd._ai_kosten_uebersicht(30)
+            check('v230d1: mit bekanntem Modell steht die Marge da',
+                  _u3['eur'] is not None and _u3['mit_preis'] == 1
+                  and not _u3['ohne_preis'], str(_u3))
         finally:
             _SVd.JOBS.clear()
             _SVd.JOBS.update(_altjobs)

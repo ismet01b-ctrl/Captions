@@ -2149,7 +2149,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230d'
+DVE_VERSION = 'v230d1'
 
 
 def _build_datei():
@@ -3668,16 +3668,49 @@ def _parse_refs_line(ln):
     return n, q
 
 
-# v230d PREISE. Sie stehen an EINER Stelle und sind ueber die Umgebung
-# aenderbar, weil sie sich aendern - eine Zahl im Code veraltet still.
-# WICHTIG: die Token-Preise sind bewusst 0 vorbelegt. Eine geschaetzte Zahl
-# waere schlimmer als keine, denn sie sieht aus wie eine Messung. Solange sie
-# 0 sind, zeigt das Panel den VERBRAUCH und sagt, dass der Preis fehlt.
-# Der Whisper-Preis ist seit Jahren 0.006 USD je Minute und deshalb gesetzt.
+# v230d/v230d1 PREISE JE MODELL. Sie stehen an EINER Stelle und sind ueber die
+# Umgebung aenderbar, weil sie sich aendern - eine Zahl im Code veraltet still.
+# EIN globaler Preis waere falsch, sobald verschiedene Fragen verschiedene
+# Modelle benutzen: die Regie soll gruendlich denken, der Pruefer nicht
+# (v230c2). Deshalb eine Tabelle Modell -> (USD je 1 Mio Eingabe-Tokens,
+# USD je 1 Mio Ausgabe-Tokens).
+# Werte aus Ismets Screenshot der Preisliste (07.08.2026), SHORT CONTEXT.
+# Bewusst NICHT der Preis fuer zwischengespeicherte Eingaben (der ist
+# guenstiger): wir rechnen damit eher zu teuer als zu billig, und bei einer
+# Marge ist das die richtige Richtung.
+AI_PREISE = {
+    'gpt-5.6-sol': (5.00, 30.00),
+    'gpt-5.6-terra': (2.00, 12.00),
+    'gpt-5.6-luna': (0.20, 1.20),
+    'gpt-5.6-cyber': (12.50, 75.00),
+}
+try:
+    # DVE_AI_PREISE als JSON: {"modell": [in, out], ...} - ergaenzt/ueberschreibt.
+    AI_PREISE.update({str(k): (float(v[0]), float(v[1])) for k, v in
+                      (json.loads(os.environ.get('DVE_AI_PREISE') or '{}')).items()})
+except Exception as _e:
+    print(f'DVE_AI_PREISE nicht lesbar: {_e}')
+# Rueckfall fuer ein Modell, das in der Tabelle FEHLT. 0 = unbekannt, und
+# unbekannt wird als solches angezeigt statt als 0 Euro.
 AI_PREIS_IN = float(os.environ.get('DVE_AI_IN_USD') or 0)     # USD je 1 Mio Tokens
 AI_PREIS_OUT = float(os.environ.get('DVE_AI_OUT_USD') or 0)   # USD je 1 Mio Tokens
 AI_PREIS_AUDIO = float(os.environ.get('DVE_WHISPER_USD') or 0.006)   # USD je Minute
 USD_EUR = float(os.environ.get('DVE_USD_EUR') or 0.92)
+
+
+def ai_preis_fuer(modelle):
+    """(in, out) fuer das Modell, das wirklich gelaufen ist - oder None.
+
+    `modelle` ist der Text aus der Log-Zeile ('gpt-5' oder 'a, b'). Bei
+    mehreren zaehlt der erste; die Fragen laufen ohnehin fast immer auf
+    demselben Modell, und eine Mischrechnung waere genauer als die
+    Datenlage."""
+    for m in str(modelle or '').replace(',', ' ').split():
+        if m in AI_PREISE:
+            return AI_PREISE[m]
+    if AI_PREIS_IN > 0 or AI_PREIS_OUT > 0:
+        return (AI_PREIS_IN, AI_PREIS_OUT)
+    return None
 
 
 def _parse_ai_usage(ln):
@@ -3706,16 +3739,17 @@ def _parse_ai_usage(ln):
 
 
 def ai_kosten_usd(v):
-    """Was ein Verbrauch in USD kostet - oder None, wenn die Token-Preise
-    nicht gesetzt sind. None heisst 'unbekannt' und wird im Panel auch so
-    angezeigt; eine 0 waere eine Luege."""
+    """Was ein Verbrauch in USD kostet - oder None, wenn fuer das gelaufene
+    Modell kein Preis bekannt ist. None heisst 'unbekannt' und wird im Panel
+    auch so angezeigt; eine 0 waere eine Luege."""
     if not v:
         return None
-    audio = (v.get('audio_min') or 0) * AI_PREIS_AUDIO
-    if AI_PREIS_IN <= 0 and AI_PREIS_OUT <= 0:
+    preis = ai_preis_fuer(v.get('modelle'))
+    if not preis:
         return None
-    return round((v.get('in', 0) / 1e6) * AI_PREIS_IN
-                 + (v.get('out', 0) / 1e6) * AI_PREIS_OUT + audio, 6)
+    audio = (v.get('audio_min') or 0) * AI_PREIS_AUDIO
+    return round((v.get('in', 0) / 1e6) * preis[0]
+                 + (v.get('out', 0) / 1e6) * preis[1] + audio, 6)
 
 
 def job_dir(jid):
@@ -10035,10 +10069,17 @@ def _ai_kosten_uebersicht(tage=30):
     Gerechnet wird ueber die Jobs im Speicher (state.json je Job). Das ist
     dieselbe Quelle, aus der die Bibliothek lebt; Jobs, die die Aufbewahrung
     ueberschritten haben, sind weg - deshalb steht die ZAHL DER GEZAEHLTEN
-    RENDERS dabei. Eine Kostenzahl ohne ihre Grundgesamtheit ist wertlos."""
+    RENDERS dabei. Eine Kostenzahl ohne ihre Grundgesamtheit ist wertlos.
+
+    v230d1: je Job mit SEINEM Modellpreis gerechnet und dann summiert. Ein
+    Durchschnittspreis ueber verschiedene Modelle waere eine Zahl, die es
+    nirgends gibt."""
     seit = time.time() - max(1, int(tage)) * 86400
     n = calls = tin = tout = tdenk = 0
     audio = 0.0
+    usd = 0.0
+    mit_preis = 0
+    modelle, ohne_preis = {}, set()
     for j in list(JOBS.values()):
         try:
             if float(j.get('finished_at') or j.get('created_at') or 0) < seit:
@@ -10052,17 +10093,28 @@ def _ai_kosten_uebersicht(tage=30):
             tout += int(v.get('out') or 0)
             tdenk += int(v.get('denken') or 0)
             audio += float(v.get('audio_min') or 0)
+            for m in str(v.get('modelle') or '').replace(',', ' ').split():
+                modelle[m] = modelle.get(m, 0) + 1
+            _k = ai_kosten_usd(v)
+            if _k is None:
+                for m in str(v.get('modelle') or '').replace(',', ' ').split():
+                    ohne_preis.add(m)
+            else:
+                usd += _k
+                mit_preis += 1
         except Exception:
             continue
-    ges = {'in': tin, 'out': tout, 'denken': tdenk, 'audio_min': round(audio, 2),
-           'calls': calls}
-    usd = ai_kosten_usd(ges)
-    return {'tage': int(tage), 'renders': n, **ges,
-            'usd': usd, 'eur': round(usd * USD_EUR, 2) if usd is not None else None,
-            'eur_je_render': round(usd * USD_EUR / n, 4)
-            if (usd is not None and n) else None,
-            'preise_gesetzt': bool(AI_PREIS_IN > 0 or AI_PREIS_OUT > 0),
-            'preis_in': AI_PREIS_IN, 'preis_out': AI_PREIS_OUT,
+    bekannt = mit_preis > 0
+    return {'tage': int(tage), 'renders': n, 'in': tin, 'out': tout,
+            'denken': tdenk, 'audio_min': round(audio, 2), 'calls': calls,
+            'mit_preis': mit_preis,
+            'usd': round(usd, 6) if bekannt else None,
+            'eur': round(usd * USD_EUR, 2) if bekannt else None,
+            'eur_je_render': round(usd * USD_EUR / mit_preis, 4)
+            if bekannt else None,
+            'modelle': sorted(modelle),
+            'ohne_preis': sorted(ohne_preis),
+            'preise': {k: list(v) for k, v in sorted(AI_PREISE.items())},
             'preis_audio': AI_PREIS_AUDIO, 'usd_eur': USD_EUR}
 
 

@@ -1565,9 +1565,12 @@ Render UNS kostet, wusste niemand — dabei liefert **jede OpenAI-Antwort einen
   Aufruf. Wer eine neue KI-Frage baut, muss nichts tun; wer eine neue
   Aufrufstelle neben `_oai_text` baut, faellt aus der Zaehlung und damit aus
   der Marge.
-- **Preise sind bewusst nicht vorbelegt** (`DVE_AI_IN_USD`/`DVE_AI_OUT_USD`,
-  USD je 1 Mio Tokens). Eine geschaetzte Zahl saehe aus wie eine Messung;
-  ohne Preise zeigt das Panel Verbrauch plus den Satz, was zu tun ist.
+- **Preise stehen als Tabelle JE MODELL** (`AI_PREISE`, aus Ismets
+  Preisseite vom 07.08.2026; `DVE_AI_PREISE` als JSON ergaenzt sie). Ein
+  globaler Preis waere falsch, sobald verschiedene Fragen verschiedene
+  Modelle nutzen. Fehlt ein Modell, wird es im Panel BEIM NAMEN genannt -
+  eine Euro-Zahl, die die Haelfte der Renders verschweigt, ist schlimmer als
+  ein Strich. Erfunden wird nie ein Preis.
 - Jede Kostenzahl im Panel nennt die **Zahl der gezaehlten Renders** — alte
   Jobs sind nach der Aufbewahrung geloescht, eine Summe ohne ihre
   Grundgesamtheit ist wertlos.

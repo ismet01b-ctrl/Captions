@@ -3,6 +3,27 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230d1 PREISE JE MODELL, AUS ISMETS PREISLISTE.**
+  Er hat die Preisseite geschickt: `gpt-5.6-sol` 5/30, `gpt-5.6-terra`
+  2/12, `gpt-5.6-luna` 0.20/1.20, `gpt-5.6-cyber` 12.50/75 USD je 1 Mio
+  Tokens (kurzer Kontext). Stehen als `AI_PREISE` drin.
+  - **Der Preis haengt am MODELL, nicht an einer globalen Zahl.** Seit
+    v230c2 kann jede KI-Frage ein eigenes Denkbudget haben, und der
+    naechste Schritt waeren eigene Modelle je Frage. Ein Durchschnitt ueber
+    verschiedene Modelle waere eine Zahl, die es nirgends gibt.
+  - **Gerechnet wird je Job mit SEINEM Modellpreis**, danach summiert.
+    Laeuft ein Modell ohne Eintrag, wird es im Panel BEIM NAMEN genannt
+    samt der Zeile, die man setzen muesste. Eine Euro-Zahl, die die
+    Haelfte der Renders verschweigt, waere schlimmer als ein Strich.
+  - **Zwischengespeicherte Eingaben sind billiger und werden bewusst NICHT
+    gegengerechnet** - bei einer Marge ist zu teuer die richtige Richtung.
+  - **OFFEN und wichtig:** die Config rendert mit `ai_model: gpt-5`, und
+    dieses Modell steht NICHT auf dem Screenshot. Solange sein Preis fehlt,
+    zeigt das Panel Verbrauch plus den Hinweis. Erfunden wird nichts.
+  - Panel zeigt jetzt zusaetzlich die Marge im Klartext: "Ein Credit bringt
+    0,45 EUR. Bleibt dir X EUR pro Minute Video." Im echten Chromium
+    geprueft (Testjob mit 38k/12k Tokens auf terra: 0,21 EUR je Render,
+    0,24 EUR Marge), 0 CSP-Verstoesse.
 - **v230d WAS KOSTET EIN RENDER? Ab jetzt beantwortbar.**
   Bis hierher stand im Panel nur, was der KUNDE zahlt (`cost_sec`). Was ein
   Render UNS kostet, wusste niemand - dabei liefert **jede OpenAI-Antwort

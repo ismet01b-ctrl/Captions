@@ -556,33 +556,49 @@ async function loadRevenue(){
      Was ein Render UNS kostet, wusste niemand - dabei liefert jede
      KI-Antwort mit, wie viel sie verbraucht hat. Ohne diese Zahl ist jede
      Preisentscheidung geraten.
-     Solange die Token-Preise nicht gesetzt sind, steht hier bewusst der
-     VERBRAUCH und der Satz, was zu tun ist - eine geschätzte Euro-Zahl sähe
-     aus wie eine Messung. */
+     v230d1: gerechnet wird je Job mit SEINEM Modellpreis. Laeuft ein Modell,
+     fuer das kein Preis hinterlegt ist, steht das hier im Klartext - eine
+     Euro-Zahl, die die Haelfte der Renders verschweigt, waere schlimmer als
+     ein Strich. */
   const ai=d.ai||{};
-  const aiZahl=(ai.eur==null)?'–':eur(ai.eur);
+  const proCredit=d.catalog[0]?d.catalog[0].per_credit:0;
+  const marge=(ai.eur_je_render!=null)?(proCredit-ai.eur_je_render):null;
+  const preisListe=Object.entries(ai.preise||{}).map(([m,v])=>
+    `<tr><td>${esc(m)}</td><td>${v[0]} $</td><td>${v[1]} $</td></tr>`).join('')
+    ||'<tr><td colspan="3" class="subtle">keine</td></tr>';
   const aiBlock=`
     <div class="grid g4" style="margin-top:6px">
       <div class="card${ai.eur!=null?' acc':''}"><div class="k">KI-Kosten (${ai.tage||30} Tage)</div>
-        <div class="v">${aiZahl}</div>
-        <div class="satz">${ai.renders||0} gezählte Renders. Nur Videos, die noch
-          in der Bibliothek liegen - ältere sind gelöscht und fehlen hier.</div></div>
+        <div class="v">${ai.eur!=null?eur(ai.eur):'–'}</div>
+        <div class="satz">${ai.renders||0} Renders gezählt, davon ${ai.mit_preis||0}
+          mit bekanntem Preis. Nur Videos, die noch in der Bibliothek liegen -
+          ältere sind gelöscht und fehlen hier.</div></div>
       <div class="card"><div class="k">Je Render</div>
         <div class="v">${ai.eur_je_render!=null?eur(ai.eur_je_render):'–'}</div>
-        <div class="satz">Das ziehst du von den ${eur(d.catalog[0]?d.catalog[0].per_credit:0)}
-          ab, die ein Credit einbringt. Was übrig bleibt, ist deine Marge.</div></div>
+        <div class="satz">${marge!=null
+          ? `Ein Credit bringt ${eur(proCredit)}. Bleibt dir ${eur(marge)} pro Minute Video.`
+          : 'Sobald für das laufende Modell ein Preis da ist, steht hier deine Marge.'}</div></div>
       <div class="card"><div class="k">Verbrauch</div>
         <div class="v" style="font-size:20px">${(ai.in||0).toLocaleString('de-DE')} rein
           <small>/ ${(ai.out||0).toLocaleString('de-DE')} raus</small></div>
         <div class="satz">Tokens. Davon ${(ai.denken||0).toLocaleString('de-DE')} reines
           Nachdenken, plus ${ai.audio_min||0} Minuten Transkription.</div></div>
-      <div class="card${ai.preise_gesetzt?'':' warnrand'}"><div class="k">Preise</div>
-        <div class="v" style="font-size:20px">${ai.preise_gesetzt?'gesetzt':'fehlen'}</div>
-        <div class="satz">${ai.preise_gesetzt
-          ? `${ai.preis_in} / ${ai.preis_out} USD je Million Tokens, Kurs ${ai.usd_eur}.`
-          : 'Trag die Token-Preise deines Modells als DVE_AI_IN_USD und '
-            +'DVE_AI_OUT_USD ein (USD je 1 Mio Tokens), dann steht hier Euro '
-            +'statt eines Strichs. Geschätzte Preise gibt es hier bewusst nicht.'}</div></div>
+      <div class="card${(ai.ohne_preis||[]).length?' warnrand':''}"><div class="k">Modelle</div>
+        <div class="v" style="font-size:20px">${esc((ai.modelle||[]).join(', ')||'–')}</div>
+        <div class="satz">${(ai.ohne_preis||[]).length
+          ? 'Für '+esc(ai.ohne_preis.join(', '))+' ist kein Preis hinterlegt. '
+            +'Trag ihn als DVE_AI_PREISE ein, zum Beispiel '
+            +'{"'+esc(ai.ohne_preis[0])+'": [5.0, 30.0]} (USD je 1 Mio Tokens), '
+            +'oder stell das Modell in der Config auf eines aus der Liste um.'
+          : 'Für alle gelaufenen Modelle ist ein Preis hinterlegt.'}</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:10px">
+      <div><table><thead><tr><th>Modell</th><th>Eingabe /1M</th><th>Ausgabe /1M</th></tr></thead>
+        <tbody>${preisListe}</tbody></table>
+        <div class="note">Preise in US-Dollar je 1 Million Tokens, kurzer Kontext.
+          Umgerechnet mit Kurs ${ai.usd_eur}. Transkription ${ai.preis_audio} $ je Minute.
+          Zwischengespeicherte Eingaben sind billiger - die rechnen wir bewusst nicht
+          gegen, damit die Marge eher zu niedrig als zu hoch steht.</div></div>
     </div>`;
   el('view').innerHTML=`
     <div class="grid g4">
