@@ -141,6 +141,52 @@ def mem_wache(fi, gesamt_frames):
               flush=True)
 
 
+# v230d WAS KOSTET EIN RENDER? Bis hierher stand im Panel nur, was der KUNDE
+# zahlt (`cost_sec`). Was der Render UNS kostet, wusste niemand - dabei liefert
+# jede OpenAI-Antwort einen `usage`-Block mit, und wir haben ihn weggeworfen.
+# Ohne diese Zahl ist jede Preisentscheidung geraten.
+# Gezaehlt werden ALLE Aufrufe, auch der Wiederholversuch nach einer leeren
+# Antwort - der kostet echtes Geld und ist genau die Verschwendung, die man
+# sehen will (v230ay: ein ganzer Aufruf umsonst, weil das Budget zu klein war).
+AI_VERBRAUCH = {'calls': 0, 'in': 0, 'out': 0, 'denken': 0, 'audio_s': 0.0,
+                'modelle': {}}
+
+
+def ai_verbrauch_zaehlen(model, usage):
+    """Tokens einer Antwort aufaddieren. Scheitert IMMER leise - eine
+    Buchhaltung darf nie einen Render reissen."""
+    try:
+        u = usage or {}
+        det = u.get('completion_tokens_details') or {}
+        AI_VERBRAUCH['calls'] += 1
+        AI_VERBRAUCH['in'] += int(u.get('prompt_tokens') or 0)
+        AI_VERBRAUCH['out'] += int(u.get('completion_tokens') or 0)
+        AI_VERBRAUCH['denken'] += int(det.get('reasoning_tokens') or 0)
+        m = str(model or '?')[:40]
+        AI_VERBRAUCH['modelle'][m] = AI_VERBRAUCH['modelle'].get(m, 0) + 1
+    except Exception:
+        pass
+
+
+def ai_verbrauch_zeile():
+    """Eine Zeile fuer den Job-Log. ENGLISCH, sie landet beim Kunden (v148).
+    Bewusst nur TOKENS und Minuten - was das in Euro ist, haengt an Preisen,
+    die sich aendern, und die gehoeren an EINE Stelle (Server/Panel), nicht
+    in jeden Render."""
+    a = AI_VERBRAUCH
+    if not a['calls'] and a['audio_s'] <= 0:
+        return ''
+    t = []
+    if a['calls']:
+        t.append(f"{a['calls']} calls, {a['in']} in + {a['out']} out tokens"
+                 + (f" (thereof {a['denken']} thinking)" if a['denken'] else ''))
+    if a['audio_s'] > 0:
+        t.append(f"{a['audio_s'] / 60.0:.2f} min transcription")
+    if a['modelle']:
+        t.append('model ' + ', '.join(sorted(a['modelle'])))
+    return 'AI usage: ' + ' | '.join(t)
+
+
 def zeit_report(gesamt):
     """Eine Zeile, absteigend nach Kosten. 'rest' ist alles Ungemessene -
     ist der gross, ist die Messung selbst unvollstaendig und sagt das."""
@@ -1540,6 +1586,12 @@ def transcribe(audio_path, language, cfg=None):
                  f"Please try again in a few minutes.")
     r.raise_for_status()
     data = r.json()
+    # v230d: Whisper wird nach MINUTEN abgerechnet, nicht nach Tokens - die
+    # Dauer ist die Kostengroesse und steht in der Antwort.
+    try:
+        AI_VERBRAUCH['audio_s'] += float(data.get('duration') or 0)
+    except Exception:
+        pass
     words = [{'word': w['word'].strip(), 'start': round(w['start'], 3), 'end': round(w['end'], 3)}
              for w in data.get('words', [])]
     if not words:
@@ -2097,6 +2149,9 @@ def _oai_text(key, body, timeout=120):
         r = requests.post(url, headers=kopf, json=body, timeout=timeout)
         r.raise_for_status()
         d = r.json()
+        # v230d: JEDER Aufruf wird gezaehlt, auch der gleich folgende
+        # Wiederholversuch - der kostet echtes Geld.
+        ai_verbrauch_zaehlen(body.get('model'), d.get('usage'))
         ch = (d.get('choices') or [{}])[0]
         txt = ((ch.get('message') or {}).get('content') or '').strip()
         if txt:
@@ -16544,6 +16599,14 @@ def main():
             _sp = os.path.splitext(args.input)[0] + '_silent.json'
             json.dump(_sil, open(_sp, 'w', encoding='utf-8'), ensure_ascii=False)
             print(f"Silent score: {_sil['score']}/100 (impact without sound)")
+
+    # v230d: was dieser Render an KI verbraucht hat. Bewusst GANZ am Ende -
+    # der Silent-Score ist auch ein bezahlter Aufruf, und eine Buchhaltung,
+    # die den letzten Posten nicht kennt, ist keine. Der Server rechnet
+    # daraus Euro; die Preise stehen an EINER Stelle, nicht in jedem Render.
+    _aiz = ai_verbrauch_zeile()
+    if _aiz:
+        print(_aiz)
 
     # --- Fenster-Segment frame-exakt ins fertige Video einsetzen
     if args.window and args.splice_into:

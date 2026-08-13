@@ -10311,6 +10311,114 @@ def _scenario_betrieb(tmp):
     check('v197b: der Restore verlangt auch im Panel die Tippbestaetigung',
           "Type RESTORE to confirm" in _adm197)
 
+    # ======= v230d: was kostet ein Render? ================================
+    # Bis hierher stand im Panel nur, was der KUNDE zahlt (cost_sec). Was der
+    # Render UNS kostet, wusste niemand - dabei liefert jede OpenAI-Antwort
+    # einen `usage`-Block mit, und der wurde weggeworfen. Ohne diese Zahl ist
+    # jede Preisentscheidung geraten.
+    import render as _Rd
+    import server as _SVd
+    _altd = dict(_Rd.AI_VERBRAUCH)
+    try:
+        _Rd.AI_VERBRAUCH.update({'calls': 0, 'in': 0, 'out': 0, 'denken': 0,
+                                 'audio_s': 0.0, 'modelle': {}})
+        # (a) DER ECHTE PFAD: _oai_text zaehlt jeden Aufruf - auch den
+        #     Wiederholversuch nach einer leeren Antwort. Genau der ist die
+        #     Verschwendung, die man sehen will (v230ay: ein ganzer Aufruf
+        #     umsonst, weil das Budget zu klein war).
+        import requests as _rqd
+        _echt_post = _rqd.post
+        _antworten = [
+            {'choices': [{'message': {'content': ''}, 'finish_reason': 'length'}],
+             'usage': {'prompt_tokens': 500, 'completion_tokens': 2500,
+                       'completion_tokens_details': {'reasoning_tokens': 2500}}},
+            {'choices': [{'message': {'content': '{"ok": 1}'}}],
+             'usage': {'prompt_tokens': 500, 'completion_tokens': 40,
+                       'completion_tokens_details': {'reasoning_tokens': 10}}},
+        ]
+
+        class _Antw:
+            def __init__(self, d):
+                self._d = d
+            def raise_for_status(self):
+                pass
+            def json(self):
+                return self._d
+        try:
+            _rqd.post = lambda *a, **k: _Antw(_antworten.pop(0))
+            _txt = _Rd._oai_text('sk-test', {'model': 'gpt-5',
+                                             'max_completion_tokens': 2500,
+                                             'messages': []})
+        finally:
+            _rqd.post = _echt_post
+        check('v230d: auch der Wiederholversuch wird mitgezaehlt',
+              _txt == '{"ok": 1}' and _Rd.AI_VERBRAUCH['calls'] == 2
+              and _Rd.AI_VERBRAUCH['in'] == 1000
+              and _Rd.AI_VERBRAUCH['out'] == 2540
+              and _Rd.AI_VERBRAUCH['denken'] == 2510,
+              str(_Rd.AI_VERBRAUCH))
+        # (b) Die Log-Zeile wird durch AUFRUFEN geprueft und muss vom Server
+        #     wieder LESBAR sein - eine Zeile, die niemand parsen kann, ist
+        #     Zierde (v230ay: die Stil-Anker-Zeile stand deutsch im Log,
+        #     waehrend der Quelltext-Test gruen war).
+        _Rd.AI_VERBRAUCH['audio_s'] = 55.2
+        _zeiled = _Rd.ai_verbrauch_zeile()
+        _vd = _SVd._parse_ai_usage(_zeiled)
+        check('v230d: der Server liest die Zeile verlustfrei zurueck',
+              _vd and _vd['calls'] == 2 and _vd['in'] == 1000
+              and _vd['out'] == 2540 and _vd['denken'] == 2510
+              and abs(_vd['audio_min'] - 0.92) < 0.01,
+              f'{_zeiled} -> {_vd}')
+        check('v230d: die Zeile ist englisch (sie landet beim Kunden)',
+              _zeiled.startswith('AI usage:')
+              and not re.search(r'Aufruf|Token\b|Minuten', _zeiled), _zeiled)
+        # (c) OHNE Preise gibt es KEINE Euro-Zahl. Eine 0 waere eine Luege,
+        #     eine geschaetzte Zahl saehe aus wie eine Messung.
+        _pin, _pout = _SVd.AI_PREIS_IN, _SVd.AI_PREIS_OUT
+        try:
+            _SVd.AI_PREIS_IN = _SVd.AI_PREIS_OUT = 0.0
+            check('v230d: ohne Preise steht "unbekannt", nicht 0',
+                  _SVd.ai_kosten_usd(_vd) is None)
+            _SVd.AI_PREIS_IN, _SVd.AI_PREIS_OUT = 1.25, 10.0
+            _usd = _SVd.ai_kosten_usd(_vd)
+            _soll = (1000 / 1e6) * 1.25 + (2540 / 1e6) * 10.0 \
+                + 0.92 * _SVd.AI_PREIS_AUDIO
+            check('v230d: mit Preisen stimmt die Rechnung',
+                  _usd is not None and abs(_usd - _soll) < 1e-6,
+                  f'{_usd} gegen {_soll}')
+        finally:
+            _SVd.AI_PREIS_IN, _SVd.AI_PREIS_OUT = _pin, _pout
+        # (d) Die Uebersicht zaehlt nur Jobs im Fenster - und nennt ihre
+        #     Grundgesamtheit. Eine Kostenzahl ohne "aus wie vielen Renders"
+        #     ist wertlos, weil alte Jobs geloescht sind.
+        _altjobs = dict(_SVd.JOBS)
+        try:
+            _SVd.JOBS.clear()
+            _SVd.JOBS['a'] = {'finished_at': time.time(),
+                              'ai_usage': {'calls': 2, 'in': 1000, 'out': 2000,
+                                           'denken': 500, 'audio_min': 1.0}}
+            _SVd.JOBS['b'] = {'finished_at': time.time() - 99 * 86400,
+                              'ai_usage': {'calls': 9, 'in': 9, 'out': 9}}
+            _SVd.JOBS['c'] = {'finished_at': time.time()}          # ohne Messung
+            _u = _SVd._ai_kosten_uebersicht(30)
+            check('v230d: nur Jobs im Fenster zaehlen, und die Zahl steht dabei',
+                  _u['renders'] == 1 and _u['in'] == 1000 and _u['calls'] == 2,
+                  str(_u))
+        finally:
+            _SVd.JOBS.clear()
+            _SVd.JOBS.update(_altjobs)
+    finally:
+        _Rd.AI_VERBRAUCH.clear()
+        _Rd.AI_VERBRAUCH.update(_altd)
+    # (e) Der Job-Log-Leser muss die Zeile ueberhaupt abgreifen.
+    _svd_src = open(os.path.join(HERE, 'web', 'server.py'), encoding='utf-8').read()
+    check('v230d: der Render-Log-Leser greift die Zeile ab',
+          "ln.startswith('AI usage:')" in _svd_src
+          and 'set_state(jid, ai_usage=' in _svd_src)
+    check('v230d: das Panel zeigt die Kosten in der Umsatz-Ansicht',
+          'KI-Kosten' in open(os.path.join(HERE, 'web', 'admin.html'),
+                              encoding='utf-8').read())
+
     # ======= v230c6: eine gelernte Referenz ist KEIN Preset ==============
     # Ismet: "wofuer habe ich denn die ganzen Einstellungen, wenn die nicht
     # wirklich greifen?" Nachgezaehlt: _apply_reference_params setzt 21 Werte

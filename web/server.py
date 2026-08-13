@@ -2149,7 +2149,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230c9'
+DVE_VERSION = 'v230d'
 
 
 def _build_datei():
@@ -3668,6 +3668,56 @@ def _parse_refs_line(ln):
     return n, q
 
 
+# v230d PREISE. Sie stehen an EINER Stelle und sind ueber die Umgebung
+# aenderbar, weil sie sich aendern - eine Zahl im Code veraltet still.
+# WICHTIG: die Token-Preise sind bewusst 0 vorbelegt. Eine geschaetzte Zahl
+# waere schlimmer als keine, denn sie sieht aus wie eine Messung. Solange sie
+# 0 sind, zeigt das Panel den VERBRAUCH und sagt, dass der Preis fehlt.
+# Der Whisper-Preis ist seit Jahren 0.006 USD je Minute und deshalb gesetzt.
+AI_PREIS_IN = float(os.environ.get('DVE_AI_IN_USD') or 0)     # USD je 1 Mio Tokens
+AI_PREIS_OUT = float(os.environ.get('DVE_AI_OUT_USD') or 0)   # USD je 1 Mio Tokens
+AI_PREIS_AUDIO = float(os.environ.get('DVE_WHISPER_USD') or 0.006)   # USD je Minute
+USD_EUR = float(os.environ.get('DVE_USD_EUR') or 0.92)
+
+
+def _parse_ai_usage(ln):
+    """v230d: liest 'AI usage: 5 calls, 18420 in + 9310 out tokens (thereof
+    7100 thinking) | 0.92 min transcription | model gpt-5'.
+
+    Bewusst tolerant: fehlt ein Teil (kein Transkript, kein Denk-Modell),
+    stehen dort 0 statt gar nichts - eine Auswertung mit Loechern ist
+    schlimmer als eine mit Nullen."""
+    ln = ln or ''
+    def _z(muster, gruppe=1):
+        m = re.search(muster, ln)
+        try:
+            return float(m.group(gruppe)) if m else 0.0
+        except Exception:
+            return 0.0
+    v = {'calls': int(_z(r'(\d+)\s+calls')),
+         'in': int(_z(r'([\d]+)\s+in\b')),
+         'out': int(_z(r'\+\s*([\d]+)\s+out\b')),
+         'denken': int(_z(r'thereof\s+([\d]+)\s+thinking')),
+         'audio_min': round(_z(r'([\d.]+)\s+min transcription'), 3)}
+    m = re.search(r'model\s+([a-z0-9_.,\- ]+)$', ln)
+    if m:
+        v['modelle'] = m.group(1).strip()[:80]
+    return v if (v['calls'] or v['audio_min']) else None
+
+
+def ai_kosten_usd(v):
+    """Was ein Verbrauch in USD kostet - oder None, wenn die Token-Preise
+    nicht gesetzt sind. None heisst 'unbekannt' und wird im Panel auch so
+    angezeigt; eine 0 waere eine Luege."""
+    if not v:
+        return None
+    audio = (v.get('audio_min') or 0) * AI_PREIS_AUDIO
+    if AI_PREIS_IN <= 0 and AI_PREIS_OUT <= 0:
+        return None
+    return round((v.get('in', 0) / 1e6) * AI_PREIS_IN
+                 + (v.get('out', 0) / 1e6) * AI_PREIS_OUT + audio, 6)
+
+
 def job_dir(jid):
     # Sicherheit: jid kommt teils aus der URL - hart auf Hex sanitisieren,
     # damit '../'-Traversal unmoeglich ist (uuid4.hex-Jobs bleiben identisch).
@@ -3796,6 +3846,13 @@ def _run_render(jid, extra_args=None, out_name='fertig.mp4', progress_start=0.05
                 pass
         elif ln.startswith('Style anchor:') or ln.startswith('Stil-Anker:'):
             set_state(jid, stil_anker=ln.split(':', 1)[1].strip())
+        elif ln.startswith('AI usage:'):
+            # v230d: was der Render an KI VERBRAUCHT hat. Bis hierher wusste
+            # das Panel nur, was der Kunde ZAHLT (cost_sec) - die andere
+            # Haelfte der Rechnung fehlte komplett.
+            _v = _parse_ai_usage(ln)
+            if _v:
+                set_state(jid, ai_usage=_v)
 
         phase = None
         progress = None
@@ -9967,7 +10024,46 @@ def _admin_revenue_calc(days: int = 90):
     return {'windows': windows, 'per_pack': per_pack, 'aov': aov, 'arppu': arppu,
             'buyers': {'once': once, 'repeat': repeat}, 'series': ser,
             'top_spenders': tops, 'catalog': catalog, 'stripe': _stripe_health(),
+            'ai': _ai_kosten_uebersicht(30),
             'pre_v128_estimate': {'count': pre_n, 'eur_est': round(pre_cent / 100.0, 2)}}
+
+
+def _ai_kosten_uebersicht(tage=30):
+    """v230d: was die Renders der letzten Tage an KI verbraucht haben - und
+    was davon in Euro bekannt ist.
+
+    Gerechnet wird ueber die Jobs im Speicher (state.json je Job). Das ist
+    dieselbe Quelle, aus der die Bibliothek lebt; Jobs, die die Aufbewahrung
+    ueberschritten haben, sind weg - deshalb steht die ZAHL DER GEZAEHLTEN
+    RENDERS dabei. Eine Kostenzahl ohne ihre Grundgesamtheit ist wertlos."""
+    seit = time.time() - max(1, int(tage)) * 86400
+    n = calls = tin = tout = tdenk = 0
+    audio = 0.0
+    for j in list(JOBS.values()):
+        try:
+            if float(j.get('finished_at') or j.get('created_at') or 0) < seit:
+                continue
+            v = j.get('ai_usage')
+            if not isinstance(v, dict):
+                continue
+            n += 1
+            calls += int(v.get('calls') or 0)
+            tin += int(v.get('in') or 0)
+            tout += int(v.get('out') or 0)
+            tdenk += int(v.get('denken') or 0)
+            audio += float(v.get('audio_min') or 0)
+        except Exception:
+            continue
+    ges = {'in': tin, 'out': tout, 'denken': tdenk, 'audio_min': round(audio, 2),
+           'calls': calls}
+    usd = ai_kosten_usd(ges)
+    return {'tage': int(tage), 'renders': n, **ges,
+            'usd': usd, 'eur': round(usd * USD_EUR, 2) if usd is not None else None,
+            'eur_je_render': round(usd * USD_EUR / n, 4)
+            if (usd is not None and n) else None,
+            'preise_gesetzt': bool(AI_PREIS_IN > 0 or AI_PREIS_OUT > 0),
+            'preis_in': AI_PREIS_IN, 'preis_out': AI_PREIS_OUT,
+            'preis_audio': AI_PREIS_AUDIO, 'usd_eur': USD_EUR}
 
 
 @app.get('/api/admin/timeseries')

@@ -1552,6 +1552,26 @@ die sich wiederholen:
   meldet ueber `DVE_QUEUE_WARN`, wann es eng wird - das ist das Signal fuer
   mehr Maschine, nicht mehr Threads.
 
+## Kosten je Render (v230d) — die andere Haelfte der Rechnung
+Bis v230c9 stand im Panel nur, was der KUNDE zahlt (`cost_sec`). Was ein
+Render UNS kostet, wusste niemand — dabei liefert **jede OpenAI-Antwort einen
+`usage`-Block mit**, und der wurde weggeworfen.
+- `AI_VERBRAUCH` sammelt in `_oai_text` (EINE Aufrufstelle) + Whisper-Minuten
+  aus der Transkriptions-Antwort. Job-Log-Zeile `AI usage: ...`, vom Server
+  ueber `_parse_ai_usage` gelesen und als `ai_usage` am Job abgelegt.
+- **Der Wiederholversuch nach einer leeren Antwort zaehlt mit.** Er kostet
+  echtes Geld und ist genau die Verschwendung, die man sehen will.
+- **Die Zeile steht GANZ am Ende** — der Silent-Score ist auch ein bezahlter
+  Aufruf. Wer eine neue KI-Frage baut, muss nichts tun; wer eine neue
+  Aufrufstelle neben `_oai_text` baut, faellt aus der Zaehlung und damit aus
+  der Marge.
+- **Preise sind bewusst nicht vorbelegt** (`DVE_AI_IN_USD`/`DVE_AI_OUT_USD`,
+  USD je 1 Mio Tokens). Eine geschaetzte Zahl saehe aus wie eine Messung;
+  ohne Preise zeigt das Panel Verbrauch plus den Satz, was zu tun ist.
+- Jede Kostenzahl im Panel nennt die **Zahl der gezaehlten Renders** — alte
+  Jobs sind nach der Aufbewahrung geloescht, eine Summe ohne ihre
+  Grundgesamtheit ist wertlos.
+
 ## Betriebs-Meldungen (v147)
 Render-Fehler und Job-Timeouts gehen **nicht** mehr per Mail raus, sondern nur
 in die Tabelle `alerts` und den Admin-Tab **Alerts**. `_notify_admin(...,

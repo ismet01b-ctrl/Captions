@@ -552,6 +552,38 @@ async function loadRevenue(){
   const packs=d.per_pack.map(p=>`<tr><td>${esc(p.pack)}</td><td>${p.count}</td><td>${eur(p.eur)}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
   const tops=d.top_spenders.map(t=>`<tr class="click" data-act="openUser" data-arg="${t.uid}"><td>${esc(t.email)}</td><td>${eur(t.eur)}</td><td>${t.orders}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
   const cat=d.catalog.map(c=>`<tr><td>${esc(c.id)}</td><td>${eur(c.eur)}</td><td>${c.credits}</td><td>${eur(c.per_credit)}</td></tr>`).join('');
+  /* v230d KI-KOSTEN. Bis hierher stand im Panel nur, was der Kunde ZAHLT.
+     Was ein Render UNS kostet, wusste niemand - dabei liefert jede
+     KI-Antwort mit, wie viel sie verbraucht hat. Ohne diese Zahl ist jede
+     Preisentscheidung geraten.
+     Solange die Token-Preise nicht gesetzt sind, steht hier bewusst der
+     VERBRAUCH und der Satz, was zu tun ist - eine geschätzte Euro-Zahl sähe
+     aus wie eine Messung. */
+  const ai=d.ai||{};
+  const aiZahl=(ai.eur==null)?'–':eur(ai.eur);
+  const aiBlock=`
+    <div class="grid g4" style="margin-top:6px">
+      <div class="card${ai.eur!=null?' acc':''}"><div class="k">KI-Kosten (${ai.tage||30} Tage)</div>
+        <div class="v">${aiZahl}</div>
+        <div class="satz">${ai.renders||0} gezählte Renders. Nur Videos, die noch
+          in der Bibliothek liegen - ältere sind gelöscht und fehlen hier.</div></div>
+      <div class="card"><div class="k">Je Render</div>
+        <div class="v">${ai.eur_je_render!=null?eur(ai.eur_je_render):'–'}</div>
+        <div class="satz">Das ziehst du von den ${eur(d.catalog[0]?d.catalog[0].per_credit:0)}
+          ab, die ein Credit einbringt. Was übrig bleibt, ist deine Marge.</div></div>
+      <div class="card"><div class="k">Verbrauch</div>
+        <div class="v" style="font-size:20px">${(ai.in||0).toLocaleString('de-DE')} rein
+          <small>/ ${(ai.out||0).toLocaleString('de-DE')} raus</small></div>
+        <div class="satz">Tokens. Davon ${(ai.denken||0).toLocaleString('de-DE')} reines
+          Nachdenken, plus ${ai.audio_min||0} Minuten Transkription.</div></div>
+      <div class="card${ai.preise_gesetzt?'':' warnrand'}"><div class="k">Preise</div>
+        <div class="v" style="font-size:20px">${ai.preise_gesetzt?'gesetzt':'fehlen'}</div>
+        <div class="satz">${ai.preise_gesetzt
+          ? `${ai.preis_in} / ${ai.preis_out} USD je Million Tokens, Kurs ${ai.usd_eur}.`
+          : 'Trag die Token-Preise deines Modells als DVE_AI_IN_USD und '
+            +'DVE_AI_OUT_USD ein (USD je 1 Mio Tokens), dann steht hier Euro '
+            +'statt eines Strichs. Geschätzte Preise gibt es hier bewusst nicht.'}</div></div>
+    </div>`;
   el('view').innerHTML=`
     <div class="grid g4">
       <div class="card acc"><div class="k">Heute</div><div class="v">${eur(w.today.eur)} <small>${w.today.count}×</small></div></div>
@@ -571,6 +603,7 @@ async function loadRevenue(){
       <div><h3>Beste Kunden</h3><table><thead><tr><th>E-Mail</th><th>Umsatz gesamt</th><th>Käufe</th></tr></thead><tbody>${tops}</tbody></table></div>
       <div><h3>Preisliste</h3><table><thead><tr><th>Paket</th><th>Preis</th><th>Cr.</th><th>/cr</th></tr></thead><tbody>${cat}</tbody></table></div>
     </div>
+    <h3>Was die Renders dich kosten</h3>${aiBlock}
     <h3>Export</h3><div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button></div>
     <div class="note">Umsatz = tatsächlich gezahlte Beträge aus Stripe (Tabelle purchases, ab v128). Alles vor v128 ist aus den Buchungs-Sekunden geschätzt.</div>`;
 }

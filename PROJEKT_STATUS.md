@@ -3,6 +3,35 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230d WAS KOSTET EIN RENDER? Ab jetzt beantwortbar.**
+  Bis hierher stand im Panel nur, was der KUNDE zahlt (`cost_sec`). Was ein
+  Render UNS kostet, wusste niemand - dabei liefert **jede OpenAI-Antwort
+  einen `usage`-Block mit**, und der wurde weggeworfen. Ohne diese Zahl ist
+  jede Preisentscheidung geraten.
+  - `AI_VERBRAUCH` sammelt in `_oai_text` (der EINEN Aufrufstelle) Tokens je
+    Aufruf, dazu die Whisper-Minuten aus der Transkriptions-Antwort. Der
+    Job-Log endet mit `AI usage: 5 calls, 18420 in + 9310 out tokens
+    (thereof 7100 thinking) | 0.92 min transcription | model gpt-5`.
+  - **Auch der Wiederholversuch nach einer leeren Antwort zaehlt.** Genau
+    das ist die Verschwendung, die man sehen will (v230ay: ein ganzer
+    Aufruf umsonst, weil das Budget zu klein war). Und die Zeile steht GANZ
+    am Ende des Renders - der Silent-Score ist auch ein bezahlter Aufruf,
+    und eine Buchhaltung, die den letzten Posten nicht kennt, ist keine.
+  - **Preise sind bewusst NICHT vorbelegt.** Eine geschaetzte Token-Zahl
+    saehe aus wie eine Messung. Solange `DVE_AI_IN_USD` und
+    `DVE_AI_OUT_USD` fehlen, zeigt das Panel den VERBRAUCH und sagt in
+    einem Satz, was zu tun ist. Der Whisper-Preis (0.006 USD/min) ist seit
+    Jahren stabil und deshalb gesetzt.
+  - Panel, Ansicht Umsatz, Block **"Was die Renders dich kosten"**: Kosten
+    der letzten 30 Tage, Kosten je Render neben dem Erloes je Credit
+    (0,45 EUR), Verbrauch in Tokens, und ob die Preise gesetzt sind.
+    Dabei steht immer die Zahl der GEZAEHLTEN Renders - aeltere Jobs sind
+    geloescht, eine Kostenzahl ohne ihre Grundgesamtheit ist wertlos.
+  - **Beweis:** 8 Tests, darunter ein echter `_oai_text`-Lauf mit
+    vorgetaeuschter API (leere Antwort -> Wiederholung, beide gezaehlt) und
+    der verlustfreie Rundlauf Log-Zeile -> Server-Parser. Panel im echten
+    Chromium: der Block steht da, ohne Preise steht ein Strich statt einer
+    erfundenen Zahl, 0 CSP-Verstoesse.
 - **v230c9 DIE ZUSAMMENFASSUNG SAGT, OB EIN GELERNTER STIL MITWIRKT.**
   Ismets Ansage. Bis hierher stand in der Zusammenfassung vor dem Rendern
   Look, Schrift, Dichte, Kamera und Ton - aber nirgends, dass ein
