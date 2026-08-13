@@ -3591,8 +3591,13 @@ def _scenario_logic(clip, transcript, tmp):
     # JSONDecodeError nennt diesen Grund nicht - und ein Fallback, der ihn
     # schluckt, macht daraus ein Feature, das niemand vermisst (v210-Lehre).
     class _FakeR:
+        # v230d3: eine echte requests-Antwort hat immer status_code und text.
+        # Ohne sie prueft der Test eine Attrappe, die es so nicht gibt - und
+        # faellt, sobald die Produktion ein normales Feld liest.
         def __init__(self, d):
             self._d = d
+            self.status_code = 200
+            self.text = ''
 
         def raise_for_status(self):
             pass
@@ -4541,6 +4546,61 @@ def _scenario_logic(clip, transcript, tmp):
                  if 'frage=' not in l.split('timeout=')[0][:400]]
         check('v230d2: jede KI-Aufrufstelle nennt ihre Frage',
               not _ohne, f'{len(_ohne)} ohne frage=')
+        # v230d3 SICHERHEITSNETZ: ein Modellname, den das Konto nicht kennt,
+        # antwortet mit 400/404. Ohne Netz faellt die Frage still auf die
+        # Heuristik zurueck - die v210-Falle, in der vier KI-Systeme
+        # monatelang aus waren. Geprueft wird durch AUSFUEHREN, mit
+        # vorgetaeuschter API.
+        import requests as _rq3
+        _echt3 = _rq3.post
+        _gesehen3 = []
+
+        class _A3:
+            def __init__(self, code, d, text=''):
+                self.status_code, self._d, self.text = code, d, text
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise Exception(f'HTTP {self.status_code}')
+            def json(self):
+                return self._d
+        try:
+            _R2.AI_MODELL_FRAGE = {'regie': 'gibts-nicht-5'}
+            _R2.AI_MODELL_STD = 'gpt-5'
+            _folge = [
+                _A3(404, {}, '{"error":{"message":"The model does not exist"}}'),
+                _A3(200, {'choices': [{'message': {'content': 'ok'}}],
+                          'usage': {'prompt_tokens': 1, 'completion_tokens': 1}}),
+            ]
+
+            def _post3(url, **kw):
+                _gesehen3.append((kw.get('json') or {}).get('model'))
+                return _folge.pop(0)
+            _rq3.post = _post3
+            _erg3 = _R2._oai_text('sk', _R2._oai_json(
+                'gpt-5', [], 800, 0.0, frage='regie'))
+            check('v230d3: ein unbekanntes Modell faellt EINMAL laut zurueck',
+                  _erg3 == 'ok' and _gesehen3 == ['gibts-nicht-5', 'gpt-5'],
+                  str(_gesehen3))
+        finally:
+            _rq3.post = _echt3
+        # Und die gesetzte Wahl muss auch wirklich in der ausgelieferten
+        # Config stehen - eine Entscheidung, die nur im Kopf steht, wirkt nie.
+        _cfg3 = yaml.safe_load(open(os.path.join(HERE, 'config.yaml'),
+                                    encoding='utf-8'))
+        _mf3 = _cfg3['keywords'].get('ai_model_frage') or {}
+        check('v230d3: der kreative Kern laeuft auf dem staerkeren Modell',
+              _mf3.get('regie') == _mf3.get('bild') == 'gpt-5.6-sol'
+              and _mf3.get('pruefer') == _mf3.get('fluss') == 'gpt-5.6-luna',
+              str(_mf3))
+        # Jedes gesetzte Modell braucht einen Preis - sonst zeigt das Panel
+        # dauerhaft einen Strich statt der Marge (v230d1).
+        _src3 = open(os.path.join(HERE, 'web', 'server.py'),
+                     encoding='utf-8').read()
+        _pr3 = dict(re.findall(r"'([a-z0-9.\-]+)': \(([\d.]+), [\d.]+\)",
+                               _src3.split('AI_PREISE = {')[1].split('}')[0]))
+        check('v230d3: fuer jedes gesetzte Modell gibt es einen Preis',
+              all(m in _pr3 for m in set(_mf3.values())),
+              str(sorted(set(_mf3.values()) - set(_pr3))))
     finally:
         _R2.AI_MODELL_FRAGE = _altm
     check('v230c2: die Log-Zeile steht wirklich im Render-Ablauf',
@@ -10383,8 +10443,11 @@ def _scenario_betrieb(tmp):
         ]
 
         class _Antw:
+            # v230d3: eine echte requests-Antwort hat status_code und text.
             def __init__(self, d):
                 self._d = d
+                self.status_code = 200
+                self.text = ''
             def raise_for_status(self):
                 pass
             def json(self):

@@ -3,6 +3,28 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230d3 UMGESTELLT, MIT SICHERHEITSNETZ.** Ismet: "du sollst alles
+  machen. Ich nutze dich ja, um so effizient wie moeglich zu sein." Also
+  keine .env-Anleitung mehr, sondern die Entscheidung getroffen und in die
+  ausgelieferte `config.yaml` geschrieben:
+  - `regie`, `bild`, `stil` -> **gpt-5.6-sol** (5/30 USD): die kreative
+    Wahl der Schluesselwoerter, die Bild-Regie und das Lernen eines
+    Vorbilds. Dort entsteht die Qualitaet.
+  - `pruefer`, `fluss`, `anker`, `schrift`, `stille` -> **gpt-5.6-luna**
+    (0.20/1.20 USD): Checklisten und Auswahlen aus einer fertigen Liste.
+  - **Das ist eine begruendete Wahl, keine gemessene.** Was
+    sol/terra/luna wirklich koennen, zeigt erst ein Vergleich an echtem
+    Material - der Preis ist nur ein Indiz. Umstellen geht mit einer Zeile.
+  - **Sicherheitsnetz:** kennt das Konto einen Namen nicht (400/404),
+    wiederholt `_oai_text` den Aufruf EINMAL mit `keywords.ai_model` und
+    schreibt es LAUT ins Job-Log. Ein stiller Rueckfall auf die Heuristik
+    waere die v210-Falle, in der vier KI-Systeme monatelang aus waren.
+  - Zwei Test-Attrappen hatten kein `status_code` - eine Antwort-Attrappe
+    ohne die Felder einer echten Antwort prueft etwas, das es nicht gibt
+    (CLAUDE.md: der eigene Testaufbau ist auch Code).
+  - Ein Test haelt fest, dass fuer JEDES gesetzte Modell ein Preis
+    hinterlegt ist. Sonst zeigt das Panel dauerhaft einen Strich statt der
+    Marge.
 - **v230d2 MODELL JE FRAGE - und ein ehrlicher Weg, es zu vergleichen.**
   Ismets Frage: "was ist die beste Moeglichkeit an KI, damit die Captions
   am besten werden?"

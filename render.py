@@ -2170,6 +2170,21 @@ def _oai_text(key, body, timeout=120):
     letzte = ''
     for versuch in (0, 1):
         r = requests.post(url, headers=kopf, json=body, timeout=timeout)
+        # v230d3 SICHERHEITSNETZ FUER DIE MODELLWAHL. Seit v230d2 kann jede
+        # Frage ihr eigenes Modell haben - und ein Modellname, den das Konto
+        # nicht kennt (oder der eine unserer Optionen nicht unterstuetzt),
+        # antwortet mit 400/404. Ohne dieses Netz faellt die Frage still auf
+        # die Heuristik zurueck: genau die v210-Falle, in der vier KI-Systeme
+        # monatelang aus waren, ohne dass es jemand merkte.
+        # Deshalb: EINMAL mit dem normalen Modell wiederholen, und zwar LAUT.
+        if r.status_code in (400, 404) and str(body.get('model')) != AI_MODELL_STD:
+            _t = (r.text or '')[:200].lower()
+            if 'model' in _t:
+                print(f"  AI: model {body.get('model')} not usable "
+                      f"({r.status_code}) - falling back to {AI_MODELL_STD}. "
+                      f"Check keywords.ai_model_frage.")
+                body = dict(body, model=AI_MODELL_STD)
+                r = requests.post(url, headers=kopf, json=body, timeout=timeout)
         r.raise_for_status()
         d = r.json()
         # v230d: JEDER Aufruf wird gezaehlt, auch der gleich folgende

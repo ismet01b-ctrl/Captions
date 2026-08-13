@@ -75,7 +75,22 @@ keywords:
   # Fuer einen Vergleich ohne Datei-Aenderung geht auch die Umgebung:
   #   DVE_AI_MODELL_FRAGE='{"regie":"gpt-5.6-sol"}'
   # Was WIRKLICH galt, steht im Job-Log ("AI setup: keywords=.../full, ...").
-  ai_model_frage: {}
+  # Gesetzt am 07.08.2026 (Ismet: "du sollst alles machen"): der kreative
+  # Kern auf das staerkste Modell der Liste, die Checklisten auf das
+  # billigste. Das ist eine begruendete Wahl, keine gemessene - was
+  # sol/terra/luna wirklich koennen, zeigt erst ein Vergleich an echtem
+  # Material. Faellt ein Name aus (Konto kennt ihn nicht, Option nicht
+  # unterstuetzt), wiederholt _oai_text EINMAL mit ai_model und sagt es
+  # LAUT im Job-Log - ein stiller Rueckfall waere die v210-Falle.
+  ai_model_frage:
+    regie: gpt-5.6-sol      # welche Woerter tragen den Clip - der Kern
+    bild: gpt-5.6-sol       # hinter die Person, an die Wand, auf den Boden
+    stil: gpt-5.6-sol       # Vorbild lernen (laeuft einmal je Referenz)
+    pruefer: gpt-5.6-luna   # Checkliste ueber die eigenen Vorschlaege
+    fluss: gpt-5.6-luna     # je Textblock das Ankerwort
+    anker: gpt-5.6-luna     # Gegenstand im Standbild benennen
+    schrift: gpt-5.6-luna   # aehnlichste Hausschrift aus einer Shortlist
+    stille: gpt-5.6-luna    # Bewertung ohne Ton
   auto: true
   emphasize_last: true
   min_gap_seconds: 6
