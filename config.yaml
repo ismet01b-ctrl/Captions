@@ -64,6 +64,18 @@ keywords:
     pruefer: low
     fluss: low
     anker: low
+  # v230d2 MODELL JE FRAGE. Leer = alle Fragen laufen auf ai_model (oben).
+  # Sieben KI-Fragen auf demselben Modell sind in beide Richtungen
+  # Verschwendung: die eine kreative Entscheidung (welche Woerter tragen den
+  # Clip) verdient das staerkste Modell, Pruefer/Ankerwort/Objektsuche sind
+  # Checklisten und koennen auf dem billigsten laufen.
+  # Frage-Namen: regie | pruefer | bild | anker | fluss | akzente | stil |
+  # stille | schrift. Beispiel:
+  #   ai_model_frage: {regie: gpt-5.6-sol, bild: gpt-5.6-sol, pruefer: gpt-5.6-luna}
+  # Fuer einen Vergleich ohne Datei-Aenderung geht auch die Umgebung:
+  #   DVE_AI_MODELL_FRAGE='{"regie":"gpt-5.6-sol"}'
+  # Was WIRKLICH galt, steht im Job-Log ("AI setup: keywords=.../full, ...").
+  ai_model_frage: {}
   auto: true
   emphasize_last: true
   min_gap_seconds: 6

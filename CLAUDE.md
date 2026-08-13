@@ -1789,6 +1789,14 @@ gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
   zuerst: Entscheidung oder Pruefung? Und die Zeile `AI thinking: ...` im
   Job-Log sagt, was wirklich galt - eine Zeitmessung ohne sie ist nicht
   lesbar (daran ist v228d/v228e zweimal vorbeigelaufen).
+- **v230d2: MODELL je Frage, nicht nur Denkstufe** (`keywords.ai_model_frage`,
+  `DVE_AI_MODELL_FRAGE`). Bis dahin liefen alle SIEBEN Fragen auf demselben
+  Modell. Der Riegel sitzt IN `_oai_json` (jede Aufrufstelle nennt ihre
+  `frage=`, ein Test faellt sonst), Standard ist LEER. Die Log-Zeile heisst
+  `AI setup: keywords=<modell>/<stufe>, ...`.
+- **Die Transkription ist das Fundament und laeuft fest auf `whisper-1`.**
+  Falsches Wort = falsches Keyword, ungenaue Zeit = Caption an der falschen
+  Stelle. Kein Regie-Modell repariert das hinterher.
 - **Die Kette ist echt seriell und damit ausgereizt** (v230c2, am Log
   gemessen): Schluesselwoerter -> pruefen -> Bild-Regie -> Textfluss, jede
   Stufe braucht die vorige. 83 % des Renders sind Warten auf OpenAI, die

@@ -1961,7 +1961,7 @@ def silent_score(out_video, words, fx_map, model='gpt-5'):
         _txt = _oai_text(key, _oai_json(
             model, [{'role': 'system', 'content': SILENT_PROMPT},
                     {'role': 'user', 'content': content}],
-            max_toks=500, temperature=0.1), timeout=90)
+            max_toks=500, temperature=0.1, frage='stille'), timeout=90)
         data = json.loads(_txt)
         score = min(max(int(data.get('score', -1)), 0), 100)
         hints = []
@@ -2029,6 +2029,24 @@ AI_DENKEN = 'aus'   # v228e: zurueckgestellt, siehe config.yaml
 # falschen Wert mit 400 ab, und ein Tippfehler in der Config darf nicht die
 # ganze Regie abschiessen (v230f: klemmen statt kaputtmachen).
 AI_DENKEN_FRAGE = {}
+# v230d2 MODELL JE FRAGE. Bis hierher liefen ALLE sieben KI-Fragen auf
+# demselben Modell (`keywords.ai_model`). Das ist in beide Richtungen
+# Verschwendung: die eine kreative Entscheidung (welche Woerter tragen den
+# Clip) verdient das staerkste Modell, Pruefer, Ankerwort und Objektsuche
+# sind Checklisten und koennen auf dem billigsten laufen.
+# Dieselbe Struktur wie beim Denk-Aufwand, eine Ebene hoeher - und derselbe
+# Riegel: er sitzt IN `_oai_json`, nicht an den zehn Aufrufstellen (v159).
+# Standard ist LEER: es aendert sich nichts, bis jemand bewusst etwas setzt.
+# Ein Modellwechsel ist eine Qualitaetsentscheidung, keine technische.
+AI_MODELL_FRAGE = {}
+
+
+def _modell_fuer(frage, standard):
+    """v230d2: welches Modell gilt fuer diese Frage? Ohne Eintrag das
+    normale. Ein leerer oder unsinniger Wert faellt auf das normale
+    zurueck - klemmen, nicht kaputtmachen (v230f)."""
+    m = str((AI_MODELL_FRAGE or {}).get(frage, '') or '').strip()
+    return m if re.fullmatch(r'[A-Za-z0-9._\-]{2,64}', m or '') else standard
 _DENK_STUFEN = ('minimal', 'low', 'medium', 'high')
 # Frage -> Stufe, wenn nichts anderes gesetzt ist. Wer hier eine Frage
 # ergaenzt, beantwortet zuerst: ist das eine ENTSCHEIDUNG (dann volle
@@ -2055,6 +2073,7 @@ def _denk_fuer(frage=None):
 
 
 # Frage -> Name im Job-Log. Der Kunde liest das Log, also englisch (v148).
+AI_MODELL_STD = 'gpt-5'      # nur fuer die Log-Zeile; der echte Wert kommt aus der Config
 _DENK_NAMEN = (('regie', 'keywords'), ('pruefer', 'checker'),
                ('bild', 'picture'), ('anker', 'anchor'), ('fluss', 'flow'))
 
@@ -2064,8 +2083,9 @@ def _denk_log_zeile():
     AUFRUFEN pruefen kann. Eine zusammengebaute Log-Zeile, die nur als
     Quelltext geprueft wird, stand in Ismets Job-Log schon einmal falsch da
     (v230ay, die Stil-Anker-Zeile war noch komplett deutsch)."""
-    return 'AI thinking: ' + ', '.join(
-        f"{name}={_denk_fuer(frage) or 'full'}" for frage, name in _DENK_NAMEN)
+    return 'AI setup: ' + ', '.join(
+        f"{name}={_modell_fuer(frage, AI_MODELL_STD)}/{_denk_fuer(frage) or 'full'}"
+        for frage, name in _DENK_NAMEN)
 
 
 def _oai_json(model, messages, max_toks, temperature, json_mode=True,
@@ -2077,6 +2097,9 @@ def _oai_json(model, messages, max_toks, temperature, json_mode=True,
     v96t: json_mode=False fuer PROSA-Antworten (Stil-Lernen). Mit
     response_format=json_object verlangt OpenAI das Wort "json" im Prompt und
     erzwingt JSON - ein Prosa-Prompt scheitert dann mit 400."""
+    # v230d2: das Modell haengt an der FRAGE, nicht am ganzen Render. Hier
+    # aufgeloest, damit keine der zehn Aufrufstellen es vergessen kann.
+    model = _modell_fuer(frage, model)
     new = str(model).startswith(('gpt-5', 'o1', 'o3', 'o4'))
     body = {'model': model, 'messages': messages}
     if json_mode:
@@ -2220,7 +2243,7 @@ def ai_scene_direct(words, fx_map, video_path, model='gpt-5', min_power=2,
         _txt = _oai_text(key, _oai_json(
             model, [{'role': 'system', 'content': SZENE_PROMPT},
                     {'role': 'user', 'content': content}],
-            max_toks=1500 + 260 * len(sent), temperature=0.1), timeout=180)
+            max_toks=1500 + 260 * len(sent), temperature=0.1, frage='bild'), timeout=180)
         data = json.loads(_txt)
         n_v = 0
         for m in data.get('momente', []):
@@ -5909,7 +5932,7 @@ def analyze_reference_video(video_path, name=None, model='gpt-5',
     try:
         _txt = _oai_text(key, _oai_json(
             model, [{'role': 'user', 'content': content}],
-            max_toks=400, temperature=0.3, json_mode=False), timeout=120)
+            max_toks=400, temperature=0.3, json_mode=False, frage='stil'), timeout=120)
         desc = _txt
     except Exception as e:
         print(f"Style learning unavailable ({type(e).__name__})")
@@ -6135,7 +6158,7 @@ def _style_params_from_desc(desc, model='gpt-5', key=None, frames=None):
     try:
         _txt = _oai_text(key, _oai_json(
             model, [{'role': 'user', 'content': content}],
-            max_toks=200, temperature=0.0), timeout=90)
+            max_toks=200, temperature=0.0, frage='stil'), timeout=90)
         data = json.loads(_txt)
         out = {}
         try:
@@ -7338,7 +7361,7 @@ def ai_accents(words, language='auto', model='gpt-5', profile=None, cfg=None,
         _txt = _oai_text(key, _oai_json(
             model, [{'role': 'system', 'content': sys_p},
                     {'role': 'user', 'content': usr}],
-            max_toks=1200, temperature=0.3), timeout=90)
+            max_toks=1200, temperature=0.3, frage='akzente'), timeout=90)
         data = json.loads(_txt)
         arr = data.get('akzente') if isinstance(data, dict) else data
         san = sanitize_accents(arr, words, profile, kw)
@@ -7739,7 +7762,7 @@ def ai_direct(words, language, model='gpt-5', voice_wav=None, validate=True):
             _txt = _oai_text(key, _oai_json(
                 model, [{'role': 'system', 'content': REGIE_PROMPT},
                         {'role': 'user', 'content': listing}],
-                max_toks=3000, temperature=0.2), timeout=180)
+                max_toks=3000, temperature=0.2, frage='regie'), timeout=180)
             res = parse_regie(_txt, words, language)
             if res:
                 # Overlap-Bereich: Momente aus dem Kontext-Vorlauf verwerfen,
@@ -14790,7 +14813,7 @@ def main():
         if os.path.exists(auto_t):
             args.transcript = auto_t
     # v228d: Denk-Aufwand der KI aus der Config uebernehmen (Standard 'low').
-    global AI_DENKEN, AI_DENKEN_FRAGE
+    global AI_DENKEN, AI_DENKEN_FRAGE, AI_MODELL_FRAGE, AI_MODELL_STD
     AI_DENKEN = str(cfg['keywords'].get('ai_denken', 'aus')).strip().lower()
     # v230c2: dazu die Feineinstellung je Frage. Sie steht im LOG, damit die
     # naechste Zeitmessung beantwortbar ist, ohne die Config zu kennen - genau
@@ -14798,6 +14821,19 @@ def main():
     _df = cfg['keywords'].get('ai_denken_frage') or {}
     AI_DENKEN_FRAGE = {str(k).strip().lower(): str(v).strip().lower()
                        for k, v in _df.items()} if isinstance(_df, dict) else {}
+    # v230d2: Modell je Frage. Standard leer - es aendert sich nichts, bis
+    # jemand bewusst etwas setzt. Ueber die Umgebung, damit ein Vergleich
+    # ohne Datei-Aenderung laeuft (DVE_AI_MODELL_FRAGE als JSON).
+    AI_MODELL_STD = str(cfg['keywords'].get('ai_model', 'gpt-5'))
+    _mf = cfg['keywords'].get('ai_model_frage') or {}
+    if not isinstance(_mf, dict):
+        _mf = {}
+    try:
+        _mf = dict(_mf, **json.loads(os.environ.get('DVE_AI_MODELL_FRAGE') or '{}'))
+    except Exception as _e:
+        print(f"AI model per question: env ignored ({type(_e).__name__})")
+    AI_MODELL_FRAGE = {str(k).strip().lower(): str(v).strip()
+                       for k, v in _mf.items()}
     print(_denk_log_zeile())
     _zt_tr = time.time()
     if args.transcript and os.path.exists(args.transcript):

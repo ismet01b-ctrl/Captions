@@ -4493,11 +4493,56 @@ def _scenario_logic(clip, transcript, tmp):
     # Die Log-Zeile wird AUFGERUFEN, nicht gelesen: eine zusammengebaute Zeile
     # hat schon einmal falsch im Job-Log gestanden, waehrend der Quelltext-Test
     # gruen war (v230ay).
+    _R2.AI_MODELL_FRAGE = {}
+    _R2.AI_MODELL_STD = 'gpt-5'
     _zeile230 = _R2._denk_log_zeile()
-    check('v230c2: der Job-Log nennt den Aufwand je Frage (echter Aufruf)',
-          _zeile230 == 'AI thinking: keywords=full, checker=low, '
-                       'picture=full, anchor=low, flow=low',
+    check('v230c2: der Job-Log nennt Modell und Aufwand je Frage (echter Aufruf)',
+          _zeile230 == 'AI setup: keywords=gpt-5/full, checker=gpt-5/low, '
+                       'picture=gpt-5/full, anchor=gpt-5/low, flow=gpt-5/low',
           _zeile230)
+
+    # ===== v230d2 MODELL JE FRAGE ======================================
+    # Ismets Frage "was ist die beste Moeglichkeit an KI". Bis hierher liefen
+    # ALLE sieben KI-Fragen auf demselben Modell - in beide Richtungen
+    # Verschwendung. Standard bleibt LEER: ein Modellwechsel ist eine
+    # Qualitaetsentscheidung, keine technische, und die trifft Ismet an
+    # seinem Material.
+    _altm = dict(_R2.AI_MODELL_FRAGE)
+    try:
+        check('v230d2: ohne Eintrag aendert sich nichts',
+              _R2._modell_fuer('regie', 'gpt-5') == 'gpt-5'
+              and _R2._oai_json('gpt-5', [], 800, 0.0,
+                                frage='regie')['model'] == 'gpt-5')
+        _R2.AI_MODELL_FRAGE = {'regie': 'gpt-5.6-sol', 'pruefer': 'gpt-5.6-luna'}
+        # Der Riegel sitzt IN _oai_json, nicht an den zehn Aufrufstellen -
+        # sonst vergisst ihn die naechste neue Frage (v159).
+        check('v230d2: die kreative Frage laeuft auf dem gewaehlten Modell',
+              _R2._oai_json('gpt-5', [], 800, 0.0,
+                            frage='regie')['model'] == 'gpt-5.6-sol'
+              and _R2._oai_json('gpt-5', [], 800, 0.0,
+                                frage='pruefer')['model'] == 'gpt-5.6-luna'
+              and _R2._oai_json('gpt-5', [], 800, 0.0,
+                                frage='bild')['model'] == 'gpt-5')
+        check('v230d2: die Denkstufe bleibt davon unberuehrt',
+              _R2._oai_json('gpt-5', [], 800, 0.0,
+                            frage='pruefer').get('reasoning_effort') == 'low')
+        # Ein unsinniger Wert faellt auf das normale Modell zurueck, statt die
+        # API mit einem 400 abzuwuergen (v230f: klemmen, nicht kaputtmachen).
+        for _bad in ('', '   ', 'a', 'boese modell', '../etc/passwd', 'x' * 99):
+            if _R2._modell_fuer('regie', 'gpt-5') and \
+                    _R2._modell_fuer('regie', 'gpt-5') != 'gpt-5.6-sol':
+                break
+        _R2.AI_MODELL_FRAGE = {'regie': 'boese modell'}
+        check('v230d2: ein unsinniger Modellname faellt zurueck',
+              _R2._modell_fuer('regie', 'gpt-5') == 'gpt-5')
+        # Und JEDE der zehn Aufrufstellen muss eine Frage nennen - sonst ist
+        # sie weder steuerbar noch in der Zeitmessung sichtbar.
+        _ohne = [l for l in _rc0.split('_oai_json(')[1:]
+                 if 'frage=' not in l.split('timeout=')[0][:400]]
+        check('v230d2: jede KI-Aufrufstelle nennt ihre Frage',
+              not _ohne, f'{len(_ohne)} ohne frage=')
+    finally:
+        _R2.AI_MODELL_FRAGE = _altm
     check('v230c2: die Log-Zeile steht wirklich im Render-Ablauf',
           '_denk_log_zeile()' in _rc0
           and _rc0.index('print(_denk_log_zeile())')

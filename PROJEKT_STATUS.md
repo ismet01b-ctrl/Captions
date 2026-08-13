@@ -3,6 +3,37 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230d2 MODELL JE FRAGE - und ein ehrlicher Weg, es zu vergleichen.**
+  Ismets Frage: "was ist die beste Moeglichkeit an KI, damit die Captions
+  am besten werden?"
+  - **Befund: alle SIEBEN KI-Fragen liefen auf demselben Modell.** Das ist
+    in beide Richtungen Verschwendung. Die eine kreative Entscheidung
+    (welche Woerter tragen den Clip) verdient das staerkste Modell;
+    Pruefer, Ankerwort und Objektsuche sind Checklisten und koennen auf
+    dem billigsten laufen. Dieselbe Erkenntnis wie v230c2, eine Ebene
+    hoeher.
+  - `keywords.ai_model_frage` bzw. `DVE_AI_MODELL_FRAGE` (JSON) setzt das
+    Modell je Frage. **Der Riegel sitzt IN `_oai_json`**, nicht an den zehn
+    Aufrufstellen - sonst vergisst ihn die naechste neue Frage (v159).
+    Alle zehn Aufrufstellen nennen jetzt ihre Frage; ein Test faellt, wenn
+    eine neue das vergisst.
+  - **Standard ist LEER.** Es aendert sich nichts, bis jemand bewusst etwas
+    setzt: ein Modellwechsel ist eine Qualitaetsentscheidung, keine
+    technische, und die trifft Ismet an seinem Material. Ein unsinniger
+    Name faellt auf das normale Modell zurueck statt die API mit 400
+    abzuwuergen.
+  - Job-Log-Zeile heisst jetzt `AI setup: keywords=gpt-5/full,
+    checker=gpt-5/low, ...` - Modell UND Denkstufe je Frage. Ohne sie ist
+    ein Qualitaetsvergleich nicht lesbar (daran ist v228d/v228e zweimal
+    vorbeigelaufen).
+  - **Was ich NICHT weiss:** was sol/terra/luna/cyber koennen. Die Namen
+    sind neu; welches Modell die bessere Regie macht, sagt nur ein
+    Vergleich an echtem Material. Deshalb wurde nichts umgestellt.
+  - **Der wichtigere Befund steht daneben:** die Transkription laeuft fest
+    verdrahtet auf `whisper-1`. Jedes falsche Wort wird zum falschen
+    Keyword, jede ungenaue Zeit setzt die Caption an die falsche Stelle -
+    kein Regie-Modell repariert das hinterher. Das ist der billigste
+    Qualitaetssprung, der hier noch offen ist.
 - **v230d1 PREISE JE MODELL, AUS ISMETS PREISLISTE.**
   Er hat die Preisseite geschickt: `gpt-5.6-sol` 5/30, `gpt-5.6-terra`
   2/12, `gpt-5.6-luna` 0.20/1.20, `gpt-5.6-cyber` 12.50/75 USD je 1 Mio
