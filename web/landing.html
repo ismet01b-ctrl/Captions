@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/favicon.png">
+<title>DouchkoVE · Captions that look like you hired an editor. No subscription.</title>
+<meta name="description" content="An AI director places editorial captions, effects and camera moves that fit exactly what you say. One-time credits, no subscription. Learns your style.">
+<!-- v230ah: Schriften kommen vom EIGENEN Server. Vorher von Google - und die
+     CSP hat das seit v92 blockiert (erlaubt ist nur 'self'), die Seite lief
+     also die ganze Zeit mit Ersatzschriften. Gefunden hat das erst ein echter
+     Browser-Test. Nebeneffekt: kein Besucher-Browser meldet sich mehr bei
+     Google, das erspart die Datenschutz-Diskussion gleich mit. -->
+<link href="/assets/fonts/fonts.css" rel="stylesheet">
+<!-- v230am TEILEN-VORSCHAU + STRUKTURDATEN. Der eigentliche Nutzen ist NICHT
+     Google (eine neue Domain ohne Verweise rankt auf Monate nicht), sondern
+     die Vorschaukarte: wer den Link auf WhatsApp, LinkedIn, Discord oder X
+     postet, hatte bisher einen grauen Kasten ohne Bild und ohne Text.
+     BEWUSST NICHT drin: jede Aussage ueber Datenhaltung ("EU-hosted",
+     "no data leaves the EU"). Der Server steht zwar in Deutschland, die
+     Transkription laeuft aber ueber OpenAI in den USA - eine Zusage, die man
+     nicht halten kann, gehoert nicht in Werbetext und schon gar nicht in
+     Strukturdaten. Ebenso raus: FAQ-Schema (Google zeigt es seit 2023
+     praktisch nur noch fuer grosse Medienseiten) und jede Zahl, die nicht
+     aus dem Code stammt. -->
+<!-- v230at: Nachweis fuer die Google Search Console. Nur damit Google die
+     Seite ueberhaupt kennt: neue Domain, keine fremden Links, also findet
+     der Crawler sie sonst nicht von allein. Der Code identifiziert nur den
+     Eigentuemer, er gibt niemandem Zugriff auf irgendetwas. -->
+<meta name="google-site-verification" content="-ESYe6i5wAdHAMvh5syCaHkSL6olMqoQ8qaX8wLjHlM">
+<meta name="google-site-verification" content="hoqj4G_OoSRSOxGp8GlxNTN0tWU8u79aqlQN2TG_XcE">
+<link rel="canonical" href="https://douchko.eu/">
+<meta property="og:title" content="DouchkoVE: Captions that think like an editor">
+<meta property="og:description" content="Upload a talking-head video. An AI director reads what you say, picks the words that matter and gives each one an animation that fits. 3 free minutes every month, no card, no subscription.">
+<meta property="og:url" content="https://douchko.eu/">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://douchko.eu/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="DouchkoVE">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DouchkoVE: Captions that think like an editor">
+<meta name="twitter:description" content="An AI director reads what you say, picks the words that matter and gives each one an animation that fits. 3 free minutes every month, no card.">
+<meta name="twitter:image" content="https://douchko.eu/assets/og-image.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Organization",
+ "@id":"https://douchko.eu/#organization","name":"DouchkoVE",
+ "url":"https://douchko.eu/","logo":"https://douchko.eu/favicon.png",
+ "description":"Premium AI captions for talking-head videos. An AI director places editorial captions, effects and camera moves that fit exactly what you say.",
+ "email":"Ismet@douchkove.com"}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite",
+ "@id":"https://douchko.eu/#website","url":"https://douchko.eu/",
+ "name":"DouchkoVE","publisher":{"@id":"https://douchko.eu/#organization"}}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication",
+ "name":"DouchkoVE","applicationCategory":"MultimediaApplication",
+ "operatingSystem":"Web","url":"https://douchko.eu/",
+ "description":"Premium AI captions for talking-head videos. An AI director reads the transcript, picks the words that matter and gives each one an animation that fits its meaning.",
+ "featureList":["26 word-aware caption animations","9 editorial looks",
+   "Scene analysis per moment","Beat sync to music or speech",
+   "Moments editor with frame preview","Portrait, landscape and square",
+   "SRT subtitle file and transparent caption layer (ProRes 4444)"],
+ "offers":{"@type":"Offer","price":"0","priceCurrency":"EUR",
+   "description":"3 free minutes every month, no card required"}}
+</script>
+<style>
+:root {
+  --bg: #0a0a0b; --bg2: #121012; --panel: #161417;
+  --ink: #f6f4ef; --ink2: #c3bdb3; --mut: #8b857b;
+  --line: rgba(246,244,239,.12); --line-soft: rgba(246,244,239,.06);
+  --acc: #ff7a1a; --acc-soft: rgba(255,122,26,.12); --gold: #f2c14e;
+  --serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --max: 1140px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--sans); background: var(--bg); color: var(--ink);
+  line-height: 1.55; overflow-x: hidden; min-height: 100vh;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+::selection { background: var(--acc); color: var(--bg); }
+a { color: inherit; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 32px; }
+
+/* ---- shared type ---- */
+.kicker {
+  font-family: var(--mono); font-weight: 600; font-size: 12px;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--mut);
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.kicker::before { content: ''; width: 22px; height: 1px; background: var(--acc); display: inline-block; }
+.display {
+  font-family: var(--serif); font-weight: 500; letter-spacing: -0.015em;
+  line-height: 1.02; color: var(--ink);
+}
+.display em { font-style: italic; color: var(--acc); }
+.lead { font-family: var(--sans); color: var(--ink2); font-size: clamp(16px, 1.5vw, 19px); line-height: 1.65; }
+
+/* ---- nav ---- */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(10,10,11,.72); backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--line-soft);
+}
+nav .inner { max-width: var(--max); margin: 0 auto; padding: 18px 32px;
+  display: flex; align-items: center; justify-content: space-between; }
+.logo { font-family: var(--serif); font-weight: 600; font-size: 22px; letter-spacing: -0.02em;
+  display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo img { height: 24px; width: auto; }
+.logo .beta { font-family: var(--mono); font-weight: 600; font-size: 9px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--mut); border: 1px solid var(--line);
+  border-radius: 4px; padding: 2px 6px; vertical-align: middle; }
+.nav-links { display: flex; align-items: center; gap: 30px; }
+.nav-links a:not(.cta) { font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--mut); text-decoration: none; transition: color .18s; }
+.nav-links a:not(.cta):hover { color: var(--ink); }
+.cta {
+  font-family: var(--sans); background: var(--ink); color: var(--bg);
+  padding: 10px 20px; border-radius: 999px; font-weight: 600; font-size: 14px;
+  text-decoration: none; transition: transform .16s ease, background .18s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.cta:hover { transform: translateY(-1px); background: var(--acc); }
+.cta.solid { background: var(--acc); color: var(--bg); }
+.cta.solid:hover { background: #ff8a34; }
+
+/* ---- hero ---- */
+.hero { padding: clamp(64px, 11vh, 130px) 32px clamp(48px, 8vh, 96px); }
+.hero-grid { max-width: var(--max); margin: 0 auto;
+  display: grid; grid-template-columns: 1.15fr .85fr; gap: 64px; align-items: center; }
+.hero h1 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.02em;
+  font-size: clamp(44px, 6.2vw, 86px); line-height: 0.98; margin: 22px 0 26px; }
+.hero h1 em { font-style: italic; color: var(--acc); }
+.hero .lead { max-width: 30em; }
+.hero-actions { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 36px; }
+.btn-primary {
+  font-family: var(--sans); background: var(--acc); color: var(--bg);
+  padding: 16px 28px; border-radius: 999px; font-weight: 600; font-size: 16px;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 10px;
+  transition: transform .16s ease, box-shadow .2s;
+  box-shadow: 0 10px 30px -12px rgba(255,122,26,.6);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -12px rgba(255,122,26,.75); }
+/* v230s ZWEITER WEG HINEIN. Der 10-Sekunden-Test ohne Konto stand als graue
+   Nebenzeile neben dem Hauptknopf - das ist der billigste Einstieg ueberhaupt
+   und war optisch der unwichtigste Punkt der Seite. Jetzt ein Umriss-Knopf:
+   gleiche Groesse, klar zweite Wahl, aber sichtbar. */
+.btn-ghost {
+  font-family: var(--sans); color: var(--ink); background: transparent;
+  padding: 15px 24px; border-radius: 999px; font-weight: 600; font-size: 15px;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 9px;
+  border: 1px solid rgba(255,255,255,.22);
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+.btn-ghost:hover { border-color: var(--acc); color: var(--acc); background: rgba(255,122,26,.06); }
+.btn-ghost small { font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--mut); font-weight: 500; }
+.link-quiet { font-family: var(--sans); color: var(--ink2); text-decoration: none;
+  font-size: 15px; font-weight: 500; border-bottom: 1px solid var(--line); padding-bottom: 3px;
+  transition: color .18s, border-color .18s; }
+.link-quiet:hover { color: var(--ink); border-color: var(--acc); }
+.hero-note { margin-top: 26px; font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--mut); line-height: 2; }
+.hero-note span { color: var(--ink2); }
+#liveStats { color: var(--gold); }
+
+/* caption specimen (a typographic illustration of what the tool outputs) */
+.specimen {
+  position: relative; aspect-ratio: 4/5; border-radius: 20px; overflow: hidden;
+  background: radial-gradient(120% 90% at 30% 10%, #23201d, #0c0b0c 70%);
+  border: 1px solid var(--line); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8);
+  display: flex; align-items: center; justify-content: center;
+}
+.specimen::after { content: ''; position: absolute; inset: 0;
+  background: radial-gradient(90% 60% at 50% 120%, rgba(255,122,26,.14), transparent 60%); }
+.spec-cap { position: relative; text-align: center; padding: 0 26px; z-index: 1; }
+.spec-cap .l1 { font-family: var(--sans); font-weight: 700; font-size: 15px; letter-spacing: .02em;
+  color: var(--ink2); }
+.spec-cap .big { font-family: var(--sans); font-weight: 800; letter-spacing: -0.03em; line-height: .92;
+  font-size: clamp(40px, 9vw, 76px); margin: 8px 0; }
+.spec-cap .big .hit { color: var(--acc); display: inline-block; transform: rotate(-3deg); }
+.spec-cap .l3 { font-family: var(--sans); font-weight: 700; font-size: 18px; color: var(--ink); }
+.spec-tag { position: absolute; left: 16px; bottom: 16px; z-index: 1;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--mut); background: rgba(10,10,11,.55); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; backdrop-filter: blur(4px); }
+
+/* ---- Demo im Hero: VORHER/NACHHER (v230q, v230r, v230s) ----
+   Das Standbild hier war eine Attrappe aus HTML und CSS (v230q). Seit v230s
+   steht daneben nicht nur das Ergebnis, sondern der VERGLEICH: links das
+   Rohvideo, rechts derselbe Moment gerendert, mit einem Schieber dazwischen.
+   Nur das Ergebnis zu zeigen beweist nichts - man sieht nicht, wie nackt das
+   Original war, und genau darin liegt der Beweis.
+   9:16 mit `contain`, weil das Produkt fuer Hochformat gebaut ist - ein
+   4:5-Rahmen mit `cover` haette ein Drittel abgeschnitten (v228-Lehre).
+
+   v230r LEISTE: Beschriftung und Ton-Schalter lagen als zwei frei schwebende
+   Kaestchen an den beiden Kanten und liefen auf dem Handy uebereinander.
+   Ein Element, dessen Breite vom TEXT abhaengt, darf nicht gegen ein zweites
+   gesetzt werden, das an der anderen Kante klebt. Jetzt EINE Flex-Zeile. */
+.demo {
+  position: relative; aspect-ratio: 9/16; max-height: 74vh; margin: 0 auto;
+  border-radius: 20px; overflow: hidden; background: #0c0b0c;
+  border: 1px solid var(--line); box-shadow: 0 40px 90px -40px rgba(0,0,0,.8);
+  --split: 52%;
+}
+.demo video { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block; }
+/* Das Ergebnis liegt OBEN und wird links beschnitten - der Schieber gibt es
+   frei. So bleibt das Original sichtbar, ohne dass etwas skaliert wird. */
+.demo .after { clip-path: inset(0 0 0 var(--split)); z-index: 1; }
+/* Lese-Verlauf: nur so stark, dass die Zeile traegt - das Bild bleibt Bild. */
+.demo::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+  pointer-events: none; z-index: 2;
+  background: linear-gradient(to top, rgba(6,6,7,.78), rgba(6,6,7,.34) 42%, transparent);
+}
+.demo-side, .demo-line, .demo-grip { opacity: 0; transition: opacity .22s ease; }
+.demo.vergleich .demo-side, .demo.vergleich .demo-line,
+.demo.vergleich .demo-grip { opacity: 1; }
+.demo-line { position: absolute; top: 0; bottom: 0; left: var(--split); width: 2px;
+  margin-left: -1px; background: rgba(255,255,255,.85); z-index: 3;
+  pointer-events: none; box-shadow: 0 0 14px rgba(0,0,0,.6); }
+.demo-grip { position: absolute; top: 50%; left: var(--split); z-index: 4;
+  transform: translate(-50%, -50%); width: 38px; height: 38px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; gap: 2px;
+  color: #0c0b0c; background: rgba(255,255,255,.92); pointer-events: none;
+  box-shadow: 0 6px 22px rgba(0,0,0,.55); }
+/* v230t DAS ZIEHEN LAEUFT UEBER ZEIGER-EREIGNISSE, NICHT UEBER DEN
+   RANGE-REGLER. Ein `input[type=range]` mit Deckkraft 0 ueber dem Bild sah
+   nach der eleganten Loesung aus, verhaelt sich aber je nach Browser und
+   Eingabeart verschieden: der Griff muss teils exakt getroffen werden, ein
+   Wisch daneben tut nichts (Ismets Befund: "ich kann das Ding in der Mitte
+   nicht ziehen, nur klicken verschiebt"). Pointer-Events sind fuer Maus,
+   Finger und Stift derselbe Weg.
+   Der Regler bleibt fuer die TASTATUR (Pfeiltasten) - aber ohne
+   Zeiger-Ereignisse, damit er nichts mehr abfaengt. */
+.demo { touch-action: pan-y; }        /* senkrecht scrollen bleibt moeglich */
+.demo-range { position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%;
+  margin: 0; opacity: 0; pointer-events: none; -webkit-appearance: none;
+  appearance: none; background: transparent; }
+.demo-range:focus-visible ~ .demo-line { outline: 2px solid var(--acc); }
+.demo.zieht { cursor: ew-resize; }
+.demo.zieht .demo-grip { transform: translate(-50%, -50%) scale(1.08); }
+.demo-grip { transition: transform .12s ease; }
+.demo-side { position: absolute; top: 13px; z-index: 3; pointer-events: none;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .15em;
+  text-transform: uppercase; color: rgba(255,255,255,.82);
+  background: rgba(10,10,11,.42); border-radius: 5px; padding: 4px 7px;
+  backdrop-filter: blur(4px); text-shadow: 0 1px 8px rgba(0,0,0,.9); }
+.demo-side.l { left: 13px; }
+.demo-side.r { right: 13px; color: var(--acc); }
+/* Die Leiste liegt UEBER dem Schieber (z-index 5). Sonst faengt das
+   unsichtbare Schieber-Feld den Klick auf den Ton-Knopf ab - im Browser
+   gemessen: der Knopf war gar nicht bedienbar. Die Leiste selbst laesst
+   Zeiger durch (`pointer-events: none`), nur der Knopf nimmt sie an, das
+   Ziehen funktioniert also weiter auf der ganzen Flaeche. */
+.demo-bar {
+  position: absolute; left: 14px; right: 14px; bottom: 13px; z-index: 6;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  pointer-events: none;
+}
+.demo-tag {
+  min-width: 0; flex: 1 1 auto;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .15em;
+  text-transform: uppercase; color: rgba(255,255,255,.72);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 1px 10px rgba(0,0,0,.9);
+}
+.demo-tag b { color: rgba(255,255,255,.94); font-weight: 600; }
+.demo-tag i { font-style: normal; margin-left: .45em; }
+.demo-snd {
+  pointer-events: auto; flex: 0 0 auto; cursor: pointer;
+  width: 34px; height: 34px; display: inline-flex; align-items: center;
+  justify-content: center; padding: 0;
+  color: rgba(255,255,255,.9); background: rgba(12,12,14,.55);
+  border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.demo-snd:hover { color: var(--acc); border-color: var(--acc); background: rgba(12,12,14,.72); }
+.demo-snd:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.demo-snd .on { display: none; }
+.demo-snd[aria-pressed="true"] { color: var(--acc); border-color: var(--acc); }
+.demo-snd[aria-pressed="true"] .on { display: block; }
+.demo-snd[aria-pressed="true"] .off { display: none; }
+
+/* ---- index strip ---- */
+.index { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.index .wrap { display: flex; flex-wrap: wrap; gap: 8px 30px; padding-top: 22px; padding-bottom: 22px; }
+.index span { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--mut); display: inline-flex; align-items: center; gap: 8px; }
+.index span::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--acc); display: inline-block; }
+
+/* ---- section frame ---- */
+section { padding: clamp(72px, 11vh, 120px) 0; }
+.sec-head { max-width: 720px; margin-bottom: 56px; }
+.sec-head h2 { font-family: var(--serif); font-weight: 500; letter-spacing: -0.02em;
+  font-size: clamp(30px, 4.4vw, 52px); line-height: 1.04; margin: 18px 0 16px; }
+.sec-head h2 em { font-style: italic; color: var(--acc); }
+.sec-head p { font-family: var(--sans); color: var(--ink2); font-size: clamp(16px,1.6vw,18px); line-height: 1.65; }
+
+/* editorial feature rows */
+.rows { border-top: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 64px 1fr; gap: 28px;
+  padding: 34px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.row .no { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--acc);
+  letter-spacing: .1em; padding-top: 6px; }
+.row .body { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 22px 48px; align-items: start; }
+.row h3 { font-family: var(--serif); font-weight: 500; font-size: clamp(21px, 2.4vw, 27px);
+  letter-spacing: -0.01em; line-height: 1.15; }
+.row p { font-family: var(--sans); color: var(--ink2); font-size: 15.5px; line-height: 1.65; }
+.row:hover h3 { color: var(--acc); transition: color .2s; }
+
+/* how it works */
+.how { background: var(--bg2); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-soft);
+  border: 1px solid var(--line-soft); border-radius: 18px; overflow: hidden; }
+.step { background: var(--bg2); padding: 40px 32px; }
+.step .snum { font-family: var(--serif); font-weight: 500; font-size: 40px; color: var(--acc);
+  line-height: 1; letter-spacing: -0.02em; }
+.step h4 { font-family: var(--sans); font-weight: 700; font-size: 18px; margin: 18px 0 8px; letter-spacing: -0.01em; }
+.step p { font-family: var(--sans); color: var(--ink2); font-size: 14.5px; line-height: 1.6; }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 24px; }
+.stat { border-left: 1px solid var(--line); padding-left: 22px; }
+.stat .n { font-family: var(--serif); font-weight: 500; font-size: clamp(42px,6vw,68px);
+  line-height: .9; letter-spacing: -0.03em; color: var(--ink); }
+.stat.acc .n { color: var(--acc); }
+.stat .l { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--mut); margin-top: 14px; }
+
+/* quote */
+.quote-wrap { max-width: 900px; }
+.quote-wrap blockquote { font-family: var(--serif); font-weight: 400; font-style: italic;
+  font-size: clamp(24px, 3.4vw, 40px); line-height: 1.25; letter-spacing: -0.015em; color: var(--ink); }
+.quote-wrap blockquote .mark { color: var(--acc); font-style: normal; }
+.quote-wrap .by { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--mut); margin-top: 28px; }
+
+/* pricing */
+.pay-once { font-family: var(--sans); font-size: 15.5px; color: var(--ink2); line-height: 1.6;
+  border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: 10px;
+  padding: 18px 22px; margin-bottom: 44px; max-width: 720px; }
+.pay-once strong { color: var(--ink); font-weight: 600; }
+.plans { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; align-items: stretch; }
+.plan { background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+  padding: 34px 30px; display: flex; flex-direction: column; position: relative;
+  transition: transform .18s ease, border-color .18s; }
+.plan:hover { transform: translateY(-4px); border-color: rgba(246,244,239,.24); }
+.plan.hot { border-color: var(--acc); }
+.plan .ptag { position: absolute; top: 20px; right: 22px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--acc); }
+.plan h3 { font-family: var(--serif); font-weight: 500; font-size: 24px; letter-spacing: -0.01em; }
+.plan .aud { font-family: var(--sans); color: var(--mut); font-size: 13.5px; margin: 6px 0 22px; min-height: 38px; }
+.plan .price { font-family: var(--serif); font-weight: 500; font-size: 54px; letter-spacing: -0.03em; line-height: 1; }
+.plan .per { font-family: var(--mono); color: var(--mut); font-size: 11.5px; letter-spacing: .06em; margin-top: 8px; }
+.plan .buy { margin-top: 26px; text-align: center; text-decoration: none;
+  font-family: var(--sans); font-weight: 600; font-size: 15px; padding: 13px 20px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink); transition: background .18s, color .18s, border-color .18s; }
+.plan .buy:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.plan.hot .buy { background: var(--acc); border-color: var(--acc); color: var(--bg); }
+.plan.hot .buy:hover { background: #ff8a34; }
+.plan .feats { list-style: none; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line-soft); }
+.plan .feats li { font-family: var(--sans); color: var(--ink2); font-size: 14px; padding: 7px 0 7px 26px; position: relative; }
+.plan .feats li::before { content: ''; position: absolute; left: 4px; top: 12px; width: 8px; height: 8px;
+  border-right: 1.6px solid var(--acc); border-bottom: 1.6px solid var(--acc); transform: rotate(45deg); }
+.pricing-foot { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--mut);
+  margin-top: 30px; text-transform: uppercase; }
+
+/* faq */
+.faq { max-width: 760px; margin: 80px auto 0; }
+.faq h3 { font-family: var(--serif); font-weight: 500; font-size: 28px; letter-spacing: -0.01em; margin-bottom: 8px; }
+.faq details { border-bottom: 1px solid var(--line); padding: 4px 0; }
+.faq summary { cursor: pointer; font-family: var(--sans); font-weight: 600; font-size: 16px;
+  padding: 18px 40px 18px 0; list-style: none; position: relative; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: '+'; position: absolute; right: 4px; top: 15px; color: var(--acc);
+  font-size: 22px; font-weight: 400; transition: transform .2s; }
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq details p { font-family: var(--sans); color: var(--ink2); font-size: 15px; line-height: 1.7; padding: 0 0 20px; }
+
+/* bottom cta */
+.bottom { text-align: center; padding: clamp(80px,14vh,150px) 32px; border-top: 1px solid var(--line-soft); }
+.bottom h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(34px,6vw,66px);
+  letter-spacing: -0.02em; line-height: 1.02; margin-bottom: 22px; }
+.bottom h2 em { font-style: italic; color: var(--acc); }
+.bottom p { font-family: var(--sans); color: var(--ink2); font-size: 17px; margin-bottom: 34px; }
+
+/* footer */
+footer { border-top: 1px solid var(--line-soft); padding: 46px 32px 40px; }
+footer .inner { max-width: var(--max); margin: 0 auto; display: flex; justify-content: space-between;
+  align-items: center; flex-wrap: wrap; gap: 20px; }
+footer .copy { font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; color: var(--mut); text-transform: uppercase; }
+footer .links { display: flex; flex-wrap: wrap; gap: 22px; }
+footer .links a { font-family: var(--sans); color: var(--mut); text-decoration: none; font-size: 14px; transition: color .18s; }
+footer .links a:hover { color: var(--ink); }
+
+/* reveal motion */
+[data-reveal] { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+[data-reveal].in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+  .btn-primary:hover, .cta:hover, .plan:hover { transform: none; }
+}
+
+/* responsive */
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+  .specimen { max-width: 420px; margin: 0 auto; }
+  .demo { max-width: 300px; max-height: 62vh; }
+  /* Der Zusatz passt im schmalen Rahmen nicht mehr. Eine Ellipse
+     mitten im Satz sieht nach Fehler aus - also lieber weglassen. */
+  .demo-tag i { display: none; }
+  .row .body { grid-template-columns: 1fr; gap: 10px; }
+  .steps { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2,1fr); gap: 34px 24px; }
+  .plans { grid-template-columns: 1fr; max-width: 460px; margin: 0 auto; }
+}
+@media (max-width: 620px) {
+  .wrap, nav .inner, .hero, .bottom, footer { padding-left: 22px; padding-right: 22px; }
+  .nav-links a:not(.cta) { display: none; }
+  .row { grid-template-columns: 40px 1fr; gap: 16px; }
+  footer .inner { flex-direction: column; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <a class="logo" href="/"><img src="/logo_white.png" alt="">DouchkoVE<span class="beta">Beta</span></a>
+    <div class="nav-links">
+      <a href="#captions">Product</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/app" class="cta solid">Open the app</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-grid">
+    <div data-reveal>
+      <span class="kicker">Auto-captions · No subscription</span>
+      <h1>Captions that look like<br>you <em>hired an editor.</em></h1>
+      <p class="lead">Upload a talking-head video. An AI director reads what you say, finds the
+        hook, and places every word the way a good editor would: effects, emphasis and camera
+        moves that fit the moment. You get back a finished clip, not subtitles on top.</p>
+      <div class="hero-actions">
+        <a href="/app/create" class="btn-primary">Caption my video
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="/app" class="btn-ghost">Try 10 seconds free
+          <small>no account</small>
+        </a>
+        <!-- v230ao: der Weg zur Beweis-Seite. Wer den Schieber im Hero
+             antippt, will meistens genau das: denselben Clip gross und die
+             Erklaerung dazu. -->
+        <a href="/before-after" class="link-quiet">See it on a real clip</a>
+      </div>
+      <div class="hero-note">
+        3 free minutes every month · <span>No card</span> · <span>No subscription, ever</span>
+        <div id="liveStats" style="display:none;"></div>
+      </div>
+    </div>
+    <div data-reveal>
+      <div class="demo" id="demoWrap">
+        <!-- v230an DAS UNSICHTBARE VIDEO HAT DEM SICHTBAREN DIE LEITUNG
+             WEGGENOMMEN. Gemessen in der Handy-Ansicht bei 1.6 Mbit/s: die
+             Seite lud BEIDE Spuren komplett - 1.3 MB fuer das laufende und
+             840 KB fuer das Vorher-Video, das im Ruhezustand gar nicht
+             spielt (v230u). Am Handy ruckelt oder haengt das laufende Bild
+             dadurch, obwohl die Datei selbst klein ist.
+             Jetzt: das laufende Video zuerst und vollstaendig ('auto'), das
+             Vorher-Video gar nicht ('none') - es wird per JS nachgeladen,
+             SOBALD das erste fluessig laeuft. Der Vergleich bleibt also da,
+             er draengelt sich nur nicht mehr vor. -->
+        <video id="demoBefore" src="/assets/demo_before.mp4"
+               poster="/assets/demo_before_poster.jpg"
+               muted loop playsinline preload="none"
+               aria-label="The same clip before captioning"></video>
+        <video id="demoVid" class="after" src="/assets/demo.mp4"
+               poster="/assets/demo_poster.jpg"
+               autoplay muted loop playsinline preload="auto"
+               aria-label="Example output rendered by DouchkoVE"></video>
+        <span class="demo-side l">Your upload</span>
+        <span class="demo-side r">DouchkoVE</span>
+        <input type="range" class="demo-range" id="demoRange" min="0" max="100"
+               step="0.1" value="0" aria-label="Drag to compare before and after">
+        <div class="demo-line"></div>
+        <div class="demo-grip" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path
+               d="M9 6 4 12l5 6M15 6l5 6-5 6"/></svg>
+        </div>
+        <div class="demo-bar">
+          <span class="demo-tag"><b>Rendered output</b><i>· drag to compare</i></span>
+          <button class="demo-snd" id="demoSnd" type="button" aria-pressed="false"
+                  aria-label="Turn sound on" title="Sound">
+            <svg class="off" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.1" stroke-linecap="round"
+                 stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path
+                 d="M22 9l-6 6M16 9l6 6"/></svg>
+            <svg class="on" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.1" stroke-linecap="round"
+                 stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path
+                 d="M15.5 8.5a5 5 0 0 1 0 7M19 5.5a9 9 0 0 1 0 13"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="index">
+  <div class="wrap">
+    <span>AI director</span>
+    <span>Scene analysis per moment</span>
+    <span>26 text animations</span>
+    <span>Beat-synced to music</span>
+    <span>Cut-out matting</span>
+    <!-- v230ag: die alte Zahl (50+) stimmte nicht - die Schriften hatten
+         gar keine Zeichen fuer Chinesisch, Japanisch, Koreanisch, Kyrillisch
+         oder Griechisch (gemessen). Jetzt liegen sie bei, und die Zahl nennt,
+         was WIRKLICH gesetzt werden kann. -->
+    <span>40+ languages</span>
+    <span>Vertical · wide · square</span>
+    <span>SRT + transparent layer</span>
+  </div>
+</div>
+
+<section id="captions" class="wrap">
+  <div class="sec-head" data-reveal>
+    <span class="kicker">The product</span>
+    <h2>Not a subtitle plugin. An <em>editor</em> that gets what you mean.</h2>
+    <p>It reads your transcript, decides where words should hit hard and where silence works,
+      and renders a finished piece. Nothing is random, and nothing is a fixed template.</p>
+  </div>
+
+  <div class="rows">
+    <div class="row" data-reveal>
+      <div class="no">01</div>
+      <div class="body">
+        <h3>An AI director, not a template</h3>
+        <p>The AI chooses keywords, effects and camera moves from what you actually say: 9 looks,
+          26 text animations, beat-synced to your music. Every video is directed fresh.</p>
+      </div>
+    </div>
+    <div class="row" data-reveal>
+      <div class="no">02</div>
+      <div class="body">
+        <h3>Fix the transcript before it renders</h3>
+        <p>Names, technical terms, brands: you see the full transcript first and correct any word.
+          It only renders once it reads right, so nothing lands on screen misspelled.</p>
+      </div>
+    </div>
+    <div class="row" data-reveal>
+      <div class="no">03</div>
+      <div class="body">
+        <h3>Sound, emphasis and a hook score</h3>
+        <p>Real licensed sounds instead of synthetic beeps, matching emphasis on the words that
+          matter, and a hook score that rates your opener before you post it.</p>
+      </div>
+    </div>
+    <div class="row" data-reveal>
+      <div class="no">04</div>
+      <div class="body">
+        <h3>It learns your style</h3>
+        <p>Show it one video whose captions you love. It studies the pacing, emphasis and hook
+          behaviour, and your future renders follow that taste. Every edit teaches it more.</p>
+      </div>
+    </div>
+    <!-- v230ag: drei Dinge, die das Produkt kann und die hier nie standen -
+         Motion-Grafiken, SRT-Datei und die transparente Ebene. Wer sie nicht
+         nennt, verkauft sich unter Wert. -->
+    <div class="row" data-reveal>
+      <div class="no">05</div>
+      <div class="body">
+        <h3>It fits into your edit, not the other way round</h3>
+        <p>Take the finished MP4, or take the parts: an SRT subtitle file for YouTube, and a
+          transparent caption layer (ProRes 4444) you drop straight over your original in
+          Premiere or Resolve, same captions, still movable.</p>
+      </div>
+    </div>
+    <div class="row" data-reveal>
+      <div class="no">06</div>
+      <div class="body">
+        <h3>Motion graphics, same engine</h3>
+        <p>Clean animated graphics in the Apple keynote language, pills, widgets, app-store
+          cards, lower thirds, chat and notification clips. One flat credit each, MP4, ready to
+          cut in.</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-reveal>
+    <a href="/app/create" class="btn-primary">Caption my video
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+    <span style="font-family:var(--mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--mut); margin-left:18px;">Watermark clears with your first purchase</span>
+  </div>
+</section>
+
+<section id="how" class="how">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="kicker">How it works</span>
+      <h2>Three steps, done.</h2>
+      <p>From upload to a finished video in under 30 minutes, depending on length.</p>
+    </div>
+    <div class="steps" data-reveal>
+      <div class="step">
+        <div class="snum">01</div>
+        <h4>Upload your video</h4>
+        <p>Vertical, wide or square. Up to 3 minutes, any common format.</p>
+      </div>
+      <div class="step">
+        <div class="snum">02</div>
+        <h4>Pick a look</h4>
+        <p>TikTok, Viral, Creator, Editorial, Poster, Retro, Elegant, Cinematic, Clean, or tune
+          everything yourself.</p>
+      </div>
+      <div class="step">
+        <div class="snum">03</div>
+        <h4>Let it render</h4>
+        <p>Check the transcript, tweak the moments editor if you want, render, download the MP4.
+          Files auto-delete after 7 days.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="quote-wrap" data-reveal>
+    <span class="kicker">Why it exists</span>
+    <blockquote style="margin-top:24px;">I didn’t want a tool that sticks subtitles on top.
+      I wanted an editor that <span class="mark">understands what I’m saying</span> and turns it
+      into something that looks like an editorial piece.</blockquote>
+    <div class="by">The reason DouchkoVE was built</div>
+  </div>
+  <div class="stats" style="margin-top:72px" data-reveal>
+    <div class="stat acc"><div class="n">26</div><div class="l">Text animations</div></div>
+    <div class="stat"><div class="n">9</div><div class="l">Editorial looks</div></div>
+    <div class="stat"><div class="n">40+</div><div class="l">Languages</div></div>
+    <div class="stat acc"><div class="n">0</div><div class="l">Subscription traps</div></div>
+  </div>
+</section>
+
+<section id="pricing" class="wrap">
+  <div class="sec-head" data-reveal>
+    <span class="kicker">Pricing</span>
+    <h2>Buy credits. Render videos. <em>That’s it.</em></h2>
+    <p>1 credit = 1 minute of finished video, billed per started minute. A motion clip is
+      1 credit flat. No surcharges, no upsells.</p>
+  </div>
+
+  <div class="pay-once" data-reveal>
+    <strong>One-time purchase.</strong> No subscription, no auto-renewal, no surprise charges.
+    Your credits stay valid for <strong>6&nbsp;months</strong>, and we say it here and before you pay,
+    not in the fine print.
+  </div>
+
+  <div class="plans">
+    <div class="plan" data-reveal>
+      <h3>Starter</h3>
+      <p class="aud">For trying it on your first real videos</p>
+      <div class="price">€9</div>
+      <div class="per">one-time · 20 credits · €0.45 each</div>
+      <a href="/app" class="buy">Get 20 credits</a>
+      <ul class="feats">
+        <li>1 credit = 1 minute of finished video</li>
+        <li>All looks, effects and animations</li>
+        <li>No watermark · priority queue</li>
+        <li>Credits valid for 6 months</li>
+      </ul>
+    </div>
+    <div class="plan hot" data-reveal>
+      <span class="ptag">Most popular</span>
+      <h3>Creator</h3>
+      <p class="aud">For creators who post every week</p>
+      <div class="price">€19</div>
+      <div class="per">one-time · 60 credits · €0.32 each</div>
+      <a href="/app" class="buy">Get 60 credits</a>
+      <ul class="feats">
+        <li>1 credit = 1 minute of finished video</li>
+        <li>All looks, effects and animations</li>
+        <li>No watermark · priority queue</li>
+        <li>Credits valid for 6 months</li>
+      </ul>
+    </div>
+    <div class="plan" data-reveal>
+      <span class="ptag">Best value</span>
+      <h3>Pro</h3>
+      <p class="aud">For daily creators and small teams</p>
+      <div class="price">€39</div>
+      <div class="per">one-time · 150 credits · €0.26 each</div>
+      <a href="/app" class="buy">Get 150 credits</a>
+      <ul class="feats">
+        <li>1 credit = 1 minute of finished video</li>
+        <li>All looks, effects and animations</li>
+        <li>No watermark · priority queue</li>
+        <li>Credits valid for 6 months</li>
+      </ul>
+    </div>
+  </div>
+  <p class="pricing-foot">Buy once, render whenever. No countdown, no “pause plan”, no cancellation maze.</p>
+
+  <div class="faq">
+    <h3>Common questions</h3>
+    <details><summary>What is a credit?</summary>
+      <!-- v230al: 4K ist raus. Es kam beim Zuschauer nie als 4K an (TikTok,
+           Reels und Shorts rechnen alles auf 1080p herunter) und war die
+           teuerste Stufe fuer ein identisches Ergebnis. -->
+      <p>1 credit renders 1 minute of finished video, billed per started minute. A 90-second clip costs 2 credits.
+        A motion clip is 1 credit flat. Output is up to 1080p, the resolution every short-form platform
+        delivers to viewers anyway.</p></details>
+    <details><summary>Do I need a subscription?</summary>
+      <p>No. You buy credits once. There is no plan, no renewal and nothing to cancel.</p></details>
+    <details><summary>Do credits expire?</summary>
+      <p>Yes, after 6 months. We say so here and before you pay, and we remind you by email before anything expires.</p></details>
+    <details><summary>Can I try it before paying?</summary>
+      <p>Yes. There is a 10-second demo without an account, and every confirmed account gets free credits plus
+        3 free minutes per month (watermarked until your first purchase).</p></details>
+    <details><summary>What happens to my videos?</summary>
+      <p>They are private and deleted from the server automatically after 7 days. Download your renders in time.</p></details>
+    <!-- v230ag: die Sprachfrage wird ehrlich beantwortet. Vorher stand eine zu grosse Zahl
+         auf der Seite, waehrend die Schriften nicht einmal Kyrillisch
+         konnten - genau die Sorte Versprechen, die einen Kunden einmal
+         kostet und dann fuer immer. -->
+    <details><summary>Which languages work?</summary>
+      <p>Speech is recognised in most languages. Captions are set in any language written in the
+        Latin, Cyrillic or Greek alphabet, plus Chinese, Japanese and Korean, roughly 40 in
+        practice. Arabic, Hebrew, Hindi and Thai are not supported yet; we say so before you
+        spend a credit rather than after.</p></details>
+  </div>
+</section>
+
+<div class="bottom">
+  <span class="kicker" style="justify-content:center;">Early access</span>
+  <h2 style="margin-top:20px;">Make your next video<br>look <em>edited.</em></h2>
+  <p>3 free minutes every month. No card, no subscription, no strings.</p>
+  <a href="/app" class="btn-primary" style="font-size:17px;">Open the app
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+  </a>
+</div>
+
+<footer>
+  <div class="inner">
+    <div class="copy">© 2026 DouchkoVE · Early Access</div>
+    <div class="links">
+      <a href="#captions">Product</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/imprint">Imprint</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="mailto:Ismet@douchkove.com">Contact</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// v230q Demo-Video im Hero. Autoplay geht nur STUMM (Browser-Regel), also
+// steht daneben ein Ton-Schalter - die Sounds sind Teil des Produkts, ein
+// dauerhaft stummes Beispiel zeigt die Haelfte. Laeuft die Datei nicht, faellt
+// der Rahmen auf das Standbild zurueck; ein kaputter Player darf die Seite
+// nicht leer aussehen lassen.
+(function () {
+  const v = document.getElementById('demoVid'), b = document.getElementById('demoSnd');
+  if (!v || !b) return;
+  // v230s VORHER/NACHHER. Zwei Spuren desselben Clips uebereinander; der
+  // Schieber beschneidet die obere. Beide sind gleich lang und aus derselben
+  // Quelle, laufen also synchron - kleine Abweichungen (Dekoder-Ruckler,
+  // Tab im Hintergrund) werden nachgezogen. Ohne das Nachziehen sieht man
+  // links und rechts zwei verschiedene Momente, und der Vergleich beweist
+  // nichts mehr.
+  const vor = document.getElementById('demoBefore');
+  const rng = document.getElementById('demoRange');
+  const wrap = document.getElementById('demoWrap');
+  // v230u NUR EIN VIDEO LAEUFT IM RUHEZUSTAND.
+  // Gemessen (Handy-Ansicht, gedrosselte CPU): zwei laufende Videos halbieren
+  // die Bildrate (60 -> 30). Pausiert oder ausgeblendet sind es sofort wieder
+  // 60, und eine kleinere Aufloesung aendert NICHTS - es kostet der zweite
+  // Decoder, nicht die Pixelzahl. Deshalb laeuft im Ruhezustand nur der
+  // fertige Render; das Original startet erst, wenn der Vergleich gebraucht
+  // wird (einmaliger Blick nach dem Laden, oder sobald jemand zieht).
+  if (rng && wrap) {
+    const AN_SCHWELLE = 0.4;             // ab hier ist der Vergleich sichtbar
+    const setz = () => {
+      const v2 = parseFloat(rng.value) || 0;
+      wrap.style.setProperty('--split', v2 + '%');
+      wrap.classList.toggle('vergleich', v2 > AN_SCHWELLE);
+    };
+    // v230ab: EIN Sprung reicht nicht. Ein `currentTime`-Sprung braucht
+    // Zeit (dekodieren bis zum Zielbild), und waehrend dessen laeuft die
+    // andere Spur weiter - gemessen 0.10 s Versatz direkt nach dem Start,
+    // also 2 bis 3 Bilder. Danach zog die alte Feinkorrektur (3 %) das ueber
+    // rund drei Sekunden gerade, und genau die sieht man.
+    // Jetzt: nach dem Sprung NOCH EINMAL nachziehen, sobald das Zielbild
+    // wirklich steht (`seeked`), und die Korrektur ist am Anfang grob.
+    const sync = () => {                 // gleicher Moment auf beiden Spuren
+      if (!vor) return;
+      try { vor.currentTime = v.currentTime; } catch (e) {}
+      vor.addEventListener('seeked', () => {
+        if (Math.abs(v.currentTime - vor.currentTime) > 0.03) {
+          try { vor.currentTime = v.currentTime; } catch (e) {}
+        }
+      }, { once: true });
+    };
+    let zieht = false, blick = false, benutzt = false;
+    const vorAn = () => {
+      if (!vor || !vor.paused) return;
+      sync();
+      vor.play().catch(() => {});
+    };
+    const vorAus = () => {
+      if (!vor || vor.paused) return;
+      if (zieht || blick) return;
+      if ((parseFloat(rng.value) || 0) > AN_SCHWELLE) return;
+      vor.pause();
+    };
+    rng.addEventListener('input', () => {        // Pfeiltasten
+      benutzt = true;
+      setz();
+      if ((parseFloat(rng.value) || 0) > AN_SCHWELLE) vorAn(); else vorAus();
+    });
+    setz();
+    const ausX = (x) => {
+      const r = wrap.getBoundingClientRect();
+      if (!r.width) return;
+      rng.value = Math.max(0, Math.min(100, ((x - r.left) / r.width) * 100));
+      setz();
+    };
+    // v230ac: WAS BEDIENT WERDEN SOLL, DARF DAS ZIEHEN NICHT AUSLOESEN.
+    // Der Ton-Knopf liegt IM Bild; sein pointerdown steigt bis hierher auf,
+    // und `setPointerCapture` haengt danach alle Zeiger-Ereignisse an den
+    // Rahmen - der Klick kommt beim Knopf gar nicht mehr an (im Browser
+    // gemessen: Ton blieb aus, dafuer sprang der Schieber auf 91.5 %).
+    // z-index und `pointer-events: auto` reichen dagegen NICHT, die regeln
+    // nur, wer das Ereignis ZUERST bekommt, nicht wer es danach abfaengt.
+    const bedienelement = (e) => !!(e.target && e.target.closest
+      && e.target.closest('button, a, input, select, textarea, [role="button"]'));
+    wrap.addEventListener('pointerdown', (e) => {
+      if (bedienelement(e)) return;
+      const r = wrap.getBoundingClientRect();
+      const auf = parseFloat(rng.value) || 0;
+      const linie = r.left + r.width * (auf / 100);
+      // Am FINGER wird nur direkt an der Linie gegriffen - sonst kann man
+      // ueber dem Bild nicht mehr scrollen, und das waere ein schlechter
+      // Tausch fuer einen Schieber. Ist der Vergleich noch zu, wird gar nicht
+      // gezogen: dann OEFFNET ihn ein Tipp. (Der erste Entwurf liess am Rand
+      // ueberall greifen - damit hat ein senkrechter Wisch den Schieber
+      // aufgerissen statt zu scrollen, im Browser gemessen.)
+      if (e.pointerType === 'touch'
+          && (auf <= AN_SCHWELLE || Math.abs(e.clientX - linie) > 44)) return;
+      zieht = true;
+      blick = false;
+      benutzt = true;
+      wrap.classList.add('zieht');
+      try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
+      vorAn();
+      ausX(e.clientX);
+      e.preventDefault();
+    });
+    wrap.addEventListener('pointermove', (e) => {
+      if (!zieht) return;
+      ausX(e.clientX);
+      e.preventDefault();
+    });
+    const schluss = (e) => {
+      if (!zieht) return;
+      zieht = false;
+      wrap.classList.remove('zieht');
+      try { wrap.releasePointerCapture(e.pointerId); } catch (err) {}
+      vorAus();
+    };
+    wrap.addEventListener('pointerup', schluss);
+    wrap.addEventListener('pointercancel', schluss);
+    // Ein Tipp neben der Linie soll trotzdem springen - aber nur, wenn
+    // wirklich getippt und nicht gewischt wurde.
+    let tippX = null, tippY = null;
+    wrap.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' || bedienelement(e)) return;
+      benutzt = true;
+      tippX = e.clientX; tippY = e.clientY;
+    });
+    wrap.addEventListener('pointerup', (e) => {
+      if (e.pointerType !== 'touch' || tippX === null) return;
+      if (Math.abs(e.clientX - tippX) < 8 && Math.abs(e.clientY - tippY) < 8) {
+        vorAn();
+        ausX(e.clientX);
+        // Landet der Tipp wieder am Rand, muss die zweite Spur auch wieder
+        // anhalten - sonst laeuft sie fuer immer weiter und die Bildrate
+        // bleibt halbiert, ohne dass etwas zu sehen waere.
+        vorAus();
+      }
+      tippX = tippY = null;
+    });
+    // EINMALIGER BLICK: ohne ihn wuerde niemand merken, dass hier zwei
+    // Fassungen liegen. Danach laeuft wieder nur eine Spur. Wer weniger
+    // Bewegung eingestellt hat, bekommt ihn nicht.
+    const ruhig = window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let blickGetan = ruhig;
+    // v230an: das Vorher-Video wird ERST geholt, wenn das sichtbare fluessig
+    // laeuft. Vorher hat es ihm die Leitung weggenommen (840 KB, die im
+    // Ruhezustand niemand sieht). Zwei Ausloeser, weil `canplaythrough` auf
+    // manchen Handys gar nicht kommt: das Ereignis ODER 2.5 Sekunden.
+    let vorGeholt = false;
+    const vorHolen = () => {
+      if (vorGeholt || !vor) return;
+      vorGeholt = true;
+      try { vor.preload = 'auto'; vor.load(); } catch (e) {}
+    };
+    v.addEventListener('canplaythrough', vorHolen, { once: true });
+    setTimeout(vorHolen, 2500);
+    const zeigeKurz = () => {
+      if (blickGetan || zieht || document.hidden) return;
+      // v230an: erst laden, dann zeigen - und danach WIRKLICH zeigen. Ein
+      // blosses `return` haette den einmaligen Blick verschluckt, und der
+      // ist das Einzige, was den Vergleich ueberhaupt entdeckbar macht.
+      if (!vorGeholt) { vorHolen(); setTimeout(zeigeKurz, 1200); return; }
+      blickGetan = true;
+      blick = true;
+      vorAn();
+      const t0 = performance.now(), ZIEL = 46, HIN = 620, HALT = 1500;
+      const lauf = (t) => {
+        // JEDE Bedienung bricht den Blick ab - auch ein Tipp, der kein Ziehen
+        // ist. Sonst ueberschreibt die Animation, was der Nutzer gerade
+        // eingestellt hat (im Browser gemessen: der Tipp sprang zurueck).
+        if (zieht || benutzt) { blick = false; vorAus(); return; }
+        const d = t - t0;
+        let w2;
+        if (d < HIN) w2 = ZIEL * (d / HIN);
+        else if (d < HIN + HALT) w2 = ZIEL;
+        else if (d < HIN + HALT + HIN) w2 = ZIEL * (1 - (d - HIN - HALT) / HIN);
+        else w2 = 0;
+        rng.value = w2;
+        setz();
+        if (d < HIN + HALT + HIN) requestAnimationFrame(lauf);
+        else { blick = false; vorAus(); }
+      };
+      requestAnimationFrame(lauf);
+    };
+    if (!blickGetan) {
+      const start = () => setTimeout(zeigeKurz, 1800);
+      if (v.readyState >= 3) start();
+      else v.addEventListener('canplay', start, { once: true });
+    }
+    // Nachziehen OHNE Sprung: ein `currentTime`-Sprung leert den Decoder und
+    // ist selbst ein sichtbarer Ruckler. Kleine Abweichungen holt die
+    // Abspielgeschwindigkeit auf, nur ein grosser Versatz wird gesetzt.
+    if (vor) {
+      // Nachziehen in drei Stufen. Ein Sprung ist selbst ein Ruckler, also
+      // nur bei grossem Versatz; darunter regelt die Geschwindigkeit. Grob
+      // (25 %) holt 0.1 s in 0.4 s auf - bei einem stummen Video sieht man
+      // das nicht, den Versatz dagegen schon. Fein (5 %) haelt es danach.
+      const nachziehen = () => {
+        if (vor.paused) return;
+        const d = v.currentTime - vor.currentTime;
+        const ad = Math.abs(d);
+        if (ad > 0.35) { try { vor.currentTime = v.currentTime; } catch (e) {} }
+        else if (ad > 0.05) vor.playbackRate = d > 0 ? 1.25 : 0.8;
+        else if (ad > 0.02) vor.playbackRate = d > 0 ? 1.05 : 0.95;
+        else if (ad > 0.008) vor.playbackRate = d > 0 ? 1.02 : 0.98;
+        else vor.playbackRate = 1;
+      };
+      v.addEventListener('timeupdate', nachziehen);
+      // `timeupdate` kommt nur alle 200-250 ms - zu selten fuer die grobe
+      // Phase. Solange der Vergleich offen ist, wird jedes Bild nachgezogen.
+      const takt = () => {
+        if (!vor.paused) nachziehen();
+        requestAnimationFrame(takt);
+      };
+      requestAnimationFrame(takt);
+    }
+  }
+  if (vor) {
+    v.addEventListener('timeupdate', () => {
+      if (Math.abs(vor.currentTime - v.currentTime) > 0.15) {
+        try { vor.currentTime = v.currentTime; } catch (e) {}
+      }
+    });
+    // Faellt die Vorher-Spur aus, bleibt das Ergebnis allein stehen - ein
+    // halb leerer Vergleich waere schlimmer als gar keiner.
+    const vergleich = (an) => {
+      wrap.style.setProperty('--split', an ? (rng ? rng.value + '%' : '52%') : '0%');
+      if (rng) rng.style.display = an ? '' : 'none';
+      document.querySelectorAll('.demo-line, .demo-grip, .demo-side')
+        .forEach(e => { e.style.display = an ? '' : 'none'; });
+    };
+    // Faellt die Vorher-Spur aus, bleibt das Ergebnis allein stehen - ein halb
+    // leerer Vergleich waere schlimmer als gar keiner. Laeuft sie wieder, kommt
+    // der Vergleich zurueck: eine einmalige Stoerung darf ihn nicht dauerhaft
+    // abschalten (derselbe Fehler wie beim Ton-Knopf in v230q).
+    vor.addEventListener('error', () => vergleich(false));
+    vor.addEventListener('playing', () => vergleich(true));
+  }
+  b.addEventListener('click', () => {
+    v.muted = !v.muted;
+    // Der Zustand haengt am aria-pressed, nicht an Inline-Styles: so sieht
+    // das CSS ihn, und Screenreader auch.
+    b.setAttribute('aria-pressed', v.muted ? 'false' : 'true');
+    b.setAttribute('aria-label', v.muted ? 'Turn sound on' : 'Turn sound off');
+    if (!v.muted) { v.play().catch(() => {}); }
+  });
+  // Ein Fehler blendet den Schalter aus - aber NICHT fuer immer: sobald
+  // wieder Bild laeuft, kommt er zurueck. Ein Schalter, der nach einer
+  // einmaligen Stoerung dauerhaft weg ist, ist schlimmer als keiner.
+  v.addEventListener('error', () => { b.style.display = 'none'; });
+  v.addEventListener('playing', () => { b.style.display = ''; });
+  // Nicht im Hintergrund weiterlaufen lassen - das kostet Akku und Daten,
+  // ohne dass jemand hinschaut.
+  document.addEventListener('visibilitychange', () => {
+    const alle = [v, document.getElementById('demoBefore')].filter(Boolean);
+    if (document.hidden) { alle.forEach(x => x.pause()); }
+    else { alle.forEach(x => x.play().catch(() => {})); }
+  });
+})();
+
+// Live render count (only shown once it is meaningfully high).
+fetch('/api/stats').then(r => r.json()).then(d => {
+  if (d && d.renders > 100) {
+    const el = document.getElementById('liveStats');
+    el.textContent = d.renders.toLocaleString() + ' videos rendered so far';
+    el.style.display = 'block';
+  }
+}).catch(() => {});
+
+// Scroll reveal: subtle, respects reduced-motion (handled in CSS).
+(function () {
+  const els = document.querySelectorAll('[data-reveal]');
+  if (!('IntersectionObserver' in window)) { els.forEach(e => e.classList.add('in')); return; }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+  els.forEach(e => io.observe(e));
+})();
+</script>
+</body>
+</html>

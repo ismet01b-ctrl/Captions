@@ -41,6 +41,54 @@ F_NAV_A  = ('Segoe UI Semibold', 10)
 
 CARD, TILE, GOLD, GOLD_HI = SURF, SURF2, ACCENT, '#e7d3a8'
 
+
+class EditorHistory:
+    """Undo/Redo-Stack fuer den Momente-Editor.
+
+    Snapshots sind Listen von Tuples - eine je Zeile. Was drin steht ist
+    egal, die Klasse behandelt sie opak. Push nur, wenn sich was geaendert
+    hat (kein Doppel-Push). Deckel `cap` verhindert unbeschraenktes Wachstum
+    bei tausenden Aenderungen.
+    """
+    def __init__(self, cap=200):
+        self.stack = []
+        self.idx = -1
+        self.cap = cap
+        self.quiet = False   # True waehrend apply(): keine neuen Snapshots
+
+    def push(self, snap):
+        if self.quiet:
+            return False
+        if self.idx >= 0 and self.stack[self.idx] == snap:
+            return False
+        del self.stack[self.idx + 1:]
+        self.stack.append(snap)
+        if len(self.stack) > self.cap:
+            self.stack.pop(0)
+        self.idx = len(self.stack) - 1
+        return True
+
+    def can_undo(self):
+        return self.idx > 0
+
+    def can_redo(self):
+        return self.idx < len(self.stack) - 1
+
+    def undo(self):
+        if not self.can_undo():
+            return None
+        self.idx -= 1
+        return self.stack[self.idx]
+
+    def redo(self):
+        if not self.can_redo():
+            return None
+        self.idx += 1
+        return self.stack[self.idx]
+
+    def current(self):
+        return self.stack[self.idx] if self.idx >= 0 else None
+
 FONT_CHOICES = [
     {'id': 'kino',    'label': 'Kino',      'file': 'fonts/archivo.ttf',     'italic': 'fonts/serif_i.ttf',
      'script': 'fonts/playfair_i.ttf'},
@@ -473,6 +521,14 @@ class App:
         self.zahl_var = tk.IntVar(value=int(float(cfg['effects'].get('zahl_gap', 15))))
         self.beat_var = tk.IntVar(value=int(float(cfg['effects'].get('beat_sync', 0.7)) * 100))
         self.pshadow_var = tk.IntVar(value=int(float(cfg['effects'].get('person_shadow', 0.5)) * 100))
+        self.bgblur_var = tk.IntVar(value=int(float(cfg['effects'].get('bg_blur', 0.5)) * 100))
+        self.mbeat_var = tk.IntVar(value=int(float(cfg['effects'].get('music_beat', 0.6)) * 100))
+        # v73: 5 neue Effekt-Klassen
+        self.freeze_var = tk.IntVar(value=int(float(cfg['effects'].get('freeze_frame', 0.0)) * 100))
+        self.trail_var = tk.IntVar(value=int(float(cfg['effects'].get('trail', 0.0)) * 100))
+        self.cring_var = tk.IntVar(value=int(float(cfg['effects'].get('counter_ring', 0.0)) * 100))
+        self.split_var = tk.IntVar(value=int(float(cfg['effects'].get('split_screen', 0.0)) * 100))
+        self.envsh_var = tk.IntVar(value=int(float(cfg['effects'].get('env_shadow', 0.0)) * 100))
         self.sfxvol_var = tk.IntVar(value=int(cfg['effects'].get('sfx_volume', 0.35) * 100))
         self.cam_str = tk.IntVar(value=int(cfg['camera'].get('strength', 0.7) * 100))
         self.crash_var = tk.IntVar(value=int(float(cfg['camera'].get('crash', 0.55)) * 100))
@@ -945,6 +1001,11 @@ class App:
                      'Text und Sprache treffen denselben Akzent — der Grund, warum teure '
                      'Edits „auf den Punkt" wirken.')
         Slider(c, self.beat_var, 0, 100, ' %').pack(fill='x')
+        self.setting(c, 'Musik-Beat',
+                     'Zusätzlich zum Sprech-Onset auch den Musik-Beat (Kick/Sub-Bass) '
+                     'ins Beat-Sync mischen. Ohne Musik im Clip passiert nichts — die '
+                     'Erkennung merkt das an der Tempo-Sicherheit. 0 = nur Stimme.')
+        Slider(c, self.mbeat_var, 0, 100, ' %').pack(fill='x')
         self.setting(c, 'Schatten der Person auf den Text',
                      'Die Person wirft einen weichen Schatten auf den Text hinter ihr. '
                      'Ohne ihn ist der Text nur ausgeschnitten — mit ihm sitzt er im Raum.')
@@ -1014,9 +1075,45 @@ class App:
                      'Brillenbügel — kostet aber spürbar Rechenzeit.')
         Segmented(r, [('Standard', 'standard'), ('Hoch', 'hoch'),
                       ('Maximum', 'maximum')], self.mask_var).pack()
+        self.setting(c, 'Hintergrund weichzeichnen',
+                     'Waehrend eines Caption-Moments wird der Hintergrund unscharf, '
+                     'die Person und der Text bleiben scharf. Lenkt den Blick wie in '
+                     'Kino/Interviews. 0 = aus. Auf B-Roll (Drohne, FPV) ausgeschaltet, '
+                     'dort ist die Umgebung das Motiv.')
+        Slider(c, self.bgblur_var, 0, 100, ' %').pack(fill='x')
+
+        c = self.card('Spezial-Effekte (v73)',
+                      'Fuenf neue Effekte fuer besondere Momente. Bei 0 % passiert '
+                      'nichts — dezent hochdrehen und in der Vorschau prüfen.')
+        self.setting(c, 'Freeze-Frame (Standbild auf Punchline)',
+                     'Der stärkste Moment (Power 3) friert das Video ein — 0.4-1.2 s '
+                     'Standbild, waehrend die Caption weiterlaeuft. Zwingt die '
+                     'Aufmerksamkeit auf das eine Wort. Maximal einmal pro Clip.')
+        # Slider ist in 0.01 s Schritten (0..150 = 0..1.5 s Standbild)
+        Slider(c, self.freeze_var, 0, 150, ' ×10ms').pack(fill='x')
+        self.setting(c, 'Duplicate-Trail (Speed-Echo)',
+                     'Text hinterlaesst versetzte Kopien — Speed-Gefuehl wie in '
+                     'Musikvideos. 0.3-0.6 dezent, 1.0 knallig. Wirkt nur wenn '
+                     'Text im Frame ist.')
+        Slider(c, self.trail_var, 0, 100, ' %').pack(fill='x')
+        self.setting(c, 'Zaehler-Ring (Fortschritts-Bogen um Zahlen)',
+                     'Bei Zahl-Momenten (57 %, 12 Millionen …) läuft ein Kreis-'
+                     'Bogen um die Zahl hoch, synchron zum Zaehler. Wirkt wie '
+                     'ein Sport-Timer.')
+        Slider(c, self.cring_var, 0, 100, ' %').pack(fill='x')
+        self.setting(c, 'Split-Screen (horizontale Teilung)',
+                     'Der Frame teilt sich horizontal, dazwischen sitzt der Text. '
+                     'Greift bei Power-3-Momenten (Höhepunkt) ohne B-Roll. Nur ein '
+                     'paar pro Video, sonst wird es albern.')
+        Slider(c, self.split_var, 0, 100, ' %').pack(fill='x')
+        self.setting(c, 'Kontakt-Schatten unter In-Szene-Text',
+                     'Ground-Text (behind Kamera-Track) wirft einen weichen Schatten '
+                     'auf den Untergrund - der Text sitzt im Raum statt aufgeklebt. '
+                     'Ergaenzt Blender-Wasser (der es fuer Wasser schon macht).')
+        Slider(c, self.envsh_var, 0, 100, ' %').pack(fill='x')
 
         c = self.card('Lebendige Typo',
-                      '13 Animationen. Das Wort reagiert auf den Satz: „Deutschland '
+                      '26 Animationen. Das Wort reagiert auf den Satz: „Deutschland '
                       'bricht seine Versprechen" — das Wort zerbricht wirklich.')
         self.switch_row(c, 'Animationen aktiv',
                         'Die KI-Regie wählt die passende Animation aus dem Inhalt. '
@@ -1637,7 +1734,14 @@ class App:
                     'emerge_var', 'mask_var',
                     # v61 Premium-Typo
                     'hold_var', 'beat_var', 'pshadow_var', 'zahl_var',
-                    'crash_var', 'whip_var')
+                    'crash_var', 'whip_var',
+                    # v69 Hintergrund-Blur
+                    'bgblur_var',
+                    # v70 Musik-Beat
+                    'mbeat_var',
+                    # v73 fuenf neue Effekte
+                    'freeze_var', 'trail_var', 'cring_var', 'split_var',
+                    'envsh_var')
 
     def profile_snapshot(self):
         snap = {'font': self.font_id.get(),
@@ -1709,6 +1813,14 @@ class App:
         self.cfg['effects']['zahl_gap'] = int(self.zahl_var.get())
         self.cfg['effects']['beat_sync'] = round(self.beat_var.get() / 100.0, 2)
         self.cfg['effects']['person_shadow'] = round(self.pshadow_var.get() / 100.0, 2)
+        self.cfg['effects']['bg_blur'] = round(self.bgblur_var.get() / 100.0, 2)
+        self.cfg['effects']['music_beat'] = round(self.mbeat_var.get() / 100.0, 2)
+        # v73
+        self.cfg['effects']['freeze_frame'] = round(self.freeze_var.get() / 100.0, 2)
+        self.cfg['effects']['trail'] = round(self.trail_var.get() / 100.0, 2)
+        self.cfg['effects']['counter_ring'] = round(self.cring_var.get() / 100.0, 2)
+        self.cfg['effects']['split_screen'] = round(self.split_var.get() / 100.0, 2)
+        self.cfg['effects']['env_shadow'] = round(self.envsh_var.get() / 100.0, 2)
         self.cfg['effects']['dim_blurin'] = round(self.dim_var.get() / 100.0 * 0.8, 2)
         self.cfg['effects']['tracking'] = True
         self.cfg['effects']['scene_lock'] = True
@@ -1769,13 +1881,24 @@ class App:
                'schweben': 'Schweben (3D-Drift, edel)',
                'fokus': 'Fokus (kommt scharf ins Bild)',
                'enthuellen': 'Enthüllen (wird freigewischt)',
-               'spur': 'Spur (Tempo mit Nachzieher)'}
+               'spur': 'Spur (Tempo mit Nachzieher)',
+               # v71
+               'kippen': 'Kippen (klappt nach vorn)',
+               'explosion': 'Explosion (fliegt weg + zurück)',
+               'magnet': 'Magnet (Streifen ziehen zusammen)',
+               'wackel': 'Wackel (Cartoon-Bounce)',
+               'regen': 'Regen (Streifen fallen von oben)',
+               'zoom_punch': 'Zoom-Punch (harter Push)',
+               'rutsche': 'Rutsche (von rechts rein)',
+               'stempel': 'Stempel (knallt drauf)'}
     ANIM_DE_R = {v: k for k, v in ANIM_DE.items()}
     SZENE_LIST = ('auto', 'wasser', 'boden', 'wand', 'person')
     LAGE_LIST = ('auto', 'liegend', 'stehend', 'frei')
     ANIM_LIST = ('', 'glitch', 'puls', 'welle', 'zittern', 'neon', 'schub',
                  'bruch', 'sturz', 'anstieg', 'wende', 'druck', 'schwund', 'knall',
-                 'gewicht', 'schweben', 'fokus', 'enthuellen', 'spur')
+                 'gewicht', 'schweben', 'fokus', 'enthuellen', 'spur',
+                 'kippen', 'explosion', 'magnet', 'wackel', 'regen', 'zoom_punch',
+                 'rutsche', 'stempel')
 
     def open_moments(self):
         if getattr(self, 'busy', False):
@@ -1829,6 +1952,67 @@ class App:
         skipped = 0
         import copy as _copy
         orig_moments = _copy.deepcopy(moments)
+        # Undo/Redo-Historie: pro Snapshot die 7 Var-Werte je Zeile.
+        # Text-Entries schnappen erst nach 400 ms Ruhe, sonst haetten wir pro Tastendruck
+        # einen State und Strg+Z wuerde Buchstabe fuer Buchstabe zurueckgehen.
+        hist = EditorHistory()
+        pending = {'after': None}
+
+        def snapshot():
+            return [(av.get(), fv.get(), pv.get(), nv.get(), tv.get(), sv.get(), lv.get())
+                    for (_m, av, fv, pv, nv, tv, sv, lv) in rows]
+
+        def apply_snap(snap):
+            hist.quiet = True
+            try:
+                for row, values in zip(rows, snap):
+                    _m, av, fv, pv, nv, tv, sv, lv = row
+                    a_v, f_v, p_v, n_v, t_v, s_v, l_v = values
+                    av.set(a_v); fv.set(f_v); pv.set(p_v); nv.set(n_v)
+                    tv.set(t_v); sv.set(s_v); lv.set(l_v)
+            finally:
+                hist.quiet = False
+
+        def push_now():
+            hist.push(snapshot())
+
+        def push_debounced():
+            if hist.quiet:
+                return
+            try:
+                if pending['after']:
+                    win.after_cancel(pending['after'])
+            except Exception:
+                pass
+            pending['after'] = win.after(400, _push_and_refresh)
+
+        def refresh_buttons():
+            """Undo/Redo ausgrauen wenn Stack am Ende. Sichtbar = klickbar."""
+            btns = pending.get('btns') or {}
+            u, r = btns.get('undo'), btns.get('redo')
+            if u:
+                u.set_enabled(hist.can_undo())
+            if r:
+                r.set_enabled(hist.can_redo())
+
+        def undo(_e=None):
+            snap = hist.undo()
+            if snap is not None:
+                apply_snap(snap)
+            refresh_buttons()
+            return 'break'
+
+        def redo(_e=None):
+            snap = hist.redo()
+            if snap is not None:
+                apply_snap(snap)
+            refresh_buttons()
+            return 'break'
+
+        def _push_and_refresh():
+            push_now()
+            refresh_buttons()
+
         for m in moments:
             if not isinstance(m, dict) or 'i' not in m:
                 skipped += 1
@@ -1870,6 +2054,10 @@ class App:
                 ttk.Combobox(fr, textvariable=lv, values=self.LAGE_LIST, width=8,
                              state='readonly').pack(side='left', padx=2)
                 rows.append((m, av, fv, pv, nv, tv, sv, lv))
+                # Traces registrieren: Text-Entry debounced, Rest sofort.
+                tv.trace_add('write', lambda *_a: push_debounced())
+                for var in (av, fv, pv, nv, sv, lv):
+                    var.trace_add('write', lambda *_a: _push_and_refresh())
             except Exception as e:
                 skipped += 1
                 try:
@@ -1888,6 +2076,11 @@ class App:
                      font=F_M, bg=BG, fg=FG, justify='left').pack(anchor='w', pady=12)
 
         def save():
+            try:
+                if pending['after']:
+                    win.after_cancel(pending['after'])
+            except Exception:
+                pass
             for m, av, fv, pv, nv, tv, sv, lv in rows:
                 m['aktiv'] = bool(av.get())
                 m['fx'] = self.FX_DE_R.get(fv.get(), 'behind')
@@ -1906,10 +2099,35 @@ class App:
                           f'Momente gespeichert ({len(changed)} geändert).')
             if changed:
                 self.partial_rerender(changed)
+        # Startzustand als erster Snapshot. Danach werden Traces bei User-Aenderungen aktiv.
+        if rows:
+            push_now()
+        # Tastatur + Buttons. Bindung am Toplevel greift ueberall im Fenster.
+        win.bind_all('<Control-z>', undo)
+        win.bind_all('<Control-Z>', undo)
+        win.bind_all('<Control-y>', redo)
+        win.bind_all('<Control-Y>', redo)
+        win.bind_all('<Control-Shift-Z>', redo)  # Mac/Editor-Gewohnheit
+        # Bindings raeumen wir beim Schliessen auf, sonst greifen sie auch im Hauptfenster.
+        win.protocol('WM_DELETE_WINDOW', lambda: (
+            [win.unbind_all(k) for k in ('<Control-z>', '<Control-Z>', '<Control-y>',
+                                         '<Control-Y>', '<Control-Shift-Z>')],
+            win.destroy()))
         Pill(bar, 'Speichern', save, primary=True, width=170,
              bg=BG).pack(side='right', padx=16, pady=12)
-        tk.Label(bar, text='Geänderte Momente werden einzeln neu gerendert.',
+        _redo_btn = Pill(bar, 'Redo', redo, primary=False, width=70, bg=BG)
+        _redo_btn.pack(side='right', padx=(2, 8), pady=12)
+        _undo_btn = Pill(bar, 'Undo', undo, primary=False, width=70, bg=BG)
+        _undo_btn.pack(side='right', padx=2, pady=12)
+        pending['btns'] = {'undo': _undo_btn, 'redo': _redo_btn}
+        refresh_buttons()   # Startzustand: nichts zurueckzuholen -> beide grau.
+        tk.Label(bar, text='Undo Strg+Z · Redo Strg+Y · Geänderte Momente werden einzeln neu gerendert.',
                  font=F_S, bg=BG, fg=MUT2).pack(side='left', padx=16)
+        # Fuer Selftest zugreifbar machen (kein User-Effekt).
+        win._dve_editor = dict(rows=rows, hist=hist, snapshot=snapshot,
+                               apply_snap=apply_snap, undo=undo, redo=redo,
+                               push_now=push_now, undo_btn=_undo_btn, redo_btn=_redo_btn,
+                               refresh_buttons=refresh_buttons)
 
     def set_busy(self, busy):
         """Waehrend Render/Analyse: alles sperren, was den Lauf durcheinanderbringen
@@ -2020,26 +2238,32 @@ class App:
         self.root.after(120, self.poll_queue)
 
     def handle_line(self, item):
+        # v148: die Engine schreibt englisch. Alte Marker bleiben daneben
+        # stehen, damit ein aelterer Log weiter gelesen wird.
         m = re.search(r'Frame (\d+)/(\d+)', item)
         if m:
             cur, tot = int(m.group(1)), int(m.group(2))
             self.total_frames = tot
             self.progress.set(cur / max(tot, 1))
-            eta = re.search(r'noch ~(\S+)', item)
+            eta = re.search(r'~(\S+) left', item) or re.search(r'noch ~(\S+)', item)
             extra = f'  ·  noch {eta.group(1)} min' if eta else ''
             self.status.configure(text=f'Rendert...  {cur}/{tot} Frames  '
                                        f'({cur / max(tot,1):.0%}){extra}')
             return
-        if 'Transkribiere' in item:
+        if 'Transcribing' in item or 'Transkribiere' in item:
             self.status.configure(text='Transkription läuft …')
-        elif 'KI-Regie analysiert' in item:
+        elif 'AI director is analysing' in item or 'KI-Regie analysiert' in item:
             self.status.configure(text='KI-Regie analysiert das Transkript...')
-        elif 'Szenen-Analyse' in item or 'Gesichts-Tracking' in item:
+        elif 'Face tracking' in item or 'Szenen-Analyse' in item \
+                or 'Gesichts-Tracking' in item:
             self.status.configure(text='Szenen- und Gesichts-Analyse...')
         low = item.lower()
         if any(s in low for s in ('error', 'traceback')) \
-           or any(s in item for s in ('Lade', 'Keywords', 'Matting', 'Fertig', 'Transk', 'Eingabe',
-                                      'FEHLER', 'Szenen', 'Kompositionen', 'KI-Regie', 'Vorschau',
+           or any(s in item for s in ('Downloading', 'Keywords', 'Matting', 'Done:', 'Transc',
+                                      'Input:', 'ERROR', 'shots', 'Compositions', 'AI director',
+                                      'Preview', 'not usable',
+                                      'Lade', 'Fertig', 'Transk', 'Eingabe', 'FEHLER',
+                                      'Szenen', 'Kompositionen', 'KI-Regie', 'Vorschau',
                                       'nicht nutzbar')):
             self.log_line(item)
 

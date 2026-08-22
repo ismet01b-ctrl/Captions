@@ -1,15 +1,20 @@
-transcription:
-  engine: api        # api = OpenAI Whisper (beste Qualitaet) | local = faster-whisper (offline)
-  model: base
-  device: auto
-  compute: int8
-language: de
+language: auto
 output:
+  # Zielmass der KURZEN Kante (nicht der Bildhoehe): 1080 ergibt hoch
+  # 1080x1920 und quer 1920x1080. Wird nie ueber die Quelle hochskaliert.
   height: 1080
+  # 'hd' (Standard) oder '4k' - 4k hebt die kurze Kante auf 2160 und kostet
+  # im Web-Produkt das Doppelte, weil Matting, Tiefe und Encode auf voller
+  # Aufloesung laufen.
+  quality: hd
   crf: 18
   preset: medium
   master: false
   speed: standard
+  # v101d Safe-Zone-Regie: Ziel-Plattform fuer die UI-Maske im Hochformat.
+  # generic = fuer alle Feeds sicher (Schnittmenge). tiktok/reels/shorts =
+  # engere, plattform-genaue Maske. Nur bei 9:16 aktiv (effects.safe_zone).
+  platform: generic
 matting_downsample: auto
 fonts:
   display: fonts/archivo.ttf
@@ -29,16 +34,164 @@ colors:
   adaptive: true
 keywords:
   ai: true
+  ai_model: gpt-5      # v94: staerkere Regie-KI (frueher aelteres Chat-Modell). Urteilt
+                       # besser welcher Effekt HIER passt + Platzierung.
+  # v228d DENK-AUFWAND der Regie-KI: minimal | low | medium | high | aus.
+  # An einem echten Render gemessen waren 129 von 191 s reines Warten auf die
+  # KI - und der Loewenanteil davon ist internes Nachdenken, nicht die
+  # Antwort. 'low' ist die bewusste Entscheidung (Ismet, Juli 2026):
+  # spuerbar schneller, dafuer denkt die Regie weniger lange nach.
+  # 'aus' schickt den Parameter gar nicht (Verhalten wie vor v228d).
+  # v228e ZURUECKGESTELLT auf 'aus'. Ismets Befund nach dem ersten Render mit
+  # 'low': "Qualitaet ist sehr schlecht geworden". Die Regie ist das Herz des
+  # Produkts - Renderzeit gegen Regie-Qualitaet zu tauschen war das falsche
+  # Geschaeft, und das entscheidet der, der das Ergebnis sieht. Der Schalter
+  # bleibt: wer die Zeit braucht, kann ihn selbst stellen.
+  ai_denken: aus
+  # v230c2 DENK-AUFWAND JE FRAGE. Der Schalter darueber gilt fuer ALLE
+  # KI-Fragen - und das war der Fehler von v228d: die Fragen sind nicht gleich
+  # schwer. Am Job-Log vom 07.08.2026 gemessen (204 s gesamt, 170 s davon
+  # Warten auf die KI): in den 100.7 s der Schluesselwort-Frage stecken ZWEI
+  # Aufrufe, und der zweite ist nur ein Pruefer mit Checkliste ("Hilfsverb?
+  # Konjunktion? Pronomen?") ueber ganze 2 Vorschlaege.
+  # Kreativ bleibt kreativ (keywords, picture = volle Gruendlichkeit),
+  # mechanisch wird schnell (checker, anchor, flow = 'low').
+  # Frage-Namen: regie | pruefer | bild | anker | fluss.
+  # Ein Eintrag hier gewinnt gegen 'ai_denken'; 'aus' je Frage heisst
+  # "Parameter gar nicht schicken". Was hier steht, steht auch im Job-Log
+  # ("AI thinking: ..."), damit die naechste Zeitmessung lesbar ist.
+  ai_denken_frage:
+    pruefer: low
+    fluss: low
+    anker: low
+  # v230d2 MODELL JE FRAGE. Leer = alle Fragen laufen auf ai_model (oben).
+  # Sieben KI-Fragen auf demselben Modell sind in beide Richtungen
+  # Verschwendung: die eine kreative Entscheidung (welche Woerter tragen den
+  # Clip) verdient das staerkste Modell, Pruefer/Ankerwort/Objektsuche sind
+  # Checklisten und koennen auf dem billigsten laufen.
+  # Frage-Namen: regie | pruefer | bild | anker | fluss | akzente | stil |
+  # stille | schrift. Beispiel:
+  #   ai_model_frage: {regie: gpt-5.6-sol, bild: gpt-5.6-sol, pruefer: gpt-5.6-luna}
+  # Fuer einen Vergleich ohne Datei-Aenderung geht auch die Umgebung:
+  #   DVE_AI_MODELL_FRAGE='{"regie":"gpt-5.6-sol"}'
+  # Was WIRKLICH galt, steht im Job-Log ("AI setup: keywords=.../full, ...").
+  # Gesetzt am 07.08.2026 (Ismet: "du sollst alles machen"): der kreative
+  # Kern auf das staerkste Modell der Liste, die Checklisten auf das
+  # billigste. Das ist eine begruendete Wahl, keine gemessene - was
+  # sol/terra/luna wirklich koennen, zeigt erst ein Vergleich an echtem
+  # Material. Faellt ein Name aus (Konto kennt ihn nicht, Option nicht
+  # unterstuetzt), wiederholt _oai_text EINMAL mit ai_model und sagt es
+  # LAUT im Job-Log - ein stiller Rueckfall waere die v210-Falle.
+  ai_model_frage:
+    regie: gpt-5.6-sol      # welche Woerter tragen den Clip - der Kern
+    bild: gpt-5.6-sol       # hinter die Person, an die Wand, auf den Boden
+    stil: gpt-5.6-sol       # Vorbild lernen (laeuft einmal je Referenz)
+    pruefer: gpt-5.6-luna   # Checkliste ueber die eigenen Vorschlaege
+    fluss: gpt-5.6-luna     # je Textblock das Ankerwort
+    anker: gpt-5.6-luna     # Gegenstand im Standbild benennen
+    schrift: gpt-5.6-luna   # aehnlichste Hausschrift aus einer Shortlist
+    stille: gpt-5.6-luna    # Bewertung ohne Ton
   auto: true
   emphasize_last: true
   min_gap_seconds: 6
   include: []
   exclude: []
   ai_vision: true
+# v188 AKZENTE WIEDER AUS. v185 hatte sie eingeschaltet, weil Ismets
+# lolo-Referenz Counter und Namens-Karten enthaelt. Am Ergebnis war es
+# falsch: die Pille wirkt im Caption-Video wie ein Fremdkoerper, nicht wie
+# Regie ("die motion graphic ist wieder drin, mach das raus"). In lolo
+# gehoeren diese Elemente zu einer AGENTUR-Produktion mit Multikamera und
+# Schnitt - dort tragen sie, bei nacktem Talking-Head nicht.
+# Gerendert wird wieder NUR, was der Nutzer im Momente-Editor selbst
+# anlegt (_accents.json via '+ Add accent').
+accents:
+  auto: false
+  ai_model: gpt-5
+  intensity: 1.0
 effects:
   words_per_group: 3
   words_per_group_max: 5
   chunk_hold_min: 0.65
+  # v140 TEMPO-KURVE: Chunk-Groesse folgt dem echten Sprechtempo (schnell =
+  # groessere Bloecke gegen Flackern, langsam-betont = kleinere), und ein
+  # power-3-Wort steht allein. false = konstantes Tempo wie vor v140.
+  pace_adaptive: true
+  # v140 KONTRAST-GARANTIE: Mindest-Kontrast (WCAG-Verhaeltnis) zwischen
+  # Caption-Ton und gemessenem Untergrund. Reicht Hell nicht, kippt derselbe
+  # Farbton nach Dunkel. 0 = aus (Alt-Verhalten, immer fast weiss).
+  # v181: WCAG-AA-Norm ist 4.5:1, nicht 2.2.
+  caption_contrast: 4.5
+  # v143: Platzierungs-Regie. true = der Textblock weicht Gesicht und
+  # unruhigen Bildbereichen aus (Raum-Karte pro Shot). false = feste Zone.
+  adaptive_place: true
+  # v150: Abwechslung im Satzbild. Neben dem gewohnten Zeilenraster streut
+  # die Engine eine COLLAGE ein - Woerter in eigener Groesse ueber die
+  # Flaeche verteilt, so wie in den Vorbildern. Deterministisch gewaehlt,
+  # nicht zufaellig. 'clean' bleibt davon unberuehrt.
+  caption_collage: true
+  # v153: Anordnung. 'auto' laesst die Regie zwischen Zeilensatz und Collage
+  # wechseln (empfohlen), 'rows' oder 'collage' erzwingen eine davon.
+  caption_layout: auto
+  # v153/v155: BUENDIGKEIT der Zeilen zueinander. Kommt auch aus einer
+  # gemessenen Referenz. Legt NICHT fest, wo im Bild der Block sitzt.
+  caption_align: auto
+  # v155: BILDSEITE. 'auto' wechselt deterministisch zwischen links und
+  # rechts, damit die Captions nicht an einer Kante kleben. Nur eine
+  # ausdrueckliche Nutzerwahl nagelt sie fest - eine gemessene Referenz nie.
+  caption_seite: auto
+  # v152: die Collage haelt den GANZEN SATZ stehen (wie in den Vorbildern),
+  # statt ihn chunkweise auszutauschen. Die Chunk-Bildung selbst bleibt
+  # unangetastet - geschluckt wird nur fuer die Darstellung.
+  caption_satz_collage: true
+  # v152: das Schlusswort am Satzende darf links und rechts angeschnitten
+  # aus dem Bild laufen. Nur so erreicht es die Groesse der Vorbilder.
+  caption_bleed: true
+  # v181 LESBARKEIT: dunkle Kontur am Glyphenrand. Sie garantiert den
+  # Kontrast unabhaengig vom Untergrund - ein versetzter Schlagschatten
+  # allein reicht auf grauem Stoff oder Beton nicht (gemessen 1.5-3.1:1,
+  # Norm ist 4.5:1). 1.0 = Hausmass, 0 = aus, bis 2.5 dicker.
+  # v199: AUS (Ismets Ansage "die outlines bei den Schriften weg"). Der
+  # Kontrast haengt damit allein an der Textfarbe: fit_caption_color
+  # bekommt kontur=False und kippt auf hellem Untergrund wieder nach
+  # dunkel, statt hell zu bleiben (v181-Regel). Auf mittelgrauem Grund
+  # bleibt es die schwaechere Loesung - das ist der Preis, nicht ein Bug.
+  caption_kontur: 0
+  # v189: Umriss auch am grossen Schluesselwort? Standard AUS - dort traegt
+  # die Flaeche den Kontrast, der Saum machte das Wort plakativ statt
+  # gesetzt. true = Umriss auch dort (Alt-Verhalten v181-v188).
+  caption_kontur_key: false
+  # v182 AKTIVES WORT: das gerade gesprochene Wort steht voll und leicht
+  # groesser, die schon gesprochenen dimmen auf 70 %. Der dominante
+  # Caption-Stil 2026 - bindet den Blick ans Wort statt an den Block.
+  caption_aktivwort: true
+  # v190 RUHE: Woerter erscheinen, statt einzufliegen. Bis v189 kam jedes
+  # Wort von unten (2 % Bildhoehe), von 86 % hochskaliert, mit Overshoot -
+  # bei drei Woertern je Sekunde war das Dauerbewegung. Gemessen: Beat,
+  # Kamera, Pop und Motion-Blur hatten daran KEINEN Anteil, es war der
+  # Einflug selbst. false = Alt-Verhalten (v82 bis v189).
+  caption_ruhig: true
+  # v184 PUNCH HINTER DER PERSON: das Schlusswort eines Satzes darf durch
+  # die Person laufen und wird von ihr verdeckt (Referenz-Grammatik der
+  # High-End-Vorbilder). Nur am Satzende, nie auf B-Roll. false = aus.
+  caption_hinter: true
+  # v160 ZEIGE-REGIE: zeigt oder schaut der Sprecher irgendwohin, landet die
+  # Caption dort. Gemessen aus Hand-Landmarks und Kopfdrehung, kein API-Ruf.
+  # Ein Gesicht bleibt trotzdem tabu - der Text weicht ihm weiter aus.
+  caption_zeige: true
+  # v161 OBJEKT-ANKER: bezieht sich der Satz auf einen sichtbaren Gegenstand
+  # ("dieses Glas hier"), setzt sich die Caption daneben und bleibt daran
+  # kleben, auch wenn die Kamera schwenkt. GPT-5-Vision sagt EINMAL, WAS
+  # gemeint ist; wohin es wandert, misst Optical Flow jeden Frame.
+  caption_objekt: true
+  # v162 ZWEI-SPRECHER-REGIE: sind mehrere Personen im Bild, springt die
+  # Caption auf die Seite dessen, der gerade redet. Zuordnung ueber die
+  # Mundbewegung im Face-Track (die Kamera nutzt sie schon seit v96).
+  # Bei EINER Person wirkungslos - dort ist "der Sprecher" keine Information.
+  caption_sprecher: true
+  # v140 STILLE VOR DEM EINSCHLAG: Sekunden Text-Leere direkt vor einem
+  # power-3-Moment. 0 = aus.
+  punch_silence: 0.34
   zahl_gap: 15
   beat_sync: 0.7
   person_shadow: 0.5
@@ -53,12 +206,29 @@ effects:
   dim_blurin: 0.3
   tracking: true
   sfx: true
-  sfx_volume: 0.5
+  sfx_volume: 0.6
+  # v230 WIEVIEL TON: sparsam | normal | dicht. Steuert den Mindestabstand
+  # zwischen zwei Ticks ausserhalb des Schnitt-Fensters (3.2 / 1.8 / 1.1 s).
+  # Die 1.6-s-Regel aus der Referenz galt nur direkt nach einem Schnitt - in
+  # einem schnittarmen Talking-Head kam danach gar kein Ton mehr.
+  sfx_dichte: normal
+  # v230b5 SCHREIBMASCHINE. Baut sich ein Block Wort fuer Wort auf, bekommt
+  # JEDES Wort einen leisen Anschlag (0.15 gegen 0.42 beim Anker-Tick). Die
+  # Lautstaerken-Trennung ist der ganze Punkt: laut waere es Klickerei, leise
+  # ist es eine Textur unter der Stimme. Bei einem Block MIT Animation steht
+  # der Text ab dem ersten Bild komplett da (v194a) - dort laeuft nichts.
+  sfx_typing: true
   broll_captions: false
   scene_lock: true
   text_style: 3d
   finish: true
   density: akzente
+  caption_flow: true          # v97: Filler-Captions bauen sich inline auf
+                              # (Referenz-Look @migs.visuals) - Anker-Wort
+                              # gross+getippt+Glow, Abschlusswort kursiv-Akzent.
+                              # Dramatik-Momente (behind/cascade) bleiben.
+  caption_follow: true        # v97c: Flow-Block folgt der Person sanft +
+                              # gedaempft + begrenzt (Struktur bleibt). Aus = fest.
   anim: true
   motion_blur: true
   intro_hook: true
@@ -77,6 +247,14 @@ effects:
   retention_gap: 12
   pattern_interrupt: 9
   emerge: auto
+  bg_blur: 0.5   # v69: Hintergrund weichzeichnen waehrend Momente (0 = aus, 1 = maximum)
+  music_beat: 0.6  # v70: Musik-Beat mit ins Beat-Sync (0 = nur Stimme, 1 = voll)
+  # ---- v73: 5 neue Effekt-Klassen ----
+  freeze_frame: 0.0   # Sekunden Standbild auf staerkstem Moment (0 = aus, 0.4-1.2 gut)
+  trail: 0.0          # Duplicate-Trail Staerke (0 = aus, 0.3-0.6 dezent, 1 = knallig)
+  counter_ring: 0.0   # Kreis-Fortschritt um Zahl-Momente (0 = aus)
+  split_screen: 0.0   # Split-Screen Staerke (0 = aus, greift bei p.split=True in Regie)
+  env_shadow: 0.0     # Kontaktschatten unter ground-Text (0 = aus, 0.5 dezent)
 camera:
   strength: 0.7
   crash: 0.55      # Crash-Zoom auf den staerksten Moment (0 = aus)

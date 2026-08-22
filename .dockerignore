@@ -1,0 +1,25 @@
+# Keep the build context lean. The motion/ Node deps + browsers are installed
+# INSIDE the image (npm ci + remotion browser ensure), never copied from the host.
+.git
+__pycache__/
+*.pyc
+motion/node_modules/
+motion/out/
+motion/.remotion/
+data/
+*.log
+# v230c-sec: Die .env liegt auf dem Server NEBEN dem Repo (deploy.sh legt sie
+# dort an) und enthaelt den Stripe-LIVE-Schluessel, den Admin-Schluessel, das
+# SMTP-Passwort und den OpenAI-Schluessel. Ohne diese Zeilen kopiert
+# `COPY . /app/` sie ins Image - ausgerechnet in das Arbeitsverzeichnis des
+# Render-Subprozesses, dem v204-sec genau diese Geheimnisse per Allowlist aus
+# der Umgebung genommen hat. Ein praepariertes Kundenvideo haette sie mit
+# einem einzigen open('.env') zurueckgeholt.
+.env
+.env.*
+!.env.example
+# Kundendatenbank + Sicherungen gehoeren nie ins Image. `data/` griff nur auf
+# oberster Ebene; der lokale Entwicklungsstand liegt in web/data/.
+web/data/
+**/users.db
+**/*.db

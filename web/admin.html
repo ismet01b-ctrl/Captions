@@ -1,0 +1,1759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin · DouchkoVE</title>
+<style>
+:root{--bg:#0a0a0b;--surf:#161417;--surf2:#1e1c20;--fg:#f6f4ef;--mut:#b0a99e;--mut2:#8b857b;
+  --acc:#ff7a1a;--line:#242320;--ok:#3ec46d;--warn:#f2c14e;--bad:#ff5233;--info:#5b9dff;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);
+  color:var(--fg);line-height:1.5;padding:22px 20px 60px;min-height:100vh;font-size:14px}
+.wrap{max-width:1200px;margin:0 auto}
+h1{font-size:22px;font-weight:800;letter-spacing:-.4px}
+h1 .dot{color:var(--acc)}
+h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);margin:22px 0 10px;font-weight:700}
+.subtle{color:var(--mut2);font-size:12px}
+.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.gate{max-width:360px;margin:14vh auto 0;text-align:center}
+.gate input{width:100%;padding:12px 14px;background:var(--surf);border:1px solid var(--line);border-radius:10px;color:var(--fg);font-size:15px;margin:14px 0}
+.btn{background:var(--acc);color:#111;border:none;font-weight:700;font-size:13px;padding:8px 15px;border-radius:999px;cursor:pointer}
+.btn:hover{filter:brightness(1.07)}
+.btn.sm{padding:5px 11px;font-size:12px}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn.bad{background:var(--bad);color:#fff}
+.btn.warn{background:var(--warn);color:#111}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.live{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(62,196,109,.5);animation:pl 2s infinite}
+.pulse.off{background:var(--mut2);animation:none}
+@keyframes pl{0%{box-shadow:0 0 0 0 rgba(62,196,109,.5)}70%{box-shadow:0 0 0 7px rgba(62,196,109,0)}100%{box-shadow:0 0 0 0 rgba(62,196,109,0)}}
+/* v195: Seitenleiste statt Tab-Reihe. Zwoelf Tabs in einer umbrechenden
+   Zeile waren schon zu viel, und jede neue Ansicht machte es schlimmer.
+   Eine gruppierte Seitenleiste haelt beliebig viele Punkte aus und sagt
+   nebenbei, WAS zusammengehoert. */
+.shell{display:grid;grid-template-columns:212px 1fr;gap:22px;align-items:start}
+/* Ein Grid-Kind hat per Voreinstellung min-width:auto und kann deshalb nicht
+   schmaler werden als sein breitester Inhalt - eine breite Tabelle schiebt
+   dann die GANZE Seite auf. Der Seitenkoerper darf nie quer scrollen;
+   breite Inhalte scrollen in ihrem eigenen Kasten. */
+.shell>main{min-width:0}
+#view{overflow-x:auto}
+body{overflow-x:hidden}
+.side{position:sticky;top:22px;background:var(--surf);border:1px solid var(--line);
+  border-radius:14px;padding:14px 10px;max-height:calc(100vh - 44px);overflow:auto}
+.side .brand{display:flex;align-items:center;gap:9px;padding:4px 8px 14px;
+  border-bottom:1px solid var(--line);margin-bottom:10px}
+.side .brand b{font-size:14.5px;font-weight:800;letter-spacing:-.2px}
+.side .brand .dot{color:var(--acc)}
+.navgrp{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut2);
+  font-weight:700;padding:14px 10px 6px}
+.side a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;
+  color:var(--mut);font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer;
+  border:1px solid transparent;transition:background .12s,color .12s}
+.side a:hover{background:var(--surf2);color:var(--fg)}
+.side a.on{background:var(--surf2);color:var(--fg);border-color:var(--line)}
+.side a.on svg{color:var(--acc)}
+.side a svg{width:16px;height:16px;flex:0 0 auto;stroke:currentColor;fill:none;
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--mut2)}
+.side a .badge{margin-left:auto;font-size:10.5px;font-weight:800;color:var(--bad);
+  background:rgba(255,82,51,.14);border-radius:999px;padding:1px 7px}
+/* v230b0: Die Kopfzeile sagte dreimal dasselbe (Brotkrume, Ueberschrift,
+   Build-Zeile untereinander). Jetzt EINE Zeile: links wo man ist, rechts wie
+   es dem Server geht. Der Stand steht bei den Statusanzeigen, nicht unter
+   der Ueberschrift - er gehoert zum Server, nicht zur Ansicht. */
+.top{padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:18px;
+  align-items:center}
+.top h1{font-size:24px}
+.live .sep{width:1px;height:14px;background:var(--line)}
+/* Am Handy hat die Kopfzeile keinen Platz fuer den Build-Stempel - er steht
+   ausserdem in der Ansicht Technik. Weglassen ist besser als vierzeilig. */
+@media(max-width:760px){.live .sep,#buildLine{display:none}}
+/* Unterreiter: die zusammengelegten Ansichten. Sieht aus wie eine Reiterzeile,
+   ist aber nur ein Sprung in dieselbe Ansichts-Funktion wie vorher. */
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 18px}
+.subtabs .sub{background:transparent;border:1px solid var(--line);color:var(--mut);
+  font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:999px;cursor:pointer;
+  transition:background .12s,color .12s,border-color .12s}
+.subtabs .sub:hover{color:var(--fg);background:var(--surf)}
+.subtabs .sub.on{background:var(--surf2);color:var(--fg);border-color:var(--acc)}
+.navtog{display:none}
+@media(max-width:900px){
+  .shell{grid-template-columns:1fr;gap:14px}
+  .side{position:static;max-height:none;padding:10px}
+  .side.zu .navgrp,.side.zu a{display:none}
+  .navtog{display:inline-flex;align-items:center;gap:8px;margin-left:auto;
+    background:transparent;border:1px solid var(--line);color:var(--fg);
+    border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer}
+  .side .brand{border-bottom:0;margin-bottom:0;padding-bottom:4px}
+  .side.zu .brand{border-bottom:0}
+}
+.grid{display:grid;gap:11px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:820px){.g4,.g3{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card .k{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2)}
+.card .v{font-size:23px;font-weight:800;letter-spacing:-.5px;margin-top:5px}
+.card .v small{font-size:12px;font-weight:600;color:var(--mut)}
+.card.acc .v{color:var(--acc)}
+.health{display:flex;flex-wrap:wrap;gap:9px 20px;background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:12.5px}
+.pill{display:inline-flex;align-items:center;gap:7px}
+.led{width:9px;height:9px;border-radius:50%;background:var(--mut2);flex:0 0 auto}
+.led.ok{background:var(--ok)}.led.warn{background:var(--warn)}.led.bad{background:var(--bad)}
+table{width:100%;border-collapse:collapse;margin-top:4px;font-size:13px}
+th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut2);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+tr.click{cursor:pointer}tr.click:hover{background:var(--surf)}
+.search{padding:8px 11px;background:var(--surf);border:1px solid var(--line);border-radius:8px;color:var(--fg)}
+select.search{cursor:pointer}
+.tag{font-size:10.5px;padding:2px 7px;border-radius:6px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.tag.ok{color:var(--ok);border-color:rgba(62,196,109,.4)}
+.tag.no{color:var(--bad);border-color:rgba(255,82,51,.4)}
+.tag.buy{color:var(--acc);border-color:rgba(255,122,26,.4)}
+.tag.warn{color:var(--warn);border-color:rgba(242,193,78,.4)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-start;justify-content:center;padding:34px 14px;overflow:auto;z-index:50}
+.overlay.on{display:flex}
+.modal{background:var(--bg);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;padding:22px}
+.modal h2{font-size:17px;margin-bottom:2px;word-break:break-all}
+.acts{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:14px 0;padding:13px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.acts input{width:78px;padding:6px 9px;background:var(--surf);border:1px solid var(--line);border-radius:8px;color:var(--fg)}
+.acts input.reason{width:140px}
+.msg{font-size:12.5px;color:var(--mut);margin-top:8px;min-height:16px}
+.scroll{max-height:280px;overflow:auto;margin-top:4px;border:1px solid var(--line);border-radius:8px}
+.pos{color:var(--ok)}.neg{color:var(--mut)}
+.hidden{display:none}
+.bars{display:flex;align-items:flex-end;gap:2px;height:46px;margin-top:8px}
+.bars i{flex:1;background:var(--acc);border-radius:2px 2px 0 0;min-height:2px;opacity:.85}
+/* v136: dynamische Grafen (reines SVG, kein Framework) */
+.chart{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:13px 16px 9px}
+.chart .ct{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.chart .ct b{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut2);font-weight:700}
+.chart .ct span{font-size:12px;color:var(--mut)}
+.chart svg{display:block;width:100%}
+.chart .cx{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:3px}
+.chart rect{transition:opacity .15s}
+.chart rect:hover{opacity:1 !important}
+.hbars{display:flex;flex-direction:column;gap:7px;margin-top:6px}
+.hb{display:grid;grid-template-columns:120px 1fr 64px;gap:10px;align-items:center;font-size:12.5px}
+.hb .hl{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb .ht{height:14px;background:var(--surf2);border-radius:7px;overflow:hidden}
+.hb .ht i{display:block;height:100%;background:var(--acc);border-radius:7px;min-width:2px;transition:width .4s}
+.hb .hv{text-align:right;color:var(--fg);font-weight:700;font-size:12px}
+.row-actions{display:flex;gap:5px;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:12.5px}
+.kv .kk{color:var(--mut2)}
+.note{font-size:11.5px;color:var(--mut2);margin-top:10px;font-style:italic}
+.spin{color:var(--mut2);padding:14px 2px}
+
+/* v206 Startseite: eine Zahl je Frage, gross, mit einem Satz daneben. Alles
+   Technische bleibt in den anderen Ansichten - es steht nur nicht mehr vorn. */
+/* v230b0: --card und --dim gab es NIE. Die Startseite stand deshalb seit
+   v206 ohne Kartenhintergrund da, und die Fragezeile war so hell wie der
+   Fliesstext - genau das sah "unaufgeraeumt" aus. Jetzt dieselben Farben
+   wie jede andere Karte im Panel. Eine Variable, die es nicht gibt, faellt
+   still aus; deshalb prueft der Selftest jetzt jede benutzte Variable. */
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.hero .box{background:var(--surf);border:1px solid var(--line);border-radius:14px;
+  padding:17px 18px 16px;display:flex;flex-direction:column}
+.hero .frage{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--mut2);font-weight:700;margin-bottom:9px}
+/* Die Masszahl steht auf EINER Zeile, die Einheit als eigene darunter. Vorher
+   umbrach "letzte 30 Tage" mitten im Satz und die zweite Haelfte stand in
+   Ueberschriftsgroesse im Text - das las sich wie ein Fehler. */
+.hero .zahl{font-size:31px;font-weight:800;line-height:1.1;letter-spacing:-.6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero .zahl small{display:block;font-size:12px;font-weight:600;color:var(--mut);
+  letter-spacing:0;margin-top:3px;white-space:normal}
+.hero .satz{margin-top:9px;font-size:12.5px;color:var(--mut);line-height:1.55}
+.hero .satz+.satz{margin-top:5px}
+.hero .box.gruen{border-color:rgba(60,200,120,.45)}
+.hero .box.gelb{border-color:rgba(255,180,40,.5)}
+.hero .box.rot{border-color:rgba(255,90,90,.55)}
+.ampel{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.ampel.gruen{background:#3cc878}.ampel.gelb{background:#ffb428}.ampel.rot{background:#ff5a5a}
+/* Die Knopfzeile sitzt unten buendig, damit vier verschieden lange Karten
+   nicht vier verschieden hohe Knopfreihen haben. */
+.tuwas{margin-top:auto;padding-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+/* v230b2: Erklaerkasten mit Ampel (Ansicht Missbrauch). Gleiche Sprache wie
+   die Startseite: EINE Aussage gross, ein Satz Klartext darunter. */
+.box-ampel{background:var(--surf);border:1px solid var(--line);border-radius:14px;
+  padding:16px 18px}
+.box-ampel.gruen{border-color:rgba(60,200,120,.45)}
+.box-ampel.gelb{border-color:rgba(255,180,40,.5)}
+.zahl2{font-size:22px;font-weight:800;letter-spacing:-.4px;line-height:1.2}
+.card .satz{margin-top:7px;font-size:12px;color:var(--mut);line-height:1.5}
+.box-ampel .satz{margin-top:7px;font-size:12.5px;color:var(--mut);line-height:1.55}
+.card.warnrand{border-color:rgba(255,180,40,.5)}
+/* v208 Trichter: eine Zeile je Stufe, Balkenbreite = Anteil an ganz oben. */
+.tri{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.trow{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.trow .tt{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.trow .tt b{font-size:14px}
+.trow .tn{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.trow .tbar{height:12px;background:var(--surf2);border-radius:7px;overflow:hidden;margin:9px 0 7px}
+.trow .tbar i{display:block;height:100%;background:var(--acc);border-radius:7px;min-width:3px;transition:width .4s}
+.trow .te{font-size:12.5px;color:var(--mut);line-height:1.5}
+.trow .tdrop{font-weight:700}
+.trow .tdrop.warn{color:var(--warn)}.trow .tdrop.bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="gate" class="gate">
+    <h1>DouchkoVE <span class="dot">Admin</span></h1>
+    <p class="subtle" style="margin-top:6px">Admin-Schlüssel eingeben (Server-Variable DVE_ADMIN).</p>
+    <input type="password" id="keyIn" placeholder="Admin-Schlüssel" autocomplete="off" data-enter="saveKey">
+    <button class="btn" data-act="saveKey">Öffnen</button>
+    <p class="msg" id="gateMsg"></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="shell">
+      <aside class="side zu" id="side">
+        <div class="brand">
+          <b>DouchkoVE <span class="dot">Admin</span></b>
+          <button class="navtog" data-act="navTog" id="navBtn">Menü</button>
+        </div>
+        <nav id="nav"></nav>
+      </aside>
+      <main>
+        <div class="top">
+          <h1 id="viewTitle">Live</h1>
+          <div class="live">
+            <span class="pulse" id="pulse"></span><span id="liveTxt">live</span>
+            <span class="sep"></span>
+            <span class="subtle" id="buildLine">Stand unbekannt</span>
+            <button class="btn ghost sm" data-act="togglePause" id="pauseBtn">Pause</button>
+            <button class="btn ghost sm" data-act="logout">Sperren</button>
+          </div>
+        </div>
+        <div id="subtabs" class="subtabs hidden"></div>
+        <div id="view"><div class="spin">Lade …</div></div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" data-overlay="1"><div class="modal" id="modal"></div></div>
+
+<script>
+let KEY = sessionStorage.getItem('dve_admin_key') || '';
+let POLL=null, TICK=null, paused=false, active='start', lastLoad={}, serverNow=0;
+const AUTO={start:30000, live:15000, jobs:5000, alerts:20000};
+/* v195: Navigation in Abschnitte gruppiert. Die zwoelf Ansichten sind
+   unveraendert - nur ihre Anordnung sagt jetzt, was zusammengehoert.
+   Reihenfolge folgt dem Arbeitsalltag: erst was gerade passiert, dann Geld,
+   dann Kunden, dann Betrieb und Recht. */
+const ICON={
+  offsite:'<path d="M20 16.6A5 5 0 0 0 18 7h-1.3A8 8 0 1 0 4 15.2"/><path d="M12 12v9m0 0 3.5-3.5M12 21l-3.5-3.5"/>',
+  start:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/>',
+  live:'<path d="M3 12h4l3 8 4-16 3 8h4"/>',
+  alerts:'<path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  jobs:'<path d="M4 7h16M4 12h16M4 17h10"/>',
+  revenue:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+  credits:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h5M9.5 14.5h5"/>',
+  codes:'<path d="M8 4 5 20M19 4l-3 16M3 9h18M2 15h18"/>',
+  users:'<path d="M16 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3.5"/><path d="M21 20v-2a4 4 0 0 0-3-3.9"/>',
+  support:'<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l2-4.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/>',
+  abuse:'<path d="M12 3 3 7v5c0 5 3.8 8.6 9 9.7 5.2-1.1 9-4.7 9-9.7V7l-9-4z"/><path d="M12 9v4m0 3h.01"/>',
+  system:'<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  compliance:'<path d="M9 11l2 2 4-4"/><path d="M20 12a8 8 0 1 1-8-8 8 8 0 0 1 8 8z"/>',
+  legal:'<path d="M12 3v18M5 7h14M7 7l-3 6h6zM17 7l-3 6h6z"/>',
+  feedback:'<path d="M12 3 14.9 8.9l6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.6 9.8l6.5-.9z"/>',
+  ann:'<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>',
+  logs:'<path d="M6 3h9l5 5v13H6z"/><path d="M9 12h7M9 16h7M9 8h3"/>',
+  events:'<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>',
+  trichter:'<path d="M3 4h18l-7 8v7l-4 2v-9z"/>',
+};
+/* v230b0: EINE Quelle fuer die Navigation, jetzt mit UNTERREITERN.
+   Siebzehn Punkte untereinander waren zu viel, und die Haelfte davon gehoert
+   inhaltlich zusammen (Logs und Chronik sind beides Protokolle, Recht und
+   Compliance beides Pflichten). Ein Eintrag kann deshalb Reiter tragen:
+   ['id','Beschriftung',[['reiterId','Beschriftung'], ...]]. Die Ansichten
+   selbst sind UNVERAENDERT - es aendert sich nur, wie man sie erreicht.
+   Sprache durchgehend deutsch: das Panel sieht nur Ismet (Ansage 07.08.2026),
+   und ein halb uebersetztes Menue liest sich langsamer als ein ganzes. */
+const NAV=[
+  ['', [['start','Start'],['live','Live'],
+        ['alerts','Störungen'],['jobs','Renders']]],
+  ['Geld', [['revenue','Umsatz',[['revenue','Einnahmen'],
+                                 ['credits','Guthaben'],
+                                 ['codes','Gutscheine']]],
+            ['trichter','Reichweite']]],
+  ['Kunden', [['users','Konten'],
+              ['support','Anfragen',[['support','Tickets'],
+                                     ['feedback','Bewertungen']]],
+              ['abuse','Missbrauch']]],
+  ['Produkt', [['ann','Ankündigungen']]],
+  ['Betrieb', [['system','Technik',[['system','System'],
+                                    ['offsite','Sicherung']]],
+               ['logs','Protokolle',[['logs','Logs'],
+                                     ['events','Chronik']]],
+               ['legal','Recht',[['legal','Recht & Steuern'],
+                                 ['compliance','Compliance']]]]],
+];
+// Jeder Reiter zeigt auf seinen Menuepunkt zurueck - ein Sprung aus der
+// Startseite (go('system')) muss den richtigen Punkt markieren.
+const NAVITEMS=NAV.flatMap(([,items])=>items);
+const TABSOF=Object.fromEntries(NAVITEMS.map(([id,,tabs])=>[id,tabs||null]));
+const PARENT={};
+for(const [id,,tabs] of NAVITEMS){PARENT[id]=id;
+  for(const [k] of (tabs||[]))PARENT[k]=id;}
+const TABS=NAVITEMS.flatMap(([id,t,tabs])=>tabs?tabs:[[id,t]]);
+const TITEL=Object.fromEntries(TABS);
+for(const [id,t,tabs] of NAVITEMS) if(!tabs) TITEL[id]=t;
+const $=s=>document.querySelector(s), el=id=>document.getElementById(id);
+function hdr(){return {'X-Admin-Key':KEY};}
+async function api(path,opts={}){
+  opts.headers=Object.assign(hdr(),opts.headers||{});
+  const r=await fetch(path,opts);
+  if(r.status===403){logout('Schlüssel fehlt oder stimmt nicht.');throw new Error('403');}
+  if(!r.ok){let d={};try{d=await r.json();}catch(e){}throw new Error(d.detail||('HTTP '+r.status));}
+  const ct=r.headers.get('content-type')||''; return ct.includes('json')?r.json():r.text();
+}
+function saveKey(){KEY=el('keyIn').value.trim();if(!KEY)return;sessionStorage.setItem('dve_admin_key',KEY);boot();}
+function logout(m){KEY='';sessionStorage.removeItem('dve_admin_key');stopPoll();el('app').classList.add('hidden');el('gate').classList.remove('hidden');if(m)el('gateMsg').textContent=m;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fdt(ts){if(!ts)return '–';const d=new Date(ts*1000);return d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
+/* v136: dynamische Grafen. Reines SVG, kein Framework (CSP-sicher).
+   barChart: Tages-Balken, Hover zeigt Datum+Wert, letzter Balken (heute)
+   voll orange, Summen/Max oben rechts. hbars: horizontale Verteilung. */
+function sdt(d){if(!d)return '';return d.length===7?d.slice(5,7)+'/'+d.slice(0,4):d.slice(8,10)+'.'+d.slice(5,7);}
+function barChart(title,labels,values,fmt,height){
+  fmt=fmt||(v=>String(v)); height=height||96;
+  const n=values.length;
+  if(!n||values.every(v=>!v))
+    return `<div class="chart"><div class="ct"><b>${title}</b><span>noch keine Daten</span></div>
+      <div class="subtle" style="padding:16px 0 12px">In diesem Zeitraum nichts.</div></div>`;
+  const mx=Math.max(...values,1e-9);
+  const W=1000,H=height,gap=Math.min(6,Math.max(1.2,W/n*0.18)),bw=(W-gap*(n-1))/n;
+  let bars='';
+  for(let i=0;i<n;i++){
+    const h=values[i]>0?Math.max(2.5,values[i]/mx*(H-6)):1.2;
+    const x=i*(bw+gap),y=H-h,last=i===n-1;
+    bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--acc)" opacity="${last?1:(values[i]>0?0.55:0.16)}"><title>${labels[i]}: ${fmt(values[i])}</title></rect>`;
+  }
+  const total=Math.round(values.reduce((a,b)=>a+b,0)*100)/100;
+  const mid=labels[Math.floor(n/2)]||'';
+  return `<div class="chart"><div class="ct"><b>${title}</b><span>peak ${fmt(Math.round(mx*100)/100)} · total ${fmt(total)}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">
+      <line x1="0" y1="0.5" x2="${W}" y2="0.5" stroke="var(--line)" stroke-dasharray="3 5"/>${bars}</svg>
+    <div class="cx"><span>${sdt(labels[0])}</span><span>${sdt(mid)}</span><span>${sdt(labels[n-1])} · today</span></div></div>`;
+}
+function hbars(items,fmt){
+  fmt=fmt||(v=>String(v));
+  if(!items.length||items.every(i=>!i.v))return '<div class="subtle">noch keine</div>';
+  const mx=Math.max(...items.map(i=>i.v),1e-9);
+  return `<div class="hbars">${items.map(i=>`<div class="hb"><span class="hl" title="${esc(i.l)}">${esc(i.l)}</span><span class="ht"><i style="width:${Math.max(2,Math.round(i.v/mx*100))}%${i.c?';background:'+i.c:''}"></i></span><span class="hv">${fmt(i.v)}</span></div>`).join('')}</div>`;
+}
+let TS_CACHE={};
+async function tseries(days){
+  const k=String(days), now=Date.now();
+  if(TS_CACHE[k]&&now-TS_CACHE[k].t<60000)return TS_CACHE[k].d;   // 60s-Cache
+  const d=await api('/api/admin/timeseries?days='+days);
+  TS_CACHE[k]={t:now,d};return d;
+}
+function fdate(ts){return ts?new Date(ts*1000).toLocaleDateString():'–';}
+function ago(ts){if(!ts)return 'nie';const s=Math.max(0,Math.floor((serverNow||Date.now()/1000)-ts));if(s<60)return 'vor '+s+' s';if(s<3600)return 'vor '+Math.floor(s/60)+' min';if(s<86400)return 'vor '+Math.floor(s/3600)+' h';return 'vor '+Math.floor(s/86400)+' Tagen';}
+function dur(s){if(s==null)return '–';s=Math.round(s);if(s<60)return s+'s';const m=Math.floor(s/60);return m+'m '+(s%60)+'s';}
+function eur(n){return '€'+Number(n||0).toFixed(2);}
+
+function boot(){
+  el('nav').innerHTML=NAV.map(([grp,items])=>
+    (grp?`<div class="navgrp">${grp}</div>`:'')
+    + items.map(([id,t])=>
+        `<a data-t="${id}" data-act="go" data-arg="${id}">`
+        + `<svg viewBox="0 0 24 24">${ICON[id]||''}</svg>`
+        + `<span>${t}</span><span class="badge hidden" id="bdg-${id}"></span></a>`).join('')
+  ).join('');
+  api('/api/admin/overview').then(()=>{el('gate').classList.add('hidden');el('app').classList.remove('hidden');go('live');refreshBadges();
+      if(window._bdgT)clearInterval(window._bdgT);
+      window._bdgT=setInterval(()=>{if(!document.hidden)refreshBadges();},30000);})
+    .catch(e=>{if(e.message!=='403')el('gateMsg').textContent=e.message;});
+  if(TICK)clearInterval(TICK);
+  TICK=setInterval(()=>{const t=lastLoad[active];if(t)el('liveTxt').textContent=(AUTO[active]?'live · ':'')+'aktualisiert '+ago(t);},1000);
+}
+function stopPoll(){if(POLL){clearInterval(POLL);POLL=null;}}
+function setPulse(){const on=AUTO[active]&&!paused&&!document.hidden;el('pulse').classList.toggle('off',!on);}
+/* v195: ungelesene Alerts als Zaehler in der Navigation. Vorher musste man
+   auf den Tab klicken, um zu sehen, ob etwas ansteht - in einer Ops-Konsole
+   ist genau das die Information, die man ohne Klick braucht. */
+function setBadge(id,n){
+  const b=el('bdg-'+id); if(!b)return;
+  b.textContent=n>99?'99+':String(n);
+  b.classList.toggle('hidden',!n);
+}
+async function refreshBadges(){
+  try{
+    const d=await api('/api/admin/overview');
+    setBadge('alerts', d.alerts_offen||0);
+    // v230b0: Bewertungen und Tickets liegen jetzt unter EINEM Menuepunkt -
+    // der Zaehler dort muss beide zeigen, sonst faellt eine der beiden
+    // Zahlen unter den Tisch (ein Zaehler, der nur die Haelfte zaehlt, ist
+    // schlimmer als keiner).
+    setBadge('support', (d.tickets_open||0) + (d.feedback_offen||0));
+    if(d.build) el('buildLine').textContent='Stand '+d.build;
+  }catch(e){}
+}
+function navTog(){
+  const s=el('side'); s.classList.toggle('zu');
+  el('navBtn').textContent = s.classList.contains('zu') ? 'Menü' : 'Schließen';
+}
+function go(name){
+  active=name;stopPoll();
+  // v230b0: der markierte Menuepunkt ist der ELTERN-Eintrag. Sonst steht die
+  // Leiste auf nichts, sobald jemand direkt auf einen Reiter springt
+  // (die Startseite tut genau das, z.B. go('system')).
+  const par=PARENT[name]||name;
+  document.querySelectorAll('.side a').forEach(b=>b.classList.toggle('on',b.dataset.t===par));
+  const t=TITEL[name]||name;
+  el('viewTitle').textContent=t;
+  const _tabs=TABSOF[par];
+  el('subtabs').innerHTML = _tabs ? _tabs.map(([k,lab])=>
+      `<button class="sub${k===name?' on':''}" data-act="go" data-arg="${k}">${lab}</button>`
+    ).join('') : '';
+  el('subtabs').classList.toggle('hidden', !_tabs);
+  document.title=t+' · Admin · DouchkoVE';
+  // Auf schmalen Schirmen klappt die Leiste nach der Wahl wieder zu -
+  // sonst muesste man an zwoelf Punkten vorbeiscrollen, um etwas zu sehen.
+  if(window.matchMedia('(max-width:900px)').matches){
+    el('side').classList.add('zu'); el('navBtn').textContent='Menü';
+  }
+  el('view').innerHTML='<div class="spin">Loading…</div>';
+  RENDER[name]();
+  if(AUTO[name]&&!paused){POLL=setInterval(()=>{if(!document.hidden)RENDER[name](true);},AUTO[name]);}
+  setPulse();
+}
+function togglePause(){paused=!paused;el('pauseBtn').textContent=paused?'Weiter':'Pause';go(active);}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPoll();else if(AUTO[active]&&!paused){go(active);}setPulse();});
+function danger(msg){return confirm('⚠ '+msg);}
+
+/* ---------- LIVE ---------- */
+async function loadLive(silent){
+  let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/overview'),tseries(30).catch(()=>null)]);}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.live=Date.now()/1000; serverNow=d.now;
+  el('buildLine').textContent='Stand '+d.build;
+  const r=d.revenue,s=d.system,st=s.stripe;
+  const led=(c,w)=>`<span class="led ${c?'ok':(w?'warn':'bad')}"></span>`;
+  const rc=(t,o)=>`<div class="card"><div class="k">${t}</div><div class="v">${eur(o.eur)} <small>${o.count}×</small></div></div>`;
+  const diskBad=s.disk&&s.disk.used_pct>90,diskWarn=s.disk&&s.disk.used_pct>78;
+  el('view').innerHTML=`
+    <div class="grid g4">${rc('Umsatz heute',r.today)}${rc('7 Tage',r.week)}${rc('30 Tage',r.month)}${rc('Insgesamt',r.total)}</div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">Neu heute / 7 T / 30 T</div><div class="v">${d.signups.today} <small>/ ${d.signups.week} / ${d.signups.month}</small></div></div>
+      <div class="card"><div class="k">Konten (bestätigt · zahlend)</div><div class="v">${d.users.total} <small>${d.users.verified} bestätigt · ${d.users.purchasers} zahlend</small></div></div>
+      <div class="card"><div class="k">Aktive Sitzungen</div><div class="v">${d.sessions_active}</div></div>
+      <div class="card acc"><div class="k">Offene Verpflichtung</div><div class="v">${d.credits.liability_min} <small>Min offen</small></div></div>
+    </div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">Schlange Captions</div><div class="v">${d.jobs.queue} <small>wartet ${d.jobs.waiting} · läuft ${d.jobs.running} · gescheitert ${d.jobs.failed}</small></div></div>
+      <div class="card"><div class="k">Schlange Motion</div><div class="v">${d.jobs.motion_queue}</div></div>
+      <div class="card"><div class="k">Renders insgesamt</div><div class="v">${d.renders.count} <small>${d.renders.minutes} Min</small></div></div>
+      <div class="card"><div class="k">Ungelesene Störungen</div><div class="v">${d.alerts_offen||0} <small>gedrosselt ${d.alerts_active}</small></div></div>
+    </div>
+    <h3>Systemzustand</h3>
+    <div class="health">
+      ${led(s.openai.set&&s.openai.valid!==false,s.openai.set&&s.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!s.openai.set?'FEHLT':(s.openai.valid===false?'SCHLÜSSEL UNGÜLTIG':'ok')}</span>
+      ${led(st.ready&&st.mode==='live',st.mode==='test')}<span class="pill"><b>Stripe</b> ${st.mode}${st.ready?'':' (aus)'}</span>
+      ${led(st.webhook_secret)}<span class="pill"><b>Webhook</b> ${st.webhook_secret?'gesetzt':'FEHLT'}</span>
+      ${led(s.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${s.mail.transport==='none'?'keiner':s.mail.transport}</span>
+      ${led(!diskBad&&!diskWarn,diskWarn)}<span class="pill"><b>Platte</b> ${s.disk?s.disk.free_gb+' GB frei ('+s.disk.used_pct+'% belegt)':'?'}</span>
+      <span class="pill"><span class="led ok"></span><b>Datenbank</b> ${s.db_mb??'?'} MB</span>
+      ${led(s.last_backup)}<span class="pill"><b>Sicherung</b> ${s.last_backup?fdate(s.last_backup):'keine'}</span>
+      ${led(s.heartbeats.watchdog)}<span class="pill"><b>Wachhund</b> ${s.heartbeats.watchdog?ago(s.heartbeats.watchdog):'—'}</span>
+      ${led(s.heartbeats.cleanup)}<span class="pill"><b>Aufräumer</b> ${s.heartbeats.cleanup?ago(s.heartbeats.cleanup):'—'}</span>
+      ${led(s.motion,true)}<span class="pill"><b>Motion</b> ${s.motion?'da':'aus'}</span>
+    </div>
+    ${ts?`<h3>Letzte 30 Tage</h3>
+    <div class="grid g2">
+      ${barChart('Umsatz je Tag',ts.labels,ts.revenue_eur,v=>eur(v))}
+      ${barChart('Neue Konten je Tag',ts.labels,ts.signups)}
+    </div>
+    <div class="grid g2" style="margin-top:11px">
+      ${barChart('Renders je Tag',ts.labels,ts.renders)}
+      ${barChart('Verbrauchtes Guthaben je Tag (Min)',ts.labels,ts.credits_spent_min)}
+    </div>`:''}`;
+}
+
+/* ---------- JOBS ---------- */
+async function loadJobs(silent){
+  let d;try{d=await api('/api/admin/jobs');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.jobs=Date.now()/1000;
+  const q=d.queue, dist=d.distribution||{};
+  const DCOL={laeuft:'var(--info)',wartet:'var(--warn)',fertig:'var(--ok)',fehler:'var(--bad)'};
+  const distBars=hbars(Object.entries(dist).map(([k,v])=>({l:k,v,c:DCOL[k]||'var(--acc)'})));
+  const rows=d.jobs.length?d.jobs.map(j=>`<tr>
+    <td class="mono">${esc((j.jid||'').slice(0,10))}</td>
+    <td>${j.email?esc(j.email):'<span class="subtle">demo</span>'}</td>
+    <td>${esc(j.status||'')}${j.progress?` <span class="subtle">${Math.round(j.progress*100)}%</span>`:''}${j.at_risk?' <span class="tag warn">at risk</span>':''}</td>
+    <td class="subtle">${esc(j.phase||'')}${j.eta_sec!=null?` <span class="subtle">~${dur(j.eta_sec)}</span>`:''}</td>
+    <td>${esc(j.kind)}${j.wm?' <span class="tag">wm</span>':''}</td>
+    <td class="subtle">${j.updated_at?ago(j.updated_at):'–'}</td>
+    <td><div class="row-actions">
+      <button class="btn ghost sm" data-act="jobLog" data-arg="${j.jid}">Log</button>
+      ${j.status==='fehler'?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="retry" data-arg3="Render nochmal versuchen?">Nochmal</button>`:''}
+      ${(j.status==='laeuft'||j.status==='wartet')?`<button class="btn bad sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="kill" data-arg3="Diesen Render abbrechen und erstatten?">Abbrechen</button>`:''}
+      <button class="btn warn sm" data-act="jobRefund" data-arg="${j.jid}">Erstatten</button>
+      ${j.wm?`<button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="unlock" data-arg3="Wasserzeichen freischalten? Die Datei wird DAUERHAFT durch die saubere Fassung ersetzt.">Freischalten</button>`:''}
+      <button class="btn ghost sm" data-act="jobAct" data-arg="${j.jid}" data-arg2="delete" data-arg3="Diesen Render-Ordner löschen? Die Dateien sind dann weg.">Löschen</button>
+    </div></td></tr>`).join(''):`<tr><td colspan="7" class="subtle">Keine Renders.</td></tr>`;
+  el('view').innerHTML=`
+    <div class="grid g4">
+      <div class="card" style="grid-column:span 2"><div class="k">Verteilung der Zustände (live)</div>${distBars}</div>
+      <div class="card"><div class="k">Schlange Captions / Motion</div><div class="v">${q.caption} <small>/ ${q.motion}</small></div>
+        <div class="subtle" style="margin-top:4px">waiting paid ${q.paid_waiting} · free ${q.free_waiting}</div></div>
+      <div class="card"><div class="k">Ø Renderzeit</div><div class="v">${dur(d.avg_render_sec)}</div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin:14px 0 4px"><button class="btn bad sm" data-act="reapStuck">Alle Hänger stoppen</button></div>
+    <table><thead><tr><th>Render</th><th>Konto</th><th>Status</th><th>Phase</th><th>Art</th><th>Aktualisiert</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function jobAct(jid,act,msg){if(msg&&!danger(msg))return;try{await api('/api/admin/jobs/'+jid+'/'+act,{method:'POST'});loadJobs();}catch(e){alert(e.message);}}
+async function jobRefund(jid){const m=prompt('Wie viele Minuten erstatten? (leer = die vollen Kosten des Renders)','');if(m===null)return;const fd=new FormData();if(m.trim())fd.append('minutes',parseInt(m,10)||0);fd.append('reason','admin');try{const d=await api('/api/admin/jobs/'+jid+'/refund',{method:'POST',body:fd});alert('Refunded '+d.refunded_min+' min.');loadJobs();}catch(e){alert(e.message);}}
+async function reapStuck(){if(!danger('ALLE wartenden und laufenden Renders stoppen und erstatten?'))return;try{const d=await api('/api/admin/jobs/reap_stuck',{method:'POST'});alert(d.reaped+' Render gestoppt.');loadJobs();}catch(e){alert(e.message);}}
+/* v228c Ein Log ist zum WEITERGEBEN da. Bis hier musste man ihn im Handy
+   muehsam markieren; jetzt ein Klick fuer alles, plus ein eigener Knopf fuer
+   die Timing-Zeile - die ist die eine, die man beim Thema Renderzeit
+   braucht. Fallback ohne Zwischenablage-Recht (Safari ohne HTTPS-Kontext):
+   Text markieren, damit Kopieren wenigstens von Hand geht. */
+function copyText(txt, btn){
+  const fertig = ok => { if(!btn) return; const alt = btn.textContent;
+    btn.textContent = ok ? 'Kopiert' : 'Bitte manuell'; setTimeout(()=>{btn.textContent=alt;},1600); };
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(txt).then(()=>fertig(true),()=>fertig(false));
+  } else {
+    const ta=document.createElement('textarea'); ta.value=txt;
+    ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta);
+    ta.select(); let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(ta); fertig(ok);
+  }
+}
+let LOG_TXT='';
+// v230aw: Der ganze Bauteil-Bestand als Text - zu lang fuer ein data-arg,
+// deshalb wie LOG_TXT in einer Variablen (der Verteiler liest sie).
+let FREEZE_TXT='';
+async function jobLog(jid){try{const d=await api('/api/admin/jobs/'+jid+'/log');LOG_TXT=d.log||'';
+  const tl=(LOG_TXT.split('\n').filter(l=>l.startsWith('Timing (total'))||[]).pop()||'';
+  el('modal').innerHTML=`<h2>Log · ${esc(jid)}</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+      <button class="btn sm" data-act="copyLog">Log kopieren</button>
+      ${tl?`<button class="btn ghost sm" data-act="copyArg" data-arg="${esc(tl)}">Timing kopieren</button>`:''}
+    </div>
+    <div class="scroll" style="max-height:60vh"><pre class="mono" data-act="copyLog" data-arg="still" title="Klick kopiert den ganzen Log" style="padding:12px;font-size:11.5px;white-space:pre-wrap;cursor:copy">${esc(d.log)}</pre></div>`;
+  el('overlay').classList.add('on');}catch(e){alert(e.message);}}
+
+/* ---------- REVENUE ---------- */
+async function loadRevenue(){
+  let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/revenue'),tseries(90).catch(()=>null)]);}catch(e){el('view').innerHTML=err(e);return;}
+  const w=d.windows;
+  const chart=ts?barChart('Umsatz je Tag (90 Tage)',ts.labels,ts.revenue_eur,v=>eur(v),120):'<div class="subtle">Noch keine Verkäufe.</div>';
+  const packShare=hbars(d.per_pack.map(p=>({l:p.pack,v:p.eur})),v=>eur(v));
+  const packs=d.per_pack.map(p=>`<tr><td>${esc(p.pack)}</td><td>${p.count}</td><td>${eur(p.eur)}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
+  const tops=d.top_spenders.map(t=>`<tr class="click" data-act="openUser" data-arg="${t.uid}"><td>${esc(t.email)}</td><td>${eur(t.eur)}</td><td>${t.orders}</td></tr>`).join('')||'<tr><td colspan="3" class="subtle">–</td></tr>';
+  const cat=d.catalog.map(c=>`<tr><td>${esc(c.id)}</td><td>${eur(c.eur)}</td><td>${c.credits}</td><td>${eur(c.per_credit)}</td></tr>`).join('');
+  /* v230d KI-KOSTEN. Bis hierher stand im Panel nur, was der Kunde ZAHLT.
+     Was ein Render UNS kostet, wusste niemand - dabei liefert jede
+     KI-Antwort mit, wie viel sie verbraucht hat. Ohne diese Zahl ist jede
+     Preisentscheidung geraten.
+     v230d1: gerechnet wird je Job mit SEINEM Modellpreis. Laeuft ein Modell,
+     fuer das kein Preis hinterlegt ist, steht das hier im Klartext - eine
+     Euro-Zahl, die die Haelfte der Renders verschweigt, waere schlimmer als
+     ein Strich. */
+  const ai=d.ai||{};
+  const proCredit=d.catalog[0]?d.catalog[0].per_credit:0;
+  const marge=(ai.eur_je_render!=null)?(proCredit-ai.eur_je_render):null;
+  const preisListe=Object.entries(ai.preise||{}).map(([m,v])=>
+    `<tr><td>${esc(m)}</td><td>${v[0]} $</td><td>${v[1]} $</td></tr>`).join('')
+    ||'<tr><td colspan="3" class="subtle">keine</td></tr>';
+  const aiBlock=`
+    <div class="grid g4" style="margin-top:6px">
+      <div class="card${ai.eur!=null?' acc':''}"><div class="k">KI-Kosten (${ai.tage||30} Tage)</div>
+        <div class="v">${ai.eur!=null?eur(ai.eur):'–'}</div>
+        <div class="satz">${ai.renders||0} Renders gezählt, davon ${ai.mit_preis||0}
+          mit bekanntem Preis. Nur Videos, die noch in der Bibliothek liegen -
+          ältere sind gelöscht und fehlen hier.</div></div>
+      <div class="card"><div class="k">Je Render</div>
+        <div class="v">${ai.eur_je_render!=null?eur(ai.eur_je_render):'–'}</div>
+        <div class="satz">${marge!=null
+          ? `Ein Credit bringt ${eur(proCredit)}. Bleibt dir ${eur(marge)} pro Minute Video.`
+          : 'Sobald für das laufende Modell ein Preis da ist, steht hier deine Marge.'}</div></div>
+      <div class="card"><div class="k">Verbrauch</div>
+        <div class="v" style="font-size:20px">${(ai.in||0).toLocaleString('de-DE')} rein
+          <small>/ ${(ai.out||0).toLocaleString('de-DE')} raus</small></div>
+        <div class="satz">Tokens. Davon ${(ai.denken||0).toLocaleString('de-DE')} reines
+          Nachdenken, plus ${ai.audio_min||0} Minuten Transkription.</div></div>
+      <div class="card${(ai.ohne_preis||[]).length?' warnrand':''}"><div class="k">Modelle</div>
+        <div class="v" style="font-size:20px">${esc((ai.modelle||[]).join(', ')||'–')}</div>
+        <div class="satz">${(ai.ohne_preis||[]).length
+          ? 'Für '+esc(ai.ohne_preis.join(', '))+' ist kein Preis hinterlegt. '
+            +'Trag ihn als DVE_AI_PREISE ein, zum Beispiel '
+            +'{"'+esc(ai.ohne_preis[0])+'": [5.0, 30.0]} (USD je 1 Mio Tokens), '
+            +'oder stell das Modell in der Config auf eines aus der Liste um.'
+          : 'Für alle gelaufenen Modelle ist ein Preis hinterlegt.'}</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:10px">
+      <div><table><thead><tr><th>Modell</th><th>Eingabe /1M</th><th>Ausgabe /1M</th></tr></thead>
+        <tbody>${preisListe}</tbody></table>
+        <div class="note">Preise in US-Dollar je 1 Million Tokens, kurzer Kontext.
+          Umgerechnet mit Kurs ${ai.usd_eur}. Transkription ${ai.preis_audio} $ je Minute.
+          Zwischengespeicherte Eingaben sind billiger - die rechnen wir bewusst nicht
+          gegen, damit die Marge eher zu niedrig als zu hoch steht.</div></div>
+    </div>`;
+  el('view').innerHTML=`
+    <div class="grid g4">
+      <div class="card acc"><div class="k">Heute</div><div class="v">${eur(w.today.eur)} <small>${w.today.count}×</small></div></div>
+      <div class="card"><div class="k">7 Tage</div><div class="v">${eur(w.week.eur)}</div></div>
+      <div class="card"><div class="k">30 Tage</div><div class="v">${eur(w.month.eur)}</div></div>
+      <div class="card"><div class="k">Insgesamt</div><div class="v">${eur(w.total.eur)} <small>${w.total.count}×</small></div></div>
+    </div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">Ø Kaufwert</div><div class="v">${eur(d.aov)}</div></div>
+      <div class="card"><div class="k">Ø Umsatz je Käufer</div><div class="v">${eur(d.arppu)}</div></div>
+      <div class="card"><div class="k">Käufer einmal / mehrfach</div><div class="v">${d.buyers.once} <small>/ ${d.buyers.repeat}</small></div></div>
+      <div class="card"><div class="k">Vor v128 (geschätzt)</div><div class="v">${eur(d.pre_v128_estimate.eur_est)} <small>${d.pre_v128_estimate.count}×</small></div></div>
+    </div>
+    <h3>Umsatzverlauf</h3>${chart}
+    <div class="grid g3" style="margin-top:16px">
+      <div><h3>Nach Paket</h3>${packShare}<table><thead><tr><th>Paket</th><th>Verkauft</th><th>EUR</th></tr></thead><tbody>${packs}</tbody></table></div>
+      <div><h3>Beste Kunden</h3><table><thead><tr><th>E-Mail</th><th>Umsatz gesamt</th><th>Käufe</th></tr></thead><tbody>${tops}</tbody></table></div>
+      <div><h3>Preisliste</h3><table><thead><tr><th>Paket</th><th>Preis</th><th>Cr.</th><th>/cr</th></tr></thead><tbody>${cat}</tbody></table></div>
+    </div>
+    <h3>Was die Renders dich kosten</h3>${aiBlock}
+    <h3>Export</h3><div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button></div>
+    <div class="note">Umsatz = tatsächlich gezahlte Beträge aus Stripe (Tabelle purchases, ab v128). Alles vor v128 ist aus den Buchungs-Sekunden geschätzt.</div>`;
+}
+function dl(t){const u='/api/admin/export/'+t+'.csv';fetch(u,{headers:hdr()}).then(r=>r.blob()).then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=t+'.csv';a.click();}).catch(e=>alert(e.message));}
+
+/* ---------- CREDITS ---------- */
+async function loadCredits(){
+  let d,ts;try{[d,ts]=await Promise.all([api('/api/admin/credits'),tseries(30).catch(()=>null)]);}catch(e){el('view').innerHTML=err(e);return;}
+  const g=d.granted,c=d.consumed,a=d.aging_min;
+  const mix=hbars([
+    {l:'Paid (Kauf)',v:g.paid,c:'var(--acc)'},{l:'Welcome',v:g.welcome},
+    {l:'Monthly free',v:g.monthly},{l:'Referral',v:g.referral},
+    {l:'Reload bonus',v:g.reload_bonus},{l:'Admin granted',v:g.admin},
+    {l:'Refunds',v:g.refund}],v=>v+' min');
+  const use=hbars([
+    {l:'Render',v:c.render,c:'var(--info)'},{l:'Alpha export',v:c.alpha},
+    {l:'Style learn',v:c.style_learn},{l:'Expired (breakage)',v:c.expired_breakage,c:'var(--warn)'},
+    {l:'Admin clawback',v:c.admin_clawback}],v=>v+' min');
+  const aging=hbars([
+    {l:'expires ≤30d',v:a.d0_30,c:'var(--bad)'},{l:'30–90d',v:a.d30_90,c:'var(--warn)'},
+    {l:'90–180d',v:a.d90_180,c:'var(--ok)'}],v=>v+' min');
+  el('view').innerHTML=`
+    ${ts?`<div class="grid g2" style="margin-bottom:14px">
+      ${barChart('Gekauftes Guthaben je Tag (Min)',ts.labels,ts.credits_bought_min,v=>v+' min')}
+      ${barChart('Verbrauchtes Guthaben je Tag (Min)',ts.labels,ts.credits_spent_min,v=>v+' min')}
+    </div>`:''}
+    <div class="grid g3">
+      <div class="card"><div class="k">Herkunft des Guthabens (Minuten)</div>${mix}</div>
+      <div class="card"><div class="k">Verbrauch (Minuten)</div>${use}</div>
+      <div class="card"><div class="k">Alter der offenen Verpflichtung · ${d.liability_min} Min offen</div>${aging}</div>
+    </div>
+    <h3>Gutgeschrieben (Minuten)</h3>
+    <div class="grid g4">
+      <div class="card acc"><div class="k">Gekauft</div><div class="v">${g.paid}</div></div>
+      <div class="card"><div class="k">Gratis insgesamt</div><div class="v">${g.free_total}</div></div>
+      <div class="card"><div class="k">Vom Admin gutgeschrieben</div><div class="v">${g.admin}</div></div>
+      <div class="card"><div class="k">Erstattungen</div><div class="v">${g.refund}</div></div>
+    </div>
+    <div class="grid g4" style="margin-top:11px">
+      <div class="card"><div class="k">Willkommensbonus</div><div class="v">${g.welcome}</div></div>
+      <div class="card"><div class="k">Monatliches Gratis</div><div class="v">${g.monthly}</div></div>
+      <div class="card"><div class="k">Empfehlung</div><div class="v">${g.referral}</div></div>
+      <div class="card"><div class="k">Nachkauf-Bonus</div><div class="v">${g.reload_bonus}</div></div>
+    </div>
+    <h3>Verbraucht (Minuten)</h3>
+    <div class="grid g4">
+      <div class="card"><div class="k">Render</div><div class="v">${c.render}</div></div>
+      <div class="card"><div class="k">Ebenen-Export</div><div class="v">${c.alpha}</div></div>
+      <div class="card"><div class="k">Stil gelernt</div><div class="v">${c.style_learn}</div></div>
+      <div class="card"><div class="k">Verfallen</div><div class="v">${c.expired_breakage}</div></div>
+    </div>
+    <h3>Offene Verpflichtung &amp; Alter</h3>
+    <div class="grid g4">
+      <div class="card acc"><div class="k">Offene Verpflichtung</div><div class="v">${d.liability_min} <small>Min</small></div></div>
+      <div class="card"><div class="k">Läuft ab in ≤30 T</div><div class="v">${a.d0_30}</div></div>
+      <div class="card"><div class="k">30–90d</div><div class="v">${a.d30_90}</div></div>
+      <div class="card"><div class="k">90–180d</div><div class="v">${a.d90_180}</div></div>
+    </div>
+    <div class="note">Alle Zahlen in Minuten (1 Guthaben = 1 Minute). Verbrauch und Gutschriften kommen aus der Buchungsart im Ledger.</div>`;
+}
+
+/* ---------- USERS ---------- */
+let uState={q:'',flt:'',sort:'created_at',offset:0};
+async function loadUsers(){
+  el('view').innerHTML=`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input class="search" id="uq" placeholder="E-Mail suchen …" value="${esc(uState.q)}" data-input="uSearch">
+      <select class="search" id="uflt" data-change="flt">
+        <option value="">alle</option><option value="verified">bestätigt</option><option value="unverified">unbestätigt</option><option value="disabled">gesperrt</option></select>
+      <select class="search" id="usort" data-change="sort">
+        <option value="created_at">neueste</option><option value="balance">meistes Guthaben</option><option value="email">E-Mail</option></select>
+      <span class="subtle" id="uCount"></span>
+    </div>
+    <table><thead><tr><th>E-Mail</th><th>Status</th><th>Guthaben</th><th>Art</th><th>Dabei seit</th></tr></thead><tbody id="uRows"></tbody></table>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+      <button class="btn ghost sm" data-act="uPage" data-arg="-1">◀ Zurück</button>
+      <button class="btn ghost sm" data-act="uPage" data-arg="1">Weiter ▶</button>
+      <span class="subtle" id="uPageInfo"></span></div>`;
+  el('uflt').value=uState.flt; el('usort').value=uState.sort; fetchUsers();
+}
+let _ut=null;
+function uSearch(){clearTimeout(_ut);_ut=setTimeout(()=>{uState.q=el('uq').value;uState.offset=0;fetchUsers();},250);}
+function uPage(dir){uState.offset=Math.max(0,uState.offset+dir*50);fetchUsers();}
+async function fetchUsers(){
+  const p=new URLSearchParams({q:uState.q,flt:uState.flt,sort:uState.sort,limit:50,offset:uState.offset});
+  let d;try{d=await api('/api/admin/users?'+p);}catch(e){el('uRows').innerHTML='<tr><td colspan=5>'+esc(e.message)+'</td></tr>';return;}
+  el('uCount').textContent=d.total+' Konten';
+  el('uPageInfo').textContent=`${d.offset+1}–${d.offset+d.users.length} of ${d.total}`;
+  el('uRows').innerHTML=d.users.length?d.users.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}">
+    <td>${esc(u.email)}${u.disabled?' <span class="tag no">suspended</span>':''}</td>
+    <td>${u.verified?'<span class="tag ok">verified</span>':'<span class="tag no">unverified</span>'}</td>
+    <td>${u.credits}</td>
+    <td>${u.purchased?'<span class="tag buy">zahlend</span>':'<span class="tag">gratis</span>'}</td>
+    <td class="subtle">${fdate(u.created_at)}</td></tr>`).join(''):'<tr><td colspan=5 class="subtle">Keine Konten.</td></tr>';
+}
+async function openUser(uid){
+  let d;try{d=await api('/api/admin/users/'+uid);}catch(e){alert(e.message);return;}
+  const u=d.user;
+  const led=d.ledger.map(l=>`<tr><td class="${l.delta_sec>=0?'pos':'neg'}">${l.delta_sec>=0?'+':''}${Math.round(l.delta_sec/60)}m</td><td>${esc(l.grund)}</td><td class="subtle">${fdate(l.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">–</td></tr>';
+  const pur=d.purchases.map(p=>`<tr><td>${esc(p.pack)}</td><td>${eur(p.eur)}</td><td class="mono subtle">${esc((p.session_id||'').slice(0,14))}</td><td><button class="btn warn sm" data-act="refundSession" data-arg="${esc(p.session_id)}">Erstatten</button></td></tr>`).join('')||'<tr><td colspan=4 class="subtle">no purchases</td></tr>';
+  const cons=d.consents.map(c=>`${esc(c.kind)} (${fdate(c.created_at)})`).join(', ')||'none';
+  el('modal').innerHTML=`
+    <h2>${esc(u.email)} ${u.is_owner?'<span class="tag buy">owner</span>':''}${u.disabled?'<span class="tag no">suspended</span>':''}</h2>
+    <div class="kv" style="margin-top:8px">
+      <span class="kk">ID / Name</span><span>#${u.id} · ${esc(u.name||'—')}</span>
+      <span class="kk">Status</span><span>${u.verified?'verified':'<b style="color:var(--bad)">unverified</b>'} · ${u.disposable?'<b style="color:var(--warn)">disposable email</b>':'normal email'}</span>
+      <span class="kk">Guthaben / Umsatz gesamt</span><span><b>${u.credits} cr</b> · ${eur(u.ltv_eur)} lifetime · ${u.orders} orders · ${u.render_count} renders</span>
+      <span class="kk">Sitzungen / dabei seit</span><span>${u.active_sessions} active · joined ${fdate(u.created_at)}</span>
+      <span class="kk">Empfehlung</span><span>Code ${esc(u.ref_code||'—')} · geworben von ${esc(u.referred_by_email||'—')}</span>
+      <span class="kk">Läuft ab</span><span>${u.expiring_credits} Cr in ${u.expiring_days==null?'—':u.expiring_days+' T'}</span>
+      <span class="kk">Consents</span><span>${cons}</span>
+    </div>
+    <div class="acts">
+      <input type="number" id="mDelta" placeholder="±min"><input type="text" class="reason" id="mReason" placeholder="Grund">
+      <button class="btn sm" data-act="grantCredits" data-arg="${uid}">Guthaben ändern</button>
+      ${u.verified?'':`<button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="verify">Bestätigen</button><button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="resend_verify">Erneut senden</button>`}
+      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="reset">Passwort zurücksetzen</button>
+      <button class="btn ghost sm" data-act="uAct" data-arg="${uid}" data-arg2="revoke_sessions">Sitzungen beenden</button>
+      <button class="btn ${u.disabled?'':'warn'} sm" data-act="disableUser" data-arg="${uid}" data-arg2="${u.disabled?0:1}">${u.disabled?'Unsuspend':'Suspend'}</button>
+      <button class="btn ghost sm" data-act="exportUser" data-arg="${uid}">Export</button>
+      <button class="btn bad sm" data-act="delUser" data-arg="${uid}" data-arg2="${esc(u.email)}">Löschen</button>
+    </div>
+    <p class="msg" id="mMsg"></p>
+    <div class="grid g2">
+      <div><h3 style="margin-top:0">Buchungen (100)</h3><div class="scroll"><table><tbody>${led}</tbody></table></div></div>
+      <div><h3 style="margin-top:0">Käufe</h3><div class="scroll"><table><tbody>${pur}</tbody></table></div></div>
+    </div>`;
+  el('overlay').classList.add('on');
+}
+function closeModal(){el('overlay').classList.remove('on');if(active==='users')fetchUsers();}
+async function grantCredits(uid){const v=parseInt(el('mDelta').value,10);if(!v){el('mMsg').textContent='Enter ± minutes.';return;}if(v<0&&!danger('Deduct '+(-v)+' Minuten von diesem Konto?'))return;const fd=new FormData();fd.append('delta_min',v);fd.append('reason',el('mReason').value||'manual');try{const d=await api('/api/admin/users/'+uid+'/credits',{method:'POST',body:fd});el('mMsg').textContent='Neuer Stand: '+d.credits+' Guthaben.';}catch(e){el('mMsg').textContent=e.message;}}
+async function uAct(uid,act){try{const d=await api('/api/admin/users/'+uid+'/'+act,{method:'POST'});openUser(uid);}catch(e){el('mMsg').textContent=e.message;}}
+async function disableUser(uid,on){if(on&&!danger('Dieses Konto sperren? Der Kunde wird abgemeldet und kommt nicht mehr rein.'))return;const fd=new FormData();fd.append('on',on);try{await api('/api/admin/users/'+uid+'/disable',{method:'POST',body:fd});openUser(uid);}catch(e){el('mMsg').textContent=e.message;}}
+function exportUser(uid){fetch('/api/admin/users/'+uid+'/export',{headers:hdr()}).then(r=>r.json()).then(d=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download='user_'+uid+'.json';a.click();}).catch(e=>alert(e.message));}
+async function delUser(uid,email){if(!danger('Konto LÖSCHEN: '+email+'? Die Käufe wandern ins 10-Jahres-Archiv, alles andere wird gelöscht.'))return;try{await api('/api/admin/users/'+uid+'/delete',{method:'POST'});closeModal();}catch(e){alert(e.message);}}
+async function refundSession(sid){if(!danger('Stripe-Vorgang erstatten: '+sid+' UND die gutgeschriebenen Minuten zurückholen? Hier fließt echtes Geld.'))return;const fd=new FormData();fd.append('session_id',sid);fd.append('clawback','1');try{const d=await api('/api/admin/refund',{method:'POST',body:fd});alert('Stripe: '+d.stripe+'\\nClawed back: '+d.clawed_back_min+' min');}catch(e){alert(e.message);}}
+
+/* ---------- ABUSE ---------- */
+async function loadAbuse(){
+  let d;try{d=await api('/api/admin/abuse');}catch(e){el('view').innerHTML=err(e);return;}
+  /* v230b2 DIESE ANSICHT HAT NUR ROHE SIGNALE GEZEIGT.
+     Ismets Befund: "Beim Reiter abuse verstehe ich garnichts". Stimmt - da
+     standen sieben Zahlen ohne ein Wort dazu, dazu ein englischer Satz über
+     "orphan claims". Ismet ist kein Entwickler; eine Zahl ohne Erklärung ist
+     fuer ihn keine Information, sondern Rauschen. Jetzt gilt dieselbe Regel
+     wie auf der Startseite (v206): EINE Zahl, EIN Satz was sie heißt, und
+     falls nötig ein Satz was zu tun ist. Die Daten sind unverändert. */
+  const zeile=(rows,leer)=>rows||`<tr><td class="subtle" colspan=9>${leer}</td></tr>`;
+  const disp=d.disposable_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td></tr>`).join('');
+  const unv=d.unverified_accounts.map(u=>`<tr class="click" data-act="openUser" data-arg="${u.id}"><td>${esc(u.email)}</td><td class="subtle">${fdate(u.created_at)}</td></tr>`).join('');
+  const refs=d.top_referrers.map(r=>`<tr><td>${esc(r.email||'#'+r.uid)}</td><td>${r.invited}</td></tr>`).join('');
+  /* v230c3: der Schlüssel der Bremse ist technisch (login_konto:12,
+     login:1.2.3.4). So wie er ist, sagt er Ismet nichts - also übersetzen.
+     Eine gehashte Mailadresse wird bewusst NICHT aufgelöst: sie ist absichtlich
+     nicht rückrechenbar, und "gibt es nicht" ist hier die ganze Information. */
+  const bremsName=k=>{
+    const s=String(k||''), p=s.indexOf(':');
+    if(p<0) return s;
+    const art=s.slice(0,p), rest=s.slice(p+1);
+    if(art==='login_konto') return rest.charAt(0)==='e'
+      ? 'Anmelden · Adresse gibt es gar nicht' : 'Anmelden · Konto #'+rest;
+    const was={login:'Anmelden',reg:'Registrieren',reset:'Passwort vergessen',
+               support:'Support'}[art]||art;
+    return was+' · '+rest;
+  };
+  const locks=d.rate_limit_lockouts.map(l=>`<tr><td class="mono">${esc(bremsName(l.key))}</td><td>${l.hits}</td></tr>`).join('');
+  const demo=d.demo_ip_abuse.map(l=>`<tr><td class="mono">${esc(l.ip)}</td><td>${l.hits}</td></tr>`).join('');
+  // Was ist auffällig? Bewusst großzügige Schwellen: eine Ampel, die
+  // grundlos rot ist, schaut nach einer Woche niemand mehr an (v206).
+  const auf=[];
+  if(d.disposable_accounts.length>=5) auf.push(`${d.disposable_accounts.length} Konten mit Wegwerf-Adresse`);
+  if(d.rate_limit_lockouts.length) auf.push(`${d.rate_limit_lockouts.length} Mal automatisch ausgebremst (Anschluss oder Konto)`);
+  if(d.demo_ip_abuse.some(x=>x.hits>=5)) auf.push('eine Internet-Adresse nutzt die Demo auffällig oft');
+  if((d.top_referrers[0]||{}).invited>=10) auf.push('ein Konto hat auffällig viele Leute geworben');
+  if(d.pending_resets>=10) auf.push(`${d.pending_resets} Passwort-Links gleichzeitig gültig`);
+  const kachel=(titel,zahl,satz,warn)=>`
+    <div class="card${warn?' warnrand':''}"><div class="k">${titel}</div>
+      <div class="v">${zahl}</div>
+      <div class="satz">${satz}</div></div>`;
+  el('view').innerHTML=`
+    <div class="box-ampel ${auf.length?'gelb':'gruen'}">
+      <div class="zahl2"><span class="ampel ${auf.length?'gelb':'gruen'}"></span>${
+        auf.length?'Ein paar Sachen zum Ansehen':'Nichts Auffälliges'}</div>
+      <div class="satz">${auf.length
+        ? esc(auf.join(' \u00b7 '))+'. Keine davon ist ein Notfall, aber ein Blick lohnt.'
+        : 'Niemand versucht gerade, das Gratis-Guthaben oder die Demo auszunutzen.'}</div>
+    </div>
+    <div class="grid g4" style="margin-top:14px">
+      ${kachel('Abgewehrte Gratis-Tricks', d.orphan_claims.credit+' + '+d.orphan_claims.referral,
+        'So oft hat jemand sein Konto gelöscht und sich neu angemeldet, um das '
+        +'Gratis-Guthaben ein zweites Mal zu bekommen. Das wurde jedes Mal '
+        +'geblockt. Die zweite Zahl ist dasselbe für den Empfehlungs-Bonus. '
+        +'Eine hohe Zahl heißt: der Schutz arbeitet, nicht dass etwas kaputt ist.', false)}
+      ${kachel('Wegwerf-Adressen', d.disposable_accounts.length,
+        'Konten mit einer Zehn-Minuten-Mailadresse. Meistens Leute, die nur das '
+        +'Gratis-Guthaben wollen und nie kaufen. Unten stehen sie einzeln; ein '
+        +'Klick öffnet das Konto.', d.disposable_accounts.length>=5)}
+      ${kachel('Nie bestätigt', d.unverified_accounts.length,
+        'Angemeldet, aber nie auf den Link in der Mail geklickt. Diese Konten '
+        +'bekommen kein Guthaben und können nichts rendern. Meistens einfach '
+        +'Leute, die es sich anders überlegt haben.', false)}
+      ${kachel('Passwort-Links offen', d.pending_resets,
+        'So viele "Passwort vergessen"-Links sind gerade gültig. Ein oder zwei '
+        +'sind normal. Viele auf einmal wären ein Zeichen, dass jemand fremde '
+        +'Konten übernehmen will.', d.pending_resets>=10)}
+    </div>
+    <div class="grid g2" style="margin-top:18px">
+      <div>
+        <h3>Wegwerf-Adressen</h3>
+        <div class="note" style="margin:-4px 0 8px">Klick öffnet das Konto. Wenn dir eines
+          davon Ärger macht, kannst du es dort sperren.</div>
+        <div class="scroll"><table><tbody>${zeile(disp,'keine')}</tbody></table></div>
+      </div>
+      <div>
+        <h3>Nie bestätigt</h3>
+        <div class="note" style="margin:-4px 0 8px">Adresse und Anmeldetag. Diese Konten
+          kosten nichts und können nichts - sie stehen hier nur der Vollständigkeit halber.</div>
+        <div class="scroll"><table><tbody>${zeile(unv,'keine')}</tbody></table></div>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:18px">
+      <div>
+        <h3>Wer hat geworben</h3>
+        <div class="note" style="margin:-4px 0 8px">Wie viele Leute ein Konto geworben hat.
+          Eine auffällig hohe Zahl kann heißen, dass sich jemand selbst einlädt,
+          um Gratis-Guthaben zu sammeln.</div>
+        <table><thead><tr><th>Konto</th><th>geworben</th></tr></thead><tbody>${zeile(refs,'noch niemand')}</tbody></table>
+      </div>
+      <div>
+        <h3>Automatisch ausgebremst</h3>
+        <div class="note" style="margin:-4px 0 8px">Wer in der letzten Stunde auffällig oft
+          etwas versucht hat. Zwei Bremsen laufen: eine pro Internet-Anschluss, eine
+          pro Konto (ab 10 falschen Passwörtern in 15 Minuten wird gar kein Passwort
+          mehr geprüft). Beide lösen sich von allein wieder, du musst nichts tun.</div>
+        <table><thead><tr><th>Wer</th><th>Versuche</th></tr></thead><tbody>${zeile(locks,'niemand')}</tbody></table>
+      </div>
+      <div>
+        <h3>Demo mehrfach benutzt</h3>
+        <div class="note" style="margin:-4px 0 8px">Wie oft von derselben Internet-Adresse in
+          24 Stunden die Gratis-Demo lief. Zwei bis drei sind normal (Familie, Büro).</div>
+        <table><thead><tr><th>Internet-Adresse</th><th>in 24 h</th></tr></thead><tbody>${zeile(demo,'niemand')}</tbody></table>
+      </div>
+    </div>
+    <div class="note" style="margin-top:16px">Die letzten beiden Listen leben nur im
+      Arbeitsspeicher: nach einem Neustart des Servers fangen sie wieder bei null an.
+      Sie sagen also etwas über JETZT, nicht über die ganze Zeit.</div>`;
+}
+
+/* ---------- SYSTEM ---------- */
+async function loadSystem(){
+  let d;try{d=await api('/api/admin/system');}catch(e){el('view').innerHTML=err(e);return;}
+  FREEZE_TXT = d.freeze || '';
+/* v230j WAS GERADE PASSIERT, NICHT NUR WAS LAEUFT.
+   Das Panel zeigte ausschliesslich den laufenden Stand - damit liess sich
+   "dauert noch" nicht von "haengt" unterscheiden (Ismets Befund: er sah
+   v230h, waehrend v230i vier Minuten alt und noch im Bau war). autodeploy.sh
+   schreibt seinen Zustand jetzt mit, inklusive der GEMESSENEN Dauer der
+   letzten Runde - eine echte Zahl vom eigenen Server, keine Schaetzung. */
+function mmss(s) {
+  s = Math.max(0, Math.round(s || 0));
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
+}
+function deployZeile(dp) {
+  if (!dp || !dp.phase) return '';
+  const c = esc(String(dp.commit_kurz || '').slice(0, 8));
+  if (dp.phase === 'baut')
+    return `<div style="margin-top:6px;color:#6ea8ff;font-size:12px">`
+      + `${c} wird ausgerollt \u00b7 seit ${mmss(dp.laeuft_seit)}</div>`;
+  if (dp.phase === 'haengt')
+    return `<div style="margin-top:6px;color:var(--warn,#e0a33e);font-size:12px">`
+      + `${c} baut seit ${mmss(dp.laeuft_seit)} - das dauert zu lange, auf dem `
+      + `Server nachsehen (journalctl -u douchko-deploy).</div>`;
+  if (dp.phase === 'fehler')
+    return `<div style="margin-top:6px;color:var(--bad,#e0574e);font-size:12px">`
+      + `${c} ging NICHT live (nach ${mmss(dp.dauer_s)}). Die laufende Fassung `
+      + `ist unveraendert.` + (dp.grund ? '<br><span style="opacity:.75">'
+        + esc(String(dp.grund).slice(0, 200)) + '</span>' : '') + `</div>`;
+  return `<div class="k" style="margin-top:6px">letzter Deploy ${c} \u00b7 `
+    + `${mmss(dp.dauer_s)}</div>`;
+}
+
+  const k=d.keys,c=d.config,led=(x,w)=>`<span class="led ${x?'ok':(w?'warn':'bad')}"></span>`;
+  const cfg=Object.entries(c).map(([kk,v])=>`<tr><td class="subtle">${esc(kk)}</td><td class="mono">${esc(v)}</td></tr>`).join('');
+  el('view').innerHTML=`
+    <h3>Schlüssel &amp; Versand (nur vorhanden/fehlt, nie der Wert)</h3>
+    <div class="health">
+      ${led(k.openai.set&&k.openai.valid!==false,k.openai.set&&k.openai.valid===null)}<span class="pill"><b>OpenAI</b> ${!k.openai.set?'FEHLT':(k.openai.valid===false?'SCHLÜSSEL UNGÜLTIG':'ok')}</span>
+      ${led(k.stripe.ready&&k.stripe.mode==='live',k.stripe.mode==='test')}<span class="pill"><b>Stripe</b> ${k.stripe.mode}</span>
+      ${led(k.stripe.webhook_secret)}<span class="pill"><b>Webhook</b> ${k.stripe.webhook_secret?'set':'FEHLT'}</span>
+      ${led(k.mail.transport!=='none')}<span class="pill"><b>Mail</b> ${k.mail.transport} → ${esc(k.mail.admin_to)}</span>
+      ${led(k.admin_key)}<span class="pill"><b>Admin-Schlüssel</b> set</span>
+      ${led(k.ref_salt)}<span class="pill"><b>Ref-Salz</b> set</span>
+    </div>
+    <div class="grid g4" style="margin-top:12px">
+      <div class="card"><div class="k">Stand</div><div class="v" style="font-size:16px">${esc(d.build)}</div>
+        ${d.deploy ? `<div class="k" style="margin-top:6px">${d.deploy.branch
+            ? esc(d.deploy.branch) + ' · seit ' + (d.deploy.alter_tage ?? '?') + ' Tagen'
+            : 'Stand unbekannt'}</div>` : ''}
+        ${d.deploy && d.deploy.warnung
+            ? `<div style="margin-top:6px;color:var(--warn,#e0a33e);font-size:12px">${esc(d.deploy.warnung)}</div>`
+            : ''}
+        ${deployZeile(d.deploy && d.deploy.deploy)}</div>
+      <div class="card"><div class="k">Platte frei</div><div class="v">${d.disk?d.disk.free_gb+'G':'?'} <small>${d.disk?d.disk.used_pct+'%':''}</small></div></div>
+      <div class="card"><div class="k">Speicher (RAM)</div><div class="v">${
+        d.mem ? (d.mem.limit_gb ? d.mem.limit_gb+'G Limit' : (d.mem.host_gb??'?')+'G Maschine') : '?'
+      } <small>${d.mem ? (d.mem.limit_gb
+          ? (d.mem.used_gb??'?')+'G belegt'
+          : (d.mem.frei_gb??'?')+'G frei') : ''}</small></div>
+        <div class="subtle" style="font-size:11px;margin-top:4px">4K-Renders brauchen mehrere GB</div></div>
+      <div class="card"><div class="k">Datenbank</div><div class="v">${d.db_mb??'?'} <small>MB</small></div></div>
+      <div class="card"><div class="k">Letzte Sicherung</div><div class="v" style="font-size:16px">${d.last_backup?fdate(d.last_backup):'none'}</div></div>
+    </div>
+    <div class="health" style="margin-top:12px">
+      ${led(d.heartbeats.watchdog)}<span class="pill"><b>Wachhund</b> ${d.heartbeats.watchdog?ago(d.heartbeats.watchdog):'—'}</span>
+      ${led(d.heartbeats.cleanup)}<span class="pill"><b>Aufräumer</b> ${d.heartbeats.cleanup?ago(d.heartbeats.cleanup):'—'}</span>
+      <span class="pill"><b>Aktive Störungen</b> ${d.alerts_active}</span>
+    </div>
+    <h3>Einstellungen (nur Anzeige)</h3>
+    <table><tbody>${cfg}</tbody></table>
+    <h3>Läuft hier</h3>
+    <div class="health" style="margin-bottom:10px">
+      ${d.laufzeit ? (d.laufzeit.root
+        ? '<span class="tag no">root</span><span class="subtle">Der Dienst hat noch den Generalschlüssel. Die Härtung ist auf den alten Weg zurückgefallen.</span>'
+        : '<span class="tag ok">'+esc(d.laufzeit.user||('uid '+d.laufzeit.uid))+'</span><span class="subtle">Kein Generalschlüssel, Härtung aktiv.</span>')
+        : '<span class="subtle">unbekannt</span>'}
+    </div>
+    ${d.laufzeit ? `<div class="subtle" style="margin-bottom:10px">
+      Python ${esc(d.laufzeit.python||'?')} &middot; ${esc(d.laufzeit.ffmpeg||'')}</div>` : ''}
+    <h3>Bauteile <span class="subtle">(Version im laufenden Container)</span></h3>
+    <table><tbody>${Object.entries(d.pakete||{}).map(([k,v])=>
+      `<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`).join('')
+      || '<tr><td class="subtle">nicht auslesbar</td></tr>'}</tbody></table>
+    <div class="note">Diese Liste braucht es, um die Versionen in
+      requirements.txt festzunageln. Sonst kann bei jedem Neubau eine
+      andere Fassung hereinkommen.</div>
+    <div class="row-actions" style="margin-top:8px">
+      <button class="btn sm" data-act="copyFreeze">Alle Bauteile kopieren
+        (${(d.freeze||'').split('\n').filter(Boolean).length})</button>
+    </div>
+    <div class="note">Der ganze Bestand inklusive der Mitgebrachten, im
+      Format von <span class="mono">pip freeze</span>. Kopieren und in den
+      Chat einfuegen, daraus wird die Pruefsummen-Liste.</div>
+    <h3>Betriebszustand</h3>
+    <div id="betriebBox" class="subtle">loading …</div>
+    <h3>Aktionen</h3>
+    <div class="row-actions">
+      <button class="btn ghost sm" data-act="sysAct" data-arg="backup/run" data-arg2="Jetzt eine Sicherung der Datenbank anlegen?">Jetzt sichern</button>
+      <button class="btn ghost sm" data-act="sysAct" data-arg="mail/test" data-arg2="Eine Testmail an die Admin-Adresse schicken?">Testmail senden</button>
+      <button class="btn bad sm" data-act="factoryReset">Alles zurücksetzen (ALLE Daten weg)</button>
+      <button class="btn warn sm" data-act="sysAct" data-arg="cleanup/run" data-arg2="Jetzt aufräumen? Löscht Render-Ordner, die älter sind als die Aufbewahrungsfrist.">Aufräumen</button>
+      <button class="btn warn sm" data-act="sysAct" data-arg="expiry/run" data-arg2="Jetzt prüfen, welches Guthaben abgelaufen ist?">Ablauf prüfen</button>
+    </div>
+    <div class="note">Diese Werte kommen beim Start aus der Umgebung. Ändern heißt: .env anpassen und den Container neu starten. Das Panel kann sie nicht umschalten.</div>
+    <h3>Sicherungen</h3>
+    <div id="bkList" class="subtle">loading …</div>
+    <div class="card" style="margin-top:12px">
+      <div class="k">Aus einer gemailten Sicherung zurückspielen</div>
+      <p class="subtle" style="margin:6px 0 10px">Für den echten Notfall: ist die
+        Platte dieses Servers weg, ist die Kopie in deinem Postfach die letzte,
+        die es noch gibt. Nimmt <code>.db</code> oder <code>.db.gz</code>.</p>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+        <input type="file" id="bkFile" accept=".db,.gz">
+        <button class="btn bad sm" data-act="bkUpload">Hochladen und zurückspielen</button>
+      </div>
+    </div>
+    <div class="note">Jede Sicherung wird hier geprüft (Integrität, Pflichttabellen,
+      Kontenzahl). Eine Sicherung, die sich nicht lesen lässt, ist wertlos. Beim
+      Zurückspielen wandert der Stand in die LAUFENDE Datenbank, es muss nichts
+      angehalten werden, und der Stand von vorher bleibt als
+      <code>vor_restore_*.db</code> liegen. So kommst du denselben Weg zurück.</div>`;
+  loadBackups();
+  loadBetrieb();
+}
+/* v230v SICHERUNG AUSSER HAUS (Cloudflare R2). Bis hierher lag die einzige
+   Kopie auf derselben Platte wie die Datenbank - stirbt sie, ist das Guthaben
+   zahlender Kunden weg. Die Zugaenge kommen HIER herein, nicht ueber eine
+   Datei auf dem Server: alles laeuft ueber das Panel, ein Weg mit Terminal
+   wird nie benutzt. Geheimnisse zeigt der Server nie wieder her - hier steht
+   nur "gesetzt: ja/nein". */
+async function loadOffsite(){
+  const v=el('view');
+  let d;try{d=await api('/api/admin/offsite');}catch(e){v.innerHTML=err(e);return;}
+  const ja=x=>x?'<span class="tag ok">gesetzt</span>':'<span class="tag no">fehlt</span>';
+  v.innerHTML=`<h2>Sicherung ausser Haus</h2>
+    <div class="note" style="margin-bottom:14px">Taeglich wandert eine
+      <b>verschlüsselte</b> Kopie der Datenbank zu Cloudflare R2. Verschluesselt
+      wird auf DIESEM Server. Wer den Speicher aufmacht, sieht Rauschen.
+      Es bleiben ${d.staende} Staende liegen.</div>
+    <div class="grid3">
+      <div class="card"><div class="k">Zustand</div><div class="v" style="font-size:16px">
+        ${d.bereit?'<span class="tag ok">eingerichtet</span>':'<span class="tag no">noch nicht eingerichtet</span>'}</div></div>
+      <div class="card"><div class="k">Letzte Kopie</div><div class="v" style="font-size:16px">
+        ${d.letzte_ts?fdt(d.letzte_ts):'&ndash;'}</div></div>
+      <div class="card"><div class="k">Stände im Speicher</div><div class="v" style="font-size:16px">
+        ${d.dateien.length}</div></div>
+    </div>
+    ${d.fehler?`<div class="note bad" style="margin-top:12px">Speicher nicht erreichbar: ${esc(d.fehler)}</div>`:''}
+    <h3>Zugang</h3>
+    <div class="card">
+      <div style="display:grid;gap:9px;max-width:640px">
+        <label class="k">Endpoint <span class="subtle">(aus Cloudflare, beginnt mit https://)</span>
+          <input id="oEp" placeholder="https://….r2.cloudflarestorage.com" value="${esc(d.endpoint)}"></label>
+        <label class="k">Bucket
+          <input id="oBk" placeholder="douchkove-backup" value="${esc(d.bucket)}"></label>
+        <label class="k">Access Key ID ${ja(d.key_gesetzt)}
+          <input id="oKey" placeholder="${d.key_gesetzt?'unveraendert lassen':'aus Cloudflare'}"></label>
+        <label class="k">Secret Access Key ${ja(d.secret_gesetzt)}
+          <input id="oSec" type="password" placeholder="${d.secret_gesetzt?'unveraendert lassen':'wird nur EINMAL angezeigt'}"></label>
+        <label class="k">Passwort fuer die Verschluesselung ${ja(d.pass_gesetzt)}
+          <input id="oPw" type="password" placeholder="${d.pass_gesetzt?'unveraendert lassen':'mind. 12 Zeichen'}"></label>
+      </div>
+      <div class="row-actions" style="margin-top:12px">
+        <button class="btn sm" data-act="offSave">Speichern</button>
+        <button class="btn ghost sm" data-act="offTest">Verbindung prüfen</button>
+        <button class="btn ghost sm" data-act="offRun">Jetzt sichern</button>
+        <button class="btn ghost sm" data-act="offPw">Passwort anzeigen</button>
+      </div>
+      <div class="note" style="margin-top:10px"><b>Das Passwort außer Haus aufheben.</b>
+        Ohne es lässt sich die Kopie NICHT lesen, und liegt es nur auf
+        diesem Server, ist es zusammen mit der Platte weg. &bdquo;Passwort
+        anzeigen&ldquo; holt es hervor, solange der Server laeuft; kopier es in
+        deinen Passwort-Speicher.</div>
+    </div>
+    <h3>Vorhandene Stände</h3>
+    <div id="offList" class="subtle">&ndash;</div>`;
+  const box=el('offList');
+  if(!d.dateien.length){box.innerHTML='<div class="subtle">Noch nichts hochgeladen.</div>';}
+  else{box.innerHTML=`<table><thead><tr><th>Datei</th><th>Größe</th><th>Wann</th><th></th></tr></thead>
+    <tbody>${d.dateien.map(f=>`<tr><td>${esc(f.name)}</td>
+      <td class="subtle">${(f.bytes/1024).toFixed(0)} KB</td>
+      <td class="subtle" style="white-space:nowrap">${esc((f.ts||'').replace('T',' ').slice(0,16))}</td>
+      <td><button class="btn bad sm" data-act="offRestore" data-arg="${esc(f.name)}">Zurückspielen</button></td>
+    </tr>`).join('')}</tbody></table>`;}
+}
+async function offSave(){
+  const fd=new FormData();
+  fd.append('endpoint',el('oEp').value.trim()); fd.append('bucket',el('oBk').value.trim());
+  fd.append('key',el('oKey').value.trim()); fd.append('secret',el('oSec').value.trim());
+  fd.append('passwort',el('oPw').value.trim());
+  try{await api('/api/admin/offsite/settings',{method:'POST',body:fd});
+    alert('Gespeichert.'); loadOffsite();}
+  catch(e){alert(e.message);}
+}
+async function offTest(){
+  try{const d=await api('/api/admin/offsite/test',{method:'POST'});
+    alert('Funktioniert: '+d.bytes+' Bytes hoch, wieder heruntergeholt, '
+      +'entschluesselt und verglichen.');}
+  catch(e){alert('Fehlgeschlagen:\n'+e.message);}
+}
+/* v230x: das Passwort nachschlagen, solange der Server noch lebt. Ist die
+   Platte tot, ist es mit ihr weg - und die Kopie damit unlesbar. Der Aufruf
+   steht in der Chronik. */
+async function offPw(){
+  try{const d=await api('/api/admin/offsite/passwort',{method:'POST'});
+    prompt('Passwort der Sicherung. Kopier es in deinen Passwort-Speicher '
+      +'- ohne es ist die Kopie im Ernstfall unlesbar.', d.passwort);}
+  catch(e){alert(e.message);}
+}
+async function offRun(){
+  try{const d=await api('/api/admin/offsite/run',{method:'POST'});
+    alert('Hochgeladen: '+d.datei); loadOffsite();}
+  catch(e){alert('Fehlgeschlagen:\n'+e.message);}
+}
+/* Zurueckspielen ueberschreibt ALLE Konten - dieselbe Tipp-Bestaetigung wie
+   beim Factory-Reset. Der jetzige Stand bleibt als vor_restore_*.db liegen. */
+async function offRestore(name){
+  const t=prompt('Das ueberschreibt die laufende Datenbank mit "'+name+'".\n'
+    +'Der jetzige Stand bleibt als vor_restore_*.db liegen.\n'
+    +'Tippe RESTORE zum Bestätigen.');
+  if(!t)return;
+  const pw=prompt('Passwort der Kopie. Leer lassen, wenn es dasselbe ist wie '
+    +'oben gespeichert.')||'';
+  const fd=new FormData(); fd.append('datei',name); fd.append('bestaetigung',t);
+  fd.append('passwort',pw);
+  try{const d=await api('/api/admin/offsite/restore',{method:'POST',body:fd});
+    alert('Eingespielt: '+(d.konten!=null?d.konten+' Konten':'ok')); loadOffsite();}
+  catch(e){alert(e.message);}
+}
+/* v197a: Die Sicherungen lagen nur auf der Platte und im Postfach. Im Panel
+   stand bloss ein Datum - man sah also, DASS gesichert wurde, kam aber nicht
+   an die Datei und wusste nicht, ob sie lesbar ist. */
+async function loadBackups(){
+  const box=el('bkList'); if(!box)return;
+  let d;try{d=await api('/api/admin/backups');}catch(e){box.innerHTML=err(e);return;}
+  if(!d.items.length){box.innerHTML='<div class="subtle">Noch keine Sicherungen.</div>';return;}
+  box.innerHTML=`<table><thead><tr><th>Datei</th><th>Art</th><th>Konten</th>
+    <th>Größe</th><th>Wann</th><th></th></tr></thead><tbody>${d.items.map(b=>`
+    <tr><td>${b.ok?'':'<span class="tag no">unreadable</span> '}${esc(b.datei)}</td>
+      <td><span class="tag${b.art==='snapshot'?' ok':''}">${b.art}</span></td>
+      <td>${b.konten==null?'–':b.konten}</td>
+      <td class="subtle">${(b.bytes/1024).toFixed(0)} KB</td>
+      <td class="subtle" style="white-space:nowrap">${fdt(b.zeit)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn ghost sm" data-act="bkDl" data-arg="${esc(b.datei)}">Download</button>
+        <button class="btn ghost sm" data-act="bkCheck" data-arg="${esc(b.datei)}">Bestätigen</button>
+        <button class="btn bad sm" data-act="bkRestore" data-arg="${esc(b.datei)}" data-arg2="${b.konten==null?-1:b.konten}">Zurückspielen</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+async function bkCheck(datei){
+  const fd=new FormData(); fd.append('datei',datei);
+  try{const d=await api('/api/admin/backup/check',{method:'POST',body:fd});
+    alert(d.ok?`Usable.\n${d.konten} accounts, ${d.kaeufe} purchases, ${d.tabellen} tables.`
+              :`NOT usable:\n${d.meldung}`);}
+  catch(e){alert(e.message);}
+}
+/* Zurueckspielen ueberschreibt ALLE Konten - deshalb dieselbe Tipp-Bestaetigung
+   wie beim Factory-Reset. Der jetzige Stand wird vorher als vor_restore_*.db
+   weggeschrieben, der Weg zurueck ist derselbe Knopf. */
+async function bkRestore(datei,konten){
+  const t=prompt(`This overwrites the live database with "${datei}"`
+    +(konten>=0?` (${konten} accounts)`:'')
+    +`.\nThe current state is kept as vor_restore_*.db.\nType RESTORE to confirm.`);
+  if(!t)return;
+  const fd=new FormData(); fd.append('datei',datei); fd.append('bestaetigung',t);
+  try{const d=await api('/api/admin/backup/restore',{method:'POST',body:fd});
+    alert(`Restored.\n${d.konten} accounts, ${d.kaeufe} purchases.\n`
+      +`Previous state saved as ${d.vorher_gesichert}.`);
+    loadSystem();}
+  catch(e){alert(e.message);}
+}
+async function bkUpload(){
+  const f=el('bkFile'); if(!f||!f.files[0]){alert('Pick a file first.');return;}
+  const t=prompt('This overwrites the live database with the uploaded file.\n'
+    +'The current state is kept as vor_restore_*.db.\nType RESTORE to confirm.');
+  if(!t)return;
+  const fd=new FormData(); fd.append('file',f.files[0]); fd.append('bestaetigung',t);
+  try{const d=await api('/api/admin/backup/upload',{method:'POST',body:fd});
+    alert(`Restored.\n${d.konten} accounts, ${d.kaeufe} purchases.\n`
+      +`Previous state saved as ${d.vorher_gesichert}.`);
+    loadSystem();}
+  catch(e){alert(e.message);}
+}
+/* Der Admin-Key steht im HEADER, nicht in der URL - ein <a href> kann ihn
+   also nicht mitschicken (und in der URL haette er nichts zu suchen: er
+   landete in History und Server-Log). Deshalb ueber fetch + Blob, genau wie
+   der CSV-Export. */
+function bkDl(datei){
+  fetch('/api/admin/backup/download?datei='+encodeURIComponent(datei),{headers:hdr()})
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.blob();})
+    .then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
+      a.download=datei;a.click();}).catch(e=>alert(e.message));
+}
+async function sysAct(path,msg){if(!danger(msg))return;try{const d=await api('/api/admin/'+path,{method:'POST'});alert('OK: '+JSON.stringify(d));if(path.startsWith('backup'))loadSystem();}catch(e){alert(e.message);}}
+/* v137: kompletter Neustart auf null (vor dem Launch). Loescht ALLES lokale;
+   Stripe-Belege bleiben im Stripe-Dashboard. Tipp-Bestaetigung 'RESET'. */
+async function factoryReset(){
+  const t=prompt('This wipes ALL users, credits, purchases, tickets, jobs and caches. Stripe records stay in Stripe. Type RESET to confirm.');
+  if(t===null)return;
+  if(t.trim()!=='RESET'){alert('Nicht bestätigt. Es wurde nichts gelöscht.');return;}
+  try{const fd=new FormData();fd.append('confirm','RESET');
+    const d=await api('/api/admin/factory_reset',{method:'POST',body:fd});
+    alert('Fresh start. Wiped: '+JSON.stringify(d.wiped));go('live');
+  }catch(e){alert(e.message);}
+}
+
+/* ---------- COMPLIANCE ---------- */
+async function loadCompliance(){
+  let cons,arch;
+  try{cons=await api('/api/admin/compliance/consents');arch=await api('/api/admin/compliance/archive');}catch(e){el('view').innerHTML=err(e);return;}
+  const cr=cons.consents.map(c=>`<tr><td>${esc(c.email)}</td><td>${esc(c.kind)}</td><td class="subtle">${fdt(c.created_at)}</td></tr>`).join('')||'<tr><td colspan=3 class="subtle">keine</td></tr>';
+  const ar=arch.archive.map(a=>`<tr><td>${esc(a.user_email)}</td><td>${Math.round(a.delta_sec/60)}m</td><td>${esc(a.grund)}</td><td class="subtle">${fdate(a.archived_at)}</td></tr>`).join('')||'<tr><td colspan=4 class="subtle">keine</td></tr>';
+  el('view').innerHTML=`
+    <h3>Widerrufs-Zustimmungen (Nachweis §356 Abs. 4 BGB)</h3>
+    <div class="scroll" style="max-height:320px"><table><thead><tr><th>Konto</th><th>Art</th><th>Wann</th></tr></thead><tbody>${cr}</tbody></table></div>
+    <h3>GoBD-Archiv der Käufe (gelöschte Konten, 10 Jahre)</h3>
+    <div class="scroll" style="max-height:260px"><table><thead><tr><th>E-Mail</th><th>Min</th><th>Grund</th><th>Archiviert</th></tr></thead><tbody>${ar}</tbody></table></div>
+    <h3>Export für die Buchhaltung</h3>
+    <div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button><button class="btn ghost sm" data-act="dl" data-arg="users">users.csv</button></div>`;
+}
+
+/* ---------- RECHT & STEUERN (v142) ----------
+   Alles gesetzlich Relevante an EINER Stelle, gerechnet aus den echten
+   Buchungen: Steuer-Identitaet, §19-Schwellen mit Ampel, Umsatz je Jahr und
+   Monat, Belege, Aufbewahrungsfristen, Verarbeitungsverzeichnis (Art. 30
+   DSGVO), Links auf die Rechtsseiten. Bewusst als Uebersicht deklariert,
+   nicht als Steuerberatung. */
+function eur(c){return (c/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' \u20ac';}
+function lamp(state){
+  const m={ok:['ok','im Rahmen'],warn:['no','80 % oder mehr der Grenze'],ueber:['no','GRENZE ÜBERSCHRITTEN']};
+  const s=m[state]||m.ok;return `<span class="tag ${s[0]}">${s[1]}</span>`;
+}
+function meter(ist,grenze,state){
+  const pct=Math.min(100,Math.round(ist/Math.max(grenze,1)*100));
+  const col=state==='ok'?'var(--acc)':(state==='warn'?'#e3a008':'var(--bad)');
+  return `<span class="ht" style="display:inline-block;width:160px;vertical-align:middle"><i style="width:${Math.max(1,pct)}%;background:${col}"></i></span> <span class="subtle">${pct}%</span>`;
+}
+async function loadLegal(){
+  let d;try{d=await api('/api/admin/compliance/tax');}catch(e){el('view').innerHTML=err(e);return;}
+  const k=d.kleinunternehmer;
+  const jr=d.jahre.slice().reverse().map(j=>`<tr><td>${j.jahr}</td><td>${j.anzahl}</td><td><b>${eur(j.brutto_cent)}</b></td></tr>`).join('');
+  const mr=d.monate.length?d.monate.slice().reverse().map(m=>`<tr><td class="mono">${esc(m.monat)}</td><td>${m.anzahl}</td><td>${eur(m.brutto_cent)}</td></tr>`).join(''):'<tr><td colspan=3 class="subtle">in diesem Jahr noch keine Verkäufe</td></tr>';
+  const br=d.belege.length?d.belege.map(b=>`<tr><td class="mono">${esc(b.session_id)}</td><td>${esc(b.email||'gelöschtes Konto')}</td><td>${esc(b.pack||'')}</td><td>${eur(b.cents)}</td><td class="subtle">${fdt(b.created_at)}</td></tr>`).join(''):'<tr><td colspan=5 class="subtle">noch keine Käufe</td></tr>';
+  const vr=d.verarbeitung.map(v=>`<tr><td>${esc(v.daten)}</td><td>${esc(v.zweck)}</td><td class="mono">${esc(v.grundlage)}</td><td class="subtle">${esc(v.frist)}</td></tr>`).join('');
+  const a=d.aufbewahrung;
+  const mchart=barChart('Revenue per month ('+d.jahr+')',d.monate.map(m=>m.monat),d.monate.map(m=>m.brutto_cent/100),v=>v.toFixed(2)+' \u20ac',88);
+  el('view').innerHTML=`
+    <h3>Steuer-Identität</h3>
+    <table><tbody>
+      <tr><td>Regelung</td><td><b>${esc(d.identitaet.regelung)}</b></td></tr>
+      <tr><td>VAT ID</td><td class="mono"><b>${esc(d.identitaet.ust_id)}</b></td></tr>
+      <tr><td>Umsatzsteuer ausweisen</td><td><span class="tag no">nie</span> <span class="subtle">${esc(d.identitaet.hinweis)}</span></td></tr>
+      <tr><td>USt-IdNr auf der Rechnung</td><td><span class="tag ok">yes</span> <span class="subtle">Steht als Kennzeichen im Rechnungsfuß, neben dem §19-Hinweis. Es wird keine Umsatzsteuer erhoben.</span></td></tr>
+      <tr><td>Aussteller</td><td><b>${esc(d.identitaet.name||'')}</b><br><span class="subtle">${esc(d.identitaet.anschrift||'')}</span></td></tr>
+    </tbody></table>
+
+    <h3>Pflichtangaben auf der Rechnung</h3>
+    <table><tbody>
+      ${(d.identitaet.rechnungspflicht||[]).map(x=>`<tr><td><span class="tag ok">on</span></td><td>${esc(x)}</td></tr>`).join('')}
+      <tr><td><span class="tag no">manual</span></td><td>${esc(d.identitaet.dashboard||'')}</td></tr>
+    </tbody></table>
+
+    <h3>&sect;19 UStG: Schwellen</h3>
+    <table><thead><tr><th>Prüfung</th><th>Tatsächlich</th><th>Grenze</th><th>Nutzung</th><th>Zustand</th></tr></thead><tbody>
+      <tr><td>Vorjahr (${d.jahr-1})</td><td><b>${eur(k.vorjahr_cent)}</b></td><td>${eur(k.vorjahr_grenze_cent)}</td><td>${meter(k.vorjahr_cent,k.vorjahr_grenze_cent,k.vorjahr_lage)}</td><td>${lamp(k.vorjahr_lage)}</td></tr>
+      <tr><td>Laufendes Jahr (${d.jahr})</td><td><b>${eur(k.laufend_cent)}</b></td><td>${eur(k.laufend_grenze_cent)}</td><td>${meter(k.laufend_cent,k.laufend_grenze_cent,k.laufend_lage)}</td><td>${lamp(k.laufend_lage)}</td></tr>
+    </tbody></table>
+    <div class="note">Wird die Vorjahresgrenze gerissen, endet die Kleinunternehmer-Regelung im nächsten Jahr. Wird die laufende Grenze gerissen, endet sie sofort, ab genau diesem Verkauf. Dieses Panel warnt ab 80 %. Die Zahlen kommen aus deinen eigenen Kaufbelegen, nicht aus Stripe. Weichen sie von Stripe ab, gilt Stripe, und dann nachsehen warum.</div>
+
+    <h3>Umsatz</h3>
+    ${mchart}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div><h4 class="subtle">Je Kalenderjahr</h4><table><thead><tr><th>Jahr</th><th>Verkäufe</th><th>Brutto</th></tr></thead><tbody>${jr}</tbody></table></div>
+      <div><h4 class="subtle">Je Monat (${d.jahr})</h4><div class="scroll" style="max-height:240px"><table><thead><tr><th>Monat</th><th>Verkäufe</th><th>Brutto</th></tr></thead><tbody>${mr}</tbody></table></div></div>
+    </div>
+
+    <h3>Aufbewahrungsfristen</h3>
+    <table><tbody>
+      <tr><td>Kaufbelege</td><td><b>${a.belege_jahre} Jahre</b> <span class="subtle">(${esc(a.rechtsgrundlage)})</span></td></tr>
+      <tr><td>Archivierte Zeilen gelöschter Konten</td><td>${a.archiv_zeilen} <span class="subtle">${a.archiv_von?fdate(a.archiv_von)+' \u2013 '+fdate(a.archiv_bis):''}</span></td></tr>
+      <tr><td>Buchungszeilen</td><td>${a.ledger_zeilen}</td></tr>
+      <tr><td>Gespeicherte Widerrufs-Zustimmungen</td><td>${a.consent_zeilen}</td></tr>
+      <tr><td>Kundenvideos werden gelöscht nach</td><td>${a.video_tage} Tage</td></tr>
+      <tr><td>Guthaben verfällt nach</td><td>${a.credit_tage} Tage</td></tr>
+    </tbody></table>
+    <div class="row-actions"><button class="btn ghost sm" data-act="dl" data-arg="purchases">purchases.csv</button><button class="btn ghost sm" data-act="dl" data-arg="ledger">ledger.csv</button><button class="btn ghost sm" data-act="dl" data-arg="users">users.csv</button></div>
+
+    <h3>Kaufbelege (neueste zuerst)</h3>
+    <div class="scroll" style="max-height:320px"><table><thead><tr><th>Stripe-Vorgang</th><th>Kunde</th><th>Paket</th><th>Brutto</th><th>Wann</th></tr></thead><tbody>${br}</tbody></table></div>
+
+    <h3>Verarbeitungsverzeichnis (Art. 30 DSGVO)</h3>
+    <table><thead><tr><th>Daten</th><th>Zweck</th><th>Rechtsgrundlage</th><th>Aufbewahrung</th></tr></thead><tbody>${vr}</tbody></table>
+
+    <h3>Öffentliche Rechtsseiten</h3>
+    <div class="row-actions">${d.seiten.map(s=>`<a class="btn ghost sm" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titel)}</a>`).join('')}</div>
+    <div class="note">Diese Seite ist eine Übersicht über deine eigenen Zahlen. Sie ist keine Steuerberatung und ersetzt keine Buchhaltung.</div>`;
+}
+
+/* ---------- CODES ---------- */
+async function loadCodes(){
+  let d;try{d=await api('/api/admin/codes');}catch(e){el('view').innerHTML=err(e);return;}
+  const rows=d.codes.map(c=>`<tr><td class="mono">${esc(c.code)}</td><td>${esc(c.name||'')}</td><td>${c.genutzt||0}/${c.limit||'-'}</td><td>${c.aktiv?'<span class="tag ok">active</span>':'<span class="tag no">blocked</span>'}</td>
+    <td><button class="btn ghost sm" data-act="codeAct" data-arg="${c.aktiv?'block':'unblock'}" data-arg2="${esc(c.code)}">${c.aktiv?'Block':'Unblock'}</button></td></tr>`).join('')||'<tr><td colspan=5 class="subtle">keine Codes</td></tr>';
+  el('view').innerHTML=`
+    <h3>Test-Zugangscodes</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <input class="search" id="cName" placeholder="Name des Testers">
+      <input class="search" id="cLimit" type="number" placeholder="Video-Grenze" value="5" style="width:120px">
+      <button class="btn sm" data-act="newCode">Code anlegen</button></div>
+    <table><thead><tr><th>Code</th><th>Name</th><th>Benutzt</th><th>Zustand</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="note">Mit einem Zugangscode können Tester die App ohne Konto benutzen, ohne dass dein OpenAI-Schlüssel sichtbar wird.</div>`;
+}
+async function newCode(){const fd=new FormData();fd.append('action','new');fd.append('name',el('cName').value||'Tester');fd.append('limit',parseInt(el('cLimit').value,10)||5);try{const d=await api('/api/admin/codes',{method:'POST',body:fd});alert('Neuer Code: '+d.code);loadCodes();}catch(e){alert(e.message);}}
+async function codeAct(action,code){const fd=new FormData();fd.append('action',action);fd.append('code',code);try{await api('/api/admin/codes',{method:'POST',body:fd});loadCodes();}catch(e){alert(e.message);}}
+
+/* ---------- SUPPORT ---------- */
+/* v198: Ein Ticket ist ein VERLAUF, keine einzelne Nachricht mehr. Antworten
+   geht hier im Panel; die Antwort geht zusaetzlich als Mail raus, damit der
+   Kunde nicht in die App schauen muss, um sie zu sehen. */
+const TAG_ST={open:'no',answered:'warn',closed:'ok'};
+async function loadSupport(silent){
+  let d;try{d=await api('/api/admin/tickets?status=all');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.support=Date.now()/1000;
+  const karten=d.tickets.map(t=>{
+    const verlauf=(t.messages&&t.messages.length?t.messages:[{von:'kunde',text:t.body,created_at:t.created_at}])
+      .map(m=>`<div style="margin:8px 0;padding:9px 11px;border-radius:9px;
+        background:${m.von==='admin'?'rgba(255,122,26,.09)':'rgba(255,255,255,.04)'}">
+        <div class="subtle" style="font-size:11px;margin-bottom:3px">
+          ${m.von==='admin'?'You':esc(t.email)} · ${fdt(m.created_at)}</div>
+        <div style="white-space:pre-wrap">${esc(m.text)}</div></div>`).join('');
+    return `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <span class="tag ${TAG_ST[t.status]||''}">${t.status}</span>
+        <b>#${t.id} ${esc(t.subject)}</b>
+        <span class="subtle">${esc(t.email)}</span>
+        <span class="subtle" style="margin-left:auto">${fdt(t.updated_at||t.created_at)}</span>
+      </div>
+      ${verlauf}
+      ${t.status==='closed'
+        ? `<div class="note" style="margin-top:8px">Ticket wurde geschlossen.
+             es kann nicht mehr geantwortet werden. Der Kunde sieht es noch 24 h,
+             dann verschwindet es aus seiner Liste. Zum Weiterschreiben erst
+             wieder oeffnen.</div>`
+        : `<textarea class="search" id="rp${t.id}" rows="3" placeholder="Antwort schreiben …"
+        style="width:100%;margin-top:8px"></textarea>`}
+      <div style="display:flex;gap:9px;margin-top:8px;flex-wrap:wrap">
+        ${t.status==='closed' ? '' : `<button class="btn sm" data-act="ticketReply" data-arg="${t.id}">Antwort senden</button>`}
+        <button class="btn ghost sm" data-act="ticketAct" data-arg="${t.id}" data-arg2="${t.status==='closed'?'open':'closed'}">
+          ${t.status==='closed'?'Reopen':'Close'}</button>
+      </div>
+    </div>`;}).join('')||'<div class="subtle">no tickets</div>';
+  el('view').innerHTML=`
+    <h3>Support <span class="subtle">(${d.open_count} waiting)</span></h3>
+    <div class="note">Antworten gehen von hier raus: sie landen im Verlauf des
+      Kunden in der App <b>und</b> zusätzlich als Mail. Eine Rückfrage bleibt im
+      selben Ticket, statt ein neues aufzumachen.</div>
+    ${karten}`;
+}
+async function ticketReply(id){
+  const box=el('rp'+id); const t=(box&&box.value||'').trim();
+  if(t.length<2){alert('Write something first.');return;}
+  const fd=new FormData(); fd.append('text',t);
+  try{const d=await api('/api/admin/tickets/'+id+'/reply',{method:'POST',body:fd});
+    if(!d.gemailt)alert('Im Verlauf gespeichert, aber die Mail ging nicht raus. SMTP prüfen.');
+    loadSupport();refreshBadges();}
+  catch(e){alert(e.message);}
+}
+async function ticketAct(id,status){const fd=new FormData();fd.append('status',status);try{await api('/api/admin/tickets/'+id+'/status',{method:'POST',body:fd});loadSupport();}catch(e){alert(e.message);}}
+
+// v147: Stoerungen stehen HIER, nicht mehr im Postfach. Render-Fehler und
+// Timeouts werden nur noch protokolliert - Ismets Wunsch.
+async function loadAlerts(silent){
+  let d;try{d=await api('/api/admin/alerts');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.alerts=Date.now()/1000;
+  const rows=d.alerts.length?d.alerts.map(a=>`<tr${a.gelesen?'':' style="background:rgba(255,122,26,.06)"'}>
+    <td>${a.gelesen?'<span class="tag ok">gelesen</span>':'<span class="tag no">neu</span>'}</td>
+    <td><b>${esc(a.betreff)}</b><div class="subtle mono" style="font-size:11px">${esc(a.schluessel)}</div></td>
+    <td><pre class="mono" style="white-space:pre-wrap;font-size:11.5px;margin:0">${esc(a.text)}</pre></td>
+    <td class="subtle">${a.gemailt?'mailed':'panel only'}</td>
+    <td class="subtle">${new Date(a.created_at*1000).toLocaleString()}</td>
+    <td>${a.gelesen?'':`<button class="btn" data-act="alertRead" data-arg="${a.id}">Als gelesen</button>`}</td>
+  </tr>`).join(''):'<tr><td colspan="6" class="subtle">Keine Störungen.</td></tr>';
+  el('view').innerHTML=`
+    <h3>Alerts <span class="subtle">${d.offen} unread</span>
+      <button class="btn" style="float:right" data-act="alertRead" data-arg="0">Alle als gelesen</button></h3>
+    <p class="subtle">Gescheiterte Renders und Zeitüberschreitungen stehen nur hier, es geht keine
+      Mail raus. Das Guthaben wird automatisch erstattet.</p>
+    <table><thead><tr><th></th><th>Was</th><th>Detail</th><th>Mail</th><th>Wann</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function alertRead(id){const fd=new FormData();fd.append('id',id);try{await api('/api/admin/alerts/read',{method:'POST',body:fd});loadAlerts();}catch(e){alert(e.message);}}
+
+function err(e){return '<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Fehler</b> '+esc(e.message)+'</div>';}
+/* ---------- v196 FEEDBACK ----------
+   Bewusst nicht dasselbe wie Support: ein Ticket ist eine Frage mit
+   Antworterwartung, Feedback ist eine Bewertung ohne. Der Wert steckt in
+   der VERTEILUNG und im Schnitt JE LOOK - eine blosse Liste sagt nichts
+   darueber, wo das Produkt enttaeuscht. */
+let fbFilt='all';
+function sterne(n){return '★'.repeat(n)+'<span style="color:var(--line)">'+'★'.repeat(5-n)+'</span>';}
+async function loadFeedback(silent){
+  let d;try{d=await api('/api/admin/feedback?filt='+fbFilt);}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.feedback=Date.now()/1000;
+  setBadge('feedback', d.offen||0);          // sofort, nicht erst nach 30 s
+  const max=Math.max(1,...Object.values(d.verteilung));
+  const bars=[5,4,3,2,1].map(n=>{
+    const c=d.verteilung[n]||0;
+    return `<div style="display:flex;align-items:center;gap:9px;margin:5px 0">
+      <span style="width:58px;color:var(--mut2);font-size:12px">${n} ★</span>
+      <div style="flex:1;height:8px;background:var(--surf2);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${Math.round(c/max*100)}%;background:${n>=4?'var(--ok)':n===3?'var(--warn)':'var(--bad)'}"></div></div>
+      <span style="width:38px;text-align:right;font-size:12px">${c}</span></div>`;}).join('');
+  const looks=d.looks.length?d.looks.map(l=>
+    `<tr><td>${esc(l.look)}</td><td>${l.c}</td>
+     <td style="color:${l.avg>=4?'var(--ok)':l.avg>=3?'var(--warn)':'var(--bad)'}">${Number(l.avg).toFixed(2)}</td></tr>`
+    ).join(''):'<tr><td colspan="3" class="subtle">Noch keine Bewertung mit Look.</td></tr>';
+  const rows=d.items.length?d.items.map(f=>`<tr${f.gelesen?'':' style="background:rgba(255,122,26,.06)"'}>
+      <td style="white-space:nowrap;color:${f.note>=4?'var(--ok)':f.note>=3?'var(--warn)':'var(--bad)'}">${sterne(f.note)}</td>
+      <td>${esc(f.name||'')}<div class="subtle">${esc(f.email||'gelöschtes Konto')}</div></td>
+      <td>${esc(f.look||'–')}</td>
+      <td style="max-width:420px;white-space:pre-wrap">${esc(f.text)||'<span class="subtle">kein Kommentar</span>'}</td>
+      <td class="subtle" style="white-space:nowrap">${fdt(f.created_at)}</td>
+      <td>${f.gelesen?'':`<button class="btn ghost sm" data-act="fbRead" data-arg="${f.id}">Als gelesen</button>`}</td>
+    </tr>`).join(''):'<tr><td colspan="6" class="subtle">Noch nichts da.</td></tr>';
+  el('view').innerHTML=`
+    <div class="grid g4">
+      <div class="card"><div class="k">Bewertungen</div><div class="v">${d.gesamt}</div></div>
+      <div class="card acc"><div class="k">Durchschnitt</div><div class="v">${d.schnitt||'–'} <small>von 5</small></div></div>
+      <div class="card"><div class="k">Ungelesen</div><div class="v">${d.offen}</div></div>
+      <div class="card"><div class="k">1-2 Sterne</div><div class="v">${(d.verteilung[1]||0)+(d.verteilung[2]||0)}</div></div>
+    </div>
+    <div class="grid g2" style="margin-top:12px">
+      <div class="card"><h3 style="margin-top:0">Verteilung</h3>${bars}</div>
+      <div class="card"><h3 style="margin-top:0">Durchschnitt je Look</h3>
+        <table><tr><th>Look</th><th>Bewertungen</th><th>Ø</th></tr>${looks}</table></div>
+    </div>
+    <h3>Comments
+      <span style="float:right;font-weight:600;text-transform:none;letter-spacing:0">
+      ${['all','neu','schlecht'].map(f=>`<button class="btn ${fbFilt===f?'':'ghost'} sm" data-act="fbSet" data-arg="${f}">${f==='all'?'All':f==='neu'?'Unread':'1-2 stars'}</button>`).join(' ')}
+      </span></h3>
+    <table><tr><th>Note</th><th>Kunde</th><th>Look</th><th>Kommentar</th><th>Wann</th><th></th></tr>${rows}</table>`;
+}
+function fbSet(f){fbFilt=f;loadFeedback();}
+async function fbRead(id){await api('/api/admin/feedback/'+id+'/read',{method:'POST'});loadFeedback();refreshBadges();}
+
+/* ---------- v196 ANKUENDIGUNGEN ----------
+   Der einzige Weg, Kunden etwas zu sagen, war bisher eine Mail an alle -
+   fuer "Wartung heute 20 Uhr" das falsche Mittel. Eine Ankuendigung steht
+   IN der App und kann von selbst ablaufen; eine Wartungsmeldung, die jemand
+   vergisst abzuschalten, ist schlimmer als keine. */
+async function loadAnn(silent){
+  let d;try{d=await api('/api/admin/announcements');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.ann=Date.now()/1000;
+  const rows=d.items.length?d.items.map(a=>{
+    const ab=a.bis?fdt(a.bis):'–';
+    const weg=a.bis&&a.bis*1000<Date.now();
+    return `<tr>
+      <td><span class="tag ${a.stufe==='warn'?'warn':a.stufe==='wartung'?'no':'ok'}">${a.stufe}</span></td>
+      <td><b>${esc(a.titel)}</b><div class="subtle" style="white-space:pre-wrap;max-width:460px">${esc(a.text)}</div></td>
+      <td class="subtle" style="white-space:nowrap">${fdt(a.created_at)}</td>
+      <td class="subtle" style="white-space:nowrap">${ab}${weg?' <span class="tag no">expired</span>':''}</td>
+      <td>${a.aktiv?'<span class="tag ok">live</span>':'<span class="tag">aus</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn ghost sm" data-act="annTog" data-arg="${a.id}">${a.aktiv?'Turn off':'Turn on'}</button>
+        <button class="btn ghost sm" data-act="annDel" data-arg="${a.id}">Löschen</button></td>
+    </tr>`;}).join(''):'<tr><td colspan="6" class="subtle">Noch keine Ankündigungen.</td></tr>';
+  el('view').innerHTML=`
+    <div class="card">
+      <h3 style="margin-top:0">Neue Ankündigung</h3>
+      <p class="subtle" style="margin-bottom:10px">Erscheint als Banner in der App, bei jedem Kunden. Ablauf auf 0 lassen heißt
+        „bis ich es abschalte".</p>
+      <div style="display:flex;flex-direction:column;gap:9px;max-width:620px">
+        <input class="search" id="annT" placeholder="Titel" maxlength="120">
+        <textarea class="search" id="annB" rows="3" placeholder="Text" maxlength="2000"></textarea>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+          <select class="search" id="annS">
+            <option value="info">Info</option>
+            <option value="warn">Warnung</option>
+            <option value="wartung">Wartung</option>
+          </select>
+          <input class="search" id="annD" type="number" min="0" max="365" step="0.5" value="0"
+                 style="width:120px" title="Läuft nach N Tagen automatisch ab (0 = nie)">
+          <span class="subtle">Tage bis zum Ablauf (0 = nie)</span>
+          <button class="btn" data-act="annSave">Veröffentlichen</button>
+        </div>
+        <p class="msg subtle" id="annMsg"></p>
+      </div>
+    </div>
+    <h3>Alle Ankündigungen</h3>
+    <table><tr><th>Stufe</th><th>Nachricht</th><th>Angelegt</th><th>Läuft ab</th><th>Zustand</th><th></th></tr>${rows}</table>`;
+}
+async function annSave(){
+  const t=el('annT').value.trim(), b=el('annB').value.trim();
+  if(!t||!b){el('annMsg').textContent='Titel und Text sind Pflicht.';return;}
+  const fd=new FormData();
+  fd.append('titel',t);fd.append('text',b);
+  fd.append('stufe',el('annS').value);fd.append('tage',el('annD').value||'0');
+  try{await api('/api/admin/announcements',{method:'POST',body:fd});loadAnn();}
+  catch(e){el('annMsg').textContent=e.message;}
+}
+async function annTog(id){await api('/api/admin/announcements/'+id+'/toggle',{method:'POST'});loadAnn();}
+async function annDel(id){if(!danger('Diese Ankündigung löschen?'))return;
+  await api('/api/admin/announcements/'+id+'/delete',{method:'POST'});loadAnn();}
+
+/* v197 Logs. Der Betriebs-Log lag bisher nur in `docker logs` und war nach
+   jedem Deploy weg. Jetzt schreibt der Server ihn zusaetzlich in eine
+   rotierende Datei; hier steht ihr Ende. */
+let logTeil='';
+async function loadLogs(silent){
+  let d;try{d=await api('/api/admin/logs?zeilen=400'+(logTeil?'&teil='+logTeil:''));}
+  catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.logs=Date.now()/1000;
+  const wahl=d.dateien.map(f=>{
+    const t=f.includes('.log.')?f.split('.log.')[1]:'';
+    return `<button class="btn ghost sm${t===logTeil?' on':''}" data-act="logPick" data-arg="${t}">${esc(f)}</button>`;
+  }).join(' ');
+  el('view').innerHTML=`
+    <div class="card">
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        ${wahl}
+        <span class="subtle" style="margin-left:auto">${(d.bytes/1024).toFixed(0)} KB</span>
+        <button class="btn ghost sm" data-act="loadLogs">Neu laden</button>
+      </div>
+      <pre style="max-height:64vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
+        font-size:12px;line-height:1.5;margin:0">${esc(d.text)}</pre>
+    </div>`;
+  const p=el('view').querySelector('pre'); if(p)p.scrollTop=p.scrollHeight;
+}
+function logPick(t){logTeil=t;loadLogs();}
+
+/* v204-sec Chronik: wer wann was. Bis v203 hielt NICHTS fest, wer sich im
+   Panel angemeldet oder ein Konto geaendert hat - nach einem Vorfall waere
+   nicht rekonstruierbar gewesen, was passiert ist. */
+let evFilt='';
+async function loadEvents(silent){
+  let d;try{d=await api('/api/admin/events?limit=300'+(evFilt?'&aktion='+encodeURIComponent(evFilt):''));}
+  catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.events=Date.now()/1000;
+  const knopf=(k,t)=>`<button class="btn ghost sm${evFilt===k?' on':''}" data-act="evSet" data-arg="${k}">${t}</button>`;
+  const filter=[knopf('','Alle')].concat(d.arten.map(a=>knopf(a,a))).join(' ');
+  const rows=d.events.length?d.events.map(e=>`<tr>
+    <td class="subtle" style="white-space:nowrap">${fdt(e.ts)}</td>
+    <td><span class="tag${e.aktion.includes('fehl')?' no':e.aktion==='login_ok'?' ok':''}">${esc(e.aktion)}</span></td>
+    <td class="mono">${esc(e.wer||'-')}</td>
+    <td class="mono subtle">${esc(e.ip||'-')}</td>
+    <td class="subtle" style="max-width:340px;word-break:break-all">${esc(e.ziel||'')}</td>
+    <td class="subtle">${esc(e.detail||'')}</td></tr>`).join(''):
+    '<tr><td colspan="6" class="subtle">Noch nichts protokolliert.</td></tr>';
+  el('view').innerHTML=`
+    <div class="row-actions" style="margin-bottom:10px;flex-wrap:wrap">${filter}</div>
+    <div class="note">Aufbewahrung ${d.aufbewahrung_tage} Tage. Hier steht, WER WANN WAS getan hat:
+      bewusst keine Inhalte (keine Nachrichten, keine Passwoerter).</div>
+    <table><thead><tr><th>Wann</th><th>Was</th><th>Wer</th><th>IP</th><th>Wo</th><th>Detail</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+function evSet(k){evFilt=k;loadEvents();}
+
+/* v204-sec NOTAUS. Der Hebel fuer die Stunde, in der man noch nicht weiss,
+   was los ist. 'notaus' beendet zusaetzlich ALLE Kundensitzungen. */
+async function loadBetrieb(){
+  const box=el('betriebBox'); if(!box)return;
+  let d;try{d=await api('/api/admin/betrieb');}catch(e){box.innerHTML=err(e);return;}
+  const txt={normal:'Alles laeuft normal.',
+             pausiert:'PAUSIERT. Keine neuen Uploads, Renders, Käufe oder Registrierungen. Fertige Videos bleiben abrufbar.',
+             notaus:'NOTAUS. Alle Kunden sind abgemeldet, es geht nichts mehr rein.'};
+  box.innerHTML=`
+    <div class="health" style="margin-bottom:10px">
+      ${d.stufe==='normal'?'<span class="tag ok">normal</span>':'<span class="tag no">'+esc(d.stufe)+'</span>'}
+      <span class="subtle">${esc(txt[d.stufe]||'')}</span>
+    </div>
+    <div class="row-actions">
+      <button class="btn ghost sm" data-act="setBetrieb" data-arg="normal">Normalbetrieb</button>
+      <button class="btn warn sm" data-act="setBetrieb" data-arg="pausiert">Pausieren</button>
+      <button class="btn bad sm" data-act="setBetrieb" data-arg="notaus">NOTAUS</button>
+    </div>`;
+}
+async function setBetrieb(stufe){
+  const warnung=stufe==='notaus'
+    ? 'NOTAUS: alle Kunden werden sofort abgemeldet und es geht nichts mehr rein. Fortfahren?'
+    : stufe==='pausiert'
+    ? 'Pausieren: keine neuen Uploads, Renders, Kaeufe, Registrierungen. Fortfahren?'
+    : 'Zurueck in den Normalbetrieb?';
+  if(!danger(warnung))return;
+  const fd=new FormData(); fd.append('stufe',stufe);
+  try{await api('/api/admin/betrieb',{method:'POST',body:fd});loadBetrieb();}
+  catch(e){alert(e.message);}
+}
+
+/* v206 STARTSEITE. Vier Fragen, vier Zahlen, jede mit einem Satz Klartext.
+   Ismets Befund: das Panel war "unuebersichtlich und kaum benutzerfreundlich",
+   mit Begriffen, bei denen er "keine Ahnung habe, was genau das ist" - und er
+   wusste nicht, ob die Umsatzzahlen stimmen. Taten sie nicht: sie waren brutto.
+   Hier steht jetzt, was GEBLIEBEN ist, und daneben was das heisst. */
+function eur(v){return (v||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' &euro;';}
+async function loadStart(silent){
+  let d;try{d=await api('/api/admin/start');}catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.start=Date.now()/1000;
+  const g=d.geld, b=d.betrieb, p=d.post, w=d.wachstum;
+
+  const trend = g.trend_prozent===null||g.trend_prozent===undefined ? ''
+    : `<div class="satz">${g.trend_prozent>=0?'+':''}${g.trend_prozent}&nbsp;% gegenüber den 30 Tagen davor.</div>`;
+  const erstattet = g.gesamt.erstattet_eur>0
+    ? `<div class="satz">Insgesamt eingenommen ${eur(g.gesamt.eur+g.gesamt.erstattet_eur)},
+       davon ${eur(g.gesamt.erstattet_eur)} wieder erstattet.</div>`
+    : '<div class="satz">Bisher nichts erstattet. Eingenommen ist gleich geblieben.</div>';
+
+  const probleme = b.probleme.length
+    ? b.probleme.map(x=>`<div class="satz"><span class="ampel ${x.stufe}"></span>${esc(x.text)}</div>`).join('')
+    : '<div class="satz">Keine offenen Punkte. Nichts zu tun.</div>';
+
+  const postSatz = (p.tickets||p.feedback)
+    ? `<div class="satz">${p.tickets?p.tickets+' Kunde(n) warten auf eine Antwort. ':''}${p.feedback?p.feedback+' neue Bewertung(en).':''}</div>`
+    : '<div class="satz">Niemand wartet auf dich.</div>';
+
+  el('view').innerHTML=`
+    <div class="hero">
+      <div class="box">
+        <div class="frage">Verdiene ich Geld?</div>
+        <div class="zahl">${eur(g.monat.eur)}<small>in den letzten 30 Tagen</small></div>
+        ${trend}
+        <div class="satz">Heute ${eur(g.heute.eur)} &middot; Woche ${eur(g.woche.eur)} &middot;
+          insgesamt ${eur(g.gesamt.eur)}. Das ist, was nach Erstattungen geblieben ist.</div>
+        ${erstattet}
+        <div class="tuwas"><button class="btn ghost sm" data-act="go" data-arg="revenue">Details</button></div>
+      </div>
+
+      <div class="box ${b.ampel}">
+        <div class="frage">Läuft alles?</div>
+        <div class="zahl"><span class="ampel ${b.ampel}"></span>${
+          b.ampel==='gruen'?'Alles gut':b.ampel==='gelb'?'Kleinigkeiten':'Kümmern'}</div>
+        ${probleme}
+        <div class="satz">${b.laeuft_gerade} Video(s) werden gerade gerendert,
+          ${b.wartet} warten.</div>
+        <div class="tuwas">
+          <button class="btn ghost sm" data-act="go" data-arg="alerts">Störungen</button>
+          <button class="btn ghost sm" data-act="go" data-arg="system">System</button>
+        </div>
+      </div>
+
+      <div class="box${(p.tickets||p.feedback)?' gelb':''}">
+        <div class="frage">Will jemand etwas von mir?</div>
+        <div class="zahl">${p.tickets}<small>offene Anfragen</small></div>
+        ${postSatz}
+        ${p.note?`<div class="satz">Durchschnittliche Bewertung ${p.note} von 5
+          (${p.bewertungen} Stimmen).</div>`:''}
+        <div class="tuwas">
+          <button class="btn ghost sm" data-act="go" data-arg="support">Tickets</button>
+          <button class="btn ghost sm" data-act="go" data-arg="feedback">Bewertungen</button>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="frage">Wächst es?</div>
+        <div class="zahl">${w.kunden}<small>Konten insgesamt</small></div>
+        <div class="satz">${w.neu_7t} neu in den letzten 7 Tagen.
+          ${w.zahler} davon haben schon einmal gekauft.</div>
+        <div class="satz">${w.renders_7t} Videos in den letzten 7 Tagen gerendert.</div>
+        <div class="tuwas"><button class="btn ghost sm" data-act="go" data-arg="users">Konten</button></div>
+      </div>
+    </div>
+    <div class="note" style="margin-top:16px">Diese Seite beantwortet die vier Fragen,
+      die im Alltag zählen. Alles andere steht unverändert in den Ansichten links:
+      einzelne Renders, Gutscheine, Recht &amp; Steuern, Technik.</div>`;
+}
+
+/* v208 TRICHTER. "Wer kam auf die Webseite, und wo verliere ich die Leute?"
+   Sechs Stufen von Besucher bis Kauf. Gezaehlt werden MENSCHEN, nicht Klicks.
+   Die wichtige Zahl steht rechts an jedem Balken: der Anteil, der es von der
+   Stufe darueber bis hierher geschafft hat - dort klemmt es, nicht im
+   Gesamtanteil. */
+let triTage=30;
+function triSetTage(t){triTage=t;loadTrichter();}
+async function loadTrichter(silent){
+  let d;try{d=await api('/api/admin/trichter?tage='+triTage);}
+  catch(e){if(!silent)el('view').innerHTML=err(e);return;}
+  lastLoad.trichter=Date.now()/1000;
+  const oben=(d.stufen[0]||{}).anzahl||0;
+  const rows=d.stufen.map((s,i)=>{
+    const br=oben?Math.max(1,Math.round(s.anzahl/oben*100)):0;
+    let verlust='';
+    if(i>0&&s.von_vorher_prozent!==null&&s.von_vorher_prozent!==undefined){
+      const p=s.von_vorher_prozent;
+      const kl=p<20?'bad':p<50?'warn':'';
+      verlust=`<span class="tdrop ${kl}">${p}&nbsp;% von der Stufe darueber</span>
+        · ${100-p}&nbsp;% springen hier ab.`;
+    }else if(i===0){verlust='Das ist die Ausgangsmenge.';}
+    return `<div class="trow">
+      <div class="tt"><b>${esc(s.titel)}</b><span class="tn">${s.anzahl}</span></div>
+      <div class="tbar"><i style="width:${br}%"></i></div>
+      <div class="te">${esc(s.erklaerung)} ${verlust}</div>
+    </div>`;}).join('');
+
+  const qr=(d.quellen||[]).map(q=>`<tr><td>${esc(q.quelle)}</td>
+      <td>${q.besucher}</td><td>${q.konten}</td><td>${q.kaeufer}</td>
+      <td>${q.besucher?Math.round(q.konten/q.besucher*100)+'&nbsp;%':'–'}</td></tr>`).join('');
+
+  el('view').innerHTML=`
+    <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+      <span class="subtle">Zeitraum:</span>
+      ${[7,30,90,365].map(t=>`<button class="btn ${t===triTage?'':'ghost'} sm"
+        data-act="triSetTage" data-arg="${t}">${t===365?'1 Jahr':t+' Tage'}</button>`).join('')}
+    </div>
+    <div class="tri" style="margin-top:12px">${rows}</div>
+    <div class="chart" style="margin-top:14px">
+      <div class="ct"><b>Woher kamen sie</b><span>letzte ${d.tage} Tage</span></div>
+      ${qr?`<table><thead><tr><th>Quelle</th><th>Besucher</th><th>Konten</th>
+        <th>Käufer</th><th>Konto-Quote</th></tr></thead><tbody>${qr}</tbody></table>`
+        :'<div class="spin">Noch keine Daten. Die Zaehlung laeuft ab dem Deploy.</div>'}
+      <div class="note">"direkt" heisst: getippt, Lesezeichen, oder die App hat
+        die Herkunft nicht mitgeschickt (bei Instagram/TikTok normal).
+        Konten und Kaeufer werden der Quelle zugeordnet, aus der der Mensch
+        das erste Mal kam.</div>
+    </div>
+    <div class="note">${esc(d.hinweis||'')}
+      ${d.seit?' Erste Zaehlung: '+fdt(d.seit)+'.':''}</div>`;
+}
+
+/* v230ah KEINE INLINE-HANDLER MEHR. Bis hierher stand an jedem Knopf ein
+   ein Klick-Attribut; damit die Seite lief, musste die CSP `unsafe-inline` fuer
+   Skripte erlauben - und genau das haette auch einen eingeschleusten
+   <script>-Block ausgefuehrt. Jetzt traegt jeder Knopf nur noch DATEN
+   (data-act + data-arg...), und dieser eine Verteiler ruft die Funktion auf.
+   Die ERLAUBT-Liste ist der Riegel: was nicht darin steht, wird nicht
+   gerufen - ein data-act aus fremdem Text kann also nichts ausloesen. */
+const ERLAUBT = {
+  saveKey:0, navTog:0, togglePause:0, logout:0, reapStuck:0, factoryReset:0,
+  bkUpload:0, offSave:0, offTest:0, offRun:0, offPw:0, newCode:0, annSave:0,
+  loadLogs:0,
+  go:1, jobLog:1, jobRefund:1, copyLog:1, copyArg:1, copyFreeze:0, openUser:1, dl:1,
+  uPage:1, refundSession:1, grantCredits:1, exportUser:1, offRestore:1,
+  bkDl:1, bkCheck:1, ticketReply:1, alertRead:1, fbRead:1, fbSet:1,
+  annTog:1, annDel:1, logPick:1, evSet:1, setBetrieb:1, triSetTage:1,
+  uAct:2, disableUser:2, delUser:2, sysAct:2, bkRestore:2, codeAct:2,
+  ticketAct:2,
+  jobAct:3,
+};
+/* Welche Argumente ZAHLEN sind. Pauschal alles Numerische zu wandeln waere
+   falsch: eine Job-Nummer oder ein Gutschein-Code kann zufaellig nur aus
+   Ziffern bestehen. uPage(-1) dagegen MUSS eine Zahl sein, sonst rechnet
+   die Seitenzahl mit Text weiter. */
+const ZAHL_ARG = {
+  openUser:[0], grantCredits:[0], uAct:[0], disableUser:[0, 1], exportUser:[0],
+  delUser:[0], ticketReply:[0], ticketAct:[0], alertRead:[0], fbRead:[0],
+  annTog:[0], annDel:[0], triSetTage:[0], uPage:[0], bkRestore:[1],
+};
+function _args(el, name, n) {
+  const roh = [el.dataset.arg, el.dataset.arg2, el.dataset.arg3].slice(0, n);
+  const zahlen = ZAHL_ARG[name] || [];
+  return roh.map((v, i) => (zahlen.includes(i) && v !== undefined && v !== ''
+                            ? Number(v) : v));
+}
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const name = el.dataset.act;
+  if (!(name in ERLAUBT)) return;
+  const fn = (name === 'copyLog' ? (a) => copyText(LOG_TXT, a === 'still' ? null : el)
+              : name === 'copyFreeze' ? () => copyText(FREEZE_TXT, el)
+              : name === 'copyArg' ? (a) => copyText(a, el)
+              : window[name]);
+  if (typeof fn !== 'function') return;
+  e.preventDefault();
+  fn.apply(null, _args(el, name, ERLAUBT[name]));
+});
+/* Die vier Faelle, die kein reiner Funktionsaufruf waren. */
+document.addEventListener('keydown', (e) => {
+  const el = e.target.closest('[data-enter]');
+  if (el && e.key === 'Enter' && typeof window[el.dataset.enter] === 'function') {
+    window[el.dataset.enter]();
+  }
+});
+document.addEventListener('click', (e) => {
+  if (e.target instanceof Element && e.target.hasAttribute('data-overlay')) closeModal();
+});
+document.addEventListener('input', (e) => {
+  const el = e.target.closest('[data-input]');
+  if (el && typeof window[el.dataset.input] === 'function') window[el.dataset.input]();
+});
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('[data-change]');
+  if (!el) return;
+  if (el.dataset.change === 'flt') { uState.flt = el.value; uState.offset = 0; fetchUsers(); }
+  else if (el.dataset.change === 'sort') { uState.sort = el.value; fetchUsers(); }
+});
+const RENDER={start:loadStart,trichter:loadTrichter,live:loadLive,logs:loadLogs,events:loadEvents,alerts:loadAlerts,jobs:loadJobs,revenue:loadRevenue,credits:loadCredits,users:loadUsers,support:loadSupport,abuse:loadAbuse,system:loadSystem,offsite:loadOffsite,compliance:loadCompliance,legal:loadLegal,codes:loadCodes,feedback:loadFeedback,ann:loadAnn};
+if(KEY)boot();
+</script>
+</body>
+</html>

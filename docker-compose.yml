@@ -1,0 +1,114 @@
+# DouchkoVE Web Stack: Caddy (HTTPS + Reverse-Proxy) + App (Render-Backend).
+# Caddy holt Let's Encrypt automatisch, kein certbot noetig.
+
+services:
+  app:
+    build: .
+    container_name: douchko-app
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY fehlt in .env}
+      DVE_ADMIN: ${DVE_ADMIN:?DVE_ADMIN fehlt in .env}
+      DVE_WORKERS: ${DVE_WORKERS:-1}
+      DVE_MAX_SECONDS: ${DVE_MAX_SECONDS:-180}
+      DVE_MAX_MB: ${DVE_MAX_MB:-300}
+      # v80h/i: Accounts, Trial-Guthaben und Stripe-Payments
+      DVE_TRIAL_SECONDS: ${DVE_TRIAL_SECONDS:-120}
+      DVE_PUBLIC_URL: ${DVE_PUBLIC_URL:-https://douchko.eu}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # v80w: Mail (Passwort-Reset, spaeter Verifikation)
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # v132: bisher fehlten diese Durchreichungen - .env-Werte kamen NICHT im
+      # Container an (Compose gibt nur explizit gelistete Variablen weiter).
+      # Betrifft u.a. Owner-Panel (DVE_OWNER), Mail-Alarme, Alert-Regler und
+      # jetzt "Mit Google anmelden".
+      DVE_OWNER: ${DVE_OWNER:-}
+      DVE_ADMIN_MAIL: ${DVE_ADMIN_MAIL:-ismet.01.b@gmail.com}
+      DVE_SUPPORT_MAIL: ${DVE_SUPPORT_MAIL:-Ismet@douchkove.com}
+      DVE_TAX_ID: ${DVE_TAX_ID:-DE463613884}
+      DVE_ALERTS: ${DVE_ALERTS:-important}
+      DVE_RETENTION_DAYS: ${DVE_RETENTION_DAYS:-7}
+      DVE_CREDIT_DAYS: ${DVE_CREDIT_DAYS:-180}
+      DVE_INFLIGHT_CAP: ${DVE_INFLIGHT_CAP:-3}
+      DVE_JOB_TIMEOUT: ${DVE_JOB_TIMEOUT:-2400}
+      DVE_MOTION_CONCURRENCY: ${DVE_MOTION_CONCURRENCY:-2}
+      DVE_REF_SALT: ${DVE_REF_SALT:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    # v204-sec CONTAINER-HAERTUNG. Der Dienst schiebt FREMDE Videos durch
+    # ffmpeg, opencv und Pillow - genau die Bibliotheken, in denen ein
+    # praeparierte Datei historisch zu Codeausfuehrung gefuehrt hat. Bis v203
+    # lief das ohne jede Einschraenkung. Diese vier Zeilen aendern nichts am
+    # Betrieb, nehmen einem Ausbruch aber den Grossteil seines Wertes:
+    #   no-new-privileges: kein Rechte-Aufstieg ueber setuid-Programme
+    #   cap_drop ALL:      keine Kernel-Sonderrechte (der Dienst braucht keine)
+    #   pids_limit:        eine Fork-Bombe kann die Maschine nicht mehr fluten
+    #   mem_limit:         ein entgleister Render reisst nicht den ganzen Host
+    # mem_limit grosszuegig: ein 4K-Render haelt Frames im Speicher. Zu knapp
+    # gesetzt stirbt der Job mitten im Render (und der Kunde bekommt eine
+    # Erstattung statt eines Videos) - das waere die schlechtere Krankheit.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # v205a-sec: cap_drop ALL nimmt auch die Rechte weg, die der Start
+    # BRAUCHT, um ueberhaupt auf den kleineren Nutzer umzuschalten - genau
+    # daran ist die v204-Haertung gescheitert und auf root zurueckgefallen
+    # (im Panel unter System sichtbar). Diese vier gibt es nur fuer die
+    # Startsekunde zurueck:
+    #   CHOWN + FOWNER  - /data dem Dienst-Nutzer uebergeben
+    #   SETUID + SETGID - runuser darf die Kennung wechseln
+    #   DAC_OVERRIDE    - dabei fremde Dateien anfassen
+    # Sobald der Prozess die Kennung gewechselt hat, sind sie weg: Linux
+    # entzieht einem Wechsel von root auf einen normalen Nutzer die
+    # Sonderrechte automatisch. Der laufende Dienst hat also weiterhin KEINE.
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    pids_limit: ${DVE_PIDS_LIMIT:-512}
+    mem_limit: ${DVE_MEM_LIMIT:-6g}
+    volumes:
+      - dve-data:/data
+    expose:
+      - "8000"
+    # v98: ohne Rotation frisst das Container-Log irgendwann die Platte
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2
+    container_name: douchko-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN fehlt in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  dve-data:
+  caddy-data:
+  caddy-config:

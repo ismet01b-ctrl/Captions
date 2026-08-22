@@ -1,62 +1,1832 @@
 # DouchkoVE Captions — Arbeitsanweisung für Claude Code
 
-Automatische Premium-Untertitel im Editorial-Stil. Python/Windows-Desktop-App.
-Läuft **lokal auf Ismets PC** mit seinem eigenen `OPENAI_API_KEY`. Kein Verkauf,
-kein Server, kein Abo, kein Lizenzsystem. **Jede Entscheidung dient der Qualität.**
+Automatische Premium-Untertitel im Editorial-Stil + Apple-Style Motion-Graphics.
+**Eine gemeinsame Engine, zwei Gesichter:**
+1. **Web-Produkt douchko.eu** (`web/server.py`, FastAPI) — das ist der EINZIGE
+   Weg, den Ismet nutzt: echte Kunden, Credits, Stripe. **Beta.**
+2. **Windows-Desktop-App** (`gui.py`) — liegt weiter im Repo und wird
+   mitgetestet, aber Ismet arbeitet ausschliesslich ueber das Web (Ansage
+   01.08.2026). Kein Windows-Test mehr als offener Punkt fuehren, und keine
+   Aussage mehr auf "sieht er auf Windows" verschieben.
+
+**Jede Entscheidung dient der Qualität.** Stand: v101k (Juli 2026) —
+Innovations-Batch komplett: Betonungs-Typografie (Variable-Font nach
+Sprech-Pegel), Choreographie-Regie, Silent-Score, Watermark-Unlock
+(Kauf schaltet gecachte Videos ohne Neu-Render frei), Beat-Grid,
+Safe-Zone-Regie (Plattform-UI-Masken tiktok/reels/shorts,
+`output.platform`), Korrektur-Gedächtnis (Vorlieben-Profil in die
+KI-Regie), Licht-Wahrheit (gerichteter Kontakt-Schatten),
+Regie-Kontaktbogen (`/api/contact/{jid}`), Caption-Alpha-Export
+(ProRes-4444-Ebene via Difference-Matting-Doppelpass, `--alpha-export`,
+`/api/alpha/{jid}` für Käufer), World-Lock Wand (eigener Wand-Track),
+Hand-Kontakt (MediaPipe `models/hand.task`, Feder-Impuls + Occlusion),
+Depth-Bullet-Time (2.5D-Dolly in der Pause vor power-3),
+Zeige-Regie (Caption landet, wohin der Sprecher zeigt oder schaut),
+Objekt-Anker (Caption dockt am genannten Gegenstand an und bleibt daran),
+Zwei-Sprecher-Regie (Caption springt auf die Seite des aktiven Redners). NICHT gebaut
+(bewusst): Tiefen-Fokuszug, persistente Welt-Anker (SLAM),
+Hook-A/B-Varianten.
 
 ## Oberste Regeln (nicht verhandelbar)
 1. **Qualität über alles.** Niemals ein Feature vereinfachen, degradieren oder
    durch eine Heuristik ersetzen, um Zeit/Kosten zu sparen. Im Zweifel: die
-   aufwändigere, bessere Lösung.
+   aufwändigere, bessere Lösung. Gilt auch für Optik — nichts darf "billig" oder
+   "draufgeklatscht" aussehen; Maßstab ist ein Senior-VFX/Motion-Designer 2026.
 2. **Kein Deliver ohne grünen Selftest.** Erst wenn ALLE Tests grün sind, gilt
    etwas als fertig. Nie Teilstände als fertig ausgeben.
 3. **Fragen statt raten.** Bei Unklarheit über Architektur/Verhalten nachfragen,
    nicht annehmen. Ismet entscheidet.
 4. **Nichts ungefragt umbauen.** Keine Architektur-Änderungen ohne Bestätigung.
-5. **Ehrlich bleiben.** Tests laufen hier auf CPU mit synthetischem Material.
-   Echte GPU-/Qualitätswirkung sieht Ismet auf Windows mit echtem Material —
-   das immer klar sagen, nie so tun als sei es final verifiziert.
+5. **Sicherheit wird beim Bauen mitgedacht, nicht nachträglich auditiert**
+   (Ismets Ansage, Juli 2026). Wer einen neuen Endpunkt baut, beantwortet
+   BEVOR er ihn abgibt: Wer darf ihn aufrufen, und wo steht die Prüfung?
+   Gehören die Daten dem Aufrufer (Ownership/IDOR)? Was kostet ein Aufruf
+   den Server, und was passiert bei tausend (Rate-Limit)? Fließt ein
+   Parameter in einen Dateipfad, eine Kommandozeile oder SQL? Landet
+   fremder Text irgendwo im HTML — **auch im Admin-Panel** (dort liegt der
+   Admin-Key im sessionStorage, ein vergessenes `esc()` ist Kontoübernahme
+   per Support-Ticket)? Wird die Aktion protokolliert? Der Selftest bekommt
+   für jede dieser Antworten einen Test — Sicherheit, die nur im Kopf des
+   Autors stand, ist beim nächsten Umbau weg.
+   **Je mächtiger die Aktion, desto mehr als nur der Admin-Key.** Seit v197b
+   kann ein einziger Endpunkt alle Konten ersetzen (`backup/upload`); das ist
+   eine andere Klasse als "Daten lesen" und verlangt eine eigene Schranke.
+6. **Ehrlich bleiben.** Tests laufen hier auf Linux/CPU mit synthetischem
+   Material und OHNE OpenAI-Key (Heuristik-Pfad). Echte GPU-/KI-/Qualitäts-
+   wirkung sieht Ismet erst live auf douchko.eu mit echtem Material — das
+   immer klar sagen, nie so tun als sei es final verifiziert.
+
+## ERST FRAGEN, DANN BAUEN (Ismets Ansage, 31.07.2026, "merk dir das fuer
+## immer")
+Vor JEDER Aenderung am Verhalten oder an der Optik: kurz fragen, was gewollt
+ist. Nicht loslegen, weil ein Befund plausibel aussieht. Ein Befund ist eine
+FRAGE an Ismet, keine Arbeitsanweisung an mich — was wie ein Fehler aussieht,
+kann gewollt sein (Beispiel: zwei Fliesstext-Bloecke gleichzeitig im Bild sind
+in Ordnung; v230k hat das ungefragt "repariert").
+
+## MEINE WIEDERKEHRENDEN FEHLER — vor JEDEM Deliver durchgehen
+(Ismets Ansage, mehrfach: "Lerne aus allen deinen Fehlern.") Diese Liste ist
+keine Sammlung von Anekdoten, sondern eine **Checkliste**. Jeder Punkt ist
+mindestens zweimal wirklich passiert und hat Ismet Zeit, Geld oder einen
+Render gekostet. Neue Fehler kommen HIER dazu, nicht nur in den
+Versions-Abschnitt.
+
+1. **Ein Schutz darf begrenzen, niemals wegwerfen.** Eine Allowlist, ein
+   Filter, ein Sanitizer: unbekannte Werte klemmen, nicht entfernen. Ein
+   stiller Wegfall schaltet ein Feature ab, ohne Meldung und ohne Test
+   (v230f `caption_zone`, v210 vier tote KI-Systeme). Wenn Entfernen wirklich
+   nötig ist, muss es protokolliert oder getestet sein.
+2. **Erst den echten Pfad LAUFEN LASSEN, dann behaupten.** Quelltext lesen,
+   greppen und "sieht richtig aus" haben mich mehrfach getäuscht: v230d
+   (`(_current_user(r) or {}).get('id')` wirft AttributeError auf einer
+   `sqlite3.Row`), v218 (toter Code im falschen Zweig), v193 (Plan trug den
+   Wert, im Bild passierte nichts). Der Beweis ist der Aufruf plus eine
+   Messung, nie die Textsuche.
+3. **Prüfen, ob ein bestehender Test die REGEL schützt oder den FEHLER.**
+   Dreimal einen Test angetroffen, der genau das Kaputte festschrieb
+   (v230f "unbekannte Zahl fliegt raus", v230d der `str`-Vergleich beim
+   Admin-Key, v222 `_al is None or _al > 7`). Wer einen Test anpassen muss,
+   um seinen Fix grün zu bekommen, prüft zuerst, welcher von beiden recht hat.
+   **Und ein Test darf nie an einem NAMEN oder einer ZEILE hängen, wenn er
+   eine Regel meint.** An einem Tag dreimal passiert: der SFX-Test verlangte
+   `place(V('impact')…` statt "Ton führt Bild 30 ms" (v230o), der
+   Landing-Test eine bestimmte `.demo video`-CSS-Zeile statt "9:16, nichts
+   abgeschnitten" (v230s). Beide meldeten eine gewollte Verbesserung als
+   Fehler. Formuliere die ZUSAGE, nicht die Schreibweise.
+4. **Ein Riegel gehört in die Funktion, nicht an EIN Gate.** Erst ALLE
+   Aufrufer suchen. v230d gleich dreimal (`check_auth` 1 von 7,
+   `resend_verification`, `/admin/codes`), davor v159/v170/v176.
+5. **Qualität ist nie die Währung.** Renderzeit, Kosten und Bequemlichkeit
+   dürfen nie gegen die Regie oder die Optik getauscht werden — v228d
+   (`reasoning_effort: low`) war genau dieser Tausch und Ismets Antwort war
+   "Qualität ist sehr schlecht geworden". Erst messen, WELCHER Schritt
+   teuer ist; nur echte Leerarbeit darf weg.
+6. **Vergleiche müssen ausgerichtet sein.** Ich habe Ismet gesagt, der
+   Bildfehler stecke in seinem Quellvideo — falsch, weil ich durch ein
+   festes Fenster gemessen habe, während die Kamera 3 % zoomt. Erst nach
+   SIFT-Ausrichtung war die Wahrheit sichtbar. Vor jeder "das war schon
+   vorher so"-Aussage: ausrichten, sonst nichts sagen.
+7. **Der eigene Testaufbau ist auch Code und hat Fehler.** Synthetische
+   Fälle brauchen die ECHTEN Größenverhältnisse (ein 320x240-Testbild
+   beweist nichts über 720x1280), Messfenster müssen dort liegen, wo der
+   Effekt ist, und Werkzeuge haben eigene Fallen (`schneide()` verlor das
+   `async`, ein früherer Abschnitt ersetzte `setTimeout` durch eine
+   Warteschlange). Symptom: der Test ist grün und misst nichts.
+   Weitere Fälle, alle am selben Tag: ohne `face_pos` ist der
+   Gesichts-Versatz 0, also lagen die beiden Kopien exakt übereinander und
+   der Doppel-Test sah nichts (v230m); zwei Kopien 20 px versetzt
+   verschmelzen in einer Zeilen-Erkennung zu EINEM Band (deshalb Tinte
+   messen, die ist gegen Verschieben unempfindlich); und der Test-Chromium
+   im Container kann kein H.264 — eine Wiedergabe-Prüfung braucht dort eine
+   WebM-Kopie, sonst prüft sie den Fehlerfall.
+8. **Eine Regel, die Zeiten ändert, darf nur kürzen.** Verlängern beseitigt
+   die Überschneidung in den Zahlen und erzeugt sie im Bild (v216/v217).
+   Und jede neue Zeit-, Bewegungs- oder Platzierungsregel muss zuerst
+   beantworten, was sie mit einem `intent`-Moment macht (v214/v226).
+9. **Vor der Ursachensuche prüfen, WELCHE Fassung lief.** Build-Stempel im
+   Video (`ffprobe -show_entries format_tags`) bzw. Panel-Ansicht Build.
+   Drei Runden gingen verloren, weil der Stempel log (v222/v225c).
+10. **Ein Bedienelement wird BEDIENT, nicht simuliert.** Den Wert per
+    `input`-Ereignis zu setzen beweist nur, dass die Zuweisung funktioniert —
+    nicht, dass man ziehen kann (v230t: grün, im Browser ging es nicht).
+    Ebenso: ein Layout-Test, der Größe und Wiedergabe prüft, sieht nicht,
+    dass ein Knopf die Beschriftung verdeckt (v230r) oder ein unsichtbares
+    Feld den Klick abfängt (v230s). Also: echter Klick, echtes Ziehen, mit
+    Maus UND Finger, und die Rechtecke der Bedienelemente vergleichen.
+11. **Ein Sicherheitsnetz, das sich nicht selbst prueft, ist Dekoration.**
+    Die taegliche Sicherung lief jahrelang, meldete "DB-Backup: …" und konnte
+    trotzdem den LEEREN Stand vom Serverstart enthalten (v230y, WAL). Niemand
+    hat je den INHALT einer automatischen Sicherung mit der laufenden
+    Datenbank verglichen - der Fehler kam nur ans Licht, weil ein Test im
+    Container zufaellig hinsah. Wer ein Netz baut (Sicherung, Wachhund,
+    Alarm), baut die Gegenprobe MIT: Zahlen aus dem Ergebnis gegen Zahlen aus
+    der Quelle, regelmaessig, mit Alarm bei Abweichung.
+12. **Dieselbe Frage, andere Umgebung, andere Antwort.** `getmtime` bei WAL,
+    H.264 im Test-Chromium, tkinter im Container, ein Checkpoint, der lokal
+    zufaellig laeuft: derselbe Code kann anderswo das Gegenteil sagen. Wenn
+    ein Test nur DORT faellt, ist die erste Frage nicht "welcher Test ist
+    kaputt", sondern "welche Annahme gilt dort nicht" - und die Antwort wird
+    am echten Verhalten gemessen (v230y: die WAL-Datei hat eine neuere Zeit
+    als die Datenbank, in drei Zeilen bewiesen).
+13. **Sagen, was NICHT bewiesen ist.** Kein "gefixt", wenn nur ein
+    Ersatzpfad grün ist; nicht reproduzierbar heißt: nicht reproduzierbar
+    (v230e Renderer-Absturz). Lieber eine Zeile Unsicherheit als eine
+    Runde umsonst.
 
 ## Kommunikation
 Ismet ist direkt und terse. **Effizienzmodus:** keine Floskeln, kurze klare
 Sätze, nur Code + exakte Schritte. Technische Tiefe bleibt voll erhalten,
-nur Füllmaterial weg. Korrektur ohne Rechtfertigung annehmen.
+nur Füllmaterial weg. Korrektur ohne Rechtfertigung annehmen. Bei visuellen
+Änderungen: Beweis liefern (Frame-Streifen / Beispiel-Video), nicht behaupten.
+
+**HARTE OBERGRENZE: 5 ZEILEN (Ismets Ansage, 29.07.2026, "nie wieder so
+viel schreiben, fuer immer").** Ergebnis + was zu tun ist, sonst nichts.
+Keine Ueberschriften, keine Aufzaehlung der Befunde, keine Beweisketten,
+keine Ursachen-Erklaerung, keine Ehrlich-Grenzen-Absaetze - das steht
+alles im Commit und in PROJEKT_STATUS.md. Details NUR auf Nachfrage.
+Wer beim Schreiben denkt "das muss er noch wissen": nein, muss er nicht.
+
+**NIE DIESEN GEDANKENSTRICH, NIE NACH KI KLINGEN (Ismets Ansage,
+03.08.2026, "wie oft denn noch").** Der lange Gedankenstrich ist verboten,
+in Antworten UND in allem, was auf die Seite geht. Ebenso das ganze
+KI-Vokabular: kein "Ehrlich dazu:", kein "Wichtig:", keine Dreier-Rhythmen,
+keine Aufzaehlung, wo zwei Saetze reichen, keine Zusammenfassung am Ende.
+Schreiben wie ein Mensch, der es eilig hat: kurze Saetze, Punkt, fertig.
+Wer beim Schreiben ein Muster erkennt, das nach Textbaustein klingt, streicht
+es.
+
+**KURZ UND KNACKIG (Ismets Ansage, Juli 2026).** Antworten so kurz wie
+möglich. Keine langen Analysen, keine Aufzählung von Nebenbefunden, kein
+Wiederholen dessen, was er schon weiß. Ergebnis zuerst, Details nur auf
+Nachfrage. Gilt auch für Deliver-Summaries.
+
+**SEHR KURZ + FÜR LAIEN — das ist EINE Regel (Ismet hat sie mehrfach
+wiederholt).** Der Standard ist eine Handvoll Zeilen, nicht eine Seite. Auch
+ein Audit mit 30 Befunden wird zu vier Sätzen: was war offen, ist es zu, was
+ist noch offen. Tabellen, Aufzählungen von Nebenbefunden und Belegketten nur
+auf Nachfrage. Wer sich beim Schreiben denkt "das gehört noch dazu", liegt
+fast immer falsch — es gehört in den Commit, nicht in die Antwort.
+
+**IMMER LINKS SCHICKEN, NIE WEGE BESCHREIBEN (Ismets Ansage, 01.08.2026,
+"behandle mich wie den faulsten Menschen der Welt").** Wenn irgendwo etwas
+angeklickt werden muss: den **direkten Link** dazu, nicht "geh in die
+Einstellungen und dann...". Dazu die Werte zum Kopieren, fertig ausgefüllt,
+in der Reihenfolge der Felder. Ziel ist die kleinste Zahl an Klicks, nicht
+die vollständigste Beschreibung. Was ich selbst erledigen kann, erledige ich —
+gefragt wird nur, wo es ohne ihn nicht geht (Zugangsdaten, Geld, Geschmack).
+
+**FÜR LAIEN ERKLÄREN (Ismets Ansage, Juli 2026 — gilt dauerhaft).** Ismet ist
+kein Entwickler. Erklärungen kommen ohne Fachwörter: was ist es, was heißt das
+für ihn, was kostet es ihn wenn nichts passiert. Ein Bild statt eines
+Fachbegriffs ("das Videoprogramm hat den Generalschlüssel" statt "Container
+läuft als root"). Fachbegriff höchstens in Klammern dahinter, damit er ihn
+wiedererkennt, wenn er ihn woanders liest. Das gilt für ALLES — Sicherheit,
+Technik, Recht, Betrieb —, nicht nur für Zusammenfassungen. Die technische
+Tiefe bleibt in Code und Commit-Nachricht, nicht in der Antwort an ihn.
+
+**Geschäftlich: KNALLHART (Ismets ausdrückliche Ansage, Juli 2026).**
+Rolle bei Business-Fragen ist Mitgründer/Investor, nicht Dienstleister.
+Nicht zustimmen, wenn etwas falsch oder dumm ist. Kein Trost, kein
+Schönreden, keine höfliche Umschreibung. Wenn er sich im Kreis dreht:
+das benennen, auch wenn es unangenehm ist. Neue Produkt-Ideen sind NUR
+dann eine Antwort, wenn das aktuelle Problem wirklich am Produkt liegt
+und nicht am Vertrieb.
+
+**WIDERSPRUCH IST ERWUENSCHT (Ismets Ansage, 03.08.2026: "gut, dass du auch
+Kontra gibst. Bleib immer so").** Das gilt fuer ALLES, nicht nur fuer
+Geschaeftsfragen: einen fremden Vorschlag (auch von einer anderen KI), eine
+Anweisung, die auf einer falschen Annahme steht, eine Zahl, die nicht stimmt.
+Erst nachmessen, dann sagen, was NICHT stimmt und warum - und was ich
+stattdessen mache. Zustimmen, ohne geprueft zu haben, ist die teuerste Art zu
+antworten. Wenn er nach dem Widerspruch bei seiner Entscheidung bleibt, wird
+sie umgesetzt, vollstaendig und ohne Nachtreten.
+
+## Deploy (Web) — WICHTIG für neue Chats
+- Entwicklung läuft auf dem Branch `claude/caveman-repo-xt386k` (committen +
+  pushen, wenn eine Einheit fertig+grün ist).
+- Der Server zieht selbst: `autodeploy.sh` (systemd-Timer, alle 2 Min) prüft
+  den Branch, bei neuen Commits läuft `update.sh` (Rebuild + Neustart).
+  → Änderungen sind ~5-15 Min nach dem Push auf douchko.eu live.
+- Kein Push = kein Deploy. Ismet testet live erst NACH dem Deploy.
 
 ## Stack
-Python, tkinter (Canvas-basierte Custom-Widgets), ffmpeg, Blender 4.5.11,
-OpenAI Whisper API (Transkription) + GPT-4o (KI-Regie), RVM-Matting (ONNX),
-MediaPipe Face, DirectML (Ismets GPU). Fonts als Variable-Font-Instanzen.
+Python. Engine: ffmpeg, OpenAI Whisper API (`whisper-1`, Transkription) +
+GPT-4o / GPT-4o-Vision (KI-Regie), RVM-Matting (ONNX, Person freistellen),
+Depth-ONNX (Szenen-Occlusion), MediaPipe Face, Blender 4.5.11 (3D-Wasserglas),
+Variable-Font-Instanzen. Desktop-GUI: tkinter (Canvas-Custom-Widgets).
+Web: FastAPI + SQLite (WAL), reines HTML/JS-SPA (kein Framework), Stripe,
+Caddy (HTTPS-Reverse-Proxy) + Docker Compose.
 
 ## Dateien
-- `render.py` — Pipeline: Transkription → KI-Regie → Matting → Face-Tracking →
-  Compositing → Kamera → Encode
-- `gui.py` — tkinter-GUI (Apple-Dark, Canvas-Cards, iOS-Switch, Segmented)
-- `selftest.py` — Testsuite
-- `blender_engine.py` — 3D-Wasserglas-Renderer
-- `sfx_engine.py` / `sfx_pack.py` — CC0-Sound-System (Freesound)
-- `config.yaml` — alle Einstellungen
-- `PROJEKT_STATUS.md` — **komplette Versionshistorie v1–v67, hier zuerst lesen**
-- `ANLEITUNG.md` — Nutzer-Anleitung
+Engine + Desktop:
+- `render.py` — **Caption-Pipeline** (Herzstück): Transkription → KI-Regie →
+  Matting → Face-Tracking → Compositing → Kamera → Encode. Enthält alle 26
+  Text-Animationen (`anim_apply`/`_anim_core`).
+- `gfx_engine.py` — **Motion-Graphics-Engine** (Apple-Style UI-Motion). 6
+  Templates (pills/widgets/appstore/lowerthird/chat/notify), 4 Styles, MP4 +
+  ProRes-4444-Alpha-MOV. Warmer Preview-Daemon (`--preview-server`).
+- `gui.py` — tkinter-Desktop-GUI (Apple-Dark, Canvas-Cards, iOS-Switch).
+- `blender_engine.py` — 3D-Wasserglas-Renderer (stehender Szenen-Text).
+- `sfx_engine.py` / `sfx_pack.py` — CC0-Sound-System (Freesound).
+- `vfx_engine.py` — Cloud-VFX-Hook (Higgsfield/Seedance), opt-in, NotImplemented.
+- `config.yaml` — alle Engine-Einstellungen.
+
+Web-Produkt (`web/`):
+- `web/server.py` — FastAPI-Backend: Auth, Credits/Stripe, Job-Queue (Caption
+  + Motion-Fast-Lane), Library, Momente-Editor-API, Health/Monitoring,
+  Warm-Preview-Daemon, DB-Backup, Watchdog.
+- `web/index.html` — SPA (Create/Motion/Library/Billing/Account). Ein File.
+- `web/landing.html` — Marketing-Landing (**Englisch**, international, an
+  Branchen-Konventionen ausgerichtet; KEINE Konkurrenz-Namen, kein Datenschutz-
+  Block auf der Seite).
+- `web/admin.html` — Ops-Konsole, durchgehend **deutsch** (Ismets Wahl,
+  07.08.2026; die Kundenseite bleibt englisch). **Navigation ist EINE Quelle** (`NAV`,
+  gruppiert; `TABS` wird daraus abgeleitet). Wer eine Ansicht ergaenzt, traegt
+  sie in `NAV` ein und legt ein SVG in `ICON` — keine Emoji als Symbole.
+  Grid-Kinder brauchen `min-width:0`, sonst schiebt eine breite Tabelle die
+  ganze Seite quer. Ein Eintrag kann **Unterreiter** tragen
+  (`['id','Titel',[['reiterId','Titel'],…]]`); `PARENT` fuehrt jeden Reiter auf
+  seinen Menuepunkt zurueck, sonst markiert ein Direktsprung nichts.
+  **Eine CSS-Variable, die es nicht gibt, faellt STILL aus** — `--card` und
+  `--dim` haben die Startseite seit v206 ohne Kartenhintergrund gelassen, ohne
+  Fehler und ohne Meldung. Der Selftest prueft jetzt jede benutzte Variable.
+- `web/imprint/privacy/terms.html`, `web/codes.py`.
+- `Dockerfile`, `docker-compose.yml` (app + caddy), `autodeploy.sh`, `update.sh`,
+  `deploy_gate.sh` (Selftest im neuen Image vor dem Umschalten), `restore.sh`
+  (users.db zurueckspielen, mit Kandidaten-Pruefung + Sicherheitskopie).
+
+Doku:
+- `PROJEKT_STATUS.md` — **komplette Versionshistorie, HIER ZUERST LESEN.**
+  Neueste Einträge stehen oben unter `## Kern-Features` (v100 → v98 → …).
+- `ANLEITUNG.md` — Nutzer-Anleitung.
 
 ## KI-Regie (Kern der Qualität — NICHT optional machen)
-- `ai_direct()` — GPT-4o wählt Keywords/Phrasen/Effekte/Wucht
+- `ai_direct()` — GPT-4o wählt Keywords/Phrasen/Effekte (fx)/Wucht(power)/
+  Animation. Prompt = `REGIE_PROMPT` (Retention-Dramaturgie, Sperrliste,
+  ORT-/HANDLUNG-Mapping, Selbstbezug, Audio-Dynamik).
 - `ai_scene_direct()` — GPT-4o-Vision entscheidet Szene/Lage pro Moment
-Beide laufen über Ismets lokalen `OPENAI_API_KEY`. Die Heuristik-Fallbacks
-existieren nur als Notnagel bei fehlendem Key — nie als Standardweg bewerben.
+  (wasser/boden/wand/himmel/person, liegend/stehend/frei).
+Beide laufen über Ismets `OPENAI_API_KEY` (Desktop lokal, Web über Server-Env).
+Heuristik-Fallbacks existieren nur als Notnagel bei fehlendem Key — nie als
+Standardweg bewerben. Determin. Leitplanken danach: `_regie_sanity`,
+`_speech_intent`, `_self_ref_intent`, `_behind_cover_backstop`, `_cap_power3`.
+
+### Semantische Regie (v99/v99a) — "Captions tun, was der Sprecher sagt"
+Sagt jemand WO/WAS die Caption tun soll, MUSS die Caption das abbilden:
+- "behind me" → fx `behind` (Text hinter der Person, echte RVM-Occlusion; bei
+  Nahaufnahme Flag `nah` = bleibt auf Kopf-/Schulterhöhe und wird so weit
+  vergrößert, dass er beidseitig am Kopf vorbeiragt. **NICHT mehr `himmel`** —
+  das schob den Text an den oberen Bildrand, weg von der Person, und die
+  Ansage stimmte nicht mehr (v141, Ismets Befund).
+- "on the ground / an der Wand / im Wasser / am Himmel" → fx `ground`+szene+lage.
+- "explode / fällt / fliegt / …" → passende Animation, sichtbar vorn (nie behind).
+- Selbstbezug-Sätze bestehen oft nur aus Sperrlisten-Wörtern → `_self_ref_intent`
+  erzeugt den Moment notfalls selbst (läuft in ALLEN Pfaden, auch ohne Key).
+- **Der Wortschatz muss die KUNDENSPRACHE treffen (v209).** `_self_ref_intent`
+  erkennt eine Ansage nur, wenn ein Bezugswort auf die Captions im Satz steht.
+  Bis v208 waren das nur caption/subtitle/word/text - und in Ismets eigenem
+  Werbespot wurde deshalb KEINE der drei Ansagen umgesetzt, weil er "this next
+  LINE" und "this ONE" sagt. Ergaenzt: line/zeile/satz/one (+ Bestimmungswort
+  bis zwei Woerter davor, "this NEXT line"). Gegenprobe ist Pflicht: "the guy
+  behind me was loud" darf NICHTS ausloesen. Lehre: ein Wortschatz, der die
+  haeufigste Formulierung nicht kennt, ist derselbe Fehler wie ein Riegel am
+  falschen Gate - das Feature ist gruen getestet und trifft trotzdem nie.
+  Wer hier etwas ergaenzt, testet mit einem ECHTEN Sprechtext, nicht mit dem
+  Lehrbuchsatz.
+- **`intent`-Flag = Ansage ist Gesetz.** Es schützt den Moment vor Degradierung
+  durch Dichte-Limit, B-Roll-Gate, Mehrwort-Komposition, Nahaufnahme-Backstop
+  und Editor-Roundtrip. NUR eine bewusste Nutzer-Änderung im Editor löscht es.
+- **Ansage-Erkennung läuft in ALLEN Pfaden (v159).** `_speech_intent` und
+  `_self_ref_intent` stehen in `main()` an der immer laufenden Stelle, NICHT
+  nur in `ai_direct`. Sonst fällt die Ansage weg, sobald kein Key da ist, die
+  API ausfällt **oder der Regie-Cache greift**, und der Cache ist der
+  Normalfall beim zweiten Render desselben Videos. Wer eine neue
+  Semantik-Prüfung baut, hängt sie dort hin, nicht in den KI-Zweig. Im
+  KI-Pfad läuft `_speech_intent` dadurch zweimal; der Riegel
+  `if fx_map[i].get('intent'): continue` hält das Log sauber.
+- **Vokabellisten treffen Verbformen (v159).** `ANIM_HINTS` steht in der
+  3. Person Singular, Transkripte sagen Infinitiv und Plural. `_anim_hit`
+  vergleicht deshalb über `_anim_stamm()`. Blindes `startswith` erst ab
+  6 Zeichen Stichwortlänge, sonst schlug 'fall' in "FALLS" an.
+  Verneinte Sätze bekommen KEINE Animation (`_hat_negation`): eine Anim, die
+  die Handlung ausführt, widerspricht dem Satz, und ihr SFX tut es hörbar.
+
+### KI-Aufrufe (v210) — ein stiller Fallback verdeckt einen Bug
+- **`render.py` importiert `requests` in JEDER Funktion lokal.** In
+  `ai_flow_direct` fehlte die Zeile: die KI-Textaufteilung starb bei JEDEM
+  Kundenrender an einem NameError und fiel still auf die Heuristik zurueck.
+  Wer eine neue KI-Funktion baut, braucht einen Test, der ohne echten
+  Schluessel prueft, dass sie NICHT mit NameError endet.
+- **Bei gpt-5/o-Serie zaehlen die DENK-Tokens in `max_completion_tokens`.**
+  Ein knappes Budget wird vom Denken aufgebraucht, die Antwort kommt LEER -
+  im Log als JSONDecodeError. So fielen Bild-Regie, Objekt-Anker und
+  Stille-Score aus. `_oai_json` setzt fuer neue Modelle 2500 als Untergrenze.
+- **Ein Fallback, der jeden Fehler schluckt, macht aus einem
+  Programmierfehler ein Feature, das niemand vermisst.** Vier Systeme waren
+  monatelang aus, ohne dass ein Test oder ein Kunde es merkte.
+- **Und 6000 sind die Untergrenze, nicht 2500 (v230ay).** In Ismets erstem
+    echten Job-Log stand es woertlich: `budget=2500, used=2500, thereof
+    reasoning=2500` - Denken hat alles aufgebraucht, Antwort leer, der
+    Wiederholversuch mit 5000 lief durch. Eine ganze Runde umsonst, beim
+    teuersten Posten des Renders (Text-Fluss, 85 s von 245 s). Merksatz:
+    `max_completion_tokens` ist eine OBERGRENZE, keine Bestellung - bezahlt
+    werden verbrauchte Tokens. Sie zu klein zu lassen spart nichts und kostet
+    einen kompletten zweiten Aufruf.
+- **Und 2500 haben nicht gereicht (v230p).** Dieselben zwei Systeme fielen
+  in Ismets v230l-Log wieder aus. Die Antwort war nicht kaputt, sie war
+  NICHT DA: `finish_reason='length'`, Inhalt leer, das Denken hatte das
+  ganze Budget. Ein JSONDecodeError nennt diesen Grund NICHT. Jetzt geht
+  jeder Aufruf ueber `_oai_text` — eine leere Antwort wird EINMAL mit
+  doppeltem Budget wiederholt, danach nennt die Meldung finish_reason,
+  Budget und Denk-Tokens. Das Budget waechst ausserdem mit dem Umfang
+  (+260 je Bild, +90 je Textblock). Merksatz: wer eine Fehlermeldung baut,
+  fragt, ob sie die URSACHE nennt oder nur das Symptom.
+
+### Hand-Regie (v174) — "der Text weicht der Hand, die ihn schubst"
+**Angesagt schlägt beiläufig (v177/v178).** Der angesagte Wisch hat eigene
+Werte (Deckel W*3.6, Impuls 2.2, Feder K=52/C=5.2 → ~143 px Spitze); der
+zufällige Kontakt bleibt bei v101j (~16 px). Wer daran dreht, muss BEIDE
+Wege prüfen — und dass der Block in die Ruhelage zurückkehrt.
+**Der angesagte Wisch braucht keine Berührung (v177).** Die Hand fährt vor
+dem eigenen Körper entlang — dort kann die Caption nie liegen (Gesichtssperre
+2.5 > Hand-Ziel 2.2, richtig so). Sagt der Satz die Handlung UND ist ein
+Wisch > 0.50 W/s messbar, bekommt der Block den Impuls ohne Trefferprüfung.
+**Das Hand-System darf NIE an `kw_i` hängen (v176).** `need_hands`,
+`hand_contacts` und die Feder gelten auch für Flow-Chunks — Schub-Sätze
+sind fast immer Füllwort-Chunks ohne Keyword. Dreimal derselbe Fehlertyp
+(v159/v170/v176): ein Riegel am falschen Gate.
+**Drei Stufen, sauber getrennt (v179):** angesagter Wisch → voller Schub
+(~143 px), echte Berührung → Stups (~16 px), Geste daneben → NICHTS. Der
+v174-Näherungstreffer ist raus: zusammen mit v176 (alle Flow-Chunks) ließ
+er bei einem gestikulierenden Sprecher jede Caption zucken. Ein Notbehelf
+muss zurückgebaut werden, sobald die richtige Lösung steht.
+`hand_ziele()` zieht die Caption bei Hand-Aktions-Wörtern (push/shove/
+wegschieben/wischen, `_HAND_AKTION`) in Reichweite der Hand; `hand_contacts`
+trifft zusätzlich per **Näherung** (0.075 W), wenn die Hand schnell
+(≥0.25 W/s) und in RICHTUNG des Texts fliegt. Ohne Nähe-Platzierung läuft
+jede Schub-Geste ins Leere — die Platzierungs-Regie legt Text sonst von der
+Person weg. **Abnahme-Lehre: nie einen Einzelframe bewerten** — Exit-Blenden
+und wortweiser Aufbau sehen im Standbild wie Fehler aus (zweimal passiert:
+"is", "EXPLODE").
+
+### Zeige-Regie (v160) — "Captions landen, wohin gezeigt wird"
+`zeige_ziele()` misst an den Moment-Zeitpunkten, wohin der Sprecher **zeigt**
+(Hand-Landmarks) oder **schaut** (Kopfdrehung aus den Gesichts-Keypoints).
+Reine Bildmessung, kein API-Ruf. Zeigen schlägt Blick. Das Ziel geht als
+`ziel` in `spot()` und als Seitenwahl in `pick_side()`.
+- **Gestreckt/eingerollt wird gegen das HANDGELENK gemessen**, nicht gegen die
+  Senkrechte. Sonst hängt das Ergebnis an der Handdrehung im Bild.
+- **Offene Hand = Geste, kein Zeigen.** Ohne diese Sperre schiebt jedes
+  Herumfuchteln die Captions durchs Bild.
+- **Finger Richtung Kamera → kein Ziel.** Kurze Projektion heißt: im Bild gibt
+  es keinen gemeinten Ort. Raten ist schlechter als nichts.
+- **Das Gesicht bleibt tabu.** Zeige-Gewicht 2.2, Gesichtsberührung ab 2.5.
+  Wer auf den eigenen Kopf zeigt, bekommt den Text daneben.
+- **Eine gehaltene Geste ist EINE Ansage (v167).** `_ziel_dedupe` lässt von
+  aufeinanderfolgenden Zielen am selben Ort nur die ersten zwei Momente
+  durch. Sonst nagelt ein über das halbe Video gehaltener Arm alle Captions
+  auf eine Seite (Ismets Befund, am Bild belegt).
+- **Sichtbarkeit hängt am WORT (v172), nicht an der Anim-Wahl.**
+  `anim_for(txt)` in `_VISIBLE_ANIM` → nie behind/ground/**blurin** (alle
+  drei zeichnen vor dem Person-Overlay, v173) — unabhängig davon,
+  welches Anim die Regie wählte und ob `effects.anim` an ist. Der Riegel
+  sitzt in `build_plans` außerhalb des Anim-Blocks (v159-Lehre). Rangfolge:
+  die HANDLUNG im Satz gewinnt auch gegen intent; eine ORTS-Ansage
+  ("behind me") hat kein Aktionsverb und bleibt dadurch Gesetz. B-Roll
+  behält Szenen-Text (keine Person, die verdeckt).
+- **Ein-Wort-Rest nach Pause fällt in ALLEN Dichte-Pfaden weg (v170).**
+  Der Riegel steht VOR den Pfad-Weichen (akzente/intro/durchgehend/forts) —
+  er saß erst nur in satz_offen, und Ismets Job lief mit 'durchgehend'.
+- **Blick ist Abweichung, nicht Haltung (v166).** `_blick_targets` filtert
+  gegen den Median der Kopfdrehungen. Eine absolute Schwelle macht aus einer
+  seitlich stehenden Kamera ein Dauer-Ziel und nagelt alle Captions auf eine
+  Seite (Ismets Befund). Zeigen bleibt absolut — eine Geste ist eine Ansage.
+- Bei gesetztem Ziel fallen Wunschzone und Wunschseite weg (`return k`), der
+  Rest der Kosten bleibt. Ein Ziel bricht die Hysterese (`kalt`).
+- **Grenze:** ein breiter Block hat im Title-Safe kaum Spielraum (0.773 W bei
+  0.84 W nutzbar). Die Regie wirkt, wo Platz ist.
+
+### Zwei-Sprecher-Regie (v162) — "Der Text folgt dem Redner"
+`sprecher_at()` liefert die x-Position des aktiven Gesichts, aber **nur bei
+mehreren Personen**. Das Signal ist alt (`_active_index`, Mundbewegung, v96);
+neu ist, dass die Captions es lesen und nicht nur die Kamera.
+- **Kein Tiebreaker.** `wunsch_x` wirkt nur ohne Motiv-Berührung, und neben
+  zwei Personen ist fast jede Stelle berührt. Deshalb eigener Kosten-Term
+  (Gewicht 1.3), der immer wirkt, aber unter der Gesichtssperre (2.5) bleibt.
+- **`_free_x_multi` nimmt die Lücke NEBEN dem Sprecher**, nicht die breiteste.
+  Passt keine, gilt wieder die breiteste (sonst wird der Sprecher angeschnitten).
+- **Auf das erkannte Gesicht einrasten.** `face_pos` ist über 41 Frames
+  geglättet und liegt beim Wechsel zwischen beiden Personen — ohne Einrasten
+  landet der Text in der Mitte, wo niemand sitzt. Hysterese gegen Flackern,
+  aber ein echter Sprecherwechsel bricht die Platzierungs-Hysterese.
+
+### Objekt-Anker (v161) — "Captions kleben am Gegenstand"
+`ai_objekt_anker()` fragt GPT-5-Vision **einmal pro Moment** nach einem
+sichtbaren Bezugsobjekt; `ObjektAnker` (Optical Flow) verfolgt es **jeden
+Frame** ohne Token. Die KI sagt WAS, die Messung sagt WO.
+- **Der Anker muss in den Regie-Cache** (`parse_regie` + Cache-Schreiber).
+  Sonst ist er beim zweiten Render weg — derselbe Fehlertyp wie v159.
+- **Der LK-Status ist bei einem Schnitt wertlos.** LK rastet auf einer
+  ähnlichen Stelle ein und meldet plausible Mini-Bewegung (gemessen: -3.6 px
+  bei 200 px Sprung). Nur die **Vorwärts-Rückwärts-Probe** (Median-Flow,
+  Schwelle 1 px) erkennt das. Wer hier etwas ändert, darf sie nicht
+  wegoptimieren.
+- **Verlorene Spur friert ein**, sie springt nicht auf null zurück.
+- **Neben das Objekt, nie darauf** — sonst verdeckt die Caption genau das,
+  worum es geht. Erst darunter, dann darüber, sonst gar nicht.
+- **Keine Doppelbewegung**: verankerte Plans bekommen weder `track_offset`
+  (Gesicht) noch `scene_shift` (Schwenk) obendrauf.
+- Nicht jeder Look legt sein Bild in `arr` — `outline` benutzt `o_arr`.
+
+### Platzierungs-Regie (v143) — "Captions passen sich dem Bild an"
+Ein Textblock bekommt seine Position aus `spot()` in `build_plans`, nicht aus
+Konstanten. Reihenfolge: harte Sperren (Title-Safe 5 %, Plattform-UI-Maske,
+Gesichtsbox), weiche Kosten (Motiv-Unruhe aus `scene_space_sampler`, Abstand
+zur Wunschzone), **Hysterese** (alte Stelle gewinnt, solange sie nicht klar
+schlechter ist), Rasterung auf `VZ_GRID`. Bei echter Nahaufnahme verengt
+`_freie_breite` die Spalte, damit der Block NEBEN den Kopf passt.
+**Ohne Hysterese springt der Text** — 10 px Gesichtsbreite reichten im ersten
+Entwurf für 0.19 W Versatz. Das ist kein Detail, das ist der Unterschied
+zwischen Regie und Zittern.
+
+### Animationen pruefen (v194) — Name ist eine Zusage
+`anim_apply()` ist eine REINE FUNKTION auf einem Sprite. Wer eine Animation
+pruefen will, ruft sie direkt ueber eine Zeitreihe auf und misst — kein
+Video noetig. Gemessen wird die TINTE (Breite, Hoehe, Teile, Streuung,
+Strichstaerke ueber Distanztransform), nicht das Sprite-Rechteck.
+- **Einseitig polstern ist ein Positionsfehler.** Wer die Leinwand nur auf
+  einer Seite wachsen laesst, verschiebt den fertigen Text um die halbe
+  Polsterbreite — der Zeichenpfad setzt das Sprite mittig. `regen` sass
+  53 px zu hoch, `rutsche` 92 px zu weit links. `explosion`/`magnet`
+  polstern symmetrisch und sind der Massstab.
+- **`_persp3d(arr, ax, ay)`: ax = Querachse (nach vorn kippen), ay =
+  Hochachse (umblaettern).** Vertauscht macht `kippen` dasselbe wie `wende`.
+- **`spring()` endet frueher, als die Zeitkonstante suggeriert.** Sie
+  erreicht 1.0 beim ersten Kosinus-Nulldurchgang, also bei x = 1/(2*freq) —
+  nicht bei x = 1. Fuer monotone Rampen (Blur, Kippung) ist sie das falsche
+  Werkzeug; dort gehoert `smoothstep` hin.
+- **Ganzzahlige Morphologie-Kernel quantisieren einen Regler tot.**
+  `k = int(round(amt*4)) | 1` ergab fuer die ganze Bass-Spanne denselben
+  Kernel. Zwischen zwei Kernelgroessen mischen.
+- **Neun Animationen sind AUDIO-getrieben** (glitch, puls, welle, zittern,
+  neon, schub, druck, gewicht, wackel). Mit einem konstanten Audio-Wert
+  gemessen stehen sie still — das ist ein Messfehler, kein Bug. Immer ein
+  sprech-aehnliches Signal anlegen.
+- **Ein Fingerabdruck aus der Alpha-SUMME ist blind fuer Verformung.**
+  Eine Welle verschiebt Tinte nur seitlich; die Summe bleibt gleich. Form
+  messen (Zeilen-/Spaltenprofil), nicht Menge.
+- **Nicht jeder Restversatz ist ein Fehler:** `sturz` bleibt unten liegen,
+  `anstieg` oben — das ist ihre Bauart. Dauer-Animationen (schweben,
+  wackel, puls, welle) sind bei einer Stichprobe einfach mitten in ihrer
+  Schwingung.
+
+### Block-Editor (v193) — "eine Zeile, ein Block, und die Einstellung gilt"
+`_bloecke.json` ist die **Quelle der Chunk-Bildung**, kein Nachschlagen
+obendrauf. Liegt ein Nutzerplan vor, gibt `groups_for` ihn zurueck und
+`build_groups` laeuft gar nicht erst — eine Aufteilung, die danach vom
+Merge-Pass wieder zusammengelegt wird, ist keine.
+- **Ein Block hat nur ueber den Wortbereich Identitaet.** Der alte Weg
+  (Schluessel = erster Wortindex einer FRISCH berechneten Aufteilung, so wie
+  `flow_map`) verfaellt still, sobald sich eine Grenze verschiebt. Weil der
+  Nutzerplan die Gruppen SELBST bildet, kann sein Schluessel nicht danebenzeigen.
+- **Acht Gates muessen den Nutzer-Block kennen** (`_ublk` / `_bl_akt`):
+  B-Roll, Atempause, Ein-Wort-Rest, Dichte-Weiche, Satz-Collage,
+  Luecken-Netz, Schnitt-Disziplin, Beat-Grid. Wer ein neues Gate baut, haengt
+  den Riegel dort hin. Die Dichte-Weiche ist die gefaehrlichste: mit
+  'akzente' (Standard) verschwaende der Block sonst ohne jede Meldung.
+- **Das Luecken-Netz ist bei Nutzer-Bloecken AUS.** Die Zusage "jedes Wort
+  steht im Bild" gilt der Automatik, nicht gegen eine Loeschung.
+- **Eine Block-Animation braucht den GANZEN Block im Bild (v194a).** Ein
+  Fliess-Block baut sich Wort fuer Wort auf; eine Animation von 0.2 bis
+  0.6 s ist vorbei, bevor das dritte Wort da ist - sie lief nur auf dem
+  ersten Wort und dort drei Bilder lang (am Render gemessen: Unterschied
+  4.2 bei 3.28 s, ab 3.38 s noch 0.3). Bei gesetzter Animation steht der
+  Block deshalb ab seinem Beginn ganz da. Ohne Animation bleibt der
+  Karaoke-Aufbau.
+- **Eine Einstellung am PLAN nachzuweisen reicht als Test NICHT.** Genau
+  daran ist v193 vorbeigelaufen: der Plan trug `anim`, im Bild passierte
+  nichts. Der Beweis ist der Unterschied im gerenderten Bild ueber das
+  ganze Zeitfenster.
+- **Fliess-Bloecke konnten bis v192 gar nicht animieren** — alle neun
+  `anim_apply`-Aufrufe hingen an `p['arr']` (Keyword-Karten). Der
+  Fliess-Pfad hat jetzt einen eigenen Aufruf: **eigener Zustandstraeger je
+  Wort, gemeinsame BLOCK-Zeit**. Ein gemeinsames dict waere falsch,
+  `_anim_core` haelt seinen Zufallszustand am Objekt und wuerde je Frame
+  N-mal weitergetickt.
+- **Groesse ist NICHT power.** Power ist Dramaturgie (Kamera, SFX,
+  Tempo-Kurve, `pace_power_map`), Groesse ist der Schriftgrad. Beides in
+  einen Regler zu legen waere der v155/v156-Fehler. Der `groesse`-Parameter
+  muss an ALLE VIER `compose_flow`-Aufrufe (auch Rueckfall und Luecken-Netz).
+- **Der Analyse-Lauf muss die Bloecke exportieren**, bevor `--plan-only`
+  aussteigt — und mit derselben `groups_for`-Konfiguration wie der
+  Voll-Render, sonst zeigt der Editor eine andere Aufteilung als das Video.
+- **Serverseitig sanitisieren** (`sanitize_blocks`), nicht erst in der
+  Engine. Und **pro Eintrag fangen**: ein kaputter Wert darf nie den ganzen
+  Plan verwerfen (genau das passiert bei `_momente.json`).
+- **`_flow3.json` muss mit weg**, wenn sich Blockgrenzen oder das Transkript
+  aendern. Sonst zeigen die gecachten Anker auf den falschen Chunk und
+  verfallen still.
+- Mitgenommene Alt-Fehler: der Momente-Roundtrip verlor `anker` und
+  `user_pick` bei JEDEM Render; `p['power']` wurde nie an einen Plan
+  geschrieben (sieben Leser bekamen konstant 2, sechs Effekte liefen nie an).
+
+### Schriftgroessen (v154)
+Das **Schluesselwort und der Fliesstext haben getrennte Referenz-Faktoren**
+(`caption_scale` aus `key_hoehe`, `caption_scale_klein` aus `klein_hoehe`).
+Den Fliesstext ueber key_hoehe mal Hierarchie abzuleiten war der Grund, warum
+eine Referenz mit grosser Punchline den ganzen Satz aufblies.
+Hausmass aktuell (v192): **0.089 em Schluesselwort, 0.043 em Fliesstext**
+(v154 stand auf 0.076/0.034, v184 auf 0.105/0.050). **Wer daran dreht,
+muss den Punch-Faktor mitziehen** — sonst faellt der Randabfall (v152) unter
+die Bildbreite und ist unsichtbar.
+Jeder Keyword-Moment bekommt eine Animation; `anim_for()` liefert bei
+normalen Woertern None, deshalb rotiert ein **bedeutungsneutraler Fallback**.
+
+### Buendigkeit vs. Bildseite (v155/v156)
+**`caption_align` = Buendigkeit der Zeilen** (kommt aus der Referenz-Messung).
+**`caption_seite` = wo im Bild der Block sitzt** (nur ausdrueckliche
+Nutzerwahl, sonst 'auto'). Beides in einen Schalter zu legen war der Grund,
+warum eine gelernte Referenz mit 'links' jede Caption an die linke Kante
+nagelte.
+Der Seiten-Tiebreaker prueft `_motiv`, und `_motiv` zaehlt **nur
+Gesichts-Beruehrungen** — mit der Unruhe-Karte darin war er nie erfuellt.
+v156: die gemessene Buendigkeit ist eine **Tendenz**, rund die Haelfte der
+Bloecke folgt der Bildseite. Eine Messung auf alle Chunks anzuwenden macht
+aus einer Tendenz eine Schablone.
+
+### Regler + behind-Wort (v191)
+- **Ein Regler-Fallback darf nie mit der Anzeige-Skala multipliziert
+  werden.** `min` als Rohwert x 100 ergab "6000 %" und "14000x". Regler
+  ohne Config-Eintrag brauchen `data-default` in ANZEIGE-Einheiten, und
+  der Selftest prueft jeden Regler gegen seinen Bereich.
+- **Verdeckt wird von der SILHOUETTE, nicht vom Kopf.** Der
+  Lesbarkeits-Riegel fuer `behind` verglich mit 1.7x Gesichtsbox;
+  ausgestanzt wird die ganze Person inklusive Schultern (~2.6x). Ein Wort
+  kann klar breiter als der Kopf sein und trotzdem in der Mitte
+  zerschnitten werden (gemessen 28 % am Stueck). Drei Stufen:
+  vergroessern ueber die Schultern, sonst auf KOPFHOEHE heben, sonst ueber
+  den Kopf legen.
+
+### Ruhe im Bild (v190) — erst messen, dann abschalten
+Ismets "alles zu sehr am Zucken" wurde GEMESSEN, nicht geraten, und die
+naheliegende Vermutung war falsch: mit Beat-Sync, Kamera, Aktivwort-Pop
+und Motion-Blur AUS blieb die Unruhe unveraendert (3.09 statt 2.84
+Promille je Frame). Ursache war der Wort-EINFLUG: 2 % Bildhoehe von
+unten, von 86 % skaliert, mit ease_back-Ueberschwingen.
+- `effects.caption_ruhig` (Standard an): Woerter erscheinen an ihrer
+  Endposition, kein Sprung, kein Overshoot, Scale ab 0.97, laengere
+  Blende. Pop und Settle gedaempft, Abdimmen ueber 0.25 s statt als
+  Helligkeitssprung. Alt-Verhalten bleibt ueber den Schalter erreichbar.
+- **Der Rest ist EREIGNISDICHTE, kein Fehler:** alle 0.3 bis 0.4 s ein
+  neues Wort, alle rund 1 s ein neuer Block. Wer mehr Ruhe will, dreht an
+  `chunk_hold_min` und `words_per_group`, nicht an der Animation.
+
+### Schriftwahl + Umriss (v189)
+- **Eine Nutzer-Schriftwahl gilt fuer den GANZEN Satz.** Die Font-Kachel
+  setzt display, support, italic und strong. Nur `fonts.display` zu setzen
+  ergab zwei Schriften im selben Block (Schluesselwort gewaehlt,
+  Fliesstext vom Preset). Die Schreibschrift bleibt ein eigener Schnitt.
+- **Der Umriss gehoert dem Fliesstext, nicht dem grossen Wort.** Dort
+  traegt die Flaeche den Kontrast; der Saum wirkt plakativ. Schalter
+  `effects.caption_kontur_key` (Standard aus), Parameter `kontur=` an
+  `Sprites.text`. Wer Groessen misst, muss den hellen GLYPHENKOERPER
+  nehmen - eine Alpha-Box vergleicht sonst Glyphe gegen Glyphe-plus-Saum.
+- **Auto-Motion-Grafik bleibt AUS** (`accents.auto`). In den High-End-
+  Referenzen gehoert sie zu einer Agentur-Produktion mit Multikamera und
+  Schnitt; im nackten Talking-Head ist sie ein Fremdkoerper. Was der
+  Nutzer im Momente-Editor anlegt, wird weiterhin gerendert.
+
+### Plattform-Korridor + Vorschau (v186/v187)
+- **Der Satzspiegel haengt am Korridor, nicht an einer Konstanten.**
+  `_korridor()` liefert die zoom-bereinigte nutzbare Breite (Title-Safe,
+  Button-Spalte, Kamera-Stauchung). compose_flow bekommt sie als `maxw`.
+  `colw` bleibt getrennt davon die NAHAUFNAHME-Sperre - haengt beides am
+  selben Parameter, greifen Randabfall und Punch-Deckel nie wieder.
+- **Jeder Report muss Flow-Bloecke kennen.** `safe_zone_report` und
+  `_caption_boxes` lasen cx/cy vom Plan; Flow-Bloecke tragen ihren Text in
+  `front`. Beide fielen dadurch still durch (Log sagte "Button-Spalte
+  frei", Akzent legte sich auf die Caption). Wer eine neue Pruefung baut,
+  muss BEIDE Plan-Formen abdecken. Gemessen wird die TINTE, nicht das
+  Sprite-Rechteck (bis 180 px Glow-Polster).
+- **Dichte-Werte sind ein geschlossener Satz:** sparsam / akzente /
+  durchgehend. 'wortweise' kannte die Engine nie und fiel in den sparsamen
+  Pfad - der TikTok-Look zeigte jahrelang die Haelfte der Woerter. Neue
+  Werte gehoeren an ALLE fuenf Gates oder gar nicht in die UI.
+- **Der Knall ist in H gedeckelt (0.165 H), nicht nur in W.** Im
+  Hochformat bleibt er bei langen Woertern unter dem Faktor 2.25 - das ist
+  Physik (1080 W reichen nicht), kein Bug. Nicht mit Anschnitt erzwingen,
+  v152 verbietet ihn ab 6 Zeichen.
+- **Die Kontur richtet sich nach der Textfarbe.** Hart schwarz war im Look
+  'clean' (feste dunkle Palette) ein dunkler Saum um dunklen Text.
+- **Die Look-Vorschau kommt aus der echten Config** (`/api/default_config`,
+  dieselben Hausmasse wie compose_flow). Sie zeigt bewusst nur Typografie
+  und sagt das auch - eine geschoente Attrappe waere schlimmer als keine.
+
+### Ein Moment, ein Bild + kein Wort faellt weg (v185)
+- **Der Solo-Riegel rechnet mit dem AUSKLINGEN, nicht mit dem Ende.** Ein
+  Plan bleibt nach `end` noch bis 0.40 s im Bild (`active`-Fenster). Mit dem
+  blossen Ende gerechnet melden die Zahlen "keine Ueberschneidung", waehrend
+  im Bild zwei Texte uebereinander liegen. Gedraengte Karten bekommen ein
+  eigenes kurzes `aus` am Plan; die Zeichenschleife liest es.
+- **Der Solo-Riegel gilt auch KARTE gegen KARTE (v209a).** Bis v209 verglich
+  er nur Karte gegen Fliesstext - zwei Karten konnten sich beliebig
+  ueberlagern. Bei Orts-Ansagen ist das der Normalfall: drei Saetze
+  hintereinander ergeben drei Karten, und eine Karte steht laenger als ihr
+  gesprochenes Wort (an Ismets Werbespot gemessen: 'ON THE WALL' 7.20-10.25
+  gegen 'BEHIND ME' 7.25-8.75). Beim Aufloesen kuerzt die ERSTE nie unter
+  ihre Lesezeit - stattdessen WARTET die zweite und bleibt dafuer laenger
+  stehen. Eine auf 0.2 s gestauchte Karte blitzt nur auf und ist schlimmer
+  als die Ueberschneidung.
+- **Solange eine Keyword-Karte steht, raeumt jeder andere Textplan.** Die
+  Karte hat Vorrang bis 0.80 s Mindestlesezeit, danach raeumt sie selbst.
+  Vorher galt "Karte oben, Block unten" als saubere Neben-Platzierung - das
+  ergab fuenf Elemente in vier Stilen gleichzeitig.
+- **Dichte 'durchgehend' ist eine Zusage: JEDES gesprochene Wort steht im
+  Bild.** Deshalb dort keine Atempause nach Keyword-Momenten, plus ein
+  Luecken-Netz am Ende von `build_plans`. In 'akzente'/'sparsam' sind
+  Textpausen dagegen die gewollte Handschrift - das Netz laeuft dort nicht.
+  Der v170-Riegel (Ein-Wort-Rest nach Pause) gilt auch im Netz.
+- **Keine Farb-Karaoke.** Gelb auf dem gesprochenen Wort ist der Marker des
+  CapCut/Opus-Templates (Ismet: "ausgelutscht") und landet auf Fuellwoertern.
+  Emphase = Groessen-Pop plus Dimmen auf 70 %, in allen Looks.
+- **Wortabstand haengt am Schriftgrad** (mind. ein Drittel Geviert), Zeilen
+  um das Schluesselwort brechen um, ein zu langes Wort schrumpft per `S.fit`
+  in die Spalte. Ohne diese drei ragten Woerter bis 1.57 W aus dem Bild.
+- **Motion-Grafik-Akzente sind wieder an** (`accents.auto`). Sie sind in den
+  High-End-Referenzen tragende Elemente; dosiert werden sie von
+  `sanitize_accents` (Dichte-Deckel + 3.5 s Abstand), nicht per Schalter.
+
+### Referenz-Grammatik (v184) — der Massstab fuer "high level"
+An Ismets drei Referenz-Clips gemessen (kram.visuals/migs.visuals/
+johnbacog_), NICHT geschaetzt. Gemeinsame Grammatik der Vorbilder:
+- **RAUMFOLGE = LESEREIHENFOLGE.** Der Cluster-Lesepfad (compose_flow,
+  layout 'collage') setzt kurze Zeilen (1-3 Woerter) mit Treppen-Einzug,
+  engem Zeilenfall (1.06) und gemeinsamer GRUNDLINIE je Zeile. Die alte
+  v150-Anordnung (Verbinder-Spalte NEBEN der Treppe) riss Lese- und
+  Raumfolge auseinander - das war Ismets "keine high level Typografie".
+- **Groessen sind Referenzmass, kein Geschmack:** key 0.105 em (Versal
+  ~0.074 H), Fliesstext 0.050 em (Band ~0.040 H, in allen drei Refs
+  identisch), Punch 2.25x (~0.165 H). Die v153/v154-Verkleinerungen sind
+  damit UEBERHOLT - wer schrumpft, muss gegen die Referenzen messen.
+  **v192 ist genau so ein bewusster Schritt darunter** (Faktor 0.85 ->
+  0.089/0.043 em, Ismets Ansage). Der Referenzwert bleibt der Massstab,
+  die gelieferte Groesse ist eine Nutzer-Entscheidung.
+- **Punch hinter der Person** (`occlude_sprite`, effects.caption_hinter):
+  das Schlusswort laeuft durch die Person, die Silhouette wird pro Frame
+  an der Zielposition ausgestanzt. Nur Satzende, nie B-Roll, nie bei
+  angesagtem Hand-Schub. Die Zeichenreihenfolge des Frames bleibt.
+- Viral-Faktoren sind auf die neue Basis umgerechnet (1.55/2.00), das
+  absolute Viral-Ziel (0.163/0.099 em) ist unveraendert.
+
+### Viral-Look — RAUS seit v230b1
+Ismets Ansage (07.08.2026): "Mach das preset viral komplett raus." Preset,
+Katalogeintrag, UI-Karte, Vorschau-Zweig und alle acht `caption_viral`-Zweige
+in der Engine sind entfernt. Nicht wieder einbauen. Der Abschnitt darunter
+beschreibt, was es war und warum es weg ist.
+
+### Viral-Look (v183/v183a, HISTORISCH) — Option, NICHT das Gesicht des Produkts
+Look 'viral' (Server-Preset + Engine-Schalter `effects.caption_viral`):
+alles versal + extrabold (Montserrat XB), Schluesselwort 2.15x / Fliesstext
+2.90x Hausmass, enge 2-4-Wort-Bloecke mittig-unten (caption_zone 0.58),
+Karaoke: die Akzentfarbe (fest Gelb, adaptive AUS - Konstanz ist der Look)
+wandert mit dem gesprochenen Wort (`tint_glyph`, Kontur bleibt dunkel),
+vergangene Woerter dimmen NICHT, Pop 10 %. Kein Schreibschrift-Akzent.
+- **Der Zeilensatz-Riegel sitzt in build_plans** (immer laufende Stelle,
+  v159-Lehre), nicht nur im Preset.
+- **Der Punch-Deckel kennt den Crash-Zoom** (0.89 W - 0.11 W * crash, alle
+  Looks): der Zoom sitzt genau auf Punch-Momenten und schob die Kante aus
+  dem Bild (gemessen 0.999 W). Wer am Deckel dreht, muss den Zoom mitdenken.
+- **'mitte'-Zeilen und Zeilen breiter als der Satzspiegel werden ZENTRIERT**
+  (alle Looks) - buendig bei x0 war der halbe Anschnitt.
+- Viral-Groessen sind MULTIPLIKATOREN auf die Hausmasse - eine gelernte
+  Referenz (caption_scale) skaliert weiter relativ, v151-Kaskade intakt.
+- **v183a: KEIN Auto-Default.** Ismets Befund am Ergebnis: Versal-
+  Montserrat + gelbes Karaoke-Wort ist das CapCut/Opus-Standard-Template
+  ("KEINE STANDARD MUELL", v181-Briefing). "Marktniveau" heisst die
+  GROESSEN und die Handwerks-Qualitaet des Markts, NICHT sein
+  meistkopierter Stil. Der Look bleibt waehlbare Option (wer das Template
+  will, kriegt es), steht aber nicht vorn und wird nie vorgewaehlt. Die
+  Produkt-Identitaet ist Editorial - was "high level" konkret heisst,
+  entscheidet Ismet (Referenzen messen statt raten).
+
+### Lesbarkeit + aktives Wort (v181/v182)
+**v199: die Kontur ist AUS** (`caption_kontur: 0`, Ismets Ansage "die
+outlines bei den Schriften weg" - auch im Viral-Preset). Der Kontrast haengt
+damit allein an der Textfarbe: `fit_caption_color` bekommt `kontur=False`
+und kippt auf hellem Untergrund wieder nach dunkel, statt hell zu bleiben.
+Auf mittelgrauem Grund ist das die schwaechere Loesung (gemessen 5.4:1 statt
+weiss bei 3.0:1 - der Text wird dort also dunkel). Der Abschnitt darunter
+beschreibt, warum es sie gab; die Mechanik bleibt ueber den Regler erreichbar.
+Wer Tests anfasst, die die Kontur MESSEN, muss sie sich dafuer selbst
+einschalten - mit der Datei-Config sind beide Faelle jetzt identisch und der
+Test bewiese nichts (drei Tests sind genau darauf reingefallen).
+
+**Kontur ist Pflicht, nicht Deko.** Ein versetzter Schlagschatten trägt auf
+grauem Stoff nicht — gemessen 1.5 bis 3.1:1, Norm ist 4.5:1. `caption_kontur`
+zeichnet einen dunklen Saum auf der HINTEREN Ebene (0.055 der Schriftgröße);
+`caption_contrast` steht auf 4.5.
+- **Mit Kontur bleibt der Text hell**, bis der Untergrund wirklich hell ist
+  (bg_lum ≥ 0.45). Nach Dunkel zu kippen ist lesbar, sieht aber aus wie ein
+  anderer Look.
+- `fit_caption_color` fällt notfalls auf reines Weiß/Schwarz — ein Szenen-Ton,
+  den man nicht lesen kann, ist keine Handschrift.
+- **Die Kontur zählt nicht zur Layout-Breite** (`_ink_x` misst den
+  Glyphenkörper). Rest 0.003 W durch Antialiasing bleibt.
+- **v182 aktives Wort:** gesprochenes Wort voll + Pop, vergangene auf 70 %,
+  Keywords dimmen NIE. Kein Farbwechsel — der Akzent gehört dem Schlusswort.
+
+### Querformat steht mittig (v180)
+**16:9 = unten mittig**, das ist die Konvention für eingebrannten Text
+(Netflix TTSG, BBC, SMPTE). Links/rechts geparkt ist Lower-Third-Sprache.
+Die Seiten-Abwechslung (v168) gilt **nur im Hochformat** — sie war gegen
+"immer links" bei 9:16 gebaut und lief vorher als Nebeneffekt auch quer.
+Mitte ist ein **Wunsch, keine Fessel**: `spot()` weicht weiter aus (Person
+unten mittig → Block auf 0.75 W gemessen), Zeige-Ziel, Hand-Geste,
+Sprecherwechsel und `caption_seite` überstimmen sie.
+
+### Seite als Entscheidung (v168) — NACH v153 lesen
+"Immer links, egal was" hatte drei gemessene Ursachen: (1) der Seiten-Wurf
+pro Chunk (~40-45 % rechts, erster Chunk immer links, lange Ketten normal) →
+jetzt **echter Wechsel mit Zustand** (`spot_state['seite_lauf']`, jeder
+vierte bleibt, Start am Video-Seed); (2) der 0.55-Tiebreaker verlor gegen
+die 1.6-Unruhe-Karte — die ruhigste Bildhälfte gewann IMMER → jetzt
+entscheidet der **Motiv-Anteil allein** (nur Gesicht + Atemluft): die
+Wunschseite gilt, wenn sie genauso gesichtsfrei ist wie die beste Stelle;
+Unruhe wählt nur noch die Position INNERHALB der Seite; (3) die
+Seiten-Suche muss in der **Wunschzonen-Höhe** bleiben (±0.18 H) und
+innerhalb der Seite gilt Motiv → Nähe zur Wunschmitte → Kosten. Sonst
+erkauft sie sich die Seite mit einer falschen Höhe oder klebt an der
+Fensterkante zur Mitte. Das v143-Ausweichen bleibt unberührt: steht die
+Person auf der Wunschseite, fällt die Seite zurück.
+
+### Seite + Streuung (v153)
+`_mix01` ist der **32-Bit-Finalizer**, nicht eine einzelne Multiplikation mit
+`& 1023` — die lief fuer kleine Vielfache als lineare Rampe, jeder
+"deterministische Wechsel" fiel damit immer gleich aus.
+Die **Wunschseite ist ein Tiebreaker, keine Kraft**: `wunsch_x` wirkt nur an
+Stellen ohne Motiv-Beruehrung. Als Kosten-Term uebertoente sie das
+Gesichts-Ausweichen — zweimal gemessen, zweimal falsch. Ein Seitenwechsel
+setzt die Hysterese zurueck (sie ist gegen Zittern da, nicht gegen Regie).
+
+### Randabfall + satzweise Collage (v152)
+Der Anschnitt am Satzende gilt nur bis **5 Zeichen** — bei 7 frisst er die
+Randglyphen und das Wort ist unlesbar (am Render gemessen). Das
+angeschnittene Wort darf die **Blockbreite nicht bestimmen** und wird auf die
+Bildmitte zentriert.
+Die satzweise Collage schluckt Folgegruppen über `used`; die **Chunk-Bildung
+bleibt unangetastet**. Keyword-Momente werden nie geschluckt. Passt es nicht
+in 0.40 H, wird erst die Erweiterung zurückgedreht, nicht das Layout.
+
+### Referenz MESSEN (v230c5) — die groesste Stelle ist nicht das Mass
+Ismets Befund am Standbild: ein Fuellwort ('STECKT') bildfuellend. Die
+Groesse kam aus seiner eigenen gelernten Referenz, `size=0.184H` im Job-Log
+— das **96. Perzentil** der gemessenen Textteile, also die PUNCHLINE des
+Vorbilds. Dieser eine Wert wurde zur Grundgroesse fuer JEDES grosse Wort.
+- **Derselbe Fehler wie v154, eine Zeile hoeher.** Dort traf es den
+  Fliesstext (eigener Messwert `klein_hoehe` war die Loesung), hier das
+  Schluesselwort. Wer einen neuen Messwert aus einer Referenz zieht, fragt
+  zuerst: beschreibt er den TYPISCHEN Fall oder den lautesten?
+- `_gross_klasse()` liefert die typische Schluesselwort-Groesse: die
+  Fliesstext-Klasse ueber das 35. Perzentil bestimmen, alles ab dem
+  1.8-fachen ist 'gross', davon der MEDIAN.
+- **Otsu ist hier nachweislich falsch.** Bei drei Moden (Fliesstext,
+  Schluesselwort, Punchline) trennt die groesste Varianz zwischen
+  Schluesselwort und Punchline — genau der Wert, den man loswerden will.
+  Deshalb von UNTEN her trennen, nicht nach maximaler Varianz.
+- **Kein zweiter Deckel im Composer, auch wenn es hier verlockend ist.**
+  Ein Hoehen-Deckel auf das Ankerwort wurde gebaut und wieder ausgebaut:
+  die Wirkung einer Referenz fiel von 1.4x auf 1.02x, der v151-Test fiel
+  sofort. Groesse wird dort korrigiert, wo sie ENTSTEHT.
+- **Ab `caption_scale` ~1.9 deckelt die SPALTE, nicht die Skala.** Am Bild
+  gemessen: 2.60 und 1.88 ergeben beide 166 px Versalhoehe, erst 1.00
+  faellt auf 92 px. Wer am Ankerwort einen Faktor ansetzt, aendert dort
+  nichts — der einzige Hebel ist die Messung.
+- **Eine gespeicherte Referenz wird NICHT nachgemessen.** Der alte Wert
+  bleibt im Konto, bis der Kunde sie neu lernt. Wer eine Messung aendert,
+  sagt dazu, dass Bestandskunden sie erneut lernen muessen.
+
+### Schrift NACHSTELLEN (v230c8) — nicht nachbauen
+- **Exakt nachbauen ist keine Option.** Ein Vorbild zeigt ~20 Buchstaben,
+  ohne Umlaute/Zahlen/Satzzeichen, komprimiert. Und fremde Schriften sind in
+  Deutschland geschuetzt. Wer das nochmal vorschlaegt: beides steht hier.
+- **Variable Schnitte sind der Weg.** `_FONT_ACHSEN` (archivo_var
+  wght 100-900 + wdth 62-125, inter_var, montserrat_var). `_font_steckbriefe`
+  legt fuer sie ein RASTER an, `font_nachstellen` sucht den nahesten Punkt,
+  `_font_instanz` erzeugt daraus per fontTools eine echte Datei (Cache ueber
+  den Dateinamen, erzeugt beim RENDERN - die Referenz speichert nur Name und
+  Achsen).
+- **Die BREITE misst man ueber Zusammenhangskomponenten**, nie ueber
+  Teilbreite/Zeichenzahl: die Zeichenzahl ist unbekannt und Leerzeichen
+  zaehlen mit (gemessen >30 % Schwankung gegen 0 % bei Anton).
+- **Zwei Rollen.** Grosser Text -> `display`/`strong`/`italic`, kleiner Text
+  -> `support`. Ein Caption-Video hat fast nie nur einen Schnitt.
+- Der Beweis ist das gezeichnete Wort (479 px gegen 729 px bei gleicher
+  Versalhoehe), nicht der Config-Eintrag.
+
+### Schriftwahl aus dem Vorbild (v230c7) — messen grenzt ein, sehen entscheidet
+Eine gelernte Referenz bringt seit v230c7 die aehnlichste HAUSSCHRIFT mit
+(`display`/`strong`/`italic`; Stuetz- und Schreibschrift bleiben beim Look).
+- **Aus dem Videobild ueberlebt nur die STRICHSTAERKE.** Nachgemessen:
+  Innenraum-Breite bei Anton 0.086 auf sauberem Text gegen 0.006 durch die
+  echte Messkette, und ein Wort wie 'STECKT' hat gar keine geschlossenen
+  Innenraeume. Serifen-Kontrast schwankte 1.93 bis 2.82 fuer dieselbe
+  Schrift. Wer ein neues Schrift-Merkmal baut, misst es DURCH die Messkette,
+  nicht am gerenderten Glyphen.
+- **Die Steckbriefe unserer Schriften werden mit demselben Rezept gemessen**
+  wie das Vorbild (`_font_strich`). Zwei verschieden gemessene Zahlen zu
+  vergleichen ist wertlos (CLAUDE.md-Regel "Vergleiche muessen ausgerichtet
+  sein").
+- **Messung als Leitplanke, Vision als Entscheider.** Die reine Messung traf
+  bei lockerer Schwelle 12 mal sicher richtig und 3 mal sicher FALSCH - ein
+  sicher falscher Griff ist schlimmer als keiner. Jetzt waehlt die
+  Strichstaerke sechs Kandidaten, Vision nimmt daraus die Form. Antwort
+  ausserhalb der Liste = verworfen.
+- **Einmal beim LERNEN, nie beim Rendern.** Sonst waere die Ausgabe nicht
+  mehr reproduzierbar und jeder Render teurer.
+
+### Referenz ist kein Preset (v230c6) — die eigene Wahl gewinnt
+Die Kaskade heisst jetzt: `config.yaml` → Look-Preset → **Referenz** → was
+der Kunde selbst eingestellt hat. Bis v230c5 lief `_apply_reference_params`
+in `render.py` NACH allem und hat 21 Regler des Kunden still ueberstimmt
+(Ismet: "wofuer habe ich denn die ganzen Einstellungen").
+- **Der Riegel steht NICHT an den 21 Zuweisungen.** Die Referenz darf weiter
+  alles setzen, danach werden die eigenen Werte zurueckgeschrieben
+  (`cfg['ref_schutz']`). Ein Riegel je Zuweisung waere beim naechsten neuen
+  Messwert vergessen (v159/v230f); Zurueckschreiben kann nichts uebersehen.
+- **"Selbst eingestellt" = weicht vom Look-Preset AB**, nicht "steht im
+  Override-Paket". `applyTemplate` schickt bei einem gespeicherten Setup ALLE
+  Preset-Werte mit (v230f) — waere das der Massstab, waere nach einem Setup
+  alles geschuetzt und die Referenz wirkungslos, also v151 zurueck.
+- Die `Style anchor:`-Zeile nennt am Ende, welche Regler die Referenz nicht
+  durfte. Wer hier etwas aendert, laesst diese Zeile stehen.
+- Ohne `ref_schutz` (Desktop, Handbetrieb) gilt das alte Verhalten.
+
+### Referenz anwenden (v151) — klemmen, nicht verwerfen
+Ein gemessener Wert ausserhalb des Plausibilitaetsfensters wird **geklemmt**,
+nie verworfen. Verwerfen heisst: der Kunde laedt eine Referenz hoch und sieht
+nichts — genau das ist bei den auffaelligsten Vorbildern passiert, weil die
+Fenster an einem einzigen Video geeicht waren.
+**Deckel nur an EINER Stelle.** `_apply_reference_params` entscheidet;
+`compose_flow` sichert danach nur noch gegen Unsinn. Zwei Deckel
+hintereinander halbieren die Wirkung, ohne dass es im Code auffaellt.
+Jeder Messwert, den `_reference_params()` durchreicht, muss auch angewandt
+werden — sonst ist er Zierde. Gegenprobe: Schluessel aus `_reference_params()`
+gegen die Nutzung in `_apply_reference_params` diffen.
+
+### Abwechslung im Satzbild (v150)
+Ein Filler-Chunk bekommt NICHT mehr immer dasselbe Zeilenraster. `compose_flow`
+kennt zwei Anordnungen (`layout='flow'|'collage'`): die Collage setzt kleine
+Woerter links in eine Spalte und treppt die Inhaltswoerter rechts daneben nach
+unten, jedes in eigener Groesse; eine Verbinder-Kette laeuft in Schreibschrift
+mit. Der Wechsel ist **deterministisch** (`_mix01`), nie zufaellig — ein
+Re-Render muss dasselbe Bild ergeben.
+Sperren, die man nicht aufweichen darf: verengte Spalte (Nahaufnahme) → immer
+Zeilensatz; Collage über 0.40 H → Rückfall auf Zeilensatz; `clean` bleibt
+schlicht. Schwelle ist `len(g) >= 3` — mit 4 lief die Collage im echten Render
+gar nicht an.
+Der Schlusswort-Knall (`punch`) greift nur am Satzende und ist auf 0.89 W
+gedeckelt, weil der Block bei x0 = 0.07 W ansetzt.
+**Bei jeder Änderung hier einen Frame-Streifen rendern.** Zwei der drei Fehler
+in v150 waren in der Komposition unsichtbar und erst im fertigen Bild zu sehen.
+
+### Referenz-Funktion (v144) — gemessen, nicht geschaetzt
+`measure_reference_video()` in `render.py` liest den Stil eines hochgeladenen
+Vorbilds direkt aus Bild und Ton — deterministisch, ohne KI, ohne API-Key.
+GPT-5 Vision liefert nur noch die Prosa-Beschreibung; alle wirksamen Zahlen
+kommen aus der Messung. Erkennung von Schrift: Fuellgrad 0.14-0.74,
+Strichbreite 0.06-0.40 der Zeichenhoehe, Zeilen-Bindung, zeitliche
+Wasserzeichen-Karte (>85 % gleiche helle Stelle = Logo), Textband in zwei
+Durchgaengen. **Das Band muss wachsen**: das 70-Prozent-Fenster findet nur die
+schwerste Stelle, ein fettes Schluesselwort draengt die Fliesstext-Zeile sonst
+heraus und das Groessenverhaeltnis wird 1.0. Gewachsen wird nur entlang echter
+ZEILEN (>= 2 Teile auf einer Grundlinie), max. 1.6 Zeilenhoehen je Schritt,
+Deckel 0.40 H.
+Angewendet werden (`_apply_reference_params`): Kamera, `chunk_hold_min`,
+SFX-Pegel, `caption_zone`, `caption_align`, `caption_glow`, `caption_outline`,
+Akzentfarbe, `caption_scale`, `caption_hierarchie`. Groessen wandern als
+Anteil der BILDHOEHE (Formatausgleich `pf` bleibt davor), Umrechnung ueber
+cap/em 0.70 und x-Hoehe/em 0.52, beides gedeckelt.
+**Kein API-Key noetig** — `analyze_reference_video` misst zuerst und liefert
+auch ohne OpenAI einen Eintrag. `/api/style/learn` darf deshalb kein 503 mehr
+werfen. Der Kunde sieht die Messung im Konto als Klartext-Zeile (`gemessen`,
+englisch); Rohdaten bleiben auf dem Server.
+**Testvideos fuer die Messung nie mit `cv2.putText` bauen** — Hershey-Schriften
+haben weder Punzen noch Antialiasing und besitzen die geprueften Merkmale gar
+nicht. Echte Schriftdateien nehmen, Captions wechseln lassen (stehender Text
+gilt sonst als Wasserzeichen), Stoerer wandern lassen.
+
+### Typografie-Regeln aus der Referenz (v143, gemessen)
+- Jeder Look setzt **eigene** `fonts.support`. Stammbreite/Versalhöhe ≥ 0.20
+  (Referenz 0.22). `sans_l` = 0.102 ist nur für `clean` richtig.
+- Schlüsselwort nimmt die **Display-Schrift des Looks** (`fonts.strong`
+  übersteuert), nicht mehr hart `poppins_b`.
+- Versalhöhe Schlüsselwort zu x-Höhe Kleintext = **2.2 bis 2.6**.
+- Die Referenz **füllt die Spalte nicht**: groß ansetzen, nur lange Wörter
+  schrumpfen lassen. Eine "Spalte füllen"-Funktion ergibt 3.1× und ist falsch.
+- Querformat **vergrößert** (`pf` 1.35), es verkleinert nicht. Alle anderen
+  Composer gleichen die kurze H-Kante um 1.68 bis 2.00 aus.
+
+## Animationen (26 Stück, Stand 2026)
+Alle über zentrales `anim_apply()` routen (Beat-Sync + Motion-Blur legt es
+oben drauf). Kern in `_anim_core`. Qualitätsmaßstab (v100): Federn mit
+Overshoot statt ease_out, Anticipation→Impact→Settle statt Endlos-Drift,
+Envelope-Follower statt rohem Audio, verwürfelte Staffelung statt linearer
+Muster, Tremor statt Weißrauschen. Keine Anim darf mechanisch/synthetisch/
+1-Frame-zufällig wirken. Katalog: `ANIM_LIST`; Keyword→Anim-Heuristik
+`ANIM_HINTS`/`anim_for` (DE+EN, an Satzgrenzen gekappt via `anim_ctx`).
+
+## Aufloesung (v149, 4K abgeschaltet in v230al)
+**4K ist seit v230al aus der Oberflaeche raus** (Ismets Entscheidung): die
+Plattformen liefern ohnehin nur 1080p aus, die Stufe kostete doppelt und war
+die einzige, die am Speicher starb. `DVE_4K=1` schaltet sie wieder frei;
+`_4k_erlaubt()` ist der EINE Riegel, an dem Preis, Klemmung und Erkennung
+haengen. Abgeschaltet heisst nicht ungeprueft - der Selftest fährt den Pfad
+mit gesetztem Schalter weiter durch.
+
+
+`output.height` ist das Zielmass der **kurzen Kante**, nicht der Bildhoehe
+(hoch 1080x1920, quer 1920x1080). `output.quality: 4k` hebt es auf 2160.
+Es wird **nie hochskaliert** — `H = min(H, src_h)`. 4K kostet im Web-Produkt
+den doppelten Credit-Satz und wird nur berechnet, wenn die Quelle mindestens
+1440p kurze Kante hat (`_will_uhd`). **`_will_uhd` muss BEIDE Wege kennen** —
+`quality: 4k` und `height >= 2160` (die UI schickt seit v157 die Hoehe).
+Wird 4K abgelehnt, muss auch die HOEHE zurueckfallen, sonst rechnet die
+Engine gross und der Kunde zahlt den einfachen Satz. Der gezahlte Betrag steht als `cost_sec`
+am Job; Erstattungen gehen ueber `_job_cost(j)`, nie ueber `cost_seconds(dauer)`.
+
+## Sprache der Ausgaben (v148)
+**Ein Sprach-Test, der nur `print(...)`-Literale liest, sieht die Haelfte
+nicht (v230ay).** Die Stil-Anker-Zeile wird aus `parts.append(...)`
+zusammengebaut und woanders ausgegeben - sie stand deshalb noch komplett
+deutsch in Ismets Job-Log, waehrend der Test gruen war. Wer eine Log-Zeile
+zusammenbaut, prueft sie durch AUFRUFEN. Und die Wortliste muss die Woerter
+kennen, die wirklich vorkommen (v209-Falle).
+**Eine Wortliste allein reicht NIE (v230az).** Dritte Runde desselben
+Fehlers: "leise", "Haerte", "Button-Spalte rechts", "ragen ins UI" standen
+auf keiner Liste. Zweites Netz ist ein BAU-MERKMAL - die Umschrift
+ae/oe/ue kommt im Englischen fast nicht vor (Ausnahmen aufgezaehlt: does,
+silhouette, queue, value, continue). Es hat sofort drei Stellen gefunden.
+In einer f-Zeichenkette stehen in den Klammern Variablennamen, kein
+Kundentext - vor der Pruefung entfernen, sonst Fehlalarm. Config-Schluessel bleiben
+deutsch - sie stehen in config.yaml, im Cache und in gespeicherten Setups;
+uebersetzt wird nur die ANZEIGE (`_REF_EN`, `ANIM_EN`, `anim_en()`).
+
+`render.py` schreibt seine `print()`/`sys.exit()`-Meldungen **englisch** — der
+Job-Log landet im Web-Produkt beim Kunden. Kommentare und Docstrings bleiben
+deutsch. Wer eine Log-Zeile aendert, muss BEIDE Leser mitziehen:
+`web/server.py` (Fortschritts-Phasen, `_parse_refs_line`, `ERROR:`-Erkennung)
+und `gui.py` (Desktop-Statuszeile). Die alten deutschen Marker stehen als
+Fallback daneben — gecachte Logs von vor v148 sollen weiter lesbar bleiben.
+
+## Support: ein offenes Anliegen je Konto (v230b1)
+Ismets Ansage gegen Spam. **Ein Tempo-Limit ist kein Mengen-Limit** — die
+bestehende Bremse (10 Nachrichten je Stunde) haette zehn eigene Verlaeufe
+zugelassen. `/api/support` weist mit 409 ab, solange ein Ticket offen oder
+beantwortet ist. Zwei Dinge duerfen dabei NIE zugehen: im bestehenden Ticket
+weiterschreiben, und nach dem Schliessen ein neues Anliegen aufmachen — sonst
+sperrt der Schutz den Kunden aus statt den Spam (v230f-Fehlertyp). Die App
+blendet das Formular aus, statt erst tippen zu lassen und dann abzuweisen.
+
+## Kunden-Mails (v194b) — ein Deckel je NUTZER, nicht je Job
+Die Ablauf-Erinnerung ging bis v194a pro JOB raus. Der Deckel (`expiry_mail`
+im Job-State) verhinderte nur die zweite Mail zum selben Job — wer dasselbe
+Video dreimal gerendert hatte, bekam drei Mails, alle in derselben Minute
+(Ismets Screenshot). **Ein Deckel, der Jobs zaehlt, deckelt nichts.**
+- `_expiry_sammeln` sammelt, `_expiry_mails` verschickt gebuendelt: EINE
+  Mail je Nutzer mit allen ablaufenden Videos.
+- Zusaetzlich `mail_log`-Schluessel `expiry-YYYY-MM-DD`: hoechstens eine
+  Ablauf-Mail pro Nutzer und Tag.
+- **Ein Tages-Deckel deckelt bei taeglicher Nutzung nichts (v194c).** Videos
+  laufen laufend ab; wer taeglich rendert, bekaeme taeglich Post. Richtig
+  sind zwei Riegel: **aktive Nutzer** (Login oder Job in 48 h) bekommen die
+  Erinnerung gar nicht, und der Abstand ist eine ganze Aufbewahrungs-Periode
+  (`_mail_abstand_ok`, rollend statt Tagesschluessel).
+- **Listen in Mails deckeln.** Zehn Zeilen, dann "and N more"; gleiche Namen
+  ueber die GANZE Liste gruppieren, nicht nur nebeneinanderliegende.
+- Wer eine neue Kunden-Mail baut, deckelt sie ueber `_mail_abstand_ok(uid, …)`
+  bzw. `_log_mail_once(uid, …)` und prueft, ob der Empfaenger ueberhaupt
+  weg war. Ausnahme: der Kaufbeleg ist ein Rechnungsdokument und geht pro
+  Kauf raus.
+
+## Reichweite messen (v208) — Trichter ohne Cookie
+Sechs Stufen (`_TRICHTER_STUFEN`): besuch -> app -> konto -> upload ->
+fertig -> kauf, dazu die Herkunft. Panel-Ansicht **Trichter** unter Umsatz.
+- **Kein Cookie, keine gespeicherte IP, kein fremder Dienst.** Gezaehlt wird
+  ueber `sha256(salz|DATUM|ip|user-agent)[:16]`. Das DATUM im Salz ist der
+  ganze Trick: der Wert wechselt taeglich, ist nicht rueckrechenbar und
+  nicht ueber Tage verkettbar - deshalb kein Einwilligungsbanner. Wer das
+  Datum herausnimmt, macht daraus eine dauerhafte Kennung und braucht ein
+  Banner plus Rechtsgrundlage.
+- **Menschen zaehlen, nicht Klicks.** Vor der Anmeldung ueber den
+  Fingerabdruck, danach ueber die Konto-Nummer.
+- **Kauf und fertiges Video haben keinen Browser** (Stripe-Webhook,
+  Render-Worker). Ihre Herkunft kommt ueber das Konto (`quelle_von_konto`,
+  erste Spur gewinnt) - sonst laege jeder Umsatz unter "direkt".
+- **Die Zahl, die zaehlt, ist der Anteil an der Stufe DARUEBER.** Der Anteil
+  an ganz oben verschleiert, wo es klemmt.
+- Eine Zaehlung scheitert IMMER leise; `_trichter` darf nie einen
+  Seitenaufruf reissen. Aufbewahrung `DVE_FUNNEL_DAYS` (400 Tage).
+- Wer eine Stufe ergaenzt, traegt sie in `_TRICHTER_STUFEN` UND in die
+  Klartext-Tabelle in `_trichter_calc` ein - eine Stufe ohne Erklaerung ist
+  im Panel wertlos, und die Datenschutzseite muss den Zweck nennen.
+
+## Optik: HIGH END, immer (Ismets Ansage, 07.08.2026)
+"Das sieht so billig aus. Mach es so, dass es wirklich high class aussieht.
+Es soll immer so high end aussehen." Das gilt fuer JEDE Oberflaeche, nicht
+nur fuer die eine Stelle, an der es auffiel. Woran es konkret lag (v230b4,
+am Bildschirm nachgemessen) - dieselben vier Punkte gelten ueberall:
+1. **Ein Motiv fuehrt.** Drei Elemente auf derselben Lautstaerke (dicker
+   Ring, Bild, oranger Kasten) sind der haeufigste Grund, warum eine Seite
+   billig wirkt. Hierarchie heisst: EINE Sache gross, der Rest leise.
+2. **Tiefe statt Rahmen.** Ein 1px-Rand auf flacher Flaeche sieht aus wie ein
+   Screenshot. Radius, echter Schlagschatten, Haarlinie nach INNEN
+   (`outline-offset: -1px`) und ein unscharfer Schein aus demselben Bild.
+3. **Duenn und praezise schlaegt dick.** Eine 3-px-Linie mit Verlauf wirkt
+   teurer als ein 6-px-Donut; grosse Zahlen im LEICHTEN Schnitt mit
+   Tabellenziffern, kleine Beschriftungen in Versalien und gedaempft.
+4. **Nichts springt** - aber ein Platzhalter muss auch etwas SAGEN (v230b9:
+   die Buehne reservierte ihren Platz und war leer; auf dem Handy ein
+   schwarzes Loch mitten im Bild). Platzhalter in Endgroesse (kein Layout-Sprung),
+   Bildwechsel als Ueberblendung ueber zwei Ebenen, Textwechsel als Blende.
+Und: **kein schwarzer Balken.** Wer ein Medium einbettet, nimmt das
+Seitenverhaeltnis aus dem MEDIUM. Feste Breite plus `max-height` ergibt
+Balken - die Hoehe gewinnt und das Verhaeltnis wird ignoriert.
+
+## Kunden-App: Layout-Fallen (v226b)
+- **Ein Aufklapp-Bereich darf keinen festen `max-height` haben.** Der offene
+  Zustand stand auf `max-height: 2000px; overflow: hidden` - nur damit die
+  Animation lief. Auf einem 390 px breiten Handy ist "Look & Typography" rund
+  3500 px hoch: **1502 px an Einstellungen waren abgeschnitten und mit keinem
+  Scrollen erreichbar** (Ismets Befund "Ich sehe die weiteren Menue Optionen
+  nicht"). Offen heisst jetzt `max-height: none`; den Pixelwert setzt das JS
+  gemessen und nur fuer die Dauer der Animation (plus Sicherheitsnetz, falls
+  `transitionend` ausbleibt). Merksatz: eine Animation, die Bedienelemente
+  verschluckt, ist den Preis nicht wert - und ohne JS muss der Bereich
+  trotzdem VOLLSTAENDIG da sein.
+- **Was ein Vorschaubild darf, darf ein Player nicht (v228).** Die
+  Bibliotheks-Kachel ist 16:9 mit `object-fit: cover` - richtig fuer ein
+  ruhiges Raster. Beim Klick wurde derselbe Rahmen zum Player: von einem
+  9:16-Video waren 32 % zu sehen. Wer einen Rahmen doppelt benutzt, muss ihn
+  beim Rollenwechsel umschalten (`.playing` -> `aspect-ratio: auto` +
+  `contain`). Und `width:100%` + `max-height` ohne `object-fit` VERZERRT ein
+  Hochformat-Video, weil die Voreinstellung `fill` ist.
+- **Ein Zustand ohne Fortschritt ist von einem Haenger nicht zu
+  unterscheiden (v230ae).** Der Ebenen-Render (`/api/alpha`) setzte den Knopf
+  auf "Rendering …" und liess ihn dort stehen - auch nach dem Ende. Und weil
+  der Job dabei wieder auf 'wartet' steht, fiel die Kachel aus der
+  Bibliothek (die zeigte nur Status 'fertig'): das fertige Video war
+  waehrend des Zusatz-Renders unsichtbar. Zwei Regeln: ein laufender
+  ZUSATZ-Vorgang darf das fertige Ergebnis nie wegnehmen, und wer einen
+  Vorgang anstoesst, zeigt seinen Fortschritt und loest sich selbst ab
+  (Poller nur im sichtbaren Tab, hoechstens einer je Job).
+- **Eine Knopfzeile, die nicht umbricht, waechst die KACHEL (v230ad).** Die
+  Bibliotheks-Kachel kann sechs Knoepfe tragen; ohne `flex-wrap: wrap` zog
+  ihr Inhalt am Handy die Kachel auf 712 px (Bildschirm 390) und am Desktop
+  schnitt sie ueber `overflow: hidden` bis zu 399 px ab. Zwei Regeln: eine
+  Zeile mit unbekannt vielen Elementen bricht um, und ein Grid-Kind bekommt
+  `min-width: 0` - sonst zieht der breiteste Inhalt die ganze Spalte auf.
+  `flex: 1` (Basis 0) ist dabei das Gegenteil von dem, was man will: es
+  presst alle Knoepfe in EINE Spur; richtig ist `flex: 1 1 auto`.
+- Am Handy geprueft wird im BROWSER (Chromium, 390x844) und ueber
+  `web/_dom_probe.mjs`, nicht per Quelltext-Suche. `scrollHeight` ist nur bei
+  `overflow: hidden` aussagekraeftig - bei `visible` liefert es die eigene
+  Hoehe und verschweigt den Ueberhang.
+
+## Ankuendigungen + Feedback (v196)
+- **Ankuendigung** = Banner IN der App (`announcements`, Stufen info/warn/
+  wartung, optionales Ablaufdatum). `/api/announcements` braucht bewusst
+  KEINE Anmeldung - eine Wartungsmeldung muss auch den erreichen, der
+  gerade nicht eingeloggt ist. Weggeklickt wird **pro Ankuendigung** im
+  localStorage gemerkt, nie global.
+- **Support ist eine eigene Seite (v202), kein Block unter Account.** Dazu ein
+  Zaehler im Navigations-Link: ungelesene Antworten kommen als `support_neu`
+  aus `/api/me` (das wird ohnehin bei jedem Seitenaufruf geholt - ein eigener
+  Endpunkt waere reine Last) und werden beim Oeffnen der Seite sofort
+  zurueckgesetzt. Ein Zaehler, der stehen bleibt, nachdem man hingeschaut hat,
+  ist Muell. Achtung beim Ergaenzen von `/api/me`: die REGISTRIERUNG gibt
+  dieselbe Zeile zurueck, hat die Zaehl-Abfrage aber nicht - eine
+  Sammelersetzung baut dort einen 500er ein.
+- **Ein Ticket ist ein VERLAUF (v198), keine Nachricht.** `ticket_messages`
+  ist die Quelle, `tickets.body` bleibt nur die erste Zeile. Geantwortet wird
+  im Panel; die Antwort geht ZUSAETZLICH als Mail raus (niemand soll in die
+  App schauen muessen, um sie zu sehen), und eine Rueckfrage des Kunden bleibt
+  im selben Ticket und setzt es wieder auf `open`. Status ist offen/answered/
+  closed - wer einen Wert ergaenzt, muss ihn auch in `admin_ticket_status`
+  erlauben. Alt-Tickets bekommen ihre erste Nachricht beim Start nachgetragen,
+  sonst faengt jeder alte Verlauf mit der Antwort an.
+- **Feedback ist NICHT das Ticket-System.** Ticket = Frage mit Antwort,
+  Feedback = Bewertung ohne. Die Sterne haengen am fertigen Render, damit
+  der LOOK mitkommt - ohne ihn ist eine Note nicht auswertbar. Eine
+  Bewertung je Render (die zweite ueberschreibt).
+- Die Kunden-App hat `escHtml`, NICHT `esc` (das gibt es nur in
+  `admin.html`). Und ein `try/catch` um einen Renderer muss loggen: ein
+  leeres Banner sieht sonst aus wie "nichts vorhanden".
+
+## Kunden-App: Hintergrund-Tab (v230e)
+- **Ein Fehlerzähler muss wissen, WARUM eine Anfrage scheiterte.** Im
+  Hintergrund bricht das Handy laufende Anfragen ab; gezählt wurden sie wie
+  echte Ausfälle, und nach 10 kam die Karte „Connection lost" — während der
+  Render unverändert weiterlief. Regel: im Hintergrund gar nicht erst
+  fragen (`whenVisible()`), dort auftretende Fehler zählen nicht, und beim
+  Zurückkommen fängt der Zähler bei null an.
+- **Die Sonde `web/_dom_probe.mjs` hat zwei eigene Fallen:** `schneide()`
+  muss das `async` VOR dem Funktionsnamen mitnehmen (sonst ist das erste
+  `await` ein Syntaxfehler), und ein früherer Abschnitt ersetzt
+  `globalThis.setTimeout` durch eine Warteschlange — wer echte Zeit braucht,
+  nimmt `ECHTER_TIMEOUT`. Beides fällt als „Test misst nichts" auf, nicht
+  als Fehler.
+- **Was NICHT reproduzierbar war:** ein echter Renderer-Absturz. Weder im
+  Leerlauf noch mit laufendem Render, auch nicht nach dreimaligem Einfrieren
+  des Tabs. Kommt der Befund wieder, braucht es Gerät und Browser.
+
+## Eine Allowlist darf nichts VERWERFEN (v230f — meine eigene Regression)
+`_sanitize_overrides` liess nach v230c-sec nur noch Zahlen mit
+Tabellen-Eintrag durch und warf den Rest weg. `effects.caption_zone` fehlte
+— und fiel damit aus jedem gespeicherten Setup heraus: die Captions sassen
+wieder im Standardband (Ismets „die Captions respektieren die Safe Zones
+nicht mehr"). Der Weg: `applyTemplate` setzt `State.cfg` auf das Setup und
+laesst `State.cfgBase` stehen, der Unterschied enthaelt danach ALLE
+Preset-Werte.
+- **Unbekannte Zahlen klemmen, nicht entfernen** (`_ZAHL_ALLGEMEIN`). Ein
+  stiller Wegfall schaltet ein Feature ab, ohne dass ein Test oder eine
+  Meldung es zeigt — derselbe Fehlertyp wie v210. Die teuren Regler behalten
+  ihre eigene enge Grenze, der Sicherheitsgewinn bleibt.
+- **Der Riegel ist der Test, nicht die Sorgfalt:** jede Zahl, die in
+  irgendeinem Preset vorkommt, muss einen eigenen Eintrag haben. So faellt
+  der naechste neue Regler im Selftest auf, nicht beim Kunden. Dazu ein
+  Test, der ein ganzes gespeichertes Setup durchschickt und auf
+  Vollstaendigkeit prueft.
+- Und wieder die v132-Falle: der v230c-Test verlangte ausdruecklich, dass
+  eine unbekannte Zahl VERWORFEN wird — er hat den Fehler festgeschrieben.
+
+## Eine Pruefung, die nur EINE Form kennt (v230n)
+`ink_box` misst drei Formen eines Textmoments — Karte, Komposition,
+Fliesstext. Die **Stuetzzeile (`small`) war nicht dabei**, also war sie fuer
+den Anschnitt-Riegel unsichtbar und lief aus dem Bild ('HIS ONE STICKS' ohne
+das T, Ismets Standbild). Genau davor warnt der Docstring dieser Funktion
+selbst — und trotzdem ist die vierte Form dazugekommen, ohne dort eingetragen
+zu werden. Wer eine neue Textform baut, traegt sie in `ink_box`,
+`_verschiebe_plan` UND `_skaliere_plan` ein; sonst misst der Riegel sie nicht,
+oder er verschiebt die Karte und laesst die Zeile stehen.
+Und: **ein Riegel mit `q is not p` uebersieht die eigene Karte.** Das
+Ankerwort wich jedem fremden Block, nur nicht der Stuetzzeile derselben
+Karte. Beim Nachbessern nicht ueberdrehen — die erste Fassung unterdrueckte
+das Ankerwort immer und brach v221; der bestehende Test hat es gefangen.
+
+## Eine Erkennung mit EINEM Merkmal ist blind — und schweigt (v230m)
+Ismets `ABOVE ME` überlebte den Schnitt und wanderte in der Nahaufnahme nach
+unten. Die Schnitt-Disziplin war NICHT schuld: die Schnitt-Erkennung hatte in
+dem Video **keinen einzigen Schnitt** gefunden. Sie vergleicht Farb-Histogramme,
+und ein graues Studio mit dunkler Kleidung sieht vor und nach dem Schnitt fast
+gleich aus (stärkstes Signal 0.935 gegen die Schwelle 0.55).
+- **Zweites Signal: der BILDAUFBAU** (mittlere Helligkeitsabweichung eines
+  32x32-Miniaturbildes). Schwelle als Vielfaches des Medians, nicht fest — ein
+  Handyvideo wackelt durchgehend, ein Stativ-Interview nie.
+- **Wer eine Erkennung baut, fragt: auf welchem Material hat mein Merkmal
+  keinen Kontrast?** Dort liefert sie nicht "unsicher", sondern "nichts" — und
+  alles, was darauf aufbaut (Schnitt-Disziplin, Farbwelt pro Shot,
+  Ton-Dramaturgie, Raum-Karte), fällt lautlos aus.
+- **Der `behind`-Zweig ist der einzige Zeichenweg ohne `dt >= 0`.** Er malt die
+  Stützzeile schon vor der Karte. Wer etwas "vor die Weiche" zieht, weil ein
+  Zweig es richtig macht, baut es bei genau diesem Zweig DOPPELT ein (v230g →
+  dieselbe Zeile zweimal, um den Gesichts-Versatz verschoben).
+- **Tinte ist gegen Verschieben unempfindlich** — mit Versatz muss genauso viel
+  Tinte im Bild sein wie ohne. So braucht ein Doppel-Test keinen Referenzwert.
+  Zeilen-Erkennung taugt dafür NICHT: zwei Kopien, die sich um 20 px
+  überlappen, verschmelzen zu einem Band und der Test misst nichts.
+
+## Ein Sidecar schreibt zurueck, was es liest (v230l — zweimal derselbe Fehler)
+Ismets „das Gesagte wird zweimal im Bild eingeblendet" hatte dieselbe Wurzel
+wie der Anschnitt in v230g, nur eine Datei weiter: der Analyse-Lauf schreibt
+in JEDEN Eintrag den AUTOMATISCHEN Wortlaut (`_bloecke.json` das Feld `text`,
+`_momente.json` ebenso), und der naechste Lauf liest ihn als
+NUTZER-Ueberschreibung — obwohl niemand etwas geaendert hat.
+- **Regel: ein zurueckgeschriebenes Feld ist erst dann eine Nutzer-Aenderung,
+  wenn es sich vom Automatik-Wert UNTERSCHEIDET** (`_norm_txt`-Vergleich).
+  Wer ein neues Sidecar-Feld exportiert, beantwortet sofort, wie der naechste
+  Lauf „unveraendert" von „geaendert" unterscheidet.
+- **Ein Kartentext darf nie mehr Woerter zeigen, als die Karte besitzt.**
+  `phrase` bricht an einer Sprechpause ab, `n` kennt die Pause nicht; der
+  alte `phrase = phrase[:1]` gab die ueberzaehligen Woerter frei und sie
+  standen direkt danach noch einmal als Fliesstext im Bild (gemessen: Karte
+  `ON THE WALL` 5.10-6.55, danach Block `wall.` 6.55-6.98). Deckt sich der
+  Text mit den gesprochenen Woertern ab `i`, waechst die Phrase mit.
+- **Die Doppeltext-Wache meldet, sie raeumt nicht auf.** Sie schreibt Zeit
+  und Wortlaut ins Job-Log, wenn ein gesprochenes Wort in zwei Plaenen steht,
+  die gleichzeitig oder innerhalb einer Sekunde laufen. Woerter wegzuwerfen
+  waere die v230f-Falle.
+- **Der Suchweg ist die eigentliche Lehre:** vier Ebenen wurden gemessen,
+  bevor die Ursache feststand — innerhalb eines Blocks (504 Bloecke, 0),
+  zwischen den Plaenen (drei Dichten, 0), im fertigen Bild per Schablone
+  (0, Detektor vorher am kuenstlich verdoppelten Bild geprueft) und
+  gespiegelt (0). Erst der zweite Render mit Sidecar zeigte den Fall. Wer
+  einen Kundenbefund nicht reproduziert, hat meistens den ERSTEN Lauf
+  getestet.
+
+## Missbrauch: Gesamt-Bremse, nicht nur pro Konto (v230av)
+Die Pro-Konto-Deckel (`_inflight_count`, `_vorbereitet_count`) schuetzen gegen
+EIN Konto. Gegen VIELE Gratis-Konten, die zusammen den einen Worker und die
+Platte zustellen, half nichts - die Priority-Queue laesst Kaeufer zwar
+vorbei, aber die Schlange selbst war unbegrenzt. `QUEUE_FREE_MAX` (Standard
+40): ist die Caption-Schlange tiefer, werden NUR NOCH Gratis-Uploads mit 503
+vertroestet; wer je gekauft hat (`_has_purchased`), kommt IMMER durch. Der
+Riegel sitzt an derselben Stelle wie die Konto-Deckel (nach der
+Video-Pruefung). Wer eine neue Gratis-Aktion baut, fragt: was macht sie, wenn
+tausend Konten sie gleichzeitig ausloesen?
+
+## Sicherheit: Header + CSP (v230ah)
+- **Keine Ereignis-Attribute im Markup.** `onclick=`/`onsubmit=` zwangen die
+  CSP zu `script-src 'unsafe-inline'` - und das haette auch ein
+  eingeschleustes `<script>` ausgefuehrt. Jeder Knopf traegt nur Daten
+  (`data-act` + `data-arg…`), EIN Verteiler je Seite ruft die Funktion; die
+  ERLAUBT-Liste ist der Riegel. Wer einen neuen Knopf baut, traegt ihn dort
+  ein - der Selftest faellt sonst.
+- **Die CSP hat GENAU EINE Quelle: `_csp()` in `web/server.py`.** Sie enthaelt
+  die SHA256-Fingerabdruecke der Inline-Bloecke und wird bei Datei-Aenderung
+  neu gebaut. Im Caddyfile steht sie NICHT mehr: zwei Kopfzeilen werden vom
+  Browser BEIDE erzwungen (die strengere gewinnt), eine vergessene Zeile
+  haette die App lahmgelegt.
+- **`style-src 'unsafe-inline'` bleibt bewusst** (hunderte `style="…"`;
+  Fingerabdruecke decken Attribute nicht ab).
+- **Ein Fremd-Host im Markup ist unter dieser CSP ein toter Link.** Die
+  Landing holte ihre Schriften von Google und lief deshalb seit v92 mit
+  Ersatzschriften - gefunden hat das erst ein echter Browser-Lauf, keine
+  Quelltext-Suche. Schriften und Assets liegen jetzt lokal (`web/assets/`);
+  das erspart nebenbei die Google-Fonts-Abmahnungen.
+- **Der Deploy startet nur die APP neu - Caddy muss eigens neu laden.**
+  `update.sh` macht das seit v230ah (`caddy validate` -> `caddy reload`,
+  Rueckfall Neustart). Davor lag jede Caddyfile-Aenderung tot im Repo: die
+  Datei ist read-only in den Container gemountet und wird nie von selbst neu
+  gelesen. Aufgefallen ist es erst, als eine ganze Adresse davon abhing
+  (www ohne Zertifikat). Wer am Caddyfile etwas aendert, prueft danach am
+  echten Server, ob es angekommen ist.
+- **Der Nachweis ist `web/_csp_probe.mjs`** (Chromium gegen einen laufenden
+  Server, zaehlt `securitypolicyviolation` und klickt umgebaute Knoepfe). Wer
+  an CSP, Handlern oder Seiten etwas aendert, laesst sie einmal laufen.
+- Build-Stempel (`X-DVE-Version`) geht nur noch an Aufrufer mit Admin-Key.
+
+## Login-Bremse (v230c3) — je Anschluss ist keine Bremse
+- **Ein Deckel je IP haelt einen VERTEILTEN Angriff nicht auf.** 20 Versuche
+  je Anschluss klingt streng; ein gemietetes Botnetz hat tausend Anschluesse
+  und damit 20.000 Versuche auf dieselbe Adresse, ohne dass ein Zaehler
+  anschlaegt. Wer eine Bremse baut, fragt zuerst: gegen WEN zaehlt sie, und
+  was kostet es den Angreifer, diese Groesse zu wechseln? Eine IP ist billig,
+  ein fremdes Konto nicht.
+- **Ein Zaehler im Arbeitsspeicher ist bei taeglichem Deploy keiner.**
+  `_REG_ATTEMPTS` war nach jedem Neustart leer, und autodeploy prueft alle
+  2 Minuten. Alles, was einen Angriff ueber Minuten hinweg messen soll, gehoert
+  in die Datenbank (Tabelle `bremse`, Aggregat je Schluessel).
+- **Eine Bremse darf nicht zum Verrats-Orakel werden.** Wuerde nur ein
+  EXISTIERENDES Konto ab dem elften Versuch 429 liefern, waere genau das
+  Enumerieren wieder offen, das die identische Fehlermeldung verhindert.
+  Unbekannte Adressen zaehlen mit, unter `_email_hash`, und verhalten sich
+  identisch.
+- **Wer sperrt, baut den Notausgang mit.** Waehrend der Sperre kommt auch der
+  echte Kunde nicht rein (das ist der Punkt). Also loest der Passwort-Reset
+  die Sperre, und eine erfolgreiche Anmeldung raeumt den Zaehler - sonst
+  sperrt ein Angreifer mit 10 Fehlversuchen einen zahlenden Kunden aus.
+- **Was ein Fremder fuellen kann, braucht Mengendeckel und Aufraeumer**
+  (`BREMSE_MAX_ZEILEN`, `_bremse_purge`) - dieselbe Regel wie bei `alerts`.
+  Und: faellt die Datenbank aus, gilt der Versuch als ERLAUBT. Eine Bremse,
+  die bei eigener Stoerung alle aussperrt, ist ein Ausfall, kein Schutz.
+- **Wer die Quelle einer Zahl umbaut, sucht ihre LESER.** Die Panel-Ansicht
+  Abuse las noch das tote dict und haette dauerhaft eine leere Liste gezeigt,
+  ohne Fehler und ohne Meldung (v210). Getestet wird per echtem Angriff ueber
+  HTTP, nicht per Quelltext-Suche (v230d-sec).
+
+## Sicherheit: Lehren aus Audit-Runde 2 (v230d-sec)
+- **Ein mehrstufiger Vorgang wird an JEDER Stufe geprüft, und die
+  Berechtigung gehört an den VORGANG, nicht an den einzelnen Request.** Der
+  resumable Upload sind drei Anfragen; geprüft wurde nur die erste, und der
+  Kunde kam aus dem Cookie der gerade laufenden. Wer beim Abschluss das
+  Cookie wegließ, bekam einen Job ohne Eigentümer — und damit **kein
+  Wasserzeichen, keine Abbuchung, keinen Flut-Deckel**, weil alle drei an
+  `user_id` hängen. Wo eine Kette aus mehreren Aufrufen besteht, gehört der
+  Eigentümer in den Sitzungszustand.
+- **Ein Riegel, den nur die halbe Nachbarschaft hat, ist keiner** — dreimal
+  in dieser Runde: die Code-Bremse saß an einem von sieben `check_auth`-
+  Aufrufern, `/api/resend_verification` war der einzige Mail-Endpunkt ohne
+  Limit, `/admin/codes` benutzte noch den `str`-Vergleich, den v203-sec in
+  `_admin_ok` längst durch Bytes ersetzt hatte. Wer einen Riegel baut,
+  sucht ALLE Aufrufer der geschützten Funktion ab und hängt ihn möglichst
+  in die Funktion selbst.
+- **Ein Protokoll, das ein Fremder füllen kann und niemand aufräumt, ist
+  ein Angriff.** Ein anonymer 500er schrieb einen vollen Traceback in
+  `alerts` — 452 KB je 100 Aufrufe, in derselben Datei wie Konten und
+  Guthaben. Jede Log-Tabelle braucht einen Wiederholungs- und einen
+  Mengendeckel.
+- **Gleichheit von E-Mail-Adressen ist nicht Groß-/Kleinschreibung.**
+  Plus-Tags und (bei Gmail) Punkte bezeichnen dasselbe Postfach. Für
+  Missbrauchs-Sperren normalisieren — für die Anmelde-Identität NICHT,
+  sonst sperrt man bestehende Kunden aus.
+- **Der Wirksamkeits-Nachweis hat hier einen wirkungslosen Fix gefangen:**
+  `(_current_user(request) or {}).get('id')` wirft einen AttributeError
+  (`sqlite3.Row` hat kein `.get()`, v96p-Falle). Alle Quelltext-Tests waren
+  grün, im echten Lauf ging der Angriff weiter durch. Sicherheits-Riegel
+  gehören per echtem Angriff getestet, nicht per Textsuche.
+
+## Sicherheit: Lehren aus dem zweiten Audit (v230c-sec)
+Sieben bestätigte Wege, alle aus derselben Familie: **Sabotage und Kosten,
+nicht Diebstahl.** Wer hier etwas ergänzt, prüft zuerst diese vier Fragen.
+- **Jede Zahl aus dem Client braucht eine Grenze — und was keine hat, kommt
+  gar nicht erst durch.** `_sanitize_overrides` klemmte fünf Werte und ließ
+  den Rest laufen. Zwei davon steuern direkt die Rechenzeit
+  (`matting_downsample` Faktor 50–90, `effects.bg_blur` Faktor 48) und ein
+  einziges Gratis-Konto konnte den EINEN Worker stundenlang belegen. Eine
+  Allowlist mit Bereichen (`_EFFECT_RANGE`) ist die einzige Form, die beim
+  nächsten neuen Regler nicht wieder aufgeht. **Geklemmt wird auf beiden
+  Seiten** — die Desktop-App schreibt dieselbe Config-Datei.
+- **Der Wachhund rettet nicht vor einem LANGSAMEN Job.** Sein Fingerabdruck
+  ist (Status, Fortschritt, Phase); solange der Fortschritt kriecht, läuft
+  die Uhr immer neu. Rechenzeit begrenzt man am Eingang, nicht am Timeout.
+- **Ein Riegel darf nicht am MODUS hängen, wenn die Eigenschaft am JOB
+  hängt.** `_render_gebucht(...) if mode == 'full'` machte aus "schon
+  bezahlt" ein "je nach Aufruf" — 4K zum 1080p-Preis. Und **erstattet wird,
+  was in der Ledger-Zeile steht**, nie was ein überschreibbares Feld
+  (`cost_sec`) behauptet: sonst erzeugt ein Abbruch Guthaben.
+- **`_job_owner_ok` beweist kein Eigentum an einer UNBEKANNTEN jid.** Kein
+  Job → kein Eigentümer → `True`. Wo eine ID aus dem Formular kommt, muss
+  der Job EXISTIEREN und dem Aufrufer gehören.
+- **Ein Deckel auf das Gleichzeitige ist kein Deckel auf die Summe.**
+  `_inflight_count` zählt 'wartet'/'laeuft'; ein vorbereiteter Upload fällt
+  heraus und der nächste ist sofort erlaubt. Wer nichts abbucht, braucht
+  eine Summen-Grenze (`_vorbereitet_count`) — sonst sind Whisper-Rechnung
+  und Plattenplatz unbegrenzt.
+- **Eine Grenze auf die lange Kante ist keine auf die Fläche.** 8x4096 ist
+  unter jedem Limit und wird intern auf 384x196608 hochskaliert (226 MB je
+  zwischengespeichertem Bild). Kurze Kante und Seitenverhältnis mitprüfen.
+- **Betrieb: was neben dem Repo liegt, landet im Image.** `.env` fehlte in
+  `.dockerignore`, also backte `COPY . /app/` den Stripe-LIVE-Key ins
+  Arbeitsverzeichnis genau des Prozesses, dem v204-sec ihn weggenommen hat.
+  Und ein Skript, dessen Standard-Pfad auf dem Server nicht existiert
+  (`restore.sh` → `./web/data` statt Volume `dve-data`), meldet Erfolg,
+  ohne etwas zu tun — die gefährlichste Sorte Fehler bei einem Notfall-Werkzeug.
+
+## Sicherheit: Lehren aus dem Audit (v203-sec)
+Zwei adversariell gegengeprüfte Audits, 30 bestätigte Befunde. Die Muster,
+die sich wiederholen:
+- **Ein Wächter, der nicht wirft, ist keiner.** `_admin_ok` gibt nur `bool`
+  zurück; als nackte Anweisung aufgerufen (`_admin_ok(request)`) sicherte sie
+  GAR NICHTS. Zwei Endpunkte waren dadurch anonym erreichbar. Der werfende
+  Riegel heißt `_require_admin` — `_admin_ok` ist nur der Test dahinter.
+  Der Selftest fährt jetzt ALLE `/api/admin/*`-Routen ohne Key ab; eine
+  Quelltext-Suche findet diesen Fehler nicht (beide Namen stehen ja da).
+- **Eine doppelt registrierte Route verdeckt den Riegel der zweiten.**
+  Starlette bedient die ZUERST registrierte; die gesicherte Variante war
+  toter Code und sah beim Lesen nach Absicherung aus. Selftest prüft auf
+  doppelte Pfade.
+- **Der Riegel gehört VOR die Mutation.** In `render_start` wurden Preis und
+  Qualität gesetzt, bevor abgerechnet wurde — und die Abrechnung ist
+  idempotent, buchte also nicht nach: 4K zum 1080p-Preis, und über die
+  Erstattung ließ sich Guthaben erzeugen. Der Preis hängt jetzt am LEDGER
+  (`_render_gebucht`), nicht an einem überschreibbaren Feld. Derselbe
+  Fehlertyp wie v159/v170/v176.
+- **Eine Eigenschaft, die schützt, darf nicht in einem Feld stehen, das der
+  nächste Request umschreibt.** 'demo' stand nur in `mode`; über den
+  Momente-Editor wurde daraus ein voller Gratis-Render ohne Wasserzeichen.
+  Jetzt `j['demo']`, gesetzt bei der Anlage, gelesen im Worker.
+- **Ein unbestätigtes Konto ist kein Eigentumsnachweis.** Der Google-Login
+  verknüpfte still über die E-Mail — wer vorher auf eine fremde Adresse
+  registrierte, teilte sich danach das Konto mit dem echten Inhaber. Google
+  hat die Adresse bewiesen, also übernimmt es sie: verknüpfen, altes Passwort
+  entwerten, Sitzungen beenden. NICHT löschen (sonst verlöre ein echter Kunde
+  seine Bibliothek).
+- **Nutzerdaten, die in die Engine laufen, gehören geklemmt — auf BEIDEN
+  Seiten.** `sanitize_moments` am Server, plus harte Klemmung in `render.py`:
+  die Desktop-App schreibt dieselbe Datei. Ein ungeklemmtes `power` treibt den
+  Gauß-Radius ins Unendliche und legt den einen Worker lahm.
+- **Ein Passwortwechsel muss die anderen Sitzungen beenden.** Der Reset-Weg
+  tat es seit jeher, der Wechsel-Weg nicht — die beiden widersprachen sich.
+- **Ein Test kann eine Lücke als Zusage festschreiben.** Der v132-Test
+  verlangte ausdrücklich "Passwort bleibt gültig" nach der Google-Verknüpfung.
+  Wer einen Test anpasst, muss prüfen, ob er die Regel schützt oder den Fehler.
+
+## Betrieb: Deploy, Backup, Logs, Schlange (v197)
+- **Das Gate kennt ZWEI Fehler (v201).** `exit 1` = Tests rot, Code kaputt,
+  Deploy abbrechen. `exit 2` = das Gate konnte gar nicht laufen (Image startet
+  nicht, ffmpeg fehlt, docker zickt) - darueber ist ueber den Code NICHTS
+  gesagt, also wird deployt, aber laut und mit Eintrag im Panel. In v197 war
+  beides derselbe Fall: eine Panne an der PRUEFVORRICHTUNG fror damit den
+  ganzen Betrieb ein, und v198 bis v200 gingen nie live. Ein Waechter, der bei
+  eigenem Ausfall die Tuer zumauert, ist kein Waechter. Das Gate wird im
+  Selftest mit einem VORGETAEUSCHTEN docker durchgespielt (alle drei
+  Ausgaenge) - eine Quelltext-Suche haette den Fehler nie gefunden.
+- **Das Gate urteilt nach der BILANZ, nicht nach einer Textsuche (v208a).**
+  Es hielt `1511/1511 Tests bestanden` fuer ROT und blockierte einen
+  einwandfreien Commit, weil irgendwo im Log eine Zeile mit `FAIL` begann -
+  naemlich im BELEG eines BESTANDENEN Tests (der v201a-Test legt absichtlich
+  einen roten Gate-Befund an und zeigt ihn her). Zwei Riegel: `check()` macht
+  aus jedem Beleg EINE Zeile, und gruen heisst jetzt `bestanden == geprueft`
+  plus Rueckgabewert 0. Merksatz: ein Waechter, der Text sucht statt das
+  Ergebnis zu lesen, haelt irgendwann den Falschen auf - und ein falscher
+  Alarm kostet genauso viel wie ein verpasster, weil dann nichts mehr live geht.
+- **Der Befund gehoert in die Meldung (v201a).** `deploy_gate.sh` schreibt
+  sein Ergebnis nach `.deploy_gate_last.txt` (gitignored), `autodeploy.sh`
+  haengt die gefallenen Tests an die Panel-Meldung. "Deploy abgebrochen" ohne
+  Grund ist fuer jemanden, der nie ins Terminal geht, dasselbe wie keine
+  Meldung.
+- **Nichts geht ungeprueft live.** `update.sh` ruft `deploy_gate.sh` (Selftest
+  im NEU GEBAUTEN Image, `--rm --no-deps`, eigenes `DVE_DATA`, kein Key) VOR
+  `docker compose up`. Rot = Abbruch, die alte Version laeuft weiter. Wer den
+  Deploy anfasst, darf diese Reihenfolge nicht drehen.
+- **Ein Pfad heisst auf dem Host und im Container gleich und ist trotzdem ein
+  anderer Ort (v225c).** `update.sh` schrieb den Build-Stempel nach
+  `$DVE_DATA` - auf dem HOST. Im Container ist `DVE_DATA=/data` ein
+  Docker-Volume (`dve-data`, KEIN Bind-Mount), also hat der Server die Datei
+  nie gesehen: Panel dauerhaft "Commit unbekannt", taeglich eine
+  "Seit Tagen kein Deploy"-Mail, Video-Metadaten ohne Commit - genau die drei
+  Dinge, die v222 beheben sollte, alle drei tot. Was der Container wissen
+  soll, gehoert ins IMAGE (Datei ins Bauverzeichnis, `COPY . /app/` nimmt sie
+  mit) oder in eine Umgebungsvariable, nie in ein Verzeichnis, das nur auf dem
+  Host so heisst. Zweiter Grund fuer denselben Weg: ein Stempel neben der
+  Datenbank behauptet den NEUEN Commit, sobald `git pull` durch ist - auch
+  wenn das Test-Gate danach abbricht und weiter die ALTE Fassung laeuft. Ein
+  Stempel, der luegen kann, ist wertlos.
+- **Jede Meldung nennt den Stand des Absenders (v226a).** Ismet bekam
+  dieselbe Fehlalarm-Mail zweimal und konnte nicht erkennen, ob die zweite
+  noch von der alten Fassung kam. Die Antwort brauchte Commit-Zeiten und
+  Video-Metadaten - fuer eine Zeile, die der Absender gratis mitliefert.
+  `_notify_admin` haengt `Gemeldet von DouchkoVE <Stand>` an, `/api/health`
+  nennt die Version (nicht den Commit).
+- **Ein gescheiterter Deploy war STUMM (v226a).** `autodeploy.sh`/`update.sh`
+  schreiben per sqlite DIREKT in die alerts-Tabelle - sie koennen
+  `_notify_admin` nicht aufrufen, also ging nie eine Mail raus. Genau der
+  Fall, in dem gar nichts mehr live geht, war der Fall, von dem niemand
+  erfuhr. Der Watchdog mailt ungemailte `deploy`/`deploy_gate`-Alarme nach.
+  Merksatz: wer aus einem Skript heraus meldet, prueft, ob den Eintrag
+  ueberhaupt jemand ABHOLT.
+- **Ein fehlender Messwert ist kein schlechter Messwert (v225c).** Der
+  Wachhund behandelte "kein Stempel" wie "Stand ist 20 Tage alt" und mailte
+  taeglich einen Stillstand, den es nicht gab. Zwei Lagen, zwei Meldungen:
+  messbar alt = echter Befund (taeglich erlaubt), kein Stempel = "ich weiss es
+  nicht" (genau EINMAL je Programmlauf). Und der alte Test verlangte
+  ausdruecklich `_al is None or _al > 7` - er hat den Fehler festgeschrieben,
+  dieselbe Falle wie v132.
+- **Ein stiller Fehlschlag ist schlimmer als ein lauter.** Nach `git pull`
+  steht der Server schon auf dem neuen Commit; scheitert das Gate, saehe der
+  naechste Timer-Lauf "nichts Neues". Deshalb schreibt `autodeploy.sh` bei
+  Fehlschlag eine Zeile in die alerts-Tabelle des LAUFENDEN Containers.
+- **Alles geht ueber das Admin-Panel, nichts ueber das Terminal (Ismets
+  Ansage, Juli 2026).** Auch das Zurueckspielen: `_restore_users_db` schreibt
+  die Sicherung ueber die SQLite-Online-Backup-API IN die laufende Datenbank -
+  kein Dateitausch, kein Neustart, offene Verbindungen sehen danach den neuen
+  Inhalt. Der Skript-Weg (`restore.sh`) bleibt als Notnagel, wenn die App gar
+  nicht mehr startet. Wer eine neue Betriebs-Aufgabe baut, baut sie ins Panel.
+- **Die Sicherung prueft sich selbst (v230z).** Nach jeder Sicherung werden
+  Konten und Kaeufe im Snapshot gegen die laufende Datenbank gehalten -
+  weniger als jetzt, unlesbar oder Pruefung selbst kaputt: Alarm mit Mail.
+  Dazu ein Riegel gegen "es kommt gar nichts mehr" (neueste Sicherung aelter
+  als 26 h). Ohne diese Gegenprobe blieb der WAL-Fehler v230y unsichtbar,
+  obwohl das Log jeden Tag "DB-Backup: ..." meldete.
+- **Ein Backup, das man nie zurueckgespielt hat, ist kein Backup.**
+  `restore.sh` prueft den Kandidaten (integrity_check + Pflichttabellen),
+  BEVOR es die laufende DB anfasst, und legt den jetzigen Stand als
+  `vor_restore_*.db` zur Seite. Genau diese Probe hat den Backup-Bug
+  gefunden: `_backup_users_db` sicherte nur EINMAL je Kalendertag, also den
+  Stand beim Worker-Start - alles danach fehlte. Ein Deckel, der auf den
+  KALENDERTAG schaut statt auf den Inhalt, deckelt den falschen Wert
+  (derselbe Fehlertyp wie v194b/c bei den Mails).
+- **Zeitstempel sind im Container auf die SEKUNDE genau (v230aa).** Wer
+  "hat sich seit X etwas geaendert?" mit `<=` beantwortet, verschluckt alles,
+  was in derselben Sekunde passiert ist - im Gate jedes Mal, lokal nie
+  (Nanosekunden). Bei Gleichstand im Zweifel ARBEITEN, nicht ueberspringen.
+- **Eine Gegenprobe vergleicht mit dem Stand VON DAMALS (v230aa).** Der
+  Snapshot gegen die Zahlen von JETZT geprueft meldet Alarm, sobald sich in
+  der Zwischenzeit jemand anmeldet. Ein Wachhund, der grundlos bellt, wird
+  nach drei Mails ignoriert - das ist schlimmer als keiner.
+- **Im WAL-Modus aendert ein Schreibzugriff die HAUPTDATEI nicht (v230y).**
+  Ein INSERT landet in `users.db-wal`; `users.db` behaelt ihre Zeit bis zum
+  naechsten Checkpoint. Wer "hat sich seit X etwas geaendert?" ueber
+  `getmtime(users.db)` beantwortet, bekommt NEIN, obwohl Konten dazukamen -
+  die taegliche Sicherung konnte damit still veralten (im Gate gemessen:
+  3 Konten in der Datenbank, 0 im Snapshot), und seit v230v waere dieser
+  leere Stand auch noch ausser Haus gewandert. Immer die NEUESTE von
+  `users.db`, `-wal`, `-shm` nehmen (`_db_geaendert()`). Lokal fiel es nie
+  auf, weil im langen Testlauf zufaellig ein Checkpoint dazwischenlief.
+- **Eine gemeinsame `.tmp`-Datei ist ein Wettlauf (v230w).** `_backup_users_db`
+  laeuft im Cleanup-Arbeiter UND auf Knopfdruck; mit festem Namen loescht der
+  eine Lauf die halbfertige Datei des anderen und `os.replace` schiebt einen
+  LEEREN Stand ueber den guten Snapshot (im Gate gemessen: 3 Konten in der
+  Datenbank, 0 im Snapshot). Zwischendateien gehoeren pro Lauf eindeutig
+  benannt (PID + Thread). Der Fehler war Jahre alt und wurde erst sichtbar,
+  als der erste Lauf laenger dauerte - Wettlaeufe zeigen sich nach einer
+  harmlosen Aenderung woanders.
+- **`print()` ruft `write()` je Argument einzeln.** Ein Log-Tee ohne
+  Zeilenpuffer schreibt jedes Argument in eine eigene Zeile.
+- **Die URSACHE gehoert an den ANFANG der Meldung (v208b).** Ein Traceback
+  nennt den eigentlichen Fehler in der LETZTEN Zeile - also genau dort, wo
+  eine Panel-Ansicht oder ein Copy-Paste abschneidet. `_unhandled` schreibt
+  `URSACHE: <Typ>: <Text>` plus die letzten sechs Zeilen nach oben, den
+  vollen Verlauf darunter. Und **ein abgebrochener Upload ist keine
+  Stoerung**: `ClientDisconnect` hat einen eigenen Riegel (499, kein
+  Panel-Eintrag). Wer jeden Funkloch-Abbruch meldet, verstopft die Liste,
+  in der die echten Stoerungen stehen.
+- **Unbehandelte Fehler gehoeren ins Panel**, nicht nach stdout - stdout ist
+  nach dem naechsten Deploy weg. Der globale `@app.exception_handler` schreibt
+  in `alerts`; der Kunde sieht nie einen Traceback.
+- **Eine Positionsangabe muss die eigene Position sein.** `qsize()` ist die
+  Laenge der Schlange, nicht der Platz darin - und bei der PriorityQueue zieht
+  ein zahlendes Konto vorbei. `_queue_platz` zaehlt die Eintraege davor.
+- Skalierung bleibt bewusst 1 Worker/1 Maschine (`DVE_WORKERS`). Ein Render
+  zieht CPU und RAM; parallele Jobs machen beide langsamer. Der Watchdog
+  meldet ueber `DVE_QUEUE_WARN`, wann es eng wird - das ist das Signal fuer
+  mehr Maschine, nicht mehr Threads.
+
+## Kosten je Render (v230d) — die andere Haelfte der Rechnung
+Bis v230c9 stand im Panel nur, was der KUNDE zahlt (`cost_sec`). Was ein
+Render UNS kostet, wusste niemand — dabei liefert **jede OpenAI-Antwort einen
+`usage`-Block mit**, und der wurde weggeworfen.
+- `AI_VERBRAUCH` sammelt in `_oai_text` (EINE Aufrufstelle) + Whisper-Minuten
+  aus der Transkriptions-Antwort. Job-Log-Zeile `AI usage: ...`, vom Server
+  ueber `_parse_ai_usage` gelesen und als `ai_usage` am Job abgelegt.
+- **Der Wiederholversuch nach einer leeren Antwort zaehlt mit.** Er kostet
+  echtes Geld und ist genau die Verschwendung, die man sehen will.
+- **Die Zeile steht GANZ am Ende** — der Silent-Score ist auch ein bezahlter
+  Aufruf. Wer eine neue KI-Frage baut, muss nichts tun; wer eine neue
+  Aufrufstelle neben `_oai_text` baut, faellt aus der Zaehlung und damit aus
+  der Marge.
+- **Preise stehen als Tabelle JE MODELL** (`AI_PREISE`, aus Ismets
+  Preisseite vom 07.08.2026; `DVE_AI_PREISE` als JSON ergaenzt sie). Ein
+  globaler Preis waere falsch, sobald verschiedene Fragen verschiedene
+  Modelle nutzen. Fehlt ein Modell, wird es im Panel BEIM NAMEN genannt -
+  eine Euro-Zahl, die die Haelfte der Renders verschweigt, ist schlimmer als
+  ein Strich. Erfunden wird nie ein Preis.
+- Jede Kostenzahl im Panel nennt die **Zahl der gezaehlten Renders** — alte
+  Jobs sind nach der Aufbewahrung geloescht, eine Summe ohne ihre
+  Grundgesamtheit ist wertlos.
+
+## Betriebs-Meldungen (v147)
+Render-Fehler und Job-Timeouts gehen **nicht** mehr per Mail raus, sondern nur
+in die Tabelle `alerts` und den Admin-Tab **Alerts**. `_notify_admin(...,
+mail=False)`. Echte Betriebsstoerungen (Platte knapp, Ghost-Buy, Stripe)
+mailen weiter. Routine-Post (Backup) wird gar nicht protokolliert.
+
+## Schriftsysteme (v230ag) — was die Seite verspricht, muss die Schrift koennen
+`script_font(txt, font)` in `render.py` tauscht die Schrift, wenn die
+gewaehlte ein Zeichen nicht hat. Fuenf Noto-Schnitte liegen in `fonts/noto/`
+(OFL): Noto Sans (Latein erweitert inkl. Vietnamesisch, Kyrillisch,
+Griechisch), SC/TC, JP, KR. Der Riegel sitzt in `Sprites.text` UND
+`Sprites.fit` — den Funktionen, durch die jeder Text laeuft.
+- **Erst Unicode-BLOCK, dann Zeichentabelle.** Die Tabellenpruefung braucht
+  fontTools; fehlt es, winkt sie alles durch und es stuenden wieder leere
+  Kaesten im Bild (v210-Falle). Die Blockfrage braucht kein Paket.
+- **Ein lateinisches Video aendert sich NIE** — nur wo ein Zeichen fehlt,
+  wird getauscht.
+- **Arabisch, Hebraeisch, Devanagari, Thai gehen bewusst NICHT.** Der
+  Zeichenpfad setzt Buchstabe fuer Buchstabe (Schatten, Extrusion,
+  Buchstaben-Boxen); verbundene und Rechts-nach-links-Schriften brauchen den
+  ganzen String. `schrift_unsupported()` bricht den Render VOR der
+  Rechenarbeit ab, nennt den Grund, der Server erstattet.
+- **Eine Kasten-Glyphe ist genauso breit wie das echte Zeichen** (gemessen:
+  beide 452 px). Wer den Tausch nachweisen will, misst den BILDUNTERSCHIED,
+  nicht die Sprite-Groesse — und vergleicht gegen einen Lauf mit
+  abgeschaltetem Rueckfall, weil eine explizit uebergebene Schrift ja
+  ebenfalls getauscht wird.
 
 ## Transkription
-Default `config.yaml → transcription.engine: api` (OpenAI Whisper `whisper-1`,
-beste Qualität). `local` (faster-whisper, offline) existiert als Option, ist
-aber NICHT der Qualitäts-Default.
+Nur OpenAI Whisper API (`whisper-1`) — beste Qualität für Namen/Fachbegriffe.
+Lokale faster-whisper-Option in v72 komplett entfernt (Qualität > alles).
+
+## Web-Produkt: Geschäftsmodell & Sicherheit
+- **Steuer-Identität (NIE vergessen): Kleinunternehmer §19 UStG, USt-IdNr
+  `DE463613884`.** Steht im Impressum (§5 DDG Pflicht, da vorhanden) und im
+  Stripe-Rechnungs-Footer (`DVE_TAX_ID`-Default). NIEMALS USt ausweisen.
+- **Preise: Einmalkauf-Credits 9€/20, 19€/60, 39€/150, 6 Monate gültig.
+  KEIN Abo — das ist das Alleinstellungsmerkmal** (Abo-Frust ist die Beschwerde
+  Nr. 1 bei ALLER Konkurrenz). 1 Credit = 1 Min fertiges Video (pro angef. Min);
+  Motion-Clip pauschal 1 Cr (MP4; Motion-ProRes-Alpha existiert seit v118 nicht
+  mehr). Caption-Alpha-Layer = eigener Render, kostet erneut pro angef. Min.
+  Free 3 Min/Monat + Wasserzeichen
+  bis zum ersten Kauf. Willkommens-Guthaben (120s) erst NACH E-Mail-Verify.
+- **Bewusst NICHT bauen** (Fokus, aus Konkurrenz-Analyse): kein Abo/Hybrid,
+  kein AI-B-Roll, kein Clipping/Avatare, kein Sprachen-Wettlauf, kein
+  Feature-Stacking. Positionierung: Finishing-Tool nach dem Schnitt.
+- Sicherheit: WAL+busy_timeout, `--proxy-headers` (IP-Rate-Limits), Credits
+  atomar+idempotent, Ownership-Checks, Upload-Caps, jid-Path-Traversal dicht,
+  Stripe-Webhook-Secret-Pflicht. Konto-Löschung: Kaufbuchungen → `ledger_archive`
+  (GoBD/§147 AO 10 Jahre; DSGVO Art.17(3)(b)), Rest echt gelöscht.
+- **Umsatz ist NETTO (v206).** `purchases` ist der Kaufbeleg und wird NIE
+  nachträglich verbogen (GoBD); eine Erstattung ist ein eigener Vorgang in
+  `refunds` — aus dem Panel UND aus dem Stripe-Dashboard (`charge.refunded`
+  trägt sie nach). Umsatz und §19-Ampel rechnen mit „geblieben", das Panel
+  zeigt alle drei Zahlen. Bis v205 war alles brutto: eine Erstattung zählte
+  weiter als Einnahme, auch in der Steuer-Ampel.
+- **Das Panel hat eine STARTSEITE (v206).** Sie beantwortet vier Fragen —
+  Verdiene ich Geld? Läuft alles? Will jemand etwas von mir? Wächst es? —
+  mit je EINER großen Zahl und einem Satz Klartext daneben. Ismet ist kein
+  Entwickler; „AOV", „ARPPU", „inflight_cap" sagen ihm nichts. Alles
+  Technische bleibt in den bestehenden Ansichten, es steht nur nicht mehr
+  vorn. Wer eine Kennzahl ergänzt, schreibt den erklärenden Satz dazu.
+  **Eine Ampel, die grundlos rot ist, schaut nach einer Woche niemand mehr
+  an** — deshalb wird der Herzschlag beim Start gesetzt (der Wachhund meldet
+  sich sonst erst nach 120 s, also nach JEDEM Deploy zwei Minuten „rot").
+- **Performance (v142, nicht wieder aufweichen):** alle heißen Queries laufen
+  über Indexe — Selftest prüft per `EXPLAIN QUERY PLAN`, dass KEINE davon
+  scannt. Caching in drei Ebenen: Prozess-Datei-Cache (mtime-invalidiert),
+  ETag+304 auf HTML/Assets, 20s-TTL nur auf Admin-Aggregate (Middleware
+  verwirft ihn bei jedem Schreibzugriff). **Geld/Kontostand nie cachen.**
+  Blockierende Aufrufe in `async def`-Endpunkten sind ein Fehler (legen den
+  ganzen Server still) → `asyncio.to_thread`. Sync-`def`-Endpunkte bleiben
+  sync (FastAPI-Threadpool, korrekt für SQLite).
+- **Recht & Steuern (Admin-Tab, v142):** `/api/admin/compliance/tax` bündelt
+  Steuer-Identität, §19-Schwellen-Ampel (Vorjahr 25.000 €, laufend 100.000 €,
+  Warnung ab 80 %), Umsatz je Jahr/Monat, Belege, Aufbewahrungsfristen und das
+  Verarbeitungsverzeichnis (Art. 30 DSGVO). Übersicht, KEINE Steuerberatung.
+- Betrieb: `/api/health` (für externen Uptime-Pinger), Admin-Störungsmails
+  (1/h/Schlüssel), Watchdog killt hängende Renders (45min) + erstattet,
+  Offsite-DB-Backup per Mail, Warm-Preview-Daemon (~0.5s statt 2s).
+- **Sicherung ausser Haus LAEUFT** (v230v/v230w, 01.08.2026 von Ismet
+  eingerichtet und geprueft: Probe hoch, zurueck, entschluesselt, verglichen;
+  erste Kopie `users_20260801.db.enc`, 368 KB). Nicht mehr als offen fuehren.
+  Wer daran etwas aendert, prueft mit dem Knopf "Verbindung pruefen".
+- **UptimeRobot LAEUFT** (01.08.2026): HTTP-Monitor auf
+  `https://douchko.eu/api/health`, alle 5 Minuten, Mail an Ismet. Nicht mehr
+  als offen fuehren.
+- **Stripe läuft LIVE.** Die Kontaktadresse ist einheitlich `Ismet@douchkove.com`
+  (Impressum, Datenschutz, AGB, Landing, `SUPPORT_EMAIL`, security.txt) und
+  steht seit v230c4 nicht mehr als offener Punkt (ein Selftest rechnet es nach) — sie war es schon länger
+  nicht mehr. Die Gmail-Adresse in `ADMIN_MAIL` ist Ismets Postfach für
+  Betriebsmeldungen und bleibt bewusst getrennt; sie steht nirgends auf einer
+  Kundenseite. Wer eine neue Seite baut, nimmt `SUPPORT_EMAIL`, kein Literal.
+
+## Matte-Bleed (v230b) — ein Weichzeichner darf die Person nicht ansaugen
+Ismets "das Auge glitcht" war ein **heller, flimmernder Saum an Haar und
+Schulter**, und die Ursache stand zweimal im selben Code-Muster: ein
+Weichzeichner lief ueber das GANZE Bild, mischte dort an der Silhouette
+dunkles Haar mit heller Wand — und danach wurde die Person mit ihrer
+WEICHEN Matte wieder darueber gepastet, sodass der Mischwert als Saum auf
+dem Haar stehen blieb. Fundorte: `apply_bg_blur` (Bokeh) und die
+Tiefen-Unschaerfe hinter einem `behind`-Text in `composite_frame`.
+- **Regel: wer den Hintergrund weichzeichnet, rechnet ALPHA-GEWICHTET**
+  (`blur(bild*(1-a)) / blur(1-a)`). Personen-Pixel duerfen gar nicht erst
+  in den Mittelwert eingehen. Und die Vordergrund-Maske darf nur nach
+  AUSSEN weich sein (`fg = max(blur(a), a)`) — die weichgezeichnete Maske
+  reichte vorher ~20 px IN die Person hinein.
+- **Die Test-Invariante ist RICHTUNGSFREI:** der weichgezeichnete
+  Hintergrund darf nicht davon abhaengen, welche FARBE die Person hat. Ueber
+  die Helligkeit zu messen taugt nicht — auf Ismets Material wurde der Saum
+  HELLER, im synthetischen Testbild DUNKLER. Ein Helligkeits-Test waere je
+  nach Motiv gruen gewesen, ohne etwas zu beweisen.
+- **Ein synthetischer Testfall muss die echten GROESSENVERHAELTNISSE haben.**
+  Der erste Entwurf (320x240) zeigte alt wie neu +0.02 — die Maskenweichheit
+  haengt an `H*0.008`, bei 240 px sind das 2 px statt 10. Ein Test in
+  Briefmarkengroesse beweist nichts ueber ein 720x1280-Bild.
+- **Der Spion ist das Werkzeug der Wahl:** EIN- und AUSGANG von
+  `composite_frame` bei EINEM Zeitpunkt auf Platte legen. Damit war in einem
+  Lauf klar, dass das Bild VOR dem Compositor bitgleich zur Quelle ist
+  (0.00) — Dekodieren und Matting waren damit raus, ohne sie einzeln
+  durchzuprobieren.
+
+## Speicher (v230aj) — ein Kill sieht aus wie ein ffmpeg-Fehler
+Wird der Render-Prozess vom Betriebssystem abgeschossen (Speichermangel),
+steht im Log NUR die Meldung des ffmpeg-Zulieferers ("Broken pipe") - der
+eigentliche Prozess ist spurlos weg. Deshalb:
+- **Jede Fortschrittszeile nennt den Speicherstand** (`mem_zeile()`:
+  Spitzenwert und Container-Deckel). Wer eine Speicherfrage stellt, liest
+  DIESE Zeile aus einem echten Job-Log.
+- **`_render_fehler_text(rc, log)` im Server uebersetzt den Rueckgabewert**:
+  negativ = Signal (-9 = Kill = Speicher), >128 = dasselbe in Shell-Zaehlung.
+  "Render failed." ist nur noch der Rest.
+- **Das Panel zeigt Deckel und Verbrauch** (Ansicht System) - ohne Zahl ist
+  jede Diagnose Raten.
+- Ein 4K-Bild als Float belegt ~100 MB; die Pipeline haelt mehrere davon plus
+  ONNX- und MediaPipe-Modelle. Der Container-Deckel steht in
+  `docker-compose.yml` (`DVE_MEM_LIMIT`, Standard 6g).
+
+## Nie wieder ein stiller Render-Tod (v230ak)
+Drei Stufen, in dieser Reihenfolge zu pruefen, wenn ein Job "einfach weg" ist:
+- **`mem_wache()` in `render.py`** liest den Verbrauch je Bild; ab 80 %
+  aufraeumen + warnen, ab 93 % `sys.exit(3)` mit Grund. Wer eine neue
+  speicherhungrige Stufe baut, faellt hier auf, nicht beim Kunden.
+- **`_ist_speicher_tod(rc, log)` im Server** kennt alle drei Formen: eigener
+  Abbruch (3), Abschuss (-9 / 137), MemoryError im Log.
+- **Rueckfall auf 1080p**: ein 4K-Job laeuft nach einem Speicher-Tod EINMAL
+  in 1080p nach; der Aufschlag wird VOR dem zweiten Lauf erstattet, und der
+  Kunde sieht den Hinweis im Ergebnis-Bildschirm. Ein stiller Downgrade
+  waere schlimmer als der Fehler.
+
+## Renderzeit (v227) — messen ist Pflicht, raten ist verboten
+Jeder Render endet mit `Timing (total …)`: alle Phasen absteigend nach Kosten
+plus `other` für alles Ungemessene. Wer an der Geschwindigkeit dreht, liest
+zuerst DIESE Zeile aus einem echten Job-Log — Regel 1 verbietet, Qualität
+gegen Zeit zu tauschen, also darf nur echte Leerarbeit weg.
+- **Der teuerste Schritt war nicht das KI-Netz, sondern die Nacharbeit.**
+  `refine_alpha` (Guided Filter, zieht die Maskenkante an die Bildkante)
+  kostete bei 1080x1920 auf CPU 151-279 ms je Bild, das Matting-Netz selbst
+  216 ms. Er lief zweimal über das GANZE Bild, obwohl die Maske ein Drittel
+  ausmacht. Zuschnitt auf die Maske + 4 Radien Rand → **pixelgleich**
+  (0.0000/255 über vier Formen), 1.8x bis 14x schneller.
+- **Derselbe Fund ein zweites Mal (v228f):** `kill_spill` (Farbsaum an der
+  Silhouette) lief ebenfalls über das ganze Bild, obwohl nur ein schmales
+  Band zählt — 36 ms je Bild, teuerster Einzelposten im Compositor.
+  Zuschnitt auf das Band + 10 Sigma Rand: exakt pixelgleich, 1.9x-15x
+  schneller. Wer eine Funktion mit einer weichen Maske multipliziert, prüft
+  ZUERST, wo diese Maske überhaupt ungleich null ist.
+- Merksatz: bevor eine Einstellung heruntergedreht wird, prüfen, ob die
+  Funktion überhaupt dort rechnet, wo etwas ist. `boundingRect` auf der Maske
+  ist billiger als jede Qualitätsdiskussion.
+- **Eine Qualitäts-Einstellung hochzudrehen ist auch nur eine Vermutung
+  (v228b).** Ismets zerfetzte Maskenkante sah nach "zu grob gerechnet" aus.
+  Gemessen war die ROHE Netz-Maske sauber (9 Krümel), erst die Nachschärfung
+  machte 285 daraus — und eine feinere Detailstufe (0.337 → 0.506) änderte an
+  der Kante nichts, kostete aber +83 % Matting-Zeit. Wer an Qualität dreht,
+  misst vorher, WELCHER Schritt sie kaputt macht. Der Guided Filter hilft auf
+  echtem Kameramaterial und schadet auf weichem KI-Material; deshalb steht
+  dort jetzt eine Gegenprobe am ersten Bild statt eines festen Werts.
+- Ein Tempo-Test gehört an eine PIXELGLEICHHEITS-Prüfung gekoppelt. Ohne sie
+  ist "schneller" nur die verbotene Abkürzung mit besserem Namen.
+- **Am echten Render gemessen (v227a): 64 % der Zeit lagen VOR dem ersten
+  Bild** (`regie+plaene 99.5s` von 154.7s), und darin vor allem Warten auf
+  ffmpeg: bis zu 40 Zeige-Proben + 24 Vision-Bilder + 16 Anker-Bilder, jedes
+  ein eigener Prozessstart, streng hintereinander - und die Vision-Bilder
+  DOPPELT (Bild-Regie und Objekt-Anker fragen dieselbe Stelle). Jetzt
+  Zwischenspeicher + paralleles Vorabholen, bitgleiche Bilder, 2.5-2.7x.
+  Merksatz: wer eine neue Analyse baut, die Standbilder zieht, holt sie ueber
+  `_frame_bgr_vorab` / `_frame_b64_vorab` - ein Prozessstart je Bild in einer
+  Schleife ist der teuerste Weg, den es gibt.
+- **Am echten Render gemessen (v228c): 129 von 191 s waren WARTEN AUF DIE
+  KI** (Bild-Regie 39.5 + Text-Regie 37.7 + Text-Fluss 26.1 + Objekt-Anker
+  25.3). Bild-Regie und Objekt-Anker laufen jetzt gleichzeitig (je eine KOPIE
+  der fx_map, `merge_anker` fuehrt deterministisch zusammen). Text-Regie und
+  Text-Fluss haengen echt voneinander ab - der Fluss braucht die
+  Blockaufteilung. Wer hier weiter will, dreht am MODELL oder am Denkbudget,
+  und das ist eine Qualitaetsfrage fuer Ismet, keine technische.
+- **`keywords.ai_denken` (v228d) steuert `reasoning_effort`; Standard ist
+  seit v228e wieder 'aus'.** Ismets Befund nach dem ersten Render mit 'low':
+  "Qualitaet ist sehr schlecht geworden" - die Regie ist das Herz des
+  Produkts, Renderzeit dagegen zu tauschen war das falsche Geschaeft. Der
+  Schalter bleibt, der Standard denkt voll nach. Das Denkbudget bleibt bei >= 2500: weniger
+  denken heisst MEHR Platz fuer die Antwort (v210-Falle).
+- **v230c2: der Fehler von v228d war nicht der Regler, sondern seine
+  Grobheit.** EIN Schalter fuer ALLE KI-Fragen - dabei ist eine
+  ENTSCHEIDUNG (welche Woerter tragen den Clip, wo sitzt der Text im Raum)
+  etwas anderes als eine PRUEFUNG nach Checkliste. In Ismets Log vom
+  07.08.2026 stecken in den 100.7 s "Schluesselwort-Frage" ZWEI Aufrufe,
+  und der zweite (`_regie_validate`) urteilte mit voller Denkstufe ueber
+  ganze 2 Vorschlaege. Jetzt `keywords.ai_denken_frage` je Frage
+  (`_DENK_STD`): Schluesselwort-Wahl und Bild-Regie unveraendert, Pruefer +
+  Textfluss + Objekt-Anker 'low'. Wer eine neue KI-Frage baut, beantwortet
+  zuerst: Entscheidung oder Pruefung? Und die Zeile `AI thinking: ...` im
+  Job-Log sagt, was wirklich galt - eine Zeitmessung ohne sie ist nicht
+  lesbar (daran ist v228d/v228e zweimal vorbeigelaufen).
+- **v230d2: MODELL je Frage, nicht nur Denkstufe** (`keywords.ai_model_frage`,
+  `DVE_AI_MODELL_FRAGE`). Bis dahin liefen alle SIEBEN Fragen auf demselben
+  Modell. Der Riegel sitzt IN `_oai_json` (jede Aufrufstelle nennt ihre
+  `frage=`, ein Test faellt sonst), Standard ist LEER. Die Log-Zeile heisst
+  `AI setup: keywords=<modell>/<stufe>, ...`.
+- **Die Transkription ist das Fundament und laeuft fest auf `whisper-1`.**
+  Falsches Wort = falsches Keyword, ungenaue Zeit = Caption an der falschen
+  Stelle. Kein Regie-Modell repariert das hinterher.
+- **Die Kette ist echt seriell und damit ausgereizt** (v230c2, am Log
+  gemessen): Schluesselwoerter -> pruefen -> Bild-Regie -> Textfluss, jede
+  Stufe braucht die vorige. 83 % des Renders sind Warten auf OpenAI, die
+  eigentliche Videoarbeit ~34 s und die laeuft laengst parallel (v230c0/c1).
+  Wer hier weiter will, aendert MODELL oder Denkstufe - beides eine
+  Qualitaetsfrage fuer Ismet, keine technische.
+- **Verschachtelte Zeit-Bloecke duerfen nicht doppelt zaehlen** (`_ZEIT_KIND`):
+  `regie+plaene` umschliesst die KI-Aufrufe, die Prozente summierten sich auf
+  190 %.
+- Noch NICHT gemessen (braucht echtes Material): Tiefen-Modell je Bild,
+  MediaPipe-Hände bei voller Auflösung, x264-Preset. Und die Pipeline läuft
+  strikt seriell (dekodieren → freistellen → Tiefe → setzen → kodieren);
+  Überlappen wäre eine Architektur-Änderung → Ismet entscheidet.
 
 ## Selftest — Ablauf (Pflicht vor jedem Deliver)
-Gesamt 265/265 grün (Stand v67). Läuft nur unter Linux/CPU mit synthetischen
-Assets; GUI-Tests headless via `xvfb-run`.
+Gesamt **2092/2093 (Stand v230c1)** + Renders 7/1/5/2 + GUI. Der eine rote Test
+ist der GUI-Start: in diesem Container ist `tkinter` gar nicht installiert
+(Ersatz-Stub), das ist eine Umgebungs-Grenze, kein Code-Fehler. Läuft nur unter Linux/CPU mit
+synthetischen Assets und OHNE OpenAI-Key; GUI-Tests headless via `xvfb-run`.
+Der Server-Code (`web/server.py`) wird im `logic`-Teil mitgetestet (isolierte
+Test-DB, Quelltext-Garantien).
 
 ```bash
 # Testmaterial: /tmp/st_clip.mp4  + /tmp/st_transcript.json
+# Erzeugen wie in deploy_gate.sh - ABER: das Transkript muss eine BLANKE
+# Wortliste sein ([{word,start,end}, ...]). deploy_gate.sh schreibt die
+# {"words": ...}-Form; die reicht nur fuer --part=logic, render.py liest
+# daraus 2 "Woerter" und bricht ab.
 # In Etappen (Rendern ist langsam, sonst Timeout):
-python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=logic     # 255
+python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=logic
 python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=render1   # 6
 python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=render2a  # 1
 python selftest.py /tmp/st_clip.mp4 /tmp/st_transcript.json --part=render2b  # 1
@@ -66,26 +1836,353 @@ GUI-Smoke separat:
 ```bash
 xvfb-run -a python3 -c "import tkinter as tk, gui; r=tk.Tk(); gui.App(r); r.destroy(); print('GUI_OK')"
 ```
+Web-Smoke (optional): Server auf Port starten, Playwright gegen `/` und `/app`
+(Login → Testuser in users.db verifizieren → Seite prüfen → Testuser löschen).
+
+## WIRKSAMKEITS-NACHWEIS (v219, Ismets Ansage "lerne aus deinen Fehlern")
+**Vor jedem Deliver einer Verhaltens-/Optik-Änderung ist zu BEWEISEN, dass der
+geänderte Code im echten Pfad LÄUFT.** Nicht dass er da steht — dass er läuft.
+Drei Fehlschläge an einem Tag hatten dieselbe Form: der Fix war richtig
+gedacht, grün getestet und ohne jede Wirkung. Ismet hat dreimal umsonst
+gerendert. Die Pflichtfragen, in dieser Reihenfolge:
+
+1. **Wird die Zeile ERREICHT?** Jede umschliessende Bedingung von aussen nach
+   innen durchgehen und ihren Wert im Zielfall aufschreiben. `composite_frame`
+   ist die Falle: der `ground`-Zweig allein hat DREI Zeichenwege (getrackt /
+   ungetrackt / `front_layer`), und jeder endet mit `continue`. Eine
+   Sprite- oder Pose-Korrektur gehört VOR die Weiche, nie in einen Ast.
+   Bei `tracked` gilt: für einen ground-Plan ist es IMMER wahr, weil
+   `need_track` das ganze Anzeigefenster abdeckt (v219).
+2. **Der Test muss die Funktion AUFRUFEN, die im Produkt läuft.** Eine
+   Quelltext-Suche (`'wall_pose(' in src`) und eine reine Funktionsprüfung
+   waren bei v218 beide grün, während im Bild nichts passierte. Also:
+   `build_plans` UND `composite_frame` echt aufrufen, notfalls mit einem
+   Spion auf der neuen Funktion (`R.x = spion`), und den AUFRUFZÄHLER prüfen.
+   Das ist die v193-Lehre, verschärft: nicht nur "Plan trägt den Wert",
+   sondern "der Wert kommt im Bild an".
+2b. **Browser-JavaScript wird AUSGEFÜHRT, nicht gelesen.** Node 22 liegt im
+   Image. `web/_dom_probe.mjs` schneidet Funktionen aus `index.html` und lässt
+   sie gegen ein Mini-DOM laufen; der Selftest ruft die Sonde auf. Wer SPA-
+   Verhalten ändert, erweitert die Sonde — eine Quelltext-Suche zählt nicht.
+3. **Der Unterschied muss MESSBAR sein.** Alt gegen neu am gerenderten Bild
+   oder am Sprite vergleichen (v219: abgewandte Textseite von 2.23 auf 0.52
+   verkürzt). "Plausibel" ist kein Beweis.
+4. **Eine Regel gegen Doppelbilder darf Zeiten nur KÜRZEN, nie verlängern**
+   (v216/v217). Sonst beseitigt sie die Überschneidung in den ZAHLEN und
+   erzeugt sie im INHALT — kein Zeit-Test fällt darauf.
+4b. **`composite_frame` ist NICHT zustandsfrei.** Anker, Animationsphase und
+   Flächenmessung liegen AM PLAN. Ein alt-gegen-neu-Vergleich braucht deshalb
+   FRISCHE Pläne pro Lauf — sonst misst der zweite Durchgang den Zustand des
+   ersten (v221, hat einen eigenen Test zum Fallen gebracht).
+5. **Wenn ein Fix nicht reproduzierbar ist, sagen — nicht liefern und hoffen.**
+   Zwei Videos pixelweise vergleichen (`mittlere Differenz < 1` = derselbe
+   Render) beantwortet in 10 Sekunden, ob überhaupt die neue Fassung lief.
+6. **ZUERST prüfen, WELCHE Fassung das Video gerendert hat** (v222). Der
+   Build-Stempel steht in den Metadaten jedes Videos:
+   `ffprobe -show_entries format_tags` → `comment=DouchkoVE <stand> job <jid>`.
+   Stimmt der Stand nicht mit dem eigenen Commit überein, ist die Frage nach
+   dem Code sinnlos — dann hängt der Deploy. Drei Runden gingen genau dafür
+   verloren, weil `DVE_BUILD` ein festes Literal war und log. Steht dort
+   `(Commit unbekannt)`, ist der Container älter als v225c — dann sagt der
+   Stempel gar nichts, und die Frage muss über das Panel (Ansicht Build)
+   beantwortet werden.
+7. **Eine Richtung aus einem VORZEICHEN ist eine Behauptung** (v225b). Ob eine
+   Wand nach links oder rechts flieht, kam aus dem Vorzeichen eines
+   Sobel-Medians — dessen Orientierung ich verwechselt hatte, und das faellt
+   erst am fertigen Bild auf, also beim Kunden. Richtungen gehoeren
+   geometrisch begruendet (die weiter entfernte Seite ist im Bild kuerzer) und
+   mit einem GESPIEGELTEN Gegentest belegt, der bei vertauschter Richtung
+   fallen muss. Gilt fuer jede Seiten-, Dreh- oder Kipp-Entscheidung.
 
 ## Deliver-Muster (jede neue Version)
-1. Selftest erweitern (neues Feature bekommt Tests)
-2. Volle Regression grün
-3. `PROJEKT_STATUS.md`-Eintrag (was neu, ehrliche Ursache, Beweis, Test-Hinweise)
-4. Zip nach Ablage (ohne `__pycache__/models/sfx`)
-5. Deutscher Summary im Effizienzmodus
+0. **Wirksamkeits-Nachweis nach dem Abschnitt darüber.** Ohne ihn gilt eine
+   Verhaltens-/Optik-Änderung als NICHT fertig, auch wenn alle Tests grün sind.
+1. Selftest erweitern (neues Feature bekommt Tests; visuelle Sachen bekommen
+   Verhaltens-Invarianten, nicht nur "läuft durch").
+2. Volle Regression grün + ggf. Browser-Smoke.
+3. `PROJEKT_STATUS.md`-Eintrag oben (was neu, EHRLICHE Ursache, Beweis,
+   Test-Hinweise).
+4. Commit + Push auf den Feature-Branch (→ Auto-Deploy).
+5. Deutscher Summary im Effizienzmodus, mit Beweis (Frames/Video) bei Optik.
 
 ## Wichtige Prinzipien (aus der Historie)
+- **Sound-VARIANTEN (v200): ein Slot ist eine LISTE, keine Datei.**
+  `sfx/pack/<slot>.wav` plus `<slot>_1..9.wav`; `V()` wechselt reihum durch.
+  Ismets Befund "immer dieselben Sounds" lag NICHT am Wahl-Mechanismus (den
+  gab es seit v96d), sondern daran, dass es nichts zu waehlen gab: jeder Slot
+  hatte genau EINE Datei, 7 der 21 hochgeladenen Sounds lagen ungenutzt in
+  `sfx/incoming`. Wer Sounds nachlegt, legt sie als `_N` daneben - `tick`
+  zuerst, der laeuft bei fast jeder Wortgruppe.
+  - **Der Varianten-Versatz muss aus dem INHALT kommen** (crc32 ueber Text +
+    Laenge), nicht aus einem bei 0 startenden Zaehler: sonst ist der erste
+    Tick in JEDEM Video dieselbe Datei. Und **nie `hash()`** - Pythons
+    String-Hash ist pro Prozess gesalzen, ein Re-Render ergaebe eine andere
+    Tonspur.
+  - Pitch- und Varianten-Versatz sind GETRENNT, sonst laeuft Variante 3 immer
+    mit demselben Pitch.
+  - Zwei Schnitte aus derselben Aufnahme sind formal Varianten und klingen
+    gleich - der Selftest misst die spektrale Aehnlichkeit (< 0.8).
+- **Eine an fremdem Material geeichte Regel kann auf dem eigenen zur
+  Stummschaltung werden (v230).** "Ticks nur in den ersten 1.6 s einer
+  Einstellung" stammt aus einer schnittreichen Referenz; in einem
+  Talking-Head ist der ganze Clip EINE Einstellung, also kam nach 1.6 s gar
+  kein Ton mehr. Jetzt: am Schnitt volle Dramaturgie, danach Ticks mit
+  Mindestabstand (`effects.sfx_dichte`, Standard 'normal' = 1.8 s). Gemessen
+  3 -> 8 Sounds auf 15.6 s. Wer eine Referenz-Regel uebernimmt, fragt: was
+  macht sie, wenn das Merkmal (hier: der Schnitt) FEHLT?
+- **Eine Rotation muss im richtigen Ring laufen (v230o).** `V()` wechselt die
+  VARIANTE innerhalb eines Slots - 8 der 14 Slots haben aber nur EINE Datei.
+  Dort muss der SLOT wechseln, sonst hoert man dieselbe Aufnahme mit
+  +-8 % Tonhoehe (Ismets "spammt denselben Sound"). Drei Ketten aus
+  gleichwertigen Slots mit Pegelausgleich: Einflug, Wucht, Luft. Gemessen am
+  echten Job: 11 -> 15 benutzte Dateien, haeufigste 27.3 % -> 13.6 %.
+  Wer hier prueft, misst die HERKUNFT der Signale (Etikett am Array), nicht
+  den Quelltext - und ein Test darf an der REGEL haengen (Ton fuehrt Bild),
+  nie am Slot-Namen, sonst meldet er die gewollte Abwechslung als Fehler.
+- **Die KI entscheidet NICHT ueber den Ton (v230b5).** `ai_direct` waehlt
+  Keywords, Effekte, Animation und Wucht; die Tonspur setzt danach
+  deterministischer Code (`sfx_engine`). Wer sich fragt, warum die KI eine
+  offensichtliche Sound-Idee nicht hat: sie wird nie gefragt. Neue
+  Ton-Ideen gehoeren deshalb in die Regeln von `sfx_engine`, nicht in den
+  Prompt.
+- **Schreibmaschine (v230b5):** baut sich ein Block Wort fuer Wort auf,
+  bekommt JEDES Wort einen Anschlag - aber bei 0.15 gegen 0.42 beim
+  Anker-Tick. Die Lautstaerken-Trennung ist der ganze Punkt. Ein Block MIT
+  Animation steht sofort ganz da (v194a) und tippt nicht.
 - **Sound:** nur echte CC0-Library-Sounds (Freesound), kein Synthetik-Fallback.
-  Stille ist besser als billiger Ton. Ohne `sfx/pack` laufen Videos STUMM.
-- **B-Roll:** in ALLEN Systemen ausschließen (auch Kamera-Impulse).
+  Stille ist besser als billiger Ton. Ohne `sfx/pack` liefe alles STUMM —
+  der Pack IST da (14/14 Slots, v175 geprüft), also klingt es.
+  SFX sitzen auf Wort-Onsets, nicht auf Anim-Phasen.
+- **B-Roll:** in ALLEN Systemen ausschließen (auch Kamera-Impulse) — AUSSER
+  explizit angesagte (`intent`) Szenen-Texte, die dort hingehören.
 - **GUI:** Rounded Cards nur via Canvas (nicht tk.Frame).
 - **Animationen:** immer über zentrales `anim_apply()` routen.
-- **Config-Sicherheit:** in Tests NIE `app.save_cfg()` gegen echte config.yaml.
-- **Selftest-Integrität:** 4 Presets (TikTok/Creator/Cinematic/Clean) ohne
-  überlappende fx/Fonts/Kameras/Dichten.
-- **Blender-Demo:** `/tmp/demo_cfg.yaml` (4 Frames / 36–40 Samples / 1000px).
+- **Config-Sicherheit:** in Tests NIE `app.save_cfg()` gegen echte config.yaml;
+  Web-Tests NIE gegen die echte users.db (isolierte `DVE_DATA`).
+  **Und NIE gegen einen echten AUSSENDIENST (v207-sec).** `selftest.py` leert
+  ganz oben, VOR dem Import von `web.server`, alle Zugänge: Stripe, SMTP,
+  Resend, OpenAI, Google. Gefunden hat das der erste erfolgreiche Lauf des
+  Test-Gates IM CONTAINER — dort ist der Stripe-LIVE-Schlüssel aus der .env
+  gesetzt, und `admin_refund` rief im Test tatsächlich `Refund.create` gegen
+  das echte Konto. Mit erfundener Sitzungs-Nummer schlug es fehl; mit einer
+  echten wäre echtes Geld erstattet worden. Der Gate-Aufruf leert dieselben
+  Werte ein zweites Mal — ein Testlauf, der Geld bewegen kann, darf nicht an
+  EINER Vorsichtsmaßnahme hängen.
+- **Zwei Elemente an zwei Kanten laufen irgendwann uebereinander (v230r).**
+  Ein Element, dessen Breite vom TEXT abhaengt, darf nicht gegen ein zweites
+  gesetzt werden, das an der gegenueberliegenden Kante klebt - irgendeine
+  Bildschirmbreite bringt sie zur Deckung. Beide in EINE Flex-Zeile
+  (`space-between`), die Schrift mit `min-width: 0` + Ellipse, und im engen
+  Fall den Zusatz ganz weglassen. Der Layout-Test muss das MESSEN
+  (Rechtecke vergleichen) - ein Test, der nur Groesse und Wiedergabe prueft,
+  ist gruen, waehrend der Knopf die Beschriftung verdeckt.
+- **Ziehen gehoert an Pointer-Events, nicht an einen unsichtbaren
+  Range-Regler (v230t).** Ein `input[type=range]` mit Deckkraft 0 ueber einem
+  Bild verhaelt sich je nach Browser und Eingabeart anders - mal muss der
+  Griff exakt getroffen werden, mal springt ein Klick, mal passiert nichts.
+  `pointerdown` + `setPointerCapture` + `pointermove` ist fuer Maus, Finger
+  und Stift derselbe Weg. Am Finger nur an der Linie greifen (sonst frisst
+  das Element das Scrollen) und `touch-action: pan-y` setzen. Und: ein Test,
+  der den Wert per `input`-Ereignis setzt, hat NIE gezogen - er ist gruen,
+  waehrend es im Browser nicht geht.
+- **Wer den Zeiger FAENGT, nimmt jedem Knopf darunter den Klick (v230ac).**
+  `setPointerCapture` haengt ab dem `pointerdown` alle Zeiger-Ereignisse an
+  das fangende Element - der Klick kommt beim Knopf nie an, obwohl der
+  ordentlich oben liegt und Zeiger annimmt. `z-index` und `pointer-events`
+  regeln nur, wer das Ereignis ZUERST bekommt, nicht wer es danach abfaengt
+  (Ismets "ich kann den Mute-Button nicht druecken", im Browser gemessen:
+  Ton blieb aus, Schieber sprang 46 % -> 91.5 %). Wer eine Zieh-Geste auf
+  eine ganze Flaeche legt, setzt in JEDEN pointerdown-Horcher den Riegel
+  `e.target.closest('button, a, input, ...')` - und der Test haengt an
+  dieser Regel, nicht an einer Zeile, sonst reisst der naechste neue
+  Horcher dieselbe Luecke wieder auf. Zweiter Anlauf desselben Befunds:
+  v230s hatte dieselbe Wirkung aus anderer Ursache.
+- **Ein Test, der ALLE Nebenwirkungen im Prozess zaehlt, flattert (v230ac).**
+  Die Alarm-Drosselung wurde ueber `len(sent) == 2` geprueft; meldete
+  waehrenddessen ein Hintergrund-Arbeiter (Sicherungs-Gegenprobe, Wachhund),
+  stand da eine 3 und der Test fiel - mal so, mal so. Gezaehlt wird, was der
+  Test selbst ausgeloest hat.
+- **Ein unsichtbares Bedienfeld frisst die Klicks darunter (v230s).** Der
+  Vergleichs-Schieber liegt als transparentes `input[type=range]` ueber dem
+  ganzen Bild - damit war der Ton-Knopf nicht mehr bedienbar. Alles, was auf
+  so einem Feld liegen soll, braucht eine hoehere Ebene; das Feld selbst
+  bleibt ganzflaechig, sonst kann man nur auf einem 38-px-Knopf ziehen.
+  Gefunden hat das nur ein echter Klick im Browser.
+- **Zwei laufende Videos halbieren die Bildrate (v230u).** Am gedrosselten
+  Handy gemessen: zwei Spuren 30 fps, eine 60; pausiert oder ausgeblendet
+  sofort wieder 60. Eine kleinere Aufloesung aendert NICHTS - es kostet der
+  zweite Decoder, nicht die Pixelzahl. Darum laeuft im Ruhezustand nur eine
+  Spur; der Vergleich startet auf Beruehrung (plus einmaliges Aufblitzen).
+  Und: Zeit-Sprunge (`currentTime`) sind selbst ein Ruckler - kleinen
+  Versatz ueber `playbackRate` nachregeln, springen erst ab 0.6 s.
+- **Landing:** im Hero steht der VERGLEICH (`demo_before.mp4` links,
+  `demo.mp4` rechts, Schieber dazwischen) - nur das Ergebnis zu zeigen
+  beweist nichts. Beide Spuren werden nachgezogen, sonst zeigen sie zwei
+  verschiedene Momente. Beide liegen unter `web/assets/` und werden ueber den
+  Mount `/assets` ausgeliefert (kein Job, keine Anmeldung).
+  Wer es tauscht: fuers Web neu kodieren (Ziel < 2.5 MB), Standbild daneben,
+  Rahmen bleibt 9:16 mit `contain`. Der Test-Chromium im Container kennt kein
+  H.264 - die Wiedergabe laesst sich dort nur mit einer WebM-Kopie pruefen.
+- **Zwei Videospuren laufen NIE von selbst synchron (v230ab).** Der Browser
+  gibt keine Garantie, dass zwei `<video>` denselben Moment zeigen; jeder
+  Sprung (`currentTime`) laeuft ausserdem verzoegert, waehrend die andere
+  Spur weiterlaeuft. Drei Dinge sind noetig, und einzeln taugt keines:
+  nachziehen JEDES Bild (`requestAnimationFrame`, nicht nur `timeupdate` -
+  das feuert 4x/s), die Korrektur in STUFEN ueber `playbackRate` (grob 25 %,
+  fein 2 %; eine einzige Stufe braucht Sekunden oder ruckelt hoerbar), und
+  nach jedem Sprung EINMAL nachmessen (`seeked`) statt dem Sprung zu
+  glauben. Gemessen im Browser: Spitze 0.103 -> 0.055 s, Dauerversatz
+  0.026 -> 0.008 s (rund ein Fuenftel Bild bei 24 fps).
+- **`/before-after` (v230ao) ist die BEWEIS-Seite**: derselbe Clip zweimal,
+  plus die Entscheidungen der Regie und ein ehrlicher Abschnitt "was es NICHT
+  kann". Wer eine neue Seite baut: Route in `server.py`, Datei in
+  `_CSP_HTML` (sonst blockiert die eigene CSP den Inline-Block), Eintrag in
+  der Sitemap, Link von der Landing - und jede Zahl aus dem Code.
+- **Landing:** Englisch, international, Modellnamen unsichtbar (kein "GPT-4o"
+  im Hero), keine Konkurrenz-Namen, kein Datenschutz-Block (gehört in /privacy).
+
+## STAND 29.07.2026 - HIER WEITERMACHEN (fuer den naechsten Chat)
+
+### ERLEDIGT (v214): Ansage wurde vor ihr Wort gezogen
+Ismets Befund (`Block 8.18s | ON THE WALL`, gesprochen ab 9.08 s) ist behoben.
+**Die Ursache war NICHT der Overlap guard** - der kuerzt nur Enden. Schuld war
+der 1.5-s-Vorlauf des Szenen-Texts ("liegt schon da"), den der Solo-Riegel
+danach als `t0` festschrieb; `t0` ist die Uhr, nach der die Karte einblendet.
+Behoben an vier Stellen (Vorlauf, Sofort-Hook, Beat-Grid, `intent` steht jetzt
+AM PLAN) plus `intent_time_floor()` als zentralem Riegel am Ende von
+`build_plans`. Der Vorlauf gilt weiter fuer Szenen-Text OHNE Ansage.
+Lehre bleibt: **wer eine neue Zeit-Regel baut, fragt zuerst, was sie mit einem
+`intent`-Moment macht** - sie darf ihn nur nach HINTEN schieben.
+
+### ERLEDIGT (v226): die Kamera widerlegte die Ansage
+Ismets Befund am gestempelten v225b-Render: "das 'above me' zuckt etwas zu viel
+und geht runter". Am Video gemessen wanderte die Karte in 0.29 s um 109 px NACH
+UNTEN - bei einer Ansage, die "ueber mir" heisst.
+- **Kameramodus 'caption' kann sein Versprechen nicht halten.** Er schiebt das
+  Bild um `(by - H/2) * 0.30` auf die Karte zu; bei `by = 0.22 H` sind das
+  108 px nach unten - genau der Messwert. Nur: die Caption wird VOR dem Warp
+  ins Bild gezeichnet und wandert mit. Der Abstand zwischen Kamera und Karte
+  bleibt gleich, es rutscht bloss alles zusammen. Ein Name, der eine Zusage
+  macht, die der Code nicht einloest (v194-Lehre) - und bei einer ORTS-Ansage
+  ist das Ergebnis nicht nur wirkungslos, sondern falsch: die Karte verlaesst
+  den angesagten Ort. Orts-Ansagen bekommen deshalb den reinen Zoom.
+- **Der Himmel ist die ferne Ebene.** Der Welt-Lock (`scene_shift`) zog die
+  Karte senkrecht 1:1 mit dem Nahbereich-Schwenk mit (bis 0.072 H). Parallaxe
+  geht mit der Entfernung gegen null - 1:1 war auch physikalisch falsch.
+- **Die Lehre ist dieselbe wie v214, eine Achse weiter: nicht nur ZEIT-Regeln
+  muessen die Ansage respektieren, auch BEWEGUNGS-Regeln** (Kamera, Welt-Lock,
+  Tracking, Anim-Drift). Wer eine neue baut, fragt zuerst: was macht sie mit
+  einem `intent`-Moment, dessen Ansage eine Richtung nennt?
+- Die Ansage steht als `p['ort_ansage']` AM PLAN. Sie muss dort stehen und
+  nicht in `info`: eine Himmel-Ansage laeuft je nach Fall durch den ground-
+  ODER den behind-Zweig, und nur der ground-Zweig schreibt `p['szene']` -
+  ein Riegel daran haette in der Haelfte der Faelle nicht gegriffen (v159).
+- Beweis: `camera_at` 107.3 px -> 0.0 px senkrechter Bildversatz; am
+  gerenderten Bild mit Schwenk 40.4 px -> 4.4 px Weg der Tinte.
+
+### ERLEDIGT (v215): Solo-Riegel mass die Lesezeit am falschen Punkt
+Gleiche Verwechslung wie v214, eine Regel weiter: gerechnet wurde ab
+`p['start']` (Anfang der WORTGRUPPE) statt ab dem Erscheinen der Karte.
+`CAPTIONS` stand auf dem Papier 1.20-2.00, im Bild 1.80-2.00 - **0.20 s statt
+der garantierten 0.80 s**. Behoben ueber `card_t0(p, words)`, der EINEN Stelle
+fuer "wann erscheint die Karte wirklich".
+**Beide Richtungen:** die richtige Messung allein haette das Blinzeln nur an
+den Fliesstext weitergereicht (0.27 s). `_FLOW_MIN = 0.55` - muesste ein
+wartender Block darunter, gibt die KARTE nach. Ein Block traegt die Woerter,
+die gerade gesprochen werden; er wird nie beschnitten.
+**Kein Bug war:** Woerter ohne Caption bei Dichte 'akzente'. Das Luecken-Netz
+laeuft laut Code bewusst nur bei 'durchgehend' - Textpausen sind dort die
+gewollte Handschrift. Der Alpha-Test suchte deshalb den Caption-Moment nicht,
+sondern riet ihn (fest 1.20 s); er sucht ihn jetzt.
+
+### Was in dieser Runde fertig wurde (v208-v219)
+- v208/v208a Trichter + Test-Gate urteilt nach der Bilanz statt Textsuche
+- v208b Ursache zuerst in der Fehlermeldung, ClientDisconnect ist keine Stoerung
+- v209 Ansage-Wortschatz: line/one + Adjektiv zwischen Bestimmungswort und Nomen
+- v209a/v213 Solo-Riegel Karte gegen Karte, ohne dass eine Ansage verschwindet
+- v210 ai_flow_direct hatte kein `import requests` (NameError bei JEDEM Render);
+  Denkbudget >= 2500 fuer gpt-5 (leere Antwort -> JSONDecodeError);
+  Himmel-Ansage wird nicht mehr auf Kopfhoehe heruntergezogen
+- v211 Blockmasse ins Job-Log (genau das hat den Befund oben moeglich gemacht)
+- v212/a/b/c Tickets: geschlossen = dicht, nach 24 h aus der Kundenliste;
+  Desktop-Lesebreite; KEIN color-scheme (machte Eingabefelder pechschwarz)
+- v214 Ansage steht nie vor ihrem Wort (`intent` am Plan, 1.5-s-Vorlauf nur
+  fuer NICHT angesagten Szenen-Text, Sofort-Hook + Beat-Grid respektieren die
+  Ansage, `intent_time_floor()` als zentraler Riegel)
+- v215 Solo-Riegel misst ab dem Erscheinen der Karte (`card_t0`), und ein
+  wartender Fliesstext-Block behaelt seine Lesezeit (`_FLOW_MIN`)
+- v216/v217 kein Text am Bildrand angeschnitten (`fit_into_frame`), Block-Log
+  misst endlich Karten. Der Fliesstext-gegen-Fliesstext-Riegel ist RAUS: er
+  verlaengerte den wartenden Block und liess denselben Satz doppelt stehen.
+  **Eine Regel gegen Doppelbilder darf Zeiten nur KUERZEN, nie verlaengern.**
+- v218/v219 Wand-Text sitzt in der gemessenen Wandebene (`wall_pose` aus der
+  Tiefenkarte statt festem +-6-Grad-Wechsel; Wand hebt jetzt `flat_arr` auf).
+  **v218 war toter Code:** der Block lag im nicht-getrackten Zweig, und bei
+  einem Wand-Plan ist `tracked` IMMER wahr (need_track deckt das ganze
+  Anzeigefenster ab). Der ground-Zweig hat DREI Zeichenwege (getrackt,
+  ungetrackt, `front_layer`) - eine Sprite-Korrektur gehoert VOR die Weiche.
+  Gefunden hat es nur ein Test, der `composite_frame` wirklich aufruft;
+  Quelltext-Suche plus reine Funktionspruefung waren gruen (v193-Fehler).
+
+### Noch offen aus den Renders
+- **Zwei Fliesstext-Bloecke gleichzeitig sind IN ORDNUNG** (Ismets Ansage,
+  31.07.2026). v230k hatte das ungefragt "repariert" und ist wieder raus.
+- **Der Anschnitt ist mit v216 generell abgeriegelt** (`fit_into_frame` misst
+  das FERTIGE Bild und verkleinert notfalls). Die URSACHE ist weiterhin nicht
+  bekannt - sie liess sich mit nachgebautem Transkript nicht ausloesen. Wenn
+  er wiederkommt: der Block-Log nennt jetzt Karten, Wortlaut und Zeitfenster,
+  die herauslaufende Zeile traegt `<-- RAGT AUS DEM BILD`.
+- 24 fps Quelle ruckelt auf dem Handy. Video technisch sauber gemessen
+  (keine doppelten/fehlenden Bilder) - Ismet soll Seedance auf 30 fps stellen.
+- 'above me' greift jetzt, am echten Material noch nicht bestaetigt.
+
+### Vor dem Launch (Ismets Seite)
+(Nichts mehr offen - Sicherung ausser Haus und Uptime-Waechter sind
+eingerichtet, siehe unten.)
 
 ## Offene echte Punkte
-- Sound-Pack: Ismet wählt/schickt CC0-Zip → ohne Pack stumm.
-- OpenAI-Key-Rotation (lokal in Ismets Umgebung).
-- Windows-Test mit echtem Material + neuer Maskenqualität 'hoch'.
+- Semantik-Regie & v100-Animationen auf ECHTEM Material verifizieren (hier nur
+  Heuristik/CPU/synthetisch getestet) — das geschieht ueber douchko.eu.
+
+### Sicherheits-Rückstand (Stand v230ax, am Code nachgeprüft)
+**Nichts mehr offen.** Nicht wieder als offen führen: Dienst-Nutzer
+statt root (v204/v205a), Sicherheits-Ereignisprotokoll, FPS-/Auflösungsgrenze,
+Allowlist für den Render-Subprozess, Notaus, `security.txt`, gepinnte Bauteile
+— seit v230v/v230w die **Sicherung ausser Haus** (Cloudflare R2,
+verschlüsselt, 30 Stände, im Panel eingerichtet und mit der Probe bestätigt)
+— und seit v230ax die **Prüfsummen** (siehe unten).
+
+### Prüfsummen für Fremdbauteile (v230aw/v230ax)
+Exakte Versionen (v205a) verhindern nur den ZUFÄLLIGEN Wechsel. Wird ein
+Bauteil unter DERSELBEN Nummer neu veröffentlicht, lädt der nächste Bau die
+neue Fassung. `requirements.lock.txt` + `--require-hashes` rechnen nach.
+- **Die Versionen kommen aus dem laufenden Container, nie aus einer
+  Schätzung.** Panel → System → **Alle Bauteile kopieren** (`_paket_freeze`,
+  v230aw). Die 16 „wichtigen" reichen NICHT: `--require-hashes` verlangt
+  jedes Paket, auch die Mitgebrachten (jax, matplotlib, scipy … über
+  mediapipe). Geraten zu pinnen blockiert nur Deploys.
+- **Je Bauteil stehen ALLE Dateien der Version drin** (Rad je Python-Version
+  und Architektur, Quellpaket). pip nimmt, was zu einer davon passt — sonst
+  fällt der Bau, sobald ein anderes Rad gezogen wird.
+- **Zwei Listen für dieselbe Frage sind eine zu viel:** ein Test vergleicht
+  jeden Pin aus `requirements.txt` mit dem Lockfile.
+- **KI-Modelle: `MODEL_SHA256` in `render.py`.** Frisch geladen → falscher
+  Fingerabdruck bricht ab und die Datei fliegt weg. Schon liegend → nur
+  Meldung, ein zu alter Pin darf den Betrieb nicht anhalten. `depth.onnx`
+  bleibt bewusst ungepinnt (`resolve/main` = beweglicher Stand, Quelle vom
+  Container aus 403); jedes ungepinnte Modell braucht einen Eintrag in
+  `MODEL_UNPINNED` mit Begründung, sonst fällt der Selftest.
+- **Der Bau darf einen Netzhänger schlucken, einen falschen Fingerabdruck
+  NICHT** (`ensure_models_cli`, Ausgang 9). Das alte `|| echo` hätte genau
+  die Meldung verschluckt, wegen der es die Prüfung gibt.
+- Was es schützt: späteres Austauschen einer Datei, Manipulation unterwegs.
+  Was NICHT: ein Paket, das schon zum Zeitpunkt der Liste vergiftet war.
+
+**ERLEDIGT, nicht mehr als offen behandeln (v175, am Repo/Live geprüft):**
+- **Sound-Pack liegt vollständig im Repo**: `sfx/pack` 14/14 Slots belegt
+  (impact, whoosh, whoosh_soft, riser, tick, counter, boom, crack, fall,
+  rise, turn, press, vanish, slam), Manifest `pack.json`, alle mit Ismets
+  eigener Lizenz. Prüfen mit `python -c "import sfx_pack; print(sfx_pack.pack_status())"`.
+  Videos sind NICHT stumm.
+- **Stripe ist im Live-Modus** (Ismets Bestätigung). Keine Live-Umstellung
+  mehr planen oder als offenen Punkt nennen.

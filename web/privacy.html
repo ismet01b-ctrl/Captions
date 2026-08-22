@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · DouchkoVE</title>
+<style>
+:root { --bg: #0a0a0b; --surf: #161417; --fg: #f6f4ef; --mut: #b0a99e; --acc: #ff7a1a; --line: #242320; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--fg); line-height: 1.6; padding: 40px 24px; min-height: 100vh; }
+.wrap { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 32px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 8px; }
+h2 { font-size: 20px; font-weight: 800; margin: 32px 0 12px; }
+p, li { color: var(--mut); font-size: 15px; margin-bottom: 8px; }
+li { margin-left: 20px; }
+strong { color: var(--fg); font-weight: 600; }
+a { color: var(--acc); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.back { display: inline-block; margin-bottom: 32px; color: var(--mut); }
+.hi { background: rgba(255, 122, 26, 0.1); border-left: 3px solid var(--acc);
+  padding: 12px 16px; border-radius: 6px; margin: 16px 0; }
+.hi p { color: var(--fg); }
+.stub { background: var(--surf); border: 1px dashed var(--line);
+  padding: 16px 20px; border-radius: 12px; margin-top: 24px; }
+.stub p { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← Back</a>
+  <h1>Privacy Policy</h1>
+  <p style="margin-top: 8px;">Short, honest, concrete.</p>
+
+  <div class="hi">
+    <p><strong>Summary:</strong> You upload a video, we add captions, you download it.
+      Your videos and transcripts are auto-deleted after 7 days. Your account and
+      purchase history stay until you delete your account. We do not run advertising
+      trackers. Besides our AI provider (captioning), your data is handled by Stripe
+      (payments) and our hosting provider netcup, as described below.</p>
+  </div>
+
+  <h2>Controller</h2>
+  <p>Ismet Beyazkus, Hinter den Gärten 4, 52388 Nörvenich, Ismet@douchkove.com</p>
+
+  <h2>What data we process</h2>
+  <ul>
+    <li><strong>Your video:</strong> uploaded by you for processing.
+      Legal basis: performance of our contract with you (Art. 6(1)(b) GDPR).</li>
+    <li><strong>Your account email &amp; password (hashed):</strong> for login and billing.
+      Legal basis: performance of our contract with you (Art. 6(1)(b) GDPR).</li>
+    <li><strong>Server logs:</strong> IP address and timestamps for operations
+      (kept no longer than 14 days). Legal basis: our legitimate interest in the
+      security and stable operation of the service (Art. 6(1)(f) GDPR).</li>
+    <li><strong>Abuse protection:</strong> to stop password guessing we count
+      failed attempts, per internet connection (IP address) and per account.
+      Only a counter and a timestamp are stored, never a password or what was
+      typed; for an email address that does not exist we keep a one-way hash
+      instead of the address. Deleted after at most 24 hours. Legal basis: our
+      legitimate interest in protecting accounts (Art. 6(1)(f) GDPR).</li>
+    <li><strong>Anonymous reach statistics:</strong> we count how many people
+      reach the site, open the app, register, upload, and buy, plus the referring
+      site (e.g. "instagram", "google", "direct"). To avoid counting the same
+      visit twice we store a short one-way hash of IP address and browser string
+      that is <strong>salted with the current date and therefore changes every
+      day</strong>. It cannot be reversed, cannot be linked across days, and is
+      never joined with any advertising network. We do <strong>not</strong> store
+      your IP address for this, and we set <strong>no cookie</strong> for it.
+      Legal basis: our legitimate interest in knowing whether the service reaches
+      anyone (Art. 6(1)(f) GDPR).</li>
+    <li><strong>Payment data:</strong> handled by Stripe (Stripe Payments Europe,
+      Ltd., Ireland). We only see your email and the amount paid.
+      Legal basis: performance of our contract with you (Art. 6(1)(b) GDPR).</li>
+    <li><strong>Fraud prevention (referral &amp; free credits):</strong> when a
+      referral bonus or a free credit (welcome / monthly free minutes) is granted,
+      we store a one-way salted hash of the email address (never the address
+      itself). This lets us grant each free benefit only once per person and prevent
+      abuse such as delete-and-re-register farming. Legal basis: our legitimate
+      interest in preventing fraud (Art. 6(1)(f) GDPR). This pseudonymous hash is
+      kept even after account deletion for the same reason.</li>
+    <li><strong>Purchase confirmations (withdrawal consent):</strong> when you
+      purchase, we log your confirmation that you request immediate performance
+      and acknowledge the loss of the withdrawal right, with a timestamp
+      (§ 356 (4) BGB). Legal basis: legal obligation and defence of legal
+      claims (Art. 6(1)(c) and (f) GDPR). Kept as long as claims can arise from
+      the purchase (up to 3 years after the end of the year of purchase).</li>
+    <li><strong>Support requests:</strong> if you contact us via the in-app
+      support form, we store your message, subject, and account email as a
+      ticket and receive it by email, so we can answer you. Legal basis:
+      performance of our contract (Art. 6(1)(b) GDPR). Tickets are deleted
+      when you delete your account.</li>
+    <li><strong>Sign in with Google (optional):</strong> if you choose Google
+      sign-in, we receive your Google account ID, email address, and display
+      name from Google to create or sign in to your account (Art. 6(1)(b)
+      GDPR). Google LLC (USA) learns about the sign-in; see Google's privacy
+      policy. The transfer is based on Art. 44 ff. GDPR (Standard Contractual
+      Clauses / EU-US Data Privacy Framework). Email + password login remains
+      available; Google sign-in is never required.</li>
+  </ul>
+
+  <h2>What we do NOT do</h2>
+  <ul>
+    <li>No Google Analytics, no Meta Pixel, no advertising tracker</li>
+    <li>No cookies other than technically required ones (the session cookie;
+      during an optional Google sign-in, two short-lived security cookies that
+      expire after 10 minutes)</li>
+    <li>No sharing of your videos with advertising partners</li>
+  </ul>
+
+  <h2>Transactional email (data processor)</h2>
+  <p>System emails (email confirmation, password reset, purchase confirmation,
+    support replies, expiry warnings) are sent through Resend (Resend, Inc.,
+    USA) as our processor. Resend processes your email address, name, and the
+    content of the respective email. Legal basis: performance of our contract
+    (Art. 6(1)(b) GDPR). A data processing agreement is in place; the transfer
+    to the USA is based on the EU Standard Contractual Clauses and, where
+    applicable, the EU-US Data Privacy Framework (Art. 44 to 46 GDPR).</p>
+
+  <h2>Sharing with our AI provider (data processor)</h2>
+  <p>For transcription and AI direction we share the following with our AI provider
+    (OpenAI, L.L.C., San Francisco, USA):</p>
+  <ul>
+    <li>The audio track of your video (for transcription)</li>
+    <li>Individual video frames of the most important moments (for vision analysis)</li>
+    <li>The recognized text (for the direction decision)</li>
+  </ul>
+  <p>The provider is contractually bound <strong>not to use API data for model training</strong>
+    and to delete it after 30 days. Details:
+    <a href="https://openai.com/policies/eu-privacy-policy" target="_blank">privacy policy</a>.</p>
+  <p>A data processing agreement (Art. 28 GDPR) is in place with the provider. As the
+    provider is located in the USA, the transfer is based on the EU Standard Contractual
+    Clauses and, where applicable, the provider's certification under the EU-US Data
+    Privacy Framework (Art. 44 to 46 GDPR).</p>
+
+  <h2>Retention</h2>
+  <ul>
+    <li>Videos, transcripts, intermediate files: <strong>7 days after upload</strong>, then automatic deletion</li>
+    <li>Server logs: 14 days</li>
+    <li>Abuse-protection counters: 24 hours</li>
+    <li>Anonymous reach statistics: 400 days (the daily hash is already
+      unlinkable after 24 hours)</li>
+    <li>Account and purchase history: until you delete your account</li>
+    <li><strong>Exception (tax law):</strong> booking records of purchases
+      (amount, date, and the account email as part of the record) are kept for
+      <strong>10 years after account deletion</strong> to meet German
+      retention duties (§ 147 AO / GoBD). This exception is permitted by
+      Art. 17(3)(b) GDPR. Everything else is really deleted.</li>
+  </ul>
+
+  <h2>Your rights</h2>
+  <p>You have the right to access, rectification, erasure, restriction of processing
+    (Art. 18 GDPR), data portability (Art. 20 GDPR), and to object.
+    Contact: <a href="mailto:Ismet@douchkove.com">Ismet@douchkove.com</a>.
+    Right to complain to the responsible supervisory authority.</p>
+
+  <h2>Hosting</h2>
+  <p>Server is located at netcup GmbH, Karlsruhe, Germany. Personal data leaves
+    the EU only for the processing steps described above (AI provider,
+    transactional email, optional Google sign-in), each safeguarded under
+    Art. 44 ff. GDPR.</p>
+</div>
+</body>
+</html>

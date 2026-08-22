@@ -1,0 +1,30 @@
+{
+  "name": "douchkove-motion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DouchkoVE Motion-Graphics engine (Remotion). Separate TS/Canvas stack; the caption pipeline stays Python. Renders a flat, deterministic SceneSpec to MP4/ProRes with senior-grade motion.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts MotionShowcase out/video.mp4 --props=src/demo-spec.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.18.0",
+    "@react-three/postprocessing": "^2.16.3",
+    "@remotion/three": "^4.0.496",
+    "postprocessing": "^6.36.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.496",
+    "three": "^0.169.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.496",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "typescript": "5.5.4"
+  }
+}

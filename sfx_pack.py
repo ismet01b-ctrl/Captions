@@ -260,8 +260,24 @@ def fetch_pack(key, pdir=None, slots=None, progress=print, pick=0):
             man[slot] = {'id': c['id'], 'name': c['name'], 'license': 'CC0',
                          'quelle': f"https://freesound.org/s/{c['id']}/",
                          'dauer': c['duration']}
+            # v96d: bis zu 2 weitere CC0-Treffer als Varianten (slot_1/2.wav) -
+            # mehr Abwechslung, damit nicht jeder Klick gleich klingt.
+            vn = 0
+            for extra in cands[min(pick, len(cands) - 1) + 1:]:
+                if vn >= 2:
+                    break
+                try:
+                    fetch_one(extra, os.path.join(pdir, f'{slot}_{vn + 1}.wav'))
+                    man[f'{slot}_{vn + 1}'] = {
+                        'id': extra['id'], 'name': extra['name'], 'license': 'CC0',
+                        'quelle': f"https://freesound.org/s/{extra['id']}/",
+                        'dauer': extra['duration'], 'variante': slot}
+                    vn += 1
+                except Exception:
+                    pass
             ok += 1
-            progress(f"  {slot}: {c['name'][:40]} ({c['duration']}s)")
+            progress(f"  {slot}: {c['name'][:40]} ({c['duration']}s)"
+                     + (f" +{vn} Varianten" if vn else ""))
         except Exception as e:
             fail.append(slot)
             progress(f'  {slot}: Fehler - {type(e).__name__}')

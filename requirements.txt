@@ -1,8 +1,65 @@
-numpy
-opencv-python
-Pillow
-mediapipe
-onnxruntime-gpu
-requests
-PyYAML
-faster-whisper>=1.0
+# DouchkoVE Laufzeit-Abhaengigkeiten.
+#
+# v205a-sec: ALLE Versionen exakt festgenagelt. Bis v205 stand hier bei den
+# meisten nur der Name - bei jedem Neubau konnte also eine andere Fassung
+# hereinkommen, ohne dass jemand es merkt. Zwei Risiken: eine neue Version
+# verhaelt sich anders (der Renderer bricht ohne erkennbaren Grund), und wird
+# eines dieser Bauteile gekapert, installiert der naechste Deploy die
+# vergiftete Fassung automatisch mit. Gerade opencv, Pillow und onnxruntime
+# parsen FREMDE Dateien - dort ist eine unbemerkte Version am teuersten.
+#
+# Die Zahlen sind KEINE Schaetzung: sie kommen aus dem laufenden Container
+# (Admin-Panel -> System -> Bauteile, Stand 28.07.2026, Python 3.12.13,
+# ffmpeg 7.1.5). Genau diese Kombination laeuft nachweislich in Produktion.
+#
+# WENN DU HIER ETWAS HOCHZIEHST: eine Version zu aendern heisst, die
+# Kombination neu zu pruefen. Der Deploy faengt einen Fehlgriff ab - schlaegt
+# der Build fehl, laeuft die alte Version weiter und im Panel steht eine
+# Meldung -, aber bis zur Korrektur geht dann nichts mehr live.
+# Die aktuell laufenden Versionen stehen jederzeit im Panel unter System.
+
+# --- Bild/Video: parsen fremde Dateien, hier ist Sorgfalt am wichtigsten ---
+opencv-python==4.11.0.86
+Pillow==12.3.0
+# v230ag: liest die Zeichentabelle einer Schrift. Damit weiss die Engine VOR
+# dem Zeichnen, ob ein Zeichen ueberhaupt eine Glyphe hat - sonst stuenden
+# leere Kaesten im Video. Fehlt das Paket, faellt die Engine auf feste
+# Unicode-Bloecke zurueck (Chinesisch, Japanisch, Koreanisch, Kyrillisch,
+# Griechisch, Vietnamesisch bleiben also auch dann richtig gesetzt).
+fonttools==4.63.0
+onnxruntime==1.27.0
+# v80m: mediapipe auf 0.10.14 - neuere Versionen haben in Docker/Python3.12
+# den 'dispatcher_wrapper NoneType' Bug bei bestimmten Aufrufen (Face-Detection).
+mediapipe==0.10.14
+# Muss mit mediapipe kompatibel bleiben (mediapipe 0.10.14 will numpy<2).
+numpy==1.26.4
+protobuf==4.25.9
+
+# --- Web-Stack ---
+fastapi==0.139.2
+uvicorn==0.51.0
+# v205a-sec: fastapi, uvicorn und python-multipart wurden bis v205 im
+# Dockerfile separat und voellig ungepinnt nachinstalliert - sie standen in
+# dieser Datei gar nicht drin. Jetzt hier, damit es EINE Liste gibt.
+python-multipart==0.0.32
+
+# --- Testwerkzeug ---
+# v207a-sec: Der Selftest fuehrt die Sicherheits-Pruefungen ueber echte
+# HTTP-Aufrufe (fastapi.testclient), und starlette braucht dafuer einen
+# HTTP-Klienten. In der Entwicklungsumgebung war httpx zufaellig als
+# Nebenabhaengigkeit da, im Image NICHT - das Test-Gate starb deshalb genau
+# an der Stelle, an der es die neuen Sicherheitstests fahren wollte
+# ("The starlette.testclient module requires the httpx2 package").
+# Bewusst httpx und nicht httpx2: DIESE Kombination (starlette 1.3.1 +
+# httpx 0.28.1) laeuft hier nachweislich gruen. starlette nimmt httpx2, wenn
+# es da ist, und faellt sonst auf httpx zurueck - die Warnung dabei ist
+# kosmetisch. Ein geratener httpx2-Pin haette den Build blockieren koennen.
+httpx==0.28.1
+
+# --- Rest ---
+requests==2.34.2
+PyYAML==6.0.3
+bcrypt==5.0.0
+# v135b: >=10 war noetig, weil eine eingefrorene Alt-Version 'invoice_creation'
+# nicht kannte -> InvalidRequestError beim Checkout. Jetzt exakt gepinnt.
+stripe==15.3.1
