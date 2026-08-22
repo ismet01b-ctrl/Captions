@@ -12,12 +12,6 @@ git fetch --quiet origin "$BRANCH"
 LOCAL="$(git rev-parse HEAD)"
 REMOTE="$(git rev-parse "origin/$BRANCH")"
 
-if [ "$LOCAL" = "$REMOTE" ]; then
-  exit 0                       # nichts Neues - fertig
-fi
-
-echo "$(date -Is) Neue Version ${REMOTE:0:8} auf $BRANCH -> deploye"
-
 # v230j DER DEPLOY MELDET, DASS ER LAEUFT - UND MISST SICH SELBST.
 # Bis v230i zeigte das Panel nur den LAUFENDEN Stand. Damit liess sich
 # "dauert noch" nicht von "haengt" unterscheiden: Ismet sah v230h, waehrend
@@ -25,6 +19,8 @@ echo "$(date -Is) Neue Version ${REMOTE:0:8} auf $BRANCH -> deploye"
 # wuerden Builds gar nicht uebernommen. Jede Runde schreibt jetzt Beginn,
 # Ende und DAUER in die Datenbank des laufenden Containers; das Panel zeigt
 # damit eine echte Zahl vom eigenen Server statt einer Schaetzung.
+# v230d4: die Funktion steht VOR der Ruhe-Weiche, weil auch der Ruhe-Fall
+# melden muss (Lebendpuls). Sie stand darunter und war dort unerreichbar.
 START_TS="$(date +%s)"
 dstate() {                       # $1 phase  $2 commit  $3 dauer  $4 grund
   docker compose exec -T app python - "$1" "$2" "$3" "${4:-}" "$START_TS" \
@@ -54,6 +50,28 @@ con.execute("INSERT INTO deploy_state (id, phase, commit_kurz, started_at, "
 con.commit(); con.close()
 DSTATE_PY
 }
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+  # v230d4 DER LEBENDPULS. Bis v230d3 endete der Ruhe-Fall hier lautlos, und
+  # damit war "es gibt nichts Neues" von "der Timer steht" nicht zu
+  # unterscheiden. Der Wachhund hat deshalb ersatzweise das ALTER des
+  # laufenden Stands gemeldet - und mailte taeglich einen Stillstand, obwohl
+  # nur niemand gepusht hatte (Ismets Befund: 8 Tage lang zugespammt).
+  # Ein Alarm, der bei normalem Betrieb feuert, ist nach zwei Mails Tapete
+  # (v225c-Lehre, zweite Runde). Also meldet der Deploy selbst, dass er
+  # nachgesehen hat; das Alter allein ist kein Befund mehr.
+  # Hoechstens alle 30 Minuten, sonst 720 docker-exec am Tag fuer nichts.
+  BEAT="$INSTALL_DIR/.deploy_beat"
+  if [ ! -f "$BEAT" ] || [ $(( $(date +%s) - $(stat -c %Y "$BEAT" 2>/dev/null || echo 0) )) -ge 1800 ]; then
+    dstate ruhe "$LOCAL" 0 "nichts Neues"
+    touch "$BEAT"
+  fi
+  exit 0                       # nichts Neues - fertig
+fi
+
+echo "$(date -Is) Neue Version ${REMOTE:0:8} auf $BRANCH -> deploye"
+
+START_TS="$(date +%s)"       # Bauzeit ab HIER messen, nicht ab Skriptstart
 dstate baut "$REMOTE" 0 ""
 
 # v197: Bricht update.sh am Test-Gate ab, laeuft die ALTE Version weiter -

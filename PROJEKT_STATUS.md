@@ -3,6 +3,37 @@
 Automatische Premium-Untertitel im Editorial-Stil. Windows, C:\premium_captions, DirectML-GPU.
 
 ## Kern-Features
+- **v230d4 DER WACHHUND BELLTE OHNE GRUND.** Ismets Befund: "ich werde die
+  ganze Zeit mit seit 8 Tagen kein Deploy zugespammt". Der Alarm hatte in den
+  Zahlen recht - acht Tage kein Push, also ist der laufende Stand acht Tage
+  alt - und in der Sache unrecht: es gab schlicht nichts zu deployen.
+  - **Das ALTER eines Stands ist kein Befund.** Gemeldet werden muss, dass
+    der Auto-Deploy NICHT MEHR NACHSCHAUT. Wie alt der Stand dabei ist, ist
+    eine Folge davon, kein eigener Fehler. Bis v230d3 gab es dieses Signal
+    gar nicht: `autodeploy.sh` verliess den Ruhe-Fall (`LOCAL = REMOTE`)
+    lautlos, "nichts Neues" und "der Timer steht" sahen identisch aus, und
+    der Wachhund hat ersatzweise das Alter gemeldet.
+  - **Lebendpuls:** der Ruhe-Fall schreibt jetzt `dstate ruhe` in
+    `deploy_state`, hoechstens alle 30 Minuten (Datei `.deploy_beat`), sonst
+    waeren es 720 docker-exec am Tag fuer nichts. Ist der Puls juenger als
+    6 Stunden, schweigt der Wachhund - egal wie alt der Stand ist.
+  - **Die Funktion musste VOR die Ruhe-Weiche.** `dstate()` stand darunter
+    und war im Ruhe-Zweig gar nicht definiert; die erste Fassung war damit
+    stiller toter Code (v218-Fehlertyp, im Skript statt im Python).
+  - **Der alte Test schrieb den Fehler fest.** Er verlangte woertlich
+    `laeuft der Auto-Deploy noch` und `_al is not None and _al > 7` im
+    Quelltext - also eine SCHREIBWEISE statt einer Zusage. Genau die Regel,
+    die Ismet acht Tage zugespammt hat, war damit testgeschuetzt (CLAUDE.md
+    Punkt 3, dritte Runde). Die Entscheidung liegt jetzt in
+    `_deploy_alarm_grund(dp, jetzt)` und wird durch AUFRUFEN geprueft:
+    alter Stand + laufender Deploy = kein Alarm, alter Stand + stummer
+    Deploy = Alarm, kein Stempel = eigene Lage.
+  - Merksatz: **ein Wachhund, der bei NORMALEM Betrieb bellt, ist nach zwei
+    Mails Tapete.** Das ist derselbe Fehler wie v225c, nur eine Ebene hoeher
+    - dort war der fehlende Stempel der Fehlalarm, hier der ungenutzte
+    Feierabend.
+  - Test: 6 neue Faelle (Regel statt Wortlaut) plus die Pruefung, dass
+    `dstate()` im Skript vor der Ruhe-Weiche steht.
 - **v230d3 UMGESTELLT, MIT SICHERHEITSNETZ.** Ismet: "du sollst alles
   machen. Ich nutze dich ja, um so effizient wie moeglich zu sein." Also
   keine .env-Anleitung mehr, sondern die Entscheidung getroffen und in die

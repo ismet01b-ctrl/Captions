@@ -4885,6 +4885,7 @@ def _scenario_logic(clip, transcript, tmp):
           and 'DVE_BUILD = _build_stempel()' in _sv220,
           'DVE_BUILD darf kein fester Text mehr sein')
     _up222 = open(os.path.join(HERE, 'update.sh'), encoding='utf-8').read()
+    _ad230 = open(os.path.join(HERE, 'autodeploy.sh'), encoding='utf-8').read()
     check('v222: der Deploy schreibt Branch und Commit in einen build.json-Stempel',
           "build.json" in _up222 and "rev-parse" in _up222
           and "'--abbrev-ref'" in _up222)
@@ -4943,10 +4944,36 @@ def _scenario_logic(clip, transcript, tmp):
     # Der stille Deploy-Stopp muss sich MELDEN. autodeploy.sh schreibt nur bei
     # einem GESCHEITERTEN Versuch ins Panel; bleibt der Timer stehen, sieht es
     # aus wie "nichts Neues". Genau so lief der Server monatelang auf v213.
-    check('v222: der Watchdog meldet einen veralteten Stand von selbst',
-          "_notify_admin(" in _sv220 and 'deploy_alt-' in _sv220
-          and 'laeuft der Auto-Deploy noch' in _sv220
-          and "_al is not None and _al > 7" in _sv220)
+    # v230d4 DIE REGEL, NICHT DER WORTLAUT. Der alte Test verlangte den Satz
+    # 'laeuft der Auto-Deploy noch' im Quelltext und "_al is not None and
+    # _al > 7" - also eine SCHREIBWEISE. Damit haette jede Verbesserung der
+    # Meldung den Test gerissen, und schlimmer: er schrieb genau die Regel
+    # fest, die Ismet acht Tage lang zugespammt hat (CLAUDE.md Punkt 3).
+    # Geprueft wird jetzt die Zusage, durch AUFRUFEN der Entscheidung.
+    _now = 1_800_000_000
+    _fall = lambda puls, tage: _mod222._deploy_alarm_grund(
+        {'alter_tage': tage,
+         'deploy': ({'finished_at': puls} if puls else {})}, _now)
+    check('v230d4: alter Stand + laufender Deploy = KEIN Alarm',
+          _fall(_now - 600, 8.0) is None,
+          'genau der Fehlalarm, der Ismet acht Tage lang zugespammt hat')
+    check('v230d4: alter Stand + stummer Deploy = Alarm',
+          _fall(_now - 40 * 3600, 8.0) == 'stumm')
+    check('v230d4: gar kein Lebenszeichen + alter Stand = Alarm',
+          _fall(0, 20.0) == 'stumm')
+    check('v230d4: frischer Stand ohne Lebenszeichen = kein Alarm',
+          _fall(0, 0.5) is None)
+    check('v230d4: kein Stempel = eigene Lage, nicht "Stillstand"',
+          _fall(0, None) == 'stempel')
+    check('v230d4: der Watchdog benutzt die Funktion, nicht eine Kopie',
+          "_deploy_alarm_grund(_dp)" in _sv220
+          and "_grund == 'stumm'" in _sv220
+          and "_al is not None and _al > 7" not in _sv220,
+          'sonst driften Regel und Alarm auseinander')
+    check('v230d4: autodeploy setzt auch im Ruhe-Fall ein Lebenszeichen',
+          'dstate ruhe' in _ad230 and '.deploy_beat' in _ad230
+          and _ad230.index('dstate() {') < _ad230.index('if [ "$LOCAL" = "$REMOTE" ]'),
+          'die Funktion muss VOR der Ruhe-Weiche stehen, sonst ist sie dort unerreichbar')
     # v225c EIN FEHLENDER STEMPEL IST KEIN STILLSTAND. Bis v225b galt beides
     # als derselbe Fall - und weil der Stempel wegen des Pfadfehlers NIE ankam,
     # mailte der Wachhund taeglich einen Deploy-Stopp, den es nicht gab
@@ -4954,8 +4981,7 @@ def _scenario_logic(clip, transcript, tmp):
     # verpasster. Der ALTE Test verlangte ausdruecklich `_al is None or ...` -
     # er hat den Fehler festgeschrieben, genau die v132-Lehre.
     check('v225c: ein fehlender Stempel loest KEINEN Deploy-Stopp-Alarm aus',
-          "_al is None or _al > 7" not in _sv220
-          and "elif _al is None and not globals().get('_STEMPEL_GEMELDET')" in _sv220,
+          _fall(0, None) == 'stempel' and _fall(0, 20.0) == 'stumm',
           'unbekannt ist nicht dasselbe wie "seit Tagen kein Deploy"')
     check('v225c: die Stempel-Meldung kommt genau einmal je Programmlauf',
           "globals()['_STEMPEL_GEMELDET'] = True" in _sv220

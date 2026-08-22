@@ -2149,7 +2149,7 @@ def _csp():
 # der luegen kann, ist wertlos. Im Image kann er es nicht: `update.sh` legt
 # `build.json` in das Bauverzeichnis, `COPY . /app/` nimmt sie mit, und der
 # laufende Container liest damit ausschliesslich seinen EIGENEN Stand.
-DVE_VERSION = 'v230d3'
+DVE_VERSION = 'v230d4'
 
 
 def _build_datei():
@@ -2236,6 +2236,41 @@ def _deploy_info():
     except Exception:
         pass
     return out
+
+
+def _deploy_alarm_grund(dp, jetzt=None):
+    """v230d4: Soll der Watchdog wegen des Deploys Alarm schlagen - und warum?
+
+    Als reine Funktion, damit die REGEL geprueft werden kann und nicht der
+    Wortlaut einer Mail. Der alte Test verlangte den Satz 'laeuft der
+    Auto-Deploy noch' im Quelltext; eine bessere Meldung haette ihn zum Fallen
+    gebracht, obwohl sich an der Regel nichts aendert (CLAUDE.md: die ZUSAGE
+    formulieren, nicht die Schreibweise).
+
+    Rueckgabe:
+      None       - alles in Ordnung, keine Meldung
+      'stumm'    - der Auto-Deploy meldet sich nicht mehr UND der Stand ist alt
+      'stempel'  - kein Build-Stempel, Stand unbekannt (einmalig melden)
+
+    Der Lebendpuls entscheidet, nicht das Alter. Ein Stand darf beliebig alt
+    sein, solange niemand etwas gepusht hat - genau daran ist die alte Regel
+    gescheitert (acht Tage taegliche Fehlalarme).
+    """
+    jetzt = time.time() if jetzt is None else jetzt
+    dp = dp or {}
+    ds = dp.get('deploy') or {}
+    try:
+        puls = max(int(ds.get('finished_at') or 0), int(ds.get('started_at') or 0))
+    except Exception:
+        puls = 0
+    if puls and (jetzt - puls) < 6 * 3600:
+        return None                      # der Deploy sieht nach, alles gut
+    al = dp.get('alter_tage')
+    if al is not None and al > 7:
+        return 'stumm'
+    if al is None:
+        return 'stempel'
+    return None
 
 
 # ================= v204-sec NOTAUS =================
@@ -5775,10 +5810,30 @@ def _watchdog_worker():
                 #   Stand messbar alt   -> echter Befund, taeglich erlaubt.
                 #   Kein Stempel        -> "ich WEISS es nicht". Genau EINMAL
                 #                          je Programmlauf, kein Dauerfeuer.
+                # v230d4 DAS ALTER IST KEIN BEFUND. Ismets Befund nach acht
+                # Tagen ohne Push: "ich werde die ganze Zeit mit seit 8 Tagen
+                # kein Deploy zugespammt". Der Alarm hatte in den Zahlen recht
+                # und in der Sache unrecht - es gab schlicht nichts zu
+                # deployen. Gemeldet werden muss, dass der Auto-Deploy NICHT
+                # MEHR NACHSCHAUT; wie alt der laufende Stand dabei ist, ist
+                # eine Folge davon, kein eigener Fehler.
+                # autodeploy.sh setzt seit v230d4 auch im Ruhe-Fall einen
+                # Lebendpuls (`deploy_state`, hoechstens alle 30 Minuten).
+                # Ist der frisch, laeuft der Deploy - dann kein Alarm, egal
+                # wie alt der Stand ist. Fehlt er oder ist er alt, bleibt es
+                # beim alten Verhalten (Tagesdeckel).
+                # Merksatz fuer die naechste Runde: ein Wachhund, der bei
+                # NORMALEM Betrieb bellt, ist nach zwei Mails Tapete - das ist
+                # exakt der v225c-Fehler, nur eine Ebene hoeher.
                 try:
                     _dp = _deploy_info()
                     _al = _dp.get('alter_tage')
-                    if _al is not None and _al > 7:
+                    _ds = _dp.get('deploy') or {}
+                    _puls = max(int(_ds.get('finished_at') or 0),
+                                int(_ds.get('started_at') or 0))
+                    _puls_alt = (time.time() - _puls) if _puls else None
+                    _grund = _deploy_alarm_grund(_dp)
+                    if _grund == 'stumm':
                         _notify_admin(
                             # Tagesschluessel: der Stunden-Deckel von
                             # _notify_admin ergaebe hier 24 Mails am Tag. Ein
@@ -5786,18 +5841,24 @@ def _watchdog_worker():
                             # einmal taeglich reicht - sonst ist die Meldung
                             # nach zwei Tagen Tapete (v194b-Lehre).
                             'deploy_alt-' + time.strftime('%Y-%m-%d'),
-                            'Seit Tagen kein Deploy - laeuft der Auto-Deploy noch?',
-                            (f'Der laufende Stand ist {_al:.0f} Tage alt.\n'
+                            'Der Auto-Deploy meldet sich nicht mehr',
+                            ('Der Auto-Deploy hat sich seit '
+                             + (f'{_puls_alt / 3600:.0f} Stunden'
+                                if _puls_alt is not None else 'nie')
+                             + ' nicht mehr gemeldet, und der laufende Stand '
+                             f'ist {_al:.0f} Tage alt.\n'
                              f"Branch: {_dp.get('branch') or 'unbekannt'}\n"
                              f"Commit: {_dp.get('commit') or 'unbekannt'}\n\n"
-                             'Wurde seitdem gepusht, greift der Auto-Deploy '
-                             'nicht. Auf dem Server pruefen:\n'
+                             'Er schaut normalerweise alle 2 Minuten nach und '
+                             'setzt dabei mindestens halbstuendlich ein '
+                             'Lebenszeichen. Bleibt das aus, laeuft der Timer '
+                             'nicht mehr. Auf dem Server pruefen:\n'
                              '  systemctl status douchko-deploy.timer\n'
                              '  cd /opt/douchko && git status && bash update.sh\n\n'
                              'Bis dahin gehen KEINE Aenderungen live - und '
                              'jedes Kundenvideo wird mit dem alten Stand '
                              'gerendert.'))
-                    elif _al is None and not globals().get('_STEMPEL_GEMELDET'):
+                    elif _grund == 'stempel' and not globals().get('_STEMPEL_GEMELDET'):
                         globals()['_STEMPEL_GEMELDET'] = True
                         _notify_admin(
                             'deploy_stempel', 'Kein Build-Stempel - Stand unbekannt',
